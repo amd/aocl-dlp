@@ -1,30 +1,37 @@
-name: Branch Name Check  
-  
-on:  
-  pull_request:  
-    types: [opened, synchronize, reopened]  
-  
-jobs:  
-  check_branch_name:  
-    runs-on: Linux  # Use the default GitHub-hosted runner with Linux  
-  
-    steps:  
-    - name: Check out code  
-      uses: actions/checkout@v2  
-  
-    - name: Check branch name using Bash  
-      env:  
-        BRANCH_NAME: ${{ github.event.pull_request.head.ref }}  
-        USER: ${{ github.actor }}  
-      run: |  
-        echo "Original USER: $USER"  
-        BASE_USER=${USER%_amdeng}  # Trim the trailing _amdeng from the USER  
-        echo "Trimmed USER: $BASE_USER"  
-          
-        echo "Checking branch name: $BRANCH_NAME"  
-        if [[ ! "$BRANCH_NAME" =~ ^$BASE_USER/PR- ]]; then  
-          echo "Error: Branch name '$BRANCH_NAME' does not match the required naming convention '$BASE_USER/PR-*'."  
-          exit 1  
-        fi  
-        echo "Branch name '$BRANCH_NAME' is valid."  
-      shell: bash  # Use the default Linux shell
+name: Branch Name Check
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check_branch_name:
+    runs-on: Linux  # Using your self-hosted runner labeled 'Linux'
+
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v2
+
+    - name: Check branch name using Bash
+      env:
+        BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
+        USER: ${{ github.actor }}
+      run: |
+        echo "Original USER: $USER"
+        BASE_USER=${USER%_amdeng}  # Trim the trailing _amdeng from the USER
+        echo "Trimmed USER: $BASE_USER"
+
+        echo "Checking branch name: $BRANCH_NAME"
+
+        PR_PATTERN="^u/$BASE_USER/pr/"
+        WIP_PATTERN="^u/$BASE_USER/wip/"
+
+        if [[ "$BRANCH_NAME" =~ $PR_PATTERN ]]; then
+          echo "Branch name '$BRANCH_NAME' is recognized as a PR branch."
+        elif [[ "$BRANCH_NAME" =~ $WIP_PATTERN ]]; then
+          echo "Branch name '$BRANCH_NAME' is recognized as a WIP branch."
+        else
+          echo "Error: Branch name '$BRANCH_NAME' does not match the required naming conventions 'u/$BASE_USER/pr/*' or 'u/$BASE_USER/wip/*'."
+          exit 1
+        fi
+      shell: bash
