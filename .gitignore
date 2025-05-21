@@ -16,3 +16,6 @@ venv
 
 # Pre-commit cache
 .pre-commit-cache
+
+# Ignore internal documentation
+docs/internal

@@ -105,7 +105,7 @@ endif()
 # Add example build option
 if(BUILD_EXAMPLES)
     message(STATUS "Enabling examples")
-    # add_subdirectory(examples)
+    add_subdirectory(examples)
 endif()
 
 # Generate Doxygen documentation
