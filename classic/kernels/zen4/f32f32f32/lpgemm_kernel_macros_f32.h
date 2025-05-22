@@ -34,6 +34,71 @@
 #include "../sigmoid_avx512.h"
 #include "../silu_avx512.h"
 
+/* Zero-out all ZMM registers */
+#define ZERO_ZMM_ALL                                                           \
+    zmm0  = _mm512_setzero_ps();                                               \
+    zmm1  = _mm512_setzero_ps();                                               \
+    zmm2  = _mm512_setzero_ps();                                               \
+    zmm3  = _mm512_setzero_ps();                                               \
+    zmm4  = _mm512_setzero_ps();                                               \
+    zmm5  = _mm512_setzero_ps();                                               \
+    zmm6  = _mm512_setzero_ps();                                               \
+    zmm7  = _mm512_setzero_ps();                                               \
+    zmm8  = _mm512_setzero_ps();                                               \
+    zmm9  = _mm512_setzero_ps();                                               \
+    zmm10 = _mm512_setzero_ps();                                               \
+    zmm11 = _mm512_setzero_ps();                                               \
+    zmm12 = _mm512_setzero_ps();                                               \
+    zmm13 = _mm512_setzero_ps();                                               \
+    zmm14 = _mm512_setzero_ps();                                               \
+    zmm15 = _mm512_setzero_ps();                                               \
+    zmm16 = _mm512_setzero_ps();                                               \
+    zmm17 = _mm512_setzero_ps();                                               \
+    zmm18 = _mm512_setzero_ps();                                               \
+    zmm19 = _mm512_setzero_ps();                                               \
+    zmm20 = _mm512_setzero_ps();                                               \
+    zmm21 = _mm512_setzero_ps();                                               \
+    zmm22 = _mm512_setzero_ps();                                               \
+    zmm23 = _mm512_setzero_ps();                                               \
+    zmm24 = _mm512_setzero_ps();                                               \
+    zmm25 = _mm512_setzero_ps();                                               \
+    zmm26 = _mm512_setzero_ps();                                               \
+    zmm27 = _mm512_setzero_ps();                                               \
+    zmm28 = _mm512_setzero_ps();                                               \
+    zmm29 = _mm512_setzero_ps();                                               \
+    zmm30 = _mm512_setzero_ps();                                               \
+    zmm31 = _mm512_setzero_ps();
+
+/* Zero-out all YMM registers */
+#define ZERO_YMM_ALL                                                           \
+    ymm0  = _mm256_setzero_ps();                                               \
+    ymm1  = _mm256_setzero_ps();                                               \
+    ymm2  = _mm256_setzero_ps();                                               \
+    ymm3  = _mm256_setzero_ps();                                               \
+    ymm4  = _mm256_setzero_ps();                                               \
+    ymm5  = _mm256_setzero_ps();                                               \
+    ymm6  = _mm256_setzero_ps();                                               \
+    ymm7  = _mm256_setzero_ps();                                               \
+    ymm8  = _mm256_setzero_ps();                                               \
+    ymm9  = _mm256_setzero_ps();                                               \
+    ymm10 = _mm256_setzero_ps();                                               \
+    ymm11 = _mm256_setzero_ps();                                               \
+    ymm12 = _mm256_setzero_ps();                                               \
+    ymm13 = _mm256_setzero_ps();                                               \
+    ymm14 = _mm256_setzero_ps();                                               \
+    ymm15 = _mm256_setzero_ps();
+
+/* Zero-out all XMM registers */
+#define ZERO_XMM_ALL                                                           \
+    xmm0 = _mm_setzero_ps();                                                   \
+    xmm1 = _mm_setzero_ps();                                                   \
+    xmm2 = _mm_setzero_ps();                                                   \
+    xmm3 = _mm_setzero_ps();                                                   \
+    xmm4 = _mm_setzero_ps();                                                   \
+    xmm5 = _mm_setzero_ps();                                                   \
+    xmm6 = _mm_setzero_ps();                                                   \
+    xmm7 = _mm_setzero_ps();
+
 /* ReLU scale (Parametric ReLU):  f(x) = x, when x > 0 and f(x) = a*x when x <=
  * 0 */
 #define RELU_SCALE_OP_F32S_AVX512(reg)                                         \
@@ -65,12 +130,46 @@
     zmm2 = _mm512_setzero_ps();                                                \
     zmm3 = _mm512_setzero_ps();
 
-// Zero-out the given ZMM accumulator registers
+#define ZERO_ACC_ZMM_3_REG(zmm0, zmm1, zmm2)                                   \
+    zmm0 = _mm512_setzero_ps();                                                \
+    zmm1 = _mm512_setzero_ps();                                                \
+    zmm2 = _mm512_setzero_ps();
+
+#define ZERO_ACC_ZMM_2_REG(zmm0, zmm1)                                         \
+    zmm0 = _mm512_setzero_ps();                                                \
+    zmm1 = _mm512_setzero_ps();
+
+// Zero-out the given YMM accumulator registers
+#define ZERO_ACC_YMM_4_REG(ymm0, ymm1, ymm2, ymm3)                             \
+    ymm0 = _mm256_setzero_ps();                                                \
+    ymm1 = _mm256_setzero_ps();                                                \
+    ymm2 = _mm256_setzero_ps();                                                \
+    ymm3 = _mm256_setzero_ps();
+
+#define ZERO_ACC_YMM_3_REG(ymm0, ymm1, ymm2)                                   \
+    ymm0 = _mm256_setzero_ps();                                                \
+    ymm1 = _mm256_setzero_ps();                                                \
+    ymm2 = _mm256_setzero_ps();
+
+#define ZERO_ACC_YMM_2_REG(ymm0, ymm1)                                         \
+    ymm0 = _mm256_setzero_ps();                                                \
+    ymm1 = _mm256_setzero_ps();
+
+// Zero-out the given YMM accumulator registers
 #define ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)                             \
     xmm0 = _mm_setzero_ps();                                                   \
     xmm1 = _mm_setzero_ps();                                                   \
     xmm2 = _mm_setzero_ps();                                                   \
     xmm3 = _mm_setzero_ps();
+
+#define ZERO_ACC_XMM_3_REG(xmm0, xmm1, xmm2)                                   \
+    xmm0 = _mm_setzero_ps();                                                   \
+    xmm1 = _mm_setzero_ps();                                                   \
+    xmm2 = _mm_setzero_ps();
+
+#define ZERO_ACC_XMM_2_REG(xmm0, xmm1)                                         \
+    xmm0 = _mm_setzero_ps();                                                   \
+    xmm1 = _mm_setzero_ps();
 
 /*Multiply alpha with accumulator registers and store back*/
 #define ALPHA_MUL_ACC_ZMM_4_REG(zmm0, zmm1, zmm2, zmm3, alpha)                 \
@@ -78,6 +177,42 @@
     zmm1 = _mm512_mul_ps(zmm1, alpha);                                         \
     zmm2 = _mm512_mul_ps(zmm2, alpha);                                         \
     zmm3 = _mm512_mul_ps(zmm3, alpha);
+
+/*Beta helpers*/
+// F32 fma macro
+#define F32_BETA_FMA(reg, scratch1, scratch2)                                  \
+    scratch1 = _mm512_mul_ps(scratch2, scratch1);                              \
+    reg      = _mm512_add_ps(scratch1, reg);
+
+#define BF16_F32_BETA_OP(reg, m_ir, m_ind, n_ind, scratch1, scratch2)          \
+    scratch1 = (__m512)(_mm512_sllv_epi32(                                     \
+        _mm512_cvtepi16_epi32((__m256i)_mm256_loadu_epi16(                     \
+            ((bfloat16*)post_ops_attr.buf_downscale                            \
+             + (post_ops_attr.rs_c_downscale                                   \
+                * (post_ops_attr.post_op_c_i + m_ind))                         \
+             + post_ops_attr.post_op_c_j + (n_ind * 16)))),                    \
+        _mm512_set1_epi32(16)));                                               \
+    F32_BETA_FMA(reg, scratch1, scratch2)
+
+// Downscale n < 16 mask load beta macro
+#define BF16_F32_BETA_OP_NLT16F_MASK(lmask, reg, m_ind, n_ind, scratch1,       \
+                                     scratch2)                                 \
+    scratch1 = (__m512)(_mm512_sllv_epi32(                                     \
+        _mm512_cvtepi16_epi32((__m256i)_mm256_maskz_loadu_epi16(               \
+            lmask, (bfloat16*)post_ops_attr.buf_downscale                      \
+                       + (post_ops_attr.rs_c_downscale                         \
+                          * (post_ops_attr.post_op_c_i + m_ind))               \
+                       + post_ops_attr.post_op_c_j + (n_ind * 16))),           \
+        _mm512_set1_epi32(16)));                                               \
+    F32_BETA_FMA(reg, scratch1, scratch2)
+
+// BF16->F32 store helper
+#define CVT_STORE_F32_BF16_MASK(reg, m_ind, n_ind)                             \
+    _mm256_mask_storeu_epi16((bfloat16*)post_ops_attr.buf_downscale            \
+                                 + (post_ops_attr.rs_c_downscale               \
+                                    * (post_ops_attr.post_op_c_i + m_ind))     \
+                                 + post_ops_attr.post_op_c_j + (n_ind * 16),   \
+                             mask_all1, (__m256i)_mm512_cvtneps_pbh(reg))
 
 // BF16 bias helper macros.
 #define BF16_F32_BIAS_LOAD(scr, mask, n_ind)                                   \
@@ -118,6 +253,20 @@
     scr = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(                             \
         _mm_maskz_set1_epi8((mask), *(((int8_t*)post_ops_list_temp->op_args1)  \
                                       + post_ops_attr.post_op_c_i + m_ind))));
+
+// zero point bf16->f32
+#define BF16_F32_ZP_BCST(scr, n_ind, zp_mask)                                  \
+    scr = (__m512)(_mm512_sllv_epi32(                                          \
+        _mm512_cvtepi16_epi32(_mm256_maskz_set1_epi16(                         \
+            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1))),             \
+        _mm512_set1_epi32(16)));
+
+#define BF16_F32_ZP_COL_BCST(scr, n_ind, zp_mask)                              \
+    scr = (__m512)(_mm512_sllv_epi32(                                          \
+        _mm512_cvtepi16_epi32(_mm256_maskz_set1_epi16(                         \
+            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1                 \
+                       + post_ops_attr.post_op_c_i + n_ind))),                 \
+        _mm512_set1_epi32(16)));
 
 // Matrix Add post-ops helper macros
 #define F32_MATRIX_ADD_2COL(scr0, scr1, m_ind, r_ind0, r_ind1)                 \

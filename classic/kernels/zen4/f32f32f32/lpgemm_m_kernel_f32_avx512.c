@@ -25,10 +25,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#include "immintrin.h"
-#include "kernels/dlp_kernels.h"
-#include "xmmintrin.h"
 
+#include <immintrin.h>
+
+#include "kernels/dlp_kernels.h"
 #include "lpgemm_kernel_macros_f32.h"
 
 #define MR 6
@@ -146,7 +146,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
         return;
     }
 
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = k0;
 
@@ -253,75 +253,129 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
         ALPHA_MUL_ACC_ZMM_4_REG(zmm28, zmm29, zmm30, zmm31, zmm0)
 
         if (beta != 0) {
-            _cbuf = cbuf;
-            // load c and multiply with beta and
-            // add to accumulator and store back
             zmm3 = _mm512_set1_ps(beta);
 
-            zmm0 = _mm512_loadu_ps(_cbuf);
-            zmm1 = _mm512_loadu_ps(_cbuf + 16);
-            zmm8 = _mm512_fmadd_ps(zmm0, zmm3, zmm8);
-            zmm9 = _mm512_fmadd_ps(zmm1, zmm3, zmm9);
+            // load c and beta, convert to f32
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                // c[0, 0-15]
+                BF16_F32_BETA_OP(zmm8, m, 0, 0, zmm0, zmm3);
+                // c[0, 16-31]
+                BF16_F32_BETA_OP(zmm9, m, 0, 1, zmm1, zmm3);
+                // c[0, 32-47]
+                BF16_F32_BETA_OP(zmm10, m, 0, 2, zmm0, zmm3);
+                // c[0, 48-63]
+                BF16_F32_BETA_OP(zmm11, m, 0, 3, zmm1, zmm3);
+                // c[1, 0-15]
+                BF16_F32_BETA_OP(zmm12, m, 1, 0, zmm0, zmm3);
+                // c[1, 16-31]
+                BF16_F32_BETA_OP(zmm13, m, 1, 1, zmm1, zmm3);
+                // c[1, 32-47]
+                BF16_F32_BETA_OP(zmm14, m, 1, 2, zmm0, zmm3);
+                // c[1, 48-63]
+                BF16_F32_BETA_OP(zmm15, m, 1, 3, zmm1, zmm3);
+                // c[2, 0-15]
+                BF16_F32_BETA_OP(zmm16, m, 2, 0, zmm0, zmm3);
+                // c[2,16-31]
+                BF16_F32_BETA_OP(zmm17, m, 2, 1, zmm1, zmm3);
+                // c[2,32-47]
+                BF16_F32_BETA_OP(zmm18, m, 2, 2, zmm0, zmm3);
+                // c[2,48-63]
+                BF16_F32_BETA_OP(zmm19, m, 2, 3, zmm1, zmm3);
+                // c[3, 0-15]
+                BF16_F32_BETA_OP(zmm20, m, 3, 0, zmm0, zmm3);
+                // c[3,16-31]
+                BF16_F32_BETA_OP(zmm21, m, 3, 1, zmm1, zmm3);
+                // c[3,32-47]
+                BF16_F32_BETA_OP(zmm22, m, 3, 2, zmm0, zmm3);
+                // c[3,48-63]
+                BF16_F32_BETA_OP(zmm23, m, 3, 3, zmm1, zmm3);
+                // c[4, 0-15]
+                BF16_F32_BETA_OP(zmm24, m, 4, 0, zmm0, zmm3);
+                // c[4, 16-31]
+                BF16_F32_BETA_OP(zmm25, m, 4, 1, zmm1, zmm3);
+                // c[4, 32-47]
+                BF16_F32_BETA_OP(zmm26, m, 4, 2, zmm0, zmm3);
+                // c[4, 48-63]
+                BF16_F32_BETA_OP(zmm27, m, 4, 3, zmm1, zmm3);
+                // c[5, 0-15]
+                BF16_F32_BETA_OP(zmm28, m, 5, 0, zmm0, zmm3);
+                // c[5,16-31]
+                BF16_F32_BETA_OP(zmm29, m, 5, 1, zmm1, zmm3);
+                // c[5,32-47]
+                BF16_F32_BETA_OP(zmm30, m, 5, 2, zmm0, zmm3);
+                // c[5,48-63]
+                BF16_F32_BETA_OP(zmm31, m, 5, 3, zmm1, zmm3);
+            } else {
+                _cbuf = cbuf;
+                // load c and multiply with beta and
+                // add to accumulator and store back
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm1  = _mm512_loadu_ps(_cbuf + 48);
-            zmm10 = _mm512_fmadd_ps(zmm0, zmm3, zmm10);
-            zmm11 = _mm512_fmadd_ps(zmm1, zmm3, zmm11);
-            _cbuf += rs_c;
+                zmm0 = _mm512_loadu_ps(_cbuf);
+                zmm1 = _mm512_loadu_ps(_cbuf + 16);
+                zmm8 = _mm512_fmadd_ps(zmm0, zmm3, zmm8);
+                zmm9 = _mm512_fmadd_ps(zmm1, zmm3, zmm9);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm12 = _mm512_fmadd_ps(zmm0, zmm3, zmm12);
-            zmm13 = _mm512_fmadd_ps(zmm1, zmm3, zmm13);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm1  = _mm512_loadu_ps(_cbuf + 48);
+                zmm10 = _mm512_fmadd_ps(zmm0, zmm3, zmm10);
+                zmm11 = _mm512_fmadd_ps(zmm1, zmm3, zmm11);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm1  = _mm512_loadu_ps(_cbuf + 48);
-            zmm14 = _mm512_fmadd_ps(zmm0, zmm3, zmm14);
-            zmm15 = _mm512_fmadd_ps(zmm1, zmm3, zmm15);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm12 = _mm512_fmadd_ps(zmm0, zmm3, zmm12);
+                zmm13 = _mm512_fmadd_ps(zmm1, zmm3, zmm13);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm16 = _mm512_fmadd_ps(zmm0, zmm3, zmm16);
-            zmm17 = _mm512_fmadd_ps(zmm1, zmm3, zmm17);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm1  = _mm512_loadu_ps(_cbuf + 48);
+                zmm14 = _mm512_fmadd_ps(zmm0, zmm3, zmm14);
+                zmm15 = _mm512_fmadd_ps(zmm1, zmm3, zmm15);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm1  = _mm512_loadu_ps(_cbuf + 48);
-            zmm18 = _mm512_fmadd_ps(zmm0, zmm3, zmm18);
-            zmm19 = _mm512_fmadd_ps(zmm1, zmm3, zmm19);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm16 = _mm512_fmadd_ps(zmm0, zmm3, zmm16);
+                zmm17 = _mm512_fmadd_ps(zmm1, zmm3, zmm17);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm20 = _mm512_fmadd_ps(zmm0, zmm3, zmm20);
-            zmm21 = _mm512_fmadd_ps(zmm1, zmm3, zmm21);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm1  = _mm512_loadu_ps(_cbuf + 48);
+                zmm18 = _mm512_fmadd_ps(zmm0, zmm3, zmm18);
+                zmm19 = _mm512_fmadd_ps(zmm1, zmm3, zmm19);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm1  = _mm512_loadu_ps(_cbuf + 48);
-            zmm22 = _mm512_fmadd_ps(zmm0, zmm3, zmm22);
-            zmm23 = _mm512_fmadd_ps(zmm1, zmm3, zmm23);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm20 = _mm512_fmadd_ps(zmm0, zmm3, zmm20);
+                zmm21 = _mm512_fmadd_ps(zmm1, zmm3, zmm21);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm24 = _mm512_fmadd_ps(zmm0, zmm3, zmm24);
-            zmm25 = _mm512_fmadd_ps(zmm1, zmm3, zmm25);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm1  = _mm512_loadu_ps(_cbuf + 48);
+                zmm22 = _mm512_fmadd_ps(zmm0, zmm3, zmm22);
+                zmm23 = _mm512_fmadd_ps(zmm1, zmm3, zmm23);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm1  = _mm512_loadu_ps(_cbuf + 48);
-            zmm26 = _mm512_fmadd_ps(zmm0, zmm3, zmm26);
-            zmm27 = _mm512_fmadd_ps(zmm1, zmm3, zmm27);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm24 = _mm512_fmadd_ps(zmm0, zmm3, zmm24);
+                zmm25 = _mm512_fmadd_ps(zmm1, zmm3, zmm25);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm28 = _mm512_fmadd_ps(zmm0, zmm3, zmm28);
-            zmm29 = _mm512_fmadd_ps(zmm1, zmm3, zmm29);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm1  = _mm512_loadu_ps(_cbuf + 48);
+                zmm26 = _mm512_fmadd_ps(zmm0, zmm3, zmm26);
+                zmm27 = _mm512_fmadd_ps(zmm1, zmm3, zmm27);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm1  = _mm512_loadu_ps(_cbuf + 48);
-            zmm30 = _mm512_fmadd_ps(zmm0, zmm3, zmm30);
-            zmm31 = _mm512_fmadd_ps(zmm1, zmm3, zmm31);
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm28 = _mm512_fmadd_ps(zmm0, zmm3, zmm28);
+                zmm29 = _mm512_fmadd_ps(zmm1, zmm3, zmm29);
+
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm1  = _mm512_loadu_ps(_cbuf + 48);
+                zmm30 = _mm512_fmadd_ps(zmm0, zmm3, zmm30);
+                zmm31 = _mm512_fmadd_ps(zmm1, zmm3, zmm31);
+            }
         }
         // Post Ops
         lpgemm_post_op* post_ops_list_temp = post_ops_list;
@@ -918,16 +972,24 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
                 _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
         }
         if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-            zero_point0 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-            zero_point1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-            zero_point2 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-            zero_point3 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                BF16_F32_ZP_BCST(zero_point0, 0, zp_mask)
+                BF16_F32_ZP_BCST(zero_point1, 1, zp_mask)
+                BF16_F32_ZP_BCST(zero_point2, 2, zp_mask)
+                BF16_F32_ZP_BCST(zero_point3, 3, zp_mask)
+            } else {
+                zero_point0 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                zero_point1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                zero_point2 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                zero_point3 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            }
         }
-
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             if (post_ops_list_temp->scale_factor_len > 1) {
@@ -945,18 +1007,27 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
                                     + post_ops_attr.post_op_c_j + (3 * 16));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (0 * 16));
-                zero_point1 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (1 * 16));
-                zero_point2 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (2 * 16));
-                zero_point3 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (3 * 16));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_LOAD(zero_point0, load_mask, 0)
+                    BF16_F32_ZP_LOAD(zero_point1, load_mask, 1)
+                    BF16_F32_ZP_LOAD(zero_point2, load_mask, 2)
+                    BF16_F32_ZP_LOAD(zero_point3, load_mask, 3)
+                } else {
+                    zero_point0 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (0 * 16));
+                    zero_point1 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (1 * 16));
+                    zero_point2 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (2 * 16));
+                    zero_point3 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (3 * 16));
+                }
             }
             // c[0, 0-15]
             F32_SCL_MULRND(zmm8, selector1, zero_point0);
@@ -1051,18 +1122,27 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
                                      + post_ops_attr.post_op_c_i + 3));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 0));
-                zero_point1 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 1));
-                zero_point2 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 2));
-                zero_point3 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 3));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_COL_BCST(zero_point0, 0, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point1, 1, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point2, 2, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point3, 3, zp_mask)
+                } else {
+                    zero_point0 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 0));
+                    zero_point1 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 1));
+                    zero_point2 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 2));
+                    zero_point3 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 3));
+                }
             }
 
             // c[0, 0-15]
@@ -1122,12 +1202,19 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
                                      + post_ops_attr.post_op_c_i + 5));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 4));
-                zero_point1 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 5));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_COL_BCST(zero_point0, 4, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point1, 5, zp_mask)
+                } else {
+                    zero_point0 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 4));
+                    zero_point1 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 5));
+                }
             }
             // c[4, 0-15]
             F32_SCL_MULRND(zmm24, selector1, zero_point0);
@@ -1655,35 +1742,73 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
     }
     POST_OPS_6x64F_DISABLE:;
 
-        _mm512_storeu_ps(cbuf, zmm8);
-        _mm512_storeu_ps(cbuf + 16, zmm9);
-        _mm512_storeu_ps(cbuf + 32, zmm10);
-        _mm512_storeu_ps(cbuf + 48, zmm11);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm12);
-        _mm512_storeu_ps(cbuf + 16, zmm13);
-        _mm512_storeu_ps(cbuf + 32, zmm14);
-        _mm512_storeu_ps(cbuf + 48, zmm15);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm16);
-        _mm512_storeu_ps(cbuf + 16, zmm17);
-        _mm512_storeu_ps(cbuf + 32, zmm18);
-        _mm512_storeu_ps(cbuf + 48, zmm19);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm20);
-        _mm512_storeu_ps(cbuf + 16, zmm21);
-        _mm512_storeu_ps(cbuf + 32, zmm22);
-        _mm512_storeu_ps(cbuf + 48, zmm23);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm24);
-        _mm512_storeu_ps(cbuf + 16, zmm25);
-        _mm512_storeu_ps(cbuf + 32, zmm26);
-        _mm512_storeu_ps(cbuf + 48, zmm27);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm28);
-        _mm512_storeu_ps(cbuf + 16, zmm29);
-        _mm512_storeu_ps(cbuf + 32, zmm30);
-        _mm512_storeu_ps(cbuf + 48, zmm31);
+        // Generate a mask16 of all 1's.
+        __m512i   selector_a = _mm512_setzero_epi32();
+        __m512i   selector_b = _mm512_set1_epi32(10);
+        __mmask16 mask_all1  = _mm512_cmplt_epi32_mask(selector_a, selector_b);
+
+        if ((post_ops_attr.buf_downscale != NULL)
+            && (post_ops_attr.is_last_k == TRUE)) {
+            CVT_STORE_F32_BF16_MASK(zmm8, 0, 0);
+            CVT_STORE_F32_BF16_MASK(zmm9, 0, 1);
+            CVT_STORE_F32_BF16_MASK(zmm10, 0, 2);
+            CVT_STORE_F32_BF16_MASK(zmm11, 0, 3);
+
+            CVT_STORE_F32_BF16_MASK(zmm12, 1, 0);
+            CVT_STORE_F32_BF16_MASK(zmm13, 1, 1);
+            CVT_STORE_F32_BF16_MASK(zmm14, 1, 2);
+            CVT_STORE_F32_BF16_MASK(zmm15, 1, 3);
+
+            CVT_STORE_F32_BF16_MASK(zmm16, 2, 0);
+            CVT_STORE_F32_BF16_MASK(zmm17, 2, 1);
+            CVT_STORE_F32_BF16_MASK(zmm18, 2, 2);
+            CVT_STORE_F32_BF16_MASK(zmm19, 2, 3);
+
+            CVT_STORE_F32_BF16_MASK(zmm20, 3, 0);
+            CVT_STORE_F32_BF16_MASK(zmm21, 3, 1);
+            CVT_STORE_F32_BF16_MASK(zmm22, 3, 2);
+            CVT_STORE_F32_BF16_MASK(zmm23, 3, 3);
+
+            CVT_STORE_F32_BF16_MASK(zmm24, 4, 0);
+            CVT_STORE_F32_BF16_MASK(zmm25, 4, 1);
+            CVT_STORE_F32_BF16_MASK(zmm26, 4, 2);
+            CVT_STORE_F32_BF16_MASK(zmm27, 4, 3);
+
+            CVT_STORE_F32_BF16_MASK(zmm28, 5, 0);
+            CVT_STORE_F32_BF16_MASK(zmm29, 5, 1);
+            CVT_STORE_F32_BF16_MASK(zmm30, 5, 2);
+            CVT_STORE_F32_BF16_MASK(zmm31, 5, 3);
+        } else {
+            _mm512_storeu_ps(cbuf, zmm8);
+            _mm512_storeu_ps(cbuf + 16, zmm9);
+            _mm512_storeu_ps(cbuf + 32, zmm10);
+            _mm512_storeu_ps(cbuf + 48, zmm11);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm12);
+            _mm512_storeu_ps(cbuf + 16, zmm13);
+            _mm512_storeu_ps(cbuf + 32, zmm14);
+            _mm512_storeu_ps(cbuf + 48, zmm15);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm16);
+            _mm512_storeu_ps(cbuf + 16, zmm17);
+            _mm512_storeu_ps(cbuf + 32, zmm18);
+            _mm512_storeu_ps(cbuf + 48, zmm19);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm20);
+            _mm512_storeu_ps(cbuf + 16, zmm21);
+            _mm512_storeu_ps(cbuf + 32, zmm22);
+            _mm512_storeu_ps(cbuf + 48, zmm23);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm24);
+            _mm512_storeu_ps(cbuf + 16, zmm25);
+            _mm512_storeu_ps(cbuf + 32, zmm26);
+            _mm512_storeu_ps(cbuf + 48, zmm27);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm28);
+            _mm512_storeu_ps(cbuf + 16, zmm29);
+            _mm512_storeu_ps(cbuf + 32, zmm30);
+            _mm512_storeu_ps(cbuf + 48, zmm31);
+        }
 
         post_ops_attr.post_op_c_i += MR;
     } // mloop
@@ -1725,7 +1850,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
         &&POST_OPS_MATRIX_MUL_6x48F, &&POST_OPS_TANH_6x48F,
         &&POST_OPS_SIGMOID_6x48F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = k0;
 
@@ -1822,63 +1947,105 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
         ALPHA_MUL_ACC_ZMM_4_REG(zmm29, zmm30, zmm31, zmm2, zmm0)
 
         if (beta != 0) {
-            _cbuf = cbuf;
-            // load c and multiply with beta and
-            // add to accumulator and store back
             zmm3 = _mm512_set1_ps(beta);
 
-            zmm0 = _mm512_loadu_ps(_cbuf);
-            zmm1 = _mm512_loadu_ps(_cbuf + 16);
-            zmm8 = _mm512_fmadd_ps(zmm0, zmm3, zmm8);
-            zmm9 = _mm512_fmadd_ps(zmm1, zmm3, zmm9);
+            // load c and beta, convert to f32
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                // c[0, 0-15]
+                BF16_F32_BETA_OP(zmm8, m, 0, 0, zmm0, zmm3);
+                // c[0, 16-31]
+                BF16_F32_BETA_OP(zmm9, m, 0, 1, zmm1, zmm3);
+                // c[0, 32-47]
+                BF16_F32_BETA_OP(zmm10, m, 0, 2, zmm0, zmm3);
+                // c[1, 0-15]
+                BF16_F32_BETA_OP(zmm12, m, 1, 0, zmm0, zmm3);
+                // c[1, 16-31]
+                BF16_F32_BETA_OP(zmm13, m, 1, 1, zmm1, zmm3);
+                // c[1, 32-47]
+                BF16_F32_BETA_OP(zmm14, m, 1, 2, zmm0, zmm3);
+                // c[2, 0-15]
+                BF16_F32_BETA_OP(zmm16, m, 2, 0, zmm0, zmm3);
+                // c[2,16-31]
+                BF16_F32_BETA_OP(zmm17, m, 2, 1, zmm1, zmm3);
+                // c[2,32-47]
+                BF16_F32_BETA_OP(zmm18, m, 2, 2, zmm0, zmm3);
+                // c[3, 0-15]
+                BF16_F32_BETA_OP(zmm20, m, 3, 0, zmm0, zmm3);
+                // c[3,16-31]
+                BF16_F32_BETA_OP(zmm21, m, 3, 1, zmm1, zmm3);
+                // c[3,32-47]
+                BF16_F32_BETA_OP(zmm22, m, 3, 2, zmm0, zmm3);
+                // c[4, 0-15]
+                BF16_F32_BETA_OP(zmm24, m, 4, 0, zmm0, zmm3);
+                // c[4, 16-31]
+                BF16_F32_BETA_OP(zmm25, m, 4, 1, zmm1, zmm3);
+                // c[4, 32-47]
+                BF16_F32_BETA_OP(zmm26, m, 4, 2, zmm0, zmm3);
+                // c[5, 0-15]
+                BF16_F32_BETA_OP(zmm28, m, 5, 0, zmm0, zmm3);
+                // c[5,16-31]
+                BF16_F32_BETA_OP(zmm29, m, 5, 1, zmm1, zmm3);
+                // c[5,32-47]
+                BF16_F32_BETA_OP(zmm30, m, 5, 2, zmm0, zmm3);
+            } else {
+                _cbuf = cbuf;
+                // load c and multiply with beta and
+                // add to accumulator and store back
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm10 = _mm512_fmadd_ps(zmm0, zmm3, zmm10);
-            _cbuf += rs_c;
+                zmm0 = _mm512_loadu_ps(_cbuf);
+                zmm1 = _mm512_loadu_ps(_cbuf + 16);
+                zmm8 = _mm512_fmadd_ps(zmm0, zmm3, zmm8);
+                zmm9 = _mm512_fmadd_ps(zmm1, zmm3, zmm9);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm12 = _mm512_fmadd_ps(zmm0, zmm3, zmm12);
-            zmm13 = _mm512_fmadd_ps(zmm1, zmm3, zmm13);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm10 = _mm512_fmadd_ps(zmm0, zmm3, zmm10);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm14 = _mm512_fmadd_ps(zmm0, zmm3, zmm14);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm12 = _mm512_fmadd_ps(zmm0, zmm3, zmm12);
+                zmm13 = _mm512_fmadd_ps(zmm1, zmm3, zmm13);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm16 = _mm512_fmadd_ps(zmm0, zmm3, zmm16);
-            zmm17 = _mm512_fmadd_ps(zmm1, zmm3, zmm17);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm14 = _mm512_fmadd_ps(zmm0, zmm3, zmm14);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm18 = _mm512_fmadd_ps(zmm0, zmm3, zmm18);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm16 = _mm512_fmadd_ps(zmm0, zmm3, zmm16);
+                zmm17 = _mm512_fmadd_ps(zmm1, zmm3, zmm17);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm20 = _mm512_fmadd_ps(zmm0, zmm3, zmm20);
-            zmm21 = _mm512_fmadd_ps(zmm1, zmm3, zmm21);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm18 = _mm512_fmadd_ps(zmm0, zmm3, zmm18);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm22 = _mm512_fmadd_ps(zmm0, zmm3, zmm22);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm20 = _mm512_fmadd_ps(zmm0, zmm3, zmm20);
+                zmm21 = _mm512_fmadd_ps(zmm1, zmm3, zmm21);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm24 = _mm512_fmadd_ps(zmm0, zmm3, zmm24);
-            zmm25 = _mm512_fmadd_ps(zmm1, zmm3, zmm25);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm22 = _mm512_fmadd_ps(zmm0, zmm3, zmm22);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm26 = _mm512_fmadd_ps(zmm0, zmm3, zmm26);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm24 = _mm512_fmadd_ps(zmm0, zmm3, zmm24);
+                zmm25 = _mm512_fmadd_ps(zmm1, zmm3, zmm25);
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm28 = _mm512_fmadd_ps(zmm0, zmm3, zmm28);
-            zmm29 = _mm512_fmadd_ps(zmm1, zmm3, zmm29);
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm26 = _mm512_fmadd_ps(zmm0, zmm3, zmm26);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf + 32);
-            zmm30 = _mm512_fmadd_ps(zmm0, zmm3, zmm30);
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm28 = _mm512_fmadd_ps(zmm0, zmm3, zmm28);
+                zmm29 = _mm512_fmadd_ps(zmm1, zmm3, zmm29);
+
+                zmm0  = _mm512_loadu_ps(_cbuf + 32);
+                zmm30 = _mm512_fmadd_ps(zmm0, zmm3, zmm30);
+            }
         }
 
         // Post Ops
@@ -2348,14 +2515,23 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
                 _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
         }
         if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-            zero_point0 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-            zero_point1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-            zero_point2 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-            zero_point3 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                BF16_F32_ZP_BCST(zero_point0, 0, zp_mask)
+                BF16_F32_ZP_BCST(zero_point1, 1, zp_mask)
+                BF16_F32_ZP_BCST(zero_point2, 2, zp_mask)
+                BF16_F32_ZP_BCST(zero_point3, 3, zp_mask)
+            } else {
+                zero_point0 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                zero_point1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                zero_point2 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                zero_point3 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            }
         }
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
@@ -2371,15 +2547,23 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
                                     + post_ops_attr.post_op_c_j + (2 * 16));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (0 * 16));
-                zero_point1 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (1 * 16));
-                zero_point2 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (2 * 16));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_LOAD(zero_point0, load_mask, 0)
+                    BF16_F32_ZP_LOAD(zero_point1, load_mask, 1)
+                    BF16_F32_ZP_LOAD(zero_point2, load_mask, 2)
+                } else {
+                    zero_point0 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (0 * 16));
+                    zero_point1 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (1 * 16));
+                    zero_point2 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (2 * 16));
+                }
             }
             // c[0, 0-15]
             F32_SCL_MULRND(zmm8, selector1, zero_point0);
@@ -2459,18 +2643,27 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
                                      + post_ops_attr.post_op_c_i + 3));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 0));
-                zero_point1 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 1));
-                zero_point2 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 2));
-                zero_point3 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 3));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_COL_BCST(zero_point0, 0, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point1, 1, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point2, 2, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point3, 3, zp_mask)
+                } else {
+                    zero_point0 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 0));
+                    zero_point1 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 1));
+                    zero_point2 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 2));
+                    zero_point3 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 3));
+                }
             }
             // c[0, 0-15]
             F32_SCL_MULRND(zmm8, selector1, zero_point0);
@@ -2517,12 +2710,19 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
                                      + post_ops_attr.post_op_c_i + 5));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 4));
-                zero_point1 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 5));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_COL_BCST(zero_point0, 4, zp_mask)
+                    BF16_F32_ZP_COL_BCST(zero_point1, 5, zp_mask)
+                } else {
+                    zero_point0 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 4));
+                    zero_point1 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 5));
+                }
             }
             // c[4, 0-15]
             F32_SCL_MULRND(zmm24, selector1, zero_point0);
@@ -2957,30 +3157,61 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
     }
 
     POST_OPS_6x48F_DISABLE:;
+        // Generate a mask16 of all 1's.
+        __m512i   selector_a = _mm512_setzero_epi32();
+        __m512i   selector_b = _mm512_set1_epi32(10);
+        __mmask16 mask_all1  = _mm512_cmplt_epi32_mask(selector_a, selector_b);
 
-        _mm512_storeu_ps(cbuf, zmm8);
-        _mm512_storeu_ps(cbuf + 16, zmm9);
-        _mm512_storeu_ps(cbuf + 32, zmm10);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm12);
-        _mm512_storeu_ps(cbuf + 16, zmm13);
-        _mm512_storeu_ps(cbuf + 32, zmm14);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm16);
-        _mm512_storeu_ps(cbuf + 16, zmm17);
-        _mm512_storeu_ps(cbuf + 32, zmm18);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm20);
-        _mm512_storeu_ps(cbuf + 16, zmm21);
-        _mm512_storeu_ps(cbuf + 32, zmm22);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm24);
-        _mm512_storeu_ps(cbuf + 16, zmm25);
-        _mm512_storeu_ps(cbuf + 32, zmm26);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm28);
-        _mm512_storeu_ps(cbuf + 16, zmm29);
-        _mm512_storeu_ps(cbuf + 32, zmm30);
+        if ((post_ops_attr.buf_downscale != NULL)
+            && (post_ops_attr.is_last_k == TRUE)) {
+            CVT_STORE_F32_BF16_MASK(zmm8, 0, 0);
+            CVT_STORE_F32_BF16_MASK(zmm9, 0, 1);
+            CVT_STORE_F32_BF16_MASK(zmm10, 0, 2);
+
+            CVT_STORE_F32_BF16_MASK(zmm12, 1, 0);
+            CVT_STORE_F32_BF16_MASK(zmm13, 1, 1);
+            CVT_STORE_F32_BF16_MASK(zmm14, 1, 2);
+
+            CVT_STORE_F32_BF16_MASK(zmm16, 2, 0);
+            CVT_STORE_F32_BF16_MASK(zmm17, 2, 1);
+            CVT_STORE_F32_BF16_MASK(zmm18, 2, 2);
+
+            CVT_STORE_F32_BF16_MASK(zmm20, 3, 0);
+            CVT_STORE_F32_BF16_MASK(zmm21, 3, 1);
+            CVT_STORE_F32_BF16_MASK(zmm22, 3, 2);
+
+            CVT_STORE_F32_BF16_MASK(zmm24, 4, 0);
+            CVT_STORE_F32_BF16_MASK(zmm25, 4, 1);
+            CVT_STORE_F32_BF16_MASK(zmm26, 4, 2);
+
+            CVT_STORE_F32_BF16_MASK(zmm28, 5, 0);
+            CVT_STORE_F32_BF16_MASK(zmm29, 5, 1);
+            CVT_STORE_F32_BF16_MASK(zmm30, 5, 2);
+        } else {
+            _mm512_storeu_ps(cbuf, zmm8);
+            _mm512_storeu_ps(cbuf + 16, zmm9);
+            _mm512_storeu_ps(cbuf + 32, zmm10);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm12);
+            _mm512_storeu_ps(cbuf + 16, zmm13);
+            _mm512_storeu_ps(cbuf + 32, zmm14);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm16);
+            _mm512_storeu_ps(cbuf + 16, zmm17);
+            _mm512_storeu_ps(cbuf + 32, zmm18);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm20);
+            _mm512_storeu_ps(cbuf + 16, zmm21);
+            _mm512_storeu_ps(cbuf + 32, zmm22);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm24);
+            _mm512_storeu_ps(cbuf + 16, zmm25);
+            _mm512_storeu_ps(cbuf + 32, zmm26);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm28);
+            _mm512_storeu_ps(cbuf + 16, zmm29);
+            _mm512_storeu_ps(cbuf + 32, zmm30);
+        }
 
         post_ops_attr.post_op_c_i += MR;
     } // mloop
@@ -3023,7 +3254,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
         &&POST_OPS_MATRIX_MUL_6x32F, &&POST_OPS_TANH_6x32F,
         &&POST_OPS_SIGMOID_6x32F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = k0;
 
@@ -3101,45 +3332,75 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
         ALPHA_MUL_ACC_ZMM_4_REG(zmm24, zmm25, zmm28, zmm29, zmm0)
 
         if (beta != 0) {
-            _cbuf = cbuf;
-            // load c and multiply with beta and
-            // add to accumulator and store back
             zmm3 = _mm512_set1_ps(beta);
 
-            zmm0 = _mm512_loadu_ps(_cbuf);
-            zmm1 = _mm512_loadu_ps(_cbuf + 16);
-            zmm8 = _mm512_fmadd_ps(zmm0, zmm3, zmm8);
-            zmm9 = _mm512_fmadd_ps(zmm1, zmm3, zmm9);
-            _cbuf += rs_c;
+            // load c and beta, convert to f32
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                // c[0, 0-15]
+                BF16_F32_BETA_OP(zmm8, m, 0, 0, zmm0, zmm3);
+                // c[0, 16-31]
+                BF16_F32_BETA_OP(zmm9, m, 0, 1, zmm1, zmm3);
+                // c[1, 0-15]
+                BF16_F32_BETA_OP(zmm12, m, 1, 0, zmm0, zmm3);
+                // c[1, 16-31]
+                BF16_F32_BETA_OP(zmm13, m, 1, 1, zmm1, zmm3);
+                // c[2, 0-15]
+                BF16_F32_BETA_OP(zmm16, m, 2, 0, zmm0, zmm3);
+                // c[2,16-31]
+                BF16_F32_BETA_OP(zmm17, m, 2, 1, zmm1, zmm3);
+                // c[3, 0-15]
+                BF16_F32_BETA_OP(zmm20, m, 3, 0, zmm0, zmm3);
+                // c[3,16-31]
+                BF16_F32_BETA_OP(zmm21, m, 3, 1, zmm1, zmm3);
+                // c[4, 0-15]
+                BF16_F32_BETA_OP(zmm24, m, 4, 0, zmm0, zmm3);
+                // c[4, 16-31]
+                BF16_F32_BETA_OP(zmm25, m, 4, 1, zmm1, zmm3);
+                // c[5, 0-15]
+                BF16_F32_BETA_OP(zmm28, m, 5, 0, zmm0, zmm3);
+                // c[5,16-31]
+                BF16_F32_BETA_OP(zmm29, m, 5, 1, zmm1, zmm3);
+            } else {
+                _cbuf = cbuf;
+                // load c and multiply with beta and
+                // add to accumulator and store back
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm12 = _mm512_fmadd_ps(zmm0, zmm3, zmm12);
-            zmm13 = _mm512_fmadd_ps(zmm1, zmm3, zmm13);
-            _cbuf += rs_c;
+                zmm0 = _mm512_loadu_ps(_cbuf);
+                zmm1 = _mm512_loadu_ps(_cbuf + 16);
+                zmm8 = _mm512_fmadd_ps(zmm0, zmm3, zmm8);
+                zmm9 = _mm512_fmadd_ps(zmm1, zmm3, zmm9);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm16 = _mm512_fmadd_ps(zmm0, zmm3, zmm16);
-            zmm17 = _mm512_fmadd_ps(zmm1, zmm3, zmm17);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm12 = _mm512_fmadd_ps(zmm0, zmm3, zmm12);
+                zmm13 = _mm512_fmadd_ps(zmm1, zmm3, zmm13);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm20 = _mm512_fmadd_ps(zmm0, zmm3, zmm20);
-            zmm21 = _mm512_fmadd_ps(zmm1, zmm3, zmm21);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm16 = _mm512_fmadd_ps(zmm0, zmm3, zmm16);
+                zmm17 = _mm512_fmadd_ps(zmm1, zmm3, zmm17);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm24 = _mm512_fmadd_ps(zmm0, zmm3, zmm24);
-            zmm25 = _mm512_fmadd_ps(zmm1, zmm3, zmm25);
-            _cbuf += rs_c;
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm20 = _mm512_fmadd_ps(zmm0, zmm3, zmm20);
+                zmm21 = _mm512_fmadd_ps(zmm1, zmm3, zmm21);
+                _cbuf += rs_c;
 
-            zmm0  = _mm512_loadu_ps(_cbuf);
-            zmm1  = _mm512_loadu_ps(_cbuf + 16);
-            zmm28 = _mm512_fmadd_ps(zmm0, zmm3, zmm28);
-            zmm29 = _mm512_fmadd_ps(zmm1, zmm3, zmm29);
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm24 = _mm512_fmadd_ps(zmm0, zmm3, zmm24);
+                zmm25 = _mm512_fmadd_ps(zmm1, zmm3, zmm25);
+                _cbuf += rs_c;
+
+                zmm0  = _mm512_loadu_ps(_cbuf);
+                zmm1  = _mm512_loadu_ps(_cbuf + 16);
+                zmm28 = _mm512_fmadd_ps(zmm0, zmm3, zmm28);
+                zmm29 = _mm512_fmadd_ps(zmm1, zmm3, zmm29);
+            }
         }
 
         // Post Ops
@@ -3481,10 +3742,17 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
                 _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
         }
         if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-            zero_point0 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-            zero_point1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                BF16_F32_ZP_BCST(zero_point0, 0, zp_mask)
+                BF16_F32_ZP_BCST(zero_point1, 1, zp_mask)
+            } else {
+                zero_point0 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                zero_point1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            }
         }
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
@@ -3497,12 +3765,19 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
                                     + post_ops_attr.post_op_c_j + (1 * 16));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (0 * 16));
-                zero_point1 =
-                    _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
-                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_LOAD(zero_point0, load_mask, 0)
+                    BF16_F32_ZP_LOAD(zero_point1, load_mask, 1)
+                } else {
+                    zero_point0 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (0 * 16));
+                    zero_point1 =
+                        _mm512_loadu_ps((float*)post_ops_list_temp->op_args1
+                                        + post_ops_attr.post_op_c_j + (1 * 16));
+                }
             }
             // c[0, 0-15]
             F32_SCL_MULRND(zmm8, selector1, zero_point0);
@@ -3577,33 +3852,53 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
                     _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                zero_point0 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 0));
-                zero_point1 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 1));
-                zero_point2 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 2));
-                zero_point3 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 3));
-                zero_point4 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 4));
-                zero_point5 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
-                                     + post_ops_attr.post_op_c_i + 5));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_LOAD(zero_point0, load_mask, 0)
+                    BF16_F32_ZP_LOAD(zero_point1, load_mask, 1)
+                    BF16_F32_ZP_LOAD(zero_point2, load_mask, 2)
+                    BF16_F32_ZP_LOAD(zero_point3, load_mask, 3)
+                    BF16_F32_ZP_LOAD(zero_point4, load_mask, 4)
+                    BF16_F32_ZP_LOAD(zero_point5, load_mask, 5)
+                } else {
+                    zero_point0 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 0));
+                    zero_point1 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 1));
+                    zero_point2 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 2));
+                    zero_point3 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 3));
+                    zero_point4 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 4));
+                    zero_point5 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1
+                                         + post_ops_attr.post_op_c_i + 5));
+                }
             } else {
-                zero_point2 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-                zero_point3 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-                zero_point4 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
-                zero_point5 =
-                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                if ((post_ops_attr.buf_downscale != NULL)
+                    && (post_ops_attr.is_first_k == TRUE)) {
+                    __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                    BF16_F32_ZP_BCST(zero_point2, 2, zp_mask)
+                    BF16_F32_ZP_BCST(zero_point3, 3, zp_mask)
+                    BF16_F32_ZP_BCST(zero_point4, 4, zp_mask)
+                    BF16_F32_ZP_BCST(zero_point5, 5, zp_mask)
+                } else {
+                    zero_point2 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                    zero_point3 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                    zero_point4 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                    zero_point5 =
+                        _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+                }
             }
             // c[0, 0-15]
             F32_SCL_MULRND(zmm8, selector1, zero_point0);
@@ -3993,24 +4288,49 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
     POST_OPS_6x32F_DISABLE:;
+        // Generate a mask16 of all 1's.
+        __m512i   selector_a = _mm512_setzero_epi32();
+        __m512i   selector_b = _mm512_set1_epi32(10);
+        __mmask16 mask_all1  = _mm512_cmplt_epi32_mask(selector_a, selector_b);
 
-        _mm512_storeu_ps(cbuf, zmm8);
-        _mm512_storeu_ps(cbuf + 16, zmm9);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm12);
-        _mm512_storeu_ps(cbuf + 16, zmm13);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm16);
-        _mm512_storeu_ps(cbuf + 16, zmm17);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm20);
-        _mm512_storeu_ps(cbuf + 16, zmm21);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm24);
-        _mm512_storeu_ps(cbuf + 16, zmm25);
-        cbuf += rs_c;
-        _mm512_storeu_ps(cbuf, zmm28);
-        _mm512_storeu_ps(cbuf + 16, zmm29);
+        if ((post_ops_attr.buf_downscale != NULL)
+            && (post_ops_attr.is_last_k == TRUE)) {
+            CVT_STORE_F32_BF16_MASK(zmm8, 0, 0);
+            CVT_STORE_F32_BF16_MASK(zmm9, 0, 1);
+
+            CVT_STORE_F32_BF16_MASK(zmm12, 1, 0);
+            CVT_STORE_F32_BF16_MASK(zmm13, 1, 1);
+
+            CVT_STORE_F32_BF16_MASK(zmm16, 2, 0);
+            CVT_STORE_F32_BF16_MASK(zmm17, 2, 1);
+
+            CVT_STORE_F32_BF16_MASK(zmm20, 3, 0);
+            CVT_STORE_F32_BF16_MASK(zmm21, 3, 1);
+
+            CVT_STORE_F32_BF16_MASK(zmm24, 4, 0);
+            CVT_STORE_F32_BF16_MASK(zmm25, 4, 1);
+
+            CVT_STORE_F32_BF16_MASK(zmm28, 5, 0);
+            CVT_STORE_F32_BF16_MASK(zmm29, 5, 1);
+        } else {
+            _mm512_storeu_ps(cbuf, zmm8);
+            _mm512_storeu_ps(cbuf + 16, zmm9);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm12);
+            _mm512_storeu_ps(cbuf + 16, zmm13);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm16);
+            _mm512_storeu_ps(cbuf + 16, zmm17);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm20);
+            _mm512_storeu_ps(cbuf + 16, zmm21);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm24);
+            _mm512_storeu_ps(cbuf + 16, zmm25);
+            cbuf += rs_c;
+            _mm512_storeu_ps(cbuf, zmm28);
+            _mm512_storeu_ps(cbuf + 16, zmm29);
+        }
 
         post_ops_attr.post_op_c_i += MR;
     } // mloop

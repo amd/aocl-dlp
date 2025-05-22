@@ -66,13 +66,10 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE(f32f32f32of32)
 
     // Extra space since packing does width in multiples of NR.
     md_t n_reorder;
-#ifdef DLP_KERNELS_ZEN4
-    if ((n == 1) && (lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3)) {
+    if (n == 1) {
         // When n == 1, LPGEMV doesn't expect B to be reordered.
         n_reorder = 1;
-    } else
-#endif
-    {
+    } else {
         n_reorder = ((n + NR - 1) / NR) * NR;
     }
 
@@ -89,19 +86,28 @@ AOCL_GEMM_REORDER(float, f32f32f32of32)
     dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
 
     if ((input_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
-        || (n <= 0) || (dlp_is_notrans(dlp_trans) && (ldb < n))
-        || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+        || (n <= 0)) {
         return; // Error.
     }
 
     // Only supports row major packing now.
     md_t rs_b, cs_b;
     if ((order == 'r') || (order == 'R')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
-        cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < n))
+            || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+            cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        }
     } else if ((order == 'c') || (order == 'C')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
-        cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < k))
+            || (dlp_is_trans(dlp_trans) && (ldb < n))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+            cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        }
     } else {
         return; // Error
     }
@@ -141,10 +147,9 @@ AOCL_GEMM_REORDER(float, f32f32f32of32)
     md_t n_threads = rntm_g.num_threads;
     n_threads      = (n_threads > 0) ? n_threads : 1;
 
-#ifdef DLP_KERNELS_ZEN4
     // When n == 1, B marix becomes a vector.
     // Reordering is avoided so that LPGEMV can process it efficiently.
-    if ((n == 1) && (lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3)) {
+    if (n == 1) {
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(float)));
         } else {
@@ -154,7 +159,6 @@ AOCL_GEMM_REORDER(float, f32f32f32of32)
         }
         return;
     }
-#endif
 
 #ifdef DLP_ENABLE_OPENMP
     _Pragma("omp parallel num_threads(n_threads)")

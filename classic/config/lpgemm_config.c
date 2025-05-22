@@ -240,7 +240,6 @@ _lpgemm_cntx_init_func_map()
         }
 
 #endif
-#endif
 
         // If arch is updated at runtime, it is expeceted to be honoured.
         if (global_lpgemm_enable_arch == DLP_ARCH_ZEN3) {
@@ -248,19 +247,20 @@ _lpgemm_cntx_init_func_map()
             LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;
             LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;
         }
+#endif
     } else if (dlp_cpuid_is_avx512vnni_supported() == TRUE) {
 #ifdef DLP_KERNELS_ZEN4
         LPGEMM_KERN_FUNC_MAP_AVX512_VNNI
         LPGEMM_PACKA_FUNC_MAP_AVX512_VNNI
         LPGEMM_PACKB_FUNC_MAP_AVX512_VNNI
         LPGEMM_PACKBMXP_FUNC_MAP_AVX512_VNNI
-#endif
 
         if (global_lpgemm_enable_arch == DLP_ARCH_ZEN3) {
             LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2
             LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2;
             LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2;
         }
+#endif
     } else if (dlp_cpuid_is_avx2fma3_supported() == TRUE) {
 #ifdef DLP_KERNELS_ZEN3
         LPGEMM_KERN_FUNC_MAP_AVX2

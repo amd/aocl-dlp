@@ -122,27 +122,27 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE_SYM_QUANT(s8s8s32os32_sym_quant)
     // not rounded to NR (=64), since that would result in memory wastage.
 // Not supported yet
 #if 0 // def DLP_KERNELS_ZEN4
-	md_t n_reorder;
-	if( n == 1 )
-	{
-		n_reorder = 1;
-	}
-	else
-	{
-		n_reorder = make_multiple_of_n( n, 16 );
+    md_t n_reorder;
+    if( n == 1 )
+    {
+        n_reorder = 1;
+    }
+    else
+    {
+        n_reorder = make_multiple_of_n( n, 16 );
 
-	}
+    }
 
-	// Extra space since packing does length in multiples of 4.
-	md_t k_reorder;
-	if( n == 1 )
-	{
-		k_reorder = k;
-	}
-	else
-	{
-		k_reorder = make_multiple_of_n( k, 4 );
-	}
+    // Extra space since packing does length in multiples of 4.
+    md_t k_reorder;
+    if( n == 1 )
+    {
+        k_reorder = k;
+    }
+    else
+    {
+        k_reorder = make_multiple_of_n( k, 4 );
+    }
 #else
     md_t n_reorder = make_multiple_of_n(n, 16);
     md_t k_reorder = make_multiple_of_n(k, 4);
@@ -175,18 +175,27 @@ AOCL_GEMM_REORDER(int8_t, s8s8s32os32)
     dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
 
     if ((input_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
-        || (n <= 0) || (dlp_is_notrans(dlp_trans) && (ldb < n))
-        || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+        || (n <= 0)) {
         return; // Error.
     }
 
     md_t rs_b, cs_b;
     if ((order == 'r') || (order == 'R')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
-        cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < n))
+            || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+            cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        }
     } else if ((order == 'c') || (order == 'C')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
-        cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < k))
+            || (dlp_is_trans(dlp_trans) && (ldb < n))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+            cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        }
     } else {
         return; // Error
     }
@@ -252,18 +261,27 @@ AOCL_GEMM_REORDER_SYM_QUANT(int8_t, s8s8s32os32_sym_quant)
     dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
 
     if ((input_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
-        || (n <= 0) || (dlp_is_notrans(dlp_trans) && (ldb < n))
-        || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+        || (n <= 0)) {
         return; // Error.
     }
 
     md_t rs_b, cs_b;
     if ((order == 'r') || (order == 'R')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
-        cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < n))
+            || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+            cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        }
     } else if ((order == 'c') || (order == 'C')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
-        cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < k))
+            || (dlp_is_trans(dlp_trans) && (ldb < n))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+            cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        }
     } else {
         return; // Error
     }
@@ -295,21 +313,21 @@ AOCL_GEMM_REORDER_SYM_QUANT(int8_t, s8s8s32os32_sym_quant)
     }
 // Not supported yet
 #if 0 // def DLP_KERNELS_ZEN4
-	if( n == 1 )
-	{
-		int32_t* pack_b_column_sum = ( int32_t* ) ( reorder_buf_addr +
-		                               ( sizeof( int8_t ) * n * k ));
+    if( n == 1 )
+    {
+        int32_t* pack_b_column_sum = ( int32_t* ) ( reorder_buf_addr +
+                                       ( sizeof( int8_t ) * n * k ));
 
-		*pack_b_column_sum =  0;
+        *pack_b_column_sum =  0;
 
-		for( md_t k0 = 0; k0 < k; k0++ )
-		{
-			reorder_buf_addr[k0] = input_buf_addr[ k0 * rs_b ];
-			*pack_b_column_sum += reorder_buf_addr[k0];
-		}
-		*pack_b_column_sum *= 128;
-		return;
-	}
+        for( md_t k0 = 0; k0 < k; k0++ )
+        {
+            reorder_buf_addr[k0] = input_buf_addr[ k0 * rs_b ];
+            *pack_b_column_sum += reorder_buf_addr[k0];
+        }
+        *pack_b_column_sum *= 128;
+        return;
+    }
 #endif
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.

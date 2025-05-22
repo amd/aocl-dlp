@@ -25,10 +25,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#include "immintrin.h"
-#include "kernels/dlp_kernels.h"
-#include "xmmintrin.h"
 
+#include <immintrin.h>
+
+#include "kernels/dlp_kernels.h"
 #include "lpgemm_kernel_macros_f32.h"
 
 #define LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)         \
@@ -402,14 +402,38 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
             // C = beta*C + alpha*A*B
             zmm3 = _mm512_set1_ps(beta);
             if (rs_c == 1) {
-                zmm0 = _mm512_maskz_loadu_ps(k2, _cbuf);
+                if (post_ops_attr.buf_downscale != NULL) {
+                    zmm0 = (__m512)(_mm512_sllv_epi32(
+                        _mm512_cvtepi16_epi32((__m256i)_mm256_maskz_loadu_epi16(
+                            k2, (bfloat16*)post_ops_attr.buf_downscale
+                                    + (post_ops_attr.rs_c_downscale
+                                       * (post_ops_attr.post_op_c_i + 0))
+                                    + post_ops_attr.post_op_c_j + (0 * 16))),
+                        _mm512_set1_epi32(16)));
+                } else {
+                    zmm0 = _mm512_maskz_loadu_ps(k2, _cbuf);
+                }
             } else {
                 // load C into zmm0
-                float ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
-                    ctemp[i] = _cbuf[i * rs_c];
+
+                if (post_ops_attr.buf_downscale != NULL) {
+                    bfloat16 ctemp[16];
+                    for (md_t i = 0; i < mr0; i++) {
+                        ctemp[i] = *((bfloat16*)post_ops_attr.buf_downscale
+                                     + (post_ops_attr.rs_c_downscale
+                                        * (post_ops_attr.post_op_c_i + i)));
+                    }
+                    zmm0 = (__m512)(_mm512_sllv_epi32(
+                        _mm512_cvtepi16_epi32(
+                            (__m256i)_mm256_maskz_loadu_epi16(k2, ctemp)),
+                        _mm512_set1_epi32(16)));
+                } else {
+                    float ctemp[16];
+                    for (md_t i = 0; i < mr0; i++) {
+                        ctemp[i] = _cbuf[i * rs_c];
+                    }
+                    zmm0 = _mm512_maskz_loadu_ps(k2, ctemp);
                 }
-                zmm0 = _mm512_maskz_loadu_ps(k2, ctemp);
             }
             zmm8 = _mm512_fmadd_ps(zmm0, zmm3, zmm8);
         }
@@ -490,7 +514,14 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                 _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
         }
         if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-            zero_point0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args1);
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
+                BF16_F32_ZP_BCST(zero_point0, 0, zp_mask)
+            } else {
+                zero_point0 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            }
         }
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
@@ -509,9 +540,17 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                             + post_ops_attr.post_op_c_i);
             }
             if (*(md_t*)post_ops_list_temp->op_args3 > 1) {
-                zero_point0 = _mm512_maskz_loadu_ps(
-                    k2, (float*)post_ops_list_temp->op_args1
-                            + post_ops_attr.post_op_c_i);
+                if (post_ops_attr.buf_downscale != NULL) {
+                    zero_point0 = (__m512)(_mm512_sllv_epi32(
+                        _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(
+                            (k2), ((bfloat16*)post_ops_list_temp->op_args1)
+                                      + post_ops_attr.post_op_c_i + (0 * 16))),
+                        _mm512_set1_epi32(16)));
+                } else {
+                    zero_point0 = _mm512_maskz_loadu_ps(
+                        k2, (float*)post_ops_list_temp->op_args1
+                                + post_ops_attr.post_op_c_i);
+                }
             }
             F32_SCL_MULRND(zmm8, selector1, zero_point0);
         }
@@ -624,14 +663,33 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
     }
     POST_OPS_6x64F_DISABLE: {
         if (rs_c == 1) {
-            _mm512_mask_storeu_ps(c_use, k2, zmm8);
+            if ((post_ops_attr.buf_downscale != NULL)
+                && (post_ops_attr.is_first_k == TRUE)) {
+                _mm256_mask_storeu_epi16((bfloat16*)post_ops_attr.buf_downscale
+                                             + post_ops_attr.post_op_c_i,
+                                         k2, (__m256i)_mm512_cvtneps_pbh(zmm8));
+            } else {
+                _mm512_mask_storeu_ps(c_use, k2, zmm8);
+            }
         } else {
             // Store ZMM8 into ctemp buffer and store back
             // element by element into output buffer at strides
-            float ctemp[16];
-            _mm512_mask_storeu_ps(ctemp, k2, zmm8);
-            for (md_t i = 0; i < mr0; i++) {
-                c_use[i * rs_c] = ctemp[i];
+
+            if (post_ops_attr.buf_downscale != NULL) {
+                bfloat16 ctemp[16];
+                _mm256_mask_storeu_epi16(ctemp, k2,
+                                         (__m256i)_mm512_cvtneps_pbh(zmm8));
+                for (md_t i = 0; i < mr0; i++) {
+                    *((bfloat16*)post_ops_attr.buf_downscale
+                      + (post_ops_attr.rs_c_downscale
+                         * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
+                }
+            } else {
+                float ctemp[16];
+                _mm512_mask_storeu_ps(ctemp, k2, zmm8);
+                for (md_t i = 0; i < mr0; i++) {
+                    c_use[i * rs_c] = ctemp[i];
+                }
             }
         }
         post_ops_attr.post_op_c_i += MR;

@@ -193,8 +193,7 @@ AOCL_GEMM_MATMUL(bfloat16, bfloat16, float, float, bf16bf16f32of32)
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
-    dlp_arch_t arch_id = dlp_get_arch();
-    if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5))
+    if ((dlp_cpuid_is_avx512bf16_supported() == TRUE)
         && (is_tiny_input_bf16of32(m, n, k, lcntx_g) == TRUE)
         && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
         lpgemm_rowvar_tiny_bf16bf16f32of32(

@@ -54,7 +54,35 @@ typedef void (*lpgemm_rowvar_f32)(const md_t,
                                   lpgemm_post_op*,
                                   lpgemm_post_op_attr);
 
-#ifdef DLP_KERNELS_ZEN4
+typedef void (*lpgemv_n_one_ker_ft)(const md_t,
+                                    const md_t,
+                                    const float*,
+                                    const md_t,
+                                    const md_t,
+                                    const AOCL_MEMORY_TAG,
+                                    const float*,
+                                    const md_t,
+                                    const md_t,
+                                    const AOCL_MEMORY_TAG,
+                                    float*,
+                                    const md_t,
+                                    const md_t,
+                                    const float,
+                                    const float,
+                                    const md_t,
+                                    const md_t,
+                                    lpgemm_post_op*,
+                                    lpgemm_post_op_attr*);
+
+typedef void (*lpgemv_n_one_a_pack_ft)(float*,
+                                       const float*,
+                                       const md_t,
+                                       const md_t,
+                                       const md_t,
+                                       const md_t,
+                                       md_t*,
+                                       md_t*);
+
 LPGEMV_TINY(float, float, float, f32f32f32of32)
 {
     const float* a_use    = (float*)a;
@@ -77,9 +105,28 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
         float*         pack_b_buffer_f32f32f32of32 = NULL;
         dlp_clsc_err_t err                         = DLP_CLSC_SUCCESS;
 
-        // TODO: AVX2 support need to be added
+        md_t                   MR;
+        lpgemv_n_one_ker_ft    ker_fp;
+        lpgemv_n_one_a_pack_ft packa_fp;
+
+        // Workaround to select right kernel and blocksizes based on arch
+        // since GEMV parameters are not available in lpgemm context.
+#ifdef DLP_KERNELS_ZEN4
+        if (lpgemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
+            MR       = 16;
+            ker_fp   = lpgemv_n_one_f32f32f32of32_avx512_256;
+            packa_fp = packa_mr8_f32f32f32of32_col_major;
+        } else {
+            MR       = 16;
+            ker_fp   = lpgemv_n_one_f32f32f32of32;
+            packa_fp = packa_mr16_f32f32f32of32_col_major;
+        }
+#else
         //  Increased MR from 6 to 16 to make use of 32 ZMM registers
-        md_t MR = 16;
+        MR       = 8;
+        ker_fp   = lpgemv_n_one_f32f32f32of32_avx2;
+        packa_fp = packa_mr8_f32f32f32of32_col_major;
+#endif
 
         // Pack B matrix if rs_b > 1
         if ((mtag_b == PACK) && (rs_b != 1)) {
@@ -101,18 +148,16 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
             pack_a_buffer_f32f32f32of32 =
                 (float*)dlp_malloc_page_aligned(mem_a_size_req, &err);
 
-            packa_mr16_f32f32f32of32_col_major(pack_a_buffer_f32f32f32of32,
-                                               a_use, rs_a, cs_a, m, k,
-                                               &rs_a_use, &cs_a_use);
+            packa_fp(pack_a_buffer_f32f32f32of32, a_use, rs_a, cs_a, m, k,
+                     &rs_a_use, &cs_a_use);
             a_use = pack_a_buffer_f32f32f32of32;
         }
 
         post_ops_attr.post_op_c_i = 0;
         post_ops_attr.post_op_c_j = 0;
-        lpgemv_n_one_f32f32f32of32(m, k, a_use, rs_a_use, cs_a_use, mtag_a,
-                                   b_use, rs_b_use, cs_b_use, mtag_b, c, rs_c,
-                                   cs_c, alpha, beta, MR, k, post_op_list,
-                                   &post_ops_attr);
+        ker_fp(m, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+               cs_b_use, mtag_b, c, rs_c, cs_c, alpha, beta, MR, k,
+               post_op_list, &post_ops_attr);
 
         if (pack_a_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_a_buffer_f32f32f32of32);
@@ -122,21 +167,23 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
         }
     }
 }
-#endif
 
 LPGEMM_TINY(float, float, float, f32f32f32of32)
 {
 #ifdef DLP_KERNELS_ZEN4
     // Handle using LPGEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
-    if ((n == 1) && (dlp_cpuid_is_avx512_supported() == TRUE)
-        && (lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3)) {
+    if ((((m == 1) && (lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3)) || (n == 1))
+        && (dlp_cpuid_is_avx512_supported() == TRUE)) {
+#else
+    // m=1 case is not implemented yet for AVX2
+    if (((n == 1)) && (dlp_cpuid_is_avx2fma3_supported() == TRUE)) {
+#endif
         lpgemv_rowvar_tiny_f32f32f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
             cs_c, alpha, beta, lcntx, post_op_list, c_downscale);
         return;
     }
-#endif
 
     const md_t NR = lcntx->blksz.NR;
     const md_t MR = lcntx->blksz.MR;

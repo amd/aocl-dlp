@@ -72,6 +72,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x8m_rd);
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x4m_rd);
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x2m_rd);
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x1m_rd);
+LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_256_6x64m);
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m);
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m_rd);
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x48m_rd);
@@ -193,6 +194,12 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x1);
 LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x1);
 LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x1);
 LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x1);
+
+LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_5x32);
+LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_4x32);
+LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_3x32);
+LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_2x32);
+LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_1x32);
 
 LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_5x64);
 LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_4x64);
@@ -517,6 +524,8 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
         lpgemm_post_op* post_op, lpgemm_post_op_attr* post_op_attr)
 
 LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32);
+LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2);
+LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256);
 LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32);
 LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32);
 LPGEMV_N_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);

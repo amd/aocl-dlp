@@ -25,10 +25,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#include "immintrin.h"
-#include "kernels/dlp_kernels.h"
-#include "xmmintrin.h"
 
+#include <immintrin.h>
+
+#include "kernels/dlp_kernels.h"
 #include "lpgemm_kernel_macros_f32_avx2.h"
 
 void

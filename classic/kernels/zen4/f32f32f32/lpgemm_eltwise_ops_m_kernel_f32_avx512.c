@@ -26,9 +26,9 @@
  *
  */
 
-#include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 
+#include "kernels/dlp_kernels.h"
 #include "lpgemm_kernel_macros_f32.h"
 
 LPGEMM_ELTWISE_OPS_KERNEL(float, float, f32of32_6x64)
@@ -484,7 +484,14 @@ LPGEMM_ELTWISE_OPS_KERNEL(float, float, f32of32_6x64)
         }
         POST_OPS_RELU_SCALE_6x64_OPS: {
             zmm1 = _mm512_setzero_ps();
-            zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
+            if ((post_ops_attr.c_stor_type == S32)
+                || (post_ops_attr.c_stor_type == U8)
+                || (post_ops_attr.c_stor_type == S8)) {
+                zmm2 = _mm512_cvtepi32_ps(_mm512_set1_epi32(
+                    *((int32_t*)post_ops_list_temp->op_args2)));
+            } else {
+                zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
+            }
 
             __mmask16 relu_cmp_mask;
 
@@ -718,8 +725,18 @@ LPGEMM_ELTWISE_OPS_KERNEL(float, float, f32of32_6x64)
             POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
         }
         POST_OPS_CLIP_6x64_OPS: {
-            __m512 min = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
-            __m512 max = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
+            __m512 min, max;
+            if (post_ops_attr.c_stor_type == S32
+                || post_ops_attr.c_stor_type == S8
+                || post_ops_attr.c_stor_type == U8) {
+                min = _mm512_cvtepi32_ps(_mm512_set1_epi32(
+                    *((int32_t*)post_ops_list_temp->op_args2)));
+                max = _mm512_cvtepi32_ps(_mm512_set1_epi32(
+                    *((int32_t*)post_ops_list_temp->op_args3)));
+            } else {
+                min = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
+                max = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
+            }
 
             // c[0, 0-15]
             CLIP_F32S_AVX512(zmm8, min, max)
@@ -1816,7 +1833,15 @@ LPGEMM_ELTWISE_OPS_KERNEL(float, float, f32of32_6x64)
             POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
         }
         POST_OPS_SWISH_6x64_OPS: {
-            zmm1 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
+            if ((post_ops_attr.c_stor_type == S32)
+                || (post_ops_attr.c_stor_type == U8)
+                || (post_ops_attr.c_stor_type == S8)) {
+                zmm1 = _mm512_cvtepi32_ps(_mm512_set1_epi32(
+                    *((int32_t*)post_ops_list_temp->op_args2)));
+            } else {
+                zmm1 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
+            }
+
             __m512  al_in, r, r2, z, dn;
             __m512i ex_out;
 

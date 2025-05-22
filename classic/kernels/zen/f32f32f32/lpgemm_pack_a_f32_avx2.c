@@ -26,9 +26,10 @@
  *
  */
 
-#include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 #include <string.h>
+
+#include "kernels/dlp_kernels.h"
 
 #define F32_ROW_MAJOR_K_PACK_LOOP_AVX2()                                       \
     a0 = _mm256_unpacklo_ps(a01, b0);                                          \

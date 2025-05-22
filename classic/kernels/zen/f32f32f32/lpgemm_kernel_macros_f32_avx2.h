@@ -92,6 +92,36 @@
     reg = _mm_mul_ps(reg, selector);                                           \
     reg = _mm_add_ps(reg, zero_point);
 
+/* Zero-out all YMM registers */
+#define ZERO_YMM_ALL                                                           \
+    ymm0  = _mm256_setzero_ps();                                               \
+    ymm1  = _mm256_setzero_ps();                                               \
+    ymm2  = _mm256_setzero_ps();                                               \
+    ymm3  = _mm256_setzero_ps();                                               \
+    ymm4  = _mm256_setzero_ps();                                               \
+    ymm5  = _mm256_setzero_ps();                                               \
+    ymm6  = _mm256_setzero_ps();                                               \
+    ymm7  = _mm256_setzero_ps();                                               \
+    ymm8  = _mm256_setzero_ps();                                               \
+    ymm9  = _mm256_setzero_ps();                                               \
+    ymm10 = _mm256_setzero_ps();                                               \
+    ymm11 = _mm256_setzero_ps();                                               \
+    ymm12 = _mm256_setzero_ps();                                               \
+    ymm13 = _mm256_setzero_ps();                                               \
+    ymm14 = _mm256_setzero_ps();                                               \
+    ymm15 = _mm256_setzero_ps();
+
+/* Zero-out all XMM registers */
+#define ZERO_XMM_ALL                                                           \
+    xmm0 = _mm_setzero_ps();                                                   \
+    xmm1 = _mm_setzero_ps();                                                   \
+    xmm2 = _mm_setzero_ps();                                                   \
+    xmm3 = _mm_setzero_ps();                                                   \
+    xmm4 = _mm_setzero_ps();                                                   \
+    xmm5 = _mm_setzero_ps();                                                   \
+    xmm6 = _mm_setzero_ps();                                                   \
+    xmm7 = _mm_setzero_ps();
+
 // Zero-out the given YMM accumulator registers
 #define ZERO_ACC_YMM_4_REG(ymm0, ymm1, ymm2, ymm3)                             \
     ymm0 = _mm256_setzero_ps();                                                \
@@ -99,12 +129,30 @@
     ymm2 = _mm256_setzero_ps();                                                \
     ymm3 = _mm256_setzero_ps();
 
-// Zero-out the given XMM accumulator registers
+#define ZERO_ACC_YMM_3_REG(ymm0, ymm1, ymm2)                                   \
+    ymm0 = _mm256_setzero_ps();                                                \
+    ymm1 = _mm256_setzero_ps();                                                \
+    ymm2 = _mm256_setzero_ps();
+
+#define ZERO_ACC_YMM_2_REG(ymm0, ymm1)                                         \
+    ymm0 = _mm256_setzero_ps();                                                \
+    ymm1 = _mm256_setzero_ps();
+
+// Zero-out the given YMM accumulator registers
 #define ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)                             \
     xmm0 = _mm_setzero_ps();                                                   \
     xmm1 = _mm_setzero_ps();                                                   \
     xmm2 = _mm_setzero_ps();                                                   \
     xmm3 = _mm_setzero_ps();
+
+#define ZERO_ACC_XMM_3_REG(xmm0, xmm1, xmm2)                                   \
+    xmm0 = _mm_setzero_ps();                                                   \
+    xmm1 = _mm_setzero_ps();                                                   \
+    xmm2 = _mm_setzero_ps();
+
+#define ZERO_ACC_XMM_2_REG(xmm0, xmm1)                                         \
+    xmm0 = _mm_setzero_ps();                                                   \
+    xmm1 = _mm_setzero_ps();
 
 /*Multiply alpha with accumulator registers and store back*/
 #define ALPHA_MUL_ACC_YMM_4_REG(ymm0, ymm1, ymm2, ymm3, alpha)                 \
@@ -199,6 +247,13 @@ multiply with Beta, and add to alpha*A*B*/
     ymm##r_ind0 = _mm256_add_ps(scr0, ymm##r_ind0);                            \
     ymm##r_ind1 = _mm256_add_ps(scr1, ymm##r_ind1);
 
+#define F32_MATRIX_ADD_4COL_YMM(scr0, scr1, scr2, scr3, m_ind, r_ind0, r_ind1, \
+                                r_ind2, r_ind3)                                \
+    ymm##r_ind0 = _mm256_add_ps(scr0, ymm##r_ind0);                            \
+    ymm##r_ind1 = _mm256_add_ps(scr1, ymm##r_ind1);                            \
+    ymm##r_ind2 = _mm256_add_ps(scr2, ymm##r_ind2);                            \
+    ymm##r_ind3 = _mm256_add_ps(scr3, ymm##r_ind3);
+
 #define F32_F32_MATRIX_ADD_LOAD_XMM_1ELE(scr, scl_fct, m_ind, n_ind)           \
     scr = (__m128)_mm_load_ss(matptr                                           \
                               + ((post_ops_attr.post_op_c_i + m_ind) * ldm)    \
@@ -237,11 +292,24 @@ multiply with Beta, and add to alpha*A*B*/
     F32_F32_MATRIX_ADD_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                     \
     F32_MATRIX_ADD_1COL_YMM(scr0, m_ind, r_ind0);
 
-#define F32_F32_MATRIX_ADD_2COL(scr0, scr1, scl_fct0, scl_fct1, m_ind, r_ind0, \
-                                r_ind1)                                        \
+#ifdef F32_F32_MATRIX_ADD_2COL
+#undef F32_F32_MATRIX_ADD_2COL
+#endif
+#define F32_F32_MATRIX_ADD_2COL_YMM(scr0, scr1, scl_fct0, scl_fct1, m_ind,     \
+                                    r_ind0, r_ind1)                            \
     F32_F32_MATRIX_ADD_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                     \
     F32_F32_MATRIX_ADD_LOAD_YMM(scr1, scl_fct1, m_ind, 1);                     \
     F32_MATRIX_ADD_2COL_YMM(scr0, scr1, m_ind, r_ind0, r_ind1);
+
+#define F32_F32_MATRIX_ADD_4COL_YMM(scr0, scr1, scr2, scr3, scl_fct0,          \
+                                    scl_fct1, scl_fct2, scl_fct3, m_ind,       \
+                                    r_ind0, r_ind1, r_ind2, r_ind3)            \
+    F32_F32_MATRIX_ADD_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                     \
+    F32_F32_MATRIX_ADD_LOAD_YMM(scr1, scl_fct1, m_ind, 1);                     \
+    F32_F32_MATRIX_ADD_LOAD_YMM(scr2, scl_fct2, m_ind, 2);                     \
+    F32_F32_MATRIX_ADD_LOAD_YMM(scr3, scl_fct3, m_ind, 3);                     \
+    F32_MATRIX_ADD_4COL_YMM(scr0, scr1, scr2, scr3, m_ind, r_ind0, r_ind1,     \
+                            r_ind2, r_ind3);
 
 // Matrix-Add helpers for BF16 input.
 #define BF16_F32_MATRIX_ADD_LOAD_YMM(scr, scl_fct, m_ind, n_ind)               \
@@ -253,13 +321,16 @@ multiply with Beta, and add to alpha*A*B*/
         _mm256_set1_epi32(16)));                                               \
     scr = _mm256_mul_ps(scr, scl_fct);
 
-#define BF16_F32_MATRIX_ADD_2COL(scr0, scr1, scl_fct0, scl_fct1, m_ind,        \
-                                 r_ind0, r_ind1)                               \
+#ifdef BF16_F32_MATRIX_ADD_2COL
+#undef BF16_F32_MATRIX_ADD_2COL
+#endif
+#define BF16_F32_MATRIX_ADD_2COL_YMM(scr0, scr1, scl_fct0, scl_fct1, m_ind,    \
+                                     r_ind0, r_ind1)                           \
     BF16_F32_MATRIX_ADD_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                    \
     BF16_F32_MATRIX_ADD_LOAD_YMM(scr1, scl_fct1, m_ind, 1);                    \
     F32_MATRIX_ADD_2COL_YMM(scr0, scr1, m_ind, r_ind0, r_ind1);
 
-#define BF16_F32_MATRIX_ADD_1COL(scr0, scl_fct0, m_ind, r_ind0)                \
+#define BF16_F32_MATRIX_ADD_1COL_YMM(scr0, scl_fct0, m_ind, r_ind0)            \
     BF16_F32_MATRIX_ADD_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                    \
     F32_MATRIX_ADD_1COL_YMM(scr0, m_ind, r_ind0);
 
@@ -319,6 +390,13 @@ multiply with Beta, and add to alpha*A*B*/
     ymm##r_ind0 = _mm256_mul_ps(scr0, ymm##r_ind0);                            \
     ymm##r_ind1 = _mm256_mul_ps(scr1, ymm##r_ind1);
 
+#define F32_MATRIX_MUL_4COL_YMM(scr0, scr1, scr2, scr3, m_ind, r_ind0, r_ind1, \
+                                r_ind2, r_ind3)                                \
+    ymm##r_ind0 = _mm256_mul_ps(scr0, ymm##r_ind0);                            \
+    ymm##r_ind1 = _mm256_mul_ps(scr1, ymm##r_ind1);                            \
+    ymm##r_ind2 = _mm256_mul_ps(scr2, ymm##r_ind2);                            \
+    ymm##r_ind3 = _mm256_mul_ps(scr3, ymm##r_ind3);
+
 #define F32_F32_MATRIX_MUL_LOAD_XMM_1ELE(scr, scl_fct, m_ind, n_ind)           \
     scr = (__m128)_mm_load_ss(matptr                                           \
                               + ((post_ops_attr.post_op_c_i + m_ind) * ldm)    \
@@ -357,11 +435,24 @@ multiply with Beta, and add to alpha*A*B*/
     F32_F32_MATRIX_MUL_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                     \
     F32_MATRIX_MUL_1COL_YMM(scr0, m_ind, r_ind0);
 
-#define F32_F32_MATRIX_MUL_2COL(scr0, scr1, scl_fct0, scl_fct1, m_ind, r_ind0, \
-                                r_ind1)                                        \
+#ifdef F32_F32_MATRIX_MUL_2COL
+#undef F32_F32_MATRIX_MUL_2COL
+#endif
+#define F32_F32_MATRIX_MUL_2COL_YMM(scr0, scr1, scl_fct0, scl_fct1, m_ind,     \
+                                    r_ind0, r_ind1)                            \
     F32_F32_MATRIX_MUL_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                     \
     F32_F32_MATRIX_MUL_LOAD_YMM(scr1, scl_fct1, m_ind, 1);                     \
     F32_MATRIX_MUL_2COL_YMM(scr0, scr1, m_ind, r_ind0, r_ind1);
+
+#define F32_F32_MATRIX_MUL_4COL_YMM(scr0, scr1, scr2, scr3, scl_fct0,          \
+                                    scl_fct1, scl_fct2, scl_fct3, m_ind,       \
+                                    r_ind0, r_ind1, r_ind2, r_ind3)            \
+    F32_F32_MATRIX_MUL_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                     \
+    F32_F32_MATRIX_MUL_LOAD_YMM(scr1, scl_fct1, m_ind, 1);                     \
+    F32_F32_MATRIX_MUL_LOAD_YMM(scr2, scl_fct2, m_ind, 2);                     \
+    F32_F32_MATRIX_MUL_LOAD_YMM(scr3, scl_fct3, m_ind, 3);                     \
+    F32_MATRIX_MUL_4COL_YMM(scr0, scr1, scr2, scr3, m_ind, r_ind0, r_ind1,     \
+                            r_ind2, r_ind3);
 
 // BF16->F32 Matrix Mul Helpers
 #define BF16_F32_MATRIX_MUL_LOAD_XMM_1ELE(scr, scl_fct, m_ind, n_ind)          \
@@ -392,6 +483,9 @@ multiply with Beta, and add to alpha*A*B*/
     BF16_F32_MATRIX_MUL_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                    \
     F32_MATRIX_MUL_1COL_YMM(scr0, m_ind, r_ind0);
 
+#ifdef BF16_F32_MATRIX_MUL_2COL
+#undef BF16_F32_MATRIX_MUL_2COL
+#endif
 #define BF16_F32_MATRIX_MUL_2COL(scr0, scr1, scl_fct0, scl_fct1, m_ind,        \
                                  r_ind0, r_ind1)                               \
     BF16_F32_MATRIX_MUL_LOAD_YMM(scr0, scl_fct0, m_ind, 0);                    \

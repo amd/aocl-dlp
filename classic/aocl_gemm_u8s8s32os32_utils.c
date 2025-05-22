@@ -96,18 +96,27 @@ AOCL_GEMM_REORDER(int8_t, u8s8s32os32)
     dlp_param_map_netlib_to_dlp_trans(trans, &dlp_trans);
 
     if ((input_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
-        || (n <= 0) || (dlp_is_notrans(dlp_trans) && (ldb < n))
-        || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+        || (n <= 0)) {
         return; // Error.
     }
 
     md_t rs_b, cs_b;
     if ((order == 'r') || (order == 'R')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
-        cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < n))
+            || (dlp_is_trans(dlp_trans) && (ldb < k))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+            cs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+        }
     } else if ((order == 'c') || (order == 'C')) {
-        rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
-        cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        if ((dlp_is_notrans(dlp_trans) && (ldb < k))
+            || (dlp_is_trans(dlp_trans) && (ldb < n))) {
+            return; // Error.
+        } else {
+            rs_b = dlp_is_notrans(dlp_trans) ? 1 : ldb;
+            cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
+        }
     } else {
         return; // Error
     }

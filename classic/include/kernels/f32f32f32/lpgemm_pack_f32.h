@@ -39,6 +39,16 @@ packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                    md_t*        cs_p);
 
 void
+packa_mr8_f32f32f32of32_col_major(float*       pack_a_buffer,
+                                  const float* a,
+                                  const md_t   rs_a,
+                                  const md_t   cs_a,
+                                  const md_t   MC,
+                                  const md_t   KC,
+                                  md_t*        rs_p,
+                                  md_t*        cs_p);
+
+void
 packa_mr6_f32f32f32of32_avx512(float*       pack_a_buf,
                                const float* a,
                                const md_t   rs,

@@ -26,10 +26,9 @@
  *
  */
 
-#include "immintrin.h"
-#include "kernels/dlp_kernels.h"
-#include "xmmintrin.h"
+#include <immintrin.h>
 
+#include "kernels/dlp_kernels.h"
 #include "lpgemm_s32_kern_macros.h"
 #include "lpgemm_s32_memcpy_macros.h"
 
@@ -66,14 +65,6 @@
     ymm0 = _mm256_hadd_epi32(ymm0, ymm1);                                      \
     xmm0 = _mm_add_epi32(_mm256_extracti128_si256(ymm0, 0),                    \
                          _mm256_extracti128_si256(ymm0, 1));
-
-#define CVT_STORE_S32_S8_MASK(reg, mask, m_ind, n_ind)                         \
-    _mm512_mask_cvtsepi32_storeu_epi8(                                         \
-        (int8_t*)post_ops_attr.buf_downscale                                   \
-            + (post_ops_attr.rs_c_downscale                                    \
-               * (post_ops_attr.post_op_c_i + m_ind))                          \
-            + post_ops_attr.post_op_c_j + (n_ind * 16),                        \
-        mask, reg);
 
 LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 {
@@ -588,13 +579,22 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
             scale0 =
                 _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
         }
-        // Need to ensure sse not used to avoid avx512 -> sse transition.
-        __m128i zero_point0 = _mm512_castsi512_si128(_mm512_setzero_si512());
 
-        zero_point0 = _mm_maskz_set1_epi8(
-            0xFFFF, *((int8_t*)post_ops_list_temp->op_args1));
+        __m512 zero_point0 = _mm512_setzero_ps();
 
-        CVT_MULRND_F32(acc_8, scale0, zero_point0);
+        if (post_ops_list_temp->zp_stor_type == BF16) {
+            BF16_F32_ZP_BCST(zero_point0)
+        } else if (post_ops_list_temp->zp_stor_type == F32) {
+            F32_ZP_BCST(zero_point0)
+        } else if (post_ops_list_temp->zp_stor_type == S32) {
+            S32_F32_ZP_BCST(zero_point0)
+        } else if (post_ops_list_temp->zp_stor_type == U8) {
+            U8_F32_ZP_BCST(zero_point0)
+        } else {
+            S8_F32_ZP_BCST(zero_point0)
+        }
+
+        MULADD_RND_F32(acc_8, scale0, zero_point0);
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }

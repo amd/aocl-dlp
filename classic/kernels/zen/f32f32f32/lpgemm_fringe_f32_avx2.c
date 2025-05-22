@@ -25,10 +25,10 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#include "immintrin.h"
-#include "kernels/dlp_kernels.h"
-#include "xmmintrin.h"
 
+#include <immintrin.h>
+
+#include "kernels/dlp_kernels.h"
 #include "lpgemm_kernel_macros_f32_avx2.h"
 
 LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x16)
@@ -42,7 +42,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x16)
         &&POST_OPS_MATRIX_MUL_5x16F, &&POST_OPS_TANH_5x16F,
         &&POST_OPS_SIGMOID_5x16F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -653,38 +653,44 @@ POST_OPS_MATRIX_ADD_5x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                         7);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                         9);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
-                                     11);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 3,
+                                         10, 11);
 
             // c[4:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 4, 12,
-                                     13);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 4,
+                                         12, 13);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                         7);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                         9);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
-                                     11);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr4, scl_fctr4, 3,
+                                         10, 11);
 
             // c[4:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr5, scl_fctr5, 4, 12,
-                                     13);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr5, scl_fctr5, 4,
+                                         12, 13);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -692,38 +698,44 @@ POST_OPS_MATRIX_ADD_5x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
-                                    11);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
+                                        11);
 
             // c[4:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 4, 12,
-                                    13);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 4, 12,
+                                        13);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
-                                    11);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
+                                        11);
 
             // c[4:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr5, scl_fctr5, 4, 12,
-                                    13);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr5, scl_fctr5, 4, 12,
+                                        13);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -820,38 +832,44 @@ POST_OPS_MATRIX_MUL_5x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
-                                    11);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
+                                        11);
 
             // c[4:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 4, 12,
-                                    13);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 4, 12,
+                                        13);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
-                                    11);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
+                                        11);
 
             // c[4:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr5, scl_fctr5, 4, 12,
-                                    13);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr5, scl_fctr5, 4, 12,
+                                        13);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -1012,7 +1030,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x16)
         &&POST_OPS_MATRIX_MUL_4x16F, &&POST_OPS_TANH_4x16F,
         &&POST_OPS_SIGMOID_4x16F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -1530,30 +1548,36 @@ POST_OPS_MATRIX_ADD_4x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                         7);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                         9);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
-                                     11);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 3,
+                                         10, 11);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                         7);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                         9);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
-                                     11);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr4, scl_fctr4, 3,
+                                         10, 11);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -1561,30 +1585,36 @@ POST_OPS_MATRIX_ADD_4x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
-                                    11);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
+                                        11);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
-                                    11);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
+                                        11);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -1668,30 +1698,36 @@ POST_OPS_MATRIX_MUL_4x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
-                                    11);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 3, 10,
+                                        11);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                        9);
 
             // c[3:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
-                                    11);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr4, scl_fctr4, 3, 10,
+                                        11);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -1829,7 +1865,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x16)
         &&POST_OPS_MATRIX_MUL_3x16F, &&POST_OPS_TANH_3x16F,
         &&POST_OPS_SIGMOID_3x16F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -2263,22 +2299,28 @@ POST_OPS_MATRIX_ADD_3x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                         7);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                         9);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                         7);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                         9);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -2286,22 +2328,28 @@ POST_OPS_MATRIX_ADD_3x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                        9);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                        9);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -2372,22 +2420,28 @@ POST_OPS_MATRIX_MUL_3x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8, 9);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 2, 8,
+                                        9);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
 
             // c[2:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8, 9);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr3, scl_fctr3, 2, 8,
+                                        9);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -2502,7 +2556,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x16)
         &&POST_OPS_MATRIX_MUL_2x16F, &&POST_OPS_TANH_2x16F,
         &&POST_OPS_SIGMOID_2x16F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -2847,16 +2901,20 @@ POST_OPS_MATRIX_ADD_2x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                         7);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                         5);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                         7);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -2864,16 +2922,20 @@ POST_OPS_MATRIX_ADD_2x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -2933,16 +2995,20 @@ POST_OPS_MATRIX_MUL_2x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 1, 6,
+                                        7);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
 
             // c[1:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6, 7);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr2, scl_fctr2, 1, 6,
+                                        7);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -3035,7 +3101,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x16)
         &&POST_OPS_SIGMOID_1x16F
     };
     fflush(stdout);
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -3304,10 +3370,12 @@ POST_OPS_MATRIX_ADD_1x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                         5);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            BF16_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                         5);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -3315,10 +3383,12 @@ POST_OPS_MATRIX_ADD_1x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_ADD_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_ADD_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -3369,10 +3439,12 @@ POST_OPS_MATRIX_MUL_1x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr2, 0, 4,
+                                        5);
         } else {
             // c[0:0-15]
-            F32_F32_MATRIX_MUL_2COL(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4, 5);
+            F32_F32_MATRIX_MUL_2COL_YMM(ymm1, ymm2, scl_fctr1, scl_fctr1, 0, 4,
+                                        5);
         }
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -3441,7 +3513,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x8)
         &&POST_OPS_MATRIX_MUL_5x8F, &&POST_OPS_TANH_5x8F,
         &&POST_OPS_SIGMOID_5x8F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -3885,34 +3957,34 @@ POST_OPS_MATRIX_ADD_5x8F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 1, 6);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 2, 8);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 2, 8);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 3, 10);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 3, 10);
 
             // c[4:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 4, 12);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 4, 12);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr2, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr2, 1, 6);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr3, 2, 8);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr3, 2, 8);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr4, 3, 10);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr4, 3, 10);
 
             // c[4:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr5, 4, 12);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr5, 4, 12);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -4171,7 +4243,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x8)
         &&POST_OPS_MATRIX_MUL_4x8F, &&POST_OPS_TANH_4x8F,
         &&POST_OPS_SIGMOID_4x8F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -4554,28 +4626,28 @@ POST_OPS_MATRIX_ADD_4x8F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 1, 6);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 2, 8);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 2, 8);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 3, 10);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 3, 10);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr2, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr2, 1, 6);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr3, 2, 8);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr3, 2, 8);
 
             // c[3:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr4, 3, 10);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr4, 3, 10);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -4798,7 +4870,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x8)
         &&POST_OPS_MATRIX_MUL_3x8F, &&POST_OPS_TANH_3x8F,
         &&POST_OPS_SIGMOID_3x8F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -5128,22 +5200,22 @@ POST_OPS_MATRIX_ADD_3x8F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 1, 6);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 2, 8);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 2, 8);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr2, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr2, 1, 6);
 
             // c[2:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr3, 2, 8);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr3, 2, 8);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -5332,7 +5404,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x8)
         &&POST_OPS_MATRIX_MUL_2x8F, &&POST_OPS_TANH_2x8F,
         &&POST_OPS_SIGMOID_2x8F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -5605,16 +5677,16 @@ POST_OPS_MATRIX_ADD_2x8F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 1, 6);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
 
             // c[1:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr2, 1, 6);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr2, 1, 6);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -5767,7 +5839,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x8)
         &&POST_OPS_MATRIX_MUL_1x8F, &&POST_OPS_TANH_1x8F,
         &&POST_OPS_SIGMOID_1x8F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -5982,10 +6054,10 @@ POST_OPS_MATRIX_ADD_1x8F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
         } else {
             // c[0:0-15]
-            BF16_F32_MATRIX_ADD_1COL(ymm1, scl_fctr1, 0, 4);
+            BF16_F32_MATRIX_ADD_1COL_YMM(ymm1, scl_fctr1, 0, 4);
         }
     } else {
         float* matptr = (float*)post_ops_list_temp->op_args1;
@@ -6104,7 +6176,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x4)
         &&POST_OPS_MATRIX_MUL_5x4F, &&POST_OPS_TANH_5x4F,
         &&POST_OPS_SIGMOID_5x4F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -6804,7 +6876,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x4)
         &&POST_OPS_MATRIX_MUL_4x4F, &&POST_OPS_TANH_4x4F,
         &&POST_OPS_SIGMOID_4x4F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -7407,7 +7479,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x4)
         &&POST_OPS_MATRIX_MUL_3x4F, &&POST_OPS_TANH_3x4F,
         &&POST_OPS_SIGMOID_3x4F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -7920,7 +7992,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x4)
         &&POST_OPS_MATRIX_MUL_2x4F, &&POST_OPS_TANH_2x4F,
         &&POST_OPS_SIGMOID_2x4F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -8347,7 +8419,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x4)
         &&POST_OPS_MATRIX_MUL_1x4F, &&POST_OPS_TANH_1x4F,
         &&POST_OPS_SIGMOID_1x4F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -8673,7 +8745,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x2)
         &&POST_OPS_MATRIX_MUL_5x2F, &&POST_OPS_TANH_5x2F,
         &&POST_OPS_SIGMOID_5x2F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -9376,7 +9448,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x2)
         &&POST_OPS_MATRIX_MUL_4x2F, &&POST_OPS_TANH_4x2F,
         &&POST_OPS_SIGMOID_4x2F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -9980,7 +10052,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x2)
         &&POST_OPS_MATRIX_MUL_3x2F, &&POST_OPS_TANH_3x2F,
         &&POST_OPS_SIGMOID_3x2F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -10492,7 +10564,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x2)
         &&POST_OPS_MATRIX_MUL_2x2F, &&POST_OPS_TANH_2x2F,
         &&POST_OPS_SIGMOID_2x2F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -10916,7 +10988,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x2)
         &&POST_OPS_MATRIX_MUL_1x2F, &&POST_OPS_TANH_1x2F,
         &&POST_OPS_SIGMOID_1x2F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -11243,7 +11315,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x1)
         &&POST_OPS_MATRIX_MUL_5x1F, &&POST_OPS_TANH_5x1F,
         &&POST_OPS_SIGMOID_5x1F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -11945,7 +12017,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x1)
         &&POST_OPS_MATRIX_MUL_4x1F, &&POST_OPS_TANH_4x1F,
         &&POST_OPS_SIGMOID_4x1F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -12551,7 +12623,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x1)
         &&POST_OPS_MATRIX_MUL_3x1F, &&POST_OPS_TANH_3x1F,
         &&POST_OPS_SIGMOID_3x1F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -13062,7 +13134,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x1)
         &&POST_OPS_MATRIX_MUL_2x1F, &&POST_OPS_TANH_2x1F,
         &&POST_OPS_SIGMOID_2x1F
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 
@@ -13487,7 +13559,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x1)
         &&POST_OPS_SIGMOID_1x1F
 
     };
-    // Typecast local copies of integers in case md_t and msz_t are a
+    // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     uint64_t k_iter = (uint64_t)k0;
 

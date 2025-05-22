@@ -109,14 +109,11 @@ lpgemm_gen_dlp_task_ids(lpgemm_thrinfo_t* thread,
         thread_ic->n_way    = 1;
         thread_ic->work_id  = 0;
     } else {
-        // Replicate the logic in bli_l3_sup_thrinfo_create_root for jc thrinfo.
         thread_jc->ocomm_id = thread->tid;
         thread_jc->n_way    = thread->jc_ways;
         md_t jc_work_id     = thread->tid / thread->ic_ways;
         thread_jc->work_id  = jc_work_id;
 
-        // Replicate the sub node creation logic in
-        // bli_thrinfo_sup_create_for_cntl for ic thrinfo.
         md_t ic_comm_id     = thread->tid % thread->ic_ways;
         thread_ic->ocomm_id = ic_comm_id;
         thread_ic->n_way    = thread->ic_ways;
