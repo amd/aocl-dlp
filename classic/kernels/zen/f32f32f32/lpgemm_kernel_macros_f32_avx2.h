@@ -192,7 +192,7 @@
 multiply with Beta, and add to alpha*A*B*/
 #define BF16_F32_C_BNZ_8(m_ind, n_ind, ymm0, beta, ymm2)                       \
     ymm0 = (__m256)_mm256_sllv_epi32(                                          \
-        _mm256_cvtepi16_epi32(_mm_load_si128(                                  \
+        _mm256_cvtepi16_epi32(_mm_loadu_si128(                                  \
             (__m128i const*)((bfloat16*)post_ops_attr.buf_downscale            \
                              + (post_ops_attr.rs_c_downscale                   \
                                 * (post_ops_attr.post_op_c_i + m_ind))         \

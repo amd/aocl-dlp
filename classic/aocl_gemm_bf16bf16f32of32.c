@@ -193,9 +193,17 @@ AOCL_GEMM_MATMUL(bfloat16, bfloat16, float, float, bf16bf16f32of32)
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
-    if ((dlp_cpuid_is_avx512bf16_supported() == TRUE)
+    /* While AOCL_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that supports BF16/VNNI
+    *  with only the ISA check the exeution could enter tiny path and result in seg fault
+    *  as the tiny path for BF16->FP32 is not available. Hence the arch_id also has to be
+    *  verified here.
+    */
+    dlp_arch_t arch_id = dlp_get_arch();
+    if (( ( arch_id == DLP_ARCH_ZEN4 ) || ( arch_id == DLP_ARCH_ZEN5 ) )
+        && (dlp_cpuid_is_avx512bf16_supported() == TRUE)
         && (is_tiny_input_bf16of32(m, n, k, lcntx_g) == TRUE)
-        && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
+        && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE))
+    {
         lpgemm_rowvar_tiny_bf16bf16f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
             cs_c, alpha, beta, lcntx_g, post_op_list, F32);
