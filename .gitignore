@@ -19,3 +19,9 @@ venv
 
 # Ignore internal documentation
 docs/internal
+
+# Ignore experiments
+exp
+
+# Ignore setup artifacts
+.setup_done
