@@ -1377,8 +1377,8 @@ POST_OPS_SIGMOID_5x64F: {
 }
 
 POST_OPS_5x64F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -2557,8 +2557,8 @@ POST_OPS_SIGMOID_4x64F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_4x64F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -3524,8 +3524,8 @@ POST_OPS_SIGMOID_3x64F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_3x64F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -4274,8 +4274,8 @@ POST_OPS_SIGMOID_2x64F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_2x64F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -4803,8 +4803,8 @@ POST_OPS_SIGMOID_1x64F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_1x64F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -5923,8 +5923,8 @@ POST_OPS_SIGMOID_5x48F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_5x48F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -6898,9 +6898,9 @@ POST_OPS_SIGMOID_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_4x48F_DISABLE:
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+POST_OPS_4x48F_DISABLE:;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -7696,8 +7696,8 @@ POST_OPS_SIGMOID_3x48F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_3x48F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -8323,8 +8323,8 @@ POST_OPS_SIGMOID_2x48F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_2x48F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -8780,8 +8780,8 @@ POST_OPS_SIGMOID_1x48F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_1x48F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -9677,8 +9677,8 @@ POST_OPS_SIGMOID_5x32F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_5x32F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -10464,8 +10464,8 @@ POST_OPS_SIGMOID_4x32F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_4x32F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -11129,8 +11129,8 @@ POST_OPS_SIGMOID_3x32F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_3x32F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -11638,8 +11638,8 @@ POST_OPS_SIGMOID_2x32F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_2x32F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
@@ -12022,8 +12022,8 @@ POST_OPS_SIGMOID_1x32F: {
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
 POST_OPS_1x32F_DISABLE:;
-    uint32_t tlsb, rounded, temp[16] = {0};
-    int i;
+    uint32_t  tlsb, rounded, temp[16] = { 0 };
+    int       i;
     bfloat16* dest;
 
     if ((post_ops_attr.buf_downscale != NULL)
