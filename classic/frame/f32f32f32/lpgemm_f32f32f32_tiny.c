@@ -54,6 +54,28 @@ typedef void (*lpgemm_rowvar_f32)(const md_t,
                                   lpgemm_post_op*,
                                   lpgemm_post_op_attr);
 
+typedef void (*lpgemv_m_one_ker_ft)(const md_t,
+                                    const md_t,
+                                    const float*,
+                                    const md_t,
+                                    const md_t,
+                                    const AOCL_MEMORY_TAG,
+                                    const float*,
+                                    md_t,
+                                    const md_t,
+                                    const AOCL_MEMORY_TAG,
+                                    float*,
+                                    const md_t,
+                                    const md_t,
+                                    const float,
+                                    const float,
+                                    md_t,
+                                    const md_t,
+                                    const md_t,
+                                    const md_t,
+                                    lpgemm_post_op*,
+                                    lpgemm_post_op_attr*);
+
 typedef void (*lpgemv_n_one_ker_ft)(const md_t,
                                     const md_t,
                                     const float*,
@@ -93,6 +115,10 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
     md_t   rs_b_use = rs_b;
     md_t   cs_b_use = cs_b;
 
+    float*         pack_a_buffer_f32f32f32of32 = NULL;
+    float*         pack_b_buffer_f32f32f32of32 = NULL;
+    dlp_clsc_err_t err                         = DLP_CLSC_SUCCESS;
+
     lpgemm_post_op_attr post_ops_attr;
     post_ops_attr.c_stor_type = c_downscale;
     if (c_downscale < F32)
@@ -101,10 +127,6 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
         post_ops_attr.buf_downscale = NULL;
 
     if (n == 1) {
-        float*         pack_a_buffer_f32f32f32of32 = NULL;
-        float*         pack_b_buffer_f32f32f32of32 = NULL;
-        dlp_clsc_err_t err                         = DLP_CLSC_SUCCESS;
-
         md_t                   MR;
         lpgemv_n_one_ker_ft    ker_fp;
         lpgemv_n_one_a_pack_ft packa_fp;
@@ -165,20 +187,86 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
         if (pack_b_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_b_buffer_f32f32f32of32);
         }
+    } else { // m == 1 case
+        md_t NR = lcntx->blksz.NR;
+        md_t KC = lcntx->blksz.KC;
+
+        /*In single threaded scenarios, B matrix would be travesered in
+          blocks of NR x KC and will not have any split of panel boundary .*/
+        md_t n_sub_updated = 0;
+        md_t jc_loop_rem   = 0;
+
+        lpgemv_m_one_ker_ft ker_fp;
+
+#ifdef BLIS_KERNELS_ZEN4
+        if (lpgemm_get_enabled_arch() == BLIS_ARCH_ZEN3) {
+            ker_fp = lpgemv_m_one_f32f32f32of32_avx512_256;
+        } else {
+            ker_fp = lpgemv_m_one_f32f32f32of32;
+        }
+#else
+        ker_fp = lpgemv_m_one_f32f32f32of32_avx2;
+#endif
+        if (mtag_a == PACK && cs_a != 1) {
+            msz_t mem_a_size_req = sizeof(float) * k;
+            pack_a_buffer_f32f32f32of32 =
+                (float*)dlp_malloc_page_aligned(mem_a_size_req, &err);
+            for (md_t k0 = 0; k0 < k; k0++) {
+                pack_a_buffer_f32f32f32of32[k0] = a[k0 * cs_a];
+            }
+            a_use    = pack_a_buffer_f32f32f32of32;
+            rs_a_use = 1;
+            cs_a_use = 1;
+        }
+
+        if (mtag_b == PACK) {
+            md_t  nc0_updated    = make_multiple_of_n(n, NR);
+            msz_t mem_b_size_req = sizeof(float) * nc0_updated * k;
+
+            pack_b_buffer_f32f32f32of32 =
+                (float*)dlp_malloc_page_aligned(mem_b_size_req, &err);
+
+            n_sub_updated = nc0_updated;
+
+            ((lpgemm_pack_f32)lcntx->packb_fun_ptr)(pack_b_buffer_f32f32f32of32,
+                                                    b, rs_b, cs_b, n, k,
+                                                    &rs_b_use, &cs_b_use);
+
+            rs_b_use = NR;
+            cs_b_use = 1;
+
+            b_use = pack_b_buffer_f32f32f32of32;
+        } else if (mtag_b == REORDERED) {
+            b_use    = (float*)b;
+            rs_b_use = NR;
+            cs_b_use = 1;
+        } else {
+            b_use = (float*)b;
+        }
+
+        // Post ops meta attributes.
+        post_ops_attr.post_op_c_i = 0;
+        post_ops_attr.post_op_c_j = 0;
+
+        (ker_fp)(n, k, (float*)a_use, rs_a_use, cs_a_use, mtag_a, (float*)b_use,
+                 rs_b_use, cs_b_use, mtag_b, c, rs_c, cs_c, alpha, beta, NR, KC,
+                 n_sub_updated, jc_loop_rem, post_op_list, &post_ops_attr);
+
+        if (pack_b_buffer_f32f32f32of32 != NULL) {
+            dlp_free_page_aligned(pack_b_buffer_f32f32f32of32);
+        }
+        if (pack_a_buffer_f32f32f32of32 != NULL) {
+            dlp_free_page_aligned(pack_a_buffer_f32f32f32of32);
+        }
     }
 }
-
 LPGEMM_TINY(float, float, float, f32f32f32of32)
 {
-#ifdef DLP_KERNELS_ZEN4
     // Handle using LPGEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
-    if ((((m == 1) && (lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3)) || (n == 1))
-        && (dlp_cpuid_is_avx512_supported() == TRUE)) {
-#else
-    // m=1 case is not implemented yet for AVX2
-    if (((n == 1)) && (dlp_cpuid_is_avx2fma3_supported() == TRUE)) {
-#endif
+    if (((m == 1) || (n == 1))
+        && ((dlp_cpuid_is_avx512_supported() == TRUE)
+            || (dlp_cpuid_is_avx2fma3_supported() == TRUE))) {
         lpgemv_rowvar_tiny_f32f32f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
             cs_c, alpha, beta, lcntx, post_op_list, c_downscale);

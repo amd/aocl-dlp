@@ -87,16 +87,13 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
     __m128 xmm0, xmm1;
 
-    __m256i masks[9] = {
-        _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0),        // 0 elements
-        _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, -1),       // 1 element
-        _mm256_set_epi32(0, 0, 0, 0, 0, 0, -1, -1),      // 2 elements
-        _mm256_set_epi32(0, 0, 0, 0, 0, -1, -1, -1),     // 3 elements
-        _mm256_set_epi32(0, 0, 0, 0, -1, -1, -1, -1),    // 4 elements
-        _mm256_set_epi32(0, 0, 0, -1, -1, -1, -1, -1),   // 5 elements
-        _mm256_set_epi32(0, 0, -1, -1, -1, -1, -1, -1),  // 6 elements
-        _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1), // 7 elements
-        _mm256_set_epi32(-1, -1, -1, -1, -1, -1, -1, -1) // 8 elements
+    static const int32_t mask[9][9] = {
+        { 0, 0, 0, 0, 0, 0, 0, 0 },   // load no values, not used currently
+        { -1, 0, 0, 0, 0, 0, 0, 0 },  // load 1 value from memory
+        { -1, -1, 0, 0, 0, 0, 0, 0 }, // load 2 values from memory
+        { -1, -1, -1, 0, 0, 0, 0, 0 },     { -1, -1, -1, -1, 0, 0, 0, 0 },
+        { -1, -1, -1, -1, -1, 0, 0, 0 },   { -1, -1, -1, -1, -1, -1, 0, 0 },
+        { -1, -1, -1, -1, -1, -1, -1, 0 }, { -1, -1, -1, -1, -1, -1, -1, -1 }
     };
 
     // MR comes from framework, we need to set it based on the underlying
@@ -107,8 +104,8 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         md_t k_iter = k / 8;
         md_t k_rem  = k % 8;
 
-        const __m256i store_mask = masks[mr0];
-        const __m256i k_rem_mask = masks[k_rem];
+        __m256i store_mask = _mm256_loadu_si256((__m256i*)mask[mr0]);
+        __m256i k_rem_mask = _mm256_loadu_si256((__m256i*)mask[k_rem]);
 
         /* zero the accumulator registers */
         ZERO_ACC_YMM_4_REG(ymm8, ymm9, ymm10, ymm11);
@@ -322,7 +319,14 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
     POST_OPS_BIAS_1x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
-            ymm0 = _mm256_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            if (post_ops_list_temp->stor_type == BF16) {
+                ymm0 = (__m256)(_mm256_sllv_epi32(
+                    _mm256_cvtepi16_epi32(_mm_set1_epi16(
+                        *((bfloat16*)post_ops_list_temp->op_args1))),
+                    _mm256_set1_epi32(16)));
+            } else {
+                ymm0 = _mm256_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            }
         } else {
             // If original output was columns major, then by the time
             // kernel sees it, the matrix would be accessed as if it were
@@ -330,9 +334,19 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
             // the ic index, and each bias element corresponds to an
             // entire row of the transposed output array, instead of an
             // entire column.
-            ymm0 = _mm256_maskload_ps((float*)post_ops_list_temp->op_args1
-                                          + post_ops_attr.post_op_c_i,
-                                      store_mask);
+            if (post_ops_list_temp->stor_type == BF16) {
+                __m128i bias_mask = _mm_loadu_si128((__m128i*)mask[mr0]);
+                ymm0              = (__m256)(_mm256_sllv_epi32(
+                    _mm256_cvtepi16_epi32(_mm_maskload_epi32(
+                        (int const*)(((bfloat16*)post_ops_list_temp->op_args1)
+                                     + post_ops_attr.post_op_c_i),
+                        bias_mask)),
+                    _mm256_set1_epi32(16)));
+            } else {
+                ymm0 = _mm256_maskload_ps((float*)post_ops_list_temp->op_args1
+                                              + post_ops_attr.post_op_c_i,
+                                          store_mask);
+            }
         }
         ymm8 = _mm256_add_ps(ymm0, ymm8);
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
@@ -375,6 +389,10 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
     POST_OPS_DOWNSCALE_1x16F: {
         __m256 zero_point0 = _mm256_setzero_ps();
         __m256 selector1   = _mm256_setzero_ps();
+
+        bool is_bf16 = (post_ops_list_temp->stor_type == BF16)
+                       || ((post_ops_list_temp->stor_type == NONE)
+                           && (post_ops_attr.c_stor_type == BF16));
         // Need to account for row vs column major swaps. For scalars
         // scale and zero point, no implications.
         // Even though different registers are used for scalar in column
@@ -385,7 +403,12 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 _mm256_set1_ps(*((float*)post_ops_list_temp->scale_factor));
         }
         if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-            zero_point0 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args1);
+            if (is_bf16 == TRUE) {
+                BF16_F32_ZP_SCALAR_BCAST_AVX2(zero_point0);
+            } else {
+                zero_point0 =
+                    _mm256_set1_ps(*(float*)post_ops_list_temp->op_args1);
+            }
         }
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
@@ -405,10 +428,21 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                                        store_mask);
             }
             if (*(md_t*)post_ops_list_temp->op_args3 > 1) {
-                zero_point0 =
-                    _mm256_maskload_ps((float*)post_ops_list_temp->op_args1
-                                           + post_ops_attr.post_op_c_i,
-                                       store_mask);
+                if (is_bf16 == TRUE) {
+                    __m128i zp_mask = _mm_loadu_si128((__m128i*)mask[mr0]);
+                    zero_point0     = (__m256)(_mm256_sllv_epi32(
+                        _mm256_cvtepi16_epi32(_mm_maskload_epi32(
+                            (int const*)(((bfloat16*)
+                                              post_ops_list_temp->op_args1)
+                                         + post_ops_attr.post_op_c_i),
+                            zp_mask)),
+                        _mm256_set1_epi32(16)));
+                } else {
+                    zero_point0 =
+                        _mm256_maskload_ps((float*)post_ops_list_temp->op_args1
+                                               + post_ops_attr.post_op_c_i,
+                                           store_mask);
+                }
             }
             F32_SCL_MULRND_AVX2(ymm8, selector1, zero_point0);
         }
@@ -422,6 +456,10 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         __m256 scl_fctr1 = _mm256_setzero_ps();
 
+        bool is_bf16 = (post_ops_list_temp->stor_type == BF16)
+                       || ((post_ops_list_temp->stor_type == NONE)
+                           && (post_ops_attr.c_stor_type == BF16));
+
         // Even though different registers are used for scalar in column and
         // row major case, all those registers will contain the same value.
         // For column major, if m==1, then it means n=1 and scale_factor_len=1.
@@ -437,22 +475,51 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                     store_mask);
             }
         }
-        float* matptr = (float*)post_ops_list_temp->op_args1;
+        if (is_bf16 == TRUE) {
+            bfloat16* matptr = (bfloat16*)post_ops_list_temp->op_args1;
+            __m128i   _mask  = _mm_loadu_si128((__m128i*)mask[mr0]);
 
-        if (ldm == 1) {
-            selector1 = _mm256_maskload_ps((matptr + post_ops_attr.post_op_c_i),
-                                           store_mask);
-            selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-            ymm8      = _mm256_add_ps(selector1, ymm8);
+            if (ldm == 1) {
+                selector1 = (__m256)(_mm256_sllv_epi32(
+                    _mm256_cvtepi16_epi32(_mm_maskload_epi32(
+                        (int const*)(matptr + post_ops_attr.post_op_c_i),
+                        _mask)),
+                    _mm256_set1_epi32(16)));
 
-        } else {
-            float ctemp[16];
-            for (md_t i = 0; i < mr0; i++) {
-                ctemp[i] = *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_add_ps(selector1, ymm8);
+            } else {
+                bfloat16 ctemp[16];
+                for (md_t i = 0; i < mr0; i++) {
+                    ctemp[i] =
+                        *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
+                }
+                selector1 = (__m256)(_mm256_sllv_epi32(
+                    _mm256_cvtepi16_epi32(
+                        _mm_maskload_epi32((int const*)(ctemp), _mask)),
+                    _mm256_set1_epi32(16)));
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_add_ps(selector1, ymm8);
             }
-            selector1 = _mm256_maskload_ps(ctemp, store_mask);
-            selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-            ymm8      = _mm256_add_ps(selector1, ymm8);
+        } else {
+            float* matptr = (float*)post_ops_list_temp->op_args1;
+
+            if (ldm == 1) {
+                selector1 = _mm256_maskload_ps(
+                    (matptr + post_ops_attr.post_op_c_i), store_mask);
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_add_ps(selector1, ymm8);
+
+            } else {
+                float ctemp[16];
+                for (md_t i = 0; i < mr0; i++) {
+                    ctemp[i] =
+                        *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
+                }
+                selector1 = _mm256_maskload_ps(ctemp, store_mask);
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_add_ps(selector1, ymm8);
+            }
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
@@ -463,6 +530,10 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         __m256 scl_fctr1 = _mm256_setzero_ps();
 
+        bool is_bf16 = (post_ops_list_temp->stor_type == BF16)
+                       || ((post_ops_list_temp->stor_type == NONE)
+                           && (post_ops_attr.c_stor_type == BF16));
+
         // Even though different registers are used for scalar in column and
         // row major case, all those registers will contain the same value.
         // For column major, if m==1, then it means n=1 and scale_factor_len=1.
@@ -478,21 +549,50 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                     store_mask);
             }
         }
-        float* matptr = (float*)post_ops_list_temp->op_args1;
+        if (is_bf16 == TRUE) {
+            bfloat16* matptr = (bfloat16*)post_ops_list_temp->op_args1;
+            __m128i   _mask  = _mm_loadu_si128((__m128i*)mask[mr0]);
 
-        if (ldm == 1) {
-            selector1 = _mm256_maskload_ps((matptr + post_ops_attr.post_op_c_i),
-                                           store_mask);
-            selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-            ymm8      = _mm256_mul_ps(selector1, ymm8);
-        } else {
-            float ctemp[8];
-            for (md_t i = 0; i < mr0; i++) {
-                ctemp[i] = *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
+            if (ldm == 1) {
+                selector1 = (__m256)(_mm256_sllv_epi32(
+                    _mm256_cvtepi16_epi32(_mm_maskload_epi32(
+                        (int const*)(matptr + post_ops_attr.post_op_c_i),
+                        _mask)),
+                    _mm256_set1_epi32(16)));
+
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_mul_ps(selector1, ymm8);
+            } else {
+                bfloat16 ctemp[16];
+                for (md_t i = 0; i < mr0; i++) {
+                    ctemp[i] =
+                        *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
+                }
+                selector1 = (__m256)(_mm256_sllv_epi32(
+                    _mm256_cvtepi16_epi32(
+                        _mm_maskload_epi32((int const*)(ctemp), _mask)),
+                    _mm256_set1_epi32(16)));
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_mul_ps(selector1, ymm8);
             }
-            selector1 = _mm256_maskload_ps(ctemp, store_mask);
-            selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-            ymm8      = _mm256_mul_ps(selector1, ymm8);
+        } else {
+            float* matptr = (float*)post_ops_list_temp->op_args1;
+
+            if (ldm == 1) {
+                selector1 = _mm256_maskload_ps(
+                    (matptr + post_ops_attr.post_op_c_i), store_mask);
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_mul_ps(selector1, ymm8);
+            } else {
+                float ctemp[8];
+                for (md_t i = 0; i < mr0; i++) {
+                    ctemp[i] =
+                        *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
+                }
+                selector1 = _mm256_maskload_ps(ctemp, store_mask);
+                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+                ymm8      = _mm256_mul_ps(selector1, ymm8);
+            }
         }
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR

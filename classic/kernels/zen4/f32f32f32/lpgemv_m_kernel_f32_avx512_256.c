@@ -313,23 +313,34 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
     POST_OPS_BIAS_1x64F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
-            float* bias_ptr = (float*)post_ops_list_temp->op_args1
-                              + post_ops_attr.post_op_c_j;
-            ymm9 = _mm256_maskload_ps(bias_ptr + (0 * 8), k1);
+            if (post_ops_list_temp->stor_type == BF16) {
+                BF16_F32_BIAS_LOAD_AVX2(ymm9, 0);
+                BF16_F32_BIAS_LOAD_AVX2(ymm10, 1);
+                BF16_F32_BIAS_LOAD_AVX2(ymm11, 2);
+                BF16_F32_BIAS_LOAD_AVX2(ymm12, 3);
+                BF16_F32_BIAS_LOAD_AVX2(ymm13, 4);
+                BF16_F32_BIAS_LOAD_AVX2(ymm14, 5);
+                BF16_F32_BIAS_LOAD_AVX2(ymm15, 6);
+                BF16_F32_BIAS_LOAD_AVX2(ymm8, 7);
+            } else {
+                float* bias_ptr = (float*)post_ops_list_temp->op_args1
+                                  + post_ops_attr.post_op_c_j;
+                ymm9 = _mm256_maskload_ps(bias_ptr + (0 * 8), k1);
 
-            ymm10 = _mm256_maskload_ps(bias_ptr + (1 * 8), k2);
+                ymm10 = _mm256_maskload_ps(bias_ptr + (1 * 8), k2);
 
-            ymm11 = _mm256_maskload_ps(bias_ptr + (2 * 8), k3);
+                ymm11 = _mm256_maskload_ps(bias_ptr + (2 * 8), k3);
 
-            ymm12 = _mm256_maskload_ps(bias_ptr + (3 * 8), k4);
+                ymm12 = _mm256_maskload_ps(bias_ptr + (3 * 8), k4);
 
-            ymm13 = _mm256_maskload_ps(bias_ptr + (4 * 8), k5);
+                ymm13 = _mm256_maskload_ps(bias_ptr + (4 * 8), k5);
 
-            ymm14 = _mm256_maskload_ps(bias_ptr + (5 * 8), k6);
+                ymm14 = _mm256_maskload_ps(bias_ptr + (5 * 8), k6);
 
-            ymm15 = _mm256_maskload_ps(bias_ptr + (6 * 8), k7);
+                ymm15 = _mm256_maskload_ps(bias_ptr + (6 * 8), k7);
 
-            ymm8 = _mm256_maskload_ps(bias_ptr + (7 * 8), k8);
+                ymm8 = _mm256_maskload_ps(bias_ptr + (7 * 8), k8);
+            }
         } else {
             // If original output was columns major, then by the time
             // kernel sees it, the matrix would be accessed as if it were
@@ -337,10 +348,13 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
             // the ic index, and each bias element corresponds to an
             // entire row of the transposed output array, instead of an
             // entire column.
-            float bias = (*((float*)post_ops_list_temp->op_args1
-                            + post_ops_attr.post_op_c_i + 0));
-
-            ymm9  = _mm256_set1_ps(bias);
+            if (post_ops_list_temp->stor_type == BF16) {
+                BF16_F32_BIAS_BCAST_AVX2(ymm9, 0);
+            } else {
+                float bias = (*((float*)post_ops_list_temp->op_args1
+                                + post_ops_attr.post_op_c_i + 0));
+                ymm9       = _mm256_set1_ps(bias);
+            }
             ymm10 = ymm11 = ymm12 = ymm13 = ymm14 = ymm15 = ymm8 = ymm9;
         }
         // c[0,0-7]
@@ -446,6 +460,10 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         __m256 zero_point6 = _mm256_setzero_ps();
         __m256 zero_point7 = _mm256_setzero_ps();
 
+        bool is_bf16 = (post_ops_list_temp->stor_type == BF16)
+                       || ((post_ops_list_temp->stor_type == NONE)
+                           && (post_ops_attr.c_stor_type == BF16));
+
         // Need to account for row vs column major swaps. For scalars
         // scale and zero point, no implications.
         // Even though different registers are used for scalar in column
@@ -471,8 +489,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
                 _mm256_set1_ps(*((float*)post_ops_list_temp->scale_factor));
         }
         if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-            if ((post_ops_attr.buf_downscale != NULL)
-                && (post_ops_attr.is_first_k == TRUE)) {
+            if (is_bf16 == TRUE) {
                 BF16_F32_ZP_SCALAR_BCAST_AVX2(zero_point0)
                 BF16_F32_ZP_SCALAR_BCAST_AVX2(zero_point1)
                 BF16_F32_ZP_SCALAR_BCAST_AVX2(zero_point2)
@@ -537,8 +554,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
                     k8);
             }
             if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-                if ((post_ops_attr.buf_downscale != NULL)
-                    && (post_ops_attr.is_first_k == TRUE)) {
+                if (is_bf16 == TRUE) {
                     BF16_F32_ZP_VECTOR_LOAD_AVX2(zero_point0, 0)
                     BF16_F32_ZP_VECTOR_LOAD_AVX2(zero_point1, 1)
                     BF16_F32_ZP_VECTOR_LOAD_AVX2(zero_point2, 2)

@@ -290,6 +290,16 @@
                        + post_ops_attr.post_op_c_i + n_ind))),                 \
         _mm512_set1_epi32(16)));
 
+#define BF16_F32_BIAS_GEMV(scr, n_ind, bias_mask)                              \
+    BF16_F32_ZP_BCST(scr, n_ind, bias_mask);
+
+#define BF16_F32_BIAS_LOAD_GEMV(scr, mask, n_ind)                              \
+    scr = (__m512)(_mm512_sllv_epi32(                                          \
+        _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(                        \
+            (mask), ((bfloat16*)post_ops_list_temp->op_args1)                  \
+                        + post_ops_attr.post_op_c_i + (n_ind * 16))),          \
+        _mm512_set1_epi32(16)));
+
 // Matrix Add post-ops helper macros
 
 #define F32_MATRIX_ADD_1COL(scr0, m_ind, r_ind0)                               \
@@ -319,6 +329,15 @@
                       + post_ops_attr.post_op_c_j + (n_ind * 16))),            \
         _mm512_set1_epi32(16)));                                               \
     scr = _mm512_mul_ps(scr, scl_fct);
+
+#define BF16_F32_MATRIX_ADD_1COL_MASK(mask, scr0, scl_fct0, m_ind, r_ind0)     \
+    BF16_F32_MATRIX_ADD_LOAD(mask, scr0, scl_fct0, m_ind, 0);                  \
+    F32_MATRIX_ADD_1COL(scr0, m_ind, r_ind0);
+
+#define BF16_F32_MATRIX_ADD_1COL(scr0, scl_fct0, m_ind, r_ind0)                \
+    BF16_F32_MATRIX_ADD_LOAD(_cvtu32_mask16(0xFFFF), scr0, scl_fct0, m_ind,    \
+                             0);                                               \
+    F32_MATRIX_ADD_1COL(scr0, m_ind, r_ind0);
 
 #define BF16_F32_MATRIX_ADD_2COL(scr0, scr1, scl_fct0, scl_fct1, m_ind,        \
                                  r_ind0, r_ind1)                               \
@@ -365,6 +384,13 @@
                              3);                                               \
     F32_MATRIX_ADD_4COL(scr0, scr1, scr2, scr3, m_ind, r_ind0, r_ind1, r_ind2, \
                         r_ind3);
+
+#define BF16_F32_MATRIX_ADD_LOAD_GEMV(mask, scr, scl_fct, postop_ptr, n_ind)   \
+    scr = (__m512)(_mm512_sllv_epi32(                                          \
+        _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(                        \
+            mask, (bfloat16*)(matptr + postop_ptr + (n_ind * 16)))),           \
+        _mm512_set1_epi32(16)));                                               \
+    scr = _mm512_mul_ps(scr, scl_fct);
 
 // S8 matrix_add helper macros.
 #define S8_F32_MATRIX_ADD_LOAD(mask, scr, scl_fct, m_ind, n_ind)               \
@@ -518,6 +544,18 @@
 
 #define BF16_F32_MATRIX_MUL_LOAD(mask, scr, scl_fct, m_ind, n_ind)             \
     BF16_F32_MATRIX_ADD_LOAD(mask, scr, scl_fct, m_ind, n_ind);
+
+#define BF16_F32_MATRIX_MUL_LOAD_GEMV(mask, scr, scl_fct, postop_ptr, n_ind)   \
+    BF16_F32_MATRIX_ADD_LOAD_GEMV(mask, scr, scl_fct, postop_ptr, n_ind);
+
+#define BF16_F32_MATRIX_MUL_1COL_MASK(mask, scr0, scl_fct0, m_ind, r_ind0)     \
+    BF16_F32_MATRIX_MUL_LOAD(mask, scr0, scl_fct0, m_ind, 0);                  \
+    F32_MATRIX_MUL_1COL(scr0, m_ind, r_ind0);
+
+#define BF16_F32_MATRIX_MUL_1COL(scr0, scl_fct0, m_ind, r_ind0)                \
+    BF16_F32_MATRIX_MUL_LOAD(_cvtu32_mask16(0xFFFF), scr0, scl_fct0, m_ind,    \
+                             0);                                               \
+    F32_MATRIX_MUL_1COL(scr0, m_ind, r_ind0);
 
 #define BF16_F32_MATRIX_MUL_2COL(scr0, scr1, scl_fct0, scl_fct1, m_ind,        \
                                  r_ind0, r_ind1)                               \
