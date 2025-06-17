@@ -37,6 +37,7 @@ include(cmake/dlp_options.cmake)
 include(cmake/dlp_dependencies.cmake)
 include(cmake/dlp_documentation.cmake)
 include(cmake/dlp_testing.cmake)
+include(cmake/dlp_sanitizers.cmake)
 
 # OS specific CMake modules goes here
 if(UNIX)
@@ -88,6 +89,9 @@ target_link_libraries(${PROJECT_NAME}_static
     PUBLIC
         dlp::openmp
 )
+
+# Add all sanitizers to the target
+dlp_add_all_sanitizers(${PROJECT_NAME} ${PROJECT_NAME}_static)
 
 # Set include directories for the target shared library
 target_include_directories(${PROJECT_NAME}

@@ -121,11 +121,10 @@ lpgemm_detect_thread_topo()
                     break;
                 }
             }
-        }
-        else {
+        } else {
             // Thread was not spawned, cannot detect topo.
             // Break out of the current loop.
-            can_detect_topo = FALSE
+            can_detect_topo = FALSE;
             break;
         }
         // Check if the topo detection failed at any point.
@@ -142,8 +141,9 @@ lpgemm_detect_thread_topo()
     if (can_detect_topo == TRUE) {
 
         adj_tid_cnt_for_core_grps = calloc(num_core_grps, sizeof(int));
-        tid_cnt_for_core_grps = calloc(num_core_grps, sizeof(int));
-        if ((adj_tid_cnt_for_core_grps == NULL) || (tid_cnt_for_core_grps == NULL)) {
+        tid_cnt_for_core_grps     = calloc(num_core_grps, sizeof(int));
+        if ((adj_tid_cnt_for_core_grps == NULL)
+            || (tid_cnt_for_core_grps == NULL)) {
             goto err_handle;
         }
 
