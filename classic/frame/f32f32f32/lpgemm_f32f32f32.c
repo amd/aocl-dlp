@@ -107,6 +107,10 @@ typedef void (*lpgemv_a_pack_ft)(float*,
 
 LPGEMV(float, float, float, f32f32f32of32)
 {
+    // Ignoring mtag_a/b and should_pack_A/B for now .
+    // Matrices are packed only when the storage format is not supported by the
+    // kernel.
+
     const float* a_use    = (float*)a;
     md_t         rs_a_use = rs_a;
     md_t         cs_a_use = cs_a;
@@ -166,7 +170,7 @@ LPGEMV(float, float, float, f32f32f32of32)
         packa_fp = packa_mr8_f32f32f32of32_col_major;
 #endif
         // Pack B matrix if rs_b > 1
-        if ((mtag_b == PACK) && (rs_b != 1)) {
+        if (rs_b != 1) {
             mem_b_size_req = sizeof(float) * k;
 
             if (pack_b_buffer_f32f32f32of32 == NULL) {
@@ -199,7 +203,7 @@ LPGEMV(float, float, float, f32f32f32of32)
             post_ops_attr.post_op_c_i = ic;
 
             // To-Do: pack A case needs to be handled for AVX2 case.
-            if (mtag_a == PACK && cs_a != 1) {
+            if (cs_a != 1) {
                 mem_a_size_req = sizeof(float) * mc0 * k;
 
                 if (pack_a_buffer_f32f32f32of32 == NULL) {
@@ -217,10 +221,10 @@ LPGEMV(float, float, float, f32f32f32of32)
                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
                    post_op_list, &post_ops_attr);
         }
-        if ((mtag_a == PACK) && (pack_a_buffer_f32f32f32of32 != NULL)) {
+        if (pack_a_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_a_buffer_f32f32f32of32);
         }
-        if ((mtag_b == PACK) && (pack_b_buffer_f32f32f32of32 != NULL)) {
+        if (pack_b_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_b_buffer_f32f32f32of32);
         }
     } else {
@@ -248,7 +252,7 @@ LPGEMV(float, float, float, f32f32f32of32)
         thread_jc.work_id = thread->tid;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        if (mtag_a == PACK) {
+        if (cs_a != 1) {
             mem_a_size_req = sizeof(float) * k;
 
             if (pack_a_buffer_f32f32f32of32 == NULL) {
@@ -329,7 +333,7 @@ LPGEMV(float, float, float, f32f32f32of32)
         } // jc loop
 
         // Release pack buffers.
-        if ((mtag_a == PACK) && (pack_a_buffer_f32f32f32of32 != NULL)) {
+        if ((cs_a != 1) && (pack_a_buffer_f32f32f32of32 != NULL)) {
             dlp_free_page_aligned(pack_a_buffer_f32f32f32of32);
         }
         if ((mtag_b == PACK) && (pack_b_buffer_f32f32f32of32 != NULL)) {
@@ -387,7 +391,7 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
     msz_t  mem_a_size_req              = 0;
 
     // Check if packing of B is required.
-    bool should_pack_B = rntm->pack_b || (rs_b == 1);
+    bool should_pack_B = rntm->pack_b;
 
     // Pack buffer for B.
     float* pack_b_buffer_f32f32f32of32 = NULL;
@@ -461,7 +465,18 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
             is_last_k               = ((pc + KC) >= k) ? (TRUE) : (FALSE);
             post_ops_attr.is_last_k = is_last_k;
 
-            if ((mtag_b == PACK) && (should_pack_B == TRUE)) {
+            if (mtag_b == REORDERED) {
+                // In multi-threaded scenarios, an extra offset into a given
+                // packed B panel is required, since the jc loop split can
+                // result in per thread start offset inside the panel, instead
+                // of panel boundaries.
+                b_use = b + (jc_cur_loop * k) + (n_sub_updated * pc)
+                        + (jc_cur_loop_rem * kc0);
+
+                rs_b_use = NR;
+                cs_b_use = 1;
+                ps_b_use = kc0;
+            } else if ((mtag_b == PACK) || (should_pack_B == TRUE)) {
                 // Pack B chunks are based on jc work id.
                 md_t jc_work_id = thread_jc.work_id;
 
@@ -528,17 +543,6 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
                 dlp_atomic_barrier(thread_ic.ocomm_id,
                                    &thread->comm[jc_work_id]);
                 b_use = pack_b_buffer_f32f32f32of32;
-            } else if (mtag_b == REORDERED) {
-                // In multi-threaded scenarios, an extra offset into a given
-                // packed B panel is required, since the jc loop split can
-                // result in per thread start offset inside the panel, instead
-                // of panel boundaries.
-                b_use = b + (jc_cur_loop * k) + (n_sub_updated * pc)
-                        + (jc_cur_loop_rem * kc0);
-
-                rs_b_use = NR;
-                cs_b_use = 1;
-                ps_b_use = kc0;
             } else {
                 b_use    = b + (pc * rs_b) + (jc * cs_b);
                 ps_b_use = 1;

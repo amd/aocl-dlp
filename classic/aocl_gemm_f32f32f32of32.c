@@ -210,10 +210,6 @@ AOCL_GEMM_MATMUL(float, float, float, float, f32f32f32of32)
             cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, F32);
     }
 #else
-    // Setting pack A and B by default for non open mp case.
-    rntm_g.pack_a = TRUE;
-    rntm_g.pack_b = TRUE;
-
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
         lpgemm_f32f32f32of32_thread_decorator(

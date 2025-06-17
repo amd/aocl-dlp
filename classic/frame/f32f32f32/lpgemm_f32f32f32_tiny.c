@@ -151,7 +151,7 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
 #endif
 
         // Pack B matrix if rs_b > 1
-        if ((mtag_b == PACK) && (rs_b != 1)) {
+        if (rs_b != 1) {
             msz_t mem_b_size_req = sizeof(float) * k;
             pack_b_buffer_f32f32f32of32 =
                 (float*)dlp_malloc_page_aligned(mem_b_size_req, &err);
@@ -165,7 +165,7 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
             cs_b_use = 1;
         }
 
-        if ((mtag_a == PACK) && (cs_a != 1)) {
+        if (cs_a != 1) {
             msz_t mem_a_size_req = sizeof(float) * m * k;
             pack_a_buffer_f32f32f32of32 =
                 (float*)dlp_malloc_page_aligned(mem_a_size_req, &err);
@@ -198,8 +198,8 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
 
         lpgemv_m_one_ker_ft ker_fp;
 
-#ifdef BLIS_KERNELS_ZEN4
-        if (lpgemm_get_enabled_arch() == BLIS_ARCH_ZEN3) {
+#ifdef DLP_KERNELS_ZEN4
+        if (lpgemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
             ker_fp = lpgemv_m_one_f32f32f32of32_avx512_256;
         } else {
             ker_fp = lpgemv_m_one_f32f32f32of32;
@@ -207,7 +207,7 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
 #else
         ker_fp = lpgemv_m_one_f32f32f32of32_avx2;
 #endif
-        if (mtag_a == PACK && cs_a != 1) {
+        if (cs_a != 1) {
             msz_t mem_a_size_req = sizeof(float) * k;
             pack_a_buffer_f32f32f32of32 =
                 (float*)dlp_malloc_page_aligned(mem_a_size_req, &err);
@@ -219,7 +219,11 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
             cs_a_use = 1;
         }
 
-        if (mtag_b == PACK) {
+        if (mtag_b == REORDERED) {
+            b_use    = (float*)b;
+            rs_b_use = NR;
+            cs_b_use = 1;
+        } else if (mtag_b == PACK) {
             md_t  nc0_updated    = make_multiple_of_n(n, NR);
             msz_t mem_b_size_req = sizeof(float) * nc0_updated * k;
 
@@ -236,10 +240,6 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
             cs_b_use = 1;
 
             b_use = pack_b_buffer_f32f32f32of32;
-        } else if (mtag_b == REORDERED) {
-            b_use    = (float*)b;
-            rs_b_use = NR;
-            cs_b_use = 1;
         } else {
             b_use = (float*)b;
         }
@@ -313,7 +313,12 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
     // Even if the mtag_b is set to PACK, for tiny sizes its better to
     // pack only if it affects output accuracy (like column major B),
     // else ignore it.
-    if ((mtag_b == PACK) && (rs_b == 1)) {
+    if (mtag_b == REORDERED) {
+        b_use    = b;
+        rs_b_use = NR;
+        cs_b_use = 1;
+        ps_b_use = k;
+    } else if ((mtag_b == PACK) && (rs_b == 1)) {
         md_t nc0_updated = make_multiple_of_n(n, NR);
         mem_b_size_req   = sizeof(float) * nc0_updated * k;
 
@@ -330,11 +335,6 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
         ps_b_use = k;
 
         b_use = pack_b_buffer_f32f32f32of32;
-    } else if (mtag_b == REORDERED) {
-        b_use    = b;
-        rs_b_use = NR;
-        cs_b_use = 1;
-        ps_b_use = k;
     } else {
         b_use    = b;
         ps_b_use = 1;
