@@ -609,7 +609,7 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
     }
 
     // Release pack buffers.
-    if ((mtag_b == PACK) && (should_pack_B == TRUE)) {
+    if ((mtag_b == PACK) || (should_pack_B == TRUE)) {
         // All threads in work group should wait till B matrix usage is
         // completed by the participating threads.
         dlp_atomic_barrier(thread_jc.ocomm_id,
