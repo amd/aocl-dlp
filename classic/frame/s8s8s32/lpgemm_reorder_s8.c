@@ -310,7 +310,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
 
             md_t jc_cur_loop     = jc;
             md_t jc_cur_loop_rem = 0;
-            md_t n_sub_updated;
+            md_t n_sub_updated   = 0;
 
             get_B_panel_reordered_start_offset_width(
                 jc, n, NC, get_packb_s8s8s32o32_min_NR(), &jc_cur_loop,
@@ -328,6 +328,11 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
                 // used for packed/reordered buffers needs to be updated.
                 md_t kc0_updated = make_multiple_of_n(kc0, 4);
 
+                int8_t* b_dst_pc =
+                    (((int8_t*)b_reorder->storage.aligned_buffer)
+                     + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
+                     + (jc_cur_loop_rem * kc0_updated));
+
                 // packing kernels are designed in such a way assuming that
                 // entire KCxNC block is packed at once and strides are set
                 // based on KC value. In current scenario, we call kernel with
@@ -339,9 +344,66 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
                 for (md_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
-                    md_t nr0_updated = make_multiple_of_n(nr0, 16);
+                    int8_t*  b_dst_jr  = b_dst_pc + jr * kc0_updated;
+                    int32_t* b_sum_ptr = pack_b_column_sum + jc + jr;
+                    int8_t*  b_src_ptr = (((int8_t*)b->storage.aligned_buffer)
+                                         + (jc + jr) * cs_b);
 
-                    // group loop
+                    if (nr0 < NR) {
+                        md_t nr_mult_16  = (nr0 / 16) * 16;
+                        md_t nr0_rem     = nr0 % 16;
+                        md_t nr0_updated = nr_mult_16;
+
+                        if (nr_mult_16 > 0) {
+                            // group loop
+                            for (md_t group = group_start; group <= group_end;
+                                 group++) {
+                                md_t k_start = dlp_max(group * group_size, pc);
+                                md_t k_end =
+                                    dlp_min(((group + 1) * group_size - 1),
+                                            pc + kc0 - 1);
+                                md_t kg0 = k_end - k_start + 1;
+
+                                ((packb_s32_s8)lcntx->packb_fun_ptr)(
+                                    b_dst_jr
+                                        + ((group * group_size) - pc)
+                                              * nr0_updated,
+                                    b_sum_ptr + (group * n_updated),
+                                    b_src_ptr + (rs_b * k_start), rs_b, cs_b,
+                                    nr_mult_16, kg0, &rs_b_reorder,
+                                    &cs_b_reorder);
+                            }
+                            b_dst_jr += nr_mult_16 * kc0_updated;
+                            b_sum_ptr += nr_mult_16;
+                            b_src_ptr += nr_mult_16 * cs_b;
+                        }
+
+                        if (nr0_rem > 0) {
+                            md_t nr0_updated = 16;
+                            // group loop
+                            for (md_t group = group_start; group <= group_end;
+                                 group++) {
+                                md_t k_start = dlp_max(group * group_size, pc);
+                                md_t k_end =
+                                    dlp_min(((group + 1) * group_size - 1),
+                                            pc + kc0 - 1);
+                                md_t kg0 = k_end - k_start + 1;
+
+                                ((packb_s32_s8)lcntx->packb_fun_ptr)(
+                                    b_dst_jr
+                                        + ((group * group_size) - pc)
+                                              * nr0_updated,
+                                    b_sum_ptr + (group * n_updated),
+                                    b_src_ptr + (rs_b * k_start), rs_b, cs_b,
+                                    nr0_rem, kg0, &rs_b_reorder, &cs_b_reorder);
+                            }
+                        }
+                        // no fringe after this point
+                        continue;
+                    }
+
+                    md_t nr0_updated = NR;
+                    // nr0 == NR
                     for (md_t group = group_start; group <= group_end;
                          group++) {
                         md_t k_start = dlp_max(group * group_size, pc);
@@ -350,14 +412,11 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
                         md_t kg0     = k_end - k_start + 1;
 
                         ((packb_s32_s8)lcntx->packb_fun_ptr)(
-                            (((int8_t*)b_reorder->storage.aligned_buffer)
-                             + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
-                             + ((jc_cur_loop_rem + jr) * kc0_updated)
-                             + ((group * group_size) - pc) * nr0_updated),
-                            pack_b_column_sum + (group * n) + jc + jr,
-                            (((int8_t*)b->storage.aligned_buffer)
-                             + (rs_b * k_start) + (jc + jr) * cs_b),
-                            rs_b, cs_b, nr0, kg0, &rs_b_reorder, &cs_b_reorder);
+                            b_dst_jr
+                                + ((group * group_size) - pc) * nr0_updated,
+                            b_sum_ptr + (group * n_updated),
+                            b_src_ptr + (rs_b * k_start), rs_b, cs_b, NR, kg0,
+                            &rs_b_reorder, &cs_b_reorder);
                     }
                 }
             }
