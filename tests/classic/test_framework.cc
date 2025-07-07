@@ -662,3 +662,146 @@ TEST(SimpleProductTest, MultipleSingleValuesExpanded)
     // Should be finished now
     EXPECT_TRUE(sp.empty());
 }
+
+// Test fixture for Matrix reorder functionality
+#include "framework/matrix.hh"
+#include "framework/ual_ref.hh"
+
+using namespace dlp::testing;
+using namespace dlp::testing::classic;
+
+class MatrixReorderTest : public ::testing::Test
+{
+  protected:
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+// Test 1: Reorder without transpose - should just optimize leading dimension
+TEST_F(MatrixReorderTest, ReorderWithoutTranspose)
+{
+    // Create a 3x4 matrix (not transposed) with leading dimension 6 (has
+    // padding)
+    Matrix input(3, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 6, false);
+
+    // Fill with known values for testing
+    float* data = reinterpret_cast<float*>(input.getData());
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 4; j++) {
+            data[i * 6 + j] =
+                i * 10.0f
+                + j; // Row 0: 0,1,2,3  Row 1: 10,11,12,13  Row 2: 20,21,22,23
+        }
+    }
+
+    // Reorder using reference implementation
+    UalRef ual_ref;
+    Matrix output;
+    bool   result = ual_ref.reorder(input, output, MatrixType::f32);
+
+    EXPECT_TRUE(result);
+
+    // Check output matrix properties
+    EXPECT_EQ(output.getRows(), 3); // Should keep same dimensions
+    EXPECT_EQ(output.getCols(), 4);
+    EXPECT_FALSE(output.isTransposed()); // Should remain not transposed
+    EXPECT_TRUE(output.isReordered());   // Should be marked as reordered
+    EXPECT_EQ(output.getLeadingDimension(),
+              4); // Should be minimum (number of columns)
+
+    // Check that data is copied correctly (no transpose, just compact layout)
+    const float* output_data = reinterpret_cast<const float*>(output.getData());
+    EXPECT_FLOAT_EQ(output_data[0 * 4 + 0], 0.0f);  // [0][0]
+    EXPECT_FLOAT_EQ(output_data[0 * 4 + 1], 1.0f);  // [0][1]
+    EXPECT_FLOAT_EQ(output_data[0 * 4 + 2], 2.0f);  // [0][2]
+    EXPECT_FLOAT_EQ(output_data[0 * 4 + 3], 3.0f);  // [0][3]
+    EXPECT_FLOAT_EQ(output_data[1 * 4 + 0], 10.0f); // [1][0]
+    EXPECT_FLOAT_EQ(output_data[1 * 4 + 1], 11.0f); // [1][1]
+    EXPECT_FLOAT_EQ(output_data[2 * 4 + 0], 20.0f); // [2][0]
+    EXPECT_FLOAT_EQ(output_data[2 * 4 + 3], 23.0f); // [2][3]
+}
+
+// Test 2: Reorder with transpose - should transpose data and optimize leading
+// dimension
+TEST_F(MatrixReorderTest, ReorderWithTranspose)
+{
+    // Create a 3x4 matrix marked as transposed with leading dimension 5 (has
+    // padding)
+    Matrix input(3, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 5, true);
+
+    // Fill with known values for testing
+    // Since it's marked as transposed, logical matrix is 4x3, but physical
+    // storage is 3x4
+    float* data = reinterpret_cast<float*>(input.getData());
+    for (int i = 0; i < 3; i++) {
+        for (int j = 0; j < 4; j++) {
+            data[i * 5 + j] = i * 10.0f + j; // Physical: Row 0: 0,1,2,3  Row 1:
+                                             // 10,11,12,13  Row 2: 20,21,22,23
+        }
+    }
+
+    // Reorder using reference implementation
+    UalRef ual_ref;
+    Matrix output;
+    bool   result = ual_ref.reorder(input, output, MatrixType::f32);
+
+    EXPECT_TRUE(result);
+
+    // Check output matrix properties
+    // Input was 3x4 transposed, so logical size was 4x3
+    // After reorder, we should get physical 4x3 (dimensions swapped) and not
+    // transposed
+    EXPECT_EQ(output.getRows(), 4); // Swapped: input cols become output rows
+    EXPECT_EQ(output.getCols(), 3); // Swapped: input rows become output cols
+    EXPECT_FALSE(output.isTransposed()); // Should no longer be transposed
+    EXPECT_TRUE(output.isReordered());   // Should be marked as reordered
+    EXPECT_EQ(output.getLeadingDimension(),
+              3); // Should be minimum (number of columns)
+
+    // Check that data is transposed correctly
+    // Original physical data: [0,1,2,3], [10,11,12,13], [20,21,22,23]
+    // After transpose should be: [0,10,20], [1,11,21], [2,12,22], [3,13,23]
+    const float* output_data = reinterpret_cast<const float*>(output.getData());
+    EXPECT_FLOAT_EQ(output_data[0 * 3 + 0], 0.0f);  // [0][0] = original [0][0]
+    EXPECT_FLOAT_EQ(output_data[0 * 3 + 1], 10.0f); // [0][1] = original [1][0]
+    EXPECT_FLOAT_EQ(output_data[0 * 3 + 2], 20.0f); // [0][2] = original [2][0]
+    EXPECT_FLOAT_EQ(output_data[1 * 3 + 0], 1.0f);  // [1][0] = original [0][1]
+    EXPECT_FLOAT_EQ(output_data[1 * 3 + 1], 11.0f); // [1][1] = original [1][1]
+    EXPECT_FLOAT_EQ(output_data[1 * 3 + 2], 21.0f); // [1][2] = original [2][1]
+    EXPECT_FLOAT_EQ(output_data[2 * 3 + 0], 2.0f);  // [2][0] = original [0][2]
+    EXPECT_FLOAT_EQ(output_data[2 * 3 + 1], 12.0f); // [2][1] = original [1][2]
+    EXPECT_FLOAT_EQ(output_data[3 * 3 + 0], 3.0f);  // [3][0] = original [0][3]
+    EXPECT_FLOAT_EQ(output_data[3 * 3 + 2], 23.0f); // [3][2] = original [2][3]
+}
+
+// Test 3: Verify effective dimensions work correctly after reorder
+TEST_F(MatrixReorderTest, EffectiveDimensionsAfterReorder)
+{
+    // Test case similar to the failing GEMM test: 256x320 transposed
+    Matrix input(256, 320, MatrixType::f32, MatrixLayout::ROW_MAJOR, 256, true);
+
+    // Before reorder: physical 256x320, transposed=true, so effective 320x256
+    EXPECT_EQ(input.getEffectiveRows(), 320);
+    EXPECT_EQ(input.getEffectiveCols(), 256);
+
+    // Reorder
+    UalRef ual_ref;
+    Matrix output;
+    bool   result = ual_ref.reorder(input, output, MatrixType::f32);
+
+    EXPECT_TRUE(result);
+
+    // After reorder: should be physical 320x256, transposed=false
+    EXPECT_EQ(output.getRows(), 320);
+    EXPECT_EQ(output.getCols(), 256);
+    EXPECT_FALSE(output.isTransposed());
+    EXPECT_TRUE(output.isReordered());
+
+    // Effective dimensions should match physical dimensions (since not
+    // transposed)
+    EXPECT_EQ(output.getEffectiveRows(), 320);
+    EXPECT_EQ(output.getEffectiveCols(), 256);
+
+    // Leading dimension should be optimized
+    EXPECT_EQ(output.getLeadingDimension(), 256);
+}

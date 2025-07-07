@@ -32,6 +32,7 @@
 #include "types.hh"
 #include <any>
 #include <limits>
+#include <memory>
 
 namespace dlp { namespace testing {
 
@@ -42,7 +43,8 @@ namespace dlp { namespace testing {
      *
      * The Matrix class provides a uniform interface for working with matrices
      * of different data types, memory layouts, and supports virtual
-     * transposition without copying data.
+     * transposition without copying data. Memory is managed externally via
+     * unique_ptr for better safety and flexibility.
      */
     class Matrix
     {
@@ -51,26 +53,51 @@ namespace dlp { namespace testing {
          * @brief Default constructor
          *
          * Creates an empty matrix with default values. The matrix will need to
-         * be properly initialized before use (e.g., through assignment).
+         * be properly initialized before use (e.g., through assignment or by
+         * providing external memory).
          */
         Matrix();
 
         /**
-         * @brief Enhanced constructor with full parameterization
+         * @brief Main constructor with external memory management
          *
          * Creates a matrix with specified dimensions, data type, layout, and
-         * optional parameters for advanced use cases.
+         * externally provided memory.
+         *
+         * @param rows Number of rows in the matrix
+         * @param cols Number of columns in the matrix
+         * @param type Data type of the matrix elements
+         * @param data Unique pointer to pre-allocated memory
+         * @param dataSizeBytes Size of the allocated memory in bytes
+         * @param layout Memory layout (ROW_MAJOR or COLUMN_MAJOR)
+         * @param leadingDim Leading dimension (0 for automatic calculation)
+         * @param transposed Whether the matrix is logically transposed without
+         * data movement
+         * @param reordered Whether the matrix is reordered
+         */
+        Matrix(md_t                       rows,
+               md_t                       cols,
+               MatrixType                 type,
+               std::unique_ptr<uint8_t[]> data,
+               size_t                     dataSizeBytes,
+               MatrixLayout               layout     = MatrixLayout::ROW_MAJOR,
+               md_t                       leadingDim = 0,
+               bool                       transposed = false,
+               bool                       reordered  = false);
+
+        /**
+         * @brief Convenience constructor with automatic memory allocation
+         *
+         * Creates a matrix with automatic memory allocation. This is provided
+         * for convenience but external memory management is preferred.
          *
          * @param rows Number of rows in the matrix
          * @param cols Number of columns in the matrix
          * @param type Data type of the matrix elements
          * @param layout Memory layout (ROW_MAJOR or COLUMN_MAJOR)
          * @param leadingDim Leading dimension (0 for automatic calculation)
-         * @param transposed Whether the matrix is logically transposed without
-         * data movement
+         * @param transposed Whether the matrix is logically transposed
          * @param reordered Whether the matrix is reordered
-         * @param allocSize Override allocation size in BYTES (0 for automatic
-         * calculation)
          */
         Matrix(md_t         rows,
                md_t         cols,
@@ -78,36 +105,52 @@ namespace dlp { namespace testing {
                MatrixLayout layout     = MatrixLayout::ROW_MAJOR,
                md_t         leadingDim = 0,
                bool         transposed = false,
-               bool         reordered  = false,
-               md_t         allocSize  = 0);
-
-        /**
-         * @brief Backward compatibility constructor
-         *
-         * Creates a row-major, non-transposed matrix with automatically
-         * calculated leading dimension.
-         *
-         * @param rows Number of rows in the matrix
-         * @param cols Number of columns in the matrix
-         * @param type Data type of the matrix elements
-         */
-        Matrix(md_t rows, md_t cols, MatrixType type);
+               bool         reordered  = false);
 
         /**
          * @brief Copy constructor
          *
-         * Creates a deep copy of the source matrix.
+         * Creates a deep copy of the source matrix with newly allocated memory.
          *
          * @param other The matrix to copy from
          */
         Matrix(const Matrix& other);
 
         /**
+         * @brief Move constructor
+         *
+         * Transfers ownership of memory from source matrix.
+         *
+         * @param other The matrix to move from
+         */
+        Matrix(Matrix&& other) noexcept;
+
+        /**
          * @brief Destructor
          *
-         * Releases all allocated memory based on the matrix data type.
+         * Memory is automatically released by unique_ptr.
          */
-        ~Matrix();
+        ~Matrix() = default;
+
+        /**
+         * @brief Copy assignment operator
+         *
+         * Creates a deep copy of the source matrix with newly allocated memory.
+         *
+         * @param other The matrix to copy from
+         * @return Matrix& Reference to this matrix
+         */
+        Matrix& operator=(const Matrix& other);
+
+        /**
+         * @brief Move assignment operator
+         *
+         * Transfers ownership of memory from source matrix.
+         *
+         * @param other The matrix to move from
+         * @return Matrix& Reference to this matrix
+         */
+        Matrix& operator=(Matrix&& other) noexcept;
 
         /**
          * @brief Get the number of rows in the matrix
@@ -122,13 +165,6 @@ namespace dlp { namespace testing {
          * @return md_t The number of columns
          */
         md_t getCols() const;
-
-        /**
-         * @brief Get the matrix data container
-         *
-         * @return MatrixData The matrix data structure with type information
-         */
-        MatrixData getMatrixData() const;
 
         /**
          * @brief Get the matrix data type
@@ -185,14 +221,25 @@ namespace dlp { namespace testing {
         md_t getEffectiveCols() const;
 
         /**
-         * @brief Get the allocation size for the matrix data
+         * @brief Get the data size in bytes
          *
-         * Calculates the total number of elements allocated for the matrix
-         * based on the leading dimension and layout.
-         *
-         * @return md_t The allocation size in number of elements
+         * @return size_t The size of allocated memory in bytes
          */
-        md_t getAllocSize() const;
+        size_t getDataSizeBytes() const;
+
+        /**
+         * @brief Get raw pointer to the matrix data
+         *
+         * @return void* Pointer to the matrix data (type-erased)
+         */
+        void* getData() const;
+
+        /**
+         * @brief Get the matrix data container (for backward compatibility)
+         *
+         * @return MatrixData The matrix data structure with type information
+         */
+        MatrixData getMatrixData() const;
 
         /**
          * @brief Set the reordering flag
@@ -229,16 +276,6 @@ namespace dlp { namespace testing {
         bool operator!=(const Matrix& other) const;
 
         /**
-         * @brief Copy assignment operator
-         *
-         * Creates a deep copy of the source matrix
-         *
-         * @param other The matrix to copy from
-         * @return Matrix& Reference to this matrix
-         */
-        Matrix& operator=(const Matrix& other);
-
-        /**
          * @brief Fill matrix with random values from a uniform distribution
          *
          * Fills the matrix with random values appropriate for its data type.
@@ -259,17 +296,33 @@ namespace dlp { namespace testing {
          */
         void fillValue(std::any value);
 
+        /**
+         * @brief Get element size in bytes for the matrix type
+         *
+         * @return size_t Size of a single element in bytes (0 for packed types)
+         */
+        size_t getElementSizeBytes() const;
+
       private:
+        /**
+         * @brief Helper function for floating point data comparison
+         *
+         * @param other The matrix to compare with
+         * @return bool True if floating point data matches within tolerance
+         */
+        bool compareFloatingPointData(const Matrix& other) const;
+
         md_t m_rows; ///< Number of rows in the matrix
         md_t m_cols; ///< Number of columns in the matrix
         md_t m_k = std::numeric_limits<md_t>::max(); ///< K Dim for tolerance
                                                      ///< calculation
-        MatrixData   m_data;                         ///< Matrix data container
-        MatrixLayout m_layout;                       ///< Memory layout
-        md_t         m_leadingDim; ///< Leading dimension (stride)
+        MatrixType                 m_type;           ///< Matrix data type
+        std::unique_ptr<uint8_t[]> m_data;           ///< Matrix data storage
+        size_t       m_dataSizeBytes; ///< Size of allocated memory in bytes
+        MatrixLayout m_layout;        ///< Memory layout
+        md_t         m_leadingDim;    ///< Leading dimension (stride)
         bool m_transposed; ///< Whether the matrix is logically transposed
         bool m_reordered;  ///< Whether the matrix is reordered
-        md_t m_allocSize;  ///< Allocation size for the matrix
     };
 
 }} // namespace dlp::testing

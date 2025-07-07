@@ -32,7 +32,8 @@
  *
  * This file contains the implementation of the Matrix class that handles
  * various data types with support for different memory layouts and virtual
- * transposition.
+ * transposition. Memory is managed externally via unique_ptr for better
+ * safety and flexibility.
  */
 
 #include "framework/matrix.hh"
@@ -43,6 +44,7 @@
 #include <cstring>  // For std::memcpy
 #include <iostream> // For std::cout
 #include <random>   // For random number generation
+#include <stdexcept>
 
 namespace dlp { namespace testing {
 
@@ -55,187 +57,40 @@ namespace dlp { namespace testing {
         : m_rows(0)
         , m_cols(0)
         , m_k(std::numeric_limits<md_t>::max())
+        , m_type(MatrixType::f32)
+        , m_data(nullptr)
+        , m_dataSizeBytes(0)
         , m_layout(MatrixLayout::ROW_MAJOR)
         , m_leadingDim(0)
         , m_transposed(false)
         , m_reordered(false)
-        , m_allocSize(0)
     {
-        m_data.type = MatrixType::f32; // Default type
-        // Initialize all data pointers to nullptr to prevent double-free issues
-        // Since it's a union, we need to explicitly set all members to nullptr
-        m_data.u4_data.data   = nullptr;
-        m_data.u8_data.data   = nullptr;
-        m_data.u16_data.data  = nullptr;
-        m_data.u32_data.data  = nullptr;
-        m_data.s4_data.data   = nullptr;
-        m_data.s8_data.data   = nullptr;
-        m_data.s16_data.data  = nullptr;
-        m_data.s32_data.data  = nullptr;
-        m_data.f32_data.data  = nullptr;
-        m_data.bf16_data.data = nullptr;
     }
 
     /**
-     * @brief Calculate the number of bytes needed for allocation based on
-     * matrix type and element count
+     * @brief Main constructor with external memory management
      *
-     * @param type The matrix data type
-     * @param elementCount The number of elements to allocate
-     * @return md_t The number of bytes needed
+     * Creates a matrix with specified dimensions, data type, layout, and
+     * externally provided memory.
      */
-    static md_t calculateBytesForType(MatrixType type, md_t elementCount)
-    {
-        switch (type) {
-            case MatrixType::u4:
-            case MatrixType::s4:
-                // 4-bit types: 2 elements per byte
-                return (elementCount + 1) / 2;
-            case MatrixType::u8:
-            case MatrixType::s8:
-                return elementCount;
-            case MatrixType::u16:
-            case MatrixType::s16:
-            case MatrixType::bf16:
-                return elementCount * sizeof(uint16_t);
-            case MatrixType::u32:
-            case MatrixType::s32:
-                return elementCount * sizeof(uint32_t);
-            case MatrixType::f32:
-                return elementCount * sizeof(float);
-            default:
-                throw std::runtime_error(
-                    "Invalid matrix type for byte calculation");
-        }
-    }
-
-    /**
-     * @brief Calculate automatic allocation size in bytes based on matrix
-     * dimensions and type
-     *
-     * @param rows Number of rows
-     * @param cols Number of columns
-     * @param layout Memory layout
-     * @param leadingDim Leading dimension
-     * @param type Matrix data type
-     * @return md_t The number of bytes needed for allocation
-     */
-    static md_t calculateAutomaticAllocationBytes(md_t         rows,
-                                                  md_t         cols,
-                                                  MatrixLayout layout,
-                                                  md_t         leadingDim,
-                                                  MatrixType   type)
-    {
-        // Calculate element count based on layout
-        md_t elementCount;
-        if (layout == MatrixLayout::ROW_MAJOR) {
-            elementCount = rows * leadingDim;
-        } else {
-            elementCount = cols * leadingDim;
-        }
-
-        // Convert element count to bytes based on type
-        return calculateBytesForType(type, elementCount);
-    }
-
-    /**
-     * @brief Handle user-provided allocation size (assumed to be in bytes)
-     *
-     * @param allocSize User-provided allocation size in bytes
-     * @return md_t The allocation size in bytes (unchanged)
-     */
-    static md_t handleUserAllocationBytes(md_t allocSize)
-    {
-        // User provided size is already in bytes, use it exactly
-        return allocSize;
-    }
-
-    /**
-     * @brief Allocate memory for matrix data
-     *
-     * @param data Reference to the matrix data structure
-     * @param type The matrix data type
-     * @param byteCount The number of bytes to allocate
-     */
-    static void allocateMatrixMemory(MatrixData& data,
-                                     MatrixType  type,
-                                     md_t        byteCount)
-    {
-        switch (type) {
-            case MatrixType::u4:
-                data.u4_data.data = new uint8_t[byteCount];
-                break;
-            case MatrixType::u8:
-                data.u8_data.data = new uint8_t[byteCount];
-                break;
-            case MatrixType::u16:
-                data.u16_data.data =
-                    reinterpret_cast<uint16_t*>(new uint8_t[byteCount]);
-                break;
-            case MatrixType::u32:
-                data.u32_data.data =
-                    reinterpret_cast<uint32_t*>(new uint8_t[byteCount]);
-                break;
-            case MatrixType::s4:
-                data.s4_data.data =
-                    reinterpret_cast<int8_t*>(new uint8_t[byteCount]);
-                break;
-            case MatrixType::s8:
-                data.s8_data.data =
-                    reinterpret_cast<int8_t*>(new uint8_t[byteCount]);
-                break;
-            case MatrixType::s16:
-                data.s16_data.data =
-                    reinterpret_cast<int16_t*>(new uint8_t[byteCount]);
-                break;
-            case MatrixType::s32:
-                data.s32_data.data =
-                    reinterpret_cast<int32_t*>(new uint8_t[byteCount]);
-                break;
-            case MatrixType::f32:
-                data.f32_data.data =
-                    reinterpret_cast<float*>(new uint8_t[byteCount]);
-                break;
-            case MatrixType::bf16:
-                data.bf16_data.data =
-                    reinterpret_cast<uint16_t*>(new uint8_t[byteCount]);
-                break;
-            default:
-                throw std::runtime_error(
-                    "Invalid matrix type for memory allocation");
-        }
-    }
-
-    /**
-     * @brief Enhanced constructor implementation with full parameterization
-     *
-     * Allocates memory for the matrix based on its type, size, and layout.
-     *
-     * @param rows Number of rows in the matrix
-     * @param cols Number of columns in the matrix
-     * @param type Data type of the matrix elements
-     * @param layout Memory layout (ROW_MAJOR or COLUMN_MAJOR)
-     * @param leadingDim Leading dimension (0 for automatic calculation)
-     * @param transposed Whether the matrix is logically transposed without data
-     * movement
-     * @param is_reordered Whether the matrix is reordered
-     * @param allocSize Override allocation size in BYTES (0 for automatic
-     * calculation)
-     */
-    Matrix::Matrix(md_t         rows,
-                   md_t         cols,
-                   MatrixType   type,
-                   MatrixLayout layout,
-                   md_t         leadingDim,
-                   bool         is_trans,
-                   bool         is_reordered,
-                   md_t         allocSize)
+    Matrix::Matrix(md_t                       rows,
+                   md_t                       cols,
+                   MatrixType                 type,
+                   std::unique_ptr<uint8_t[]> data,
+                   size_t                     dataSizeBytes,
+                   MatrixLayout               layout,
+                   md_t                       leadingDim,
+                   bool                       transposed,
+                   bool                       reordered)
         : m_rows(rows)
         , m_cols(cols)
+        , m_k(std::numeric_limits<md_t>::max())
+        , m_type(type)
+        , m_data(std::move(data))
+        , m_dataSizeBytes(dataSizeBytes)
         , m_layout(layout)
-        , m_transposed(is_trans)
-        , m_reordered(is_reordered)
-        , m_allocSize(allocSize)
+        , m_transposed(transposed)
+        , m_reordered(reordered)
     {
         // Calculate leading dimension if not specified
         if (leadingDim == 0) {
@@ -244,185 +99,105 @@ namespace dlp { namespace testing {
             m_leadingDim = leadingDim;
         }
 
-        m_data.type = type;
+        // Validate that provided memory is sufficient
+        size_t requiredBytes = MatrixMemory::calculateRequiredBytes(
+            type, rows, cols, layout, m_leadingDim);
 
-        // Use user-provided allocation size if specified, otherwise calculate
-        // it
-        md_t bytesToAllocate;
-        if (allocSize > 0) {
-            // User provided allocation size in bytes - use it exactly
-            bytesToAllocate = handleUserAllocationBytes(allocSize);
-        } else {
-            // Calculate allocation size based on matrix dimensions and type
-            bytesToAllocate = calculateAutomaticAllocationBytes(
-                rows, cols, layout, m_leadingDim, type);
+        if (dataSizeBytes < requiredBytes) {
+            throw std::invalid_argument(
+                "Provided memory size is insufficient for matrix dimensions");
         }
-
-        // Allocate memory using the helper function
-        allocateMatrixMemory(m_data, type, bytesToAllocate);
     }
 
     /**
-     * @brief Backward compatibility constructor implementation
+     * @brief Convenience constructor with automatic memory allocation
      *
-     * Delegates to the enhanced constructor with default parameters.
-     *
-     * @param rows Number of rows in the matrix
-     * @param cols Number of columns in the matrix
-     * @param type Data type of the matrix elements
+     * Creates a matrix with automatic memory allocation. This is provided
+     * for convenience but external memory management is preferred.
      */
-    Matrix::Matrix(md_t rows, md_t cols, MatrixType type)
-        : Matrix(rows, cols, type, MatrixLayout::ROW_MAJOR, 0, false)
+    Matrix::Matrix(md_t         rows,
+                   md_t         cols,
+                   MatrixType   type,
+                   MatrixLayout layout,
+                   md_t         leadingDim,
+                   bool         transposed,
+                   bool         reordered)
+        : m_rows(rows)
+        , m_cols(cols)
+        , m_k(std::numeric_limits<md_t>::max())
+        , m_type(type)
+        , m_layout(layout)
+        , m_transposed(transposed)
+        , m_reordered(reordered)
     {
-        // Implementation is delegated to the enhanced constructor
+        // Calculate leading dimension if not specified
+        if (leadingDim == 0) {
+            m_leadingDim = (layout == MatrixLayout::ROW_MAJOR) ? cols : rows;
+        } else {
+            m_leadingDim = leadingDim;
+        }
+
+        // Allocate memory automatically
+        m_dataSizeBytes = MatrixMemory::calculateRequiredBytes(
+            type, rows, cols, layout, m_leadingDim);
+        m_data = MatrixMemory::allocateBytes(m_dataSizeBytes);
     }
 
     /**
      * @brief Copy constructor implementation
      *
-     * Creates a deep copy of the source matrix.
-     *
-     * @param other The matrix to copy from
+     * Creates a deep copy of the source matrix with newly allocated memory.
      */
     Matrix::Matrix(const Matrix& other)
         : m_rows(other.m_rows)
         , m_cols(other.m_cols)
         , m_k(other.m_k)
+        , m_type(other.m_type)
+        , m_dataSizeBytes(other.m_dataSizeBytes)
         , m_layout(other.m_layout)
         , m_leadingDim(other.m_leadingDim)
         , m_transposed(other.m_transposed)
         , m_reordered(other.m_reordered)
-        , m_allocSize(other.m_allocSize)
     {
-        m_data.type = other.m_data.type;
+        // Allocate new memory
+        m_data = MatrixMemory::allocateBytes(m_dataSizeBytes);
 
-        // Use the stored allocation size if available, otherwise calculate it
-        md_t bytesToAllocate;
-        if (m_allocSize > 0) {
-            // User provided allocation size in bytes - use it exactly
-            bytesToAllocate = handleUserAllocationBytes(m_allocSize);
-        } else {
-            // Calculate allocation size based on matrix dimensions and type
-            bytesToAllocate = calculateAutomaticAllocationBytes(
-                m_rows, m_cols, m_layout, m_leadingDim, m_data.type);
-        }
-
-        // Allocate memory using the helper function
-        allocateMatrixMemory(m_data, m_data.type, bytesToAllocate);
-
-        // Copy the data - we need to copy the exact number of bytes allocated
-        switch (m_data.type) {
-            case MatrixType::u4:
-            case MatrixType::s4:
-            case MatrixType::u8:
-            case MatrixType::s8:
-                std::memcpy(m_data.u8_data.data, other.m_data.u8_data.data,
-                            bytesToAllocate);
-                break;
-            case MatrixType::u16:
-            case MatrixType::s16:
-            case MatrixType::bf16:
-                std::memcpy(m_data.u16_data.data, other.m_data.u16_data.data,
-                            bytesToAllocate);
-                break;
-            case MatrixType::u32:
-            case MatrixType::s32:
-                std::memcpy(m_data.u32_data.data, other.m_data.u32_data.data,
-                            bytesToAllocate);
-                break;
-            case MatrixType::f32:
-                std::memcpy(m_data.f32_data.data, other.m_data.f32_data.data,
-                            bytesToAllocate);
-                break;
-            default:
-                throw std::runtime_error(
-                    "Invalid matrix type in copy constructor");
+        // Copy the data
+        if (other.m_data && m_dataSizeBytes > 0) {
+            std::memcpy(m_data.get(), other.m_data.get(), m_dataSizeBytes);
         }
     }
 
     /**
-     * @brief Destructor implementation
+     * @brief Move constructor implementation
      *
-     * Frees allocated memory based on the matrix type.
+     * Transfers ownership of memory from source matrix.
      */
-    Matrix::~Matrix()
+    Matrix::Matrix(Matrix&& other) noexcept
+        : m_rows(other.m_rows)
+        , m_cols(other.m_cols)
+        , m_k(other.m_k)
+        , m_type(other.m_type)
+        , m_data(std::move(other.m_data))
+        , m_dataSizeBytes(other.m_dataSizeBytes)
+        , m_layout(other.m_layout)
+        , m_leadingDim(other.m_leadingDim)
+        , m_transposed(other.m_transposed)
+        , m_reordered(other.m_reordered)
     {
-        // Since all allocations are now done as uint8_t arrays, we can simplify
-        // the cleanup Also check for nullptr to handle default-constructed
-        // matrices
-        switch (m_data.type) {
-            case MatrixType::u4:
-                if (m_data.u4_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.u4_data.data);
-                    m_data.u4_data.data = nullptr;
-                }
-                break;
-            case MatrixType::u8:
-                if (m_data.u8_data.data != nullptr) {
-                    delete[] m_data.u8_data.data;
-                    m_data.u8_data.data = nullptr;
-                }
-                break;
-            case MatrixType::u16:
-                if (m_data.u16_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.u16_data.data);
-                    m_data.u16_data.data = nullptr;
-                }
-                break;
-            case MatrixType::u32:
-                if (m_data.u32_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.u32_data.data);
-                    m_data.u32_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s4:
-                if (m_data.s4_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s4_data.data);
-                    m_data.s4_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s8:
-                if (m_data.s8_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s8_data.data);
-                    m_data.s8_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s16:
-                if (m_data.s16_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s16_data.data);
-                    m_data.s16_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s32:
-                if (m_data.s32_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s32_data.data);
-                    m_data.s32_data.data = nullptr;
-                }
-                break;
-            case MatrixType::f32:
-                if (m_data.f32_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.f32_data.data);
-                    m_data.f32_data.data = nullptr;
-                }
-                break;
-            case MatrixType::bf16:
-                if (m_data.bf16_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.bf16_data.data);
-                    m_data.bf16_data.data = nullptr;
-                }
-                break;
-            default:
-                break;
-        }
+        // Reset other matrix
+        other.m_rows          = 0;
+        other.m_cols          = 0;
+        other.m_dataSizeBytes = 0;
+        other.m_leadingDim    = 0;
+        other.m_transposed    = false;
+        other.m_reordered     = false;
     }
 
     /**
      * @brief Copy assignment operator implementation
      *
-     * Creates a deep copy of the source matrix.
-     *
-     * @param other The matrix to copy from
-     * @return Matrix& Reference to this matrix
+     * Creates a deep copy of the source matrix with newly allocated memory.
      */
     Matrix& Matrix::operator=(const Matrix& other)
     {
@@ -431,153 +206,65 @@ namespace dlp { namespace testing {
             return *this;
         }
 
-        // Free existing resources based on current type
-        switch (m_data.type) {
-            case MatrixType::u4:
-                if (m_data.u4_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.u4_data.data);
-                    m_data.u4_data.data = nullptr;
-                }
-                break;
-            case MatrixType::u8:
-                if (m_data.u8_data.data != nullptr) {
-                    delete[] m_data.u8_data.data;
-                    m_data.u8_data.data = nullptr;
-                }
-                break;
-            case MatrixType::u16:
-                if (m_data.u16_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.u16_data.data);
-                    m_data.u16_data.data = nullptr;
-                }
-                break;
-            case MatrixType::u32:
-                if (m_data.u32_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.u32_data.data);
-                    m_data.u32_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s4:
-                if (m_data.s4_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s4_data.data);
-                    m_data.s4_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s8:
-                if (m_data.s8_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s8_data.data);
-                    m_data.s8_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s16:
-                if (m_data.s16_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s16_data.data);
-                    m_data.s16_data.data = nullptr;
-                }
-                break;
-            case MatrixType::s32:
-                if (m_data.s32_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.s32_data.data);
-                    m_data.s32_data.data = nullptr;
-                }
-                break;
-            case MatrixType::f32:
-                if (m_data.f32_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.f32_data.data);
-                    m_data.f32_data.data = nullptr;
-                }
-                break;
-            case MatrixType::bf16:
-                if (m_data.bf16_data.data != nullptr) {
-                    delete[] reinterpret_cast<uint8_t*>(m_data.bf16_data.data);
-                    m_data.bf16_data.data = nullptr;
-                }
-                break;
-            default:
-                break;
-        }
-
         // Copy metadata
-        m_rows       = other.m_rows;
-        m_cols       = other.m_cols;
-        m_k          = other.m_k;
-        m_layout     = other.m_layout;
-        m_leadingDim = other.m_leadingDim;
-        m_transposed = other.m_transposed;
-        m_reordered  = other.m_reordered;
-        m_allocSize  = other.m_allocSize;
-        m_data.type  = other.m_data.type;
+        m_rows          = other.m_rows;
+        m_cols          = other.m_cols;
+        m_k             = other.m_k;
+        m_type          = other.m_type;
+        m_dataSizeBytes = other.m_dataSizeBytes;
+        m_layout        = other.m_layout;
+        m_leadingDim    = other.m_leadingDim;
+        m_transposed    = other.m_transposed;
+        m_reordered     = other.m_reordered;
 
-        // Use the stored allocation size if available, otherwise calculate it
-        md_t bytesToAllocate;
-        if (m_allocSize > 0) {
-            // User provided allocation size in bytes - use it exactly
-            bytesToAllocate = handleUserAllocationBytes(m_allocSize);
-        } else {
-            // Calculate allocation size based on matrix dimensions and type
-            bytesToAllocate = calculateAutomaticAllocationBytes(
-                m_rows, m_cols, m_layout, m_leadingDim, m_data.type);
-        }
+        // Allocate new memory
+        m_data = MatrixMemory::allocateBytes(m_dataSizeBytes);
 
-        // Allocate memory using the helper function
-        allocateMatrixMemory(m_data, m_data.type, bytesToAllocate);
-
-        // Copy the data - we need to copy the exact number of bytes allocated
-        switch (m_data.type) {
-            case MatrixType::u4:
-            case MatrixType::s4:
-            case MatrixType::u8:
-            case MatrixType::s8:
-                std::memcpy(m_data.u8_data.data, other.m_data.u8_data.data,
-                            bytesToAllocate);
-                break;
-            case MatrixType::u16:
-            case MatrixType::s16:
-            case MatrixType::bf16:
-                std::memcpy(m_data.u16_data.data, other.m_data.u16_data.data,
-                            bytesToAllocate);
-                break;
-            case MatrixType::u32:
-            case MatrixType::s32:
-                std::memcpy(m_data.u32_data.data, other.m_data.u32_data.data,
-                            bytesToAllocate);
-                break;
-            case MatrixType::f32:
-                std::memcpy(m_data.f32_data.data, other.m_data.f32_data.data,
-                            bytesToAllocate);
-                break;
-            default:
-                throw std::runtime_error(
-                    "Invalid matrix type in copy assignment");
+        // Copy the data
+        if (other.m_data && m_dataSizeBytes > 0) {
+            std::memcpy(m_data.get(), other.m_data.get(), m_dataSizeBytes);
         }
 
         return *this;
     }
 
     /**
-     * @brief Get the matrix data container
+     * @brief Move assignment operator implementation
      *
-     * @return MatrixData structure containing the matrix data and type
+     * Transfers ownership of memory from source matrix.
      */
-    MatrixData Matrix::getMatrixData() const
+    Matrix& Matrix::operator=(Matrix&& other) noexcept
     {
-        return m_data;
-    }
+        // Self-assignment check
+        if (this == &other) {
+            return *this;
+        }
 
-    /**
-     * @brief Get the matrix data type
-     *
-     * @return MatrixType enum value indicating the data type
-     */
-    MatrixType Matrix::getMatrixType() const
-    {
-        return m_data.type;
+        // Transfer ownership
+        m_rows          = other.m_rows;
+        m_cols          = other.m_cols;
+        m_k             = other.m_k;
+        m_type          = other.m_type;
+        m_data          = std::move(other.m_data);
+        m_dataSizeBytes = other.m_dataSizeBytes;
+        m_layout        = other.m_layout;
+        m_leadingDim    = other.m_leadingDim;
+        m_transposed    = other.m_transposed;
+        m_reordered     = other.m_reordered;
+
+        // Reset other matrix
+        other.m_rows          = 0;
+        other.m_cols          = 0;
+        other.m_dataSizeBytes = 0;
+        other.m_leadingDim    = 0;
+        other.m_transposed    = false;
+        other.m_reordered     = false;
+
+        return *this;
     }
 
     /**
      * @brief Get the number of rows in the matrix
-     *
-     * @return md_t Number of rows
      */
     md_t Matrix::getRows() const
     {
@@ -586,8 +273,6 @@ namespace dlp { namespace testing {
 
     /**
      * @brief Get the number of columns in the matrix
-     *
-     * @return md_t Number of columns
      */
     md_t Matrix::getCols() const
     {
@@ -595,9 +280,15 @@ namespace dlp { namespace testing {
     }
 
     /**
+     * @brief Get the matrix data type
+     */
+    MatrixType Matrix::getMatrixType() const
+    {
+        return m_type;
+    }
+
+    /**
      * @brief Get the matrix memory layout
-     *
-     * @return MatrixLayout enum value (ROW_MAJOR or COLUMN_MAJOR)
      */
     MatrixLayout Matrix::getLayout() const
     {
@@ -606,8 +297,6 @@ namespace dlp { namespace testing {
 
     /**
      * @brief Check if the matrix is logically transposed
-     *
-     * @return bool True if the matrix is transposed
      */
     bool Matrix::isTransposed() const
     {
@@ -616,8 +305,6 @@ namespace dlp { namespace testing {
 
     /**
      * @brief Check if the matrix is reordered
-     *
-     * @return bool True if the matrix is reordered
      */
     bool Matrix::isReordered() const
     {
@@ -626,8 +313,6 @@ namespace dlp { namespace testing {
 
     /**
      * @brief Get the leading dimension of the matrix
-     *
-     * @return md_t The leading dimension (stride between rows or columns)
      */
     md_t Matrix::getLeadingDimension() const
     {
@@ -636,8 +321,6 @@ namespace dlp { namespace testing {
 
     /**
      * @brief Get the effective number of rows after considering transposition
-     *
-     * @return md_t Effective number of rows (columns if transposed)
      */
     md_t Matrix::getEffectiveRows() const
     {
@@ -647,8 +330,6 @@ namespace dlp { namespace testing {
     /**
      * @brief Get the effective number of columns after considering
      * transposition
-     *
-     * @return md_t Effective number of columns (rows if transposed)
      */
     md_t Matrix::getEffectiveCols() const
     {
@@ -656,55 +337,31 @@ namespace dlp { namespace testing {
     }
 
     /**
-     * @brief Get the allocation size for the matrix data
-     *
-     * Returns the allocation size in elements. If a custom allocation
-     * size was provided during construction (in bytes), this function
-     * converts it back to element count for compatibility.
-     *
-     * @return md_t The allocation size in number of elements
+     * @brief Get the data size in bytes
      */
-    md_t Matrix::getAllocSize() const
+    size_t Matrix::getDataSizeBytes() const
     {
-        // If user provided a custom allocation size (in bytes), convert back to
-        // elements
-        if (m_allocSize > 0) {
-            switch (m_data.type) {
-                case MatrixType::u4:
-                case MatrixType::s4:
-                    // 4-bit types: 2 elements per byte
-                    return m_allocSize * 2;
-                case MatrixType::u8:
-                case MatrixType::s8:
-                    return m_allocSize;
-                case MatrixType::u16:
-                case MatrixType::s16:
-                case MatrixType::bf16:
-                    return m_allocSize / sizeof(uint16_t);
-                case MatrixType::u32:
-                case MatrixType::s32:
-                    return m_allocSize / sizeof(uint32_t);
-                case MatrixType::f32:
-                    return m_allocSize / sizeof(float);
-                default:
-                    throw std::runtime_error(
-                        "Invalid matrix type in getAllocSize");
-            }
-        }
+        return m_dataSizeBytes;
+    }
 
-        // Otherwise calculate based on dimensions and layout (returns element
-        // count)
-        if (m_layout == MatrixLayout::ROW_MAJOR) {
-            return m_rows * m_leadingDim;
-        } else {
-            return m_cols * m_leadingDim;
-        }
+    /**
+     * @brief Get raw pointer to the matrix data
+     */
+    void* Matrix::getData() const
+    {
+        return m_data.get();
+    }
+
+    /**
+     * @brief Get the matrix data container (for backward compatibility)
+     */
+    MatrixData Matrix::getMatrixData() const
+    {
+        return MatrixData(m_type, m_data.get());
     }
 
     /**
      * @brief Set the reordering flag
-     *
-     * @param reordered Whether the matrix is reordered
      */
     void Matrix::setReordered(bool reordered)
     {
@@ -713,8 +370,6 @@ namespace dlp { namespace testing {
 
     /**
      * @brief Set the k dimension for tolerance calculation
-     *
-     * @param k The k dimension for tolerance calculation
      */
     void Matrix::setK(md_t k)
     {
@@ -722,175 +377,52 @@ namespace dlp { namespace testing {
     }
 
     /**
+     * @brief Get element size in bytes for the matrix type
+     */
+    size_t Matrix::getElementSizeBytes() const
+    {
+        return MatrixMemory::getElementSizeBytes(m_type);
+    }
+
+    /**
      * @brief Compare two matrices for equality
-     *
-     * Checks if dimensions, type, and content match.
-     *
-     * @param other The matrix to compare with
-     * @return bool True if matrices are equal, false otherwise
      */
     bool Matrix::operator==(const Matrix& other) const
     {
-
-        // Check if dimensions match
-        if (getEffectiveRows() != other.getEffectiveRows()
-            || getEffectiveCols() != other.getEffectiveCols()) {
+        // Check dimensions and metadata
+        if (m_rows != other.m_rows || m_cols != other.m_cols
+            || m_type != other.m_type || m_layout != other.m_layout
+            || m_leadingDim != other.m_leadingDim
+            || m_transposed != other.m_transposed
+            || m_reordered != other.m_reordered) {
             return false;
         }
 
-        // Check if types match
-        if (m_data.type != other.m_data.type) {
+        // Check data content
+        if (m_dataSizeBytes != other.m_dataSizeBytes) {
             return false;
         }
 
-        // Compare data based on type
-        md_t rows = getEffectiveRows();
-        md_t cols = getEffectiveCols();
-
-        // For simplicity, we compare element by element
-        // In a real implementation, you might optimize this for performance
-        for (md_t i = 0; i < rows; i++) {
-            for (md_t j = 0; j < cols; j++) {
-                // Get indices based on layout and transposition
-                md_t this_idx, other_idx;
-
-                // Handle different layouts and transposition for this matrix
-                if (m_layout == MatrixLayout::ROW_MAJOR) {
-                    this_idx = m_transposed ? j * m_leadingDim + i
-                                            : i * m_leadingDim + j;
-                } else {
-                    this_idx = m_transposed ? i * m_leadingDim + j
-                                            : j * m_leadingDim + i;
-                }
-
-                // Handle different layouts and transposition for other matrix
-                if (other.m_layout == MatrixLayout::ROW_MAJOR) {
-                    other_idx = other.m_transposed ? j * other.m_leadingDim + i
-                                                   : i * other.m_leadingDim + j;
-                } else {
-                    other_idx = other.m_transposed ? i * other.m_leadingDim + j
-                                                   : j * other.m_leadingDim + i;
-                }
-
-                // Compare values based on type
-                switch (m_data.type) {
-                    case MatrixType::u4: {
-                        // 4-bit types require special handling (2 values per
-                        // byte)
-                        uint8_t this_byte = m_data.u4_data.data[this_idx / 2];
-                        uint8_t other_byte =
-                            other.m_data.u4_data.data[other_idx / 2];
-                        uint8_t this_val  = (this_idx % 2 == 0)
-                                                ? (this_byte & 0x0F)
-                                                : (this_byte >> 4);
-                        uint8_t other_val = (other_idx % 2 == 0)
-                                                ? (other_byte & 0x0F)
-                                                : (other_byte >> 4);
-                        if (this_val != other_val)
-                            return false;
-                        break;
-                    }
-                    case MatrixType::s4: {
-                        // 4-bit types require special handling (2 values per
-                        // byte)
-                        int8_t this_byte = m_data.s4_data.data[this_idx / 2];
-                        int8_t other_byte =
-                            other.m_data.s4_data.data[other_idx / 2];
-                        int8_t this_val  = (this_idx % 2 == 0)
-                                               ? (this_byte & 0x0F)
-                                               : (this_byte >> 4);
-                        int8_t other_val = (other_idx % 2 == 0)
-                                               ? (other_byte & 0x0F)
-                                               : (other_byte >> 4);
-                        // Convert to signed
-                        this_val  = (this_val & 0x08) ? (this_val | 0xF0)
-                                                      : this_val;
-                        other_val = (other_val & 0x08) ? (other_val | 0xF0)
-                                                       : other_val;
-                        if (this_val != other_val)
-                            return false;
-                        break;
-                    }
-                    case MatrixType::u8:
-                        if (m_data.u8_data.data[this_idx]
-                            != other.m_data.u8_data.data[other_idx])
-                            return false;
-                        break;
-                    case MatrixType::s8:
-                        if (m_data.s8_data.data[this_idx]
-                            != other.m_data.s8_data.data[other_idx])
-                            return false;
-                        break;
-                    case MatrixType::u16:
-                        if (m_data.u16_data.data[this_idx]
-                            != other.m_data.u16_data.data[other_idx])
-                            return false;
-                        break;
-                    case MatrixType::s16:
-                        if (m_data.s16_data.data[this_idx]
-                            != other.m_data.s16_data.data[other_idx])
-                            return false;
-                        break;
-                    case MatrixType::u32:
-                        if (m_data.u32_data.data[this_idx]
-                            != other.m_data.u32_data.data[other_idx])
-                            return false;
-                        break;
-                    case MatrixType::s32:
-                        if (m_data.s32_data.data[this_idx]
-                            != other.m_data.s32_data.data[other_idx])
-                            return false;
-                        break;
-                    case MatrixType::f32: {
-                        float this_val  = m_data.f32_data.data[this_idx];
-                        float other_val = other.m_data.f32_data.data[other_idx];
-
-                        // FIXME: Extract this out and move tolerance to YAML
-                        // parser. Use relative tolerance for floating point
-                        // comparison
-                        // Formula : 2*k*1.2e-6;
-
-                        float epsilon;
-                        if (m_k == std::numeric_limits<md_t>::max()) {
-                            epsilon = 2 * m_cols * 1.2e-6f; // Default to column
-                                                            // size
-                        } else {
-                            epsilon = 2 * m_k * 1.2e-6f; // Use user-defined k
-                        }
-                        float abs_diff = std::abs(this_val - other_val);
-                        float rel_tol =
-                            epsilon
-                            * std::max(std::abs(this_val), std::abs(other_val));
-                        float tolerance = std::max(epsilon, rel_tol);
-
-                        if (abs_diff > tolerance) {
-                            return false;
-                        }
-                        break;
-                    }
-                    case MatrixType::bf16:
-                        if (m_data.bf16_data.data[this_idx]
-                            != other.m_data.bf16_data.data[other_idx])
-                            return false;
-                        break;
-                    default:
-                        throw std::runtime_error(
-                            "Unsupported matrix type in comparison");
-                }
-            }
+        if (m_data == nullptr && other.m_data == nullptr) {
+            return true;
         }
 
-        // All checks passed
-        return true;
+        if (m_data == nullptr || other.m_data == nullptr) {
+            return false;
+        }
+
+        // For floating point types, use tolerance-based comparison
+        if (m_type == MatrixType::f32 || m_type == MatrixType::bf16) {
+            return compareFloatingPointData(other);
+        }
+
+        // For integer types, use exact comparison
+        return std::memcmp(m_data.get(), other.m_data.get(), m_dataSizeBytes)
+               == 0;
     }
 
     /**
      * @brief Compare two matrices for inequality
-     *
-     * Checks if two matrices differ in dimensions, type, or content.
-     *
-     * @param other The matrix to compare with
-     * @return bool True if matrices are not equal, false otherwise
      */
     bool Matrix::operator!=(const Matrix& other) const
     {
@@ -898,172 +430,185 @@ namespace dlp { namespace testing {
     }
 
     /**
+     * @brief Helper function for floating point data comparison
+     */
+    bool Matrix::compareFloatingPointData(const Matrix& other) const
+    {
+        // Calculate tolerance based on k dimension
+        double tolerance = 1e-6;
+        if (m_k != std::numeric_limits<md_t>::max()) {
+            tolerance = 2.0 * static_cast<double>(m_k) * 1.2e-6;
+        }
+
+        if (m_type == MatrixType::f32) {
+            const float* thisData =
+                reinterpret_cast<const float*>(m_data.get());
+            const float* otherData =
+                reinterpret_cast<const float*>(other.m_data.get());
+            size_t elementCount = m_dataSizeBytes / sizeof(float);
+
+            for (size_t i = 0; i < elementCount; ++i) {
+                if (std::abs(thisData[i] - otherData[i]) > tolerance) {
+                    return false;
+                }
+            }
+        } else if (m_type == MatrixType::bf16) {
+            // For BF16, compare as uint16_t for now
+            return std::memcmp(m_data.get(), other.m_data.get(),
+                               m_dataSizeBytes)
+                   == 0;
+        }
+
+        return true;
+    }
+
+    /**
      * @brief Fill matrix with random values from a uniform distribution
-     *
-     * Fills the matrix with random values appropriate for its data type.
-     *
-     * @param seed Optional seed for the random number generator (0 means use
-     * time-based seed)
      */
     void Matrix::fillRandom(unsigned int seed)
     {
-        // Setup random number generator
-        std::mt19937 gen;
-        if (seed == 0) {
-            // Use time-based seed if none provided
-            seed = static_cast<unsigned int>(
-                std::chrono::system_clock::now().time_since_epoch().count());
+        if (!m_data || m_dataSizeBytes == 0) {
+            return;
         }
-        gen.seed(seed);
 
-        // Get total size using the member function
-        md_t totalSize = getAllocSize();
+        // Use time-based seed if not provided
+        if (seed == 0) {
+            seed = static_cast<unsigned int>(
+                std::chrono::high_resolution_clock::now()
+                    .time_since_epoch()
+                    .count());
+        }
 
-        // Fill with random values based on type
-        switch (m_data.type) {
-            case MatrixType::u4: {
-                // For 4-bit types, we need to pack 2 values per byte
-                std::uniform_int_distribution<uint8_t> dist(
-                    0, 15); // 4-bit range: 0-15
-                uint8_t* data = m_data.u4_data.data;
-                for (md_t i = 0; i < (totalSize + 1) / 2; i++) {
-                    // Pack two 4-bit values into one byte
-                    uint8_t low  = dist(gen);
-                    uint8_t high = dist(gen);
-                    data[i]      = (high << 4) | low;
-                }
-                break;
-            }
-            case MatrixType::s4: {
-                // For 4-bit types, we need to pack 2 values per byte
-                std::uniform_int_distribution<int8_t> dist(
-                    -8, 7); // 4-bit signed range: -8 to 7
-                int8_t* data = m_data.s4_data.data;
-                for (md_t i = 0; i < (totalSize + 1) / 2; i++) {
-                    // Pack two 4-bit values into one byte
-                    int8_t low  = dist(gen) & 0x0F; // Ensure 4-bits
-                    int8_t high = dist(gen) & 0x0F; // Ensure 4-bits
-                    data[i]     = (high << 4) | low;
+        std::mt19937 gen(seed);
+
+        switch (m_type) {
+            case MatrixType::f32: {
+                std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
+                float* data         = reinterpret_cast<float*>(m_data.get());
+                size_t elementCount = m_dataSizeBytes / sizeof(float);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
             }
             case MatrixType::u8: {
-                std::uniform_int_distribution<uint16_t> dist(
-                    0, 255); // 8-bit range: 0-255
-                uint8_t* data = m_data.u8_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = static_cast<uint8_t>(dist(gen));
+                std::uniform_int_distribution<uint8_t> dis(0, 255);
+                uint8_t*                               data = m_data.get();
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
             }
             case MatrixType::s8: {
-                std::uniform_int_distribution<int16_t> dist(
-                    -128, 127); // 8-bit signed range: -128 to 127
-                int8_t* data = m_data.s8_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = static_cast<int8_t>(dist(gen));
+                std::uniform_int_distribution<int8_t> dis(-128, 127);
+                int8_t* data = reinterpret_cast<int8_t*>(m_data.get());
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
             }
             case MatrixType::u16: {
-                std::uniform_int_distribution<uint16_t> dist(
-                    0, 65535); // 16-bit range: 0-65535
-                uint16_t* data = m_data.u16_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = dist(gen);
+                std::uniform_int_distribution<uint16_t> dis(0, 65535);
+                uint16_t* data = reinterpret_cast<uint16_t*>(m_data.get());
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
             }
             case MatrixType::s16: {
-                std::uniform_int_distribution<int16_t> dist(
-                    -32768, 32767); // 16-bit signed range: -32768 to 32767
-                int16_t* data = m_data.s16_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = dist(gen);
+                std::uniform_int_distribution<int16_t> dis(-32768, 32767);
+                int16_t* data = reinterpret_cast<int16_t*>(m_data.get());
+                size_t   elementCount = m_dataSizeBytes / sizeof(int16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
             }
             case MatrixType::u32: {
-                std::uniform_int_distribution<uint32_t> dist(
-                    0, 4294967295); // 32-bit range
-                uint32_t* data = m_data.u32_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = dist(gen);
+                std::uniform_int_distribution<uint32_t> dis(0, UINT32_MAX);
+                uint32_t* data = reinterpret_cast<uint32_t*>(m_data.get());
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint32_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
             }
             case MatrixType::s32: {
-                std::uniform_int_distribution<int32_t> dist(
-                    -2147483648, 2147483647); // 32-bit signed range
-                int32_t* data = m_data.s32_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = dist(gen);
+                std::uniform_int_distribution<int32_t> dis(INT32_MIN,
+                                                           INT32_MAX);
+                int32_t* data = reinterpret_cast<int32_t*>(m_data.get());
+                size_t   elementCount = m_dataSizeBytes / sizeof(int32_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
-            }
-            case MatrixType::f32: {
-#if 1
-                std::uniform_real_distribution<float> dist(
-                    -1.0f, 1.0f); // Float range: -1.0 to 1.0
-                float* data = m_data.f32_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = dist(gen);
-                }
-                break;
-#else
-                // We are going to use int values then convert them to float
-                std::uniform_int_distribution<int32_t> dist(
-                    -10, +10); // 32-bit range
-                float* data = m_data.f32_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    data[i] = dist(gen);
-                }
-#endif
             }
             case MatrixType::bf16: {
-                // BF16 is a 16-bit floating point format with 1 sign bit, 8
-                // exponent bits, and 7 mantissa bits We'll generate random
-                // floats and convert them to BF16 format
-                std::uniform_real_distribution<float> dist(-1.0f, 1.0f);
-                uint16_t* data = m_data.bf16_data.data;
-                for (md_t i = 0; i < totalSize; i++) {
-                    float f = dist(gen);
-                    // Convert float to BF16 representation
-                    // Extract sign and exponent bits
-                    uint32_t floatBits;
-                    std::memcpy(&floatBits, &f, sizeof(float));
-                    // BF16 takes the sign bit and exponent (8 bits) and the
-                    // first 7 bits of mantissa
-                    uint16_t bf16 =
-                        static_cast<uint16_t>((floatBits >> 16) & 0xFFFF);
-                    data[i] = bf16;
+                // For BF16, fill with random uint16_t values
+                std::uniform_int_distribution<uint16_t> dis(0, 65535);
+                uint16_t* data = reinterpret_cast<uint16_t*>(m_data.get());
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = dis(gen);
+                }
+                break;
+            }
+            case MatrixType::u4:
+            case MatrixType::s4: {
+                // For packed 4-bit types, fill with random bytes
+                std::uniform_int_distribution<uint8_t> dis(0, 255);
+                uint8_t*                               data = m_data.get();
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    data[i] = dis(gen);
                 }
                 break;
             }
             default:
                 throw std::runtime_error(
-                    "Unsupported matrix type in fillRandom");
+                    "Unsupported matrix type for random fill");
         }
     }
 
     /**
      * @brief Fill matrix with a single value
-     *
-     * Fills the matrix with a single value of the appropriate data type.
-     *
-     * @param value The value to fill the matrix with
      */
     void Matrix::fillValue(std::any value)
     {
-        switch (m_data.type) {
-            case MatrixType::f32:
-                for (md_t i = 0; i < getAllocSize(); i++) {
-                    m_data.f32_data.data[i] = std::any_cast<float>(value);
+        if (!m_data || m_dataSizeBytes == 0) {
+            return;
+        }
+
+        switch (m_type) {
+            case MatrixType::f32: {
+                float  fillValue    = std::any_cast<float>(value);
+                float* data         = reinterpret_cast<float*>(m_data.get());
+                size_t elementCount = m_dataSizeBytes / sizeof(float);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = fillValue;
                 }
                 break;
+            }
+            case MatrixType::u8: {
+                uint8_t  fillValue = std::any_cast<uint8_t>(value);
+                uint8_t* data      = m_data.get();
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    data[i] = fillValue;
+                }
+                break;
+            }
+            case MatrixType::s8: {
+                int8_t  fillValue = std::any_cast<int8_t>(value);
+                int8_t* data      = reinterpret_cast<int8_t*>(m_data.get());
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    data[i] = fillValue;
+                }
+                break;
+            }
+            // Add other types as needed
             default:
                 throw std::runtime_error(
-                    "Unsupported matrix type in fillValue");
+                    "Unsupported matrix type for value fill");
         }
     }
 

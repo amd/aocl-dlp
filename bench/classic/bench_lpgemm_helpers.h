@@ -434,7 +434,8 @@ fill_array_post_ops_bfloat16(void* arr, md_t size)
         float alpha_val;                                                       \
         int32_t_to_float(*((int32_t*)alpha), &alpha_val);                      \
         float swish_reference =                                                \
-            (temp_accum / (1 + expf((double)((alpha_val)*temp_accum * -1))));  \
+            (temp_accum                                                        \
+             / (1 + expf((double)((alpha_val) * temp_accum * -1))));           \
         return swish_reference;                                                \
     }
 
@@ -1284,7 +1285,7 @@ mat_mul_accuracy_check_accum_bf16s4f32obf16(
         /* Only supporting 8 post ops at max for now.*/                        \
         md_t max_post_ops_seq_length = 8;                                      \
         post_ops->seq_vector         = (AOCL_POST_OP_TYPE*)malloc(             \
-                    max_post_ops_seq_length * sizeof(AOCL_POST_OP_TYPE));      \
+            max_post_ops_seq_length * sizeof(AOCL_POST_OP_TYPE));      \
                                                                                \
         if (post_ops->seq_vector == NULL) {                                    \
             goto err_handler;                                                  \

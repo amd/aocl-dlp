@@ -29,6 +29,7 @@
 #pragma once
 
 #include <cstdint>
+#include <memory>
 #include <ostream>
 
 /**
@@ -124,101 +125,134 @@ namespace testing {
     }
 
     /**
-     * @struct data_type
-     * @brief Type container for matrix data with pointer management
-     * @tparam T Data type of the elements
+     * @brief Matrix memory allocation utilities
      */
-    template<typename T>
-    struct data_type
-    {
-        T* data; ///< Pointer to the data array
-    };
-
-    // Type aliases for various data types
-    using u8  = data_type<uint8_t>;  ///< Alias for unsigned 8-bit data
-    using u16 = data_type<uint16_t>; ///< Alias for unsigned 16-bit data
-    using u32 = data_type<uint32_t>; ///< Alias for unsigned 32-bit data
-    using s8  = data_type<int8_t>;   ///< Alias for signed 8-bit data
-    using s16 = data_type<int16_t>;  ///< Alias for signed 16-bit data
-    using s32 = data_type<int32_t>;  ///< Alias for signed 32-bit data
-    using f32 = data_type<float>;    ///< Alias for 32-bit floating point data
-    using bf16 =
-        data_type<uint16_t>; ///< Alias for BF16 data (stored as uint16_t)
-
-    /**
-     * @struct s4
-     * @brief Special handling for signed 4-bit data (packed into int8_t)
-     */
-    struct s4 : data_type<int8_t>
-    {};
-
-    /**
-     * @struct u4
-     * @brief Special handling for unsigned 4-bit data (packed into uint8_t)
-     */
-    struct u4 : data_type<uint8_t>
-    {};
-
-    /**
-     * @struct MatrixData
-     * @brief Container for matrix data with type-based storage
-     *
-     * This structure provides a union-based approach to storing different data
-     * types while maintaining type information.
-     */
-    struct MatrixData
-    {
-        MatrixType type; ///< The type of data stored in the matrix
+    namespace MatrixMemory {
 
         /**
-         * @brief Union for storing different data types
+         * @brief Calculate the size in bytes for a single element of the given
+         * type
+         * @param type The matrix data type
+         * @return Size in bytes (0 for packed types like u4/s4)
          */
-        union
-        {
-            u4   u4_data;   ///< Storage for unsigned 4-bit data
-            u8   u8_data;   ///< Storage for unsigned 8-bit data
-            u16  u16_data;  ///< Storage for unsigned 16-bit data
-            u32  u32_data;  ///< Storage for unsigned 32-bit data
-            s4   s4_data;   ///< Storage for signed 4-bit data
-            s8   s8_data;   ///< Storage for signed 8-bit data
-            s16  s16_data;  ///< Storage for signed 16-bit data
-            s32  s32_data;  ///< Storage for signed 32-bit data
-            f32  f32_data;  ///< Storage for 32-bit floating point data
-            bf16 bf16_data; ///< Storage for BF16 data
-        };
-
-        /**
-         * @brief Get raw pointer to the matrix data
-         *
-         * @return void* Pointer to the matrix data (type-erased)
-         */
-        void* getMatrixPtr() const
+        inline size_t getElementSizeBytes(MatrixType type)
         {
             switch (type) {
                 case MatrixType::u4:
-                    return u4_data.data;
-                case MatrixType::u8:
-                    return u8_data.data;
-                case MatrixType::u16:
-                    return u16_data.data;
-                case MatrixType::u32:
-                    return u32_data.data;
                 case MatrixType::s4:
-                    return s4_data.data;
+                    return 0; // Special case: 2 elements per byte
+                case MatrixType::u8:
                 case MatrixType::s8:
-                    return s8_data.data;
+                    return 1;
+                case MatrixType::u16:
                 case MatrixType::s16:
-                    return s16_data.data;
-                case MatrixType::s32:
-                    return s32_data.data;
-                case MatrixType::f32:
-                    return f32_data.data;
                 case MatrixType::bf16:
-                    return bf16_data.data;
+                    return 2;
+                case MatrixType::u32:
+                case MatrixType::s32:
+                case MatrixType::f32:
+                    return 4;
                 default:
-                    return nullptr;
+                    return 0;
             }
         }
+
+        /**
+         * @brief Calculate required bytes for matrix storage
+         * @param type Matrix data type
+         * @param rows Number of rows
+         * @param cols Number of columns
+         * @param layout Memory layout
+         * @param leadingDim Leading dimension (0 for automatic)
+         * @return Required bytes for allocation
+         */
+        inline size_t calculateRequiredBytes(MatrixType   type,
+                                             size_t       rows,
+                                             size_t       cols,
+                                             MatrixLayout layout,
+                                             size_t       leadingDim = 0)
+        {
+            // Calculate leading dimension if not specified
+            if (leadingDim == 0) {
+                leadingDim = (layout == MatrixLayout::ROW_MAJOR) ? cols : rows;
+            }
+
+            // Calculate total elements based on layout
+            size_t totalElements;
+            if (layout == MatrixLayout::ROW_MAJOR) {
+                totalElements = rows * leadingDim;
+            } else {
+                totalElements = cols * leadingDim;
+            }
+
+            // Handle packed types (u4/s4)
+            if (type == MatrixType::u4 || type == MatrixType::s4) {
+                return (totalElements + 1) / 2; // 2 elements per byte
+            }
+
+            // Regular types
+            return totalElements * getElementSizeBytes(type);
+        }
+
+        /**
+         * @brief Allocate memory for matrix data
+         * @param type Matrix data type
+         * @param rows Number of rows
+         * @param cols Number of columns
+         * @param layout Memory layout
+         * @param leadingDim Leading dimension (0 for automatic)
+         * @return Unique pointer to allocated memory
+         */
+        inline std::unique_ptr<uint8_t[]> allocate(MatrixType   type,
+                                                   size_t       rows,
+                                                   size_t       cols,
+                                                   MatrixLayout layout,
+                                                   size_t       leadingDim = 0)
+        {
+            size_t bytes =
+                calculateRequiredBytes(type, rows, cols, layout, leadingDim);
+            return std::make_unique<uint8_t[]>(bytes);
+        }
+
+        /**
+         * @brief Allocate memory with custom size in bytes
+         * @param sizeBytes Size in bytes to allocate
+         * @return Unique pointer to allocated memory
+         */
+        inline std::unique_ptr<uint8_t[]> allocateBytes(size_t sizeBytes)
+        {
+            return std::make_unique<uint8_t[]>(sizeBytes);
+        }
+    } // namespace MatrixMemory
+
+    /**
+     * @brief Legacy MatrixData structure for backward compatibility
+     *
+     * This structure is maintained for compatibility with existing code
+     * that expects the old interface. It wraps the new memory model.
+     */
+    struct MatrixData
+    {
+        MatrixType type;     ///< The type of data stored in the matrix
+        void*      data_ptr; ///< Pointer to the matrix data
+
+        /**
+         * @brief Constructor
+         * @param matrixType The type of data
+         * @param dataPtr Pointer to the data
+         */
+        MatrixData(MatrixType matrixType = MatrixType::f32,
+                   void*      dataPtr    = nullptr)
+            : type(matrixType)
+            , data_ptr(dataPtr)
+        {
+        }
+
+        /**
+         * @brief Get raw pointer to the matrix data
+         * @return void* Pointer to the matrix data (type-erased)
+         */
+        void* getMatrixPtr() const { return data_ptr; }
     };
 
 } // namespace testing

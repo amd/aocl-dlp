@@ -255,14 +255,16 @@ class Range
      */
     size_t size() const
     {
-        if (m_step == -1 && m_start == m_end) {
-            // Special case: step=-1 with start==end means single value
-            return 1;
-        } else if ((m_step > 0 && m_start < m_end)
-                   || (m_step < 0 && m_start > m_end)) {
-            return static_cast<size_t>(
-                (std::abs(m_end - m_start) + std::abs(m_step) - 1)
-                / std::abs(m_step));
+        if constexpr (!std::is_same<T, bool>::value) {
+            if (m_step == T(-1) && m_start == m_end) {
+                // Special case: step=-1 with start==end means single value
+                return 1;
+            } else if ((m_step > 0 && m_start < m_end)
+                       || (m_step < 0 && m_start > m_end)) {
+                return static_cast<size_t>(
+                    (std::abs(m_end - m_start) + std::abs(m_step) - 1)
+                    / std::abs(m_step));
+            }
         }
         return 0;
     }
@@ -279,13 +281,16 @@ class Range
      */
     bool empty() const
     {
-        if (m_step == -1 && m_start == m_end) {
-            // Special case: step=-1 with start==end means single value (not
-            // empty)
-            return false;
+        if constexpr (!std::is_same<T, bool>::value) {
+            if (m_step == T(-1) && m_start == m_end) {
+                // Special case: step=-1 with start==end means single value (not
+                // empty)
+                return false;
+            }
+            return (m_step > 0 && m_start >= m_end)
+                   || (m_step < 0 && m_start <= m_end) || (m_step == 0);
         }
-        return (m_step > 0 && m_start >= m_end)
-               || (m_step < 0 && m_start <= m_end) || (m_step == 0);
+        return false;
     }
 
   private:
@@ -419,16 +424,21 @@ class TypeErasedRange : public IRange
             if (m_is_end)
                 return false;
 
-            // Special case: step=-1 with start==end means single value, no next
-            if (m_step == -1 && m_start == m_end) {
-                return false;
+            // Special case: step==-1 with start==end means single value, no
+            // next
+            if constexpr (!std::is_same<T, bool>::value) {
+                if (m_step == T(-1) && m_start == m_end) {
+                    return false;
+                }
             }
 
             T next_value = m_value + m_step;
-            if (m_step > 0) {
-                return next_value < m_end;
-            } else if (m_step < 0) {
-                return next_value > m_end;
+            if constexpr (!std::is_same<T, bool>::value) {
+                if (m_step > 0) {
+                    return next_value < m_end;
+                } else if (m_step < 0) {
+                    return next_value > m_end;
+                }
             }
             return false; // step == 0 case
         }
@@ -454,14 +464,16 @@ class TypeErasedRange : public IRange
          */
         size_t size() const override
         {
-            if (m_step == -1 && m_start == m_end) {
-                // Special case: step=-1 with start==end means single value
-                return 1;
-            } else if ((m_step > 0 && m_start < m_end)
-                       || (m_step < 0 && m_start > m_end)) {
-                return static_cast<size_t>(
-                    (std::abs(m_end - m_start) + std::abs(m_step) - 1)
-                    / std::abs(m_step));
+            if constexpr (!std::is_same<T, bool>::value) {
+                if (m_step == T(-1) && m_start == m_end) {
+                    // Special case: step=-1 with start==end means single value
+                    return 1;
+                } else if ((m_step > 0 && m_start < m_end)
+                           || (m_step < 0 && m_start > m_end)) {
+                    return static_cast<size_t>(
+                        (std::abs(m_end - m_start) + std::abs(m_step) - 1)
+                        / std::abs(m_step));
+                }
             }
             return 0;
         }
@@ -479,12 +491,15 @@ class TypeErasedRange : public IRange
             if (m_is_end)
                 return true;
 
-            if (m_step > 0) {
-                return m_value >= m_end;
-            } else if (m_step < 0) {
-                return m_value <= m_end;
+            if constexpr (!std::is_same<T, bool>::value) {
+                if (m_step > 0) {
+                    return m_value >= m_end;
+                } else if (m_step < 0) {
+                    return m_value <= m_end;
+                }
+                return true; // step == 0 case
             }
-            return true; // step == 0 case
+            return true;
         }
     };
 
@@ -513,14 +528,16 @@ class TypeErasedRange : public IRange
     // Size of the range
     size_t size() const override
     {
-        if (m_step == -1 && m_start == m_end) {
-            // Special case: step=-1 with start==end means single value
-            return 1;
-        } else if ((m_step > 0 && m_start < m_end)
-                   || (m_step < 0 && m_start > m_end)) {
-            return static_cast<size_t>(
-                (std::abs(m_end - m_start) + std::abs(m_step) - 1)
-                / std::abs(m_step));
+        if constexpr (!std::is_same<T, bool>::value) {
+            if (m_step == T(-1) && m_start == m_end) {
+                // Special case: step=-1 with start==end means single value
+                return 1;
+            } else if ((m_step > 0 && m_start < m_end)
+                       || (m_step < 0 && m_start > m_end)) {
+                return static_cast<size_t>(
+                    (std::abs(m_end - m_start) + std::abs(m_step) - 1)
+                    / std::abs(m_step));
+            }
         }
         return 0;
     }
@@ -528,13 +545,16 @@ class TypeErasedRange : public IRange
     // Check if range is empty
     bool empty() const override
     {
-        if (m_step == -1 && m_start == m_end) {
-            // Special case: step=-1 with start==end means single value (not
-            // empty)
-            return false;
+        if constexpr (!std::is_same<T, bool>::value) {
+            if (m_step == T(-1) && m_start == m_end) {
+                // Special case: step=-1 with start==end means single value (not
+                // empty)
+                return false;
+            }
+            return (m_step > 0 && m_start >= m_end)
+                   || (m_step < 0 && m_start <= m_end) || (m_step == 0);
         }
-        return (m_step > 0 && m_start >= m_end)
-               || (m_step < 0 && m_start <= m_end) || (m_step == 0);
+        return false;
     }
 
   private:

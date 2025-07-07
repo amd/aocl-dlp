@@ -135,56 +135,68 @@ struct GemmTestConfig
 bool
 check_valid_params(const GemmTestConfig& config)
 {
-    // Borrowed from AOCL_GEMM_CHECK macro in aocl_gemm_check.h
-    // Check basic dimensions - must be positive
-    if (config.m <= 0 || config.n <= 0 || config.k <= 0) {
+    // This function follows the exact logic from AOCL_GEMM_CHECK macro in
+    // aocl_gemm_check.h with additional handling for reordered matrices
+    // (which have custom memory layouts)
+    bool col_stored = (config.storage_format == MatrixLayout::COLUMN_MAJOR);
+    bool row_stored = (config.storage_format == MatrixLayout::ROW_MAJOR);
+
+    bool nota = !config.transA; // not transposed A
+    bool notb = !config.transB; // not transposed B
+    bool ta   = config.transA;  // transposed A
+    bool tb   = config.transB;  // transposed B
+
+    // Check basic dimensions - must be positive (same as macro: m <= 0, n <= 0,
+    // k <= 0)
+    if (config.m <= 0) {
+        return false; // info = 4 in macro
+    }
+    if (config.n <= 0) {
+        return false; // info = 5 in macro
+    }
+    if (config.k <= 0) {
+        return false; // info = 6 in macro
+    }
+
+    // Leading dimension checks for matrix A (info = 9 in macro)
+    // Skip leading dimension checks for reordered matrices as they have custom
+    // layouts
+    if (!config.reorderA) {
+        if (row_stored
+            && ((nota && (config.lda < config.k))
+                || (ta && (config.lda < config.m)))) {
+            return false;
+        }
+        if (col_stored
+            && ((nota && (config.lda < config.m))
+                || (ta && (config.lda < config.k)))) {
+            return false;
+        }
+    }
+
+    // Leading dimension checks for matrix B (info = 12 in macro)
+    // Skip leading dimension checks for reordered matrices as they have custom
+    // layouts
+    if (!config.reorderB) {
+        if (row_stored
+            && ((notb && (config.ldb < config.n))
+                || (tb && (config.ldb < config.k)))) {
+            return false;
+        }
+        if (col_stored
+            && ((notb && (config.ldb < config.k))
+                || (tb && (config.ldb < config.n)))) {
+            return false;
+        }
+    }
+
+    // Leading dimension checks for matrix C (info = 16 in macro)
+    // Matrix C is never reordered, so always check
+    if (row_stored && (config.ldc < config.n)) {
         return false;
     }
-
-    bool row_stored = (config.storage_format == MatrixLayout::ROW_MAJOR);
-    bool col_stored = (config.storage_format == MatrixLayout::COLUMN_MAJOR);
-
-    // Check leading dimension for matrix A
-    if (row_stored) {
-        // Row-major storage
-        if ((!config.transA && config.lda < config.k)
-            || (config.transA && config.lda < config.m)) {
-            return false;
-        }
-    } else if (col_stored) {
-        // Column-major storage
-        if ((!config.transA && config.lda < config.m)
-            || (config.transA && config.lda < config.k)) {
-            return false;
-        }
-    }
-
-    // Check leading dimension for matrix B
-    if (row_stored) {
-        // Row-major storage
-        if ((!config.transB && config.ldb < config.n)
-            || (config.transB && config.ldb < config.k)) {
-            return false;
-        }
-    } else if (col_stored) {
-        // Column-major storage
-        if ((!config.transB && config.ldb < config.k)
-            || (config.transB && config.ldb < config.n)) {
-            return false;
-        }
-    }
-
-    // Check leading dimension for matrix C
-    if (row_stored) {
-        // Row-major storage: C is always m x n, so ldc >= n
-        if (config.ldc < config.n) {
-            return false;
-        }
-    } else if (col_stored) {
-        // Column-major storage: C is always m x n, so ldc >= m
-        if (config.ldc < config.m) {
-            return false;
-        }
+    if (col_stored && (config.ldc < config.m)) {
+        return false;
     }
 
     return true;
@@ -416,6 +428,20 @@ createAdditionalTestConfigs()
                          false, false             // packA, packB
     );
 
+    configs.emplace_back("edge_case_100x100_transposedB_reorderedB", // name
+                         MatrixType::f32,                            // a_type
+                         MatrixType::f32,                            // b_type
+                         MatrixType::f32,                            // c_type
+                         MatrixType::f32,                            // acc_type
+                         MatrixLayout::ROW_MAJOR, // storage_format
+                         100, 100, 100,           // m, n, k
+                         100, 100, 100,           // lda, ldb, ldc
+                         1.0, 0.0,                // alpha, beta
+                         false, true,             // transA, transB
+                         false, true,             // reorderA, reorderB
+                         false, false             // packA, packB
+    );
+
     return configs;
 }
 
@@ -525,15 +551,23 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         // Apply reordering if specified
         if (config_.reorderA) {
             A.setReordered(true);
+            A_ref.setReordered(true);
         }
         if (config_.reorderB) {
-
             // Create reordered matrix with custom allocation size in bytes
             Matrix B_reordered;
+            Matrix B_ref_reordered;
 
             ual_dlp->reorder(B, B_reordered, config_.acc_type);
             B = B_reordered;
-            B.setReordered(true);
+
+            // Also apply reordering to reference matrix to ensure both have
+            // same parameters
+            std::unique_ptr<IUal> ual_ref_for_reorder =
+                UalFactory::createUal(UALType::REF);
+            ual_ref_for_reorder->reorder(B_ref, B_ref_reordered,
+                                         config_.acc_type);
+            B_ref = B_ref_reordered;
         }
 
         ASSERT_TRUE(ual_dlp != nullptr) << "Failed to create DLP UAL";
@@ -689,5 +723,4 @@ TEST(GEMMTest, DebugDoubleFree)
     }
 
     // Objects will be destroyed here - this is where double-free might occur
-    std::cout << "Test completed without crash" << std::endl;
 }

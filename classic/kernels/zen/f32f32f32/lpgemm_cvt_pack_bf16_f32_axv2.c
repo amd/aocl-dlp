@@ -620,15 +620,15 @@ cvt_bf16_f32_col_major(float*          cvt_buffer,
         for (kr = 0; (kr + 7) < KC; kr += 8) {
             LOAD_AND_CONVERT_8COLS_1ELE_BF16_F32(kr)
             UNPACKLO8x8_AVX2 UNPACKHI8x8_AVX2 SHUFFLE_8x8_AVX2 PERMUTE_8x8_AVX2
-            _mm256_storeu_ps((cvt_buffer + ((ic + 0) * KC) + kr), b_reg[0]);
+                _mm256_storeu_ps((cvt_buffer + ((ic + 0) * KC) + kr), b_reg[0]);
         }
         for (; (kr + 3) < KC; kr += 4) {
             __m256i store_mask;
             LOAD_AND_CONVERT_4COLS_1ELE_BF16_F32(kr)
             UNPACKLO8x8_AVX2 UNPACKHI8x8_AVX2 SHUFFLE_8x8_AVX2 PERMUTE_8x8_AVX2
-            GET_STORE_MASK(4, store_mask);
-            _mm256_maskstore_ps( ( cvt_buffer + ( ( ic + 0 ) * rs_p ) + kr ),
-                                store_mask, b_reg[0] );
+                GET_STORE_MASK(4, store_mask);
+            _mm256_maskstore_ps((cvt_buffer + ((ic + 0) * rs_p) + kr),
+                                store_mask, b_reg[0]);
         }
         for (; (kr + 1) < KC; kr += 2) {
             __m256i store_mask;
@@ -639,9 +639,9 @@ cvt_bf16_f32_col_major(float*          cvt_buffer,
                                a_reg[1]);
 
             UNPACKLO8x8_AVX2 UNPACKHI8x8_AVX2 SHUFFLE_8x8_AVX2 PERMUTE_8x8_AVX2
-            GET_STORE_MASK(2, store_mask);
-            _mm256_maskstore_ps( ( cvt_buffer + ( ( ic + 0 ) * rs_p ) + kr ),
-                                store_mask, b_reg[0] );
+                GET_STORE_MASK(2, store_mask);
+            _mm256_maskstore_ps((cvt_buffer + ((ic + 0) * rs_p) + kr),
+                                store_mask, b_reg[0]);
         }
         for (; kr < KC; kr += 1) {
             __m256i store_mask;
@@ -649,9 +649,9 @@ cvt_bf16_f32_col_major(float*          cvt_buffer,
             LOAD_1BF16_ELEMENT((bfloat16*)(a + (ic * rs_a)), (kr + 0),
                                a_reg[0]);
             UNPACKLO8x8_AVX2 UNPACKHI8x8_AVX2 SHUFFLE_8x8_AVX2 PERMUTE_8x8_AVX2
-            GET_STORE_MASK(1, store_mask);
-            _mm256_maskstore_ps( ( cvt_buffer + ( ( ic + 0 ) * rs_p ) + kr ),
-                                store_mask, b_reg[0] );
+                GET_STORE_MASK(1, store_mask);
+            _mm256_maskstore_ps((cvt_buffer + ((ic + 0) * rs_p) + kr),
+                                store_mask, b_reg[0]);
         }
     }
 }

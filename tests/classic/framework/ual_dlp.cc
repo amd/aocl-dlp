@@ -40,6 +40,8 @@
 
 #include "aocl_dlp.h"
 
+using namespace dlp::testing;
+
 namespace dlp::testing::classic {
 
 /**
@@ -79,6 +81,8 @@ UalDlp::toString(UALType type)
             return "Intel MKL";
         case UALType::ONEDNN:
             return "OneDNN";
+        case UALType::REF:
+            return "Reference";
         default:
             return "Unknown UAL";
     }
@@ -95,6 +99,7 @@ UalDlp::toString(UALType type)
 bool
 UalDlp::reorder(const Matrix& in, Matrix& out, MatrixType accType)
 {
+
     // Use effective (logical) dimensions for reordering
     md_t effective_rows = in.getEffectiveRows();
     md_t effective_cols = in.getEffectiveCols();
@@ -107,14 +112,17 @@ UalDlp::reorder(const Matrix& in, Matrix& out, MatrixType accType)
     // If input was transposed, the reordered output should have physical
     // dimensions that match the effective dimensions (since reordering handles
     // transposition)
-    md_t out_rows = effective_rows;
-    md_t out_cols = effective_cols;
+    md_t out_rows       = effective_rows;
+    md_t out_cols       = effective_cols;
+    md_t out_leadingDim = in.getLayout() == MatrixLayout::ROW_MAJOR ? out_cols
+                                                                    : out_rows;
 
-    // Create output matrix with correct parameter order:
-    // Matrix(rows, cols, type, layout, leadingDim, transposed, reordered,
-    // allocSize)
-    out = Matrix(out_rows, out_cols, in.getMatrixType(), in.getLayout(),
-                 in.getLeadingDimension(), false, true, alloc_bytes);
+    // Create out1put matrix using the new interface with external memory
+    // allocation
+    // Leading dimension needs to be recomputed as the matrix is copied.
+    auto memory = MatrixMemory::allocateBytes(alloc_bytes);
+    out = Matrix(out_rows, out_cols, in.getMatrixType(), std::move(memory),
+                 alloc_bytes, in.getLayout(), out_leadingDim, false, true);
 
     char layout = in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
     switch (in.getMatrixType()) {
@@ -136,9 +144,8 @@ UalDlp::reorder(const Matrix& in, Matrix& out, MatrixType accType)
 /**
  * @brief Validate GEMM parameters for correctness
  *
- * NOTE: This client-side validation is not ideal - proper error handling
- * should be implemented at the library level to provide consistent
- * parameter validation across all UAL implementations.
+ * This function follows the exact logic from AOCL_GEMM_CHECK macro in
+ * aocl_gemm_check.h
  *
  * @param A First input matrix
  * @param B Second input matrix
@@ -148,16 +155,34 @@ UalDlp::reorder(const Matrix& in, Matrix& out, MatrixType accType)
 bool
 UalDlp::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
 {
-    // Always use effective dimensions for validation - reordering is just a
-    // storage optimization and doesn't change the logical matrix multiplication
-    // dimensions
+    // Get GEMM operation dimensions (logical dimensions)
     uint32_t m = A.getEffectiveRows(); // Rows of A (and C)
     uint32_t n = B.getEffectiveCols(); // Cols of B (and C)
     uint32_t k = A.getEffectiveCols(); // Cols of A, Rows of B
 
-    // Check basic dimensions - must be positive
-    if (m <= 0 || n <= 0 || k <= 0) {
+    bool col_stored = (A.getLayout() == MatrixLayout::COLUMN_MAJOR);
+    bool row_stored = (A.getLayout() == MatrixLayout::ROW_MAJOR);
+
+    bool nota = !A.isTransposed(); // not transposed A
+    bool notb = !B.isTransposed(); // not transposed B
+    bool ta   = A.isTransposed();  // transposed A
+    bool tb   = B.isTransposed();  // transposed B
+
+    // All matrices should have the same layout
+    if (A.getLayout() != B.getLayout() || A.getLayout() != C.getLayout()) {
         return false;
+    }
+
+    // Check basic dimensions - must be positive (same as macro: m <= 0, n <= 0,
+    // k <= 0)
+    if (m <= 0) {
+        return false; // info = 4 in macro
+    }
+    if (n <= 0) {
+        return false; // info = 5 in macro
+    }
+    if (k <= 0) {
+        return false; // info = 6 in macro
     }
 
     // Check dimension compatibility for matrix multiplication
@@ -165,72 +190,45 @@ UalDlp::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
         return false;
     }
 
-    // Check that C has correct dimensions (C is never reordered)
-    if (C.getEffectiveRows() != m || C.getEffectiveCols() != n) {
-        return false;
-    }
-
-    bool row_stored = (A.getLayout() == MatrixLayout::ROW_MAJOR);
-    bool col_stored = (A.getLayout() == MatrixLayout::COLUMN_MAJOR);
-
-    // All matrices should have the same layout
-    if (A.getLayout() != B.getLayout() || A.getLayout() != C.getLayout()) {
-        return false;
-    }
-
-    // Check leading dimension for matrix A (only if not reordered)
+    // Matrix A leading dimension checks (info = 9 in macro)
+    // For reordered matrices, skip the leading dimension check as they have
+    // custom layouts
     if (!A.isReordered()) {
-        if (row_stored) {
-            // Row-major storage
-            if ((!A.isTransposed()
-                 && A.getLeadingDimension() < A.getEffectiveCols())
-                || (A.isTransposed()
-                    && A.getLeadingDimension() < A.getEffectiveRows())) {
-                return false;
-            }
-        } else if (col_stored) {
-            // Column-major storage
-            if ((!A.isTransposed()
-                 && A.getLeadingDimension() < A.getEffectiveRows())
-                || (A.isTransposed()
-                    && A.getLeadingDimension() < A.getEffectiveCols())) {
-                return false;
-            }
+        if (row_stored
+            && ((nota && (A.getLeadingDimension() < k))
+                || (ta && (A.getLeadingDimension() < m)))) {
+            return false;
+        }
+        if (col_stored
+            && ((nota && (A.getLeadingDimension() < m))
+                || (ta && (A.getLeadingDimension() < k)))) {
+            return false;
         }
     }
 
-    // Check leading dimension for matrix B (only if not reordered)
+    // Matrix B leading dimension checks (info = 12 in macro)
+    // For reordered matrices, skip the leading dimension check as they have
+    // custom layouts
     if (!B.isReordered()) {
-        if (row_stored) {
-            // Row-major storage
-            if ((!B.isTransposed()
-                 && B.getLeadingDimension() < B.getEffectiveCols())
-                || (B.isTransposed()
-                    && B.getLeadingDimension() < B.getEffectiveRows())) {
-                return false;
-            }
-        } else if (col_stored) {
-            // Column-major storage
-            if ((!B.isTransposed()
-                 && B.getLeadingDimension() < B.getEffectiveRows())
-                || (B.isTransposed()
-                    && B.getLeadingDimension() < B.getEffectiveCols())) {
-                return false;
-            }
+        if (row_stored
+            && ((notb && (B.getLeadingDimension() < n))
+                || (tb && (B.getLeadingDimension() < k)))) {
+            return false;
+        }
+        if (col_stored
+            && ((notb && (B.getLeadingDimension() < k))
+                || (tb && (B.getLeadingDimension() < n)))) {
+            return false;
         }
     }
 
-    // Check leading dimension for matrix C (C is never reordered)
-    if (row_stored) {
-        // Row-major storage: C is always m x n, so ldc >= n
-        if (C.getLeadingDimension() < C.getEffectiveCols()) {
-            return false;
-        }
-    } else if (col_stored) {
-        // Column-major storage: C is always m x n, so ldc >= m
-        if (C.getLeadingDimension() < C.getEffectiveRows()) {
-            return false;
-        }
+    // Matrix C leading dimension checks (info = 16 in macro)
+    // C is never reordered, so always check
+    if (row_stored && (C.getLeadingDimension() < n)) {
+        return false;
+    }
+    if (col_stored && (C.getLeadingDimension() < m)) {
+        return false;
     }
 
     return true;
@@ -248,6 +246,7 @@ UalDlp::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
 bool
 UalDlp::gemm(const Matrix& A, const Matrix& B, Matrix& C, MatrixType accType)
 {
+
     // Validate parameters first
     // NOTE: This client-side validation is not ideal - proper error handling
     // should be implemented at the library level to provide consistent

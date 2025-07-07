@@ -106,6 +106,10 @@ apply_prelu(float* matrix, int rows, int cols, float scale)
 int
 main()
 {
+    // Initialize post-ops pointers to NULL to avoid uninitialized warnings
+    aocl_post_op* relu_post_ops  = NULL;
+    aocl_post_op* prelu_post_ops = NULL;
+
     // Matrix dimensions
     md_t m = 128; // Rows of A and C
     md_t n = 128; // Columns of B and C
@@ -158,7 +162,7 @@ main()
     apply_relu(c2, m, n);
 
     // Method 2: Set up post-op for ReLU activation
-    aocl_post_op* relu_post_ops = (aocl_post_op*)malloc(sizeof(aocl_post_op));
+    relu_post_ops = (aocl_post_op*)malloc(sizeof(aocl_post_op));
     if (!relu_post_ops) {
         printf("Memory allocation for post-ops failed\n");
         goto cleanup;
@@ -211,7 +215,7 @@ main()
     apply_prelu(c3, m, n, prelu_scale);
 
     // Now set up post-op for PReLU activation
-    aocl_post_op* prelu_post_ops = (aocl_post_op*)malloc(sizeof(aocl_post_op));
+    prelu_post_ops = (aocl_post_op*)malloc(sizeof(aocl_post_op));
     if (!prelu_post_ops) {
         printf("Memory allocation for PReLU post-ops failed\n");
         goto cleanup;

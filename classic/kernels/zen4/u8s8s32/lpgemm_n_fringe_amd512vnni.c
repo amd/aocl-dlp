@@ -357,7 +357,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
         // Post Ops
         lpgemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6xLT16 : {
+    POST_OPS_BIAS_6xLT16: {
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
         __m512    b0        = _mm512_setzero_ps();
 
@@ -395,7 +395,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6xLT16 : {
+    POST_OPS_RELU_6xLT16: {
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -418,7 +418,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6xLT16 : {
+    POST_OPS_RELU_SCALE_6xLT16: {
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -453,7 +453,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6xLT16 : {
+    POST_OPS_GELU_TANH_6xLT16: {
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -477,7 +477,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6xLT16 : {
+    POST_OPS_GELU_ERF_6xLT16: {
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -500,7 +500,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6xLT16 : {
+    POST_OPS_CLIP_6xLT16: {
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -536,7 +536,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6xLT16 : {
+    POST_OPS_DOWNSCALE_6xLT16: {
         __m512 scale0 = _mm512_setzero_ps();
         // Typecast without data modification, safe operation.
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
@@ -617,7 +617,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6xLT16 : {
+    POST_OPS_MATRIX_ADD_6xLT16: {
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
         md_t      ldm       = *(md_t*)post_ops_list_temp->op_args3;
 
@@ -888,7 +888,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6xLT16 : {
+    POST_OPS_MATRIX_MUL_6xLT16: {
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
         md_t      ldm       = *(md_t*)post_ops_list_temp->op_args3;
 
@@ -1159,7 +1159,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6xLT16 : {
+    POST_OPS_SWISH_6xLT16: {
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == S32)
@@ -1194,7 +1194,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6xLT16 : {
+    POST_OPS_TANH_6xLT16: {
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -1218,7 +1218,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6xLT16 : {
+    POST_OPS_SIGMOID_6xLT16: {
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -1698,7 +1698,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
         // Post Ops
         lpgemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6x16 : {
+    POST_OPS_BIAS_6x16: {
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF);
         __m512    b0        = _mm512_setzero_ps();
 
@@ -1736,7 +1736,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x16 : {
+    POST_OPS_RELU_6x16: {
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -1759,7 +1759,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x16 : {
+    POST_OPS_RELU_SCALE_6x16: {
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -1794,7 +1794,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x16 : {
+    POST_OPS_GELU_TANH_6x16: {
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -1818,7 +1818,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x16 : {
+    POST_OPS_GELU_ERF_6x16: {
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -1841,7 +1841,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6x16 : {
+    POST_OPS_CLIP_6x16: {
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -1877,7 +1877,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x16 : {
+    POST_OPS_DOWNSCALE_6x16: {
         __m512    scale0    = _mm512_setzero_ps();
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
 
@@ -1958,7 +1958,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x16 : {
+    POST_OPS_MATRIX_ADD_6x16: {
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == S8)
@@ -2228,7 +2228,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x16 : {
+    POST_OPS_MATRIX_MUL_6x16: {
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == S8)
@@ -2498,7 +2498,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x16 : {
+    POST_OPS_SWISH_6x16: {
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == S32)
@@ -2533,7 +2533,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x16 : {
+    POST_OPS_TANH_6x16: {
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -2557,7 +2557,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x16 : {
+    POST_OPS_SIGMOID_6x16: {
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -3063,7 +3063,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
         // Post Ops
         lpgemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6x32 : {
+    POST_OPS_BIAS_6x32: {
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF);
         __m512    b0        = _mm512_setzero_ps();
         __m512    b1        = _mm512_setzero_ps();
@@ -3127,7 +3127,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x32 : {
+    POST_OPS_RELU_6x32: {
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -3168,7 +3168,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x32 : {
+    POST_OPS_RELU_SCALE_6x32: {
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -3221,7 +3221,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x32 : {
+    POST_OPS_GELU_TANH_6x32: {
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -3263,7 +3263,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x32 : {
+    POST_OPS_GELU_ERF_6x32: {
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -3304,7 +3304,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6x32 : {
+    POST_OPS_CLIP_6x32: {
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -3358,7 +3358,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x32 : {
+    POST_OPS_DOWNSCALE_6x32: {
         __m512    scale0    = _mm512_setzero_ps();
         __m512    scale1    = _mm512_setzero_ps();
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
@@ -3481,7 +3481,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x32 : {
+    POST_OPS_MATRIX_ADD_6x32: {
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == S8)
@@ -3755,7 +3755,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x32 : {
+    POST_OPS_MATRIX_MUL_6x32: {
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == S8)
@@ -4029,7 +4029,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x32 : {
+    POST_OPS_SWISH_6x32: {
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == S32)
@@ -4082,7 +4082,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x32 : {
+    POST_OPS_TANH_6x32: {
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -4124,7 +4124,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x32 : {
+    POST_OPS_SIGMOID_6x32: {
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -4766,7 +4766,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
         // Post Ops
         lpgemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6x48 : {
+    POST_OPS_BIAS_6x48: {
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF);
         __m512    b0        = _mm512_setzero_ps();
         __m512    b1        = _mm512_setzero_ps();
@@ -4856,7 +4856,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x48 : {
+    POST_OPS_RELU_6x48: {
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -4915,7 +4915,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x48 : {
+    POST_OPS_RELU_SCALE_6x48: {
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -4986,7 +4986,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x48 : {
+    POST_OPS_GELU_TANH_6x48: {
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -5046,7 +5046,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x48 : {
+    POST_OPS_GELU_ERF_6x48: {
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -5105,7 +5105,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6x48 : {
+    POST_OPS_CLIP_6x48: {
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -5177,7 +5177,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x48 : {
+    POST_OPS_DOWNSCALE_6x48: {
         __m512    scale0    = _mm512_setzero_ps();
         __m512    scale1    = _mm512_setzero_ps();
         __m512    scale2    = _mm512_setzero_ps();
@@ -5343,7 +5343,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x48 : {
+    POST_OPS_MATRIX_ADD_6x48: {
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == S8)
@@ -5681,7 +5681,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x48 : {
+    POST_OPS_MATRIX_MUL_6x48: {
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == S8)
@@ -6019,7 +6019,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x48 : {
+    POST_OPS_SWISH_6x48: {
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == S32)
@@ -6090,7 +6090,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x48 : {
+    POST_OPS_TANH_6x48: {
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -6150,7 +6150,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x48 : {
+    POST_OPS_SIGMOID_6x48: {
 
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
