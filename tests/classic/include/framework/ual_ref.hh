@@ -97,6 +97,7 @@ class UalRef : public IUal
      */
     bool reorder(const Matrix& in, Matrix& out, MatrixType accType) override;
 
+    // Deprecated function
     /**
      * @brief Perform general matrix multiplication: C = A * B
      *
@@ -110,6 +111,23 @@ class UalRef : public IUal
               const Matrix& B,
               Matrix&       C,
               MatrixType    accType) override;
+
+    /**
+     * @brief Perform general matrix multiplication with post-operations: C = A
+     * * B + PostOps
+     *
+     * @param A First input matrix
+     * @param B Second input matrix
+     * @param C Output matrix
+     * @param accType Accumulation type
+     * @param postOps Post-operations to apply (nullptr for no post-ops)
+     * @return true on success
+     */
+    bool gemm(const Matrix&                      A,
+              const Matrix&                      B,
+              Matrix&                            C,
+              MatrixType                         accType,
+              const std::shared_ptr<IOperation>& postOps) override;
 
   private:
     /**
@@ -146,6 +164,34 @@ class UalRef : public IUal
                  MatrixLayout layout,
                  bool         transposed,
                  MatrixType   accType);
+
+    /**
+     * @brief Apply a post-operation to a matrix
+     *
+     * @param matrix The matrix to apply the operation to
+     * @param op The post-operation parameter
+     */
+    template<typename T>
+    void applyPostOperation(Matrix& matrix, const T& op);
+
+    // Helper methods for applying specific post-operations
+    void applyRelu(Matrix& matrix);
+    void applyPrelu(Matrix& matrix, const Matrix* alpha);
+    void applyGeluTanh(Matrix& matrix);
+    void applyGeluErf(Matrix& matrix);
+    void applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper);
+    void applySwish(Matrix& matrix);
+    void applyTanh(Matrix& matrix);
+    void applySigmoid(Matrix& matrix);
+    void applySum(Matrix& matrix, const Matrix* zeroPoint);
+    void applyScale(Matrix& matrix, const Matrix* scaleFactor);
+    void applyBias(Matrix& matrix, const Matrix& bias);
+    void applyMatrixAdd(Matrix&       matrix,
+                        const Matrix& other,
+                        const Matrix* scaleFactor);
+    void applyMatrixMul(Matrix&       matrix,
+                        const Matrix& other,
+                        const Matrix* scaleFactor);
 };
 
 } // namespace dlp::testing::classic

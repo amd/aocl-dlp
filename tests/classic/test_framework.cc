@@ -665,6 +665,7 @@ TEST(SimpleProductTest, MultipleSingleValuesExpanded)
 
 // Test fixture for Matrix reorder functionality
 #include "framework/matrix.hh"
+#include "framework/operation.hh"
 #include "framework/ual_ref.hh"
 
 using namespace dlp::testing;
@@ -804,4 +805,429 @@ TEST_F(MatrixReorderTest, EffectiveDimensionsAfterReorder)
 
     // Leading dimension should be optimized
     EXPECT_EQ(output.getLeadingDimension(), 256);
+}
+
+class PostOpsTest : public ::testing::Test
+{
+  protected:
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+// Test Matrix factory methods
+TEST_F(PostOpsTest, MatrixFactoryMethods)
+{
+    // Test scalar creation
+    auto scalar = Matrix::fromValue(2.5f, MatrixType::f32);
+    EXPECT_EQ(scalar.getRows(), 1);
+    EXPECT_EQ(scalar.getCols(), 1);
+    EXPECT_EQ(scalar.getMatrixType(), MatrixType::f32);
+
+    const float* data = reinterpret_cast<const float*>(scalar.getData());
+    EXPECT_FLOAT_EQ(data[0], 2.5f);
+
+    // Test vector creation
+    std::vector<float> vec_data = { 1.0f, 2.0f, 3.0f };
+    auto               vector   = Matrix::fromVector(vec_data, MatrixType::f32);
+    EXPECT_EQ(vector.getRows(), 1);
+    EXPECT_EQ(vector.getCols(), 3);
+    EXPECT_EQ(vector.getMatrixType(), MatrixType::f32);
+
+    const float* vec_ptr = reinterpret_cast<const float*>(vector.getData());
+    EXPECT_FLOAT_EQ(vec_ptr[0], 1.0f);
+    EXPECT_FLOAT_EQ(vec_ptr[1], 2.0f);
+    EXPECT_FLOAT_EQ(vec_ptr[2], 3.0f);
+
+    // Test 2D matrix creation
+    std::vector<std::vector<float>> matrix_data = { { 1.0f, 2.0f },
+                                                    { 3.0f, 4.0f } };
+    auto matrix = Matrix::fromData(matrix_data, MatrixType::f32);
+    EXPECT_EQ(matrix.getRows(), 2);
+    EXPECT_EQ(matrix.getCols(), 2);
+    EXPECT_EQ(matrix.getMatrixType(), MatrixType::f32);
+
+    const float* mat_ptr = reinterpret_cast<const float*>(matrix.getData());
+    EXPECT_FLOAT_EQ(mat_ptr[0], 1.0f);
+    EXPECT_FLOAT_EQ(mat_ptr[1], 2.0f);
+    EXPECT_FLOAT_EQ(mat_ptr[2], 3.0f);
+    EXPECT_FLOAT_EQ(mat_ptr[3], 4.0f);
+
+    // Test convenience methods
+    auto scalar_conv = Matrix::scalar(1.5f);
+    EXPECT_EQ(scalar_conv.getMatrixType(), MatrixType::f32);
+
+    auto vector_conv = Matrix::vector(std::vector<float>{ 4.0f, 5.0f });
+    EXPECT_EQ(vector_conv.getCols(), 2);
+}
+
+// Test element-wise operation builders
+TEST_F(PostOpsTest, ElementWiseBuilders)
+{
+    // Test ReLU (no parameters)
+    auto relu = postops::createRelu().build();
+    EXPECT_EQ(relu->getType(), OperationType::ElementWise);
+
+    auto& relu_param = static_cast<const ElementWiseParam&>(*relu);
+    EXPECT_EQ(relu_param.getOperation(), ElementWiseOperation::Relu);
+    EXPECT_FALSE(relu_param.hasAlpha());
+    EXPECT_FALSE(relu_param.hasBeta());
+
+    // Test PReLU (requires alpha)
+    auto alpha = Matrix::fromValue(0.1f);
+    auto prelu = postops::createPrelu().setAlpha(alpha).build();
+    EXPECT_EQ(prelu->getType(), OperationType::ElementWise);
+
+    auto& prelu_param = static_cast<const ElementWiseParam&>(*prelu);
+    EXPECT_EQ(prelu_param.getOperation(), ElementWiseOperation::Prelu);
+    EXPECT_TRUE(prelu_param.hasAlpha());
+    EXPECT_FALSE(prelu_param.hasBeta());
+
+    const float* alpha_data =
+        reinterpret_cast<const float*>(prelu_param.getAlpha()->getData());
+    EXPECT_FLOAT_EQ(alpha_data[0], 0.1f);
+
+    // Test Clip (optional bounds)
+    auto lower = Matrix::fromValue(-1.0f);
+    auto upper = Matrix::fromValue(1.0f);
+    auto clip =
+        postops::createClip().setLowerBound(lower).setUpperBound(upper).build();
+
+    auto& clip_param = static_cast<const ElementWiseParam&>(*clip);
+    EXPECT_EQ(clip_param.getOperation(), ElementWiseOperation::Clip);
+    EXPECT_TRUE(clip_param.hasAlpha());
+    EXPECT_TRUE(clip_param.hasBeta());
+
+    // Test other element-wise operations
+    auto  gelu_tanh  = postops::createGeluTanh().build();
+    auto& gelu_param = static_cast<const ElementWiseParam&>(*gelu_tanh);
+    EXPECT_EQ(gelu_param.getOperation(), ElementWiseOperation::Gelu_Tanh);
+
+    auto  swish       = postops::createSwish().build();
+    auto& swish_param = static_cast<const ElementWiseParam&>(*swish);
+    EXPECT_EQ(swish_param.getOperation(), ElementWiseOperation::Swish);
+}
+
+// Test PReLU validation
+TEST_F(PostOpsTest, PreluValidation)
+{
+    // PReLU without alpha should throw
+    EXPECT_THROW(postops::createPrelu().build(), std::runtime_error);
+}
+
+// Test sum/scale operation builders
+TEST_F(PostOpsTest, SumScaleBuilders)
+{
+    // Test Scale (requires scale factor)
+    auto scale_factor =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 0.5f });
+    auto scale = postops::createScale()
+                     .setScaleFactor(scale_factor)
+                     .setIsPowerOf2(true)
+                     .build();
+
+    EXPECT_EQ(scale->getType(), OperationType::Sum);
+    auto& scale_param = static_cast<const SumParam&>(*scale);
+    EXPECT_EQ(scale_param.getOperation(), SumOperation::Scale);
+    EXPECT_TRUE(scale_param.hasScaleFactor());
+    EXPECT_FALSE(scale_param.hasZeroPoint());
+    EXPECT_TRUE(scale_param.getIsPowerOf2());
+
+    // Test Sum (optional parameters)
+    auto sum_scale  = Matrix::fromValue(1.5f);
+    auto zero_point = Matrix::fromValue(0);
+    auto sum        = postops::createSum()
+                   .setScaleFactor(sum_scale)
+                   .setZeroPoint(zero_point)
+                   .setIsPowerOf2(false)
+                   .build();
+
+    auto& sum_param = static_cast<const SumParam&>(*sum);
+    EXPECT_EQ(sum_param.getOperation(), SumOperation::Sum);
+    EXPECT_TRUE(sum_param.hasScaleFactor());
+    EXPECT_TRUE(sum_param.hasZeroPoint());
+    EXPECT_FALSE(sum_param.getIsPowerOf2());
+}
+
+// Test scale validation
+TEST_F(PostOpsTest, ScaleValidation)
+{
+    // Scale without scale factor should throw
+    EXPECT_THROW(postops::createScale().build(), std::runtime_error);
+}
+
+// Test other operation builders
+TEST_F(PostOpsTest, OtherOperationBuilders)
+{
+    // Test Bias
+    auto bias_vec = Matrix::fromVector(std::vector<float>{ 0.1f, 0.2f, 0.3f });
+    auto bias     = postops::createBias().setBias(bias_vec).build();
+
+    EXPECT_EQ(bias->getType(), OperationType::Bias);
+    auto& bias_param = static_cast<const BiasParam&>(*bias);
+    EXPECT_EQ(bias_param.getBias().getCols(), 3);
+
+    // Test Matrix Addition
+    std::vector<std::vector<float>> transform_data = { { 1.0f, 0.5f },
+                                                       { 0.0f, 1.0f } };
+    auto transform_matrix = Matrix::fromData(transform_data);
+    auto scale_factor     = Matrix::fromValue(0.8f);
+
+    auto matrix_add = postops::createMatrixAdd()
+                          .setMatrix(transform_matrix)
+                          .setScaleFactor(scale_factor)
+                          .build();
+
+    EXPECT_EQ(matrix_add->getType(), OperationType::MatAdd);
+    auto& add_param = static_cast<const MatrixAddParam&>(*matrix_add);
+    EXPECT_EQ(add_param.getMatrix().getRows(), 2);
+    EXPECT_EQ(add_param.getMatrix().getCols(), 2);
+    EXPECT_TRUE(add_param.hasScaleFactor());
+
+    // Test Matrix Multiplication
+    auto matrix_mul = postops::createMatrixMul()
+                          .setMatrix(transform_matrix)
+                          .setScaleFactor(scale_factor)
+                          .build();
+
+    EXPECT_EQ(matrix_mul->getType(), OperationType::MatMul);
+    auto& mul_param = static_cast<const MatrixMulParam&>(*matrix_mul);
+    EXPECT_EQ(mul_param.getMatrix().getRows(), 2);
+    EXPECT_EQ(mul_param.getMatrix().getCols(), 2);
+    EXPECT_TRUE(mul_param.hasScaleFactor());
+}
+
+// Test bias validation
+TEST_F(PostOpsTest, BiasValidation)
+{
+    // Bias without bias vector should throw
+    EXPECT_THROW(postops::createBias().build(), std::runtime_error);
+}
+
+// Test matrix operation validation
+TEST_F(PostOpsTest, MatrixOperationValidation)
+{
+    // Matrix Add without matrix should throw
+    EXPECT_THROW(postops::createMatrixAdd().build(), std::runtime_error);
+
+    // Matrix Mul without matrix should throw
+    EXPECT_THROW(postops::createMatrixMul().build(), std::runtime_error);
+}
+
+// Test OperationParams container
+TEST_F(PostOpsTest, OperationParamsContainer)
+{
+    OperationParams params;
+    EXPECT_TRUE(params.empty());
+    EXPECT_EQ(params.size(), 0);
+
+    // Add operations
+    auto relu         = postops::createRelu().build();
+    auto alpha        = Matrix::fromValue(0.2f);
+    auto prelu        = postops::createPrelu().setAlpha(alpha).build();
+    auto scale_factor = Matrix::fromValue(2.0f);
+    auto scale = postops::createScale().setScaleFactor(scale_factor).build();
+
+    params.add(std::move(relu));
+    params.add(std::move(prelu));
+    params.add(std::move(scale));
+
+    EXPECT_FALSE(params.empty());
+    EXPECT_EQ(params.size(), 3);
+
+    // Test access by index
+    EXPECT_EQ(params[0].getType(), OperationType::ElementWise);
+    EXPECT_EQ(params[1].getType(), OperationType::ElementWise);
+    EXPECT_EQ(params[2].getType(), OperationType::Sum);
+
+    // Test iteration
+    size_t count = 0;
+    for (const auto& param : params) {
+        EXPECT_NE(param.get(), nullptr);
+        count++;
+    }
+    EXPECT_EQ(count, 3);
+
+    // Test clear
+    params.clear();
+    EXPECT_TRUE(params.empty());
+    EXPECT_EQ(params.size(), 0);
+}
+
+// Test operation factory
+TEST_F(PostOpsTest, OperationFactory)
+{
+    // Test DLP operation creation
+    auto dlp_operation = OperationFactory::createOperation(UALType::DLP);
+    EXPECT_NE(dlp_operation, nullptr);
+    EXPECT_EQ(dlp_operation->getUALType(), UALType::DLP);
+
+    // Test REF operation creation
+    auto ref_operation = OperationFactory::createOperation(UALType::REF);
+    EXPECT_NE(ref_operation, nullptr);
+    EXPECT_EQ(ref_operation->getUALType(), UALType::REF);
+
+    // Test unsupported UAL type
+    EXPECT_THROW(OperationFactory::createOperation(static_cast<UALType>(999)),
+                 std::runtime_error);
+}
+
+// Test RefOperation functionality
+TEST_F(PostOpsTest, RefOperationFunctionality)
+{
+    auto operation = OperationFactory::createOperation(UALType::REF);
+
+    // Test adding individual operations
+    auto relu  = postops::createRelu().build();
+    auto alpha = Matrix::fromValue(0.1f);
+    auto prelu = postops::createPrelu().setAlpha(alpha).build();
+
+    operation->addOperation(std::move(relu));
+    operation->addOperation(std::move(prelu));
+
+    // Test finalization (should not throw)
+    EXPECT_NO_THROW(operation->finalize());
+
+    // Test adding operations after finalization (RefOperation allows this)
+    auto scale_factor = Matrix::fromValue(2.0f);
+    auto scale = postops::createScale().setScaleFactor(scale_factor).build();
+    EXPECT_NO_THROW(operation->addOperation(std::move(scale)));
+}
+
+// Test DLP operation functionality
+TEST_F(PostOpsTest, DlpOperationFunctionality)
+{
+    auto operation = OperationFactory::createOperation(UALType::DLP);
+
+    // Test adding operations via OperationParams
+    OperationParams params;
+
+    auto relu         = postops::createRelu().build();
+    auto alpha        = Matrix::fromValue(0.2f);
+    auto prelu        = postops::createPrelu().setAlpha(alpha).build();
+    auto scale_factor = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f });
+    auto scale        = postops::createScale()
+                     .setScaleFactor(scale_factor)
+                     .setIsPowerOf2(true)
+                     .build();
+
+    params.add(std::move(relu));
+    params.add(std::move(prelu));
+    params.add(std::move(scale));
+
+    operation->addOperations(params);
+
+    // Test finalization
+    EXPECT_NO_THROW(operation->finalize());
+
+    // Test adding operations after finalization should throw
+    auto bias_vec = Matrix::fromValue(0.5f);
+    auto bias     = postops::createBias().setBias(bias_vec).build();
+    EXPECT_THROW(operation->addOperation(std::move(bias)), std::runtime_error);
+}
+
+// Test complex operation sequence
+TEST_F(PostOpsTest, ComplexOperationSequence)
+{
+    auto operation = OperationFactory::createOperation(UALType::DLP);
+
+    // Create a complex sequence: Bias -> Scale -> PReLU -> Clip
+    auto bias_vec = Matrix::fromVector(std::vector<float>{ 0.1f, 0.2f, 0.3f });
+    auto bias     = postops::createBias().setBias(bias_vec).build();
+
+    auto scale_factor =
+        Matrix::fromVector(std::vector<float>{ 2.0f, 1.5f, 0.8f });
+    auto scale = postops::createScale()
+                     .setScaleFactor(scale_factor)
+                     .setIsPowerOf2(false)
+                     .build();
+
+    auto alpha = Matrix::fromValue(0.01f);
+    auto prelu = postops::createPrelu().setAlpha(alpha).build();
+
+    auto lower = Matrix::fromValue(-6.0f);
+    auto upper = Matrix::fromValue(6.0f);
+    auto clip =
+        postops::createClip().setLowerBound(lower).setUpperBound(upper).build();
+
+    // Add operations in sequence
+    operation->addOperation(std::move(bias));
+    operation->addOperation(std::move(scale));
+    operation->addOperation(std::move(prelu));
+    operation->addOperation(std::move(clip));
+
+    // Finalize
+    EXPECT_NO_THROW(operation->finalize());
+
+    // Verify UAL type
+    EXPECT_EQ(operation->getUALType(), UALType::DLP);
+}
+
+// Test parameter cloning
+TEST_F(PostOpsTest, ParameterCloning)
+{
+    auto alpha    = Matrix::fromValue(0.3f);
+    auto original = postops::createPrelu().setAlpha(alpha).build();
+
+    // Test cloning
+    auto cloned = original->clone();
+    EXPECT_NE(cloned.get(), original.get());
+    EXPECT_EQ(cloned->getType(), original->getType());
+
+    auto& orig_param  = static_cast<const ElementWiseParam&>(*original);
+    auto& clone_param = static_cast<const ElementWiseParam&>(*cloned);
+
+    EXPECT_EQ(clone_param.getOperation(), orig_param.getOperation());
+    EXPECT_EQ(clone_param.hasAlpha(), orig_param.hasAlpha());
+
+    // Verify alpha values are the same but different objects
+    const float* orig_alpha =
+        reinterpret_cast<const float*>(orig_param.getAlpha()->getData());
+    const float* clone_alpha =
+        reinterpret_cast<const float*>(clone_param.getAlpha()->getData());
+    EXPECT_FLOAT_EQ(*orig_alpha, *clone_alpha);
+    EXPECT_NE(orig_param.getAlpha(),
+              clone_param.getAlpha()); // Different objects
+}
+
+// Test your vision: exactly as described in the task
+TEST_F(PostOpsTest, YourVisionRealized)
+{
+    // Exactly as you envisioned!
+    auto ew = postops::createPrelu()
+                  .setAlpha(Matrix::fromValue(0.2f, MatrixType::f32))
+                  .build();
+
+    auto sum = postops::createScale()
+                   .setScaleFactor(Matrix::fromVector(
+                       std::vector<float>{ 1.0f, 2.0f }, MatrixType::f32))
+                   .setIsPowerOf2(true)
+                   .build();
+
+    OperationParams params;
+    params.add(std::move(ew));
+    params.add(std::move(sum));
+
+    // Backend integration
+    auto operation = OperationFactory::createOperation(UALType::DLP);
+    operation->addOperations(params);
+    operation->finalize();
+
+    // Verify the operation was created successfully
+    EXPECT_EQ(operation->getUALType(), UALType::DLP);
+    EXPECT_EQ(operation->getParams().size(), 2);
+
+    // Verify first operation (PReLU)
+    const auto& first_param = *operation->getParams()[0];
+    EXPECT_EQ(first_param.getType(), OperationType::ElementWise);
+    const auto& ew_param = static_cast<const ElementWiseParam&>(first_param);
+    EXPECT_EQ(ew_param.getOperation(), ElementWiseOperation::Prelu);
+    EXPECT_TRUE(ew_param.hasAlpha());
+
+    // Verify second operation (Scale)
+    const auto& second_param = *operation->getParams()[1];
+    EXPECT_EQ(second_param.getType(), OperationType::Sum);
+    const auto& sum_param = static_cast<const SumParam&>(second_param);
+    EXPECT_EQ(sum_param.getOperation(), SumOperation::Scale);
+    EXPECT_TRUE(sum_param.hasScaleFactor());
+    EXPECT_TRUE(sum_param.getIsPowerOf2());
 }

@@ -23,8 +23,8 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 # Import submodules to make them available when importing the package
-from . import variables
-
+from . import config
+from . import utils
 
 # List of submodules that should be imported when using "from common import *"
-__all__ = ['variables']
+__all__ = ['config', 'utils']

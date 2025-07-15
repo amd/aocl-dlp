@@ -27,6 +27,7 @@
  */
 
 #include "aocl_dlp.h"
+#include "framework/operation.hh"
 #include "framework/ual.hh"
 #include "framework/ual_factory.hh"
 #include "test_config.hh"
@@ -56,6 +57,11 @@ struct GemmTestConfig
     bool         reorderA, reorderB;
     bool         packA, packB; // TODO: Pack parameters not yet used in tests
 
+    // PostOps support
+    std::shared_ptr<IOperation> postops_dlp;
+    std::shared_ptr<IOperation> postops_ref;
+    bool                        has_postops;
+
     // Default constructor (required by GoogleTest)
     GemmTestConfig()
         : name("default")
@@ -73,30 +79,35 @@ struct GemmTestConfig
         , reorderB(false)
         , packA(false)
         , packB(false)
+        , postops_dlp(nullptr)
+        , postops_ref(nullptr)
+        , has_postops(false)
     {
     }
 
     // Constructor for easy initialization
-    GemmTestConfig(const std::string& test_name,
-                   MatrixType         a_type_,
-                   MatrixType         b_type_,
-                   MatrixType         c_type_,
-                   MatrixType         acc_type_,
-                   MatrixLayout       storage_format_,
-                   md_t               m_,
-                   md_t               n_,
-                   md_t               k_,
-                   md_t               lda_,
-                   md_t               ldb_,
-                   md_t               ldc_,
-                   double             alpha_,
-                   double             beta_,
-                   bool               transA_,
-                   bool               transB_,
-                   bool               reorderA_,
-                   bool               reorderB_,
-                   bool               packA_,
-                   bool               packB_)
+    GemmTestConfig(const std::string&          test_name,
+                   MatrixType                  a_type_,
+                   MatrixType                  b_type_,
+                   MatrixType                  c_type_,
+                   MatrixType                  acc_type_,
+                   MatrixLayout                storage_format_,
+                   md_t                        m_,
+                   md_t                        n_,
+                   md_t                        k_,
+                   md_t                        lda_,
+                   md_t                        ldb_,
+                   md_t                        ldc_,
+                   double                      alpha_,
+                   double                      beta_,
+                   bool                        transA_,
+                   bool                        transB_,
+                   bool                        reorderA_,
+                   bool                        reorderB_,
+                   bool                        packA_,
+                   bool                        packB_,
+                   std::shared_ptr<IOperation> postops_dlp_ = nullptr,
+                   std::shared_ptr<IOperation> postops_ref_ = nullptr)
         : name(test_name)
         , a_type(a_type_)
         , b_type(b_type_)
@@ -117,6 +128,9 @@ struct GemmTestConfig
         , reorderB(reorderB_)
         , packA(packA_)
         , packB(packB_)
+        , postops_dlp(postops_dlp_)
+        , postops_ref(postops_ref_)
+        , has_postops(postops_dlp_ != nullptr || postops_ref_ != nullptr)
     {
     }
 
@@ -128,7 +142,10 @@ struct GemmTestConfig
                && ldc == other.ldc && alpha == other.alpha && beta == other.beta
                && transA == other.transA && transB == other.transB
                && reorderA == other.reorderA && reorderB == other.reorderB
-               && packA == other.packA && packB == other.packB;
+               && packA == other.packA && packB == other.packB
+               && has_postops == other.has_postops
+               && postops_dlp == other.postops_dlp
+               && postops_ref == other.postops_ref;
     }
 };
 
@@ -224,6 +241,14 @@ printConfigDetails(const GemmTestConfig& config)
             << ", reorderB=" << (config.reorderB ? "true" : "false") << "\n";
     details << "Packing: packA=" << (config.packA ? "true" : "false")
             << ", packB=" << (config.packB ? "true" : "false") << "\n";
+    details << "PostOps: has_postops="
+            << (config.has_postops ? "true" : "false");
+    if (config.has_postops) {
+        details << ", DLP PostOps=" << (config.postops_dlp ? "present" : "null")
+                << ", REF PostOps="
+                << (config.postops_ref ? "present" : "null");
+    }
+    details << "\n";
 
     // Calculate effective matrix dimensions after transposition
     md_t a_rows = config.transA ? config.k : config.m;
@@ -261,6 +286,9 @@ PrintTo(const GemmTestConfig& config, std::ostream* os)
     if (config.reorderA || config.reorderB) {
         *os << "_reorder" << (config.reorderA ? "A" : "")
             << (config.reorderB ? "B" : "");
+    }
+    if (config.has_postops) {
+        *os << "_withPostOps";
     }
     *os << ")";
 }
@@ -318,6 +346,10 @@ loadTestConfigurations(const std::string& yaml_file)
                 // Generate meaningful test name
                 std::string testName = generateTestName(microTest, i, j);
 
+                // Extract PostOps from MicroTest
+                auto postops_dlp = microTest.getPostOp(UALType::DLP);
+                auto postops_ref = microTest.getPostOp(UALType::REF);
+
                 // Extract configuration from parser
                 configs.emplace_back(
                     testName,                     // name
@@ -339,7 +371,9 @@ loadTestConfigurations(const std::string& yaml_file)
                     microTest.getReorderA(),      // reorderA
                     microTest.getReorderB(),      // reorderB
                     microTest.getPackA(),         // packA
-                    microTest.getPackB()          // packB
+                    microTest.getPackB(),         // packB
+                    postops_dlp,                  // postops_dlp
+                    postops_ref                   // postops_ref
                 );
                 if (j < test_count - 1) {
                     microTest.next();
@@ -383,7 +417,8 @@ createAdditionalTestConfigs()
                          1.0, 0.0,                // alpha, beta
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
-                         false, false             // packA, packB
+                         false, false,            // packA, packB
+                         nullptr, nullptr         // postops_dlp, postops_ref
     );
 
     configs.emplace_back("rectangular_1",         // name
@@ -397,7 +432,8 @@ createAdditionalTestConfigs()
                          1.5, 0.5,                // alpha, beta
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
-                         false, false             // packA, packB
+                         false, false,            // packA, packB
+                         nullptr, nullptr         // postops_dlp, postops_ref
     );
 
     configs.emplace_back("transposed_A",          // name
@@ -411,7 +447,8 @@ createAdditionalTestConfigs()
                          2.0, 1.0,                // alpha, beta
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
-                         false, false             // packA, packB
+                         false, false,            // packA, packB
+                         nullptr, nullptr         // postops_dlp, postops_ref
     );
 
     configs.emplace_back("edge_case_1x1",         // name
@@ -425,7 +462,8 @@ createAdditionalTestConfigs()
                          1.0, 0.0,                // alpha, beta
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
-                         false, false             // packA, packB
+                         false, false,            // packA, packB
+                         nullptr, nullptr         // postops_dlp, postops_ref
     );
 
     configs.emplace_back("edge_case_100x100_transposedB_reorderedB", // name
@@ -439,7 +477,8 @@ createAdditionalTestConfigs()
                          1.0, 0.0,                // alpha, beta
                          false, true,             // transA, transB
                          false, true,             // reorderA, reorderB
-                         false, false             // packA, packB
+                         false, false,            // packA, packB
+                         nullptr, nullptr         // postops_dlp, postops_ref
     );
 
     return configs;
@@ -476,10 +515,7 @@ initializeTestConfigurations()
 static const std::vector<GemmTestConfig> g_all_test_configs =
     initializeTestConfigurations();
 
-// ============================================================================
 // PARAMETERIZED TEST FIXTURE
-// ============================================================================
-
 class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 {
   protected:
@@ -572,13 +608,15 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
         ASSERT_TRUE(ual_dlp != nullptr) << "Failed to create DLP UAL";
 
-        bool dlp_result = ual_dlp->gemm(A, B, C, config_.acc_type);
+        bool dlp_result =
+            ual_dlp->gemm(A, B, C, config_.acc_type, config_.postops_dlp);
 
         // Perform GEMM with reference implementation
         std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
         ASSERT_TRUE(ual_ref != nullptr) << "Failed to create REF UAL";
 
-        bool ref_result = ual_ref->gemm(A_ref, B_ref, C_ref, config_.acc_type);
+        bool ref_result = ual_ref->gemm(A_ref, B_ref, C_ref, config_.acc_type,
+                                        config_.postops_ref);
 
         // Check if parameters are valid
         bool params_valid = check_valid_params(config_);
@@ -634,10 +672,7 @@ INSTANTIATE_TEST_SUITE_P(
         return info.param.name;
     });
 
-// ============================================================================
 // ADDITIONAL NON-PARAMETERIZED TESTS
-// ============================================================================
-
 // Original basic test - kept as an example
 TEST(GEMMTest, Basic)
 {
@@ -723,4 +758,465 @@ TEST(GEMMTest, DebugDoubleFree)
     }
 
     // Objects will be destroyed here - this is where double-free might occur
+}
+
+// Test for PostOps integration
+TEST(GEMMTest, PostOpsIntegration)
+{
+    // Test setup
+    md_t m = 4;
+    md_t n = 4;
+    md_t k = 4;
+
+    // Create matrices
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+
+    // Initialize matrices with simple values for easier verification
+    A.fillValue(0.5f);
+    B.fillValue(0.2f);
+    C.fillValue(0.0f);
+    C_ref = C;
+
+    // Create PostOps using the builder pattern
+    auto operation_dlp = OperationFactory::createOperation(UALType::DLP);
+
+    // Add a ReLU operation
+    auto relu_dlp = postops::createRelu().build();
+    operation_dlp->addOperation(std::move(relu_dlp));
+
+    // Add a bias operation
+    auto bias_dlp =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
+    auto biasOp_dlp = postops::createBias().setBias(bias_dlp).build();
+    operation_dlp->addOperation(std::move(biasOp_dlp));
+
+    // Finalize the operations
+    operation_dlp->finalize();
+
+    // Perform GEMM with PostOps using DLP
+    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+    bool dlp_result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation_dlp);
+
+    // For now, just verify that the operation doesn't crash
+    // In a real implementation, we would verify the actual results
+    EXPECT_TRUE(dlp_result) << "DLP GEMM with PostOps should succeed";
+
+    auto operation_ref = OperationFactory::createOperation(UALType::REF);
+
+    // Add a ReLU operation
+    auto relu_ref = postops::createRelu().build();
+    operation_ref->addOperation(std::move(relu_ref));
+
+    // Add a bias operation
+    auto bias_ref =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
+    auto biasOp_ref = postops::createBias().setBias(bias_ref).build();
+    operation_ref->addOperation(std::move(biasOp_ref));
+
+    // Finalize the operations
+    operation_ref->finalize();
+
+    // Test with reference implementation (should ignore PostOps)
+    std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
+    bool                  ref_result =
+        ual_ref->gemm(A, B, C_ref, MatrixType::f32, operation_ref);
+
+    EXPECT_TRUE(ref_result) << "Reference GEMM with PostOps should succeed";
+
+    // Compare the results
+    C_ref.setK(k);
+    EXPECT_EQ(C_ref, C);
+
+    // Test with nullptr PostOps (should behave like original gemm)
+    Matrix C_no_postops(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+                        false);
+    C_no_postops.fillValue(0.0f);
+
+    bool no_postops_result =
+        ual_dlp->gemm(A, B, C_no_postops, MatrixType::f32, nullptr);
+    EXPECT_TRUE(no_postops_result)
+        << "DLP GEMM with nullptr PostOps should succeed";
+}
+
+// Test for PostOps Builder Pattern
+TEST(GEMMTest, PostOpsBuilderPattern)
+{
+    // Test the builder pattern for different operations
+
+    // Test ReLU builder
+    auto relu = postops::createRelu().build();
+    EXPECT_EQ(relu->getType(), OperationType::ElementWise);
+
+    // Test Bias builder
+    auto bias   = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f });
+    auto biasOp = postops::createBias().setBias(bias).build();
+    EXPECT_EQ(biasOp->getType(), OperationType::Bias);
+
+    // Test Scale builder
+    auto scale   = Matrix::scalar(2.0f);
+    auto scaleOp = postops::createScale().setScaleFactor(scale).build();
+    EXPECT_EQ(scaleOp->getType(), OperationType::Sum);
+
+    // Test Matrix Add builder
+    auto matrix = Matrix::fromData(
+        std::vector<std::vector<float>>{ { 1.0f, 2.0f }, { 3.0f, 4.0f } });
+    auto matAddOp = postops::createMatrixAdd().setMatrix(matrix).build();
+    EXPECT_EQ(matAddOp->getType(), OperationType::MatAdd);
+
+    // Test operation creation for different UAL types
+    auto dlp_operation = OperationFactory::createOperation(UALType::DLP);
+    EXPECT_EQ(dlp_operation->getUALType(), UALType::DLP);
+
+    auto ref_operation = OperationFactory::createOperation(UALType::REF);
+    EXPECT_EQ(ref_operation->getUALType(), UALType::REF);
+}
+
+// Test for multiple PostOps of the same type
+TEST(GEMMTest, MultiplePostOpsOfSameType)
+{
+    // Test setup
+    md_t m = 4;
+    md_t n = 4;
+    md_t k = 4;
+
+    // Create matrices
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+
+    // Initialize matrices with simple values
+    A.fillValue(0.5f);
+    B.fillValue(0.2f);
+    C.fillValue(0.0f);
+
+    // Create PostOps with multiple operations of the same type
+    auto operation = OperationFactory::createOperation(UALType::DLP);
+
+    // Add multiple RELU operations
+    auto relu1 = postops::createRelu().build();
+    operation->addOperation(std::move(relu1));
+
+    auto relu2 = postops::createRelu().build();
+    operation->addOperation(std::move(relu2));
+
+    // Add multiple BIAS operations
+    auto bias1 =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
+    auto biasOp1 = postops::createBias().setBias(bias1).build();
+    operation->addOperation(std::move(biasOp1));
+
+    auto bias2 =
+        Matrix::fromVector(std::vector<float>{ 0.5f, 1.0f, 1.5f, 2.0f });
+    auto biasOp2 = postops::createBias().setBias(bias2).build();
+    operation->addOperation(std::move(biasOp2));
+
+    // Add multiple SCALE operations (instead of SUM operations without scale
+    // factors)
+    auto scale1   = Matrix::fromVector(std::vector<float>{ 1.5f });
+    auto scaleOp1 = postops::createScale()
+                        .setScaleFactor(scale1)
+                        .setIsPowerOf2(true)
+                        .build();
+    operation->addOperation(std::move(scaleOp1));
+
+    auto scale2   = Matrix::fromVector(std::vector<float>{ 2.0f });
+    auto scaleOp2 = postops::createScale()
+                        .setScaleFactor(scale2)
+                        .setIsPowerOf2(false)
+                        .build();
+    operation->addOperation(std::move(scaleOp2));
+
+    // Finalize the operations
+    operation->finalize();
+
+    // Perform GEMM with multiple PostOps using DLP
+    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+    bool dlp_result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+
+    // Verify that the operation doesn't crash and handles multiple ops
+    // correctly
+    EXPECT_TRUE(dlp_result)
+        << "DLP GEMM with multiple PostOps of same type should succeed";
+
+    std::cout << "Multiple PostOps of same type test completed successfully!"
+              << std::endl;
+    std::cout
+        << "Operation sequence: RELU -> RELU -> BIAS -> BIAS -> SCALE -> SCALE"
+        << std::endl;
+}
+
+// Simple test for debugging multiple operations
+TEST(GEMMTest, DebugMultipleOps)
+{
+    // Test setup
+    md_t m = 2;
+    md_t n = 2;
+    md_t k = 2;
+
+    // Create matrices
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+
+    // Initialize matrices with simple values
+    A.fillValue(1.0f);
+    B.fillValue(1.0f);
+    C.fillValue(0.0f);
+
+    // Create PostOps with just two RELU operations
+    auto operation = OperationFactory::createOperation(UALType::DLP);
+
+    std::cout << "Adding first RELU operation..." << std::endl;
+    auto relu1 = postops::createRelu().build();
+    operation->addOperation(std::move(relu1));
+
+    std::cout << "Adding second RELU operation..." << std::endl;
+    auto relu2 = postops::createRelu().build();
+    operation->addOperation(std::move(relu2));
+
+    std::cout << "Finalizing operations..." << std::endl;
+    operation->finalize();
+
+    std::cout << "Creating UAL..." << std::endl;
+    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+
+    std::cout << "Calling GEMM..." << std::endl;
+    bool dlp_result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+
+    std::cout << "GEMM result: " << (dlp_result ? "SUCCESS" : "FAILED")
+              << std::endl;
+
+    EXPECT_TRUE(dlp_result)
+        << "DLP GEMM with two RELU operations should succeed";
+}
+
+// Test to isolate the segmentation fault issue
+TEST(GEMMTest, IsolateSegFault)
+{
+    // Test setup
+    md_t m = 2;
+    md_t n = 2;
+    md_t k = 2;
+
+    // Create matrices
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+
+    // Initialize matrices
+    A.fillValue(1.0f);
+    B.fillValue(1.0f);
+    C.fillValue(0.0f);
+
+    std::cout << "Testing BIAS operations..." << std::endl;
+
+    // Test 1: Just BIAS operations
+    {
+        auto operation = OperationFactory::createOperation(UALType::DLP);
+
+        try {
+            std::cout << "Creating bias matrix..." << std::endl;
+            auto bias1 = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f });
+            std::cout << "Creating bias operation..." << std::endl;
+            auto biasOp1 = postops::createBias().setBias(bias1).build();
+            std::cout << "Adding bias operation..." << std::endl;
+            operation->addOperation(std::move(biasOp1));
+
+            std::cout << "Finalizing..." << std::endl;
+            operation->finalize();
+
+            std::cout << "Creating UAL..." << std::endl;
+            std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+
+            std::cout << "Calling GEMM with BIAS..." << std::endl;
+            bool result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+
+            std::cout << "BIAS test result: " << (result ? "SUCCESS" : "FAILED")
+                      << std::endl;
+            EXPECT_TRUE(result);
+        } catch (const std::exception& e) {
+            std::cout << "Exception in BIAS test: " << e.what() << std::endl;
+            FAIL() << "Exception in BIAS test: " << e.what();
+        }
+    }
+
+    std::cout << "Testing SUM operations..." << std::endl;
+
+    // Test 2: SUM operations with scale factor
+    {
+        auto operation = OperationFactory::createOperation(UALType::DLP);
+
+        try {
+            std::cout << "Creating sum operation with scale factor..."
+                      << std::endl;
+            auto scale = Matrix::fromVector(std::vector<float>{ 1.5f });
+            auto sum1  = postops::createSum()
+                            .setScaleFactor(scale)
+                            .setIsPowerOf2(true)
+                            .build();
+            std::cout << "Adding sum operation..." << std::endl;
+            operation->addOperation(std::move(sum1));
+
+            std::cout << "Finalizing..." << std::endl;
+            operation->finalize();
+
+            std::cout << "Creating UAL..." << std::endl;
+            std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+
+            std::cout << "Calling GEMM with SUM..." << std::endl;
+            bool result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+
+            std::cout << "SUM test result: " << (result ? "SUCCESS" : "FAILED")
+                      << std::endl;
+            EXPECT_TRUE(result);
+        } catch (const std::exception& e) {
+            std::cout << "Exception in SUM test: " << e.what() << std::endl;
+            FAIL() << "Exception in SUM test: " << e.what();
+        }
+    }
+}
+
+// Comprehensive PostOps comparison test
+TEST(GEMMTest, PostOpsComprehensiveComparison)
+{
+    // Test setup with consistent initialization
+    md_t m = 4;
+    md_t n = 4;
+    md_t k = 4;
+
+    // Create matrices for DLP
+    Matrix A_dlp(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix B_dlp(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C_dlp(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+
+    // Create matrices for REF (identical to DLP)
+    Matrix A_ref(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix B_ref(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+
+    // Initialize matrices with consistent values
+    A_dlp.fillValue(0.5f);
+    B_dlp.fillValue(0.2f);
+    C_dlp.fillValue(0.0f);
+
+    A_ref.fillValue(0.5f);
+    B_ref.fillValue(0.2f);
+    C_ref.fillValue(0.0f);
+
+    // Create PostOps for DLP
+    auto operation_dlp = OperationFactory::createOperation(UALType::DLP);
+
+    // Add ReLU operation to DLP
+    auto relu_dlp = postops::createRelu().build();
+    operation_dlp->addOperation(std::move(relu_dlp));
+
+    // Add bias operation to DLP
+    auto bias_dlp =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
+    auto biasOp_dlp = postops::createBias().setBias(bias_dlp).build();
+    operation_dlp->addOperation(std::move(biasOp_dlp));
+
+    operation_dlp->finalize();
+
+    // Create PostOps for REF (identical operations)
+    auto operation_ref = OperationFactory::createOperation(UALType::REF);
+
+    // Add ReLU operation to REF
+    auto relu_ref = postops::createRelu().build();
+    operation_ref->addOperation(std::move(relu_ref));
+
+    // Add bias operation to REF
+    auto bias_ref =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
+    auto biasOp_ref = postops::createBias().setBias(bias_ref).build();
+    operation_ref->addOperation(std::move(biasOp_ref));
+
+    operation_ref->finalize();
+
+    // Test DLP implementation
+    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+    ASSERT_TRUE(ual_dlp != nullptr) << "Failed to create DLP UAL";
+
+    bool dlp_result =
+        ual_dlp->gemm(A_dlp, B_dlp, C_dlp, MatrixType::f32, operation_dlp);
+    EXPECT_TRUE(dlp_result) << "DLP GEMM with PostOps should succeed";
+
+    // Test REF implementation
+    std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
+    ASSERT_TRUE(ual_ref != nullptr) << "Failed to create REF UAL";
+
+    bool ref_result =
+        ual_ref->gemm(A_ref, B_ref, C_ref, MatrixType::f32, operation_ref);
+    EXPECT_TRUE(ref_result) << "REF GEMM with PostOps should succeed";
+
+    // Compare results (both should have applied the same PostOps)
+    C_dlp.setK(k);
+    C_ref.setK(k);
+    EXPECT_EQ(C_dlp, C_ref)
+        << "DLP and REF should produce identical results with same PostOps";
+
+    std::cout << "Comprehensive PostOps comparison test completed!"
+              << std::endl;
+}
+
+// Test for UAL type validation
+TEST(GEMMTest, PostOpsUALTypeValidation)
+{
+    // Test setup
+    md_t m = 2;
+    md_t n = 2;
+    md_t k = 2;
+
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+
+    A.fillValue(1.0f);
+    B.fillValue(1.0f);
+    C.fillValue(0.0f);
+
+    // Create DLP PostOps
+    auto dlp_operation = OperationFactory::createOperation(UALType::DLP);
+    auto relu_dlp      = postops::createRelu().build();
+    dlp_operation->addOperation(std::move(relu_dlp));
+    dlp_operation->finalize();
+
+    // Create REF PostOps
+    auto ref_operation = OperationFactory::createOperation(UALType::REF);
+    auto relu_ref      = postops::createRelu().build();
+    ref_operation->addOperation(std::move(relu_ref));
+    ref_operation->finalize();
+
+    // Test: DLP UAL with DLP PostOps (should succeed)
+    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+    bool dlp_with_dlp = ual_dlp->gemm(A, B, C, MatrixType::f32, dlp_operation);
+    EXPECT_TRUE(dlp_with_dlp) << "DLP UAL with DLP PostOps should succeed";
+
+    // Test: REF UAL with REF PostOps (should succeed)
+    std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
+    bool ref_with_ref = ual_ref->gemm(A, B, C, MatrixType::f32, ref_operation);
+    EXPECT_TRUE(ref_with_ref) << "REF UAL with REF PostOps should succeed";
+
+    // Test: DLP UAL with REF PostOps (should fail due to type mismatch)
+    Matrix C_mismatch1(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+                       false);
+    C_mismatch1.fillValue(0.0f);
+    bool dlp_with_ref =
+        ual_dlp->gemm(A, B, C_mismatch1, MatrixType::f32, ref_operation);
+    EXPECT_FALSE(dlp_with_ref)
+        << "DLP UAL with REF PostOps should fail due to type mismatch";
+
+    // Test: REF UAL with DLP PostOps (should fail due to type mismatch)
+    Matrix C_mismatch2(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+                       false);
+    C_mismatch2.fillValue(0.0f);
+    bool ref_with_dlp =
+        ual_ref->gemm(A, B, C_mismatch2, MatrixType::f32, dlp_operation);
+    EXPECT_FALSE(ref_with_dlp)
+        << "REF UAL with DLP PostOps should fail due to type mismatch";
+
+    std::cout << "UAL type validation test completed!" << std::endl;
 }

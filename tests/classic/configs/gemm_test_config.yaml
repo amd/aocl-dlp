@@ -31,21 +31,63 @@ gemm_tests:
       ub: 10
       step: -1
     ldc: 10
-    reorderA: false  # Default false
-    reorderB: true   # Matrix B reordering can improve performance
+    mtagA: ["none","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
       int8: 0
-    # post_operations:
-    #   - type: "RELU"
-    #   - type: "CLIP"
-    #     params:
-    #       lower-bound: 0
-    #       upper-bound: 6
-    #   - type: "PRELU"
-    #     params:
-    #       alpha: 0.1
+  # Basic test cases
+  - name: "small_matrix_postops"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [true]
+    # Non optional
+    m:
+      lb: 10
+      ub: 20
+      step: 5
+    n:
+      lb: 10
+      ub: 10
+      step: -1
+    k:
+      lb: 10
+      ub: 10
+      step: -1
+    alpha: [2.5, 0, -2.5]
+    beta: [2.5, 0, -2.5]
+    # Optional Params
+    lda: [10, 20, 30]
+    ldb:
+      lb: 10
+      ub: 10
+      step: -1
+    ldc: 10
+    mtagA: ["none","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n","1"]
+        # Sum disabled due to test suite issues
+        # - type: "Sum"
+        #   params:
+        #     scale_factor_len: ["n","1"]
   - name: "medium_matrix"
     a_type: ["f32"]
     b_type: ["f32"]
@@ -82,12 +124,3 @@ gemm_tests:
       float: 1.0e-4
       bfloat16: 1.0e-2
       int8: 0
-    # post_operations:
-    #   - type: "RELU"
-    #   - type: "CLIP"
-    #     params:
-    #       lower-bound: 0
-    #       upper-bound: 6
-    #   - type: "PRELU"
-    #     params:
-    #       alpha: 0.1

@@ -16,14 +16,22 @@ yaml_test:
     lda: [10, 20, 30]
     ldb: 10
     ldc: 10
-    reorderA: false
-    reorderB: true
+    mtagA: "none"
+    mtagB: "reorder"
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
       int8: 0
-    # post_operations:
-    #   - type: "RELU"
-    #   - type: "CLIP"
-    #     params:
-    #       lower-bound: 0
+    post_operations:
+      cartesian: true
+      operations:
+        # Limited to 3 operations for reasonable test performance
+        - type: "Elementwise-RELU"
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Sum"
+          params:
+            scale_factor_len: ["1"]
+            scale_factor_type: ["f32"]

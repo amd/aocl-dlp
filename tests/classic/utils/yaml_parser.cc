@@ -34,6 +34,7 @@
 #include "framework/types.hh"
 #include "framework/value_iterable.hh"
 #include "framework/vector_iterable.hh"
+#include "utils/matrix_tag.hh"
 #include "utils/yaml_parser.hh"
 #include <iostream>
 
@@ -84,6 +85,18 @@ namespace dlp { namespace testing {
             return MatrixLayout::ROW_MAJOR; // default
         }
 
+        // Helper function to convert string to MatrixTag
+        MatrixTag stringToMatrixTag(const std::string& str)
+        {
+            if (str == "none")
+                return MatrixTag::NONE;
+            if (str == "reorder")
+                return MatrixTag::REORDER;
+            if (str == "pack")
+                return MatrixTag::PACK;
+            return MatrixTag::NONE; // default
+        }
+
         template<typename T>
         TypeErasedIterator get_value(YAML::Node node)
         {
@@ -113,6 +126,19 @@ namespace dlp { namespace testing {
                 } else {
                     return ValueIterable<MatrixLayout>(
                                stringToMatrixLayout(node.as<std::string>()))
+                        .begin();
+                }
+            } else if constexpr (std::is_same_v<T, MatrixTag>) {
+                if (node.IsSequence()) {
+                    std::vector<MatrixTag> values;
+                    for (const auto& item : node) {
+                        values.push_back(
+                            stringToMatrixTag(item.as<std::string>()));
+                    }
+                    return VectorIterable<MatrixTag>(values).begin();
+                } else {
+                    return ValueIterable<MatrixTag>(
+                               stringToMatrixTag(node.as<std::string>()))
                         .begin();
                 }
             } else {
@@ -200,6 +226,51 @@ namespace dlp { namespace testing {
             }
         }
 
+        struct PostOpsConfig
+        {
+            std::vector<PostOpsIterator::PostOpConfig> operations;
+            bool                                       cartesian;
+        };
+
+        PostOpsConfig parsePostOps(YAML::Node postops_node)
+        {
+            PostOpsConfig config;
+            config.cartesian = postops_node["cartesian"].as<bool>(false);
+
+            if (postops_node["operations"]) {
+                for (const auto& op_node : postops_node["operations"]) {
+                    PostOpsIterator::PostOpConfig op_config;
+                    op_config.type = op_node["type"].as<std::string>();
+
+                    if (op_node["params"]) {
+                        for (const auto& param : op_node["params"]) {
+                            std::string param_name =
+                                param.first.as<std::string>();
+
+                            // Parse parameter values (could be lists or single
+                            // values)
+                            std::vector<std::any> param_values;
+                            if (param.second.IsSequence()) {
+                                for (const auto& value : param.second) {
+                                    param_values.push_back(
+                                        value.as<std::string>());
+                                }
+                            } else {
+                                param_values.push_back(
+                                    param.second.as<std::string>());
+                            }
+
+                            op_config.params[param_name] = param_values;
+                        }
+                    }
+
+                    config.operations.push_back(op_config);
+                }
+            }
+
+            return config;
+        }
+
         MicroTest getMicroTestFromNode(YAML::Node node)
         {
             TestCaseIterators iterators;
@@ -245,26 +316,42 @@ namespace dlp { namespace testing {
                     ValueIterable<md_t>(std::any_cast<md_t>(m_val)).begin();
             }
 
-            iterators.trans_a   = node["transA"]
-                                      ? get_value<bool>(node["transA"])
-                                      : ValueIterable<bool>(false).begin();
-            iterators.trans_b   = node["transB"]
-                                      ? get_value<bool>(node["transB"])
-                                      : ValueIterable<bool>(false).begin();
-            iterators.reorder_a = node["reorderA"]
-                                      ? get_value<bool>(node["reorderA"])
-                                      : ValueIterable<bool>(false).begin();
-            iterators.reorder_b = node["reorderB"]
-                                      ? get_value<bool>(node["reorderB"])
-                                      : ValueIterable<bool>(false).begin();
-            iterators.pack_a    = node["packA"]
-                                      ? get_value<bool>(node["packA"])
-                                      : ValueIterable<bool>(false).begin();
-            iterators.pack_b    = node["packB"]
-                                      ? get_value<bool>(node["packB"])
-                                      : ValueIterable<bool>(false).begin();
+            iterators.trans_a = node["transA"]
+                                    ? get_value<bool>(node["transA"])
+                                    : ValueIterable<bool>(false).begin();
+            iterators.trans_b = node["transB"]
+                                    ? get_value<bool>(node["transB"])
+                                    : ValueIterable<bool>(false).begin();
 
-            return MicroTest(iterators, m_yield_type);
+            // New MatrixTag-based parsing - replaces
+            // reorderA/reorderB/packA/packB
+            iterators.reorder_a =
+                node["mtagA"]
+                    ? get_value<MatrixTag>(node["mtagA"])
+                    : ValueIterable<MatrixTag>(MatrixTag::NONE).begin();
+            iterators.reorder_b =
+                node["mtagB"]
+                    ? get_value<MatrixTag>(node["mtagB"])
+                    : ValueIterable<MatrixTag>(MatrixTag::NONE).begin();
+            iterators.pack_a =
+                node["mtagA"]
+                    ? get_value<MatrixTag>(node["mtagA"])
+                    : ValueIterable<MatrixTag>(MatrixTag::NONE).begin();
+            iterators.pack_b =
+                node["mtagB"]
+                    ? get_value<MatrixTag>(node["mtagB"])
+                    : ValueIterable<MatrixTag>(MatrixTag::NONE).begin();
+
+            // Parse PostOps if present
+            std::unique_ptr<PostOpsIterator> postops_iterator = nullptr;
+            if (node["post_operations"]) {
+                auto postops_config = parsePostOps(node["post_operations"]);
+                postops_iterator    = std::make_unique<PostOpsIterator>(
+                    postops_config.operations, postops_config.cartesian);
+            }
+
+            return MicroTest(iterators, m_yield_type,
+                             std::move(postops_iterator));
         }
 
       public:

@@ -29,9 +29,13 @@
 #pragma once
 
 #include "matrix.hh"
+#include <memory>
 #include <string>
 
 namespace dlp::testing {
+
+// Forward declaration for IOperation
+class IOperation;
 
 /**
  * @enum UALType
@@ -83,6 +87,7 @@ class IUal
      */
     virtual bool reorder(const Matrix& in, Matrix& out, MatrixType accType) = 0;
 
+    // Deprecated function
     // FIXME: Need alpha and beta propagation, currently omitted due to
     // datatype issues.
     /**
@@ -98,6 +103,25 @@ class IUal
                       const Matrix& B,
                       Matrix&       C,
                       MatrixType    accType) = 0;
+
+    // FIXME: Need alpha and beta propagation, currently omitted due to
+    // datatype issues.
+    /**
+     * @brief Perform general matrix multiplication with post-operations: C = A
+     * * B + PostOps
+     *
+     * @param A First input matrix
+     * @param B Second input matrix
+     * @param C Output matrix
+     * @param accType Accumulation type
+     * @param postOps Post-operations to apply (nullptr for no post-ops)
+     * @return true on success
+     */
+    virtual bool gemm(const Matrix&                      A,
+                      const Matrix&                      B,
+                      Matrix&                            C,
+                      MatrixType                         accType,
+                      const std::shared_ptr<IOperation>& postOps) = 0;
 
     /**
      * @brief Get string representation of UAL type

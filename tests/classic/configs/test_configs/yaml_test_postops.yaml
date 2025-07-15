@@ -1,0 +1,67 @@
+# GEMM test configuration file with PostOps
+yaml_test:
+  # Test case with PostOps
+  - name: "small_matrix_with_postops"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # Matrix dimensions
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    # Optional params
+    lda: 4
+    ldb: 4
+    ldc: 4
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32", "bf16"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n", "1"]
+        - type: "Sum"
+          params:
+            scale_factor_len: ["n", "1"]
+            scale_factor_type: ["f32"]
+
+  # Test case without PostOps for comparison
+  - name: "small_matrix_no_postops"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # Matrix dimensions
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    # Optional params
+    lda: 4
+    ldb: 4
+    ldc: 4
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0

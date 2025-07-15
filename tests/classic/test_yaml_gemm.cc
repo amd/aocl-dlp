@@ -250,6 +250,7 @@ TEST(YamlParserTest, CartesianProductTest)
 
         // Verify the count matches expectation
         // Based on the YAML config for small_matrix:
+        // Base parameters:
         // - m: range lb:10, ub:20, step:5 = [10, 15, 20] = 3 values
         // - n: range lb:10, ub:10, step:0 = [10] = 1 value
         // - k: range lb:10, ub:10, step:0 = [10] = 1 value
@@ -259,9 +260,20 @@ TEST(YamlParserTest, CartesianProductTest)
         // - transA: [false, true] = 2 values
         // - transB: [true] = 1 value
         // - reorderB: true = 1 value
-        // Total: 3 * 1 * 1 * 3 * 3 * 3 * 2 * 1 * 1 = 162 combinations
+        // Base total: 3 * 1 * 1 * 3 * 3 * 3 * 2 * 1 * 1 = 162 combinations
+        //
+        // PostOps (6 operations with cartesian=true):
+        // Operations: [SIGMOID, Sum, Scale, Bias, Matrix-Add, Matrix-Mul]
+        // With cartesian=true: generates all permutations of the full sequence
+        // PostOps total: 6! = 720 permutations
+        //
+        // Total combinations: 162 base × 720 PostOps = 116,640
 
-        size_t expectedCombinations = 3 * 1 * 1 * 3 * 3 * 3 * 2 * 1 * 1; // 162
+        size_t baseCombinations = 3 * 1 * 1 * 3 * 3 * 3 * 2 * 1 * 1; // 162
+        size_t postOpsCombinations =
+            720; // 6! permutations of the full sequence
+        size_t expectedCombinations =
+            baseCombinations * postOpsCombinations; // 116,640
         EXPECT_EQ(totalCombinations, expectedCombinations)
             << "Expected " << expectedCombinations << " combinations but got "
             << totalCombinations;
@@ -347,6 +359,7 @@ TEST(YamlParserTest, MediumMatrixCartesianProductTest)
 
         // Verify the count matches expectation for medium_matrix:
         // Based on the YAML config for medium_matrix:
+        // Base parameters:
         // - m: range lb:256, ub:1024, step:64 = [256, 320, 384, ..., 1024] = 13
         // values
         // - n: range lb:256, ub:1024, step:64 = [256, 320, 384, ..., 1024] = 13
@@ -360,14 +373,24 @@ TEST(YamlParserTest, MediumMatrixCartesianProductTest)
         // - transA: [false, true] = 2 values
         // - transB: [true, false] = 2 values
         // - reorderB: true = 1 value
-        // Total: 13 * 13 * 13 * 3 * 3 * 3 * 13 * 2 * 2 * 1 = 13^4 * 3^3 * 2^2 =
-        // 28561 * 27 * 4 = 3,084,588 combinations
+        // Base total: 13 * 13 * 13 * 3 * 3 * 3 * 13 * 2 * 2 * 1 = 13^4 * 3^3 *
+        // 2^2 = 28561 * 27 * 4 = 3,084,588 combinations
+        //
+        // PostOps (4 operations with cartesian=false):
+        // Operations: [RELU, PRELU, Bias, Scale] applied in sequence
+        // With cartesian=false: 1 combination (single sequence)
+        // PostOps total: 1 combination
+        //
+        // Total combinations: 3,084,588 base × 1 PostOps = 3,084,588
 
         // Calculate expected range size: (1024 - 256) / 64 + 1 = 768/64 + 1 =
         // 12 + 1 = 13
-        size_t rangeSize            = (1024 - 256) / 64 + 1; // 13 values
-        size_t expectedCombinations = rangeSize * rangeSize * rangeSize * 3 * 3
-                                      * 3 * rangeSize * 2 * 2 * 1;
+        size_t rangeSize        = (1024 - 256) / 64 + 1; // 13 values
+        size_t baseCombinations = rangeSize * rangeSize * rangeSize * 3 * 3 * 3
+                                  * rangeSize * 2 * 2 * 1; // 3,084,588
+        size_t postOpsCombinations = 1; // cartesian=false: single sequence
+        size_t expectedCombinations =
+            baseCombinations * postOpsCombinations; // 3,084,588
 
         EXPECT_EQ(totalCombinations, expectedCombinations)
             << "Expected " << expectedCombinations << " combinations but got "
@@ -556,6 +579,7 @@ TEST(YamlParserTest, ParseListOnlyConfig)
                   << std::endl;
 
         // Calculate expected combinations based on YAML config:
+        // Base parameters:
         // - a_type: ["f32"] = 1 value
         // - b_type: ["f32"] = 1 value
         // - c_type: ["f32"] = 1 value
@@ -573,12 +597,29 @@ TEST(YamlParserTest, ParseListOnlyConfig)
         // - ldc: 10 = 1 value (single value)
         // - reorderA: false = 1 value (single value)
         // - reorderB: true = 1 value (single value)
-        // Total: 1 * 1 * 1 * 1 * 1 * 2 * 1 * 1 * 1 * 1 * 3 * 3 * 3 * 1 * 1 * 1
-        // * 1 = 54 combinations
+        // Base total: 1 * 1 * 1 * 1 * 1 * 2 * 1 * 1 * 1 * 1 * 3 * 3 * 3 * 1 * 1
+        // * 1 * 1 = 54 combinations
+        //
+        // PostOps (3 operations with cartesian=true):
+        // With corrected logic: cartesian=true generates all permutations of
+        // the full sequence For 3 operations ["Elementwise-PRELU", "Bias",
+        // "Sum"]:
+        // 1. [PRELU, Bias, Sum]
+        // 2. [PRELU, Sum, Bias]
+        // 3. [Bias, PRELU, Sum]
+        // 4. [Bias, Sum, PRELU]
+        // 5. [Sum, PRELU, Bias]
+        // 6. [Sum, Bias, PRELU]
+        // PostOps total: 3! = 6 permutations
+        //
+        // Total combinations: 54 base × 6 PostOps = 324
 
-        size_t totalCombinations    = microTest.getSize();
-        size_t expectedCombinations = 1 * 1 * 1 * 1 * 1 * 2 * 1 * 1 * 1 * 1 * 3
-                                      * 3 * 3 * 1 * 1 * 1 * 1; // 54
+        size_t totalCombinations = microTest.getSize();
+        size_t baseCombinations  = 1 * 1 * 1 * 1 * 1 * 2 * 1 * 1 * 1 * 1 * 3 * 3
+                                  * 3 * 1 * 1 * 1 * 1; // 54
+        size_t postOpsCombinations = 6; // 3! permutations of the full sequence
+        size_t expectedCombinations =
+            baseCombinations * postOpsCombinations; // 324
 
         std::cout << "Expected total combinations: " << expectedCombinations
                   << std::endl;
@@ -768,18 +809,28 @@ TEST(YamlParserTest, ElementWiseSimpleProductTest)
 
         // In element-wise mode, the size should be the minimum of all list
         // sizes From yaml_test_config_list.yaml:
+        // Base parameters:
         // - a_type: ["f32"] = 1 value (single-element list, NOT expandable)
         // - transA: [false, true] = 2 values (list)
         // - alpha: [2.5, 0, -2.5] = 3 values (list)
         // - beta: [2.5, 0, -2.5] = 3 values (list)
         // - lda: [10, 20, 30] = 3 values (list)
         // - m: 10 = single value (expandable)
-        // Minimum size = min(1, 2, 3, 3, 3) = 1 (limited by a_type
+        // Base minimum size = min(1, 2, 3, 3, 3) = 1 (limited by a_type
         // single-element list)
+        //
+        // PostOps (3 operations with cartesian=true):
+        // 3 operations ["Elementwise-PRELU", "Bias", "Sum"] generate 3! = 6
+        // permutations
+        //
+        // Total: 1 base × 6 PostOps = 6 combinations
 
         size_t totalCombinations = microTest.getSize();
-        size_t expectedCombinations =
+        size_t baseCombinations =
             1; // Limited by a_type: ["f32"] single-element list
+        size_t postOpsCombinations = 6; // 3! permutations
+        size_t expectedCombinations =
+            baseCombinations * postOpsCombinations; // 6
 
         EXPECT_EQ(totalCombinations, expectedCombinations)
             << "Element-wise should have " << expectedCombinations
@@ -842,11 +893,27 @@ TEST(YamlParserTest, ElementWiseWithRangesTest)
         MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
 
         // From yaml_test_config_range_list.yaml small_matrix:
-        // Need to check what the actual lists vs single values are
-        // The key insight is that single-element lists limit the size, while
-        // single values expand
+        // Base parameters in ElementWise mode:
+        // ALL parameters are considered for minimum:
+        // - Single-element lists: a_type[1], b_type[1], c_type[1], acc_type[1],
+        // storage_format[1], transB[1] = 1 each
+        // - Multi-element lists: alpha[3], beta[3], lda[3], transA[2]
+        // - Ranges: m[3], n[1], k[1], ldb[1]
+        // - Single values: ldc, mtagA, mtagB = 1 each
+        // Base ElementWise combinations: min(1,1,1,1,1,2,1,3,1,1,3,3,3,1,1,1) =
+        // 1 (limited by single-element lists)
+        //
+        // PostOps (6 operations with cartesian=true):
+        // 6! = 720 permutations
+        //
+        // Total: 1 base × 720 PostOps = 720 combinations
 
         size_t totalCombinations = microTest.getSize();
+        size_t baseCombinations =
+            1; // ElementWise: limited by single-element lists
+        size_t postOpsCombinations = 720; // 6! permutations
+        size_t expectedCombinations =
+            baseCombinations * postOpsCombinations; // 720
 
         // Verify we can access all parameters without exceptions
         EXPECT_NO_THROW({
@@ -860,9 +927,6 @@ TEST(YamlParserTest, ElementWiseWithRangesTest)
         });
 
         // Test if there are more combinations available
-        // Note: SimpleProduct's has_next() may return true even when there's
-        // only 1 combination because it uses CartesianProduct::has_next() which
-        // doesn't know about SimpleProduct's state
         size_t combinationCount = 1; // Constructor consumed the first one
 
         try {
@@ -870,9 +934,11 @@ TEST(YamlParserTest, ElementWiseWithRangesTest)
                 microTest.next();
                 combinationCount++;
 
-                // Safety check to avoid infinite loop
-                if (combinationCount > 20) {
-                    FAIL() << "Too many combinations, something is wrong";
+                // Safety check to avoid infinite loop - allow for PostOps
+                // multiplication
+                if (combinationCount > expectedCombinations + 10) {
+                    FAIL() << "Too many combinations, expected around "
+                           << expectedCombinations;
                     break;
                 }
             }
@@ -881,6 +947,9 @@ TEST(YamlParserTest, ElementWiseWithRangesTest)
         }
 
         EXPECT_EQ(combinationCount, totalCombinations);
+        EXPECT_EQ(totalCombinations, expectedCombinations)
+            << "Expected " << expectedCombinations
+            << " combinations for ElementWise with PostOps";
 
     } catch (const std::exception& e) {
         FAIL() << "Element-wise with ranges test threw an exception: "
@@ -1066,6 +1135,213 @@ TEST(YamlParserTest, CartesianVsElementWiseComparisonTest)
         FAIL()
             << "Cartesian vs Element-Wise comparison test threw an exception: "
             << e.what();
+    }
+}
+
+/**
+ * @brief Test minimal PostOps configuration with cartesian=false
+ *
+ * This test verifies that cartesian=false applies all operations in sequence.
+ * Expected: 1 base combination × 1 PostOps sequence = 1 total
+ */
+TEST(YamlParserTest, MinimalPostOpsNoCartesianTest)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/test_configs/yaml_test_config_minimal_no_cartesian.yaml";
+
+    try {
+        YamlParser parser(filepath, "gemm_tests");
+
+        // Get the number of test cases
+        size_t testCount = parser.getMicroTestCount();
+        ASSERT_EQ(testCount, 1)
+            << "Expected 1 test case in the minimal no-cartesian YAML file";
+
+        // Test the minimal_postops_test_no_cartesian case
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        std::cout << "\n=== Minimal PostOps No-Cartesian Test ===" << std::endl;
+
+        // Calculate expected combinations:
+        // Base parameters: all single values = 1 base combination
+        // PostOps with 2 operations ["Elementwise-RELU", "Bias"] and
+        // cartesian=false:
+        // 1. ["Elementwise-RELU", "Bias"] (apply all operations in sequence)
+        // Total PostOps combinations: 1 (single sequence)
+        // Total: 1 base × 1 PostOps = 1 combination
+
+        size_t totalCombinations    = microTest.getSize();
+        size_t expectedCombinations = 1; // 1 base × 1 PostOps sequence
+
+        std::cout << "Expected total combinations: " << expectedCombinations
+                  << std::endl;
+        std::cout << "Reported by MicroTest.getSize(): " << totalCombinations
+                  << std::endl;
+
+        EXPECT_EQ(totalCombinations, expectedCombinations)
+            << "Expected " << expectedCombinations << " combinations but got "
+            << totalCombinations;
+
+        // Test the single combination
+        std::cout << "\nThe single combination:" << std::endl;
+        std::cout << "  M=" << microTest.getM() << ", N=" << microTest.getN()
+                  << ", K=" << microTest.getK()
+                  << ", Alpha=" << microTest.getAlpha()
+                  << ", Beta=" << microTest.getBeta()
+                  << ", LDA=" << microTest.getLDA()
+                  << ", TransA=" << (microTest.getTransA() ? "true" : "false")
+                  << ", TransB=" << (microTest.getTransB() ? "true" : "false")
+                  << std::endl;
+
+        // Verify base values
+        EXPECT_EQ(microTest.getAType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getBType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getCType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getAccType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getStorageFormat(), MatrixLayout::ROW_MAJOR);
+        EXPECT_EQ(microTest.getM(), 10);
+        EXPECT_EQ(microTest.getN(), 10);
+        EXPECT_EQ(microTest.getK(), 10);
+        EXPECT_EQ(microTest.getAlpha(), 1.0);
+        EXPECT_EQ(microTest.getBeta(), 0.0);
+        EXPECT_EQ(microTest.getLDA(), 10);
+        EXPECT_EQ(microTest.getLDB(), 10);
+        EXPECT_EQ(microTest.getLDC(), 10);
+        EXPECT_FALSE(microTest.getTransA());
+        EXPECT_FALSE(microTest.getTransB());
+
+        // Should have no more combinations
+        EXPECT_FALSE(microTest.hasNext())
+            << "Should have no more combinations with cartesian=false";
+
+        std::cout << "✓ Test PASSED - Single combination generated correctly"
+                  << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Minimal PostOps no-cartesian test threw an exception: "
+               << e.what();
+    }
+}
+
+/**
+ * @brief Test minimal PostOps configuration for debugging
+ *
+ * This test uses a minimal YAML configuration with just 2 PostOps and single
+ * parameter values to validate that PostOps iteration works correctly.
+ * Expected: 1 base combination × 2 PostOps permutations = 2 total
+ */
+TEST(YamlParserTest, MinimalPostOpsDebugTest)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/test_configs/yaml_test_config_minimal.yaml";
+
+    try {
+        YamlParser parser(filepath, "gemm_tests");
+
+        // Get the number of test cases
+        size_t testCount = parser.getMicroTestCount();
+        ASSERT_EQ(testCount, 1)
+            << "Expected 1 test case in the minimal YAML file";
+
+        // Test the minimal_postops_test case
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        std::cout << "\n=== Minimal PostOps Debug Test ===" << std::endl;
+
+        // Calculate expected combinations:
+        // Base parameters: all single values = 1 base combination
+        // PostOps with 2 operations ["Elementwise-RELU", "Bias"] and
+        // cartesian=true:
+        // 1. ["Elementwise-RELU", "Bias"] (original order)
+        // 2. ["Bias", "Elementwise-RELU"] (reverse order)
+        // Total PostOps combinations: 2 (2! permutations)
+        // Total: 1 base × 2 PostOps = 2 combinations
+
+        size_t totalCombinations    = microTest.getSize();
+        size_t expectedCombinations = 2; // 1 base × 2 PostOps permutations
+
+        std::cout << "Expected total combinations: " << expectedCombinations
+                  << std::endl;
+        std::cout << "Reported by MicroTest.getSize(): " << totalCombinations
+                  << std::endl;
+
+        EXPECT_EQ(totalCombinations, expectedCombinations)
+            << "Expected " << expectedCombinations << " combinations but got "
+            << totalCombinations;
+
+        // Test all combinations
+        size_t combinationCount = 0;
+        std::cout << "\nAll combinations:" << std::endl;
+
+        // Print the first combination (current state)
+        combinationCount++;
+        std::cout << "\nCombination " << combinationCount << ":" << std::endl;
+        std::cout << "  M=" << microTest.getM() << ", N=" << microTest.getN()
+                  << ", K=" << microTest.getK()
+                  << ", Alpha=" << microTest.getAlpha()
+                  << ", Beta=" << microTest.getBeta()
+                  << ", LDA=" << microTest.getLDA()
+                  << ", TransA=" << (microTest.getTransA() ? "true" : "false")
+                  << ", TransB=" << (microTest.getTransB() ? "true" : "false")
+                  << std::endl;
+
+        // Verify first combination base values (should be constant across all
+        // combinations)
+        EXPECT_EQ(microTest.getAType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getBType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getCType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getAccType(), MatrixType::f32);
+        EXPECT_EQ(microTest.getStorageFormat(), MatrixLayout::ROW_MAJOR);
+        EXPECT_EQ(microTest.getM(), 10);
+        EXPECT_EQ(microTest.getN(), 10);
+        EXPECT_EQ(microTest.getK(), 10);
+        EXPECT_EQ(microTest.getAlpha(), 1.0);
+        EXPECT_EQ(microTest.getBeta(), 0.0);
+        EXPECT_EQ(microTest.getLDA(), 10);
+        EXPECT_EQ(microTest.getLDB(), 10);
+        EXPECT_EQ(microTest.getLDC(), 10);
+        EXPECT_FALSE(microTest.getTransA());
+        EXPECT_FALSE(microTest.getTransB());
+
+        // Iterate through all remaining combinations
+        while (microTest.hasNext()) {
+            microTest.next();
+            combinationCount++;
+            std::cout << "\nCombination " << combinationCount << ":"
+                      << std::endl;
+            std::cout << "  M=" << microTest.getM()
+                      << ", N=" << microTest.getN()
+                      << ", K=" << microTest.getK()
+                      << ", Alpha=" << microTest.getAlpha()
+                      << ", Beta=" << microTest.getBeta()
+                      << ", LDA=" << microTest.getLDA() << ", TransA="
+                      << (microTest.getTransA() ? "true" : "false")
+                      << ", TransB="
+                      << (microTest.getTransB() ? "true" : "false")
+                      << std::endl;
+
+            // Verify base parameters remain constant (only PostOps should
+            // change)
+            EXPECT_EQ(microTest.getM(), 10);
+            EXPECT_EQ(microTest.getN(), 10);
+            EXPECT_EQ(microTest.getK(), 10);
+            EXPECT_EQ(microTest.getAlpha(), 1.0);
+            EXPECT_EQ(microTest.getBeta(), 0.0);
+        }
+
+        EXPECT_EQ(combinationCount, expectedCombinations)
+            << "Should be able to iterate through all " << expectedCombinations
+            << " combinations";
+
+        std::cout << "\nTotal combinations iterated: " << combinationCount
+                  << std::endl;
+        std::cout << "✓ Test PASSED - All " << expectedCombinations
+                  << " combinations generated correctly" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Minimal PostOps debug test threw an exception: " << e.what();
     }
 }
 

@@ -31,21 +31,34 @@ yaml_test:
       ub: 10
       step: -1
     ldc: 10
-    reorderA: false  # Default false
-    reorderB: true   # Matrix B reordering can improve performance
+    mtagA: "none"    # Default none
+    mtagB: "reorder" # Matrix B reordering can improve performance
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
       int8: 0
-    # post_operations:
-    #   - type: "RELU"
-    #   - type: "CLIP"
-    #     params:
-    #       lower-bound: 0
-    #       upper-bound: 6
-    #   - type: "PRELU"
-    #     params:
-    #       alpha: 0.1
+    post_operations:
+      cartesian: true
+      operations:
+        # Element-wise operations - all supported types
+        - type: "Elementwise-SIGMOID"
+        # Sum/Scale operations (quantization)
+        - type: "Sum"
+          params:
+            scale_factor_len: ["n", "1"]
+            scale_factor_type: ["f32"]
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32", "bf16"]
+            is_power_of_2: ["true", "false"]
+        # Bias operation
+        - type: "Bias"
+          params:
+            bias_type: ["f32", "bf16", "s8"]
+            bias_dim: ["n", "1"]
+        # Matrix operations (use C matrix dimensions automatically)
+        - type: "Matrix-Add"
+        - type: "Matrix-Mul"
   - name: "medium_matrix"
     a_type: ["f32"]
     b_type: ["f32"]
@@ -76,18 +89,25 @@ yaml_test:
       ub: 1024
       step: 64
     ldc: 256
-    reorderA: false  # Default false
-    reorderB: true   # Matrix B reordering can improve performance
+    mtagA: "none"    # Default none
+    mtagB: "reorder" # Matrix B reordering can improve performance
     tolerances:
       float: 1.0e-4
       bfloat16: 1.0e-2
       int8: 0
-    # post_operations:
-    #   - type: "RELU"
-    #   - type: "CLIP"
-    #     params:
-    #       lower-bound: 0
-    #       upper-bound: 6
-    #   - type: "PRELU"
-    #     params:
-    #       alpha: 0.1
+    post_operations:
+      cartesian: false  # Simpler for medium matrices
+      operations:
+        # Commonly used PostOps for performance testing
+        - type: "Elementwise-RELU"
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            is_power_of_2: ["false"]

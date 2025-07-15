@@ -33,6 +33,7 @@
 #include <any>
 #include <limits>
 #include <memory>
+#include <vector>
 
 namespace dlp { namespace testing {
 
@@ -303,6 +304,233 @@ namespace dlp { namespace testing {
          */
         size_t getElementSizeBytes() const;
 
+        // TEMPLATED FACTORY METHODS FOR POSTOPS API
+
+        // Type mapping traits
+        template<typename T>
+        struct DefaultMatrixType;
+
+        // Enable if type is supported
+        template<typename T>
+        using EnableIfSupported = typename std::enable_if<
+            std::is_same_v<T, float> || std::is_same_v<T, double>
+                || std::is_same_v<T, int8_t> || std::is_same_v<T, uint8_t>
+                || std::is_same_v<T, int16_t> || std::is_same_v<T, uint16_t>
+                || std::is_same_v<T, int32_t> || std::is_same_v<T, uint32_t>,
+            int>::type;
+
+        // Template method implementations are below
+
+        // Template implementations (must be in header)
+      public:
+        template<typename T, EnableIfSupported<T> = 0>
+        static Matrix fromValue(T          value,
+                                MatrixType type = DefaultMatrixType<T>::value)
+        {
+            Matrix matrix(1, 1, type);
+            writeDataToMatrix(matrix, &value, 1, 0);
+            return matrix;
+        }
+
+        template<typename T, EnableIfSupported<T> = 0>
+        static Matrix fromVector(const std::vector<T>& values,
+                                 MatrixType type = DefaultMatrixType<T>::value,
+                                 MatrixLayout layout = MatrixLayout::ROW_MAJOR)
+        {
+            if (values.empty()) {
+                throw std::invalid_argument(
+                    "Cannot create matrix from empty vector");
+            }
+
+            Matrix matrix(1, values.size(), type, layout);
+            writeDataToMatrix(matrix, values.data(), values.size(), 0);
+            return matrix;
+        }
+
+        template<typename T, EnableIfSupported<T> = 0>
+        static Matrix fromData(const std::vector<std::vector<T>>& data,
+                               MatrixType   type = DefaultMatrixType<T>::value,
+                               MatrixLayout layout = MatrixLayout::ROW_MAJOR)
+        {
+            if (data.empty() || data[0].empty()) {
+                throw std::invalid_argument(
+                    "Cannot create matrix from empty data");
+            }
+
+            size_t rows = data.size();
+            size_t cols = data[0].size();
+
+            // Validate that all rows have the same number of columns
+            for (size_t i = 1; i < rows; ++i) {
+                if (data[i].size() != cols) {
+                    throw std::invalid_argument(
+                        "All rows must have the same number of columns");
+                }
+            }
+
+            Matrix matrix(rows, cols, type, layout);
+
+            // Write data row by row
+            md_t leadingDim = matrix.getLeadingDimension();
+            for (size_t i = 0; i < rows; ++i) {
+                for (size_t j = 0; j < cols; ++j) {
+                    size_t flatIndex;
+                    if (layout == MatrixLayout::ROW_MAJOR) {
+                        flatIndex = i * leadingDim + j;
+                    } else {
+                        flatIndex = j * leadingDim + i;
+                    }
+                    writeDataToMatrix(matrix, &data[i][j], 1, flatIndex);
+                }
+            }
+
+            return matrix;
+        }
+
+        /**
+         * @brief Convenience method to create a scalar matrix
+         *
+         * @param value The scalar value
+         * @return Matrix A 1x1 f32 matrix containing the value
+         */
+        static Matrix scalar(float value)
+        {
+            return fromValue<float>(value, MatrixType::f32);
+        }
+
+        /**
+         * @brief Convenience method to create a scalar matrix from integer
+         *
+         * @param value The scalar value
+         * @return Matrix A 1x1 s32 matrix containing the value
+         */
+        static Matrix scalar(int32_t value)
+        {
+            return fromValue<int32_t>(value, MatrixType::s32);
+        }
+
+        /**
+         * @brief Convenience method to create a vector matrix
+         *
+         * @param values Vector of float values
+         * @return Matrix A row vector f32 matrix containing the values
+         */
+        static Matrix vector(const std::vector<float>& values)
+        {
+            return fromVector<float>(values, MatrixType::f32);
+        }
+
+        /**
+         * @brief Convenience method to create a vector matrix from integers
+         *
+         * @param values Vector of integer values
+         * @return Matrix A row vector s32 matrix containing the values
+         */
+        static Matrix vector(const std::vector<int32_t>& values)
+        {
+            return fromVector<int32_t>(values, MatrixType::s32);
+        }
+
+      private:
+        template<typename SourceT>
+        static void writeDataToMatrix(Matrix&        matrix,
+                                      const SourceT* source,
+                                      size_t         count,
+                                      size_t         startIndex = 0)
+        {
+            MatrixType targetType = matrix.getMatrixType();
+            void*      targetData = matrix.getData();
+
+            switch (targetType) {
+                case MatrixType::f32: {
+                    float* data = reinterpret_cast<float*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = static_cast<float>(source[i]);
+                    }
+                    break;
+                }
+                case MatrixType::bf16: {
+                    uint16_t* data = reinterpret_cast<uint16_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        float floatVal = static_cast<float>(source[i]);
+                        // Convert float to BF16 by truncating mantissa
+                        uint32_t floatBits =
+                            *reinterpret_cast<const uint32_t*>(&floatVal);
+                        data[startIndex + i] =
+                            static_cast<uint16_t>(floatBits >> 16);
+                    }
+                    break;
+                }
+                case MatrixType::s32: {
+                    int32_t* data = reinterpret_cast<int32_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = static_cast<int32_t>(source[i]);
+                    }
+                    break;
+                }
+                case MatrixType::u32: {
+                    uint32_t* data = reinterpret_cast<uint32_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = static_cast<uint32_t>(source[i]);
+                    }
+                    break;
+                }
+                case MatrixType::s16: {
+                    int16_t* data = reinterpret_cast<int16_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = static_cast<int16_t>(source[i]);
+                    }
+                    break;
+                }
+                case MatrixType::u16: {
+                    uint16_t* data = reinterpret_cast<uint16_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = static_cast<uint16_t>(source[i]);
+                    }
+                    break;
+                }
+                case MatrixType::s8: {
+                    int8_t* data = reinterpret_cast<int8_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = static_cast<int8_t>(source[i]);
+                    }
+                    break;
+                }
+                case MatrixType::u8: {
+                    uint8_t* data = reinterpret_cast<uint8_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = static_cast<uint8_t>(source[i]);
+                    }
+                    break;
+                }
+                case MatrixType::s4:
+                case MatrixType::u4: {
+                    // Handle packed 4-bit types
+                    uint8_t* data = reinterpret_cast<uint8_t*>(targetData);
+                    for (size_t i = 0; i < count; ++i) {
+                        size_t  packedIndex = (startIndex + i) / 2;
+                        size_t  bitOffset   = ((startIndex + i) % 2) * 4;
+                        uint8_t value4bit =
+                            static_cast<uint8_t>(source[i]) & 0x0F;
+
+                        if (bitOffset == 0) {
+                            // Lower 4 bits
+                            data[packedIndex] =
+                                (data[packedIndex] & 0xF0) | value4bit;
+                        } else {
+                            // Upper 4 bits
+                            data[packedIndex] =
+                                (data[packedIndex] & 0x0F) | (value4bit << 4);
+                        }
+                    }
+                    break;
+                }
+                default:
+                    throw std::runtime_error(
+                        "Unsupported matrix type for writeDataToMatrix");
+            }
+        }
+
       private:
         /**
          * @brief Helper function for floating point data comparison
@@ -323,6 +551,55 @@ namespace dlp { namespace testing {
         md_t         m_leadingDim;    ///< Leading dimension (stride)
         bool m_transposed; ///< Whether the matrix is logically transposed
         bool m_reordered;  ///< Whether the matrix is reordered
+    };
+
+    // Template specializations for default type mapping (must be outside class)
+    template<>
+    struct Matrix::DefaultMatrixType<float>
+    {
+        static constexpr MatrixType value = MatrixType::f32;
+    };
+
+    template<>
+    struct Matrix::DefaultMatrixType<double>
+    {
+        static constexpr MatrixType value = MatrixType::f32;
+    };
+
+    template<>
+    struct Matrix::DefaultMatrixType<int8_t>
+    {
+        static constexpr MatrixType value = MatrixType::s8;
+    };
+
+    template<>
+    struct Matrix::DefaultMatrixType<uint8_t>
+    {
+        static constexpr MatrixType value = MatrixType::u8;
+    };
+
+    template<>
+    struct Matrix::DefaultMatrixType<int16_t>
+    {
+        static constexpr MatrixType value = MatrixType::s16;
+    };
+
+    template<>
+    struct Matrix::DefaultMatrixType<uint16_t>
+    {
+        static constexpr MatrixType value = MatrixType::u16;
+    };
+
+    template<>
+    struct Matrix::DefaultMatrixType<int32_t>
+    {
+        static constexpr MatrixType value = MatrixType::s32;
+    };
+
+    template<>
+    struct Matrix::DefaultMatrixType<uint32_t>
+    {
+        static constexpr MatrixType value = MatrixType::u32;
     };
 
 }} // namespace dlp::testing

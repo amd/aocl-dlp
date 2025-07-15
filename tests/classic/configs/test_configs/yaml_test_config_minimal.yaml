@@ -1,0 +1,33 @@
+# Minimal YAML test configuration for debugging PostOps iteration
+# Should generate exactly 5 combinations: 1 base × 5 PostOps combinations
+gemm_tests:
+  - name: "minimal_postops_test"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # Single values for dimensions
+    m: 10
+    n: 10
+    k: 10
+    alpha: 1.0
+    beta: 0.0
+    # Single values for leading dimensions
+    lda: 10
+    ldb: 10
+    ldc: 10
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-RELU"
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]

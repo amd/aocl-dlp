@@ -36,8 +36,13 @@
  */
 
 #include "framework/ual_ref.hh"
+#include "framework/operation.hh"
+#include "framework/operation_ref.hh"
 #include "ref/gemm_ref.hh"
+#include <algorithm>
+#include <cmath>
 #include <iostream>
+#include <variant>
 
 extern "C"
 {
@@ -330,6 +335,7 @@ UalRef::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
     return true;
 }
 
+// Depriciated function
 /**
  * @brief Public GEMM interface that unpacks Matrix objects
  *
@@ -385,4 +391,375 @@ UalRef::gemm(const Matrix& A, const Matrix& B, Matrix& C, MatrixType accType)
             return false;
     }
 }
+
+/**
+ * @brief Apply element-wise post-operation to a matrix
+ */
+template<>
+void
+UalRef::applyPostOperation(Matrix&                               matrix,
+                           const dlp::testing::ElementWiseParam& op)
+{
+    switch (op.getOperation()) {
+        case dlp::testing::ElementWiseOperation::Relu:
+            applyRelu(matrix);
+            break;
+        case dlp::testing::ElementWiseOperation::Prelu:
+            applyPrelu(matrix, op.getAlpha());
+            break;
+        case dlp::testing::ElementWiseOperation::Gelu_Tanh:
+            applyGeluTanh(matrix);
+            break;
+        case dlp::testing::ElementWiseOperation::Gelu_Erf:
+            applyGeluErf(matrix);
+            break;
+        case dlp::testing::ElementWiseOperation::Clip:
+            applyClip(matrix, op.getAlpha(), op.getBeta());
+            break;
+        case dlp::testing::ElementWiseOperation::Swish:
+            applySwish(matrix);
+            break;
+        case dlp::testing::ElementWiseOperation::Tanh:
+            applyTanh(matrix);
+            break;
+        case dlp::testing::ElementWiseOperation::Sigmoid:
+            applySigmoid(matrix);
+            break;
+        default:
+            break;
+    }
+}
+
+/**
+ * @brief Apply sum/scale post-operation to a matrix
+ */
+template<>
+void
+UalRef::applyPostOperation(Matrix& matrix, const dlp::testing::SumParam& op)
+{
+    switch (op.getOperation()) {
+        case dlp::testing::SumOperation::Sum:
+            applySum(matrix, op.getZeroPoint());
+            break;
+        case dlp::testing::SumOperation::Scale:
+            applyScale(matrix, op.getScaleFactor());
+            break;
+        default:
+            break;
+    }
+}
+
+/**
+ * @brief Apply bias post-operation to a matrix
+ */
+template<>
+void
+UalRef::applyPostOperation(Matrix& matrix, const dlp::testing::BiasParam& op)
+{
+    applyBias(matrix, op.getBias());
+}
+
+/**
+ * @brief Apply matrix add post-operation to a matrix
+ */
+template<>
+void
+UalRef::applyPostOperation(Matrix&                             matrix,
+                           const dlp::testing::MatrixAddParam& op)
+{
+    applyMatrixAdd(matrix, op.getMatrix(), op.getScaleFactor());
+}
+
+/**
+ * @brief Apply matrix multiply post-operation to a matrix
+ */
+template<>
+void
+UalRef::applyPostOperation(Matrix&                             matrix,
+                           const dlp::testing::MatrixMulParam& op)
+{
+    applyMatrixMul(matrix, op.getMatrix(), op.getScaleFactor());
+}
+
+/**
+ * @brief Perform general matrix multiplication with post-operations: C = A * B
+ * + PostOps
+ *
+ * @param A First input matrix
+ * @param B Second input matrix
+ * @param C Output matrix
+ * @param accType Accumulation type
+ * @param postOps Post-operations to apply (nullptr for no post-ops)
+ * @return bool Success status
+ */
+bool
+UalRef::gemm(const Matrix&                      A,
+             const Matrix&                      B,
+             Matrix&                            C,
+             MatrixType                         accType,
+             const std::shared_ptr<IOperation>& postOps)
+{
+    // For now, if no postOps are provided, delegate to the original gemm method
+    if (!postOps) {
+        return gemm(A, B, C, accType);
+    }
+
+    // Validate that the postOps are for REF backend
+    if (postOps->getUALType() != UALType::REF) {
+        return false;
+    }
+
+    // Cast to RefOperation and use the iterator pattern
+    const auto* refOp = dynamic_cast<const RefOperation*>(postOps.get());
+    if (!refOp) {
+        return false;
+    }
+
+    // First perform the GEMM operation
+    bool result = gemm(A, B, C, accType);
+    if (!result) {
+        return false;
+    }
+
+    // Apply post-operations using the iterator pattern
+    refOp->resetIterator();
+    while (refOp->hasNextPostOp()) {
+        auto postOp = refOp->getNextPostOp();
+        if (postOp) {
+            // Process the post-operation using std::visit
+            std::visit([&](const auto& op) { applyPostOperation(C, op); },
+                       *postOp);
+        }
+    }
+
+    return true;
+}
+
+// Helper methods for specific operations
+void
+UalRef::applyRelu(Matrix& matrix)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            data[i] = std::max(0.0f, data[i]);
+        }
+    }
+}
+
+void
+UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        float alpha_val = 0.01f; // Default alpha
+        if (alpha && alpha->getMatrixType() == MatrixType::f32) {
+            alpha_val = *reinterpret_cast<const float*>(alpha->getData());
+        }
+
+        for (size_t i = 0; i < size; ++i) {
+            if (data[i] < 0.0f) {
+                data[i] *= alpha_val;
+            }
+        }
+    }
+}
+
+void
+UalRef::applyGeluTanh(Matrix& matrix)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            float x = data[i];
+            float tanh_arg =
+                std::sqrt(2.0f / M_PI) * (x + 0.044715f * x * x * x);
+            data[i] = 0.5f * x * (1.0f + std::tanh(tanh_arg));
+        }
+    }
+}
+
+void
+UalRef::applyGeluErf(Matrix& matrix)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            float x = data[i];
+            data[i] = 0.5f * x * (1.0f + std::erf(x / std::sqrt(2.0f)));
+        }
+    }
+}
+
+void
+UalRef::applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        float lower_val = -6.0f; // Default lower bound
+        float upper_val = 6.0f;  // Default upper bound
+
+        if (lower && lower->getMatrixType() == MatrixType::f32) {
+            lower_val = *reinterpret_cast<const float*>(lower->getData());
+        }
+        if (upper && upper->getMatrixType() == MatrixType::f32) {
+            upper_val = *reinterpret_cast<const float*>(upper->getData());
+        }
+
+        for (size_t i = 0; i < size; ++i) {
+            data[i] = std::max(lower_val, std::min(upper_val, data[i]));
+        }
+    }
+}
+
+void
+UalRef::applySwish(Matrix& matrix)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            float x = data[i];
+            data[i] = x / (1.0f + std::exp(-x));
+        }
+    }
+}
+
+void
+UalRef::applyTanh(Matrix& matrix)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            data[i] = std::tanh(data[i]);
+        }
+    }
+}
+
+void
+UalRef::applySigmoid(Matrix& matrix)
+{
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            data[i] = 1.0f / (1.0f + std::exp(-data[i]));
+        }
+    }
+}
+
+void
+UalRef::applySum(Matrix& matrix, const Matrix* zeroPoint)
+{
+    // For sum operations, we would typically add another matrix
+    // For now, this is a placeholder implementation
+}
+
+void
+UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
+{
+    if (matrix.getMatrixType() == MatrixType::f32 && scaleFactor
+        && scaleFactor->getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+        float scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+
+        for (size_t i = 0; i < size; ++i) {
+            data[i] *= scale;
+        }
+    }
+}
+
+void
+UalRef::applyBias(Matrix& matrix, const Matrix& bias)
+{
+    if (matrix.getMatrixType() == MatrixType::f32
+        && bias.getMatrixType() == MatrixType::f32) {
+        float*       data      = reinterpret_cast<float*>(matrix.getData());
+        const float* bias_data = reinterpret_cast<const float*>(bias.getData());
+
+        md_t rows      = matrix.getRows();
+        md_t cols      = matrix.getCols();
+        md_t bias_size = bias.getRows() * bias.getCols();
+
+        // Apply bias to each row/column depending on bias size
+        for (md_t i = 0; i < rows; ++i) {
+            for (md_t j = 0; j < cols; ++j) {
+                size_t idx      = i * matrix.getLeadingDimension() + j;
+                size_t bias_idx = j % bias_size; // Broadcast bias
+                data[idx] += bias_data[bias_idx];
+            }
+        }
+    }
+}
+
+void
+UalRef::applyMatrixAdd(Matrix&       matrix,
+                       const Matrix& addMatrix,
+                       const Matrix* scaleFactor)
+{
+    if (matrix.getMatrixType() == MatrixType::f32
+        && addMatrix.getMatrixType() == MatrixType::f32) {
+        float*       data = reinterpret_cast<float*>(matrix.getData());
+        const float* add_data =
+            reinterpret_cast<const float*>(addMatrix.getData());
+
+        float scale = 1.0f;
+        if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
+            scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+        }
+
+        size_t size =
+            std::min(matrix.getDataSizeBytes(), addMatrix.getDataSizeBytes())
+            / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            data[i] += add_data[i] * scale;
+        }
+    }
+}
+
+void
+UalRef::applyMatrixMul(Matrix&       matrix,
+                       const Matrix& mulMatrix,
+                       const Matrix* scaleFactor)
+{
+    // Matrix multiplication is more complex and would require proper GEMM
+    // For now, just element-wise multiplication
+    if (matrix.getMatrixType() == MatrixType::f32
+        && mulMatrix.getMatrixType() == MatrixType::f32) {
+        float*       data = reinterpret_cast<float*>(matrix.getData());
+        const float* mul_data =
+            reinterpret_cast<const float*>(mulMatrix.getData());
+
+        float scale = 1.0f;
+        if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
+            scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+        }
+
+        size_t size =
+            std::min(matrix.getDataSizeBytes(), mulMatrix.getDataSizeBytes())
+            / sizeof(float);
+
+        for (size_t i = 0; i < size; ++i) {
+            data[i] *= mul_data[i] * scale;
+        }
+    }
+}
+
 } // namespace dlp::testing::classic

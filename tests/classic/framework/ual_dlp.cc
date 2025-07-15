@@ -36,6 +36,7 @@
  */
 
 #include "framework/ual_dlp.hh"
+#include "framework/operation_dlp.hh"
 #include <iostream>
 
 #include "aocl_dlp.h"
@@ -234,6 +235,7 @@ UalDlp::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
     return true;
 }
 
+// Depriciated function
 /**
  * @brief Public GEMM interface that unpacks Matrix objects
  *
@@ -273,20 +275,10 @@ UalDlp::gemm(const Matrix& A, const Matrix& B, Matrix& C, MatrixType accType)
     // Validate leading dimensions
     if (C.getLayout() == MatrixLayout::ROW_MAJOR) {
         if (C.getLeadingDimension() < C.getCols()) {
-            std::cerr << "ERROR: Invalid leading dimension for matrix C. "
-                      << "For row-major layout, ldc ("
-                      << C.getLeadingDimension()
-                      << ") must be >= number of columns (" << C.getCols()
-                      << ")" << std::endl;
             return false;
         }
     } else {
         if (C.getLeadingDimension() < C.getRows()) {
-            std::cerr << "ERROR: Invalid leading dimension for matrix C. "
-                      << "For column-major layout, ldc ("
-                      << C.getLeadingDimension()
-                      << ") must be >= number of rows (" << C.getRows() << ")"
-                      << std::endl;
             return false;
         }
     }
@@ -304,6 +296,92 @@ UalDlp::gemm(const Matrix& A, const Matrix& B, Matrix& C, MatrixType accType)
                 B.getLeadingDimension(), isBReordered, 1.0,
                 reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
                 C.getLeadingDimension(), nullptr);
+
+            return true;
+
+        default:
+            return false;
+    }
+}
+
+/**
+ * @brief Perform general matrix multiplication with post-operations: C = A * B
+ * + PostOps
+ *
+ * @param A First input matrix
+ * @param B Second input matrix
+ * @param C Output matrix
+ * @param accType Accumulation type
+ * @param postOps Post-operations to apply (nullptr for no post-ops)
+ * @return bool Success status
+ */
+bool
+UalDlp::gemm(const Matrix&                      A,
+             const Matrix&                      B,
+             Matrix&                            C,
+             MatrixType                         accType,
+             const std::shared_ptr<IOperation>& postOps)
+{
+    // For now, if no postOps are provided, delegate to the original gemm method
+    if (!postOps) {
+        return gemm(A, B, C, accType);
+    }
+
+    // Validate that the postOps are for DLP backend
+    if (postOps->getUALType() != UALType::DLP) {
+        return false;
+    }
+
+    // Cast to DlpOperation and access the serialized aocl_post_op structure
+    // using friend access
+    const auto* dlpOp = dynamic_cast<const DlpOperation*>(postOps.get());
+    if (!dlpOp) {
+        return false;
+    }
+
+    // Get the serialized aocl_post_op structure using friend access
+    aocl_post_op* aocl_postops = dlpOp->toAoclPostOp();
+
+    // Validate parameters first
+    if (!checkValidGemmParams(A, B, C)) {
+        return false;
+    }
+
+    uint64_t type = encode_types(A.getMatrixType(), B.getMatrixType(),
+                                 C.getMatrixType(), accType);
+
+    char transA = A.isTransposed() ? 't' : 'n';
+    char transB = B.isReordered() ? 'n' : (B.isTransposed() ? 't' : 'n');
+
+    char layoutA = A.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
+
+    char isAReordered = A.isReordered() ? 'r' : 'n';
+    char isBReordered = B.isReordered() ? 'r' : 'n';
+
+    // Validate leading dimensions
+    if (C.getLayout() == MatrixLayout::ROW_MAJOR) {
+        if (C.getLeadingDimension() < C.getCols()) {
+            return false;
+        }
+    } else {
+        if (C.getLeadingDimension() < C.getRows()) {
+            return false;
+        }
+    }
+
+    switch (type) {
+        case encode_types<MatrixType::f32, MatrixType::f32, MatrixType::f32,
+                          MatrixType::f32>():
+
+            aocl_gemm_f32f32f32of32(
+                layoutA, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), 1.0,
+                reinterpret_cast<float*>(A.getMatrixData().getMatrixPtr()),
+                A.getLeadingDimension(), isAReordered,
+                reinterpret_cast<float*>(B.getMatrixData().getMatrixPtr()),
+                B.getLeadingDimension(), isBReordered, 1.0,
+                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
+                C.getLeadingDimension(), aocl_postops);
 
             return true;
 

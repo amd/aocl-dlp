@@ -16,21 +16,24 @@ yaml_test:
     lda: 10
     ldb: 10
     ldc: 10
-    reorderA: false
-    reorderB: false
+    mtagA: "none"
+    mtagB: "none"
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
       int8: 0
-    # post_operations:
-    #   - type: "RELU"
-    #   - type: "CLIP"
-    #     params:
-    #       lower-bound: 0
-    #       upper-bound: 6
-    #   - type: "PRELU"
-    #     params:
-    #       alpha: 0.1
+    post_operations:
+      cartesian: false  # Simple for value-based config
+      operations:
+        # Essential PostOps
+        - type: "Elementwise-RELU"
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["1"]
 
   - name: "medium_matrix"
     a_type: "f32"
@@ -48,9 +51,18 @@ yaml_test:
     lda: 256
     ldb: 256
     ldc: 256
-    reorderA: false
-    reorderB: false
+    mtagA: "none"
+    mtagB: "none"
     tolerances:
       float: 1.0e-4
       bfloat16: 1.0e-2
       int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        # Performance-oriented PostOps for larger matrices
+        - type: "Elementwise-RELU"
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            is_power_of_2: ["true"]
