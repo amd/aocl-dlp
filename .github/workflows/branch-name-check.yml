@@ -22,16 +22,19 @@ jobs:
         echo "Trimmed USER: $BASE_USER"
 
         echo "Checking branch name: $BRANCH_NAME"
+        # Use case-insensitive regex by converting branch name to lowercase
+        LOWER_BRANCH_NAME=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]')
+        LOWER_BASE_USER=$(echo "$BASE_USER" | tr '[:upper:]' '[:lower:]')
 
-        PR_PATTERN="^u/$BASE_USER/pr/"
-        WIP_PATTERN="^u/$BASE_USER/wip/"
+        PR_PATTERN="^u/${LOWER_BASE_USER}/pr/"
+        WIP_PATTERN="^u/${LOWER_BASE_USER}/wip/"
 
-        if [[ "$BRANCH_NAME" =~ $PR_PATTERN ]]; then
+        if [[ "${LOWER_BRANCH_NAME}" =~ $PR_PATTERN ]]; then
           echo "Branch name '$BRANCH_NAME' is recognized as a PR branch."
-        elif [[ "$BRANCH_NAME" =~ $WIP_PATTERN ]]; then
+        elif [[ "${LOWER_BRANCH_NAME}" =~ $WIP_PATTERN ]]; then
           echo "Branch name '$BRANCH_NAME' is recognized as a WIP branch."
         else
-          echo "Error: Branch name '$BRANCH_NAME' does not match the required naming conventions 'u/$BASE_USER/pr/*' or 'u/$BASE_USER/wip/*'."
+          echo "Error: Branch name '$BRANCH_NAME' does not match the required naming conventions 'u/$BASE_USER/pr/*' or 'u/$BASE_USER/wip/*'. Examples of acceptable formats include 'u/$BASE_USER/PR/*', 'u/$BASE_USER/pr/*', 'u/$BASE_USER/WIP/*', or 'u/$BASE_USER/wip/*' (case-insensitive)."
           exit 1
         fi
       shell: bash
