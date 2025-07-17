@@ -26,6 +26,9 @@
 
 cmake_minimum_required(VERSION 3.26)
 
+# Set CMake policy
+cmake_policy(SET CMP0010 NEW)
+
 # Set CMake module path
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
@@ -48,6 +51,8 @@ endif()
 
 # Project configuration - using PROJECT_NAME from dlp_variables.cmake
 project(${PROJECT_NAME} VERSION ${PROJECT_VERSION} LANGUAGES C CXX)
+
+include(cmake/dlp_platform.cmake)
 
 # Define file extensions
 dlp_define_extensions()
@@ -72,10 +77,10 @@ add_library(${PROJECT_NAME} SHARED ${DLP_SRCS})
 # Create the static library target
 add_library(${PROJECT_NAME}_static STATIC ${DLP_SRCS})
 
-# Set binary name for static library
-set_target_properties(${PROJECT_NAME}_static PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
+# Set OS dependant definitions/target properties dlp_compiler_flags_<platform>.cmake
+dlp_set_platform_options()
 
-# Link with the classic object shared library and dependencies
+# Link with the classic object library and dependencies
 target_link_libraries(${PROJECT_NAME}
     PUBLIC
         ${CLASSIC_TARGETS}

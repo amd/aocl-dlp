@@ -26,10 +26,10 @@
  *
  */
 
-#include "cpuid.h"
 #include <cstring>
 
 #include "classic/dlp_base_types.h"
+#include "cpu_utils/cpuid.hh"
 #include "utils/type_utils.hh"
 #include "x86_cpu_features.hh"
 
@@ -232,10 +232,16 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
             // Call xgetbv to get xcr0 (the extended control register) copied
             // to [edx:eax]. This encodes whether software supports various
             // register state-saving features.
+#if DLP_OS_WINDOWS
+            uint64_t xcr_result = xgetbv(xcr);
+            eax = static_cast<uint32_t>(xcr_result & 0xFFFFFFFF);
+            edx = static_cast<uint32_t>(xcr_result >> 32);
+#else
             __asm__ __volatile__(".byte 0x0F, 0x01, 0xD0"
                                  : "=a"(eax), "=d"(edx)
                                  : "c"(xcr)
                                  : "cc");
+#endif
 
             // The OS can manage the state of 512-bit zmm (AVX-512) registers
             // only if the xcr[7:5] bits are set. If they are not set, then

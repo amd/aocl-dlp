@@ -35,15 +35,22 @@
  * 3. Compare with sequential execution of individual GEMMs
  */
 
+#ifndef _WIN32
 /* Define _POSIX_C_SOURCE to access POSIX functions in strict C11 mode */
 #define _POSIX_C_SOURCE 200809L
+#endif
 
 #include "aocl_dlp.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <time.h>
+#endif
 
 // Utility function to initialize a matrix with values
 void
@@ -60,9 +67,19 @@ init_matrix(float* matrix, int rows, int cols, float value)
 double
 get_time_sec()
 {
+#ifdef _WIN32
+    static LARGE_INTEGER freq = { 0 };
+    if (freq.QuadPart == 0) {
+        QueryPerformanceFrequency(&freq);
+    }
+    LARGE_INTEGER counter;
+    QueryPerformanceCounter(&counter);
+    return (double)counter.QuadPart / (double)freq.QuadPart;
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (double)ts.tv_sec + (double)ts.tv_nsec * 1.e-9;
+#endif
 }
 
 int
@@ -174,7 +191,8 @@ main()
     }
 
     // Method 1: Execute GEMMs sequentially
-    printf("Running %ld GEMM operations sequentially...\n", batch_size);
+    printf("Running %lld GEMM operations sequentially...\n",
+           (long long)batch_size);
     double sequential_start_time = get_time_sec();
 
     for (int i = 0; i < batch_size; i++) {
@@ -192,7 +210,7 @@ main()
     printf("Sequential GEMM time: %.6f seconds\n", sequential_time);
 
     // Method 2: Execute GEMMs in batch
-    printf("Running %ld GEMM operations in batch...\n", batch_size);
+    printf("Running %lld GEMM operations in batch...\n", (long long)batch_size);
     double batch_start_time = get_time_sec();
 
     aocl_batch_gemm_f32f32f32of32(

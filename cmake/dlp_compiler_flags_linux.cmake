@@ -273,3 +273,11 @@ function(dlp_set_arch_flags target arch)
     string(REPLACE ";" " " target_flags_str "${target_flags}")
     message(STATUS "Setting ${arch} flags for target ${target}: ${target_flags_str}")
 endfunction()
+
+function(dlp_set_platform_options)
+    # Set binary name for static library
+    if(DLP_OS_LINUX)
+        #FIXME: For windows we might need to do something similar
+        set_target_properties(${PROJECT_NAME}_static PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
+    endif()
+endfunction()

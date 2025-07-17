@@ -26,6 +26,7 @@
 
 # Use project's glob function to find all source files
 dlp_glob_sources(BENCH_SOURCES)
+list(REMOVE_DUPLICATES BENCH_SOURCES)
 
 # Filter sources to get benchmark executables (exclude helper files)
 list(FILTER BENCH_SOURCES INCLUDE REGEX "bench_[a-z_]+\\.c$")
@@ -53,7 +54,7 @@ foreach(source ${BENCH_SOURCES})
         target_link_libraries(${exec_name}
             PRIVATE
                 aocl-dlp
-                m  # Link math library for any math functions
+                $<$<BOOL:${UNIX}>:m>  # Link math library for any math functions (Unix-like platforms)
         )
 
         # Set compile flags (ensuring all executables use -fPIC for consistency)

@@ -29,6 +29,14 @@
 #include <functional>
 #include <memory>
 
+#include "aocl_dlp_config.h"
+
+#if DLP_OS_WINDOWS
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#endif
+
 #include "avx512_generator.hh"
 #include "jit_register/jit_register.hh"
 
@@ -518,11 +526,18 @@ jitAVX512FP32::generateAllKernels(const dlp::kernel_frame::kernelInfo& ji)
             params.useMask = (nr == 0);
 #endif
             void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
-            // Allocate executable memory using mmap for the kernel code block
+            // Allocate executable memory
+#if DLP_OS_WINDOWS
+            codeBuffer =
+                VirtualAlloc(nullptr, JIT_KERNEL_SIZE, MEM_COMMIT | MEM_RESERVE,
+                             PAGE_EXECUTE_READWRITE);
+            if (codeBuffer == nullptr) {
+#else
             codeBuffer = mmap(nullptr, JIT_KERNEL_SIZE,
                               PROT_READ | PROT_WRITE | PROT_EXEC,
                               MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
             if (codeBuffer == MAP_FAILED) {
+#endif
                 err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
                 goto cleanup;
             }
@@ -546,10 +561,14 @@ jitAVX512FP32::generateAllKernels(const dlp::kernel_frame::kernelInfo& ji)
 
 cleanup:
     // Free the memory allocated for the kernel code blocks if
-    // mmap fails or if the kernel generation fails
+    // allocation fails or if the kernel generation fails
     for (auto& codeBlock : kernelCodeBlocks) {
         if (codeBlock != nullptr) {
+#if DLP_OS_WINDOWS
+            VirtualFree(codeBlock, 0, MEM_RELEASE);
+#else
             munmap(codeBlock, JIT_KERNEL_SIZE);
+#endif
         }
     }
     return err;

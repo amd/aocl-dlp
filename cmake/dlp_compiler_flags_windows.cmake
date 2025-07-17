@@ -41,7 +41,7 @@ set(DLP_RELEASE_FLAGS_MSVC
     /GL             # Whole program optimization
     /Gy             # Function-level linking
     /Oi             # Generate intrinsic functions
-    /WX             # Treat warnings as errors (equivalent to -Werror)
+   # /WX             # Treat warnings as errors (equivalent to -Werror)
 )
 
 # Debug flags for MSVC compiler
@@ -56,11 +56,11 @@ set(DLP_ARCH_ZEN_FLAGS_MSVC /arch:AVX2)   # AVX2 for Zen architecture
 set(DLP_ARCH_ZEN4_FLAGS_MSVC /arch:AVX512) # AVX512 for Zen4 architecture
 
 # Generic flags for non-MSVC compilers (MinGW/Clang) when used on Windows
-set(DLP_GENERIC_FLAGS_OTHER -Wall -pedantic)
-set(DLP_RELEASE_FLAGS_OTHER -Werror -O3)
+set(DLP_GENERIC_FLAGS_OTHER -Wall)
+set(DLP_RELEASE_FLAGS_OTHER -O3)
 set(DLP_DEBUG_FLAGS_OTHER -g -O0)
-set(DLP_ARCH_ZEN_FLAGS_OTHER -march=znver2)
-set(DLP_ARCH_ZEN4_FLAGS_OTHER -march=znver4)
+set(DLP_ARCH_ZEN_FLAGS_OTHER -mavx2 -mfma)
+set(DLP_ARCH_ZEN4_FLAGS_OTHER -mavx512f -mavx512bw -mavx512dq -mavx512vl -mavx512ifma -mavx512vbmi -mavx512vbmi2 -mavx512vnni -mavx512bf16 -mvaes)
 
 # Create interface libraries for different flag sets
 add_library(dlp_compiler_flags INTERFACE)
@@ -196,5 +196,62 @@ function(dlp_set_relwithdebinfo_build_flags)
     else()
         set(CMAKE_C_FLAGS_RELWITHDEBINFO "" PARENT_SCOPE)
         set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "" PARENT_SCOPE)
+    endif()
+endfunction()
+# Function to check support for ZnVer flags (znver1 through znver5) on Windows
+# Sets variables:
+#   DLP_ZNVER1_SUPPORTED, DLP_ZNVER2_SUPPORTED, etc. - Whether each flag is supported
+#   DLP_HIGHEST_ZNVER - The highest supported ZnVer flag (e.g., "znver4")
+#   DLP_ZNVER1_FLAGS, DLP_ZNVER2_FLAGS, ... - The flags to use for each ZnVer
+function(dlp_check_znver_support)
+    # On MSVC, only AVX2/AVX512 are supported, not -march=znver*
+    if(MSVC)
+        set(DLP_ZNVER1_SUPPORTED FALSE PARENT_SCOPE)
+        set(DLP_ZNVER2_SUPPORTED FALSE PARENT_SCOPE)
+        set(DLP_ZNVER3_SUPPORTED FALSE PARENT_SCOPE)
+        set(DLP_ZNVER4_SUPPORTED TRUE  PARENT_SCOPE)  # AVX512 is closest to znver4
+        set(DLP_ZNVER5_SUPPORTED FALSE PARENT_SCOPE)
+        set(DLP_HIGHEST_ZNVER "znver4" PARENT_SCOPE)
+        set(DLP_ZNVER1_FLAGS "${DLP_ARCH_ZEN_FLAGS_MSVC}" PARENT_SCOPE)
+        set(DLP_ZNVER2_FLAGS "${DLP_ARCH_ZEN_FLAGS_MSVC}" PARENT_SCOPE)
+        set(DLP_ZNVER3_FLAGS "${DLP_ARCH_ZEN_FLAGS_MSVC}" PARENT_SCOPE)
+        set(DLP_ZNVER4_FLAGS "${DLP_ARCH_ZEN4_FLAGS_MSVC}" PARENT_SCOPE)
+        set(DLP_ZNVER5_FLAGS "${DLP_ARCH_ZEN4_FLAGS_MSVC}" PARENT_SCOPE)
+        message(STATUS "ZnVer support (MSVC): Only AVX2/AVX512 mapped. Highest: znver4")
+    else()
+        # For MinGW/Clang, check for -march=znver* support (simple version)
+        include(CheckCCompilerFlag)
+        set(DLP_HIGHEST_ZNVER "none")
+        set(DLP_ZNVER1_SUPPORTED FALSE)
+        set(DLP_ZNVER2_SUPPORTED FALSE)
+        set(DLP_ZNVER3_SUPPORTED FALSE)
+        set(DLP_ZNVER4_SUPPORTED FALSE)
+        set(DLP_ZNVER5_SUPPORTED FALSE)
+        foreach(ver RANGE 1 5)
+            set(flag "-march=znver${ver}")
+            string(TOUPPER "DLP_ZNVER${ver}_SUPPORTED" var)
+            check_c_compiler_flag(${flag} ${var})
+            if(${var})
+                set(DLP_HIGHEST_ZNVER "znver${ver}")
+                set(DLP_ZNVER${ver}_SUPPORTED TRUE)
+            endif()
+            set(${var} ${${var}} PARENT_SCOPE)
+        endforeach()
+        set(DLP_HIGHEST_ZNVER ${DLP_HIGHEST_ZNVER} PARENT_SCOPE)
+        set(DLP_ZNVER1_FLAGS "${DLP_ARCH_ZEN_FLAGS_OTHER}" PARENT_SCOPE)
+        set(DLP_ZNVER2_FLAGS "${DLP_ARCH_ZEN_FLAGS_OTHER}" PARENT_SCOPE)
+        set(DLP_ZNVER3_FLAGS "${DLP_ARCH_ZEN_FLAGS_OTHER}" PARENT_SCOPE)
+        set(DLP_ZNVER4_FLAGS "${DLP_ARCH_ZEN4_FLAGS_OTHER}" PARENT_SCOPE)
+        set(DLP_ZNVER5_FLAGS "${DLP_ARCH_ZEN4_FLAGS_OTHER}" PARENT_SCOPE)
+        message(STATUS "ZnVer support (MinGW/Clang): Highest: ${DLP_HIGHEST_ZNVER}")
+    endif()
+endfunction()
+
+function(dlp_set_platform_options)
+    # Ensure symbols are exported for all classic targets when building shared libs
+    if(BUILD_SHARED_LIBS)
+        foreach(classic_target IN LISTS CLASSIC_TARGETS)
+            target_compile_definitions(${classic_target} PUBLIC DLP_IS_BUILDING_LIBRARY)
+        endforeach()
     endif()
 endfunction()

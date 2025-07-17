@@ -54,7 +54,12 @@ foreach(source ${EXAMPLE_SOURCES})
     target_link_libraries(${example_name}
         PRIVATE
             ${PROJECT_NAME}
-            "-lm"
+    )
+
+    # Link with math library on Unix/Linux only
+    target_link_libraries(${example_name}
+        PRIVATE
+            $<$<BOOL:${UNIX}>:m>
     )
 
     # Apply centralized compiler flags

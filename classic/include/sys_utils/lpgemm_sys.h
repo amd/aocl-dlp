@@ -75,25 +75,25 @@ dlp_pthread_once(dlp_pthread_once_t* once, void (*init)(void))
 
 #endif
 
-size_t
+DLP_CLASSIC_EXPORT size_t
 dlp_get_page_size(void);
 
-void*
+DLP_CLASSIC_EXPORT void*
 dlp_malloc_page_aligned(size_t sz, dlp_clsc_err_t* ret_err);
-void
+DLP_CLASSIC_EXPORT void
 dlp_free_page_aligned(void* p);
 
-uint64_t
+DLP_CLASSIC_EXPORT uint64_t
 lpgemm_gettid(void);
-uint64_t
+DLP_CLASSIC_EXPORT uint64_t
 lpgemm_getpid(void);
 
-double
+DLP_CLASSIC_EXPORT double
 dlp_clock(void);
-double
+DLP_CLASSIC_EXPORT double
 dlp_clock_min_diff(double time_min, double time_start);
 
-md_t
+DLP_CLASSIC_EXPORT md_t
 dlp_get_env_var(const char* env, md_t fallback);
 
 #endif // LPGEMM_SYS_UTILS_H
