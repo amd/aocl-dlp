@@ -250,11 +250,12 @@ AOCL_GEMM_MATMUL(float, float, float, float, f32f32f32of32);
 #define AOCL_BGEMM_MATMUL(A_type, B_type, C_type, Sum_type, LP_SFX)            \
     DLP_CLASSIC_EXPORT void aocl_batch_gemm_##LP_SFX(                          \
         const char* order, const char* transa, const char* transb,             \
-        const md_t batch_size, const md_t* m, const md_t* n, const md_t* k,    \
-        const Sum_type* alpha, const A_type** a, const md_t* lda,              \
-        const char* mem_format_a, const B_type** b, const md_t* ldb,           \
-        const char* mem_format_b, const Sum_type* beta, C_type** c,            \
-        const md_t* ldc, aocl_post_op** post_op_unparsed)
+        const md_t* m, const md_t* n, const md_t* k, const Sum_type* alpha,    \
+        const A_type** a, const md_t* lda, const B_type** b, const md_t* ldb,  \
+        const Sum_type* beta, C_type** c, const md_t* ldc,                     \
+        const md_t group_count, const md_t* group_size,                        \
+        const char* mem_format_a, const char* mem_format_b,                    \
+        aocl_post_op** post_op_unparsed)
 
 // bf16 APIs
 AOCL_BGEMM_MATMUL(bfloat16, bfloat16, float, float, bf16bf16f32of32);

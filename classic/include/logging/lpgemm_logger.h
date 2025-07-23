@@ -73,7 +73,8 @@ batch_lpgemm_write_logger_gemm_fn(FILE*          fd,
                                   const char*    order,
                                   const char*    transa,
                                   const char*    transb,
-                                  const md_t     batch_size,
+                                  const md_t     group_count,
+                                  const md_t*    group_size,
                                   const md_t*    m,
                                   const md_t*    n,
                                   const md_t*    k,
@@ -101,26 +102,26 @@ lpgemm_write_logger_time_break_fn(FILE* fd, double stime);
 
 #define LPGEMM_WRITE_LOGGER(...) lpgemm_write_logger_gemm_fn(fd, __VA_ARGS__);
 
-#define BATCH_LPGEMM_WRITE_LOGGER(op_type, order, transa, transb, batch_size,  \
-                                  m, n, k, alpha, lda, mem_format_a, ldb,      \
-                                  mem_format_b, beta, ldc, post_op_unparsed)   \
+#define BATCH_LPGEMM_WRITE_LOGGER(                                             \
+    op_type, order, transa, transb, group_count, group_size, m, n, k, alpha,   \
+    lda, mem_format_a, ldb, mem_format_b, beta, ldc, post_op_unparsed)         \
     {                                                                          \
         if ((is_logger_enabled()) && (fd != NULL)) {                           \
             char pre_ops_str[1024] = { 0 };                                    \
                                                                                \
             char post_ops_str[2048] = { 0 };                                   \
                                                                                \
-            fprintf(fd, "%s:bs=%ld\n", op_type, batch_size);                   \
-            for (md_t i = 0; i < batch_size; i++) {                            \
+            fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);         \
+            for (md_t i = 0; i < group_count; i++) {                           \
                 lpgemm_get_pre_ops_str(post_op_unparsed[i], pre_ops_str);      \
                 lpgemm_get_post_ops_str(post_op_unparsed[i], post_ops_str);    \
                 fprintf(fd,                                                    \
-                        "%c %c %c %c %c %ld %ld %ld %ld %ld %ld "              \
+                        "%ld %c %c %c %c %c %ld %ld %ld %ld %ld %ld "          \
                         ":pre_ops=[%s]:post_ops=[%s] %f %f\n",                 \
-                        order[i], transa[i], transb[i], mem_format_a[i],       \
-                        mem_format_b[i], m[i], n[i], k[i], lda[i], ldb[i],     \
-                        ldc[i], pre_ops_str, post_ops_str, (float)(alpha[i]),  \
-                        (float)(beta[i]));                                     \
+                        group_size[i], order[i], transa[i], transb[i],         \
+                        mem_format_a[i], mem_format_b[i], m[i], n[i], k[i],    \
+                        lda[i], ldb[i], ldc[i], pre_ops_str, post_ops_str,     \
+                        (float)(alpha[i]), (float)(beta[i]));                  \
             }                                                                  \
         }                                                                      \
     }

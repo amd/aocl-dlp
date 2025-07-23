@@ -94,8 +94,9 @@
         }                                                                      \
     }
 
-#define AOCL_BATCH_GEMM_CHECK(op_str, order, transa, transb, gemm_no, m, n, k, \
-                              a, lda, mtag_a, b, ldb, mtag_b, c, ldc, err_no)  \
+#define AOCL_BATCH_GEMM_CHECK(op_str, order, transa, transb, group_count,      \
+                              group_size, m, n, k, a, lda, mtag_a, b, ldb,     \
+                              mtag_b, c, ldc, err_no)                          \
     {                                                                          \
         int32_t info = 0;                                                      \
         bool    col_stored, row_stored;                                        \
@@ -149,6 +150,8 @@
             info = 17;                                                         \
         else if (col_stored && (ldc < m))                                      \
             info = 17;                                                         \
+        else if (group_count < 0 || group_size < 0)                            \
+            info = 18;                                                         \
                                                                                \
         if (info != 0) {                                                       \
             char print_msg[150];                                               \
@@ -156,7 +159,7 @@
             sprintf(print_msg,                                                 \
                     "** On entry to %6s, parameter number %2i of problem %ld " \
                     "had an illegal value",                                    \
-                    op_str, info, (long int)gemm_no);                          \
+                    op_str, info, (long int)group_count);                      \
             dlp_print_msg(print_msg, __FILE__, __LINE__);                      \
             err_no = info;                                                     \
         }                                                                      \

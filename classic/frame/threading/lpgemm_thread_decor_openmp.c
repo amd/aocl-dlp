@@ -45,7 +45,7 @@
 #define DLP_NUM_STATIC_COMMS 96
 
 DLP_INLINE void
-calculate_n_threads_per_gemm(md_t        batch_size,
+calculate_n_threads_per_gemm(md_t        group_size,
                              md_t*       n_threads,
                              md_t*       n_gemms_in_parallel,
                              md_t*       n_threads_per_gemm,
@@ -56,7 +56,7 @@ calculate_n_threads_per_gemm(md_t        batch_size,
     if (*n_threads == 1) {
         (*n_gemms_in_parallel) = 1;
     } else if (*n_gemms_in_parallel < 1) {
-        (*n_gemms_in_parallel) = dlp_min((*n_threads), batch_size);
+        (*n_gemms_in_parallel) = dlp_min((*n_threads), group_size);
     }
     /* ToDo: All the leftover thrads might go under-utilized. Could be optimized
      * further. */
@@ -312,7 +312,7 @@ lpgemm_s32o32_get_threading(md_t*               n_threads,
 }
 
 DLP_INLINE void
-batch_lpgemm_s32o32_get_threading(md_t                batch_size,
+batch_lpgemm_s32o32_get_threading(md_t                group_size,
                                   md_t*               n_threads,
                                   md_t*               n_gemms_in_parallel,
                                   md_t*               n_threads_per_gemm,
@@ -325,7 +325,7 @@ batch_lpgemm_s32o32_get_threading(md_t                batch_size,
                                   AOCL_OPERATION_TYPE op_type)
 {
 
-    calculate_n_threads_per_gemm(batch_size, n_threads, n_gemms_in_parallel,
+    calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
                                  n_threads_per_gemm, rntm_g);
 
     if ((*n_threads_per_gemm) > 1) {
@@ -365,7 +365,7 @@ batch_lpgemm_s32o32_get_threading(md_t                batch_size,
 }
 
 DLP_INLINE void
-batch_lpgemm_u8s8s32o32_get_threading(md_t        batch_size,
+batch_lpgemm_u8s8s32o32_get_threading(md_t        group_size,
                                       md_t*       n_threads,
                                       md_t*       n_gemms_in_parallel,
                                       md_t*       n_threads_per_gemm,
@@ -377,12 +377,12 @@ batch_lpgemm_u8s8s32o32_get_threading(md_t        batch_size,
                                       dlp_rntm_t* rntm_g)
 {
     batch_lpgemm_s32o32_get_threading(
-        batch_size, n_threads, n_gemms_in_parallel, n_threads_per_gemm, ic_ways,
+        group_size, n_threads, n_gemms_in_parallel, n_threads_per_gemm, ic_ways,
         jc_ways, m, n, k, rntm_g, U8S8S32OS32);
 }
 
 DLP_INLINE void
-batch_lpgemm_s8s8s32o32_get_threading(md_t        batch_size,
+batch_lpgemm_s8s8s32o32_get_threading(md_t        group_size,
                                       md_t*       n_threads,
                                       md_t*       n_gemms_in_parallel,
                                       md_t*       n_threads_per_gemm,
@@ -394,7 +394,7 @@ batch_lpgemm_s8s8s32o32_get_threading(md_t        batch_size,
                                       dlp_rntm_t* rntm_g)
 {
     batch_lpgemm_s32o32_get_threading(
-        batch_size, n_threads, n_gemms_in_parallel, n_threads_per_gemm, ic_ways,
+        group_size, n_threads, n_gemms_in_parallel, n_threads_per_gemm, ic_ways,
         jc_ways, m, n, k, rntm_g, S8S8S32OS32);
 }
 
@@ -485,7 +485,7 @@ lpgemm_bf16bf16f32of32_get_threading(md_t*       n_threads,
 }
 
 DLP_INLINE void
-batch_lpgemm_bf16bf16f32of32_get_threading(md_t        batch_size,
+batch_lpgemm_bf16bf16f32of32_get_threading(md_t        group_size,
                                            md_t*       n_threads,
                                            md_t*       n_gemms_in_parallel,
                                            md_t*       n_threads_per_gemm,
@@ -497,7 +497,7 @@ batch_lpgemm_bf16bf16f32of32_get_threading(md_t        batch_size,
                                            dlp_rntm_t* rntm_g)
 {
 
-    calculate_n_threads_per_gemm(batch_size, n_threads, n_gemms_in_parallel,
+    calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
                                  n_threads_per_gemm, rntm_g);
 
     /* The user is not allowed to set ic_ways or jc_ways */
@@ -626,7 +626,7 @@ lpgemm_f32f32f32of32_get_threading(md_t*       n_threads,
 }
 
 DLP_INLINE void
-batch_lpgemm_f32f32f32of32_get_threading(md_t        batch_size,
+batch_lpgemm_f32f32f32of32_get_threading(md_t        group_size,
                                          md_t*       n_threads,
                                          md_t*       n_gemms_in_parallel,
                                          md_t*       n_threads_per_gemm,
@@ -638,7 +638,7 @@ batch_lpgemm_f32f32f32of32_get_threading(md_t        batch_size,
                                          dlp_rntm_t* rntm_g)
 {
 
-    calculate_n_threads_per_gemm(batch_size, n_threads, n_gemms_in_parallel,
+    calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
                                  n_threads_per_gemm, rntm_g);
 
     // Query the context for SUP limits.
@@ -852,14 +852,13 @@ GEN_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
 
 #define GEN_BATCH_LPGEMM_OPENMP_DECORATOR(A_type, B_type, C_type, LPGEMM_SFX)  \
     void batch_lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                  \
-        const md_t batch_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
         const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
         const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
-        const md_t* rs_c, const md_t* cs_c, const C_type* alpha,               \
-        const C_type* beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,          \
-        lpgemm_post_op(*post_op_list)[AOCL_MAX_POST_OPS],                      \
-        AOCL_STORAGE_TYPE c_downscale)                                         \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
+        lpgemm_post_op(*post_op_list), AOCL_STORAGE_TYPE c_downscale)          \
     {                                                                          \
         /* For now, Assuming all the problems in GEMM are of same size.        \
          * To-Do: optimize work distribution for case where a batch contains   \
@@ -874,7 +873,7 @@ GEN_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
                                                                                \
         /* Assuming all the problems in GEMM are of same size */               \
         batch_lpgemm_##LPGEMM_SFX##_get_threading(                             \
-            batch_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
+            group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
             &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g);                     \
                                                                                \
         dlp_task_comm_t  static_lpgemm_comms[DLP_NUM_STATIC_COMMS];            \
@@ -918,15 +917,15 @@ GEN_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
             dlp_task_id_t thrinfo;                                             \
             thrinfo.n_way   = n_gemms_in_parallel;                             \
             thrinfo.work_id = omp_get_thread_num() / n_threads_per_gemm;       \
-            dlp_thread_task_range(&thrinfo, batch_size, 1, FALSE, &gemm_start, \
+            dlp_thread_task_range(&thrinfo, group_size, 1, FALSE, &gemm_start, \
                                   &gemm_end);                                  \
                                                                                \
             for (md_t i = gemm_start; i < gemm_end; i++) {                     \
                 lpgemm_rowvar_##LPGEMM_SFX(                                    \
                     m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i], \
                     rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i],       \
-                    alpha[i], beta[i], &rntm_l, &thread, lcntx,                \
-                    post_op_list[i], c_downscale);                             \
+                    alpha, beta, &rntm_l, &thread, lcntx, post_op_list,        \
+                    c_downscale);                                              \
             }                                                                  \
         }                                                                      \
         if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
@@ -1084,14 +1083,13 @@ GEN_LPGEMM_OPENMP_DECORATOR_GRP(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 #define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_MP(A_type, B_type, C_type,           \
                                              LPGEMM_SFX, LPGEMM_PARENT_SFX)    \
     void batch_lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                  \
-        const md_t batch_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
         const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
         const md_t* cs_b, AOCL_MEMORY_TAG* mtag_b, C_type** c,                 \
-        const md_t* rs_c, const md_t* cs_c, const C_type* alpha,               \
-        const C_type* beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,          \
-        lpgemm_pre_op(*pre_op_list)[AOCL_MAX_PRE_OPS],                         \
-        lpgemm_post_op(*post_op_list)[AOCL_MAX_POST_OPS],                      \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
+        lpgemm_pre_op(*pre_op_list), lpgemm_post_op(*post_op_list),            \
         AOCL_STORAGE_TYPE c_downscale)                                         \
     {                                                                          \
         /* For now, Assuming all the problems in GEMM are of same size.        \
@@ -1107,7 +1105,7 @@ GEN_LPGEMM_OPENMP_DECORATOR_GRP(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                                                                                \
         /* Assuming all the problems in GEMM are of same size */               \
         batch_lpgemm_##LPGEMM_PARENT_SFX##_get_threading(                      \
-            batch_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
+            group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
             &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g);                     \
                                                                                \
         dlp_task_comm_t  static_lpgemm_comms[DLP_NUM_STATIC_COMMS];            \
@@ -1153,7 +1151,7 @@ GEN_LPGEMM_OPENMP_DECORATOR_GRP(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
             dlp_task_id_t thrinfo;                                             \
             thrinfo.n_way   = n_gemms_in_parallel;                             \
             thrinfo.work_id = omp_get_thread_num() / n_threads_per_gemm;       \
-            dlp_thread_task_range(&thrinfo, batch_size, 1, FALSE, &gemm_start, \
+            dlp_thread_task_range(&thrinfo, group_size, 1, FALSE, &gemm_start, \
                                   &gemm_end);                                  \
                                                                                \
             for (md_t i = gemm_start; i < gemm_end; i++) {                     \
@@ -1168,8 +1166,8 @@ GEN_LPGEMM_OPENMP_DECORATOR_GRP(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                 lpgemm_rowvar_##LPGEMM_SFX(                                    \
                     m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i], \
                     rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i],       \
-                    alpha[i], beta[i], &rntm_l, &thread, lcntx,                \
-                    pre_op_list[i], post_op_list[i], c_downscale);             \
+                    alpha, beta, &rntm_l, &thread, lcntx, pre_op_list,         \
+                    post_op_list, c_downscale);                                \
             }                                                                  \
         }                                                                      \
         if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
@@ -1451,14 +1449,13 @@ GEN_LPGEMM_DECORATOR2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 
 #define GEN_BATCH_LPGEMM_OPENMP_DECORATOR(A_type, B_type, C_type, LPGEMM_SFX)  \
     void batch_lpgemm_##LPGEMM_SFX##_thread_decorator(                         \
-        const md_t batch_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
         const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
         const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
-        const md_t* rs_c, const md_t* cs_c, const C_type* alpha,               \
-        const C_type* beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,          \
-        lpgemm_post_op(*post_op_list)[AOCL_MAX_POST_OPS],                      \
-        AOCL_STORAGE_TYPE c_downscale)                                         \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
+        lpgemm_post_op(*post_op_list), AOCL_STORAGE_TYPE c_downscale)          \
     {                                                                          \
         md_t n_threads = 1;                                                    \
                                                                                \
@@ -1480,14 +1477,13 @@ GEN_LPGEMM_DECORATOR2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         thread.jc_ways   = jc_ways;                                            \
         thread.comm      = cur_lpgemm_comm;                                    \
         md_t gemm_start  = 0;                                                  \
-        md_t gemm_end    = batch_size;                                         \
+        md_t gemm_end    = group_size;                                         \
                                                                                \
         for (md_t i = gemm_start; i < gemm_end; i++) {                         \
             lpgemm_rowvar_##LPGEMM_SFX(                                        \
                 m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i],     \
-                rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i], alpha[i], \
-                beta[i], rntm_g, &thread, lcntx, post_op_list[i],              \
-                c_downscale);                                                  \
+                rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i], alpha,    \
+                beta, rntm_g, &thread, lcntx, post_op_list, c_downscale);      \
         }                                                                      \
     }
 
@@ -1499,14 +1495,13 @@ GEN_BATCH_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
 #define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_MP(A_type, B_type, C_type,           \
                                              LPGEMM_SFX)                       \
     void batch_lpgemm_##LPGEMM_SFX##_thread_decorator(                         \
-        const md_t batch_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
         const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
         const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
-        const md_t* rs_c, const md_t* cs_c, const C_type* alpha,               \
-        const C_type* beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,          \
-        lpgemm_pre_op(*pre_op_list)[AOCL_MAX_PRE_OPS],                         \
-        lpgemm_post_op(*post_op_list)[AOCL_MAX_POST_OPS],                      \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
+        lpgemm_pre_op(*pre_op_list), lpgemm_post_op(*post_op_list),            \
         AOCL_STORAGE_TYPE c_downscale)                                         \
     {                                                                          \
         md_t n_threads = 1;                                                    \
@@ -1529,14 +1524,14 @@ GEN_BATCH_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
         thread.jc_ways   = jc_ways;                                            \
         thread.comm      = cur_lpgemm_comm;                                    \
         md_t gemm_start  = 0;                                                  \
-        md_t gemm_end    = batch_size;                                         \
+        md_t gemm_end    = group_size;                                         \
                                                                                \
         for (md_t i = gemm_start; i < gemm_end; i++) {                         \
             lpgemm_rowvar_##LPGEMM_SFX(                                        \
                 m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i],     \
-                rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i], alpha[i], \
-                beta[i], rntm_g, &thread, lcntx, pre_op_list[i],               \
-                post_op_list[i], c_downscale);                                 \
+                rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i], alpha,    \
+                beta, rntm_g, &thread, lcntx, pre_op_list, post_op_list,       \
+                c_downscale);                                                  \
         }                                                                      \
     }
 
