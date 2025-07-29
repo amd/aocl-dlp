@@ -52,8 +52,7 @@ unreorderb_nr64_s8s8s32os32_reference(lpgemm_obj_t*  b,
     md_t n    = b->width;
     md_t k    = b->length;
 
-    md_t k_updated = k;
-    k_updated += (k_updated & 0x3);
+    md_t k_updated = make_multiple_of_n(k, 4);
 
     md_t n_threads = rntm->num_threads;
     n_threads      = (n_threads > 0) ? n_threads : 1;
@@ -91,12 +90,11 @@ unreorderb_nr64_s8s8s32os32_reference(lpgemm_obj_t*  b,
             for (md_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
-                // k needs to be a multiple of 2 so that it can be used with
+                // k needs to be a multiple of 4 so that it can be used with
                 // dpbf instruction. Padding is added in cases this condition is
                 // not satisfied, and therefore the k offset used for
                 // packed/reordered buffer needs to be updated.
-                md_t kc0_updated = kc0;
-                kc0_updated += (kc0_updated & 0x3);
+                md_t kc0_updated = make_multiple_of_n(kc0, 4);
 
                 unpackb_nr64_s8_reference(
                     ((int8_t*)b_unreorder->storage.aligned_buffer)

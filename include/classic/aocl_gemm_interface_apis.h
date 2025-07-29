@@ -99,6 +99,7 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE_SYM_QUANT(s8s8s32os32_sym_quant);
         const md_t n, const md_t ldb)
 
 AOCL_GEMM_REORDER(float, f32f32f32of32);
+AOCL_GEMM_REORDER(float, f32f32f32of32_reference);
 AOCL_GEMM_REORDER(int8_t, u8s8s32os32);
 AOCL_GEMM_REORDER(bfloat16, bf16bf16f32of32);
 AOCL_GEMM_REORDER(bfloat16, bf16bf16f32of32_reference);
@@ -168,6 +169,7 @@ AOCL_GEMM_REORDER_MXP(float, bfloat16, f32obf16);
 
 AOCL_GEMM_UNREORDER(bfloat16, bf16bf16f32of32);
 AOCL_GEMM_UNREORDER(bfloat16, bf16bf16f32of32_reference);
+AOCL_GEMM_UNREORDER(float, f32f32f32of32_reference);
 AOCL_GEMM_UNREORDER(int8_t, s8s8s32os32_reference);
 
 /**
