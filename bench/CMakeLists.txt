@@ -24,13 +24,36 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# Include required cmake modules
-# No need to redefine CMake version as it's inherited from parent
-
-# Since the root CMakeLists.txt already includes the necessary modules,
-# we don't need to include them again here.
-
-# Add subdirectories
+# Add classic benchmarks, not depending on google benchmark
 add_subdirectory(classic)
 
-message(STATUS "Bench directory added to build")
+# Include dlp and utils headers
+set(BENCH_INCLUDE_DIRS
+    ${PROJECT_SOURCE_DIR}/tests/include
+    ${PROJECT_BINARY_DIR}/tests/classic
+)
+
+# Fetch google benchmark
+fetch_benchmark()
+
+# Fetch yaml-cpp for test configuration
+fetch_yaml_cpp()
+
+# Collect framework source files
+dlp_glob_sources_recursive(FRAMEWORK_SOURCES "${PROJECT_SOURCE_DIR}/tests/framework")
+
+# Collect ref source files
+dlp_glob_sources_recursive(ADAPTORS_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors")
+
+# Collect benchmark source files
+dlp_glob_sources(OUTPUT BENCHMARK_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+
+foreach(benchmark_source ${BENCHMARK_SOURCES})
+    get_filename_component(benchmark_name ${benchmark_source} NAME_WE)
+    dlp_add_benchmark(
+        NAME ${benchmark_name}
+        SOURCES ${benchmark_source} ${FRAMEWORK_SOURCES} ${ADAPTORS_SOURCES}
+        DEPENDS yaml-cpp
+    )
+    dlp_set_global_compile_flags(${benchmark_name} VISIBILITY PUBLIC)
+endforeach()

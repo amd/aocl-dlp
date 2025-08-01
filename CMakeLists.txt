@@ -40,6 +40,7 @@ include(cmake/dlp_options.cmake)
 include(cmake/dlp_dependencies.cmake)
 include(cmake/dlp_documentation.cmake)
 include(cmake/dlp_testing.cmake)
+include(cmake/dlp_benchmark.cmake)
 include(cmake/dlp_sanitizers.cmake)
 
 # OS specific CMake modules goes here

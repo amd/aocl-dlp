@@ -27,13 +27,18 @@
  */
 
 #include "framework/ual_factory.hh"
+#include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
-#include "utils/yaml_parser.hh"
 
 #include <gtest/gtest.h>
 #include <iostream>
 
-using namespace dlp::testing;
+using namespace dlp::testing::utils;
+using dlp::testing::framework::Matrix;
+using dlp::testing::framework::MatrixLayout;
+using dlp::testing::framework::MatrixType;
+using dlp::testing::framework::UalFactory;
+using dlp::testing::framework::UALType;
 
 class ComprehensivePostOpsTest : public ::testing::Test
 {

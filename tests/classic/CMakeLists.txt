@@ -24,40 +24,18 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# Include dlp and utils headers
-set(TEST_INCLUDE_DIRS
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_BINARY_DIR}
-)
-
 # Create test config
-create_test_config()
-
-# Fetch gtest
-fetch_gtest()
-
-# Fetch yaml-cpp for test configuration
-fetch_yaml_cpp()
-
-# Collect utils source files
-dlp_glob_sources(OUTPUT UTILS_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/utils")
-
-# Collect framework source files
-dlp_glob_sources(OUTPUT FRAMEWORK_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/framework")
-
-# Collect ref source files
-dlp_glob_sources(OUTPUT REF_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/ref")
+create_test_config(${CMAKE_CURRENT_SOURCE_DIR}/configs ${CMAKE_CURRENT_SOURCE_DIR}/../include/test_config.hh.in ${CMAKE_CURRENT_BINARY_DIR}/test_config.hh)
 
 # Collect test source files
 dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
-# FIXME: Move testing related tests out of this directory
 # Add each test file as a separate test
 foreach(test_source ${TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
     dlp_add_test(
         NAME ${test_name}
-        SOURCES ${test_source} ${UTILS_SOURCES} ${FRAMEWORK_SOURCES} ${REF_SOURCES}
+        SOURCES ${test_source} ${ADAPTORS_SOURCES} ${FRAMEWORK_SOURCES}
         INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
         DEPENDS yaml-cpp
     )

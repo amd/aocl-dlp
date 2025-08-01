@@ -33,9 +33,9 @@
 #include "framework/operation.hh"
 #include "framework/ual.hh"
 #include "framework/ual_factory.hh"
+#include "framework/utils/arg_parser.hh"
+#include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
-#include "utils/arg_parser.hh"
-#include "utils/yaml_parser.hh"
 
 #include <algorithm>
 #include <filesystem>
@@ -47,9 +47,9 @@
 #include <string>
 #include <vector>
 
-using namespace dlp::testing;
-using dlp::testing::IUal;
-using dlp::testing::UalFactory;
+using namespace dlp::testing::utils;
+using namespace dlp::testing::framework;
+using namespace dlp::testing::framework::postops;
 
 // ============================================================================
 // GLOBAL CONFIGURATION VARIABLES
@@ -1020,13 +1020,13 @@ TEST(GEMMTest, PostOpsIntegration)
     auto operation_dlp = OperationFactory::createOperation(UALType::DLP);
 
     // Add a ReLU operation
-    auto relu_dlp = postops::createRelu().build();
+    auto relu_dlp = createRelu().build();
     operation_dlp->addOperation(std::move(relu_dlp));
 
     // Add a bias operation
     auto bias_dlp =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_dlp = postops::createBias().setBias(bias_dlp).build();
+    auto biasOp_dlp = createBias().setBias(bias_dlp).build();
     operation_dlp->addOperation(std::move(biasOp_dlp));
 
     // Finalize the operations
@@ -1043,13 +1043,13 @@ TEST(GEMMTest, PostOpsIntegration)
     auto operation_ref = OperationFactory::createOperation(UALType::REF);
 
     // Add a ReLU operation
-    auto relu_ref = postops::createRelu().build();
+    auto relu_ref = createRelu().build();
     operation_ref->addOperation(std::move(relu_ref));
 
     // Add a bias operation
     auto bias_ref =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_ref = postops::createBias().setBias(bias_ref).build();
+    auto biasOp_ref = createBias().setBias(bias_ref).build();
     operation_ref->addOperation(std::move(biasOp_ref));
 
     // Finalize the operations
@@ -1083,23 +1083,23 @@ TEST(GEMMTest, PostOpsBuilderPattern)
     // Test the builder pattern for different operations
 
     // Test ReLU builder
-    auto relu = postops::createRelu().build();
+    auto relu = createRelu().build();
     EXPECT_EQ(relu->getType(), OperationType::ElementWise);
 
     // Test Bias builder
     auto bias   = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f });
-    auto biasOp = postops::createBias().setBias(bias).build();
+    auto biasOp = createBias().setBias(bias).build();
     EXPECT_EQ(biasOp->getType(), OperationType::Bias);
 
     // Test Scale builder
     auto scale   = Matrix::scalar(2.0f);
-    auto scaleOp = postops::createScale().setScaleFactor(scale).build();
+    auto scaleOp = createScale().setScaleFactor(scale).build();
     EXPECT_EQ(scaleOp->getType(), OperationType::Sum);
 
     // Test Matrix Add builder
     auto matrix = Matrix::fromData(
         std::vector<std::vector<float>>{ { 1.0f, 2.0f }, { 3.0f, 4.0f } });
-    auto matAddOp = postops::createMatrixAdd().setMatrix(matrix).build();
+    auto matAddOp = createMatrixAdd().setMatrix(matrix).build();
     EXPECT_EQ(matAddOp->getType(), OperationType::MatAdd);
 
     // Test operation creation for different UAL types
@@ -1132,37 +1132,33 @@ TEST(GEMMTest, MultiplePostOpsOfSameType)
     auto operation = OperationFactory::createOperation(UALType::DLP);
 
     // Add multiple RELU operations
-    auto relu1 = postops::createRelu().build();
+    auto relu1 = createRelu().build();
     operation->addOperation(std::move(relu1));
 
-    auto relu2 = postops::createRelu().build();
+    auto relu2 = createRelu().build();
     operation->addOperation(std::move(relu2));
 
     // Add multiple BIAS operations
     auto bias1 =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp1 = postops::createBias().setBias(bias1).build();
+    auto biasOp1 = createBias().setBias(bias1).build();
     operation->addOperation(std::move(biasOp1));
 
     auto bias2 =
         Matrix::fromVector(std::vector<float>{ 0.5f, 1.0f, 1.5f, 2.0f });
-    auto biasOp2 = postops::createBias().setBias(bias2).build();
+    auto biasOp2 = createBias().setBias(bias2).build();
     operation->addOperation(std::move(biasOp2));
 
     // Add multiple SCALE operations (instead of SUM operations without scale
     // factors)
-    auto scale1   = Matrix::fromVector(std::vector<float>{ 1.5f });
-    auto scaleOp1 = postops::createScale()
-                        .setScaleFactor(scale1)
-                        .setIsPowerOf2(true)
-                        .build();
+    auto scale1 = Matrix::fromVector(std::vector<float>{ 1.5f });
+    auto scaleOp1 =
+        createScale().setScaleFactor(scale1).setIsPowerOf2(true).build();
     operation->addOperation(std::move(scaleOp1));
 
-    auto scale2   = Matrix::fromVector(std::vector<float>{ 2.0f });
-    auto scaleOp2 = postops::createScale()
-                        .setScaleFactor(scale2)
-                        .setIsPowerOf2(false)
-                        .build();
+    auto scale2 = Matrix::fromVector(std::vector<float>{ 2.0f });
+    auto scaleOp2 =
+        createScale().setScaleFactor(scale2).setIsPowerOf2(false).build();
     operation->addOperation(std::move(scaleOp2));
 
     // Finalize the operations
@@ -1206,11 +1202,11 @@ TEST(GEMMTest, DebugMultipleOps)
     auto operation = OperationFactory::createOperation(UALType::DLP);
 
     std::cout << "Adding first RELU operation..." << std::endl;
-    auto relu1 = postops::createRelu().build();
+    auto relu1 = createRelu().build();
     operation->addOperation(std::move(relu1));
 
     std::cout << "Adding second RELU operation..." << std::endl;
-    auto relu2 = postops::createRelu().build();
+    auto relu2 = createRelu().build();
     operation->addOperation(std::move(relu2));
 
     std::cout << "Finalizing operations..." << std::endl;
@@ -1257,7 +1253,7 @@ TEST(GEMMTest, IsolateSegFault)
             std::cout << "Creating bias matrix..." << std::endl;
             auto bias1 = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f });
             std::cout << "Creating bias operation..." << std::endl;
-            auto biasOp1 = postops::createBias().setBias(bias1).build();
+            auto biasOp1 = createBias().setBias(bias1).build();
             std::cout << "Adding bias operation..." << std::endl;
             operation->addOperation(std::move(biasOp1));
 
@@ -1289,10 +1285,8 @@ TEST(GEMMTest, IsolateSegFault)
             std::cout << "Creating sum operation with scale factor..."
                       << std::endl;
             auto scale = Matrix::fromVector(std::vector<float>{ 1.5f });
-            auto sum1  = postops::createSum()
-                            .setScaleFactor(scale)
-                            .setIsPowerOf2(true)
-                            .build();
+            auto sum1 =
+                createSum().setScaleFactor(scale).setIsPowerOf2(true).build();
             std::cout << "Adding sum operation..." << std::endl;
             operation->addOperation(std::move(sum1));
 
@@ -1346,13 +1340,13 @@ TEST(GEMMTest, PostOpsComprehensiveComparison)
     auto operation_dlp = OperationFactory::createOperation(UALType::DLP);
 
     // Add ReLU operation to DLP
-    auto relu_dlp = postops::createRelu().build();
+    auto relu_dlp = createRelu().build();
     operation_dlp->addOperation(std::move(relu_dlp));
 
     // Add bias operation to DLP
     auto bias_dlp =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_dlp = postops::createBias().setBias(bias_dlp).build();
+    auto biasOp_dlp = createBias().setBias(bias_dlp).build();
     operation_dlp->addOperation(std::move(biasOp_dlp));
 
     operation_dlp->finalize();
@@ -1361,13 +1355,13 @@ TEST(GEMMTest, PostOpsComprehensiveComparison)
     auto operation_ref = OperationFactory::createOperation(UALType::REF);
 
     // Add ReLU operation to REF
-    auto relu_ref = postops::createRelu().build();
+    auto relu_ref = createRelu().build();
     operation_ref->addOperation(std::move(relu_ref));
 
     // Add bias operation to REF
     auto bias_ref =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_ref = postops::createBias().setBias(bias_ref).build();
+    auto biasOp_ref = createBias().setBias(bias_ref).build();
     operation_ref->addOperation(std::move(biasOp_ref));
 
     operation_ref->finalize();
@@ -1416,13 +1410,13 @@ TEST(GEMMTest, PostOpsUALTypeValidation)
 
     // Create DLP PostOps
     auto dlp_operation = OperationFactory::createOperation(UALType::DLP);
-    auto relu_dlp      = postops::createRelu().build();
+    auto relu_dlp      = createRelu().build();
     dlp_operation->addOperation(std::move(relu_dlp));
     dlp_operation->finalize();
 
     // Create REF PostOps
     auto ref_operation = OperationFactory::createOperation(UALType::REF);
-    auto relu_ref      = postops::createRelu().build();
+    auto relu_ref      = createRelu().build();
     ref_operation->addOperation(std::move(relu_ref));
     ref_operation->finalize();
 
@@ -1465,7 +1459,7 @@ int
 main(int argc, char** argv)
 {
     // Parse custom arguments before GoogleTest processes them
-    auto parser = dlp::testing::ArgParser::parseTestArgs(argc, argv);
+    auto parser = dlp::testing::utils::ArgParser::parseTestArgs(argc, argv);
 
     // Handle help request - show our custom help first, then let GoogleTest
     // show its help

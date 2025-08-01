@@ -25,91 +25,61 @@
 #
 
 include(FetchContent)
-include(GoogleTest)
 
-function(fetch_gtest)
+function(fetch_benchmark)
+    fetch_gtest()
+
     FetchContent_Declare(
-        gtest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG        v1.17.0
+        benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG        v1.9.4
     )
-
-    FetchContent_MakeAvailable(gtest)
+    FetchContent_MakeAvailable(benchmark)
 endfunction()
 
-function(create_test_config)
-    # Parameters
-    set(config_dir ${ARGV0})
-    set(config_input_header ${ARGV1})
-    set(config_output_header ${ARGV2})
-
-    # Current CONFIG DIR
-    set(TEST_CONFIG_DIR ${config_dir})
-
-    # Configure the file
-    configure_file(${config_input_header} ${config_output_header})
-endfunction()
-
-function(fetch_yaml_cpp)
-    FetchContent_Declare(
-        yaml-cpp
-        GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git
-        GIT_TAG        yaml-cpp-0.7.0
-        CMAKE_ARGS     -DYAML_CPP_BUILD_TESTS=OFF -DYAML_CPP_BUILD_TOOLS=OFF
-    )
-
-    FetchContent_MakeAvailable(yaml-cpp)
-endfunction()
-
-function(dlp_add_test)
+function(dlp_add_benchmark)
     # Parse arguments for the test function
     set(options DISABLED)
     set(oneValueArgs NAME)
     set(multiValueArgs SOURCES DEPENDS INCLUDE_DIRS)
 
-    cmake_parse_arguments(DLP_TEST "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+    cmake_parse_arguments(DLP_BENCH "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
     # Check if required arguments are provided
-    if(NOT DLP_TEST_NAME)
-        message(FATAL_ERROR "dlp_add_test: NAME argument is required")
+    if(NOT DLP_BENCH_NAME)
+        message(FATAL_ERROR "dlp_add_benchmark: NAME argument is required")
     endif()
 
-    if(NOT DLP_TEST_SOURCES)
+    if(NOT DLP_BENCH_SOURCES)
         message(FATAL_ERROR "dlp_add_test: SOURCES argument is required")
     endif()
 
     # Create test executable
-    add_executable(${DLP_TEST_NAME} ${DLP_TEST_SOURCES})
+    add_executable(${DLP_BENCH_NAME} ${DLP_BENCH_SOURCES})
 
     # Link with Google Test and the main project library
-    target_link_libraries(${DLP_TEST_NAME}
+    target_link_libraries(${DLP_BENCH_NAME}
         PRIVATE
-            gtest
-            gtest_main
+            benchmark
             ${PROJECT_NAME}
-            ${DLP_TEST_DEPENDS}
+            ${DLP_BENCH_DEPENDS}
     )
 
     # Add include directories - follow modern CMake target-based approach
-    target_include_directories(${DLP_TEST_NAME}
+    target_include_directories(${DLP_BENCH_NAME}
         PRIVATE
             ${CMAKE_SOURCE_DIR}/include
             ${CMAKE_BINARY_DIR}/include
-            ${DLP_TEST_INCLUDE_DIRS}
+            ${BENCH_INCLUDE_DIRS}
     )
 
     # Set compiler flags
-    dlp_set_global_compile_flags(${DLP_TEST_NAME})
-
-    # Add test to CTest
-    if(NOT DLP_TEST_DISABLED)
-        gtest_discover_tests(${DLP_TEST_NAME})
-    endif()
+    dlp_set_global_compile_flags(${DLP_BENCH_NAME})
 
 endfunction()
 
 # Example of adding a specific test with additional dependencies
-# dlp_add_test(
+# dlp_add_benchmark(
 #     NAME specific_feature_test
 #     SOURCES specific_feature_test.cc
 #     DEPENDS some_additional_dependency
@@ -117,7 +87,7 @@ endfunction()
 # )
 
 # Example of a disabled test
-# dlp_add_test(
+# dlp_add_benchmark(
 #     NAME disabled_test
 #     SOURCES disabled_test.cc
 #     INCLUDE_DIRS ${TEST_INCLUDE_DIRS}

@@ -24,4 +24,38 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+# Include dlp and utils headers
+set(TEST_INCLUDE_DIRS
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_BINARY_DIR}/classic
+)
+
+# Fetch gtest
+fetch_gtest()
+
+# Fetch yaml-cpp for test configuration
+fetch_yaml_cpp()
+
+# Collect framework source files
+dlp_glob_sources_recursive(FRAMEWORK_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/framework")
+
+# Collect ref source files
+dlp_glob_sources_recursive(ADAPTORS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/adaptors")
+
+# Collect test source files
+dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+
+# FIXME: Move testing related tests out of this directory
+# Add each test file as a separate test
+foreach(test_source ${TEST_SOURCES})
+    get_filename_component(test_name ${test_source} NAME_WE)
+    dlp_add_test(
+        NAME ${test_name}
+        SOURCES ${test_source} ${ADAPTORS_SOURCES} ${FRAMEWORK_SOURCES}
+        INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
+        DEPENDS yaml-cpp
+    )
+    dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
+endforeach()
+
 add_subdirectory(classic)

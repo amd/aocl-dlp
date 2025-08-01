@@ -29,10 +29,12 @@
 #include <gtest/gtest.h>
 #include <iostream>
 
+#include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
-#include "utils/yaml_parser.hh"
 
-using namespace dlp::testing;
+using namespace dlp::testing::utils;
+using dlp::testing::framework::MatrixLayout;
+using dlp::testing::framework::MatrixType;
 
 /*
    Test configurations which uses range and list type
