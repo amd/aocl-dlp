@@ -32,41 +32,6 @@
 #include "classic/aocl_gemm_post_ops.h"
 #include "lpgemm_types.h"
 
-typedef enum
-{
-    POST_OPS_DISABLE    = 0,
-    POST_OPS_BIAS       = 1,
-    POST_OPS_RELU       = 2,
-    POST_OPS_RELU_SCALE = 3,
-    POST_OPS_GELU_TANH  = 4,
-    POST_OPS_GELU_ERF   = 5,
-    POST_OPS_CLIP       = 6,
-    POST_OPS_DOWNSCALE  = 7,
-    POST_OPS_MATRIX_ADD = 8,
-    POST_OPS_SWISH      = 9,
-    POST_OPS_MATRIX_MUL = 10,
-    POST_OPS_TANH       = 11,
-    POST_OPS_SIGMOID    = 12,
-    POST_OPS_SUM        = 13
-
-} LPGEMM_POST_OP_CODE;
-
-// Used as an internal structure.
-typedef struct lpgemm_post_op_t
-{
-    uint64_t                 op_code;
-    void*                    op_args1; // zero_point, bias, sum_buff
-    void*                    op_args2; // alpha, storage order, sum_zero_point
-    void*                    op_args3; // beta, zero_point_len
-    void*                    scale_factor;
-    md_t                     scale_factor_len;
-    bool                     is_power_of_2;
-    uint64_t                 stor_type;
-    uint64_t                 zp_stor_type;
-    uint64_t                 sf_stor_type; // Introduced for sf store type
-    struct lpgemm_post_op_t* next;
-} lpgemm_post_op;
-
 // Used as an internal structure.
 typedef struct lpgemm_pre_op_t
 {
@@ -117,22 +82,6 @@ typedef struct lpgemm_group_post_op_t
     AOCL_STORAGE_TYPE              zp_stor_type;
     struct lpgemm_group_post_op_t* next;
 } lpgemm_group_post_op;
-
-// Used as an internal structure.
-typedef struct lpgemm_post_op_attr_t
-{
-    uint64_t post_op_c_i;
-    uint64_t post_op_c_j;
-    uint64_t rs_c_downscale;
-    uint64_t cs_c_downscale;
-    void*    buf_downscale;
-    uint64_t is_first_k;
-    uint64_t is_last_k;
-    uint64_t c_stor_type;
-    uint64_t b_sum_offset;
-    int32_t* b_col_sum_vec;
-    int16_t* b_col_sum_vec_s16;
-} lpgemm_post_op_attr;
 
 typedef struct lpgemm_pre_op_attr_t
 {

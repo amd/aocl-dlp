@@ -2078,7 +2078,7 @@ mat_mul_accuracy_check_accum_bf16s4f32obf16(
             }                                                                  \
                                                                                \
             /* Allocate scale buffer. */                                       \
-            md_t n_scale = 1; /* Support for vector will be added. */          \
+            md_t n_scale = n; /* Support for vector will be added. */          \
             (post_ops->matrix_add)->scale_factor =                             \
                 malloc(n_scale * sizeof(DSCALE_type));                         \
             if ((post_ops->matrix_add)->scale_factor == NULL) {                \
@@ -2200,7 +2200,7 @@ mat_mul_accuracy_check_accum_bf16s4f32obf16(
             }                                                                  \
                                                                                \
             /* Allocate scale buffer. */                                       \
-            md_t n_scale = 1; /* Support for vector will be added. */          \
+            md_t n_scale = n; /* Support for vector will be added. */          \
             (post_ops->matrix_mul)->scale_factor =                             \
                 malloc(n_scale * sizeof(DSCALE_type));                         \
             if ((post_ops->matrix_mul)->scale_factor == NULL) {                \

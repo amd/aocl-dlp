@@ -29,6 +29,7 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "cpu_utils/cpu_features.hh"
@@ -54,7 +55,7 @@ class jitGeneratorBase
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes() = 0;
     virtual jitGeneratorError                          operator()(
         const kernel_frame::kernelInfo& kI) = 0;
-    virtual jitGeneratorBase* clone()                                = 0;
+    virtual std::unique_ptr<jitGeneratorBase> clone()                = 0;
 
     // TODO: Remove this once the JIT generator and execution code are
     // separated.

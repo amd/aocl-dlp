@@ -32,6 +32,7 @@
 #include <set>
 #include <string>
 
+#include "cpu_utils/cpu_features.hh"
 #include "kernel_register/kernel_dispatch_table.hh"
 #include "kernel_register/kernel_register_traits.hh"
 #include "kernels/kernel_base.hh"
@@ -190,6 +191,118 @@ class kernelRegister
     // 2D array of dispatch tables: vecKDTs[routine_type][datatype]
     std::vector<std::vector<KERN_DISPATCH_TABLE>> vecKDTs;
 
+    template<typename HASH_KEY_GETTER,
+             typename KEY_COMPARATOR,
+             typename KEY_TYPE,
+             typename VALUE_REPLACER>
+    [[nodiscard]] kernelFrameError registerKernel(
+        std::unique_ptr<kernels::kernelBase> _kB,
+        std::string&&                        kernelFamily,
+        kernelRoutineType                    kType)
+    {
+        if (!_kB) {
+            return kernelFrameError::failure;
+        }
+
+        // Check if the kernel is compatible with the CPU features.
+        std::vector<cpu_utils::isaFeature>& reqFeatures =
+            _kB->getIsaFeaturesForKernel();
+        auto hasFeatures =
+            cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeatures);
+        if (!hasFeatures) {
+            return kernelFrameError::failure;
+        }
+
+        kernels::kernelBase*         kB      = _kB.release();
+        kernelInfo*                  kI      = kB->getKernelInfo();
+        std::vector<kernelDatatype>& kDTypes = kB->getKernelDatatypes();
+
+        auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
+        for (auto ele : kDTypes) {
+            auto idx = utils::getUnderlyingValueOfEnum(ele);
+            static_cast<void>(
+                vecKDTs[routineIdx][idx]
+                    .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
+                                     VALUE_REPLACER>(kI, kB));
+        }
+
+        return kernelFrameError::success;
+    }
+
+    template<typename HASH_KEY_GETTER,
+             typename KEY_COMPARATOR,
+             typename KEY_TYPE,
+             typename VALUE_REPLACER>
+    [[nodiscard]] kernelBaseRef registerAndGetKernel(
+        std::unique_ptr<kernels::kernelBase> _kB,
+        std::string&&                        kernelFamily,
+        kernelRoutineType                    kType,
+        kernelDatatype                       kDtype)
+    {
+        if (!_kB) {
+            return kernelBaseRef(nullptr);
+        }
+
+        // Check if the kernel is compatible with the CPU features.
+        std::vector<cpu_utils::isaFeature>& reqFeatures =
+            _kB->getIsaFeaturesForKernel();
+        auto hasFeatures =
+            cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeatures);
+        if (!hasFeatures) {
+            return kernelBaseRef(nullptr);
+        }
+
+        kernels::kernelBase* kB = _kB.release();
+
+        kernelInfo* kI = kB->getKernelInfo();
+
+        auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
+        auto idx        = utils::getUnderlyingValueOfEnum(kDtype);
+
+        // Safe to cast the voidFunctorPtr to kernelBase* because it is
+        // guaranteed that kernelBase* was typecasted to voidFunctorPtr in
+        // insert operation.
+        auto kernPtr = reinterpret_cast<kernels::kernelBase*>(
+            vecKDTs[routineIdx][idx]
+                .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
+                                 VALUE_REPLACER>(kI, kB));
+
+        if (!kernPtr) {
+            // TODO: Add logging here.
+            return kernelBaseRef(nullptr);
+        }
+
+        return kernelBaseRef(kernPtr);
+    }
+
+    template<typename HASH_KEY_GETTER,
+             typename KEY_COMPARATOR,
+             typename KEY_TYPE>
+    [[nodiscard]] kernelBaseRef getKernel(KEY_TYPE*         kI,
+                                          kernelRoutineType kType,
+                                          kernelDatatype    kDtype)
+    {
+        auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
+        auto dtypeIdx   = utils::getUnderlyingValueOfEnum(kDtype);
+
+        // Safe to cast the voidFunctorPtr to kernelBase* because it is
+        // guaranteed that kernelBase* was typecasted to voidFunctorPtr in
+        // insert operation.
+        auto kB = reinterpret_cast<kernels::kernelBase*>(
+            vecKDTs[routineIdx][dtypeIdx]
+                .template query<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE>(kI));
+
+        // Cannot throw an exception here because this function is called by the
+        // user and its not necessary to have the kernel inserted by the time
+        // query is called.
+        if (!kB) {
+            // TODO: Add logging here.
+            return kernelBaseRef(nullptr);
+        }
+
+        return kernelBaseRef(kB);
+    }
+
   public:
     /**
      * @brief Meyer's singleton instance accessor with thread-safe
@@ -225,7 +338,12 @@ class kernelRegister
      * kernelFrameError::failure otherwise
      */
     [[nodiscard]] kernelFrameError registerGemmKernel(
-        std::unique_ptr<kernels::kernelBase> _kB, std::string&& kernelFamily);
+        std::unique_ptr<kernels::kernelBase> _kB, std::string&& kernelFamily)
+    {
+        return registerKernel<gemmHashKeyGetter, gemmKeyComparator, kernelInfo,
+                              replacedKernelSink>(
+            std::move(_kB), std::move(kernelFamily), kernelRoutineType::gemm);
+    }
 
     /**
      * @brief Registers kernel and returns function pointer for specific
@@ -245,7 +363,13 @@ class kernelRegister
     [[nodiscard]] kernelBaseRef registerAndGetGemmKernel(
         std::unique_ptr<kernels::kernelBase> _kB,
         std::string&&                        kernelFamily,
-        kernelDatatype                       kDtype);
+        kernelDatatype                       kDtype)
+    {
+        return registerAndGetKernel<gemmHashKeyGetter, gemmKeyComparator,
+                                    kernelInfo, replacedKernelSink>(
+            std::move(_kB), std::move(kernelFamily), kernelRoutineType::gemm,
+            kDtype);
+    }
 
     /**
      * @brief Retrieves reference to registered GEMM kernel
@@ -261,7 +385,11 @@ class kernelRegister
      * found
      */
     [[nodiscard]] kernelBaseRef getGemmKernel(kernelInfo*    kI,
-                                              kernelDatatype kDtype);
+                                              kernelDatatype kDtype)
+    {
+        return getKernel<gemmHashKeyGetter, gemmKeyComparator, kernelInfo>(
+            kI, kernelRoutineType::gemm, kDtype);
+    }
 };
 
 constexpr inline std::size_t dlpKernelRegisterTableSize       = 200;

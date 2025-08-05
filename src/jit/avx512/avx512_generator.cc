@@ -40,7 +40,7 @@
 #include "avx512_generator.hh"
 #include "jit_register/jit_register.hh"
 
-using namespace Xbyak;
+namespace avx512gen::generator {
 
 void
 dump_jit_code(
@@ -103,17 +103,18 @@ jitAVX512::initializeParameters(bool addIrLoop)
     if (addIrLoop) {
         // Move A and C pointers to stack so
         // they can be accessed at the start or end of IR-loop
-        mov(regAPtr, ptr[stackPtr + offsetof(gemmParams, a)]);
-        mov(regMiter, ptr[stackPtr + offsetof(gemmParams, mIter)]);
+        mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
+        mov(regMiter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
 
     } else {
-        mov(regTmpAptr, ptr[stackPtr + offsetof(gemmParams, a)]);
+        mov(regTmpAptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
     }
-    mov(regCPtr, ptr[stackPtr + offsetof(gemmParams, c)]);
-    mov(regRsA, ptr[stackPtr + offsetof(gemmParams, rsA)]);
-    mov(regCsA, ptr[stackPtr + offsetof(gemmParams, csA)]);
-    mov(regRsB, ptr[stackPtr + offsetof(gemmParams, rsB)]);
-    mov(regRsC, ptr[stackPtr + offsetof(gemmParams, rsC)]);
+    mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
+    mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsA)]);
+    mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csA)]);
+    mov(regRsB, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsB)]);
+    mov(regRsC, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsC)]);
 
     lea(regRsA, ptr[regRsA * sizeof(aType)]);
     lea(regCsA, ptr[regCsA * sizeof(aType)]);
@@ -123,7 +124,7 @@ jitAVX512::initializeParameters(bool addIrLoop)
     mov(regTmpCptr, regCPtr);
 
     if (useMask) {
-        kmovw(k3, ptr[stackPtr + offsetof(gemmParams, maskF32)]);
+        kmovw(k3, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)]);
     }
 }
 
@@ -140,6 +141,7 @@ jitAVX512::BroadcastAFMAwithBZmm()
 {
     return dlp::jit::jitGeneratorError::notSupported;
 }
+
 template<typename aType, typename bType, typename accumType>
 dlp::jit::jitGeneratorError
 jitAVX512::kernelUnrollZmm(int unroll)
@@ -171,6 +173,7 @@ jitAVX512::storeResult()
 {
     return dlp::jit::jitGeneratorError::notSupported;
 }
+
 void
 jitAVX512::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 {
@@ -241,7 +244,6 @@ template<typename aType, typename bType, typename cType, typename accumType>
 dlp::jit::jitGeneratorError
 jitAVX512::generateIrLoop(generatorParams& params)
 {
-
     inLocalLabel();
     // calculate and load pointers
     if (params.mLoop) {
@@ -250,13 +252,13 @@ jitAVX512::generateIrLoop(generatorParams& params)
         // they can be accessed at the start or end of IR-loop
         mov(regTmpAptr, regAPtr);
     }
-    mov(regBptr, ptr[stackPtr + offsetof(gemmParams, b)]);
+    mov(regBptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
 
     // zero out accumulators
     regInitZmm();
 
     // Generate K-loop
-    mov(regKIter, ptr[stackPtr + offsetof(gemmParams, kIter)]);
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIter)]);
     test(regKIter, regKIter);
     je(".BCONSIDKLEFT", T_NEAR);
 
@@ -269,7 +271,7 @@ jitAVX512::generateIrLoop(generatorParams& params)
 
     L(".BCONSIDKLEFT");
     // load k_left
-    mov(regKIter, ptr[stackPtr + offsetof(gemmParams, kLeft)]);
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
     test(regKIter, regKIter);
     je(".BPOSTACCUM", T_NEAR);
 
@@ -295,10 +297,24 @@ jitAVX512::generateIrLoop(generatorParams& params)
     // convert acc type to post-op type
     RETURN_IF_ERROR((cvtAccToFloat<accumType>()));
 
-    // // check if is_last_k is set
-    // mov(regTmp1, ptr[stackPtr + offsetof(gemmParams, postOpsAttr) +
-    // offsetof(lpgemm_post_op_attr, is_last_k)]); test(regTmp1, regTmp1);
-    // je(label_store_result, T_NEAR);
+    // check if is_last_k is set
+    mov(regTmp1,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+    test(regTmp1, regTmp1);
+    je(label_store_result, T_NEAR);
+
+    // Create and set up kernelOphandler if there are post-ops
+    if (!params.kernelOps.empty()) {
+        kernelOpHandler kernelOpHandler(this, MR, NR, useMask, cRegIdx, cReg);
+
+        kernelOpHandler.generatekernelOps(params.kernelOps, stackPtr);
+
+        // The gelu constants are embedded within the generated JIT kernel.
+        // Otherwise a bug was observed whereby the address of gelu constants
+        // inside the class turned out to be beyond what JIT can access.
+        kernelOpHandler.generateTableStores();
+    }
 
     L(label_store_result);
     // store C
@@ -307,9 +323,20 @@ jitAVX512::generateIrLoop(generatorParams& params)
     if (params.mLoop) {
         // get A pointer from stack
         // add psA to A pointer
-        mov(regTmp1, ptr[stackPtr + offsetof(gemmParams, psA)]);
+        mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(aType)]);
         lea(regAPtr, ptr[regAPtr + regTmp1]);
+
+        // Update post_op_attr c_i. kernelOpsAttr is not a pointer, so adding
+        // two offsets at the same time is safe.
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        add(regTmp1, MR);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+            regTmp1);
+
         moveCPtr();
 
         // decrement m_iter
@@ -319,6 +346,7 @@ jitAVX512::generateIrLoop(generatorParams& params)
     }
     vzeroupper();
     outLocalLabel();
+
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -329,11 +357,11 @@ struct kernel_types;
 template<>
 struct kernel_types<dlp::kernel_frame::kernelDatatype::f32f32f32of32>
 {
-    using aType      = float;
-    using bType      = float;
-    using cType      = float;
-    using accumType  = float;
-    using postOpType = float;
+    using aType        = float;
+    using bType        = float;
+    using cType        = float;
+    using accumType    = float;
+    using kernelOpType = float;
 };
 
 // Template function that takes the datatype as a template parameter
@@ -362,6 +390,8 @@ jitAVX512::generateKernel(generatorParams& params)
     // pointers, strides, counters, etc.
     // Note that all the scratch registers allocated by the stack frame
     // need not be used by the kernel.
+    // Putting inside a scope so that some tables can be generated post
+    // the ret instr. StackFrame inserts a ret instr in its destructor.
     Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
     initializeStackFrame(stackFrame);
     initializeParameters<aType, bType, cType>(params.mLoop);
@@ -433,20 +463,21 @@ jitAVX512::scaleAlpha<float>()
 {
     int          alphaRegIdx = aRegIdx;
     Xbyak::Reg64 alphaReg    = regTmp1;
-    mov(alphaReg, ptr[stackPtr + offsetof(gemmParams, alpha)]);
+    mov(alphaReg, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, alpha)]);
     vbroadcastss(Zmm(alphaRegIdx), ptr[alphaReg]);
     for (int i = 0; i < cReg; i++) {
         vmulps(Zmm(cRegIdx + i), Zmm(cRegIdx + i), Zmm(alphaRegIdx));
     }
     return dlp::jit::jitGeneratorError::success;
 }
+
 template<>
 dlp::jit::jitGeneratorError
 jitAVX512::scaleBeta<float, float>()
 {
     Xbyak::Reg64 betaReg    = regTmp1;
     int          betaRegIdx = aRegIdx;
-    mov(betaReg, ptr[stackPtr + offsetof(gemmParams, beta)]);
+    mov(betaReg, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
     vbroadcastss(Zmm(betaRegIdx), ptr[betaReg]);
     for (int i = 0; i < MR; i++) {
         for (int j = 0; j < bFullReg; j++) {
@@ -511,7 +542,10 @@ jitAVX512FP32::generateAllKernels(const dlp::kernel_frame::kernelInfo& ji)
     generatorParams params(0, 0, ji.k_unroll, false, false, ji.is_beta_zero,
                            ji.is_alpha_one);
 
-    // params.postOps  = ji.postOps;
+    for (std::size_t ii = 0; ii < ji.kOpsArrSize; ++ii) {
+        // Copy the kernelOps from the kernelInfo to params
+        params.kernelOps.push_back(ji.kOpsArr[ii]);
+    }
 
     // Generate all kernels for the given MR and NR
     for (int mr = 0; mr < numMRVariants; mr++) {
@@ -550,10 +584,10 @@ jitAVX512FP32::generateAllKernels(const dlp::kernel_frame::kernelInfo& ji)
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
-
-            // dump_jit_code(kernelCodeBlocks[mr * numNRVariants + nr],
-            //               JIT_KERNEL_SIZE, "jit_kernel", params.MR,
-            //               params.NR);
+#ifdef DLP_DUMP_JIT_CODE
+            dump_jit_code(kernelCodeBlocks[mr * numNRVariants + nr],
+                          JIT_KERNEL_SIZE, "jit_kernel", params.MR, params.NR);
+#endif
         }
     }
 
@@ -574,7 +608,7 @@ cleanup:
     return err;
 }
 
-kernelError
+dlp::kernels::kernelError
 jitAVX512FP32::executeKernel(dlp::kernels::kernelParams* _params)
 {
     auto params = static_cast<dlp::kernels::gemmParams*>(_params);
@@ -599,8 +633,7 @@ jitAVX512FP32::executeKernel(dlp::kernels::kernelParams* _params)
     md_t m = params->m;
     md_t k = params->k;
 
-    // md_t c_i = params->postOpsAttr.post_op_c_i;
-
+    md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
     while (n) {
         int n_idx = n / numElemsPerReg;
         int nElemsProcessing =
@@ -609,27 +642,19 @@ jitAVX512FP32::executeKernel(dlp::kernels::kernelParams* _params)
         params->c       = c_jr;
         params->maskF32 = 0xFFFF >> (numElemsPerReg - nElemsProcessing);
 
-        // params->postOpsAttr.post_op_c_i = c_i;
-
         if (params->m >= MR) {
             params->mIter = mFullPieces;
             int m_idx     = 0;
             params->n     = nElemsProcessing;
 
-            // if (codeBlock != nullptr )
-            {
-                jit_kernel kernel = reinterpret_cast<jit_kernel>(
-                    kernelCodeBlocks[m_idx * numNRVariants + n_idx]);
-                kernel(params);
-            }
-
-            // kernel(&params);
+            jit_kernel kernel = reinterpret_cast<jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + n_idx]);
+            kernel(params);
         }
         if (mPartialPieces) {
             (params->a) = (float*)(params->a) + mFullPieces * params->psA;
             (params->c) = (float*)(params->c) + mFullPieces * MR * params->rsC;
-            // params->postOpsAttr.post_op_c_i += mFullPieces * MR;
-            int m_idx = mPartialPieces;
+            int m_idx   = mPartialPieces;
             {
                 jit_kernel kernel = reinterpret_cast<jit_kernel>(
                     kernelCodeBlocks[m_idx * numNRVariants + n_idx]);
@@ -640,10 +665,38 @@ jitAVX512FP32::executeKernel(dlp::kernels::kernelParams* _params)
         params->b = (float*)(params->b) + n_idx * numElemsPerReg;
         c_jr      = (float*)(c_jr) + n_idx * numElemsPerReg;
         n -= nElemsProcessing;
-        // params->postOpsAttr.post_op_c_j += nElemsProcessing;
+
+        // This is the case where a fringe is encountered, with the fringe
+        // itself composed of a part which is a multiple of numElemsPerReg
+        // and a part which is < numElemsPerReg.
+        (params->kernelOpsAttr).post_op_c_j += nElemsProcessing;
+
+        // The following line is necessary to ensure a subtle bug does not
+        // occur. Unlike the classic kernels where the kernelOpsAttr is passed
+        // by value to the fringe kernels, here it is kind of passed by
+        // reference, since the params ptr is the only kernel argument (inside
+        // which is the kernelOpsAttr). Since the while(n) loop can execute
+        // multiple times, any state variable, like post_op_c_i, if modified
+        // inside kernel, it needs to be reverted.
+        (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
     }
 
-    return kernelError::success;
+    return dlp::kernels::kernelError::success;
+}
+
+jitAVX512FP32::~jitAVX512FP32()
+{
+    for (auto& codeBlock : kernelCodeBlocks) {
+        if (codeBlock != nullptr) {
+#if DLP_OS_WINDOWS
+            VirtualFree(codeBlock, 0, MEM_RELEASE);
+#else
+            munmap(codeBlock, JIT_KERNEL_SIZE);
+#endif
+        }
+    }
 }
 
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAVX512FP32, "dlp_zen_jit");
+
+} // namespace avx512gen::generator

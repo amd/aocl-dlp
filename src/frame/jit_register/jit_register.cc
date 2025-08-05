@@ -34,8 +34,10 @@
 namespace dlp::jit {
 
 jitGeneratorFrameError
-jitGeneratorRegister::registerGemmJitGenerator(
-    std::unique_ptr<jitGeneratorBase> jitGen, std::string&& kernelFamily)
+jitGeneratorRegister::registerJitGenerator(
+    std::unique_ptr<jitGeneratorBase> jitGen,
+    std::string&&                     kernelFamily,
+    kernel_frame::kernelRoutineType   kType)
 {
     if (!jitGen) {
         return jit::jitGeneratorFrameError::failure;
@@ -55,8 +57,7 @@ jitGeneratorRegister::registerGemmJitGenerator(
     std::vector<kernel_frame::kernelDatatype>& kDTypes =
         jitGenPtr->getKernelDatatypes();
 
-    auto routineIdx =
-        utils::getUnderlyingValueOfEnum(kernel_frame::kernelRoutineType::gemm);
+    auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
     for (auto ele : kDTypes) {
         auto idx = utils::getUnderlyingValueOfEnum(ele);
         if (vecJITGenerators[routineIdx][idx].isOccupied.load(
@@ -93,9 +94,10 @@ jitGeneratorRegister::registerGemmJitGenerator(
 }
 
 jitGeneratorBaseRef
-jitGeneratorRegister::registerAndGetGemmJitGenerator(
+jitGeneratorRegister::registerAndGetJitGenerator(
     std::unique_ptr<jitGeneratorBase> jitGen,
     std::string&&                     kernelFamily,
+    kernel_frame::kernelRoutineType   kType,
     kernel_frame::kernelDatatype      kDtype)
 {
     if (!jitGen) {
@@ -113,9 +115,8 @@ jitGeneratorRegister::registerAndGetGemmJitGenerator(
 
     jitGeneratorBase* jitGenPtr = jitGen.release();
 
-    auto routineIdx =
-        utils::getUnderlyingValueOfEnum(kernel_frame::kernelRoutineType::gemm);
-    auto idx = utils::getUnderlyingValueOfEnum(kDtype);
+    auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
+    auto idx        = utils::getUnderlyingValueOfEnum(kDtype);
 
     if (vecJITGenerators[routineIdx][idx].isOccupied.load(
             std::memory_order_acquire)) {
@@ -149,11 +150,11 @@ jitGeneratorRegister::registerAndGetGemmJitGenerator(
 }
 
 jitGeneratorBaseRef
-jitGeneratorRegister::getGemmJitGenerator(kernel_frame::kernelDatatype kDtype)
+jitGeneratorRegister::getJitGenerator(kernel_frame::kernelRoutineType kType,
+                                      kernel_frame::kernelDatatype    kDtype)
 {
-    auto routineIdx =
-        utils::getUnderlyingValueOfEnum(kernel_frame::kernelRoutineType::gemm);
-    auto idx = utils::getUnderlyingValueOfEnum(kDtype);
+    auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
+    auto idx        = utils::getUnderlyingValueOfEnum(kDtype);
 
     if (vecJITGenerators[routineIdx][idx].isOccupied.load(
             std::memory_order_acquire)) {

@@ -26,73 +26,45 @@
  *
  */
 
-#ifndef CAPI_CPU_FEATURES_H
-#define CAPI_CPU_FEATURES_H
+#pragma once
 
-#include "classic/dlp_base_types.h"
-#include "classic/dlp_macros.h"
+#include <stack>
 
-DLP_BEGIN_EXTERN_C
+#include "jit/xbyak/xbyak.h"
 
-typedef enum
+namespace avx512gen::utils {
+
+template<typename REG_TYPE>
+class registerGuard
 {
-    DATAPATH_INVALID = -1,
-    DATAPATH_FP128,
-    DATAPATH_FP256,
-    DATAPATH_FP512
-} dlp_datapath_width;
+    Xbyak::CodeGenerator* jit;
+    std::stack<REG_TYPE>  regStack;
 
-typedef enum
-{
-    DLP_ARCH_ERROR = 0,
-    DLP_ARCH_GENERIC,
+  public:
+    registerGuard(Xbyak::CodeGenerator* _jit)
+        : jit{ _jit }
+    {
+    }
 
-    // AMD
-    DLP_ARCH_ZEN5,
-    DLP_ARCH_ZEN4,
-    DLP_ARCH_ZEN3,
-    DLP_ARCH_ZEN2,
-    DLP_ARCH_ZEN,
+    void saveRegister(REG_TYPE reg)
+    {
+        regStack.push(reg);
+        jit->push(reg);
+    }
 
-    DLP_NUM_ARCHS
-} dlp_arch_t;
+    ~registerGuard()
+    {
+        while (!regStack.empty()) {
+            auto tReg = regStack.top();
+            jit->pop(tReg);
+            regStack.pop();
+        }
+    }
 
-// API to check if AVX2 and FMA3 are supported or not on the current platform.
-bool
-dlp_cpuid_is_avx2fma3_supported(void);
+    registerGuard(registerGuard&)             = delete;
+    registerGuard(registerGuard&&)            = delete;
+    registerGuard& operator=(registerGuard&)  = delete;
+    registerGuard& operator=(registerGuard&&) = delete;
+};
 
-// API to check if AVX512 is supported or not on the current platform.
-bool
-dlp_cpuid_is_avx512_supported(void);
-
-// API to check if AVX512_VNNI is supported or not on the current platform.
-bool
-dlp_cpuid_is_avx512vnni_supported(void);
-
-// API to check if AVX512_bf16 is supported or not on the current platform.
-bool
-dlp_cpuid_is_avx512bf16_supported(void);
-
-// API to get FP/SIMD execition datapath width.
-uint32_t
-dlp_cpuid_query_fp_datapath(void);
-
-// API to check if cpu is zen5 arch.
-bool
-dlp_cpuid_is_similar_zen5_arch();
-
-// API to check if cpu is zen4 arch.
-bool
-dlp_cpuid_is_similar_zen4_arch();
-
-// API to check if cpu is zen arch.
-bool
-dlp_cpuid_is_similar_zen_arch();
-
-// API to get
-dlp_arch_t
-dlp_cpuid_query_arch_id(void);
-
-DLP_END_EXTERN_C
-
-#endif // CAPI_CPU_FEATURES_H
+} // namespace avx512gen::utils

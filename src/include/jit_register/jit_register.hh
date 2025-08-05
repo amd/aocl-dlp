@@ -175,6 +175,21 @@ class jitGeneratorRegister
     std::vector<jitGeneratorBase*> replacedJitGeneratorSink;
     std::mutex                     replacedJitGeneratorSinkMutex;
 
+    [[nodiscard]] jitGeneratorFrameError registerJitGenerator(
+        std::unique_ptr<jitGeneratorBase> jitGen,
+        std::string&&                     kernelFamily,
+        kernel_frame::kernelRoutineType   kType);
+
+    [[nodiscard]] jitGeneratorBaseRef registerAndGetJitGenerator(
+        std::unique_ptr<jitGeneratorBase> jitGen,
+        std::string&&                     kernelFamily,
+        kernel_frame::kernelRoutineType   kType,
+        kernel_frame::kernelDatatype      kDtype);
+
+    [[nodiscard]] jitGeneratorBaseRef getJitGenerator(
+        kernel_frame::kernelRoutineType kType,
+        kernel_frame::kernelDatatype    kDtype);
+
   public:
     /**
      * @brief Meyer's singleton instance accessor with thread-safe
@@ -211,7 +226,11 @@ class jitGeneratorRegister
      * error
      */
     [[nodiscard]] jitGeneratorFrameError registerGemmJitGenerator(
-        std::unique_ptr<jitGeneratorBase> jitGen, std::string&& kernelFamily);
+        std::unique_ptr<jitGeneratorBase> jitGen, std::string&& kernelFamily)
+    {
+        return registerJitGenerator(std::move(jitGen), std::move(kernelFamily),
+                                    kernel_frame::kernelRoutineType::gemm);
+    }
 
     /**
      * @brief Registers JIT generator and returns reference for specific
@@ -232,7 +251,12 @@ class jitGeneratorRegister
     [[nodiscard]] jitGeneratorBaseRef registerAndGetGemmJitGenerator(
         std::unique_ptr<jitGeneratorBase> jitGen,
         std::string&&                     kernelFamily,
-        kernel_frame::kernelDatatype      kDtype);
+        kernel_frame::kernelDatatype      kDtype)
+    {
+        return registerAndGetJitGenerator(
+            std::move(jitGen), std::move(kernelFamily),
+            kernel_frame::kernelRoutineType::gemm, kDtype);
+    }
 
     /**
      * @brief Retrieves reference to registered GEMM JIT generator
@@ -246,7 +270,10 @@ class jitGeneratorRegister
      * @return Smart pointer reference to JIT generator, or nullptr if not found
      */
     [[nodiscard]] jitGeneratorBaseRef getGemmJitGenerator(
-        kernel_frame::kernelDatatype kDtype);
+        kernel_frame::kernelDatatype kDtype)
+    {
+        return getJitGenerator(kernel_frame::kernelRoutineType::gemm, kDtype);
+    }
 };
 
 /**

@@ -1164,7 +1164,7 @@ dlp_lpgemm_jit::SIGMOID_AVX512_DEF(md_t reg)
 
     vbroadcastss(Zmm(const1), get_constant(gelu_consts_off, 6));
     vaddps(Zmm(q), Zmm(q), Zmm(const1));
-    vdivps(Zmm(reg), Zmm(q), Zmm(const1));
+    vdivps(Zmm(reg), Zmm(const1), Zmm(q));
 }
 
 void

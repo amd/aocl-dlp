@@ -65,7 +65,7 @@ class jitKernelAdapter : public kernels::kernelBase
         // a temporary solution to help with simulating a kernelRegister that is
         // under extreme load from too many kernels being registered.
         if ((shouldGenerateKernels) && (mJitGen)) {
-            auto ret = mJitGen(kI);
+            auto ret = mJitGen->operator()(kI);
             if (ret == jitGeneratorError::success) {
                 mIsJitGenerated = true;
             }
@@ -132,18 +132,17 @@ class jitKernelAdapter : public kernels::kernelBase
         // TODO: This is a temporary solution to get the kernelBase pointer from
         // the JIT generator. This is because the JIT generator now implements
         // both the jitGeneratorBase and kernelBase interfaces.
-        auto kbPtr = mJitGen.getPtr();
-        if (kbPtr) {
-            return kbPtr->executeKernel(kP);
+        if (mJitGen) {
+            return mJitGen->executeKernel(kP);
         }
 
         return kernels::kernelError::error;
     }
 
   private:
-    kernel_frame::kernelInfo mKernelInfo;
-    jitGeneratorBaseRef      mJitGen;
-    bool                     mIsJitGenerated;
+    kernel_frame::kernelInfo          mKernelInfo;
+    std::unique_ptr<jitGeneratorBase> mJitGen;
+    bool                              mIsJitGenerated;
 };
 
 } // namespace dlp::jit

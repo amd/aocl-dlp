@@ -32,25 +32,17 @@
 #include "jit/jit_generator_base.hh"
 #include "jit/xbyak/xbyak.h"
 #include "jit/xbyak/xbyak_util.h"
+#include "kernel_op_handler.hh"
 #include "kernels/kernel_base.hh"
 
 #include <cstdint>
 #include <vector>
 
-using namespace dlp::kernels;
+namespace avx512gen::generator {
 
-constexpr uint64_t JIT_KERNEL_SIZE = 4096;
+constexpr uint64_t JIT_KERNEL_SIZE = 8 * 4096;
 
-typedef void (*jit_kernel)(gemmParams*);
-
-// Error handling macro to reduce repetitive code
-#define RETURN_IF_ERROR(expr)                                                  \
-    do {                                                                       \
-        auto err = (expr);                                                     \
-        if (err != dlp::jit::jitGeneratorError::success) {                     \
-            return err;                                                        \
-        }                                                                      \
-    } while (0)
+typedef void (*jit_kernel)(dlp::kernels::gemmParams*);
 
 struct generatorParams
 {
@@ -63,6 +55,7 @@ struct generatorParams
     bool mLoop;        // This will be set to true only for the main kernel
     bool is_beta_zero; // skip beta scaling if beta is 0
     bool is_alpha_one; // skip alpha scaling if alpha is 1
+    std::vector<kernelOpsMetaData> kernelOps;
 
     generatorParams(md_t _MR,
                     md_t _NR,
@@ -127,6 +120,8 @@ class jitAVX512 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
+
+    Xbyak::Reg64 regkernelOpsList, regkernelOpsAttr;
 
     Xbyak::Label label_store_result;
 
@@ -195,8 +190,12 @@ class jitAVX512FP32 : public dlp::jit::jitGeneratorBase
                                 dlp::cpu_utils::isaFeature::avx512vl }
     {
     }
+
+    ~jitAVX512FP32();
+
     dlp::jit::jitGeneratorError generateAllKernels(
         const dlp::kernel_frame::kernelInfo& kI);
+
     dlp::jit::jitGeneratorError operator()(
         const dlp::kernel_frame::kernelInfo& kI) override
     {
@@ -214,9 +213,15 @@ class jitAVX512FP32 : public dlp::jit::jitGeneratorBase
         return mIsaFeaturesRequired;
     }
 
-    kernelError executeKernel(kernelParams* _params);
+    dlp::kernels::kernelError executeKernel(
+        dlp::kernels::kernelParams* _params);
 
-    jitGeneratorBase* clone() override { return new jitAVX512FP32(); }
+    std::unique_ptr<jitGeneratorBase> clone() override
+    {
+        return std::make_unique<jitAVX512FP32>();
+    }
 };
+
+} // namespace avx512gen::generator
 
 #endif // X86_JIT_FRAMEWORK_HPP

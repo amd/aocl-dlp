@@ -29,15 +29,83 @@
 #ifndef CAPI_KERNEL_FRAME_WRAPPERS_H
 #define CAPI_KERNEL_FRAME_WRAPPERS_H
 
-#include "classic/dlp_macros.h"
-
-DLP_BEGIN_EXTERN_C
-
-#include <stdint.h>
-
 #include "classic/aocl_gemm_post_ops.h"
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
+#include <stdint.h>
 
+// Enum to denote the storage data type (output matrix).
+// It is expected that the enum entries are in ascending order of
+// storage data type size.
+typedef enum
+{
+    S8   = 0,
+    U8   = 1,
+    S16  = 2,
+    U16  = 3,
+    BF16 = 4,
+    S32  = 5,
+    U32  = 6,
+    F32  = 7,
+    S64  = 8,
+    U64  = 9,
+    F64  = 10,
+    NONE = 11 // when we want to use default case.
+} AOCL_STORAGE_TYPE;
+
+// Post-ops codes.
+typedef enum
+{
+    POST_OPS_DISABLE    = 0,
+    POST_OPS_BIAS       = 1,
+    POST_OPS_RELU       = 2,
+    POST_OPS_RELU_SCALE = 3,
+    POST_OPS_GELU_TANH  = 4,
+    POST_OPS_GELU_ERF   = 5,
+    POST_OPS_CLIP       = 6,
+    POST_OPS_DOWNSCALE  = 7,
+    POST_OPS_MATRIX_ADD = 8,
+    POST_OPS_SWISH      = 9,
+    POST_OPS_MATRIX_MUL = 10,
+    POST_OPS_TANH       = 11,
+    POST_OPS_SIGMOID    = 12,
+    POST_OPS_SUM        = 13,
+    POST_OPS_MAX
+} LPGEMM_POST_OP_CODE;
+
+// Used as an internal structure.
+typedef struct lpgemm_post_op_t
+{
+    uint64_t                 op_code;
+    void*                    op_args1; // zero_point, bias, sum_buff
+    void*                    op_args2; // alpha, storage order, sum_zero_point
+    void*                    op_args3; // beta, zero_point_len
+    void*                    scale_factor;
+    md_t                     scale_factor_len;
+    bool                     is_power_of_2;
+    uint64_t                 stor_type;
+    uint64_t                 zp_stor_type;
+    uint64_t                 sf_stor_type; // Introduced for sf store type
+    struct lpgemm_post_op_t* next;
+} lpgemm_post_op;
+
+// Used as an internal structure.
+typedef struct lpgemm_post_op_attr_t
+{
+    uint64_t post_op_c_i;
+    uint64_t post_op_c_j;
+    uint64_t rs_c_downscale;
+    uint64_t cs_c_downscale;
+    void*    buf_downscale;
+    uint64_t is_first_k;
+    uint64_t is_last_k;
+    uint64_t c_stor_type;
+    uint64_t b_sum_offset;
+    int32_t* b_col_sum_vec;
+    int16_t* b_col_sum_vec_s16;
+} lpgemm_post_op_attr;
+
+// Type definitions that can be used by both C and C++ code
 typedef enum
 {
     DLP_KERNEL_INVALID = 0,
@@ -51,19 +119,14 @@ typedef enum
 
 typedef struct
 {
-    // Add kernel ops here
-    // The aocl post ops will be parsed to a internal representation
-    // and then this struct will be passed to the kernel
-} kernel_ops_t;
-
-typedef struct
-{
     kernel_datatype_t kDtype;
     md_t              mr;
     md_t              nr;
     void*             kernel_base;
-    // kernel_ops_t* kernel_ops;
 } dlp_kernel_hndl_t;
+
+// C linkage for function declarations only
+DLP_BEGIN_EXTERN_C
 
 dlp_kernel_hndl_t
 dlp_init_and_get_kernel_hndl(kernel_datatype_t kDtype,
@@ -72,27 +135,29 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t kDtype,
                              md_t              k,
                              void*             alpha,
                              void*             beta,
-                             aocl_post_op*     post_ops,
+                             lpgemm_post_op*   post_ops,
                              md_t              mr_hint,
                              md_t              nr_hint);
 
 void
-dlp_execute_kernel(dlp_kernel_hndl_t kernel_hndl,
-                   md_t              m,
-                   md_t              n,
-                   md_t              k,
-                   void*             A,
-                   md_t              rs_a,
-                   md_t              cs_a,
-                   md_t              ps_a,
-                   void*             B,
-                   md_t              rs_b,
-                   md_t              cs_b,
-                   void*             C,
-                   md_t              rs_c,
-                   md_t              cs_c,
-                   void*             alpha,
-                   void*             beta);
+dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
+                   md_t                m,
+                   md_t                n,
+                   md_t                k,
+                   void*               A,
+                   md_t                rs_a,
+                   md_t                cs_a,
+                   md_t                ps_a,
+                   void*               B,
+                   md_t                rs_b,
+                   md_t                cs_b,
+                   void*               C,
+                   md_t                rs_c,
+                   md_t                cs_c,
+                   void*               alpha,
+                   void*               beta,
+                   lpgemm_post_op*     post_ops_list,
+                   lpgemm_post_op_attr post_ops_attr);
 
 DLP_END_EXTERN_C
 

@@ -28,9 +28,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
 
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "classic/dlp_base_types.h"
+
 #include "cpu_utils/cpu_feature_list.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 
@@ -41,7 +44,7 @@ enum class kernelError
     success = 0,
     error,
     badInputParams,
-    badInputPostOps
+    badInputkernelOps
 };
 
 struct kernelParams
@@ -73,21 +76,26 @@ struct gemmParams : public kernelParams
     md_t     kLeft;
     uint16_t maskF32;
 
-    gemmParams(void* A,
-               void* B,
-               void* C_acc,
-               md_t  _m,
-               md_t  _n,
-               md_t  _k,
-               md_t  rs_a,
-               md_t  cs_a,
-               md_t  ps_a,
-               md_t  rs_b,
-               md_t  cs_b,
-               md_t  rs_c,
-               md_t  cs_c,
-               void* alpha_acc,
-               void* beta_acc)
+    lpgemm_post_op*     kernelOpsList;
+    lpgemm_post_op_attr kernelOpsAttr;
+
+    gemmParams(void*               A,
+               void*               B,
+               void*               C_acc,
+               md_t                _m,
+               md_t                _n,
+               md_t                _k,
+               md_t                rs_a,
+               md_t                cs_a,
+               md_t                ps_a,
+               md_t                rs_b,
+               md_t                cs_b,
+               md_t                rs_c,
+               md_t                cs_c,
+               void*               alpha_acc,
+               void*               beta_acc,
+               lpgemm_post_op*     kernelOpsList,
+               lpgemm_post_op_attr kernelOpsAttr)
         : a(A)
         , b(B)
         , c(C_acc)
@@ -107,6 +115,8 @@ struct gemmParams : public kernelParams
         , kIter(0)
         , kLeft(0)
         , maskF32(0)
+        , kernelOpsList(kernelOpsList)
+        , kernelOpsAttr(kernelOpsAttr)
     {
     }
 
@@ -130,6 +140,8 @@ struct gemmParams : public kernelParams
         , kIter(other.kIter)
         , kLeft(other.kLeft)
         , maskF32(other.maskF32)
+        , kernelOpsList(other.kernelOpsList)
+        , kernelOpsAttr(other.kernelOpsAttr)
     {
     }
 
@@ -153,30 +165,34 @@ struct gemmParams : public kernelParams
         , kIter(other.kIter)
         , kLeft(other.kLeft)
         , maskF32(other.maskF32)
+        , kernelOpsList(other.kernelOpsList)
+        , kernelOpsAttr(other.kernelOpsAttr)
     {
     }
 
     gemmParams& operator=(const gemmParams& other)
     {
-        a       = other.a;
-        b       = other.b;
-        c       = other.c;
-        m       = other.m;
-        n       = other.n;
-        k       = other.k;
-        rsA     = other.rsA;
-        csA     = other.csA;
-        psA     = other.psA;
-        rsB     = other.rsB;
-        csB     = other.csB;
-        rsC     = other.rsC;
-        csC     = other.csC;
-        alpha   = other.alpha;
-        beta    = other.beta;
-        mIter   = other.mIter;
-        kIter   = other.kIter;
-        kLeft   = other.kLeft;
-        maskF32 = other.maskF32;
+        a             = other.a;
+        b             = other.b;
+        c             = other.c;
+        m             = other.m;
+        n             = other.n;
+        k             = other.k;
+        rsA           = other.rsA;
+        csA           = other.csA;
+        psA           = other.psA;
+        rsB           = other.rsB;
+        csB           = other.csB;
+        rsC           = other.rsC;
+        csC           = other.csC;
+        alpha         = other.alpha;
+        beta          = other.beta;
+        mIter         = other.mIter;
+        kIter         = other.kIter;
+        kLeft         = other.kLeft;
+        maskF32       = other.maskF32;
+        kernelOpsList = other.kernelOpsList;
+        kernelOpsAttr = other.kernelOpsAttr;
         return *this;
     }
 
@@ -188,15 +204,16 @@ struct gemmParams : public kernelParams
 
     ~gemmParams()
     {
-        a       = nullptr;
-        b       = nullptr;
-        c       = nullptr;
-        alpha   = nullptr;
-        beta    = nullptr;
-        mIter   = 0;
-        kIter   = 0;
-        kLeft   = 0;
-        maskF32 = 0;
+        a             = nullptr;
+        b             = nullptr;
+        c             = nullptr;
+        alpha         = nullptr;
+        beta          = nullptr;
+        mIter         = 0;
+        kIter         = 0;
+        kLeft         = 0;
+        maskF32       = 0;
+        kernelOpsList = nullptr;
     }
 };
 

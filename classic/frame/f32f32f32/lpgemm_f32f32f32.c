@@ -580,9 +580,11 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
                     const md_t mc0_updated = ((mc0 + MR - 1) / MR) * MR;
                     mem_a_size_req         = sizeof(float) * mc0_updated * kc0;
 
-                    dlp_clsc_err_t ret_err;
-                    pack_a_buffer_f32f32f32of32 =
-                        dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
+                    if (pack_a_buffer_f32f32f32of32 == NULL) {
+                        dlp_clsc_err_t ret_err;
+                        pack_a_buffer_f32f32f32of32 =
+                            dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
+                    }
 
                     rs_a_use = 1;
                     cs_a_use = MR;
@@ -617,7 +619,8 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
                             (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
                             (float*)(b_use + (jr * ps_b_use)), rs_b_use,
                             cs_b_use, (c_use_ic + jr), rs_c, cs_c_use,
-                            (void*)&alpha, (void*)&beta0);
+                            (void*)&alpha, (void*)&beta0, post_op_list,
+                            post_ops_attr);
                     } else {
                         ker_ptr(mc0, nr0, kc0, (float*)a_use, rs_a_use,
                                 cs_a_use, ps_a_use,

@@ -60,9 +60,25 @@ enum class kernelDatatype : uint8_t
     max_kernel_datatypes
 };
 
+// Enum for individual datatypes (similar to AOCL_STORAGE_TYPE)
+enum class DataType : uint8_t
+{
+    invalid = 0,
+    s8,   // int8_t
+    u8,   // uint8_t
+    s16,  // int16_t
+    u16,  // uint16_t
+    bf16, // bfloat16
+    s32,  // int32_t
+    u32,  // uint32_t
+    f32,  // float
+    max_datatypes
+};
+
 enum class kernelOps : uint8_t
 {
-    bias = 0,
+    invalid = 0,
+    bias,
     geluTanh,
     geluErf,
     relu,
@@ -77,37 +93,48 @@ enum class kernelOps : uint8_t
     max_kernel_ops
 };
 
+// Enum for matrix storage format
+enum class storageFormat : uint8_t
+{
+    rowMajor = 0, // Row-major layout (C/C++ style)
+    colMajor = 1  // Column-major layout (Fortran style)
+};
+
 struct kernelOpsMetaData
 {
-    kernelOps      type;
-    kernelDatatype scaleFactorDt; // Data type of the scale factor
-    bool           scalarScaleFactorRequired;
-    bool           vectorScaleFactorRequired;
-    kernelDatatype zeroPointDt; // Data type of the zero point
-    bool           scalarZeroPointRequired;
-    bool           vectorZeroPointRequired;
-    kernelDatatype paramStorageDt; // Data type of the parameter storage
+    kernelOps     type;
+    DataType      scaleFactorDt; // Data type of the scale factor
+    bool          scalarScaleFactorRequired;
+    bool          vectorScaleFactorRequired;
+    DataType      zeroPointDt; // Data type of the zero point
+    bool          scalarZeroPointRequired;
+    bool          vectorZeroPointRequired;
+    DataType      paramStorageDt; // Data type of the parameter storage
+    storageFormat cMatFormat; // Storage format of the C matrix (row-major or
+                              // column-major)
 
     kernelOpsMetaData()
         : type(kernelOps::max_kernel_ops)
-        , scaleFactorDt(kernelDatatype::max_kernel_datatypes)
+        , scaleFactorDt(DataType::max_datatypes)
         , scalarScaleFactorRequired(false)
         , vectorScaleFactorRequired(false)
-        , zeroPointDt(kernelDatatype::max_kernel_datatypes)
+        , zeroPointDt(DataType::max_datatypes)
         , scalarZeroPointRequired(false)
         , vectorZeroPointRequired(false)
-        , paramStorageDt(kernelDatatype::max_kernel_datatypes)
+        , paramStorageDt(DataType::max_datatypes)
+        , cMatFormat(storageFormat::rowMajor)
     {
     }
 
-    kernelOpsMetaData(kernelOps      type,
-                      kernelDatatype _scaleFactorDt,
-                      bool           _scalarScaleFactorRequired,
-                      bool           _vectorScaleFactorRequired,
-                      kernelDatatype _zeroPointDt,
-                      bool           _scalarZeroPointRequired,
-                      bool           _vectorZeroPointRequired,
-                      kernelDatatype _paramStorageDt)
+    kernelOpsMetaData(kernelOps     type,
+                      DataType      _scaleFactorDt,
+                      bool          _scalarScaleFactorRequired,
+                      bool          _vectorScaleFactorRequired,
+                      DataType      _zeroPointDt,
+                      bool          _scalarZeroPointRequired,
+                      bool          _vectorZeroPointRequired,
+                      DataType      _paramStorageDt,
+                      storageFormat _CFormat)
         : type(type)
         , scaleFactorDt(_scaleFactorDt)
         , scalarScaleFactorRequired(_scalarScaleFactorRequired)
@@ -116,6 +143,7 @@ struct kernelOpsMetaData
         , scalarZeroPointRequired(_scalarZeroPointRequired)
         , vectorZeroPointRequired(_vectorZeroPointRequired)
         , paramStorageDt(_paramStorageDt)
+        , cMatFormat(_CFormat)
     {
     }
 
@@ -128,6 +156,7 @@ struct kernelOpsMetaData
         , scalarZeroPointRequired(other.scalarZeroPointRequired)
         , vectorZeroPointRequired(other.vectorZeroPointRequired)
         , paramStorageDt(other.paramStorageDt)
+        , cMatFormat(other.cMatFormat)
     {
     }
 
@@ -140,6 +169,7 @@ struct kernelOpsMetaData
         , scalarZeroPointRequired(other.scalarZeroPointRequired)
         , vectorZeroPointRequired(other.vectorZeroPointRequired)
         , paramStorageDt(other.paramStorageDt)
+        , cMatFormat(other.cMatFormat)
     {
     }
 
@@ -154,6 +184,7 @@ struct kernelOpsMetaData
             this->scalarZeroPointRequired   = other.scalarZeroPointRequired;
             this->vectorZeroPointRequired   = other.vectorZeroPointRequired;
             this->paramStorageDt            = other.paramStorageDt;
+            this->cMatFormat                = other.cMatFormat;
         }
         return *this;
     }
@@ -178,7 +209,8 @@ struct kernelOpsMetaData
             && (this->zeroPointDt == rhs.zeroPointDt)
             && (this->scalarZeroPointRequired == rhs.scalarZeroPointRequired)
             && (this->vectorZeroPointRequired == rhs.vectorZeroPointRequired)
-            && (this->paramStorageDt == rhs.paramStorageDt));
+            && (this->paramStorageDt == rhs.paramStorageDt)
+            && (this->cMatFormat == rhs.cMatFormat));
     }
 
     bool operator!=(const kernelOpsMetaData& rhs) const
