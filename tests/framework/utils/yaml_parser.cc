@@ -98,7 +98,9 @@ namespace dlp { namespace testing { namespace utils {
         }
 
         template<typename T>
-        TypeErasedIterator get_value(YAML::Node node)
+        TypeErasedIterator get_value(
+            YAML::Node node,
+            YieldType  yield_type = YieldType::CARTESIAN_PRODUCT)
         {
             // Special handling for enum types - no range support, only lists or
             // single values
@@ -111,8 +113,12 @@ namespace dlp { namespace testing { namespace utils {
                     }
                     return VectorIterable<MatrixType>(values).begin();
                 } else {
+                    // For SIMPLE_PRODUCT, single values should have infinite
+                    // extent to repeat across iterations
+                    bool report_inf = (yield_type == YieldType::SIMPLE_PRODUCT);
                     return ValueIterable<MatrixType>(
-                               stringToMatrixType(node.as<std::string>()))
+                               stringToMatrixType(node.as<std::string>()),
+                               report_inf)
                         .begin();
                 }
             } else if constexpr (std::is_same_v<T, MatrixLayout>) {
@@ -124,8 +130,12 @@ namespace dlp { namespace testing { namespace utils {
                     }
                     return VectorIterable<MatrixLayout>(values).begin();
                 } else {
+                    // For SIMPLE_PRODUCT, single values should be infinite to
+                    // extend
+                    bool report_inf = (yield_type == YieldType::SIMPLE_PRODUCT);
                     return ValueIterable<MatrixLayout>(
-                               stringToMatrixLayout(node.as<std::string>()))
+                               stringToMatrixLayout(node.as<std::string>()),
+                               report_inf)
                         .begin();
                 }
             } else if constexpr (std::is_same_v<T, MatrixTag>) {
@@ -137,8 +147,12 @@ namespace dlp { namespace testing { namespace utils {
                     }
                     return VectorIterable<MatrixTag>(values).begin();
                 } else {
+                    // For SIMPLE_PRODUCT, single values should be infinite to
+                    // extend
+                    bool report_inf = (yield_type == YieldType::SIMPLE_PRODUCT);
                     return ValueIterable<MatrixTag>(
-                               stringToMatrixTag(node.as<std::string>()))
+                               stringToMatrixTag(node.as<std::string>()),
+                               report_inf)
                         .begin();
                 }
             } else {
@@ -206,22 +220,28 @@ namespace dlp { namespace testing { namespace utils {
                     }
                 }
 
-                // Otherwise, treat as a single value
+                // Otherwise, for SIMPLE_PRODUCT, make single values have
+                // infinite extent to repeat across iterations
+                bool report_inf = (yield_type == YieldType::SIMPLE_PRODUCT);
                 if constexpr (std::is_same_v<T, md_t>) {
                     return ValueIterable<md_t>(
-                               static_cast<md_t>(node.as<int>()))
+                               static_cast<md_t>(node.as<int>()), report_inf)
                         .begin();
                 } else if constexpr (std::is_same_v<T, float>) {
-                    return ValueIterable<float>(node.as<float>()).begin();
+                    return ValueIterable<float>(node.as<float>(), report_inf)
+                        .begin();
                 } else if constexpr (std::is_same_v<T, double>) {
-                    return ValueIterable<double>(node.as<double>()).begin();
+                    return ValueIterable<double>(node.as<double>(), report_inf)
+                        .begin();
                 } else if constexpr (std::is_same_v<T, bool>) {
-                    return ValueIterable<bool>(node.as<bool>()).begin();
+                    return ValueIterable<bool>(node.as<bool>(), report_inf)
+                        .begin();
                 } else if constexpr (std::is_same_v<T, std::string>) {
-                    return ValueIterable<std::string>(node.as<std::string>())
+                    return ValueIterable<std::string>(node.as<std::string>(),
+                                                      report_inf)
                         .begin();
                 } else {
-                    return ValueIterable<T>(node.as<T>()).begin();
+                    return ValueIterable<T>(node.as<T>(), report_inf).begin();
                 }
             }
         }
@@ -275,65 +295,108 @@ namespace dlp { namespace testing { namespace utils {
         {
             TestCaseIterators iterators;
 
+            // Determine yield type for this test (used for ValueIterable
+            // behavior)
+            YieldType yield_type_for_parsing = m_yield_type; // default
+            if (node["product_type"]) {
+                auto        product_type_node = node["product_type"];
+                std::string product_type_str;
+
+                if (product_type_node.IsSequence()) {
+                    if (product_type_node.size() > 0) {
+                        product_type_str =
+                            product_type_node[0].as<std::string>();
+                    }
+                } else {
+                    product_type_str = product_type_node.as<std::string>();
+                }
+
+                if (product_type_str == "simple") {
+                    yield_type_for_parsing = YieldType::SIMPLE_PRODUCT;
+                } else if (product_type_str == "cartesian") {
+                    yield_type_for_parsing = YieldType::CARTESIAN_PRODUCT;
+                }
+            }
+
             // Required fields
-            iterators.a_type   = get_value<MatrixType>(node["a_type"]);
-            iterators.b_type   = get_value<MatrixType>(node["b_type"]);
-            iterators.c_type   = get_value<MatrixType>(node["c_type"]);
-            iterators.acc_type = get_value<MatrixType>(node["acc_type"]);
-            iterators.storage_format =
-                get_value<MatrixLayout>(node["storage_format"]);
-            iterators.m     = get_value<md_t>(node["m"]);
-            iterators.n     = get_value<md_t>(node["n"]);
-            iterators.k     = get_value<md_t>(node["k"]);
-            iterators.alpha = get_value<double>(node["alpha"]);
-            iterators.beta  = get_value<double>(node["beta"]);
+            iterators.a_type =
+                get_value<MatrixType>(node["a_type"], yield_type_for_parsing);
+            iterators.b_type =
+                get_value<MatrixType>(node["b_type"], yield_type_for_parsing);
+            iterators.c_type =
+                get_value<MatrixType>(node["c_type"], yield_type_for_parsing);
+            iterators.acc_type =
+                get_value<MatrixType>(node["acc_type"], yield_type_for_parsing);
+            iterators.storage_format = get_value<MatrixLayout>(
+                node["storage_format"], yield_type_for_parsing);
+            iterators.m = get_value<md_t>(node["m"], yield_type_for_parsing);
+            iterators.n = get_value<md_t>(node["n"], yield_type_for_parsing);
+            iterators.k = get_value<md_t>(node["k"], yield_type_for_parsing);
+            iterators.alpha =
+                get_value<double>(node["alpha"], yield_type_for_parsing);
+            iterators.beta =
+                get_value<double>(node["beta"], yield_type_for_parsing);
 
             // Optional fields with defaults
+            bool report_inf =
+                (yield_type_for_parsing == YieldType::SIMPLE_PRODUCT);
             if (node["lda"]) {
-                iterators.lda = get_value<md_t>(node["lda"]);
+                iterators.lda =
+                    get_value<md_t>(node["lda"], yield_type_for_parsing);
             } else {
                 // Default lda to m value - use the first value from m iterator
                 auto m_val = iterators.m.dereference();
                 iterators.lda =
-                    ValueIterable<md_t>(std::any_cast<md_t>(m_val)).begin();
+                    ValueIterable<md_t>(std::any_cast<md_t>(m_val), report_inf)
+                        .begin();
             }
 
             if (node["ldb"]) {
-                iterators.ldb = get_value<md_t>(node["ldb"]);
+                iterators.ldb =
+                    get_value<md_t>(node["ldb"], yield_type_for_parsing);
             } else {
                 // Default ldb to k value - use the first value from k iterator
                 auto k_val = iterators.k.dereference();
                 iterators.ldb =
-                    ValueIterable<md_t>(std::any_cast<md_t>(k_val)).begin();
+                    ValueIterable<md_t>(std::any_cast<md_t>(k_val), report_inf)
+                        .begin();
             }
 
             if (node["ldc"]) {
-                iterators.ldc = get_value<md_t>(node["ldc"]);
+                iterators.ldc =
+                    get_value<md_t>(node["ldc"], yield_type_for_parsing);
             } else {
                 // Default ldc to m value - use the first value from m iterator
                 auto m_val = iterators.m.dereference();
                 iterators.ldc =
-                    ValueIterable<md_t>(std::any_cast<md_t>(m_val)).begin();
+                    ValueIterable<md_t>(std::any_cast<md_t>(m_val), report_inf)
+                        .begin();
             }
 
-            iterators.trans_a = node["transA"]
-                                    ? get_value<bool>(node["transA"])
-                                    : ValueIterable<bool>(false).begin();
-            iterators.trans_b = node["transB"]
-                                    ? get_value<bool>(node["transB"])
-                                    : ValueIterable<bool>(false).begin();
+            iterators.trans_a =
+                node["transA"]
+                    ? get_value<bool>(node["transA"], yield_type_for_parsing)
+                    : ValueIterable<bool>(false, report_inf).begin();
+            iterators.trans_b =
+                node["transB"]
+                    ? get_value<bool>(node["transB"], yield_type_for_parsing)
+                    : ValueIterable<bool>(false, report_inf).begin();
 
             // New MatrixTag-based parsing
             // Simplified design: single MatrixTag per matrix
             // Both reorder and pack getters check the same MatrixTag value
             iterators.mtag_a =
                 node["mtagA"]
-                    ? get_value<MatrixTag>(node["mtagA"])
-                    : ValueIterable<MatrixTag>(MatrixTag::NONE).begin();
+                    ? get_value<MatrixTag>(node["mtagA"],
+                                           yield_type_for_parsing)
+                    : ValueIterable<MatrixTag>(MatrixTag::NONE, report_inf)
+                          .begin();
             iterators.mtag_b =
                 node["mtagB"]
-                    ? get_value<MatrixTag>(node["mtagB"])
-                    : ValueIterable<MatrixTag>(MatrixTag::NONE).begin();
+                    ? get_value<MatrixTag>(node["mtagB"],
+                                           yield_type_for_parsing)
+                    : ValueIterable<MatrixTag>(MatrixTag::NONE, report_inf)
+                          .begin();
 
             // Parse PostOps if present
             std::unique_ptr<PostOpsIterator> postops_iterator = nullptr;
@@ -343,7 +406,7 @@ namespace dlp { namespace testing { namespace utils {
                     postops_config.operations, postops_config.cartesian);
             }
 
-            return MicroTest(iterators, m_yield_type,
+            return MicroTest(iterators, yield_type_for_parsing,
                              std::move(postops_iterator));
         }
 
