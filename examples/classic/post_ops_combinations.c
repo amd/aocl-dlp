@@ -342,6 +342,8 @@ cleanup:
         if (post_ops->sum) {
             if (post_ops->sum->scale_factor)
                 free(post_ops->sum->scale_factor);
+            if (post_ops->sum->zero_point)
+                free(post_ops->sum->zero_point);
             free(post_ops->sum);
         }
         free(post_ops);
