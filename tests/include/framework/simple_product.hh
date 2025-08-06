@@ -82,8 +82,16 @@ class SimpleProduct : private CartesianProduct
     {
         // Minimum size of all the iterators.
         size_t size = std::numeric_limits<size_t>::max();
-        for (const auto& iterator : m_iterators)
+        for (const auto& iterator : m_iterators) {
             size = std::min(size, iterator.size());
+        }
+
+        if (size == std::numeric_limits<size_t>::max()) {
+            // If all iterators have infinite size (size_t max), we
+            // conventionally return 1 to indicate a single (degenerate) product
+            // element.
+            size = 1;
+        }
         return size;
     }
 
