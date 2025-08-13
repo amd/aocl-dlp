@@ -498,4 +498,59 @@ UalDlp::gemm(const Matrix&                      A,
     }
 }
 
+bool
+UalDlp::gemm(md_t         m,
+             md_t         n,
+             md_t         k,
+             void*        matA,
+             MatrixType   matA_type,
+             MatrixLayout matA_layout,
+             bool         matA_transposed,
+             md_t         matA_leadingDim,
+             void*        matB,
+             MatrixType   matB_type,
+             MatrixLayout matB_layout,
+             bool         matB_transposed,
+             md_t         matB_leadingDim,
+             void*        matC,
+             MatrixType   matC_type,
+             MatrixLayout matC_layout,
+             bool         matC_transposed,
+             md_t         matC_leadingDim,
+             MatrixType   accType,
+             double       alpha,
+             double       beta) const
+{
+    uint64_t type = encode_types(matA_type, matB_type, matC_type, accType);
+
+    char transA  = matA_transposed ? 't' : 'n';
+    char transB  = matB_transposed ? 't' : 'n';
+    char layoutA = matA_layout == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
+
+    // For benchmarking, assume normal memory format (no packing/reordering)
+    char memFormatA = 'n';
+    char memFormatB = 'n';
+
+    switch (type) {
+        case encode_types<MatrixType::f32, MatrixType::f32, MatrixType::f32,
+                          MatrixType::f32>(): {
+            // For f32 operations, alpha/beta are float type
+            float alpha_f32 = static_cast<float>(alpha);
+            float beta_f32  = static_cast<float>(beta);
+
+            aocl_gemm_f32f32f32of32(
+                layoutA, transA, transB, m, n, k, alpha_f32,
+                reinterpret_cast<float*>(matA), matA_leadingDim, memFormatA,
+                reinterpret_cast<float*>(matB), matB_leadingDim, memFormatB,
+                beta_f32, reinterpret_cast<float*>(matC), matC_leadingDim,
+                nullptr);
+
+            return true;
+        }
+
+        default:
+            return false;
+    }
+}
+
 } // namespace dlp::testing::classic

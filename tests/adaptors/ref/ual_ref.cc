@@ -643,6 +643,35 @@ UalRef::gemm(const Matrix&                      A,
     return true;
 }
 
+bool
+UalRef::gemm(md_t         m,
+             md_t         n,
+             md_t         k,
+             void*        matA,
+             MatrixType   matA_type,
+             MatrixLayout matA_layout,
+             bool         matA_transposed,
+             md_t         matA_leadingDim,
+             void*        matB,
+             MatrixType   matB_type,
+             MatrixLayout matB_layout,
+             bool         matB_transposed,
+             md_t         matB_leadingDim,
+             void*        matC,
+             MatrixType   matC_type,
+             MatrixLayout matC_layout,
+             bool         matC_transposed,
+             md_t         matC_leadingDim,
+             MatrixType   accType,
+             double       alpha,
+             double       beta) const
+{
+    // For now, this is a stub implementation that returns false
+    // indicating the operation is not supported in the reference implementation
+    // TODO: Implement reference GEMM logic if needed for benchmarking
+    return false;
+}
+
 // Helper methods for specific operations
 void
 UalRef::applyRelu(Matrix& matrix)

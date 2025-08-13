@@ -1,0 +1,78 @@
+# GEMM benchmarking configuration file
+gemm_tests:
+  # Basic test cases
+  - name: "small_matrix"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: true
+    # Non optional
+    m: [1, 10, 64]
+    n: [1, 10, 64]
+    k: [1, 10, 64]
+    alpha: [2.5, 0, -2.5]
+    beta: [2.5, 0, -2.5]
+    # Optional Params
+    lda: [10, 10, 64]
+    ldb: [10, 10, 64]
+    ldc: [10, 10, 64]
+    mtagA: ["none","pack","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+  - name: "medium_matrix"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: true
+    # Non optional
+    m: [160, 256, 512]
+    n: [160, 256, 512]
+    k: [160, 256, 512]
+    alpha: [2.5, 0, -2.5]
+    beta: [2.5, 0, -2.5]
+    # Optional Params
+    lda: [160, 512, 16000]
+    ldb: [160, 512, 16000]
+    ldc: [160, 512, 16000]
+    mtagA: ["none","pack","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+  - name: "large_matrix"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: true
+    # Non optional
+    m: [1000, 2048, 8192, 16000]
+    n: [1000, 2048, 8192, 16000]
+    k: [1000, 2048, 8192, 16000]
+    alpha: [2.5, 0, -2.5, 0]
+    beta: [2.5, 0, -2.5, 0]
+    # Optional Params
+    lda: 16000
+    ldb: 16000
+    ldc: 16000
+    mtagA: ["none","pack","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"

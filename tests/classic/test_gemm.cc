@@ -67,20 +67,19 @@ static std::string g_yaml_config_file = TEST_CONFIG_DIR
 // Configuration structure for YAML-driven tests
 struct GemmTestConfig
 {
-    std::string  name;
-    MatrixType   a_type, b_type, c_type, acc_type;
-    MatrixLayout storage_format;
-    md_t         m, n, k;
-    md_t         lda, ldb, ldc;
-    double       alpha, beta; // Changed from float to double for consistency
-    bool         transA, transB;
-    bool         reorderA, reorderB;
-    bool         packA, packB; // TODO: Pack parameters not yet used in tests
-
-    // PostOps support
-    std::shared_ptr<IOperation> postops_dlp;
-    std::shared_ptr<IOperation> postops_ref;
-    bool                        has_postops;
+    std::string name   = "";
+    MatrixType  a_type = MatrixType::f32, b_type = MatrixType::f32,
+               c_type = MatrixType::f32, acc_type = MatrixType::f32;
+    MatrixLayout                storage_format = MatrixLayout::ROW_MAJOR;
+    md_t                        m = 0, n = 0, k = 0;
+    md_t                        lda = 0, ldb = 0, ldc = 0;
+    double                      alpha = 1.0, beta = 0.0;
+    bool                        transA = false, transB = false;
+    bool                        reorderA = false, reorderB = false;
+    bool                        packA = false, packB = false;
+    std::shared_ptr<IOperation> postops_dlp = nullptr;
+    std::shared_ptr<IOperation> postops_ref = nullptr;
+    bool                        has_postops = false;
 
     // Default constructor (required by GoogleTest)
     GemmTestConfig() = default;

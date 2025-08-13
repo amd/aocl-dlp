@@ -143,6 +143,58 @@ class UalRef : public IUal
               double                             alpha = 1.0,
               double                             beta  = 0.0) override;
 
+    /**
+     * @brief Perform general matrix multiplication: C = alpha*A*B + beta*C
+     *
+     * This method performs general matrix multiplication on raw matrix data
+     * pointers, supporting various data types, layouts, and transposition
+     * options.
+     *
+     * @param m Number of rows of matrix A and C
+     * @param n Number of columns of matrix B and C
+     * @param k Number of columns of matrix A and rows of matrix B
+     * @param matA Pointer to matrix A data
+     * @param matA_type Data type of matrix A
+     * @param matA_layout Layout of matrix A (row-major or column-major)
+     * @param matA_transposed Whether matrix A is transposed
+     * @param matA_leadingDim Leading dimension of matrix A
+     * @param matB Pointer to matrix B data
+     * @param matB_type Data type of matrix B
+     * @param matB_layout Layout of matrix B (row-major or column-major)
+     * @param matB_transposed Whether matrix B is transposed
+     * @param matB_leadingDim Leading dimension of matrix B
+     * @param matC Pointer to matrix C data (output)
+     * @param matC_type Data type of matrix C
+     * @param matC_layout Layout of matrix C (row-major or column-major)
+     * @param matC_transposed Whether matrix C is transposed
+     * @param matC_leadingDim Leading dimension of matrix C
+     * @param accType Accumulation type
+     * @param alpha Scaling factor for A*B (default: 1.0)
+     * @param beta Scaling factor for C (default: 0.0)
+     * @return true on success, false on failure
+     */
+    bool gemm(md_t         m,
+              md_t         n,
+              md_t         k,
+              void*        matA,
+              MatrixType   matA_type,
+              MatrixLayout matA_layout,
+              bool         matA_transposed,
+              md_t         matA_leadingDim,
+              void*        matB,
+              MatrixType   matB_type,
+              MatrixLayout matB_layout,
+              bool         matB_transposed,
+              md_t         matB_leadingDim,
+              void*        matC,
+              MatrixType   matC_type,
+              MatrixLayout matC_layout,
+              bool         matC_transposed,
+              md_t         matC_leadingDim,
+              MatrixType   accType,
+              double       alpha = 1.0,
+              double       beta  = 0.0) const override;
+
   private:
     /**
      * @brief Validate GEMM parameters for correctness

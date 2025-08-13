@@ -37,6 +37,19 @@ function(fetch_benchmark)
     FetchContent_MakeAvailable(benchmark)
 endfunction()
 
+function(create_bench_config)
+    # Parameters
+    set(config_dir ${ARGV0})
+    set(config_input_header ${ARGV1})
+    set(config_output_header ${ARGV2})
+
+    # Current CONFIG DIR
+    set(BENCH_CONFIG_DIR ${config_dir})
+
+    # Configure the file
+    configure_file(${config_input_header} ${config_output_header})
+endfunction()
+
 function(dlp_add_benchmark)
     # Parse arguments for the test function
     set(options DISABLED)

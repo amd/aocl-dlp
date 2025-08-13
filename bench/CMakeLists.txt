@@ -27,10 +27,14 @@
 # Add classic benchmarks, not depending on google benchmark
 add_subdirectory(classic)
 
+# Create bench config
+create_bench_config(${CMAKE_CURRENT_SOURCE_DIR}/configs ${CMAKE_CURRENT_SOURCE_DIR}/include/bench_config.hh.in ${CMAKE_CURRENT_BINARY_DIR}/bench_config.hh)
+
 # Include dlp and utils headers
 set(BENCH_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/tests/include
     ${PROJECT_BINARY_DIR}/tests/classic
+    ${CMAKE_CURRENT_BINARY_DIR}
 )
 
 # Fetch google benchmark
