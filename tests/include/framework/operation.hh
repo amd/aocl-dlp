@@ -70,16 +70,6 @@ enum class ElementWiseOperation : uint8_t
 };
 
 /**
- * @enum SumOperation
- * @brief Types of sum/scale operations
- */
-enum class SumOperation : uint8_t
-{
-    Sum   = 0,
-    Scale = 1
-};
-
-/**
  * @class OperationParam
  * @brief Base class for all operation parameters
  */
@@ -148,26 +138,19 @@ class ElementWiseParam : public IOperationParam
 };
 
 /**
- * @class SumParam
- * @brief Parameter class for sum/scale operations
+ * @class ScaleParam
+ * @brief Parameter class for scale operations
  */
-class SumParam : public IOperationParam
+class ScaleParam : public IOperationParam
 {
   private:
-    SumOperation            m_operation;
     std::unique_ptr<Matrix> m_scaleFactor;
     std::unique_ptr<Matrix> m_zeroPoint;
-    bool                    m_isPowerOf2 = false;
 
   public:
-    SumParam(SumOperation op)
-        : m_operation(op)
-    {
-    }
+    ScaleParam() = default;
 
-    SumParam(const SumParam& other)
-        : m_operation(other.m_operation)
-        , m_isPowerOf2(other.m_isPowerOf2)
+    ScaleParam(const ScaleParam& other)
     {
         if (other.m_scaleFactor) {
             m_scaleFactor = std::make_unique<Matrix>(*other.m_scaleFactor);
@@ -177,14 +160,12 @@ class SumParam : public IOperationParam
         }
     }
 
-    OperationType getType() const override { return OperationType::Sum; }
+    OperationType getType() const override { return OperationType::Scale; }
 
     std::unique_ptr<IOperationParam> clone() const override
     {
-        return std::make_unique<SumParam>(*this);
+        return std::make_unique<ScaleParam>(*this);
     }
-
-    SumOperation getOperation() const { return m_operation; }
 
     void setScaleFactor(const Matrix& scale)
     {
@@ -196,13 +177,10 @@ class SumParam : public IOperationParam
         m_zeroPoint = std::make_unique<Matrix>(zp);
     }
 
-    void setIsPowerOf2(bool isPow2) { m_isPowerOf2 = isPow2; }
-
     const Matrix* getScaleFactor() const { return m_scaleFactor.get(); }
     const Matrix* getZeroPoint() const { return m_zeroPoint.get(); }
     bool          hasScaleFactor() const { return m_scaleFactor != nullptr; }
     bool          hasZeroPoint() const { return m_zeroPoint != nullptr; }
-    bool          getIsPowerOf2() const { return m_isPowerOf2; }
 };
 
 /**
@@ -357,8 +335,9 @@ struct ElementWiseTraits<ElementWiseOperation::Clip>
 template<>
 struct ElementWiseTraits<ElementWiseOperation::Swish>
 {
-    static constexpr bool supports_alpha = false;
-    static constexpr bool supports_beta  = false;
+    static constexpr bool supports_alpha =
+        true; // SWISH requires alpha parameter
+    static constexpr bool supports_beta = false;
 };
 
 template<>
@@ -375,27 +354,7 @@ struct ElementWiseTraits<ElementWiseOperation::Sigmoid>
     static constexpr bool supports_beta  = false;
 };
 
-/**
- * @brief Traits for sum operations to define supported parameters
- */
-template<SumOperation Op>
-struct SumTraits;
-
-template<>
-struct SumTraits<SumOperation::Scale>
-{
-    static constexpr bool requires_scale_factor = true;
-    static constexpr bool supports_zero_point   = false;
-    static constexpr bool supports_power_of_2   = true;
-};
-
-template<>
-struct SumTraits<SumOperation::Sum>
-{
-    static constexpr bool requires_scale_factor = false;
-    static constexpr bool supports_zero_point   = true;
-    static constexpr bool supports_power_of_2   = true;
-};
+// (No traits needed for Scale)
 
 // TYPE-SAFE BUILDER CLASSES
 /**
@@ -514,10 +473,28 @@ class GeluErfBuilder
  */
 class SwishBuilder
 {
+  private:
+    std::unique_ptr<Matrix> m_alpha;
+
   public:
+    SwishBuilder& setAlpha(const Matrix& alpha)
+    {
+        m_alpha = std::make_unique<Matrix>(alpha);
+        return *this;
+    }
+
     std::unique_ptr<IOperationParam> build()
     {
-        return std::make_unique<ElementWiseParam>(ElementWiseOperation::Swish);
+        auto param =
+            std::make_unique<ElementWiseParam>(ElementWiseOperation::Swish);
+        if (m_alpha) {
+            param->setAlpha(*m_alpha);
+        } else {
+            // Provide default alpha value for SWISH if not specified
+            auto default_alpha = Matrix::fromValue(1.0f, MatrixType::f32);
+            param->setAlpha(default_alpha);
+        }
+        return param;
     }
 };
 
@@ -556,7 +533,7 @@ class ScaleBuilder
 {
   private:
     std::unique_ptr<Matrix> m_scaleFactor;
-    bool                    m_isPowerOf2 = false;
+    std::unique_ptr<Matrix> m_zeroPoint;
 
   public:
     ScaleBuilder& setScaleFactor(const Matrix& scale)
@@ -565,9 +542,9 @@ class ScaleBuilder
         return *this;
     }
 
-    ScaleBuilder& setIsPowerOf2(bool isPow2)
+    ScaleBuilder& setZeroPoint(const Matrix& zp)
     {
-        m_isPowerOf2 = isPow2;
+        m_zeroPoint = std::make_unique<Matrix>(zp);
         return *this;
     }
 
@@ -577,56 +554,16 @@ class ScaleBuilder
             throw std::runtime_error(
                 "Scale factor is required for Scale operation");
         }
-        auto param = std::make_unique<SumParam>(SumOperation::Scale);
+        auto param = std::make_unique<ScaleParam>();
         param->setScaleFactor(*m_scaleFactor);
-        param->setIsPowerOf2(m_isPowerOf2);
-        return param;
-    }
-};
-
-/**
- * @class SumBuilder
- * @brief Type-safe builder for Sum operations
- */
-class SumBuilder
-{
-  private:
-    std::unique_ptr<Matrix> m_scaleFactor;
-    std::unique_ptr<Matrix> m_zeroPoint;
-    bool                    m_isPowerOf2 = false;
-
-  public:
-    SumBuilder& setScaleFactor(const Matrix& scale)
-    {
-        m_scaleFactor = std::make_unique<Matrix>(scale);
-        return *this;
-    }
-
-    SumBuilder& setZeroPoint(const Matrix& zp)
-    {
-        m_zeroPoint = std::make_unique<Matrix>(zp);
-        return *this;
-    }
-
-    SumBuilder& setIsPowerOf2(bool isPow2)
-    {
-        m_isPowerOf2 = isPow2;
-        return *this;
-    }
-
-    std::unique_ptr<IOperationParam> build()
-    {
-        auto param = std::make_unique<SumParam>(SumOperation::Sum);
-        if (m_scaleFactor) {
-            param->setScaleFactor(*m_scaleFactor);
-        }
         if (m_zeroPoint) {
             param->setZeroPoint(*m_zeroPoint);
         }
-        param->setIsPowerOf2(m_isPowerOf2);
         return param;
     }
 };
+
+// SumBuilder removed
 
 /**
  * @class BiasBuilder
@@ -769,10 +706,7 @@ namespace postops {
     {
         return ScaleBuilder{};
     }
-    inline SumBuilder createSum()
-    {
-        return SumBuilder{};
-    }
+    // createSum() removed
 
     // Other operation factories
     inline BiasBuilder createBias()

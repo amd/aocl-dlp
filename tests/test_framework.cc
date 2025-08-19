@@ -914,38 +914,18 @@ TEST_F(PostOpsTest, PreluValidation)
     EXPECT_THROW(postops::createPrelu().build(), std::runtime_error);
 }
 
-// Test sum/scale operation builders
-TEST_F(PostOpsTest, SumScaleBuilders)
+// Test scale operation builders
+TEST_F(PostOpsTest, ScaleBuilders)
 {
     // Test Scale (requires scale factor)
     auto scale_factor =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 0.5f });
-    auto scale = postops::createScale()
-                     .setScaleFactor(scale_factor)
-                     .setIsPowerOf2(true)
-                     .build();
+    auto scale = postops::createScale().setScaleFactor(scale_factor).build();
 
-    EXPECT_EQ(scale->getType(), OperationType::Sum);
-    auto& scale_param = static_cast<const SumParam&>(*scale);
-    EXPECT_EQ(scale_param.getOperation(), SumOperation::Scale);
+    EXPECT_EQ(scale->getType(), OperationType::Scale);
+    auto& scale_param = static_cast<const ScaleParam&>(*scale);
     EXPECT_TRUE(scale_param.hasScaleFactor());
     EXPECT_FALSE(scale_param.hasZeroPoint());
-    EXPECT_TRUE(scale_param.getIsPowerOf2());
-
-    // Test Sum (optional parameters)
-    auto sum_scale  = Matrix::fromValue(1.5f);
-    auto zero_point = Matrix::fromValue(0);
-    auto sum        = postops::createSum()
-                   .setScaleFactor(sum_scale)
-                   .setZeroPoint(zero_point)
-                   .setIsPowerOf2(false)
-                   .build();
-
-    auto& sum_param = static_cast<const SumParam&>(*sum);
-    EXPECT_EQ(sum_param.getOperation(), SumOperation::Sum);
-    EXPECT_TRUE(sum_param.hasScaleFactor());
-    EXPECT_TRUE(sum_param.hasZeroPoint());
-    EXPECT_FALSE(sum_param.getIsPowerOf2());
 }
 
 // Test scale validation
@@ -1037,7 +1017,7 @@ TEST_F(PostOpsTest, OperationParamsContainer)
     // Test access by index
     EXPECT_EQ(params[0].getType(), OperationType::ElementWise);
     EXPECT_EQ(params[1].getType(), OperationType::ElementWise);
-    EXPECT_EQ(params[2].getType(), OperationType::Sum);
+    EXPECT_EQ(params[2].getType(), OperationType::Scale);
 
     // Test iteration
     size_t count = 0;
@@ -1105,10 +1085,7 @@ TEST_F(PostOpsTest, DlpOperationFunctionality)
     auto alpha        = Matrix::fromValue(0.2f);
     auto prelu        = postops::createPrelu().setAlpha(alpha).build();
     auto scale_factor = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f });
-    auto scale        = postops::createScale()
-                     .setScaleFactor(scale_factor)
-                     .setIsPowerOf2(true)
-                     .build();
+    auto scale = postops::createScale().setScaleFactor(scale_factor).build();
 
     params.add(std::move(relu));
     params.add(std::move(prelu));
@@ -1136,10 +1113,7 @@ TEST_F(PostOpsTest, ComplexOperationSequence)
 
     auto scale_factor =
         Matrix::fromVector(std::vector<float>{ 2.0f, 1.5f, 0.8f });
-    auto scale = postops::createScale()
-                     .setScaleFactor(scale_factor)
-                     .setIsPowerOf2(false)
-                     .build();
+    auto scale = postops::createScale().setScaleFactor(scale_factor).build();
 
     auto alpha = Matrix::fromValue(0.01f);
     auto prelu = postops::createPrelu().setAlpha(alpha).build();
@@ -1200,7 +1174,6 @@ TEST_F(PostOpsTest, YourVisionRealized)
     auto sum = postops::createScale()
                    .setScaleFactor(Matrix::fromVector(
                        std::vector<float>{ 1.0f, 2.0f }, MatrixType::f32))
-                   .setIsPowerOf2(true)
                    .build();
 
     OperationParams params;
@@ -1225,9 +1198,7 @@ TEST_F(PostOpsTest, YourVisionRealized)
 
     // Verify second operation (Scale)
     const auto& second_param = *operation->getParams()[1];
-    EXPECT_EQ(second_param.getType(), OperationType::Sum);
-    const auto& sum_param = static_cast<const SumParam&>(second_param);
-    EXPECT_EQ(sum_param.getOperation(), SumOperation::Scale);
+    EXPECT_EQ(second_param.getType(), OperationType::Scale);
+    const auto& sum_param = static_cast<const ScaleParam&>(second_param);
     EXPECT_TRUE(sum_param.hasScaleFactor());
-    EXPECT_TRUE(sum_param.getIsPowerOf2());
 }

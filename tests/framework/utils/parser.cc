@@ -42,7 +42,6 @@ using dlp::testing::framework::postops::createPrelu;
 using dlp::testing::framework::postops::createRelu;
 using dlp::testing::framework::postops::createScale;
 using dlp::testing::framework::postops::createSigmoid;
-using dlp::testing::framework::postops::createSum;
 using dlp::testing::framework::postops::createSwish;
 using dlp::testing::framework::postops::createTanh;
 
@@ -129,42 +128,6 @@ MicroTest::createOperationParam(
 
         return createBias().setBias(bias).build();
 
-    } else if (config.type == "Sum") {
-        // Get scale_factor_len parameter
-        auto scale_len_it = config.params.find("scale_factor_len");
-        if (scale_len_it == config.params.end()
-            || scale_len_it->second.empty()) {
-            throw std::runtime_error("Sum requires scale_factor_len parameter");
-        }
-
-        auto scale_len_str =
-            std::any_cast<std::string>(scale_len_it->second[0]);
-
-        // Get scale_factor_type if available, default to f32
-        MatrixType scale_type    = MatrixType::f32;
-        auto       scale_type_it = config.params.find("scale_factor_type");
-        if (scale_type_it != config.params.end()
-            && !scale_type_it->second.empty()) {
-            auto scale_type_str =
-                std::any_cast<std::string>(scale_type_it->second[0]);
-            scale_type = stringToMatrixType(scale_type_str);
-        }
-
-        Matrix scale_factor;
-        if (scale_len_str == "n") {
-            // Create scale vector with size N
-            std::vector<float> scale_data(getN(), 2.0f);
-            scale_factor = Matrix::fromVector(scale_data, scale_type);
-        } else {
-            // Single scale value
-            scale_factor = Matrix::fromValue(2.0f, scale_type);
-        }
-
-        return createSum()
-            .setScaleFactor(scale_factor)
-            .setIsPowerOf2(false)
-            .build();
-
     } else if (config.type == "Elementwise-RELU") {
         // RELU requires no parameters
         return createRelu().build();
@@ -178,8 +141,19 @@ MicroTest::createOperationParam(
         return createGeluErf().build();
 
     } else if (config.type == "Elementwise-SWISH") {
-        // SWISH requires no parameters
-        return createSwish().build();
+        // SWISH: Optional alpha parameter, default to 1.0f if not specified
+        auto alpha_type_it = config.params.find("alpha_type");
+        if (alpha_type_it != config.params.end()
+            && !alpha_type_it->second.empty()) {
+            auto alpha_type_str =
+                std::any_cast<std::string>(alpha_type_it->second[0]);
+            auto alpha_type = stringToMatrixType(alpha_type_str);
+            auto alpha      = Matrix::fromValue(1.0f, alpha_type);
+            return createSwish().setAlpha(alpha).build();
+        } else {
+            // Use default alpha (will be set automatically in SwishBuilder)
+            return createSwish().build();
+        }
 
     } else if (config.type == "Elementwise-TANH") {
         // TANH requires no parameters
@@ -190,9 +164,50 @@ MicroTest::createOperationParam(
         return createSigmoid().build();
 
     } else if (config.type == "Elementwise-CLIP") {
-        // CLIP: Use hardcoded bounds for simplicity
-        auto lower_matrix = Matrix::fromValue(-1.0f, MatrixType::f32);
-        auto upper_matrix = Matrix::fromValue(6.0f, MatrixType::f32);
+        // CLIP: Optional alpha (lower bound) and beta (upper bound) parameters
+        Matrix lower_matrix, upper_matrix;
+
+        // Check for alpha_type (lower bound)
+        auto alpha_type_it = config.params.find("alpha_type");
+        if (alpha_type_it != config.params.end()
+            && !alpha_type_it->second.empty()) {
+            auto alpha_type_str =
+                std::any_cast<std::string>(alpha_type_it->second[0]);
+            auto alpha_type = stringToMatrixType(alpha_type_str);
+
+            // Check for alpha_value
+            auto  alpha_value_it = config.params.find("alpha_value");
+            float alpha_val      = -1.0f; // default
+            if (alpha_value_it != config.params.end()
+                && !alpha_value_it->second.empty()) {
+                alpha_val = std::any_cast<float>(alpha_value_it->second[0]);
+            }
+            lower_matrix = Matrix::fromValue(alpha_val, alpha_type);
+        } else {
+            // Default lower bound
+            lower_matrix = Matrix::fromValue(-1.0f, MatrixType::f32);
+        }
+
+        // Check for beta_type (upper bound)
+        auto beta_type_it = config.params.find("beta_type");
+        if (beta_type_it != config.params.end()
+            && !beta_type_it->second.empty()) {
+            auto beta_type_str =
+                std::any_cast<std::string>(beta_type_it->second[0]);
+            auto beta_type = stringToMatrixType(beta_type_str);
+
+            // Check for beta_value
+            auto  beta_value_it = config.params.find("beta_value");
+            float beta_val      = 6.0f; // default
+            if (beta_value_it != config.params.end()
+                && !beta_value_it->second.empty()) {
+                beta_val = std::any_cast<float>(beta_value_it->second[0]);
+            }
+            upper_matrix = Matrix::fromValue(beta_val, beta_type);
+        } else {
+            // Default upper bound
+            upper_matrix = Matrix::fromValue(6.0f, MatrixType::f32);
+        }
 
         return createClip()
             .setLowerBound(lower_matrix)
@@ -200,7 +215,13 @@ MicroTest::createOperationParam(
             .build();
 
     } else if (config.type == "Scale") {
-        // Scale: Use hardcoded scale factor values
+        // Parse scale_factor_len ("1" or "n"); default to "1"
+        std::string scale_len_str = "1";
+        auto        scale_len_it  = config.params.find("scale_factor_len");
+        if (scale_len_it != config.params.end()
+            && !scale_len_it->second.empty()) {
+            scale_len_str = std::any_cast<std::string>(scale_len_it->second[0]);
+        }
 
         // Get scale_factor_type if available, default to f32
         MatrixType scale_type    = MatrixType::f32;
@@ -212,22 +233,46 @@ MicroTest::createOperationParam(
             scale_type = stringToMatrixType(scale_type_str);
         }
 
-        // Check if it's power of 2
-        bool is_power_of_2 = false;
-        auto power_it      = config.params.find("is_power_of_2");
-        if (power_it != config.params.end() && !power_it->second.empty()) {
-            auto power_str = std::any_cast<std::string>(power_it->second[0]);
-            is_power_of_2  = (power_str == "true");
+        Matrix scale_factor;
+        if (scale_len_str == "n") {
+            std::vector<float> scale_data(getN(), 1.5f);
+            scale_factor = Matrix::fromVector(scale_data, scale_type);
+        } else {
+            scale_factor = Matrix::fromValue(1.5f, scale_type);
         }
 
-        // Use hardcoded scale factor within datatype limits
-        float scale_val    = is_power_of_2 ? 2.0f : 1.5f;
-        auto  scale_matrix = Matrix::fromValue(scale_val, scale_type);
+        // Optional zero-point
+        Matrix      zero_point_matrix;
+        bool        has_zp    = false;
+        std::string zp_len    = "";
+        MatrixType  zp_type   = MatrixType::s8; // default
+        auto        zp_len_it = config.params.find("zero_point_len");
+        if (zp_len_it != config.params.end() && !zp_len_it->second.empty()) {
+            zp_len = std::any_cast<std::string>(zp_len_it->second[0]);
+            has_zp = true;
+        }
+        auto zp_type_it = config.params.find("zero_point_type");
+        if (zp_type_it != config.params.end() && !zp_type_it->second.empty()) {
+            auto zp_type_str =
+                std::any_cast<std::string>(zp_type_it->second[0]);
+            zp_type = stringToMatrixType(zp_type_str);
+            has_zp  = true;
+        }
+        if (has_zp) {
+            if (zp_len == "n") {
+                std::vector<int32_t> zp_data(getN(), 0);
+                zero_point_matrix = Matrix::fromVector(zp_data, zp_type);
+            } else {
+                zero_point_matrix = Matrix::fromValue(0, zp_type);
+            }
+        }
 
-        return createScale()
-            .setScaleFactor(scale_matrix)
-            .setIsPowerOf2(is_power_of_2)
-            .build();
+        auto builder = createScale();
+        builder.setScaleFactor(scale_factor);
+        if (has_zp) {
+            builder.setZeroPoint(zero_point_matrix);
+        }
+        return builder.build();
 
     } else if (config.type == "Matrix-Add") {
         // Matrix-Add: Use C matrix dimensions (m×n) and proper leading dim

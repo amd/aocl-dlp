@@ -383,23 +383,6 @@ extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
                 op_names.push_back(op_name);
                 break;
             }
-            case OperationType::Sum: {
-                const auto& sum_param = static_cast<const SumParam&>(*param);
-                std::string op_name;
-                switch (sum_param.getOperation()) {
-                    case SumOperation::Sum:
-                        op_name = "Sum";
-                        break;
-                    case SumOperation::Scale:
-                        op_name = "Scale";
-                        break;
-                    default:
-                        op_name = "UnknownSum";
-                        break;
-                }
-                op_names.push_back(op_name);
-                break;
-            }
             case OperationType::Bias:
                 op_names.push_back("Bias");
                 break;

@@ -27,3 +27,6 @@ exp
 
 # Ignore setup artifacts
 .setup_done
+
+# Ignore coverage reports
+coverage_reports

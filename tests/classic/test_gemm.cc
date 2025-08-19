@@ -395,23 +395,6 @@ extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
                 op_names.push_back(op_name);
                 break;
             }
-            case OperationType::Sum: {
-                const auto& sum_param = static_cast<const SumParam&>(*param);
-                std::string op_name;
-                switch (sum_param.getOperation()) {
-                    case SumOperation::Sum:
-                        op_name = "Sum";
-                        break;
-                    case SumOperation::Scale:
-                        op_name = "Scale";
-                        break;
-                    default:
-                        op_name = "UnknownSum";
-                        break;
-                }
-                op_names.push_back(op_name);
-                break;
-            }
             case OperationType::Bias:
                 op_names.push_back("Bias");
                 break;
@@ -1140,7 +1123,7 @@ TEST(GEMMTest, PostOpsBuilderPattern)
     // Test Scale builder
     auto scale   = Matrix::scalar(2.0f);
     auto scaleOp = createScale().setScaleFactor(scale).build();
-    EXPECT_EQ(scaleOp->getType(), OperationType::Sum);
+    EXPECT_EQ(scaleOp->getType(), OperationType::Scale);
 
     // Test Matrix Add builder
     auto matrix = Matrix::fromData(
@@ -1195,16 +1178,13 @@ TEST(GEMMTest, MultiplePostOpsOfSameType)
     auto biasOp2 = createBias().setBias(bias2).build();
     operation->addOperation(std::move(biasOp2));
 
-    // Add multiple SCALE operations (instead of SUM operations without scale
-    // factors)
-    auto scale1 = Matrix::fromVector(std::vector<float>{ 1.5f });
-    auto scaleOp1 =
-        createScale().setScaleFactor(scale1).setIsPowerOf2(true).build();
+    // Add multiple SCALE operations
+    auto scale1   = Matrix::fromVector(std::vector<float>{ 1.5f });
+    auto scaleOp1 = createScale().setScaleFactor(scale1).build();
     operation->addOperation(std::move(scaleOp1));
 
-    auto scale2 = Matrix::fromVector(std::vector<float>{ 2.0f });
-    auto scaleOp2 =
-        createScale().setScaleFactor(scale2).setIsPowerOf2(false).build();
+    auto scale2   = Matrix::fromVector(std::vector<float>{ 2.0f });
+    auto scaleOp2 = createScale().setScaleFactor(scale2).build();
     operation->addOperation(std::move(scaleOp2));
 
     // Finalize the operations
@@ -1321,20 +1301,19 @@ TEST(GEMMTest, IsolateSegFault)
         }
     }
 
-    std::cout << "Testing SUM operations..." << std::endl;
+    std::cout << "Testing SCALE operations..." << std::endl;
 
-    // Test 2: SUM operations with scale factor
+    // Test 2: SCALE operations with scale factor
     {
         auto operation = OperationFactory::createOperation(UALType::DLP);
 
         try {
-            std::cout << "Creating sum operation with scale factor..."
+            std::cout << "Creating scale operation with scale factor..."
                       << std::endl;
             auto scale = Matrix::fromVector(std::vector<float>{ 1.5f });
-            auto sum1 =
-                createSum().setScaleFactor(scale).setIsPowerOf2(true).build();
-            std::cout << "Adding sum operation..." << std::endl;
-            operation->addOperation(std::move(sum1));
+            auto sc1   = createScale().setScaleFactor(scale).build();
+            std::cout << "Adding scale operation..." << std::endl;
+            operation->addOperation(std::move(sc1));
 
             std::cout << "Finalizing..." << std::endl;
             operation->finalize();
@@ -1342,7 +1321,7 @@ TEST(GEMMTest, IsolateSegFault)
             std::cout << "Creating UAL..." << std::endl;
             std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
 
-            std::cout << "Calling GEMM with SUM..." << std::endl;
+            std::cout << "Calling GEMM with SCALE..." << std::endl;
             bool result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
 
             std::cout << "SUM test result: " << (result ? "SUCCESS" : "FAILED")

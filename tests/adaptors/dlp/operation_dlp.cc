@@ -116,10 +116,11 @@ DlpOperation::addOperation(
             m_elementwise_ops.push_back(std::move(ew_param));
             break;
         }
-        case dlp::testing::framework::OperationType::Sum: {
-            auto sum_param = std::unique_ptr<dlp::testing::framework::SumParam>(
-                static_cast<dlp::testing::framework::SumParam*>(
-                    param.release()));
+        case dlp::testing::framework::OperationType::Scale: {
+            auto sum_param =
+                std::unique_ptr<dlp::testing::framework::ScaleParam>(
+                    static_cast<dlp::testing::framework::ScaleParam*>(
+                        param.release()));
             m_sum_ops.push_back(std::move(sum_param));
             break;
         }
@@ -274,16 +275,9 @@ DlpOperation::convertSumOperations()
                 m_postops->scale[i].zp->zero_point_len  = 1;
                 m_postops->scale[i].zp->zero_point_type = DLP_S8;
             } else {
-                // Regular SUM operations without scale factors need a buffer
-                // (tensor to add) Since we don't have a buffer, this operation
-                // is invalid We should either provide a buffer or reject such
-                // operations
-
-                // For now, let's reject SUM operations without scale factors
+                // No scale factor provided; invalid for SCALE op in testing.
                 throw std::runtime_error(
-                    "SUM operations without scale factors (and without "
-                    "buffers) are not supported. Use SCALE operations "
-                    "instead.");
+                    "Scale operation requires scale factor");
             }
         }
     }
@@ -399,17 +393,8 @@ DlpOperation::buildSequenceVector()
                 sequence.push_back(ELTWISE);
                 eltwise_idx++;
                 break;
-            case dlp::testing::framework::OperationType::Sum: {
-                const auto& sumParam =
-                    static_cast<const dlp::testing::framework::SumParam&>(
-                        *param);
-                // Use SCALE in sequence if we have a scale factor, following
-                // post_ops_combinations.c example
-                if (sumParam.hasScaleFactor()) {
-                    sequence.push_back(SCALE);
-                } else {
-                    sequence.push_back(SUM);
-                }
+            case dlp::testing::framework::OperationType::Scale: {
+                sequence.push_back(SCALE);
                 sum_idx++;
                 break;
             }

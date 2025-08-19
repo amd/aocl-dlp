@@ -537,19 +537,10 @@ UalRef::applyPostOperation(Matrix& matrix,
  */
 template<>
 void
-UalRef::applyPostOperation(Matrix&                                  matrix,
-                           const dlp::testing::framework::SumParam& op)
+UalRef::applyPostOperation(Matrix&                                    matrix,
+                           const dlp::testing::framework::ScaleParam& op)
 {
-    switch (op.getOperation()) {
-        case dlp::testing::framework::SumOperation::Sum:
-            applySum(matrix, op.getZeroPoint());
-            break;
-        case dlp::testing::framework::SumOperation::Scale:
-            applyScale(matrix, op.getScaleFactor());
-            break;
-        default:
-            break;
-    }
+    applyScale(matrix, op.getScaleFactor());
 }
 
 /**
@@ -809,15 +800,48 @@ UalRef::applySum(Matrix& matrix, const Matrix* zeroPoint)
 void
 UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
 {
-    if (matrix.getMatrixType() == MatrixType::f32 && scaleFactor
-        && scaleFactor->getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+    if (!(matrix.getMatrixType() == MatrixType::f32 && scaleFactor)) {
+        return;
+    }
 
-        float scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+    if (scaleFactor->getMatrixType() != MatrixType::f32) {
+        return; // currently support f32 only
+    }
 
-        for (size_t i = 0; i < size; ++i) {
-            data[i] *= scale;
+    float*       data = reinterpret_cast<float*>(matrix.getData());
+    const float* scale_data =
+        reinterpret_cast<const float*>(scaleFactor->getData());
+
+    md_t rows = matrix.getRows();
+    md_t cols = matrix.getCols();
+    md_t ld   = matrix.getLeadingDimension();
+
+    // Determine scale length: 1 (per-tensor) or N (per-channel)
+    bool per_channel = (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
+
+    if (!per_channel) {
+        float scale = *scale_data;
+        for (md_t i = 0; i < rows; ++i) {
+            for (md_t j = 0; j < cols; ++j) {
+                size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                                 ? (static_cast<size_t>(i) * ld + j)
+                                 : (static_cast<size_t>(j) * ld + i);
+                data[idx] *= scale;
+            }
+        }
+        return;
+    }
+
+    // Per-channel assumed along N (columns)
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            float scale =
+                scale_data[j
+                           % (scaleFactor->getRows() * scaleFactor->getCols())];
+            size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                             ? (static_cast<size_t>(i) * ld + j)
+                             : (static_cast<size_t>(j) * ld + i);
+            data[idx] *= scale;
         }
     }
 }

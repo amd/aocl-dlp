@@ -70,10 +70,11 @@ RefOperation::addOperation(
             m_elementwise_ops.push_back(std::move(ew_param));
             break;
         }
-        case dlp::testing::framework::OperationType::Sum: {
-            auto sum_param = std::unique_ptr<dlp::testing::framework::SumParam>(
-                static_cast<dlp::testing::framework::SumParam*>(
-                    param.release()));
+        case dlp::testing::framework::OperationType::Scale: {
+            auto sum_param =
+                std::unique_ptr<dlp::testing::framework::ScaleParam>(
+                    static_cast<dlp::testing::framework::ScaleParam*>(
+                        param.release()));
             m_sum_ops.push_back(std::move(sum_param));
             break;
         }
@@ -172,9 +173,9 @@ RefOperation::getNextPostOp() const
                     *param);
             return PostOpVariant{ ew_param };
         }
-        case dlp::testing::framework::OperationType::Sum: {
+        case dlp::testing::framework::OperationType::Scale: {
             const auto& sum_param =
-                static_cast<const dlp::testing::framework::SumParam&>(*param);
+                static_cast<const dlp::testing::framework::ScaleParam&>(*param);
             return PostOpVariant{ sum_param };
         }
         case dlp::testing::framework::OperationType::Bias: {
@@ -297,25 +298,9 @@ RefOperation::buildSequenceVector()
                 opName += ")";
                 break;
             }
-            case dlp::testing::framework::OperationType::Sum: {
-                const auto& sum_param =
-                    static_cast<const dlp::testing::framework::SumParam&>(
-                        *param);
-                opName = "Sum(";
-                switch (sum_param.getOperation()) {
-                    case dlp::testing::framework::SumOperation::Sum:
-                        opName += "Sum";
-                        break;
-                    case dlp::testing::framework::SumOperation::Scale:
-                        opName += "Scale";
-                        break;
-                    default:
-                        opName += "Unknown";
-                        break;
-                }
-                opName += ")";
+            case dlp::testing::framework::OperationType::Scale:
+                opName = "Scale";
                 break;
-            }
             case dlp::testing::framework::OperationType::Bias:
                 opName = "Bias";
                 break;

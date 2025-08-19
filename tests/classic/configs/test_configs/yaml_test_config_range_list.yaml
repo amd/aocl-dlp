@@ -42,15 +42,14 @@ yaml_test:
       operations:
         # Element-wise operations - all supported types
         - type: "Elementwise-SIGMOID"
-        # Sum/Scale operations (quantization)
-        - type: "Sum"
+        # Scale operations (quantization)
+        - type: "Scale"
           params:
             scale_factor_len: ["n", "1"]
             scale_factor_type: ["f32"]
         - type: "Scale"
           params:
             scale_factor_type: ["f32", "bf16"]
-            is_power_of_2: ["true", "false"]
         # Bias operation
         - type: "Bias"
           params:
@@ -110,4 +109,3 @@ yaml_test:
         - type: "Scale"
           params:
             scale_factor_type: ["f32"]
-            is_power_of_2: ["false"]

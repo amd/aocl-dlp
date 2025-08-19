@@ -43,7 +43,7 @@ using dlp::testing::framework::IOperationParam;
 using dlp::testing::framework::MatrixAddParam;
 using dlp::testing::framework::MatrixMulParam;
 using dlp::testing::framework::OperationParams;
-using dlp::testing::framework::SumParam;
+using dlp::testing::framework::ScaleParam;
 
 // Forward declaration for friend class
 class UalRef;
@@ -64,7 +64,7 @@ class RefOperation : public IOperation
      * @brief Variant type for holding different post-operation parameters
      */
     using PostOpVariant = std::variant<ElementWiseParam,
-                                       SumParam,
+                                       ScaleParam,
                                        BiasParam,
                                        MatrixAddParam,
                                        MatrixMulParam>;
@@ -78,7 +78,7 @@ class RefOperation : public IOperation
     // Collections for different operation types (filled during addOperation)
     std::vector<std::unique_ptr<dlp::testing::framework::ElementWiseParam>>
         m_elementwise_ops;
-    std::vector<std::unique_ptr<dlp::testing::framework::SumParam>>  m_sum_ops;
+    std::vector<std::unique_ptr<dlp::testing::framework::ScaleParam>> m_sum_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::BiasParam>> m_bias_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::MatrixAddParam>>
         m_matrix_add_ops;
