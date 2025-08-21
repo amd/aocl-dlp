@@ -47,6 +47,49 @@ using dlp::testing::framework::postops::createTanh;
 
 namespace dlp::testing::utils {
 
+// Helper functions for parameter extraction
+double
+MicroTest::extractDoubleParam(
+    const std::string&                                  param_name,
+    const std::map<std::string, std::vector<std::any>>& params,
+    double                                              default_value) const
+{
+    auto it = params.find(param_name);
+    if (it != params.end() && !it->second.empty()) {
+        auto param_str = std::any_cast<std::string>(it->second[0]);
+        return std::stod(param_str);
+    }
+    return default_value;
+}
+
+MatrixType
+MicroTest::extractMatrixTypeParam(
+    const std::string&                                  param_name,
+    const std::map<std::string, std::vector<std::any>>& params,
+    MatrixType                                          default_type) const
+{
+    auto it = params.find(param_name);
+    if (it != params.end() && !it->second.empty()) {
+        auto type_str = std::any_cast<std::string>(it->second[0]);
+        return stringToMatrixType(type_str);
+    }
+    return default_type;
+}
+
+bool
+MicroTest::extractBoolParam(
+    const std::string&                                  param_name,
+    const std::map<std::string, std::vector<std::any>>& params,
+    bool                                                default_value) const
+{
+    auto it = params.find(param_name);
+    if (it != params.end() && !it->second.empty()) {
+        auto bool_str = std::any_cast<std::string>(it->second[0]);
+        return (bool_str == "true");
+    }
+    return default_value;
+}
+
 std::shared_ptr<IOperation>
 MicroTest::getPostOp(UALType ual_type) const
 {
@@ -82,18 +125,15 @@ MicroTest::createOperationParam(
     const PostOpsIterator::PostOpConfig& config) const
 {
     if (config.type == "Elementwise-PRELU") {
-        // Get alpha_type parameter (use first value from list)
-        auto alpha_type_it = config.params.find("alpha_type");
-        if (alpha_type_it == config.params.end()
-            || alpha_type_it->second.empty()) {
-            throw std::runtime_error(
-                "Elementwise-PRELU requires alpha_type parameter");
-        }
+        // PRELU: Parse alpha parameter
+        double alpha_value    = extractDoubleParam("alpha", config.params, 0.1);
+        MatrixType alpha_type = extractMatrixTypeParam(
+            "alpha_type", config.params, MatrixType::f32);
 
-        auto alpha_type_str =
-            std::any_cast<std::string>(alpha_type_it->second[0]);
-        auto alpha_type = stringToMatrixType(alpha_type_str);
-        auto alpha      = Matrix::fromValue(0.1f, alpha_type);
+        // Create matrix with parsed values and type (static cast to correct
+        // type)
+        auto alpha =
+            Matrix::fromValue(static_cast<float>(alpha_value), alpha_type);
 
         return createPrelu().setAlpha(alpha).build();
 
@@ -164,50 +204,20 @@ MicroTest::createOperationParam(
         return createSigmoid().build();
 
     } else if (config.type == "Elementwise-CLIP") {
-        // CLIP: Optional alpha (lower bound) and beta (upper bound) parameters
-        Matrix lower_matrix, upper_matrix;
+        // CLIP: Parse alpha (lower bound) and beta (upper bound) parameters
+        double alpha_value = extractDoubleParam("alpha", config.params, -1.0);
+        double beta_value  = extractDoubleParam("beta", config.params, 6.0);
+        MatrixType alpha_type = extractMatrixTypeParam(
+            "alpha_type", config.params, MatrixType::f32);
+        MatrixType beta_type =
+            extractMatrixTypeParam("beta_type", config.params, MatrixType::f32);
 
-        // Check for alpha_type (lower bound)
-        auto alpha_type_it = config.params.find("alpha_type");
-        if (alpha_type_it != config.params.end()
-            && !alpha_type_it->second.empty()) {
-            auto alpha_type_str =
-                std::any_cast<std::string>(alpha_type_it->second[0]);
-            auto alpha_type = stringToMatrixType(alpha_type_str);
-
-            // Check for alpha_value
-            auto  alpha_value_it = config.params.find("alpha_value");
-            float alpha_val      = -1.0f; // default
-            if (alpha_value_it != config.params.end()
-                && !alpha_value_it->second.empty()) {
-                alpha_val = std::any_cast<float>(alpha_value_it->second[0]);
-            }
-            lower_matrix = Matrix::fromValue(alpha_val, alpha_type);
-        } else {
-            // Default lower bound
-            lower_matrix = Matrix::fromValue(-1.0f, MatrixType::f32);
-        }
-
-        // Check for beta_type (upper bound)
-        auto beta_type_it = config.params.find("beta_type");
-        if (beta_type_it != config.params.end()
-            && !beta_type_it->second.empty()) {
-            auto beta_type_str =
-                std::any_cast<std::string>(beta_type_it->second[0]);
-            auto beta_type = stringToMatrixType(beta_type_str);
-
-            // Check for beta_value
-            auto  beta_value_it = config.params.find("beta_value");
-            float beta_val      = 6.0f; // default
-            if (beta_value_it != config.params.end()
-                && !beta_value_it->second.empty()) {
-                beta_val = std::any_cast<float>(beta_value_it->second[0]);
-            }
-            upper_matrix = Matrix::fromValue(beta_val, beta_type);
-        } else {
-            // Default upper bound
-            upper_matrix = Matrix::fromValue(6.0f, MatrixType::f32);
-        }
+        // Create matrices with parsed values and types (static cast to correct
+        // type)
+        auto lower_matrix =
+            Matrix::fromValue(static_cast<float>(alpha_value), alpha_type);
+        auto upper_matrix =
+            Matrix::fromValue(static_cast<float>(beta_value), beta_type);
 
         return createClip()
             .setLowerBound(lower_matrix)
@@ -215,31 +225,25 @@ MicroTest::createOperationParam(
             .build();
 
     } else if (config.type == "Scale") {
-        // Parse scale_factor_len ("1" or "n"); default to "1"
-        std::string scale_len_str = "1";
-        auto        scale_len_it  = config.params.find("scale_factor_len");
-        if (scale_len_it != config.params.end()
-            && !scale_len_it->second.empty()) {
-            scale_len_str = std::any_cast<std::string>(scale_len_it->second[0]);
+        // Scale: Parse scale_factor parameter
+        double scale_value =
+            extractDoubleParam("scale_factor", config.params, 1.5);
+        MatrixType scale_type = extractMatrixTypeParam(
+            "scale_factor_type", config.params, MatrixType::f32);
+        bool is_power_of_2 =
+            extractBoolParam("is_power_of_2", config.params, false);
+
+        // If is_power_of_2 is true but no scale_factor specified, use
+        // default 2.0
+        if (is_power_of_2
+            && config.params.find("scale_factor") == config.params.end()) {
+            scale_value = 2.0;
         }
 
-        // Get scale_factor_type if available, default to f32
-        MatrixType scale_type    = MatrixType::f32;
-        auto       scale_type_it = config.params.find("scale_factor_type");
-        if (scale_type_it != config.params.end()
-            && !scale_type_it->second.empty()) {
-            auto scale_type_str =
-                std::any_cast<std::string>(scale_type_it->second[0]);
-            scale_type = stringToMatrixType(scale_type_str);
-        }
-
-        Matrix scale_factor;
-        if (scale_len_str == "n") {
-            std::vector<float> scale_data(getN(), 1.5f);
-            scale_factor = Matrix::fromVector(scale_data, scale_type);
-        } else {
-            scale_factor = Matrix::fromValue(1.5f, scale_type);
-        }
+        // Create matrix with parsed values and type (static cast to correct
+        // type)
+        auto scale_matrix =
+            Matrix::fromValue(static_cast<float>(scale_value), scale_type);
 
         // Optional zero-point
         Matrix      zero_point_matrix;
@@ -268,7 +272,7 @@ MicroTest::createOperationParam(
         }
 
         auto builder = createScale();
-        builder.setScaleFactor(scale_factor);
+        builder.setScaleFactor(scale_matrix);
         if (has_zp) {
             builder.setZeroPoint(zero_point_matrix);
         }
@@ -284,8 +288,16 @@ MicroTest::createOperationParam(
             rows, std::vector<float>(cols, 0.5f));
         auto matrix = Matrix::fromData(matrix_data);
 
-        // Use hardcoded scale factor within f32 limits
-        auto scale_matrix = Matrix::fromValue(0.8f, MatrixType::f32);
+        // Parse scale_factor parameter
+        double scale_value =
+            extractDoubleParam("scale_factor", config.params, 0.8);
+        MatrixType scale_type = extractMatrixTypeParam(
+            "scale_factor_type", config.params, MatrixType::f32);
+
+        // Create matrix with parsed values and type (static cast to correct
+        // type)
+        auto scale_matrix =
+            Matrix::fromValue(static_cast<float>(scale_value), scale_type);
 
         return createMatrixAdd()
             .setMatrix(matrix)
@@ -303,8 +315,16 @@ MicroTest::createOperationParam(
             rows, std::vector<float>(cols, 1.0f));
         auto matrix = Matrix::fromData(matrix_data);
 
-        // Use hardcoded scale factor within f32 limits
-        auto scale_matrix = Matrix::fromValue(1.2f, MatrixType::f32);
+        // Parse scale_factor parameter
+        double scale_value =
+            extractDoubleParam("scale_factor", config.params, 1.2);
+        MatrixType scale_type = extractMatrixTypeParam(
+            "scale_factor_type", config.params, MatrixType::f32);
+
+        // Create matrix with parsed values and type (static cast to correct
+        // type)
+        auto scale_matrix =
+            Matrix::fromValue(static_cast<float>(scale_value), scale_type);
 
         return createMatrixMul()
             .setMatrix(matrix)

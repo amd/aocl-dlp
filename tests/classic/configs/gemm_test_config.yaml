@@ -37,6 +37,13 @@ gemm_tests:
       float: 1.0e-5
       bfloat16: 1.0e-2
       int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+            alpha: 2.0
     # product_type: "simple"
   # Basic test cases
   - name: "small_matrix_postops"

@@ -1,0 +1,105 @@
+# GEMM test configuration file with PostOps - Comprehensive parameter testing
+yaml_test:
+  # Test case 1: Elementwise-CLIP with default values (backward compatibility)
+  - name: "elementwise_clip_default_values"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    lda: 4
+    ldb: 4
+    ldc: 4
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-CLIP"
+          params: {}
+
+  # Test case 2: Elementwise operations with custom parameters
+  - name: "elementwise_custom_parameters"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    lda: 4
+    ldb: 4
+    ldc: 4
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-CLIP"
+          params:
+            alpha: [2.0]
+            alpha_type: ["f32"]
+            beta: [5.0]
+            beta_type: ["f32"]
+        - type: "Elementwise-PRELU"
+          params:
+            alpha: ["0.2"]
+            alpha_type: ["f32"]
+        - type: "Scale"
+          params:
+            scale_factor: ["3.0"]
+            scale_factor_type: ["f32"]
+            is_power_of_2: ["false"]
+
+  # Test case 3: Different data types (bf16) validation
+  - name: "elementwise_different_types"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    lda: 4
+    ldb: 4
+    ldc: 4
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-CLIP"
+          params:
+            alpha: [1.5]
+            alpha_type: ["bf16"]
+            beta: [3.5]
+            beta_type: ["bf16"]
