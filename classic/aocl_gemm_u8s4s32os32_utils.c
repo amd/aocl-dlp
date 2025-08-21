@@ -33,7 +33,12 @@
 #include "sys_utils/dlp_cpu_arch.h"
 #include "u8s8s32/lpgemm_reorder.h"
 
-AOCL_GEMM_GET_REORDER_BUF_SIZE(u8s4s32os32)
+msz_t
+aocl_get_reorder_buf_size_u8s4s32os32(const char order,
+                                      const char trans,
+                                      const char mat_type,
+                                      const md_t k,
+                                      const md_t n)
 {
     if ((k <= 0) || (n <= 0)) {
         return 0; // Error.
@@ -91,7 +96,15 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE(u8s4s32os32)
     return size_req;
 }
 
-AOCL_GEMM_REORDER(int8_t, u8s4s32os32)
+void
+aocl_reorder_u8s4s32os32(const char    order,
+                         const char    trans,
+                         const char    mat_type,
+                         const int8_t* input_buf_addr,
+                         int8_t*       reorder_buf_addr,
+                         const md_t    k,
+                         const md_t    n,
+                         const md_t    ldb)
 {
     dlp_trans_t dlp_trans;
     /* Map BLAS chars to their corresponding DLP enumerated type value. */

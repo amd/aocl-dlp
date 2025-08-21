@@ -38,7 +38,24 @@
 #include "sys_utils/dlp_cpu_arch.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 
-AOCL_GEMM_MATMUL(int8_t, int8_t, bfloat16, int32_t, s8s8s32obf16_sym_quant)
+void
+aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
+                                 const char      transa,
+                                 const char      transb,
+                                 const md_t      m,
+                                 const md_t      n,
+                                 const md_t      k,
+                                 const int32_t   alpha,
+                                 const int8_t*   a,
+                                 const md_t      lda,
+                                 const char      mem_format_a,
+                                 const int8_t*   b,
+                                 const md_t      ldb,
+                                 const char      mem_format_b,
+                                 const int32_t   beta,
+                                 bfloat16*       c,
+                                 const md_t      ldc,
+                                 dlp_metadata_t* metadata)
 {
     LPGEMM_START_LOGGER();
     LPGEMM_WRITE_LOGGER("s8s8s32obf16_sym_quant", order, transa, transb, m, n,

@@ -33,7 +33,8 @@
 #include "lpgemm_types.h"
 #include "sys_utils/dlp_cpu_arch.h"
 
-AOCL_UTIL_L1_OP(float, gelu_tanh_f32)
+void
+aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx)
 {
     // Check if AVX2 ISA is supported, lpgemm u8s8s16os16 matmul only works with
     // it.
@@ -56,7 +57,8 @@ AOCL_UTIL_L1_OP(float, gelu_tanh_f32)
     ((lpgemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
 }
 
-AOCL_UTIL_L1_OP(float, gelu_erf_f32)
+void
+aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx)
 {
     // Check if AVX2 ISA is supported, lpgemm u8s8s16os16 matmul only works with
     // it.
@@ -79,7 +81,8 @@ AOCL_UTIL_L1_OP(float, gelu_erf_f32)
     ((lpgemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
 }
 
-AOCL_UTIL_L1_OP(float, softmax_f32)
+void
+aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx)
 {
     // Check if AVX2 ISA is supported, lpgemm u8s8s16os16 matmul only works with
     // it.

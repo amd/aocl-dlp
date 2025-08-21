@@ -35,7 +35,12 @@
 #include "s8s8s32/lpgemm_reorder_s8.h"
 #include "sys_utils/dlp_cpu_arch.h"
 
-AOCL_GEMM_GET_REORDER_BUF_SIZE(s8s8s32os32)
+msz_t
+aocl_get_reorder_buf_size_s8s8s32os32(const char order,
+                                      const char trans,
+                                      const char mat_type,
+                                      const md_t k,
+                                      const md_t n)
 {
     if ((k <= 0) || (n <= 0)) {
         return 0; // Error.
@@ -91,7 +96,13 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE(s8s8s32os32)
     return size_req;
 }
 
-AOCL_GEMM_GET_REORDER_BUF_SIZE_SYM_QUANT(s8s8s32os32_sym_quant)
+msz_t
+aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char           order,
+                                                const char           trans,
+                                                const char           mat_type,
+                                                const md_t           k,
+                                                const md_t           n,
+                                                DLP_SYMM_STAT_QUANT* meta_data)
 {
     if ((k <= 0) || (n <= 0)) {
         return 0; // Error.
@@ -168,7 +179,15 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE_SYM_QUANT(s8s8s32os32_sym_quant)
     return size_req;
 }
 
-AOCL_GEMM_REORDER(int8_t, s8s8s32os32)
+void
+aocl_reorder_s8s8s32os32(const char    order,
+                         const char    trans,
+                         const char    mat_type,
+                         const int8_t* input_buf_addr,
+                         int8_t*       reorder_buf_addr,
+                         const md_t    k,
+                         const md_t    n,
+                         const md_t    ldb)
 {
     dlp_trans_t dlp_trans;
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
@@ -254,7 +273,16 @@ AOCL_GEMM_REORDER(int8_t, s8s8s32os32)
     reorderb_nr64_s8s8s32o32(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
-AOCL_GEMM_REORDER_SYM_QUANT(int8_t, s8s8s32os32_sym_quant)
+void
+aocl_reorder_s8s8s32os32_sym_quant(const char           order,
+                                   const char           trans,
+                                   const char           mat_type,
+                                   const int8_t*        input_buf_addr,
+                                   int8_t*              reorder_buf_addr,
+                                   const md_t           k,
+                                   const md_t           n,
+                                   const md_t           ldb,
+                                   DLP_SYMM_STAT_QUANT* meta_data)
 {
     dlp_trans_t dlp_trans;
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
@@ -352,7 +380,14 @@ AOCL_GEMM_REORDER_SYM_QUANT(int8_t, s8s8s32os32_sym_quant)
                                        group_size);
 }
 
-AOCL_GEMM_UNREORDER(int8_t, s8s8s32os32_reference)
+void
+aocl_unreorder_s8s8s32os32_reference(const char    order,
+                                     const char    mat_type,
+                                     const int8_t* reorder_buf_addr,
+                                     int8_t*       output_buf_addr,
+                                     const md_t    k,
+                                     const md_t    n,
+                                     const md_t    ldb)
 {
     if ((output_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
         || (n <= 0)) {

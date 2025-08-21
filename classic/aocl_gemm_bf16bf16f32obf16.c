@@ -63,7 +63,24 @@ is_tiny_input_bf16obf16(md_t m, md_t n, md_t k, lpgemm_cntx_t* lcntx)
     return FALSE;
 }
 
-AOCL_GEMM_MATMUL(bfloat16, bfloat16, bfloat16, float, bf16bf16f32obf16)
+void
+aocl_gemm_bf16bf16f32obf16(const char      order,
+                           const char      transa,
+                           const char      transb,
+                           const md_t      m,
+                           const md_t      n,
+                           const md_t      k,
+                           const float     alpha,
+                           const bfloat16* a,
+                           const md_t      lda,
+                           const char      mem_format_a,
+                           const bfloat16* b,
+                           const md_t      ldb,
+                           const char      mem_format_b,
+                           const float     beta,
+                           bfloat16*       c,
+                           const md_t      ldc,
+                           dlp_metadata_t* metadata)
 {
     LPGEMM_START_LOGGER();
     LPGEMM_WRITE_LOGGER("bf16bf16f32obf16", order, transa, transb, m, n, k,

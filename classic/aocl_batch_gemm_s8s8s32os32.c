@@ -37,7 +37,26 @@
 #include "sys_utils/dlp_cpu_arch.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 
-AOCL_BGEMM_MATMUL(int8_t, int8_t, int32_t, int32_t, s8s8s32os32)
+void
+aocl_batch_gemm_s8s8s32os32(const char*      order,
+                            const char*      transa,
+                            const char*      transb,
+                            const md_t*      m,
+                            const md_t*      n,
+                            const md_t*      k,
+                            const int32_t*   alpha,
+                            const int8_t**   a,
+                            const md_t*      lda,
+                            const int8_t**   b,
+                            const md_t*      ldb,
+                            const int32_t*   beta,
+                            int32_t**        c,
+                            const md_t*      ldc,
+                            const md_t       group_count,
+                            const md_t*      group_size,
+                            const char*      mem_format_a,
+                            const char*      mem_format_b,
+                            dlp_metadata_t** metadata)
 {
     LPGEMM_START_LOGGER();
     BATCH_LPGEMM_WRITE_LOGGER("s8s8s32os32", order, transa, transb, group_count,
@@ -258,7 +277,26 @@ err_hndl:;
     LPGEMM_STOP_LOGGER();
 }
 
-AOCL_BGEMM_MATMUL(int8_t, int8_t, int8_t, int32_t, s8s8s32os8)
+void
+aocl_batch_gemm_s8s8s32os8(const char*      order,
+                           const char*      transa,
+                           const char*      transb,
+                           const md_t*      m,
+                           const md_t*      n,
+                           const md_t*      k,
+                           const int32_t*   alpha,
+                           const int8_t**   a,
+                           const md_t*      lda,
+                           const int8_t**   b,
+                           const md_t*      ldb,
+                           const int32_t*   beta,
+                           int8_t**         c,
+                           const md_t*      ldc,
+                           const md_t       group_count,
+                           const md_t*      group_size,
+                           const char*      mem_format_a,
+                           const char*      mem_format_b,
+                           dlp_metadata_t** metadata)
 {
     LPGEMM_START_LOGGER();
     BATCH_LPGEMM_WRITE_LOGGER("s8s8s32os8", order, transa, transb, group_count,
@@ -480,7 +518,26 @@ err_hndl:;
     LPGEMM_STOP_LOGGER();
 }
 
-AOCL_BGEMM_MATMUL(int8_t, int8_t, float, int32_t, s8s8s32of32)
+void
+aocl_batch_gemm_s8s8s32of32(const char*      order,
+                            const char*      transa,
+                            const char*      transb,
+                            const md_t*      m,
+                            const md_t*      n,
+                            const md_t*      k,
+                            const int32_t*   alpha,
+                            const int8_t**   a,
+                            const md_t*      lda,
+                            const int8_t**   b,
+                            const md_t*      ldb,
+                            const int32_t*   beta,
+                            float**          c,
+                            const md_t*      ldc,
+                            const md_t       group_count,
+                            const md_t*      group_size,
+                            const char*      mem_format_a,
+                            const char*      mem_format_b,
+                            dlp_metadata_t** metadata)
 {
     LPGEMM_START_LOGGER();
     BATCH_LPGEMM_WRITE_LOGGER("s8s8s32of32", order, transa, transb, group_count,
@@ -698,7 +755,27 @@ err_hndl:;
     LPGEMM_STOP_LOGGER();
 }
 
-AOCL_BGEMM_MATMUL(int8_t, int8_t, bfloat16, int32_t, s8s8s32obf16)
+void
+aocl_batch_gemm_s8s8s32obf16(const char*      order,
+                             const char*      transa,
+                             const char*      transb,
+                             const md_t*      m,
+                             const md_t*      n,
+                             const md_t*      k,
+                             const int32_t*   alpha,
+                             const int8_t**   a,
+                             const md_t*      lda,
+                             const int8_t**   b,
+                             const md_t*      ldb,
+                             const int32_t*   beta,
+                             bfloat16**       c,
+                             const md_t*      ldc,
+                             const md_t       group_count,
+                             const md_t*      group_size,
+                             const char*      mem_format_a,
+                             const char*      mem_format_b,
+                             dlp_metadata_t** metadata)
+
 {
     LPGEMM_START_LOGGER();
     BATCH_LPGEMM_WRITE_LOGGER(
@@ -916,7 +993,26 @@ err_hndl:;
     LPGEMM_STOP_LOGGER();
 }
 
-AOCL_BGEMM_MATMUL(int8_t, int8_t, uint8_t, int32_t, s8s8s32ou8)
+void
+aocl_batch_gemm_s8s8s32ou8(const char*      order,
+                           const char*      transa,
+                           const char*      transb,
+                           const md_t*      m,
+                           const md_t*      n,
+                           const md_t*      k,
+                           const int32_t*   alpha,
+                           const int8_t**   a,
+                           const md_t*      lda,
+                           const int8_t**   b,
+                           const md_t*      ldb,
+                           const int32_t*   beta,
+                           uint8_t**        c,
+                           const md_t*      ldc,
+                           const md_t       group_count,
+                           const md_t*      group_size,
+                           const char*      mem_format_a,
+                           const char*      mem_format_b,
+                           dlp_metadata_t** metadata)
 {
     LPGEMM_START_LOGGER();
     BATCH_LPGEMM_WRITE_LOGGER("s8s8s32ou8", order, transa, transb, group_count,

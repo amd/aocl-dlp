@@ -38,7 +38,24 @@
 #include "sys_utils/dlp_cpu_arch.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 
-AOCL_GEMM_MATMUL(bfloat16, int8_t, float, float, bf16s4f32of32)
+void
+aocl_gemm_bf16s4f32of32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const float     alpha,
+                        const bfloat16* a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const int8_t*   b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const float     beta,
+                        float*          c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata)
 {
     LPGEMM_START_LOGGER();
     LPGEMM_WRITE_LOGGER("bf16s4f32of32", order, transa, transb, m, n, k,
@@ -199,7 +216,24 @@ err_hndl:;
     LPGEMM_STOP_LOGGER();
 }
 
-AOCL_GEMM_MATMUL(bfloat16, int8_t, bfloat16, float, bf16s4f32obf16)
+void
+aocl_gemm_bf16s4f32obf16(const char      order,
+                         const char      transa,
+                         const char      transb,
+                         const md_t      m,
+                         const md_t      n,
+                         const md_t      k,
+                         const float     alpha,
+                         const bfloat16* a,
+                         const md_t      lda,
+                         const char      mem_format_a,
+                         const int8_t*   b,
+                         const md_t      ldb,
+                         const char      mem_format_b,
+                         const float     beta,
+                         bfloat16*       c,
+                         const md_t      ldc,
+                         dlp_metadata_t* metadata)
 {
     LPGEMM_START_LOGGER();
     LPGEMM_WRITE_LOGGER("bf16s4f32obf16", order, transa, transb, m, n, k,

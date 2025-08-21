@@ -33,18 +33,33 @@
 #include "classic/dlp_base_types.h"
 
 /**
- * @brief Performs activation operations on vector.
- *
+ * @brief Performs GELU activation (tanh approximation) on a float vector.
  * @param[in] n Number of elements in the vector.
  * @param[inout] x Pointer to the vector.
  * @param[in] incx Stride between consecutive elements in the vector.
  */
-#define AOCL_UTIL_L1_OP(V_type, OP_type)                                       \
-    DLP_CLASSIC_EXPORT void aocl_gemm_##OP_type(const md_t n, V_type* x,       \
-                                                const md_t incx)
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_gelu_tanh_f32
+aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx);
 
-AOCL_UTIL_L1_OP(float, gelu_tanh_f32);
-AOCL_UTIL_L1_OP(float, gelu_erf_f32);
-AOCL_UTIL_L1_OP(float, softmax_f32);
+/**
+ * @brief Performs GELU activation (erf approximation) on a float vector.
+ * @param[in] n Number of elements in the vector.
+ * @param[inout] x Pointer to the vector.
+ * @param[in] incx Stride between consecutive elements in the vector.
+ */
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_gelu_erf_f32
+aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx);
+
+/**
+ * @brief Performs softmax activation on a float vector.
+ * @param[in] n Number of elements in the vector.
+ * @param[inout] x Pointer to the vector.
+ * @param[in] incx Stride between consecutive elements in the vector.
+ */
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_softmax_f32
+aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx);
 
 #endif // AOCL_UTIL_INTERFACE_H

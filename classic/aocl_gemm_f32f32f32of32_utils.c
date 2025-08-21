@@ -39,7 +39,12 @@
 #include <omp.h>
 #endif
 
-AOCL_GEMM_GET_REORDER_BUF_SIZE(f32f32f32of32)
+msz_t
+aocl_get_reorder_buf_size_f32f32f32of32(const char order,
+                                        const char trans,
+                                        const char mat_type,
+                                        const md_t k,
+                                        const md_t n)
 {
     if ((k <= 0) || (n <= 0)) {
         return 0; // Error.
@@ -80,7 +85,15 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE(f32f32f32of32)
 }
 
 // Pack B into row stored column panels.
-AOCL_GEMM_REORDER(float, f32f32f32of32)
+void
+aocl_reorder_f32f32f32of32(const char   order,
+                           const char   trans,
+                           const char   mat_type,
+                           const float* input_buf_addr,
+                           float*       reorder_buf_addr,
+                           const md_t   k,
+                           const md_t   n,
+                           const md_t   ldb)
 {
     dlp_trans_t dlp_trans;
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
@@ -240,7 +253,15 @@ AOCL_GEMM_REORDER(float, f32f32f32of32)
     }
 }
 
-AOCL_GEMM_REORDER(float, f32f32f32of32_reference)
+void
+aocl_reorder_f32f32f32of32_reference(const char   order,
+                                     const char   trans,
+                                     const char   mat_type,
+                                     const float* input_buf_addr,
+                                     float*       reorder_buf_addr,
+                                     const md_t   k,
+                                     const md_t   n,
+                                     const md_t   ldb)
 {
     dlp_trans_t dlp_trans;
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
@@ -465,7 +486,14 @@ unreorderb_nr64_f32f32f32of32_reference(lpgemm_obj_t*  b,
     }
 }
 
-AOCL_GEMM_UNREORDER(float, f32f32f32of32_reference)
+void
+aocl_unreorder_f32f32f32of32_reference(const char   order,
+                                       const char   mat_type,
+                                       const float* reorder_buf_addr,
+                                       float*       output_buf_addr,
+                                       const md_t   k,
+                                       const md_t   n,
+                                       const md_t   ldb)
 {
     if ((output_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
         || (n <= 0)) {

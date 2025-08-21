@@ -98,6 +98,7 @@ target_link_libraries(${PROJECT_NAME}
 target_link_libraries(${PROJECT_NAME}_static
     PUBLIC
         ${CLASSIC_TARGETS}
+        ${DLP_PLUS_TARGETS}
     PUBLIC
         dlp::openmp
 )
@@ -126,6 +127,7 @@ dlp_set_global_compile_flags(${PROJECT_NAME})
 
 # Apply installation rules from dlp_install.cmake
 dlp_install(${PROJECT_NAME})
+dlp_install(${PROJECT_NAME}_static)
 
 # Enable testing
 if(BUILD_TESTING)

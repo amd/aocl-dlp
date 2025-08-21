@@ -37,7 +37,26 @@
 #include "sys_utils/dlp_cpu_arch.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 
-AOCL_BGEMM_MATMUL(float, float, float, float, f32f32f32of32)
+void
+aocl_batch_gemm_f32f32f32of32(const char*      order,
+                              const char*      transa,
+                              const char*      transb,
+                              const md_t*      m,
+                              const md_t*      n,
+                              const md_t*      k,
+                              const float*     alpha,
+                              const float**    a,
+                              const md_t*      lda,
+                              const float**    b,
+                              const md_t*      ldb,
+                              const float*     beta,
+                              float**          c,
+                              const md_t*      ldc,
+                              const md_t       group_count,
+                              const md_t*      group_size,
+                              const char*      mem_format_a,
+                              const char*      mem_format_b,
+                              dlp_metadata_t** metadata)
 {
     LPGEMM_START_LOGGER();
     BATCH_LPGEMM_WRITE_LOGGER("f32f32f32of32", order, transa, transb,

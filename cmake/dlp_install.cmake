@@ -34,7 +34,7 @@ function(dlp_install target_name)
     )
 
     install(DIRECTORY include/
-        DESTINATION include/${target_name}
+        DESTINATION include
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     )
 endfunction()

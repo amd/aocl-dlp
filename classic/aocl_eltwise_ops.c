@@ -110,7 +110,17 @@ aocl_eltwise_ops_bf16of32_base(const char      order,
 #endif
 }
 
-AOCL_UTIL_ELTWISE_OPS(bfloat16, float, bf16of32)
+void
+aocl_gemm_eltwise_ops_bf16of32(const char      order,
+                               const char      transa,
+                               const char      transb,
+                               const md_t      m,
+                               const md_t      n,
+                               const bfloat16* a,
+                               const md_t      lda,
+                               float*          b,
+                               const md_t      ldb,
+                               dlp_metadata_t* metadata)
 {
     AOCL_UTIL_ELTWISE_OPS_CHECK("bf16of32", order, transa, transb, m, n, a, lda,
                                 b, ldb);
@@ -119,7 +129,17 @@ AOCL_UTIL_ELTWISE_OPS(bfloat16, float, bf16of32)
                                    metadata, DLP_F32);
 }
 
-AOCL_UTIL_ELTWISE_OPS(bfloat16, bfloat16, bf16obf16)
+void
+aocl_gemm_eltwise_ops_bf16obf16(const char      order,
+                                const char      transa,
+                                const char      transb,
+                                const md_t      m,
+                                const md_t      n,
+                                const bfloat16* a,
+                                const md_t      lda,
+                                bfloat16*       b,
+                                const md_t      ldb,
+                                dlp_metadata_t* metadata)
 {
     AOCL_UTIL_ELTWISE_OPS_CHECK("bf16obf16", order, transa, transb, m, n, a,
                                 lda, b, ldb);
@@ -212,7 +232,17 @@ aocl_eltwise_ops_f32of32_base(const char      order,
 #endif
 }
 
-AOCL_UTIL_ELTWISE_OPS(float, float, f32of32)
+void
+aocl_gemm_eltwise_ops_f32of32(const char      order,
+                              const char      transa,
+                              const char      transb,
+                              const md_t      m,
+                              const md_t      n,
+                              const float*    a,
+                              const md_t      lda,
+                              float*          b,
+                              const md_t      ldb,
+                              dlp_metadata_t* metadata)
 {
     AOCL_UTIL_ELTWISE_OPS_CHECK("f32of32", order, transa, transb, m, n, a, lda,
                                 b, ldb);
@@ -221,7 +251,17 @@ AOCL_UTIL_ELTWISE_OPS(float, float, f32of32)
                                   metadata, DLP_F32);
 }
 
-AOCL_UTIL_ELTWISE_OPS(float, bfloat16, f32obf16)
+void
+aocl_gemm_eltwise_ops_f32obf16(const char      order,
+                               const char      transa,
+                               const char      transb,
+                               const md_t      m,
+                               const md_t      n,
+                               const float*    a,
+                               const md_t      lda,
+                               bfloat16*       b,
+                               const md_t      ldb,
+                               dlp_metadata_t* metadata)
 {
     AOCL_UTIL_ELTWISE_OPS_CHECK("f32obf16", order, transa, transb, m, n, a, lda,
                                 b, ldb);
@@ -236,7 +276,17 @@ AOCL_UTIL_ELTWISE_OPS(float, bfloat16, f32obf16)
                                   (float*)b, ldb, metadata, DLP_BF16);
 }
 
-AOCL_UTIL_ELTWISE_OPS(float, int32_t, f32os32)
+void
+aocl_gemm_eltwise_ops_f32os32(const char      order,
+                              const char      transa,
+                              const char      transb,
+                              const md_t      m,
+                              const md_t      n,
+                              const float*    a,
+                              const md_t      lda,
+                              int32_t*        b,
+                              const md_t      ldb,
+                              dlp_metadata_t* metadata)
 {
     AOCL_UTIL_ELTWISE_OPS_CHECK("f32os32", order, transa, transb, m, n, a, lda,
                                 b, ldb);
@@ -245,7 +295,17 @@ AOCL_UTIL_ELTWISE_OPS(float, int32_t, f32os32)
                                   (float*)b, ldb, metadata, DLP_S32);
 }
 
-AOCL_UTIL_ELTWISE_OPS(float, int8_t, f32os8)
+void
+aocl_gemm_eltwise_ops_f32os8(const char      order,
+                             const char      transa,
+                             const char      transb,
+                             const md_t      m,
+                             const md_t      n,
+                             const float*    a,
+                             const md_t      lda,
+                             int8_t*         b,
+                             const md_t      ldb,
+                             dlp_metadata_t* metadata)
 {
     AOCL_UTIL_ELTWISE_OPS_CHECK("f32os8", order, transa, transb, m, n, a, lda,
                                 b, ldb);
@@ -254,7 +314,17 @@ AOCL_UTIL_ELTWISE_OPS(float, int8_t, f32os8)
                                   (float*)b, ldb, metadata, DLP_S8);
 }
 
-AOCL_UTIL_ELTWISE_OPS(float, uint8_t, f32ou8)
+void
+aocl_gemm_eltwise_ops_f32ou8(const char      order,
+                             const char      transa,
+                             const char      transb,
+                             const md_t      m,
+                             const md_t      n,
+                             const float*    a,
+                             const md_t      lda,
+                             uint8_t*        b,
+                             const md_t      ldb,
+                             dlp_metadata_t* metadata)
 {
     AOCL_UTIL_ELTWISE_OPS_CHECK("f32ou8", order, transa, transb, m, n, a, lda,
                                 b, ldb);

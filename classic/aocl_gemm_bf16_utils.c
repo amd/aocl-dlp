@@ -35,7 +35,15 @@
 #include "lpgemm_types.h"
 #include "sys_utils/dlp_cpu_arch.h"
 
-AOCL_GEMM_REORDER(bfloat16, bf16bf16f32of32_reference)
+void
+aocl_reorder_bf16bf16f32of32_reference(const char      order,
+                                       const char      trans,
+                                       const char      mat_type,
+                                       const bfloat16* input_buf_addr,
+                                       bfloat16*       reorder_buf_addr,
+                                       const md_t      k,
+                                       const md_t      n,
+                                       const md_t      ldb)
 {
 
     dlp_trans_t dlp_trans;
@@ -113,7 +121,14 @@ AOCL_GEMM_REORDER(bfloat16, bf16bf16f32of32_reference)
     reorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
-AOCL_GEMM_UNREORDER(bfloat16, bf16bf16f32of32_reference)
+void
+aocl_unreorder_bf16bf16f32of32_reference(const char      order,
+                                         const char      mat_type,
+                                         const bfloat16* reorder_buf_addr,
+                                         bfloat16*       output_buf_addr,
+                                         const md_t      k,
+                                         const md_t      n,
+                                         const md_t      ldb)
 {
     if ((output_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
         || (n <= 0)) {
@@ -186,7 +201,12 @@ AOCL_GEMM_UNREORDER(bfloat16, bf16bf16f32of32_reference)
     unreorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
-AOCL_GEMM_GET_REORDER_BUF_SIZE(bf16bf16f32of32)
+msz_t
+aocl_get_reorder_buf_size_bf16bf16f32of32(const char order,
+                                          const char trans,
+                                          const char mat_type,
+                                          const md_t k,
+                                          const md_t n)
 {
     if ((k <= 0) || (n <= 0)) {
         return 0; // Error.
@@ -234,7 +254,15 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE(bf16bf16f32of32)
     return size_req;
 }
 
-AOCL_GEMM_REORDER(bfloat16, bf16bf16f32of32)
+void
+aocl_reorder_bf16bf16f32of32(const char      order,
+                             const char      trans,
+                             const char      mat_type,
+                             const bfloat16* input_buf_addr,
+                             bfloat16*       reorder_buf_addr,
+                             const md_t      k,
+                             const md_t      n,
+                             const md_t      ldb)
 {
     dlp_trans_t dlp_trans;
 
@@ -339,7 +367,15 @@ AOCL_GEMM_REORDER(bfloat16, bf16bf16f32of32)
     reorderb_nr64_bf16bf16f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
-AOCL_GEMM_REORDER_MXP(float, bfloat16, f32obf16)
+void
+aocl_reorder_f32obf16(const char   order,
+                      const char   trans,
+                      const char   mat_type,
+                      const float* input_buf_addr,
+                      bfloat16*    reorder_buf_addr,
+                      const md_t   k,
+                      const md_t   n,
+                      const md_t   ldb)
 {
 
 #ifdef LPGEMM_BF16_JIT
@@ -436,7 +472,14 @@ AOCL_GEMM_REORDER_MXP(float, bfloat16, f32obf16)
     reorderb_mxp_nr64_f32obf16(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
-AOCL_GEMM_UNREORDER(bfloat16, bf16bf16f32of32)
+void
+aocl_unreorder_bf16bf16f32of32(const char      order,
+                               const char      mat_type,
+                               const bfloat16* reorder_buf_addr,
+                               bfloat16*       output_buf_addr,
+                               const md_t      k,
+                               const md_t      n,
+                               const md_t      ldb)
 {
     if ((output_buf_addr == NULL) || (reorder_buf_addr == NULL) || (k <= 0)
         || (n <= 0)) {
@@ -515,7 +558,12 @@ AOCL_GEMM_UNREORDER(bfloat16, bf16bf16f32of32)
     unreorderb_nr64_bf16bf16f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
-AOCL_GEMM_GET_REORDER_BUF_SIZE(bf16s4f32of32)
+msz_t
+aocl_get_reorder_buf_size_bf16s4f32of32(const char order,
+                                        const char trans,
+                                        const char mat_type,
+                                        const md_t k,
+                                        const md_t n)
 {
     if ((k <= 0) || (n <= 0)) {
         return 0; // Error.
@@ -565,7 +613,15 @@ AOCL_GEMM_GET_REORDER_BUF_SIZE(bf16s4f32of32)
     return size_req;
 }
 
-AOCL_GEMM_REORDER(int8_t, bf16s4f32of32)
+void
+aocl_reorder_bf16s4f32of32(const char    order,
+                           const char    trans,
+                           const char    mat_type,
+                           const int8_t* input_buf_addr,
+                           int8_t*       reorder_buf_addr,
+                           const md_t    k,
+                           const md_t    n,
+                           const md_t    ldb)
 {
     dlp_trans_t dlp_trans;
 

@@ -41,6 +41,12 @@
  * This enum defines the various activation functions and element-wise
  * operations that can be applied as post-operations in GEMM computations.
  */
+/**
+ * @enum DLP_ELT_ALGO_TYPE
+ * @brief Element-wise algorithm types for post-operations.
+ *
+ * Enumerates supported activation and element-wise functions for GEMM post-ops.
+ */
 typedef enum
 {
     RELU      = 0, /**< Rectified Linear Unit activation: max(0, x) */
@@ -60,6 +66,12 @@ typedef enum
  * This enum defines the different types of operations that can be performed
  * on the output matrix after GEMM computation.
  */
+/**
+ * @enum DLP_POST_OP_TYPE
+ * @brief Post-operation types for GEMM results.
+ *
+ * Enumerates supported post-operations that can be applied to GEMM output.
+ */
 typedef enum
 {
     SUM        = 1, /**< Element-wise sum with another tensor */
@@ -75,6 +87,12 @@ typedef enum
  *
  * This enum defines the various data types that can be used for storing
  * parameters in GEMM operations and post-operations.
+ */
+/**
+ * @enum DLP_TYPE
+ * @brief Supported data types for GEMM and post-op parameters.
+ *
+ * Enumerates all valid data types for parameter storage in GEMM/post-ops.
  */
 typedef enum
 {
@@ -100,14 +118,20 @@ typedef enum
  * This structure contains the parameters needed for element-wise operations
  * such as activation functions in post-operations.
  */
+/**
+ * @struct dlp_eltwise_algo_t
+ * @brief Parameters for element-wise algorithm in post-ops.
+ *
+ * Holds alpha, beta, and algorithm type for element-wise operations (e.g.,
+ * activation functions).
+ */
 typedef struct
 {
-    void* alpha;                 /**< Alpha parameter for the algorithm
-                                       (e.g., leak factor for PReLU) */
-    void* beta;                  /**< Beta parameter for the algorithm
-                                       (e.g., upper bound for CLIP) */
-    DLP_ELT_ALGO_TYPE algo_type; /**< Type of element-wise algorithm
-                                       to apply */
+    void* alpha; /**< Alpha parameter for the algorithm (e.g., leak factor for
+                    PReLU) */
+    void* beta;  /**< Beta parameter for the algorithm (e.g., upper bound for
+                    CLIP) */
+    DLP_ELT_ALGO_TYPE algo_type; /**< Type of element-wise algorithm to apply */
 } dlp_eltwise_algo_t;
 
 /**
@@ -117,12 +141,17 @@ typedef struct
  * Zero-point represents the quantized value that corresponds to the real
  * value zero.
  */
+/**
+ * @struct dlp_zp_t
+ * @brief Zero-point parameters for quantization.
+ *
+ * Contains zero-point values, their length, and type for quantized operations.
+ */
 typedef struct
 {
-    void* zero_point;         /**< Pointer to zero-point values */
-    md_t  zero_point_len;     /**< Length of zero-point array
-                                   (1 for per-tensor,
-                                   n for per-channel) */
+    void* zero_point;     /**< Pointer to zero-point values */
+    md_t  zero_point_len; /**< Length of zero-point array (1 for per-tensor, n
+                             for per-channel) */
     DLP_TYPE zero_point_type; /**< Data type of zero-point values */
 } dlp_zp_t;
 
@@ -133,13 +162,18 @@ typedef struct
  * operations. Scale factor represents the scaling applied during
  * quantization/dequantization.
  */
+/**
+ * @struct dlp_sf_t
+ * @brief Scale factor parameters for quantization.
+ *
+ * Contains scale factor values, their length, and type for quantized
+ * operations.
+ */
 typedef struct
 {
-    void* scale_factor;         /**< Pointer to scale factor
-                                     values */
-    md_t scale_factor_len;      /**< Length of scale factor array
-                                     (1 for per-tensor,
-                                     n for per-channel) */
+    void* scale_factor;     /**< Pointer to scale factor values */
+    md_t  scale_factor_len; /**< Length of scale factor array (1 for per-tensor,
+                               n for per-channel) */
     DLP_TYPE scale_factor_type; /**< Data type of scale factor values */
 } dlp_sf_t;
 
@@ -149,6 +183,12 @@ typedef struct
  * This structure contains parameters for scaling operations, which can be
  * applied as post-operations. It uses structured scale factor and zero-point
  * parameters for better organization and type safety.
+ */
+/**
+ * @struct dlp_scale_t
+ * @brief Scale operation parameters for post-ops.
+ *
+ * Contains pointers to scale factor and zero-point parameter structures.
  */
 typedef struct
 {
@@ -162,11 +202,16 @@ typedef struct
  * This structure contains parameters for element-wise post-operations
  * such as activation functions applied to the GEMM result.
  */
+/**
+ * @struct dlp_post_op_eltwise
+ * @brief Element-wise post-operation parameters.
+ *
+ * Contains scale factor and algorithm parameters for element-wise post-ops.
+ */
 typedef struct
 {
     dlp_sf_t*          sf;   /**< Scale factor parameters */
-    dlp_eltwise_algo_t algo; /**< Element-wise algorithm
-                                 parameters */
+    dlp_eltwise_algo_t algo; /**< Element-wise algorithm parameters */
 } dlp_post_op_eltwise;
 
 /**
@@ -175,10 +220,17 @@ typedef struct
  * This structure contains parameters for bias addition post-operations,
  * which add a bias vector to the GEMM result.
  */
+/**
+ * @struct dlp_post_op_bias
+ * @brief Bias post-operation parameters.
+ *
+ * Contains pointer to bias values, their type, and optional scale factor.
+ */
 typedef struct
 {
-    void*    bias;      /**< Pointer to bias values */
-    DLP_TYPE stor_type; /**< Storage type of bias values */
+    void*     bias;      /**< Pointer to bias values */
+    DLP_TYPE  stor_type; /**< Storage type of bias values */
+    dlp_sf_t* sf;        /**< @todo Implement bias scale factor */
 } dlp_post_op_bias;
 
 /**
@@ -187,12 +239,17 @@ typedef struct
  * This structure contains parameters for matrix addition post-operations,
  * which add another matrix to the GEMM result.
  */
+/**
+ * @struct dlp_post_op_matrix_add
+ * @brief Matrix addition post-operation parameters.
+ *
+ * Contains pointer to matrix, leading dimension, type, and scale factor for
+ * addition.
+ */
 typedef struct
 {
-    void* matrix;        /**< Pointer to matrix
-                              to be added */
-    md_t ldm;            /**< Leading dimension
-                              of the matrix */
+    void*     matrix;    /**< Pointer to matrix to be added */
+    md_t      ldm;       /**< Leading dimension of the matrix */
     DLP_TYPE  stor_type; /**< Storage type of matrix values */
     dlp_sf_t* sf;        /**< Scale factor parameters */
 } dlp_post_op_matrix_add;
@@ -203,12 +260,17 @@ typedef struct
  * This structure contains parameters for matrix multiplication post-operations,
  * which multiply the GEMM result with another matrix.
  */
+/**
+ * @struct dlp_post_op_matrix_mul
+ * @brief Matrix multiplication post-operation parameters.
+ *
+ * Contains pointer to matrix, leading dimension, type, and scale factor for
+ * multiplication.
+ */
 typedef struct
 {
-    void* matrix;        /**< Pointer to matrix
-                              to be multiplied */
-    md_t ldm;            /**< Leading dimension
-                              of the matrix */
+    void*     matrix;    /**< Pointer to matrix to be multiplied */
+    md_t      ldm;       /**< Leading dimension of the matrix */
     DLP_TYPE  stor_type; /**< Storage type of matrix values */
     dlp_sf_t* sf;        /**< Scale factor parameters */
 } dlp_post_op_matrix_mul;
@@ -218,6 +280,13 @@ typedef struct
  *
  * This structure contains parameters for operations that are applied
  * before the main GEMM computation, typically for quantization adjustments.
+ */
+/**
+ * @struct dlp_pre_op
+ * @brief Pre-operation parameters for GEMM.
+ *
+ * Contains zero-point and scale factor for matrix B, sequence length, and group
+ * size.
  */
 typedef struct
 {
@@ -233,6 +302,13 @@ typedef struct
  * This structure contains parameters for grouped post-operations,
  * which apply different quantization parameters to different groups
  * of the matrices involved in GEMM.
+ */
+/**
+ * @struct dlp_group_post_op
+ * @brief Grouped post-operation parameters for GEMM.
+ *
+ * Contains group size, sequence length, scale factors, and zero-points for
+ * matrices A and B.
  */
 typedef struct
 {
@@ -250,6 +326,12 @@ typedef struct
  * This structure contains parameters for symmetric static quantization,
  * where the quantization is performed with symmetric range around zero.
  */
+/**
+ * @struct DLP_SYMM_STAT_QUANT
+ * @brief Symmetric static quantization parameters.
+ *
+ * Contains group size for symmetric static quantization.
+ */
 typedef struct
 {
     md_t group_size; /**< Group size for grouped quantization */
@@ -263,34 +345,37 @@ typedef struct
  * It supports multiple post-operations that can be chained together in a
  * specific order.
  */
+/**
+ * @struct dlp_metadata_t
+ * @brief Main metadata structure for post-operation configurations.
+ *
+ * Contains all post-operation parameters, sequence, and group information for
+ * GEMM.
+ */
 typedef struct
 {
     dlp_scale_t* scale;                 /**< Scale post-operations
-                                            (multiple allowed, replaces sum) */
+                                            (multiple allowed) */
     dlp_post_op_eltwise* eltwise;       /**< Element-wise post-operations
-                                              (multiple allowed) */
+                                          (multiple allowed) */
     dlp_post_op_bias*       bias;       /**< Bias addition post-operation */
     dlp_post_op_matrix_add* matrix_add; /**< Matrix addition post-operation */
     dlp_post_op_matrix_mul* matrix_mul; /**< Matrix multiplication
-                                              post-operation */
+                                             post-operation */
 
-    md_t seq_length; /**< Number of operations in the
-                          sequence (e.g., 2) */
+    md_t seq_length; /**< Number of operations in the sequence (e.g., 2) */
 
     DLP_POST_OP_TYPE* seq_vector; /**< Sequence of post-operations to
-                                        apply in order (e.g.,
-                                        seq_vector[0]=BIAS,
-                                        seq_vector[1]=ELTWISE means
-                                        bias followed by element-wise
-                                        operation) */
+                                       apply in order
+                                       (e.g., seq_vector[0]=BIAS,
+                                       seq_vector[1]=ELTWISE means bias
+                                       followed by element-wise operation) */
 
-    dlp_pre_op* pre_ops; /**< Pre-operations to be applied
-                               before GEMM */
+    dlp_pre_op* pre_ops; /**< Pre-operations to be applied before GEMM */
 
     dlp_group_post_op* post_op_grp; /**< Grouped post-operations for
-                                          different quantization groups */
-    md_t num_eltwise;               /**< Number of element-wise
-                                         operations to track */
+                                         different quantization groups */
+    md_t num_eltwise; /**< Number of element-wise operations to track */
 
 } dlp_metadata_t;
 

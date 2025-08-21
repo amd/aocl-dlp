@@ -34,8 +34,7 @@
 #include "classic/dlp_base_types.h"
 
 /**
- * @brief Performs element-wise operations on a matrix.
- *
+ * @brief Elementwise operations for GEMM output.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] transa Transpose option for matrix A.
  * @param[in] transb Transpose option for matrix B.
@@ -47,18 +46,89 @@
  * @param[in] ldb Leading dimension of matrix B.
  * @param[in] metadata Pointer to post-operation structures.
  */
-#define AOCL_UTIL_ELTWISE_OPS(A_type, B_type, LP_SFX)                          \
-    DLP_CLASSIC_EXPORT void aocl_gemm_eltwise_ops_##LP_SFX(                    \
-        const char order, const char transa, const char transb, const md_t m,  \
-        const md_t n, const A_type* a, const md_t lda, B_type* b,              \
-        const md_t ldb, dlp_metadata_t* metadata)
-
-AOCL_UTIL_ELTWISE_OPS(bfloat16, float, bf16of32);
-AOCL_UTIL_ELTWISE_OPS(bfloat16, bfloat16, bf16obf16);
-AOCL_UTIL_ELTWISE_OPS(float, float, f32of32);
-AOCL_UTIL_ELTWISE_OPS(float, bfloat16, f32obf16);
-AOCL_UTIL_ELTWISE_OPS(float, int32_t, f32os32);
-AOCL_UTIL_ELTWISE_OPS(float, int8_t, f32os8);
-AOCL_UTIL_ELTWISE_OPS(float, uint8_t, f32ou8);
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_eltwise_ops_bf16of32
+aocl_gemm_eltwise_ops_bf16of32(const char      order,
+                               const char      transa,
+                               const char      transb,
+                               const md_t      m,
+                               const md_t      n,
+                               const bfloat16* a,
+                               const md_t      lda,
+                               float*          b,
+                               const md_t      ldb,
+                               dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_eltwise_ops_bf16obf16
+aocl_gemm_eltwise_ops_bf16obf16(const char      order,
+                                const char      transa,
+                                const char      transb,
+                                const md_t      m,
+                                const md_t      n,
+                                const bfloat16* a,
+                                const md_t      lda,
+                                bfloat16*       b,
+                                const md_t      ldb,
+                                dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_eltwise_ops_f32of32
+aocl_gemm_eltwise_ops_f32of32(const char      order,
+                              const char      transa,
+                              const char      transb,
+                              const md_t      m,
+                              const md_t      n,
+                              const float*    a,
+                              const md_t      lda,
+                              float*          b,
+                              const md_t      ldb,
+                              dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_eltwise_ops_f32obf16
+aocl_gemm_eltwise_ops_f32obf16(const char      order,
+                               const char      transa,
+                               const char      transb,
+                               const md_t      m,
+                               const md_t      n,
+                               const float*    a,
+                               const md_t      lda,
+                               bfloat16*       b,
+                               const md_t      ldb,
+                               dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_eltwise_ops_f32os32
+aocl_gemm_eltwise_ops_f32os32(const char      order,
+                              const char      transa,
+                              const char      transb,
+                              const md_t      m,
+                              const md_t      n,
+                              const float*    a,
+                              const md_t      lda,
+                              int32_t*        b,
+                              const md_t      ldb,
+                              dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_eltwise_ops_f32os8
+aocl_gemm_eltwise_ops_f32os8(const char      order,
+                             const char      transa,
+                             const char      transb,
+                             const md_t      m,
+                             const md_t      n,
+                             const float*    a,
+                             const md_t      lda,
+                             int8_t*         b,
+                             const md_t      ldb,
+                             dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+/// @ref aocl_gemm_eltwise_ops_f32ou8
+aocl_gemm_eltwise_ops_f32ou8(const char      order,
+                             const char      transa,
+                             const char      transb,
+                             const md_t      m,
+                             const md_t      n,
+                             const float*    a,
+                             const md_t      lda,
+                             uint8_t*        b,
+                             const md_t      ldb,
+                             dlp_metadata_t* metadata);
 
 #endif // AOCL_ELTWISE_OPS_INTERFACE_H
