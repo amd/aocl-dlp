@@ -56,10 +56,13 @@ class jitAVX512 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError generateKernel(utils::generatorParams& params);
 
   private:
+    using Traits = amdzen::traits::ArchitectureTraits<
+        utils::kernelInstrType::avx512_zmm_32_reg>;
+
     // Configuration and state
-    int numRegs  = 32;
-    int RegSize  = 512;
-    int RegBytes = RegSize / 8;
+    int numRegs  = Traits::numRegs;
+    int RegSize  = Traits::regSize;
+    int RegBytes = Traits::regBytes;
     int aReg, bReg, bFullReg, bMaskReg, cReg;
     int aRegIdx, bRegIdx, cRegIdx;
     int MR, NR;

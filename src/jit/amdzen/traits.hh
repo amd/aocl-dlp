@@ -28,6 +28,7 @@
 
 #pragma once
 #include "jit/jit_generator_base.hh"
+#include "jit_generator_utils.hh"
 
 namespace amdzen::traits {
 
@@ -43,6 +44,52 @@ struct kernel_types<dlp::kernel_frame::kernelDatatype::f32f32f32of32>
     using cType        = float;
     using accumType    = float;
     using kernelOpType = float;
+};
+
+/**
+ * ArchitectureTraits provides a set of type and constant definitions describing
+ * the properties of a given instruction set architecture, as identified by
+ * kernelInstrType. It defines the register type (e.g., Ymm, Zmm), register size
+ * in bits and bytes, the number of available registers, and whether features
+ * like mask support and AVX512 are present. This traits struct is used by the
+ * templated kernel generator to abstract over architecture-specific details,
+ * enabling the generation of optimized kernels for different instruction sets
+ * in a generic and type-safe manner.
+ */
+template<utils::kernelInstrType KType>
+struct ArchitectureTraits;
+
+template<>
+struct ArchitectureTraits<utils::kernelInstrType::avx2_ymm_16_reg>
+{
+    using RegType                        = Xbyak::Ymm;
+    static constexpr int  regSize        = 256;
+    static constexpr int  regBytes       = regSize / 8;
+    static constexpr int  numRegs        = 16;
+    static constexpr bool hasMaskSupport = false;
+    static constexpr bool isAVX512       = false;
+};
+
+template<>
+struct ArchitectureTraits<utils::kernelInstrType::avx512_zmm_32_reg>
+{
+    using RegType                        = Xbyak::Zmm;
+    static constexpr int  regSize        = 512;
+    static constexpr int  regBytes       = regSize / 8;
+    static constexpr int  numRegs        = 32;
+    static constexpr bool hasMaskSupport = true;
+    static constexpr bool isAVX512       = true;
+};
+
+template<>
+struct ArchitectureTraits<utils::kernelInstrType::avx512_ymm_32_reg>
+{
+    using RegType                        = Xbyak::Ymm;
+    static constexpr int  regSize        = 256;
+    static constexpr int  regBytes       = regSize / 8;
+    static constexpr int  numRegs        = 32;
+    static constexpr bool hasMaskSupport = true;
+    static constexpr bool isAVX512       = true;
 };
 
 } // namespace amdzen::traits

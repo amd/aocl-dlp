@@ -284,7 +284,8 @@ jitAVX512::generateIrLoop(utils::generatorParams& params)
                                                params.useMask, cRegIdx, cReg,
                                                params.kType);
 
-        kernelOpsHandler.generateKernelOps(params.kernelOps, stackPtr);
+        RETURN_IF_ERROR(
+            (kernelOpsHandler.generateKernelOps(params.kernelOps, stackPtr)));
 
         // The gelu constants are embedded within the generated JIT kernel.
         // Otherwise a bug was observed whereby the address of gelu constants

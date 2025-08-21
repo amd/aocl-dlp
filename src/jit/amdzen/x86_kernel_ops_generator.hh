@@ -28,25 +28,40 @@
 
 #pragma once
 
+#include "jit_generator_utils.hh"
 #include "kernel_ops_generator_base.hh"
+#include "traits.hh"
+#include <queue>
 
-namespace amdzen::avx512gen {
+namespace amdzen::x86gen {
 
-class kernelOpsGeneratorAvx512 : public gen::kernelOpsGeneratorInterface
+#define DISPATCH_BY_DATATYPE(dt, func, ...)                                    \
+    switch (dt) {                                                              \
+        case DataType::f32:                                                    \
+            return func<float>(__VA_ARGS__);                                   \
+        default:                                                               \
+            return jitGeneratorError::notSupported;                            \
+    }
+
+template<utils::kernelInstrType KType>
+class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 {
+    using Traits  = traits::ArchitectureTraits<KType>;
+    using RegType = typename Traits::RegType;
+
   public:
-    kernelOpsGeneratorAvx512(Xbyak::CodeGenerator* jit,
-                             int                   MR,
-                             int                   NR,
-                             bool                  useMask,
-                             int                   cRegStartIdx,
-                             int                   cRegCount);
-    ~kernelOpsGeneratorAvx512()                               = default;
-    kernelOpsGeneratorAvx512(const kernelOpsGeneratorAvx512&) = delete;
-    kernelOpsGeneratorAvx512& operator=(const kernelOpsGeneratorAvx512&) =
-        delete;
-    kernelOpsGeneratorAvx512(kernelOpsGeneratorAvx512&&)            = delete;
-    kernelOpsGeneratorAvx512& operator=(kernelOpsGeneratorAvx512&&) = delete;
+    kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit,
+                          int                   MR,
+                          int                   NR,
+                          bool                  useMask,
+                          int                   cRegStartIdx,
+                          int                   cRegCount);
+
+    ~kernelOpsGeneratorX86()                                       = default;
+    kernelOpsGeneratorX86(const kernelOpsGeneratorX86&)            = delete;
+    kernelOpsGeneratorX86& operator=(const kernelOpsGeneratorX86&) = delete;
+    kernelOpsGeneratorX86(kernelOpsGeneratorX86&&)                 = delete;
+    kernelOpsGeneratorX86& operator=(kernelOpsGeneratorX86&&)      = delete;
 
     dlp::jit::jitGeneratorError generateKernelOps(
         std::vector<dlp::kernel_frame::kernelOpsMetaData>& kernelOps,
@@ -80,9 +95,8 @@ class kernelOpsGeneratorAvx512 : public gen::kernelOpsGeneratorInterface
     void advancePostOpsPtr() override;
 
   private:
-    int numRegs  = 32;
-    int RegSize  = 512;
-    int RegBytes = RegSize / 8;
+    int numRegs  = Traits::numRegs;
+    int RegBytes = Traits::regBytes;
 
     int MR, NR, useMask;
     int numFullRegsPerRow;
@@ -122,49 +136,37 @@ class kernelOpsGeneratorAvx512 : public gen::kernelOpsGeneratorInterface
 
     // Helper implementations for different storage formats
     template<typename T>
-    void biasRowMajorZmm();
+    dlp::jit::jitGeneratorError biasRowMajorImpl();
 
     template<typename T>
-    void biasColMajorZmm();
+    dlp::jit::jitGeneratorError biasColMajorImpl();
 
     template<typename T>
-    void reluScaleZmm();
+    dlp::jit::jitGeneratorError reluScaleImpl();
 
     template<typename T>
-    void geluTanhZmm();
+    dlp::jit::jitGeneratorError clipImpl();
 
     template<typename T>
-    void geluErfZmm();
+    dlp::jit::jitGeneratorError scaleFactorScalarImpl();
 
     template<typename T>
-    void swishZmm();
+    dlp::jit::jitGeneratorError scaleFactorRowMajorImpl();
 
     template<typename T>
-    void tanhZmm();
+    dlp::jit::jitGeneratorError scaleFactorColMajorImpl();
 
     template<typename T>
-    void sigmoidZmm();
+    dlp::jit::jitGeneratorError zeroPointScalarImpl();
 
     template<typename T>
-    void clipZmm();
+    dlp::jit::jitGeneratorError zeroPointRowMajorImpl();
 
     template<typename T>
-    void ScaleFactorScalarZmm();
+    dlp::jit::jitGeneratorError zeroPointColMajorImpl();
 
     template<typename T>
-    void ScaleFactorRowMajorZmm();
-
-    template<typename T>
-    void ScaleFactorColMajorZmm();
-
-    template<typename T>
-    void ZeroPointScalarZmm();
-
-    template<typename T>
-    void ZeroPointRowMajorZmm();
-
-    template<typename T>
-    void ZeroPointColMajorZmm();
+    dlp::jit::jitGeneratorError swishImpl();
 
     enum class matOpType
     {
@@ -180,27 +182,28 @@ class kernelOpsGeneratorAvx512 : public gen::kernelOpsGeneratorInterface
     };
 
     template<typename T>
-    void matOpScaleFactorZmm(matOpType opType, matOpScaleType sclType);
+    dlp::jit::jitGeneratorError matOpScaleFactorImpl(matOpType      opType,
+                                                     matOpScaleType sclType);
 
     // TODO: Math Utils, move to different class.
-    void POLY_EVAL_6_AVX512();
-    void EXPF_AVX512();
-    void TANHF_AVX512();
-    void GELU_TANH_F32_AVX512_DEF(md_t reg);
-    void TANHF_AVX512_DEF(md_t reg);
+    void POLY_EVAL_6();
+    void EXPF();
+    void TANHF();
+    void GELU_TANH_F32_DEF(md_t reg);
+    void TANHF_DEF(md_t reg);
     void POLY_EVAL_HORNER_16_0_AVX512();
     void ERF_AVX512();
-    void GELU_ERF_F32_AVX512_DEF(md_t reg);
-    void SWISH_F32_AVX512_DEF(md_t reg);
-    void SIGMOID_AVX512_DEF(md_t reg);
+    void GELU_ERF_F32_DEF(md_t reg);
+    void SWISH_F32_DEF(md_t reg);
+    void SIGMOID_DEF(md_t reg);
     void apply_post_ops_in_high_reg_pressure(const md_t num_post_op_regs,
                                              std::function<void(md_t)> op_fn);
-    void store_zmms_in_stack(md_t reg_start_idx, md_t num_regs);
-    void get_zmms_from_stack(md_t reg_start_idx, md_t num_regs);
+    void store_reg_in_stack(md_t reg_start_idx, md_t num_regs);
+    void get_reg_from_stack(md_t reg_start_idx, md_t num_regs);
 
     // Table of constants used in gelu_tanh and gelu_erf.
     // TODO: Clean this up and move to a more appropriate place.
-    float gelu_consts[7] = { 0.044715, 0.797884, -2, 0.5, -1, 2, 1 };
+    float gelu_consts[8] = { 0.044715, 0.797884, -2, 0.5, -1, 2, 1, -0.0f };
     float gelu_macros[6] = { 1.4426950408889634, 1.2582912E7, -88.0f, 88.0f,
                              (float)(1.0 / 0.0), -2147483648 };
 
@@ -230,7 +233,27 @@ class kernelOpsGeneratorAvx512 : public gen::kernelOpsGeneratorInterface
         return jit_->ptr[jit_->rip + tables + table_off
                          + (value_off * (md_t)sizeof(float))];
     }
-    Xbyak::Label tables;
+    Xbyak::Label  tables;
+    Xbyak::Opmask maskReg;
+
+    Xbyak::Ymm ymmMask;
+
+    std::queue<RegType> scratch_reg_queue;
+
+    RegType popAndGetScratchReg()
+    {
+        RegType reg = scratch_reg_queue.front();
+        scratch_reg_queue.pop();
+        return reg;
+    }
+
+    void loadRowF32(Xbyak::Reg64 addressReg, int regStartIdx);
 };
 
-} // namespace amdzen::avx512gen
+// Type aliases using kernelInstrType
+using kernelOpsGeneratorAvx2 =
+    kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>;
+using kernelOpsGeneratorAvx512 =
+    kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>;
+
+} // namespace amdzen::x86gen

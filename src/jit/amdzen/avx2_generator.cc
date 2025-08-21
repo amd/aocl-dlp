@@ -93,14 +93,14 @@ jitAVX2::allocateReg()
     // A-registers: minimal count for broadcast reuse, use lowest indices
     // TODO: Needs a better register allocation strategy, due to non
     // availability of mask registers in AVX2.
-    aReg    = 1;
-    aRegIdx = 0; // A-registers: YMM0
+    aReg = 1;
 
     // Mask register: positioned after A-registers for fringe N-dimension
     // handling
     if (useMask) {
-        ymmMaskIdx = aRegIdx + aReg;
+        ymmMaskIdx = 0;
     }
+    aRegIdx = ymmMaskIdx + useMask;
 
     // Verify sufficient registers: must fit A + B + C + mask (if needed)
     int totalRegsNeeded = cReg + bReg + aReg + (useMask ? 1 : 0);
@@ -271,6 +271,29 @@ jitAVX2::generateIrLoop(utils::generatorParams& params)
         RETURN_IF_ERROR((addCBufferBetaOne<accumType, cType>()));
     }
 #endif
+
+    // check if is_last_k is set
+    mov(regTmp1,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+    test(regTmp1, regTmp1);
+    je(label_store_result, T_NEAR);
+
+    // Create and set up kernelOphandler if there are post-ops
+    if (!params.kernelOps.empty()) {
+        gen::kernelOpsHandler kernelOpsHandler(this, params.MR, params.NR,
+                                               params.useMask, cRegIdx, cReg,
+                                               params.kType);
+
+        RETURN_IF_ERROR(
+            (kernelOpsHandler.generateKernelOps(params.kernelOps, stackPtr)));
+
+        // The gelu constants are embedded within the generated JIT kernel.
+        // Otherwise a bug was observed whereby the address of gelu constants
+        // inside the class turned out to be beyond what JIT can access.
+        kernelOpsHandler.generateKernelOpsAttributes();
+    }
+
     L(label_store_result);
     RETURN_IF_ERROR((storeResult<accumType, cType>()));
 
@@ -281,6 +304,16 @@ jitAVX2::generateIrLoop(utils::generatorParams& params)
         mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(aType)]);
         lea(regAPtr, ptr[regAPtr + regTmp1]);
+
+        // Update post_op_attr c_i. kernelOpsAttr is not a pointer, so adding
+        // two offsets at the same time is safe.
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        add(regTmp1, MR);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+            regTmp1);
 
         moveCPtr();
         // Decrement M iterator

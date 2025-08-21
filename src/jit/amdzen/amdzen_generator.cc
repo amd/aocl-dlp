@@ -242,7 +242,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 // The file naming is as such : jit_gemv_n1_kernels_MR_idx.
                 // The idx represents what configuration was used to generate
                 // the kernel.
-                jitHelperUtils::dump_jit_code(
+                utils::jitHelperUtils::dump_jit_code(
                     kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
                     "jit_gemv_n1_kernel", params.MR, m_left * 4 + j);
 #endif
@@ -333,7 +333,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     return dlp::jit::jitGeneratorError::error;
                 }
 #ifdef DLP_DUMP_JIT_CODE
-                jitHelperUtils::dump_jit_code(
+                utils::jitHelperUtils::dump_jit_code(
                     kernelCodeBlocks[mr * numNRVariants + nr],
                     utils::JIT_KERNEL_SIZE, "jit_kernel", params.MR, params.NR);
 #endif

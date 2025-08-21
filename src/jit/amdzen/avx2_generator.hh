@@ -36,6 +36,7 @@
 #include "jit/xbyak/xbyak.h"
 #include "jit/xbyak/xbyak_util.h"
 #include "jit_generator_utils.hh"
+#include "kernel_ops_handler.hh"
 #include "kernels/kernel_base.hh"
 #include "traits.hh"
 
@@ -75,10 +76,13 @@ class jitAVX2 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError generateKernel(utils::generatorParams& params);
 
   private:
+    using Traits = amdzen::traits::ArchitectureTraits<
+        utils::kernelInstrType::avx2_ymm_16_reg>;
+
     // Configuration and state
-    int numRegs  = 16;          // YMM0-YMM15
-    int RegSize  = 256;         // AVX2 vector size
-    int RegBytes = RegSize / 8; // 32 bytes
+    int numRegs  = Traits::numRegs;
+    int RegSize  = Traits::regSize;
+    int RegBytes = Traits::regBytes;
     int aReg, bReg, bFullReg, bMaskReg, cReg;
     int aRegIdx, bRegIdx, cRegIdx, ymmMaskIdx;
     int MR, NR;

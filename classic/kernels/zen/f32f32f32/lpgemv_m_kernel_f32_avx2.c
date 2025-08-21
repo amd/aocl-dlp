@@ -431,9 +431,9 @@ POST_OPS_MATRIX_ADD_1x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             scl_fctr1 = _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (0 * 16));
+                                        + post_ops_attr.post_op_c_j + (0 * 8));
             scl_fctr2 = _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (1 * 16));
+                                        + post_ops_attr.post_op_c_j + (1 * 8));
         } else {
             scl_fctr1 =
                 _mm256_set1_ps(*((float*)post_ops_list_temp->scale_factor
@@ -489,9 +489,9 @@ POST_OPS_MATRIX_MUL_1x16F: {
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             scl_fctr1 = _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (0 * 16));
+                                        + post_ops_attr.post_op_c_j + (0 * 8));
             scl_fctr2 = _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (1 * 16));
+                                        + post_ops_attr.post_op_c_j + (1 * 8));
         } else {
             scl_fctr1 =
                 _mm256_set1_ps(*((float*)post_ops_list_temp->scale_factor
@@ -943,10 +943,10 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
                 scl_fctr1 =
                     _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                    + post_ops_attr.post_op_c_j + (0 * 16));
+                                    + post_ops_attr.post_op_c_j + (0 * 8));
                 scl_fctr2 =
                     _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                                    + post_ops_attr.post_op_c_j + (1 * 8));
             } else {
                 scl_fctr1 =
                     _mm256_set1_ps(*((float*)post_ops_list_temp->scale_factor
@@ -1005,10 +1005,10 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
                 scl_fctr1 =
                     _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                    + post_ops_attr.post_op_c_j + (0 * 16));
+                                    + post_ops_attr.post_op_c_j + (0 * 8));
                 scl_fctr2 =
                     _mm256_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                                    + post_ops_attr.post_op_c_j + (1 * 8));
             } else {
                 scl_fctr1 =
                     _mm256_set1_ps(*((float*)post_ops_list_temp->scale_factor
