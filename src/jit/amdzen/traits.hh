@@ -63,6 +63,7 @@ template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx2_ymm_16_reg>
 {
     using RegType                        = Xbyak::Ymm;
+    using halfRegType                    = Xbyak::Xmm;
     static constexpr int  regSize        = 256;
     static constexpr int  regBytes       = regSize / 8;
     static constexpr int  numRegs        = 16;
@@ -74,6 +75,7 @@ template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx512_zmm_32_reg>
 {
     using RegType                        = Xbyak::Zmm;
+    using halfRegType                    = Xbyak::Ymm;
     static constexpr int  regSize        = 512;
     static constexpr int  regBytes       = regSize / 8;
     static constexpr int  numRegs        = 32;
@@ -85,6 +87,7 @@ template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx512_ymm_32_reg>
 {
     using RegType                        = Xbyak::Ymm;
+    using halfRegType                    = Xbyak::Xmm;
     static constexpr int  regSize        = 256;
     static constexpr int  regBytes       = regSize / 8;
     static constexpr int  numRegs        = 32;

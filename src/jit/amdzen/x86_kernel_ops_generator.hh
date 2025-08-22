@@ -46,8 +46,9 @@ namespace amdzen::x86gen {
 template<utils::kernelInstrType KType>
 class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 {
-    using Traits  = traits::ArchitectureTraits<KType>;
-    using RegType = typename Traits::RegType;
+    using Traits      = traits::ArchitectureTraits<KType>;
+    using RegType     = typename Traits::RegType;
+    using halfRegType = typename Traits::halfRegType;
 
   public:
     kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit,
@@ -191,8 +192,8 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     void TANHF();
     void GELU_TANH_F32_DEF(md_t reg);
     void TANHF_DEF(md_t reg);
-    void POLY_EVAL_HORNER_16_0_AVX512();
-    void ERF_AVX512();
+    void POLY_EVAL_HORNER_16_0(int r);
+    void ERF(int y, int r);
     void GELU_ERF_F32_DEF(md_t reg);
     void SWISH_F32_DEF(md_t reg);
     void SIGMOID_DEF(md_t reg);
@@ -211,16 +212,24 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
                             0.2402210737432219,   0.05550297297702539,
                             0.009676036358193323, 0.001341000536524434 };
 
-    float erf_consts[4] = { 0.707107, 1.0, 0.5, 3.553f };
-
-    float lpgemm_erf[16] = { 1.1283793786592402,    2.5468861568875563E-5,
-                             0.3756169877289898,    0.004025179163741976,
-                             0.12947984300439994,   0.0412525204794885,
-                             0.03918550001070417,   0.07104542913277255,
-                             0.05717052146749476,   0.025310822854733135,
-                             0.0067305713376882076, 0.0010410692067591445,
-                             6.921588102382636E-5,  4.092409485758739E-6,
-                             1.033131746125426E-6,  5.2927177513236435E-8 };
+    float  erf_consts[5]  = { 0.70710678118654f, 1.0, 0.5, 3.553f,
+                              3.91920638084411621F };
+    double lpgemm_erf[16] = { 0x1.20dd7890d27e1cec99fce48c29cp0,
+                              -0x1.ab4bed70f238422edeeba9c558p-16,
+                              -0x1.80a1bd5878e0b0689c5ff4fcdd4p-2,
+                              -0x1.07cb4cde6a7d9528c8a732990e4p-8,
+                              0x1.092cba598f96f00ddc5854cf7cp-3,
+                              -0x1.51f0ce4ac87c55f11f685864714p-5,
+                              0x1.4101f320bf8bc4d41c228faaa6cp-5,
+                              -0x1.2300882a7d1b712726997de80ep-4,
+                              0x1.d45745fff0e4b6d0604a9ab6284p-5,
+                              -0x1.9eb1491956e31ded96176d7c8acp-6,
+                              0x1.b9183fc75d326b9044bc63c9694p-8,
+                              -0x1.10e8f8c89ad8645e7d769cd596cp-10,
+                              0x1.224ffc80cc19957a48ecedad6c8p-14,
+                              0x1.12a30f42c71308321e7e7cb0174p-18,
+                              -0x1.155445e2e006723066d72d22ddcp-20,
+                              0x1.c6a4181da4ef76f22bd39bb5dcp-25 };
 
     const md_t gelu_consts_off = 0;
     const md_t gelu_macros_off = gelu_consts_off + sizeof(gelu_consts);
@@ -233,6 +242,14 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
         return jit_->ptr[jit_->rip + tables + table_off
                          + (value_off * (md_t)sizeof(float))];
     }
+
+    Xbyak::Address get_constant_dbl(md_t table_off, md_t value_off)
+    {
+        return jit_->ptr[jit_->rip + tables + table_off
+                         + (value_off * (md_t)sizeof(double))];
+    }
+
+    Xbyak::Label  erf_end;
     Xbyak::Label  tables;
     Xbyak::Opmask maskReg;
 

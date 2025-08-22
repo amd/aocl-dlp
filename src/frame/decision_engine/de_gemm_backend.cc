@@ -286,11 +286,6 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             lpgemm_post_op* temp_post_ops = gemmIn->metadata;
             while ((temp_post_ops != NULL)
                    && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
-                if (temp_post_ops->op_code == POST_OPS_GELU_ERF) {
-                    // TODO: Add support for GELU_ERF post-op
-                    // for both AVX2 and AVX512.
-                    return std::nullopt;
-                }
                 temp_post_ops = temp_post_ops->next;
                 numPostOps++;
             }

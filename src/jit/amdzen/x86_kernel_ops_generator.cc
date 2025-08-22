@@ -165,9 +165,6 @@ kernelOpsGeneratorX86<KType>::setPostOpsContext()
     dn     = scratchBcstRegIdx + 7;
     q      = scratchBcstRegIdx + 8;
 
-    // registers for gelu_erf
-    x_erf = scratchBcstRegIdx + 4;
-
     return jitGeneratorError::success;
 }
 
@@ -874,24 +871,26 @@ kernelOpsGeneratorX86<KType>::EXPF()
 
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
         // _mm256_set1_ps(EXPF_MAX)
-        jit_->vpbroadcastd(Ymm(const1), get_constant(gelu_macros_off, 3));
+        jit_->vpbroadcastd(RegType(const1), get_constant(gelu_macros_off, 3));
 
-        jit_->vcmpps(Ymm(const1), Ymm(const1), Ymm(x), 0x01);
+        jit_->vcmpps(RegType(const1), RegType(const1), RegType(x), 0x01);
 
         // _mm256_set1_ps(inf)
-        jit_->vbroadcastss(Ymm(const2), get_constant(gelu_macros_off, 4));
+        jit_->vbroadcastss(RegType(const2), get_constant(gelu_macros_off, 4));
 
-        jit_->vblendvps(Ymm(q), Ymm(q), Ymm(const2), Ymm(const1));
+        jit_->vblendvps(RegType(q), RegType(q), RegType(const2),
+                        RegType(const1));
 
         // _mm256_set1_ps(EXPF_MIN)
-        jit_->vbroadcastss(Ymm(const1), get_constant(gelu_macros_off, 2));
+        jit_->vbroadcastss(RegType(const1), get_constant(gelu_macros_off, 2));
 
-        jit_->vcmpps(Ymm(const1), Ymm(x), Ymm(const1), 0x01);
+        jit_->vcmpps(RegType(const1), RegType(x), RegType(const1), 0x01);
 
         // _mm256_set1_ps(0.0)
-        jit_->vxorps(Ymm(const2), Ymm(const2), Ymm(const2));
+        jit_->vxorps(RegType(const2), RegType(const2), RegType(const2));
 
-        jit_->vblendvps(Ymm(q), Ymm(q), Ymm(const2), Ymm(const1));
+        jit_->vblendvps(RegType(q), RegType(q), RegType(const2),
+                        RegType(const1));
     } else {
         jit_->vpxorq(RegType(const2), RegType(const2), RegType(const2));
 
@@ -998,12 +997,217 @@ kernelOpsGeneratorX86<KType>::geluTanh(kernelOpsMetaData& op)
 }
 
 template<utils::kernelInstrType KType>
+void
+kernelOpsGeneratorX86<KType>::POLY_EVAL_HORNER_16_0(int r)
+{
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 15));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 14));
+
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 13));
+    jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 12));
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 11));
+    jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 10));
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 9));
+    jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 8));
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 7));
+    jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 6));
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 5));
+    jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 4));
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 3));
+    jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 2));
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 1));
+    jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 0));
+    jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
+
+    jit_->vmulpd(RegType(r), RegType(const2), RegType(r));
+}
+
+template<>
+void
+kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::ERF(int y,
+                                                                      int r)
+{
+    jit_->inLocalLabel();
+    // r2  = _mm512_abs_ps(r); -- to be preserved for later
+    jit_->mov(regTmp5Half, 0x7FFFFFFF);
+    jit_->vpbroadcastd(RegType(const2), regTmp5Half);
+    jit_->vpandd(RegType(r2), RegType(r), RegType(const2));
+
+    // Convert first half of float values to double (lower 8 floats -> 4
+    // doubles)
+    jit_->vcvtps2pd(RegType(y), halfRegType(r2));
+
+    // Extract upper half of float values and convert to double (upper 8 floats
+    // -> 4 doubles)
+    jit_->vextractf32x8(halfRegType(x), RegType(r2),
+                        0x01); // Extract upper 4 floats
+    jit_->vcvtps2pd(RegType(x), halfRegType(x));
+
+    POLY_EVAL_HORNER_16_0(y);
+
+    POLY_EVAL_HORNER_16_0(x);
+
+    // Convert double values back to single precision and insert into y
+    // Convert x (doubles) back to singles and insert at position 0
+    jit_->vcvtpd2ps(halfRegType(y), RegType(y)); // Convert doubles to singles
+
+    // Convert r (doubles) back to singles and insert at position 1
+    jit_->vcvtpd2ps(halfRegType(x), RegType(x)); // Convert doubles to singles
+    jit_->vinsertf32x8(RegType(y), RegType(y), halfRegType(x),
+                       0x01); // Insert at position 1
+
+    // __m512i sign =
+    // _mm512_and_epi32(_mm512_castps_si512(r),
+    //                  _mm512_set1_epi32((unsigned int)0x80000000));
+    jit_->mov(regTmp4Half, 0x80000000);
+    jit_->vpbroadcastd(RegType(const2), regTmp4Half);
+    jit_->vpandd(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vorps(RegType(y), RegType(const1), RegType(y));
+
+    // ERF_UBOUND
+    jit_->mov(regTmp4Half, 0x407AD447);
+
+    // Assuming absr contains 16 float values
+    // Find the maximum value across all lanes
+    jit_->vreduceps(RegType(x), RegType(r2), 0x0E); // 0x0E = MAX operation
+    // Convert the result to integer representation
+    jit_->vextractps(regTmp5Half, Xmm(x), 0); // Extract the scalar result
+
+    // Check if regTmp5Half <= regTmp4Half and jump if true
+    jit_->cmp(regTmp5Half, regTmp4Half);
+    jit_->jg(".erf_end", jit_->T_NEAR); // Jump if regTmp5Half > regTmp4Half
+
+    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 4));
+    jit_->vcmpps(jit_->k5, RegType(const2), RegType(r2), 0x11);
+
+    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 1));
+    jit_->vblendmps(RegType(y) | jit_->k5, RegType(y), RegType(const2));
+
+    jit_->vorps(RegType(y), RegType(const1), RegType(y));
+
+    jit_->L(".erf_end");
+
+    jit_->outLocalLabel();
+}
+
+template<utils::kernelInstrType KType>
+void
+kernelOpsGeneratorX86<KType>::ERF(int y, int r)
+{
+    // r2  = _mm512_abs_ps(r); -- to be preserved for later
+    jit_->mov(regTmp5Half, 0x7FFFFFFF);
+    jit_->vmovd(halfRegType(const2), regTmp5Half);
+    jit_->vpbroadcastd(RegType(const2), halfRegType(const2));
+    // jit_->vpbroadcastd(RegType(const2), regTmp5Half);
+    jit_->vandps(RegType(r2), RegType(r), RegType(const2));
+
+    // Convert first half of float values to double (lower 8 floats -> 4
+    // doubles)
+    jit_->vcvtps2pd(RegType(y), halfRegType(r2));
+
+    // Extract upper half of float values and convert to double (upper 8 floats
+    // -> 4 doubles)
+    jit_->vextractf128(halfRegType(x), RegType(r2),
+                       0x01); // Extract upper 4 floats
+    jit_->vcvtps2pd(RegType(x), halfRegType(x));
+
+    POLY_EVAL_HORNER_16_0(y);
+
+    POLY_EVAL_HORNER_16_0(x);
+
+    // Convert double values back to single precision and insert into y
+    // Convert x (doubles) back to singles and insert at position 0
+    jit_->vcvtpd2ps(halfRegType(y), RegType(y)); // Convert doubles to singles
+
+    // Convert r (doubles) back to singles and insert at position 1
+    jit_->vcvtpd2ps(halfRegType(x), RegType(x)); // Convert doubles to singles
+    jit_->vinsertf128(RegType(y), RegType(y), halfRegType(x),
+                      0x01); // Insert at position 1
+
+    // ERF_UBOUND
+    jit_->mov(regTmp4Half, 0x407AD447);
+    jit_->vmovd(halfRegType(const2), regTmp4Half);
+    jit_->vpbroadcastd(RegType(const2), halfRegType(const2));
+    jit_->vcmpps(RegType(const1), RegType(const2), RegType(r2), 0x01);
+
+    // _mm256_set1_ps(1)
+    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 1));
+
+    jit_->vblendvps(RegType(y), RegType(y), RegType(const2), RegType(const1));
+
+    jit_->vcmpps(RegType(const1), RegType(const2), RegType(y), 0x01);
+
+    jit_->vblendvps(RegType(y), RegType(y), RegType(const2), RegType(const1));
+
+    // // _mm256_and_ps(r, (__m256)_mm256_set1_epi32(~(0x7FFFFFFF)));
+    jit_->mov(regTmp4Half, 0x80000000);
+    jit_->vmovd(halfRegType(const2), regTmp4Half);
+    jit_->vpbroadcastd(RegType(const2), halfRegType(const2));
+    jit_->vandps(RegType(const1), RegType(r), RegType(const2));
+
+    jit_->vorps(RegType(y), RegType(const1), RegType(y));
+}
+
+template<utils::kernelInstrType KType>
+void
+kernelOpsGeneratorX86<KType>::GELU_ERF_F32_DEF(md_t reg)
+{
+    jit_->vbroadcastss(RegType(const1), get_constant(erf_consts_off, 0));
+    jit_->vmulps(RegType(r), RegType(reg), RegType(const1));
+
+    jit_->vxorps(RegType(x_tanh), RegType(x_tanh), RegType(x_tanh));
+
+    ERF(x_tanh, r);
+
+    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 1));
+    jit_->vaddps(RegType(r2), RegType(x_tanh), RegType(const2));
+
+    jit_->vmulps(RegType(r2), RegType(r2), RegType(reg));
+    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 2));
+    jit_->vmulps(RegType(reg), RegType(r2), RegType(const2));
+}
+
+template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::geluErf(kernelOpsMetaData& op)
 {
-    // TODO: Implement GELU with erf approximation
-    // This is a placeholder implementation
-    return jitGeneratorError::notSupported;
+    if constexpr (KType == utils::kernelInstrType::avx512_ymm_32_reg) {
+        return jitGeneratorError::notSupported;
+    }
+    apply_post_ops_in_high_reg_pressure(
+        num_gelu_regs,
+        std::bind(&kernelOpsGeneratorX86<KType>::GELU_ERF_F32_DEF, this,
+                  std::placeholders::_1));
+    return jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
