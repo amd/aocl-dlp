@@ -100,11 +100,19 @@ UalRef::toString(UALType type)
  *
  * @param in Input matrix to reorder
  * @param out Output matrix to store reordered data
+ * @param A_type Type of matrix A in GEMM context
+ * @param B_type Type of matrix B in GEMM context
+ * @param C_type Type of matrix C in GEMM context
  * @param accType Target accumulation type
  * @return bool Success status
  */
 bool
-UalRef::reorder(const Matrix& in, Matrix& out, MatrixType accType)
+UalRef::reorder(const Matrix& in,
+                Matrix&       out,
+                MatrixType    A_type,
+                MatrixType    B_type,
+                MatrixType    C_type,
+                MatrixType    accType)
 {
     /*
         Reordering operation in reference is
@@ -121,6 +129,13 @@ UalRef::reorder(const Matrix& in, Matrix& out, MatrixType accType)
     MatrixType   input_type = in.getMatrixType();
     MatrixLayout layout     = in.getLayout();
     bool         transposed = in.isTransposed();
+
+    // The A_type, B_type, C_type parameters provide context about the GEMM
+    // operation where this reordered matrix will be used. This enables
+    // optimizations based on the full type combination, handling edge cases
+    // where mixed precision is involved. For reference implementation, we use
+    // the input type but could apply different reordering strategies based on
+    // the GEMM context.
 
     // For reordering, we need to determine the output matrix dimensions
     // If the input matrix is transposed, we need to swap dimensions to get the

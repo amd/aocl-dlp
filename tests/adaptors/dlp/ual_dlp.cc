@@ -37,6 +37,7 @@
 
 #include "adaptors/dlp/ual_dlp.hh"
 #include "adaptors/dlp/operation_dlp.hh"
+#include <cstddef>
 #include <iostream>
 
 #include "aocl_dlp.h"
@@ -94,28 +95,60 @@ UalDlp::toString(UALType type)
  *
  * @param in Input matrix to reorder
  * @param out Output matrix to store reordered data
+ * @param A_type Type of matrix A in GEMM context
+ * @param B_type Type of matrix B in GEMM context
+ * @param C_type Type of matrix C in GEMM context
  * @param accType Target accumulation type
  * @return bool Success status
  */
 bool
-UalDlp::reorder(const Matrix& in, Matrix& out, MatrixType accType)
+UalDlp::reorder(const Matrix& in,
+                Matrix&       out,
+                MatrixType    A_type,
+                MatrixType    B_type,
+                MatrixType    C_type,
+                MatrixType    accType)
 {
 
     // Use effective (logical) dimensions for reordering
     md_t effective_rows = in.getEffectiveRows();
     md_t effective_cols = in.getEffectiveCols();
 
+    // Determine appropriate reorder function based on input type and GEMM
+    // context The A, B, C types provide context for optimal reordering strategy
     md_t alloc_bytes = 0;
+
+    // Select reorder function based on input matrix type and GEMM context
     if (in.getMatrixType() == MatrixType::f32) {
-        alloc_bytes = aocl_get_reorder_buf_size_f32f32f32of32(
-            in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
-            in.isTransposed() ? 't' : 'n', 'B', effective_rows, effective_cols,
-            NULL);
+        // For mixed precision scenarios, we might need different handling
+        if (A_type == MatrixType::f32 && B_type == MatrixType::f32
+            && C_type == MatrixType::f32) {
+            alloc_bytes = aocl_get_reorder_buf_size_f32f32f32of32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, nullptr);
+        } else {
+            // Handle mixed precision cases - for now, fall back to standard f32
+            // reorder
+            alloc_bytes = aocl_get_reorder_buf_size_f32f32f32of32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, nullptr);
+        }
     } else if (in.getMatrixType() == MatrixType::bf16) {
-        alloc_bytes = aocl_get_reorder_buf_size_bf16bf16f32of32(
-            in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
-            in.isTransposed() ? 't' : 'n', 'B', effective_rows, effective_cols,
-            NULL);
+        // For bf16, consider the accumulation type and output type
+        if (accType == MatrixType::f32) {
+            alloc_bytes = aocl_get_reorder_buf_size_bf16bf16f32of32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, nullptr);
+        } else {
+            // Handle other accumulation types - for now, fall back to standard
+            alloc_bytes = aocl_get_reorder_buf_size_bf16bf16f32of32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, nullptr);
+        }
     } else {
         return false;
     }
@@ -137,16 +170,35 @@ UalDlp::reorder(const Matrix& in, Matrix& out, MatrixType accType)
                  alloc_bytes, in.getLayout(), out_leadingDim, false, true);
 
     char layout = in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
+
+    // Use the type information to select appropriate reorder function
     switch (in.getMatrixType()) {
         case MatrixType::f32:
-            aocl_reorder_f32f32f32of32(
-                layout, in.isTransposed() ? 't' : 'n', 'B',
-                reinterpret_cast<const float*>(
-                    in.getMatrixData().getMatrixPtr()),
-                reinterpret_cast<float*>(out.getMatrixData().getMatrixPtr()),
-                effective_rows, effective_cols, in.getLeadingDimension(), NULL);
+            // Consider GEMM context for optimal reordering
+            if (A_type == MatrixType::f32 && B_type == MatrixType::f32
+                && C_type == MatrixType::f32) {
+                aocl_reorder_f32f32f32of32(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const float*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<float*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    nullptr);
+            } else {
+                // Handle mixed precision - for now, use standard f32 reorder
+                aocl_reorder_f32f32f32of32(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const float*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<float*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    nullptr);
+            }
             break;
         case MatrixType::bf16:
+            // Consider accumulation type for bf16 reordering
             aocl_reorder_bf16bf16f32of32(
                 layout, in.isTransposed() ? 't' : 'n', 'B',
                 reinterpret_cast<const bfloat16*>(

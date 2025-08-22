@@ -99,10 +99,18 @@ class UalRef : public IUal
      *
      * @param in Input matrix to reorder
      * @param out Output matrix to store reordered data
+     * @param A_type Type of matrix A in GEMM context
+     * @param B_type Type of matrix B in GEMM context
+     * @param C_type Type of matrix C in GEMM context
      * @param accType Accumulation type
      * @return true on success
      */
-    bool reorder(const Matrix& in, Matrix& out, MatrixType accType) override;
+    bool reorder(const Matrix& in,
+                 Matrix&       out,
+                 MatrixType    A_type,
+                 MatrixType    B_type,
+                 MatrixType    C_type,
+                 MatrixType    accType) override;
 
     /**
      * @brief Perform general matrix multiplication: C = alpha*A*B + beta*C

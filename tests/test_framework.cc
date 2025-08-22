@@ -698,7 +698,9 @@ TEST_F(MatrixReorderTest, ReorderWithoutTranspose)
     // Reorder using reference implementation
     UalRef ual_ref;
     Matrix output;
-    bool   result = ual_ref.reorder(input, output, MatrixType::f32);
+    bool   result =
+        ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
+                        MatrixType::f32, MatrixType::f32);
 
     EXPECT_TRUE(result);
 
@@ -744,7 +746,9 @@ TEST_F(MatrixReorderTest, ReorderWithTranspose)
     // Reorder using reference implementation
     UalRef ual_ref;
     Matrix output;
-    bool   result = ual_ref.reorder(input, output, MatrixType::f32);
+    bool   result =
+        ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
+                        MatrixType::f32, MatrixType::f32);
 
     EXPECT_TRUE(result);
 
@@ -788,7 +792,9 @@ TEST_F(MatrixReorderTest, EffectiveDimensionsAfterReorder)
     // Reorder
     UalRef ual_ref;
     Matrix output;
-    bool   result = ual_ref.reorder(input, output, MatrixType::f32);
+    bool   result =
+        ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
+                        MatrixType::f32, MatrixType::f32);
 
     EXPECT_TRUE(result);
 

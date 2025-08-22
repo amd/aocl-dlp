@@ -680,7 +680,8 @@ BM_gemm(benchmark::State& state, GemmTestConfig config_)
         // Create reordered matrix with custom allocation size in bytes
         Matrix B_reordered;
 
-        ual->reorder(B, B_reordered, config_.acc_type);
+        ual->reorder(B, B_reordered, config_.a_type, config_.b_type,
+                     config_.c_type, config_.acc_type);
         B = B_reordered;
     }
 
