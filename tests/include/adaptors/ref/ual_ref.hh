@@ -29,6 +29,7 @@
 #pragma once
 
 #include "framework/ual.hh"
+#include <functional>
 
 namespace dlp::testing::classic {
 
@@ -247,6 +248,10 @@ class UalRef : public IUal
      */
     template<typename T>
     void applyPostOperation(Matrix& matrix, const T& op);
+
+    // Unified postop helper that handles type conversion
+    void applyUnifiedPostOp(Matrix&                             matrix,
+                            std::function<void(float*, size_t)> operation);
 
     // Helper methods for applying specific post-operations
     void applyRelu(Matrix& matrix);

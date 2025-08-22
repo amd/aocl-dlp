@@ -227,7 +227,7 @@ MicroTest::createOperationParam(
     } else if (config.type == "Scale") {
         // Scale: Parse scale_factor parameter
         double scale_value =
-            extractDoubleParam("scale_factor", config.params, 1.5);
+            extractDoubleParam("scale_factor", config.params, 2.5);
         MatrixType scale_type = extractMatrixTypeParam(
             "scale_factor_type", config.params, MatrixType::f32);
         bool is_power_of_2 =

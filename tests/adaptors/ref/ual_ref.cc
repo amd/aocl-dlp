@@ -41,6 +41,7 @@
 #include "framework/operation.hh"
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <iostream>
 #include <variant>
 
@@ -50,6 +51,238 @@ extern "C"
 }
 
 namespace dlp::testing::classic {
+
+// Type conversion utilities for multi-datatype support
+namespace {
+
+    /**
+     * @brief Convert a single value from any MatrixType to float
+     * @param src_ptr Pointer to source data
+     * @param src_type Source data type
+     * @param index Element index
+     * @return float Converted value
+     */
+    float convertToFloat(const void* src_ptr, MatrixType src_type, size_t index)
+    {
+        switch (src_type) {
+            case MatrixType::f32:
+                return static_cast<const float*>(src_ptr)[index];
+            case MatrixType::u8:
+                return static_cast<float>(
+                    static_cast<const uint8_t*>(src_ptr)[index]);
+            case MatrixType::s8:
+                return static_cast<float>(
+                    static_cast<const int8_t*>(src_ptr)[index]);
+            case MatrixType::u16:
+                return static_cast<float>(
+                    static_cast<const uint16_t*>(src_ptr)[index]);
+            case MatrixType::s16:
+                return static_cast<float>(
+                    static_cast<const int16_t*>(src_ptr)[index]);
+            case MatrixType::u32:
+                return static_cast<float>(
+                    static_cast<const uint32_t*>(src_ptr)[index]);
+            case MatrixType::s32:
+                return static_cast<float>(
+                    static_cast<const int32_t*>(src_ptr)[index]);
+            case MatrixType::u4: {
+                const uint8_t* data     = static_cast<const uint8_t*>(src_ptr);
+                size_t         byte_idx = index / 2;
+                size_t         bit_offset = (index % 2) * 4;
+                uint8_t        value = (data[byte_idx] >> bit_offset) & 0x0F;
+                return static_cast<float>(value);
+            }
+            case MatrixType::s4: {
+                const uint8_t* data     = static_cast<const uint8_t*>(src_ptr);
+                size_t         byte_idx = index / 2;
+                size_t         bit_offset = (index % 2) * 4;
+                uint8_t        value = (data[byte_idx] >> bit_offset) & 0x0F;
+                // Sign extend 4-bit to 8-bit
+                if (value & 0x08)
+                    value |= 0xF0;
+                return static_cast<float>(static_cast<int8_t>(value));
+            }
+            case MatrixType::bf16:
+                // BF16 is marked as unsupported as requested
+                std::cerr << "[ual_ref] Warning: convertToFloat called with "
+                             "unsupported MatrixType::bf16. Returning 0.0f."
+                          << std::endl;
+                return 0.0f;
+            default:
+                return 0.0f;
+        }
+    }
+
+    /**
+     * @brief Convert a float value to any MatrixType and store it
+     * @param dst_ptr Pointer to destination data
+     * @param dst_type Destination data type
+     * @param index Element index
+     * @param value Float value to convert
+     */
+    void convertFromFloat(void*      dst_ptr,
+                          MatrixType dst_type,
+                          size_t     index,
+                          float      value)
+    {
+        switch (dst_type) {
+            case MatrixType::f32:
+                static_cast<float*>(dst_ptr)[index] = value;
+                break;
+            case MatrixType::u8:
+                static_cast<uint8_t*>(dst_ptr)[index] = static_cast<uint8_t>(
+                    std::max(0.0f, std::min(255.0f, std::round(value))));
+                break;
+            case MatrixType::s8:
+                static_cast<int8_t*>(dst_ptr)[index] = static_cast<int8_t>(
+                    std::max(-128.0f, std::min(127.0f, std::round(value))));
+                break;
+            case MatrixType::u16:
+                static_cast<uint16_t*>(dst_ptr)[index] = static_cast<uint16_t>(
+                    std::max(0.0f, std::min(65535.0f, std::round(value))));
+                break;
+            case MatrixType::s16:
+                static_cast<int16_t*>(dst_ptr)[index] = static_cast<int16_t>(
+                    std::max(-32768.0f, std::min(32767.0f, std::round(value))));
+                break;
+            case MatrixType::u32:
+                static_cast<uint32_t*>(dst_ptr)[index] = static_cast<uint32_t>(
+                    std::max(0.0f, std::min(static_cast<float>(UINT32_MAX),
+                                            std::round(value))));
+                break;
+            case MatrixType::s32:
+                static_cast<int32_t*>(dst_ptr)[index] = static_cast<int32_t>(
+                    std::max(-2147483648.0f,
+                             std::min(2147483647.0f, std::round(value))));
+                break;
+            case MatrixType::u4: {
+                uint8_t* data       = static_cast<uint8_t*>(dst_ptr);
+                size_t   byte_idx   = index / 2;
+                size_t   bit_offset = (index % 2) * 4;
+                uint8_t  value4bit =
+                    static_cast<uint8_t>(
+                        std::max(0.0f, std::min(15.0f, std::round(value))))
+                    & 0x0F;
+                if (bit_offset == 0) {
+                    data[byte_idx] = (data[byte_idx] & 0xF0) | value4bit;
+                } else {
+                    data[byte_idx] = (data[byte_idx] & 0x0F) | (value4bit << 4);
+                }
+                break;
+            }
+            case MatrixType::s4: {
+                uint8_t* data       = static_cast<uint8_t*>(dst_ptr);
+                size_t   byte_idx   = index / 2;
+                size_t   bit_offset = (index % 2) * 4;
+                int8_t   value_s4   = static_cast<int8_t>(
+                    std::max(-8.0f, std::min(7.0f, std::round(value))));
+                uint8_t value4bit = static_cast<uint8_t>(value_s4) & 0x0F;
+                if (bit_offset == 0) {
+                    data[byte_idx] = (data[byte_idx] & 0xF0) | value4bit;
+                } else {
+                    data[byte_idx] = (data[byte_idx] & 0x0F) | (value4bit << 4);
+                }
+                break;
+            }
+            case MatrixType::bf16:
+                // BF16 is marked as unsupported as requested
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * @brief Copy matrix data with type conversion to float
+     * @param src Source matrix
+     * @param dst_data Destination float array
+     * @param dst_ld Destination leading dimension
+     * @return bool Success status
+     */
+    bool copyMatrixToFloat(const Matrix& src, float* dst_data, md_t dst_ld)
+    {
+        const void*  src_data   = src.getData();
+        MatrixType   src_type   = src.getMatrixType();
+        md_t         src_rows   = src.getRows();
+        md_t         src_cols   = src.getCols();
+        md_t         src_ld     = src.getLeadingDimension();
+        MatrixLayout layout     = src.getLayout();
+        bool         transposed = src.isTransposed();
+
+        // Handle BF16 as unsupported
+        if (src_type == MatrixType::bf16) {
+            return false;
+        }
+
+        for (md_t i = 0; i < src_rows; ++i) {
+            for (md_t j = 0; j < src_cols; ++j) {
+                size_t src_idx, dst_idx;
+
+                // Calculate source index based on layout and transposition
+                if (layout == MatrixLayout::ROW_MAJOR) {
+                    src_idx = static_cast<size_t>(i) * src_ld + j;
+                } else {
+                    src_idx = static_cast<size_t>(j) * src_ld + i;
+                }
+
+                // Calculate destination index (always row-major for float
+                // conversion)
+                if (transposed) {
+                    // If source is transposed, swap i,j for destination
+                    dst_idx = static_cast<size_t>(j) * dst_ld + i;
+                } else {
+                    dst_idx = static_cast<size_t>(i) * dst_ld + j;
+                }
+
+                dst_data[dst_idx] = convertToFloat(src_data, src_type, src_idx);
+            }
+        }
+        return true;
+    }
+
+    /**
+     * @brief Copy float data back to matrix with type conversion
+     * @param src_data Source float array
+     * @param src_ld Source leading dimension
+     * @param dst Destination matrix
+     * @return bool Success status
+     */
+    bool copyFloatToMatrix(const float* src_data, md_t src_ld, Matrix& dst)
+    {
+        void*        dst_data = dst.getData();
+        MatrixType   dst_type = dst.getMatrixType();
+        md_t         dst_rows = dst.getRows();
+        md_t         dst_cols = dst.getCols();
+        md_t         dst_ld   = dst.getLeadingDimension();
+        MatrixLayout layout   = dst.getLayout();
+
+        // Handle BF16 as unsupported
+        if (dst_type == MatrixType::bf16) {
+            return false;
+        }
+
+        for (md_t i = 0; i < dst_rows; ++i) {
+            for (md_t j = 0; j < dst_cols; ++j) {
+                size_t src_idx, dst_idx;
+
+                // Source is always row-major float
+                src_idx = static_cast<size_t>(i) * src_ld + j;
+
+                // Calculate destination index based on layout
+                if (layout == MatrixLayout::ROW_MAJOR) {
+                    dst_idx = static_cast<size_t>(i) * dst_ld + j;
+                } else {
+                    dst_idx = static_cast<size_t>(j) * dst_ld + i;
+                }
+
+                convertFromFloat(dst_data, dst_type, dst_idx,
+                                 src_data[src_idx]);
+            }
+        }
+        return true;
+    }
+
+} // anonymous namespace
 
 /**
  * @brief Constructor for UalRef
@@ -980,200 +1213,350 @@ UalRef::gemm(md_t         m,
     return false;
 }
 
+// Unified postop helper that handles type conversion
+void
+UalRef::applyUnifiedPostOp(Matrix&                             matrix,
+                           std::function<void(float*, size_t)> operation)
+{
+    MatrixType original_type = matrix.getMatrixType();
+
+    // Handle BF16 as unsupported
+    if (original_type == MatrixType::bf16) {
+        return;
+    }
+
+    // If already f32, apply operation directly
+    if (original_type == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+        operation(data, size);
+        return;
+    }
+
+    // For other types, convert to float, apply operation, convert back
+    md_t rows = matrix.getRows();
+    md_t cols = matrix.getCols();
+    md_t ld   = cols; // Use simple row-major layout for temp matrix
+
+    // Create temporary float matrix
+    std::unique_ptr<float[]> temp_data(new float[rows * ld]);
+
+    // Convert to float
+    if (!copyMatrixToFloat(matrix, temp_data.get(), ld)) {
+        return;
+    }
+
+    // Apply operation in float
+    size_t size = rows * cols;
+    operation(temp_data.get(), size);
+
+    // Convert back to original type
+    copyFloatToMatrix(temp_data.get(), ld, matrix);
+}
+
 // Helper methods for specific operations
 void
 UalRef::applyRelu(Matrix& matrix)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
-
+    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             data[i] = std::max(0.0f, data[i]);
         }
-    }
+    });
 }
 
 void
 UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
+    MatrixType original_type = matrix.getMatrixType();
+
+    // Handle BF16 as unsupported
+    if (original_type == MatrixType::bf16) {
+        return;
+    }
+
+    // Get alpha value
+    float alpha_val = 0.01f; // Default alpha
+    if (alpha && alpha->getMatrixType() == MatrixType::f32) {
+        alpha_val = *reinterpret_cast<const float*>(alpha->getData());
+    }
+
+    // If already f32, apply directly
+    if (original_type == MatrixType::f32) {
         float* data = reinterpret_cast<float*>(matrix.getData());
         size_t size = matrix.getDataSizeBytes() / sizeof(float);
-
-        float alpha_val = 0.01f; // Default alpha
-        if (alpha && alpha->getMatrixType() == MatrixType::f32) {
-            alpha_val = *reinterpret_cast<const float*>(alpha->getData());
-        }
 
         for (size_t i = 0; i < size; ++i) {
             if (data[i] < 0.0f) {
                 data[i] *= alpha_val;
             }
         }
+        return;
     }
+
+    // For other types, convert to float, apply operation, convert back
+    md_t rows = matrix.getRows();
+    md_t cols = matrix.getCols();
+    md_t ld   = cols; // Use simple row-major layout for temp matrix
+
+    // Create temporary float matrix
+    std::unique_ptr<float[]> temp_data(new float[rows * ld]);
+
+    // Convert to float
+    if (!copyMatrixToFloat(matrix, temp_data.get(), ld)) {
+        return;
+    }
+
+    // Apply PReLU in float
+    size_t size = rows * cols;
+    for (size_t i = 0; i < size; ++i) {
+        if (temp_data[i] < 0.0f) {
+            temp_data[i] *= alpha_val;
+        }
+    }
+
+    // Convert back to original type
+    copyFloatToMatrix(temp_data.get(), ld, matrix);
 }
 
 void
 UalRef::applyGeluTanh(Matrix& matrix)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
-
+    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             float x = data[i];
             float tanh_arg =
                 std::sqrt(2.0f / M_PI) * (x + 0.044715f * x * x * x);
             data[i] = 0.5f * x * (1.0f + std::tanh(tanh_arg));
         }
-    }
+    });
 }
 
 void
 UalRef::applyGeluErf(Matrix& matrix)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
-
+    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             float x = data[i];
             data[i] = 0.5f * x * (1.0f + std::erf(x / std::sqrt(2.0f)));
         }
-    }
+    });
 }
 
 void
 UalRef::applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+    float lower_val = -6.0f; // Default lower bound
+    float upper_val = 6.0f;  // Default upper bound
 
-        float lower_val = -6.0f; // Default lower bound
-        float upper_val = 6.0f;  // Default upper bound
-
-        if (lower && lower->getMatrixType() == MatrixType::f32) {
-            lower_val = *reinterpret_cast<const float*>(lower->getData());
-        }
-        if (upper && upper->getMatrixType() == MatrixType::f32) {
-            upper_val = *reinterpret_cast<const float*>(upper->getData());
-        }
-
-        for (size_t i = 0; i < size; ++i) {
-            data[i] = std::max(lower_val, std::min(upper_val, data[i]));
-        }
+    if (lower && lower->getMatrixType() == MatrixType::f32) {
+        lower_val = *reinterpret_cast<const float*>(lower->getData());
     }
+    if (upper && upper->getMatrixType() == MatrixType::f32) {
+        upper_val = *reinterpret_cast<const float*>(upper->getData());
+    }
+
+    applyUnifiedPostOp(
+        matrix, [lower_val, upper_val](float* data, size_t size) {
+            for (size_t i = 0; i < size; ++i) {
+                data[i] = std::max(lower_val, std::min(upper_val, data[i]));
+            }
+        });
 }
 
 void
 UalRef::applySwish(Matrix& matrix)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
-
+    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             float x = data[i];
             data[i] = x / (1.0f + std::exp(-x));
         }
-    }
+    });
 }
 
 void
 UalRef::applyTanh(Matrix& matrix)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
-
+    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             data[i] = std::tanh(data[i]);
         }
-    }
+    });
 }
 
 void
 UalRef::applySigmoid(Matrix& matrix)
 {
-    if (matrix.getMatrixType() == MatrixType::f32) {
-        float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
-
+    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             data[i] = 1.0f / (1.0f + std::exp(-data[i]));
         }
-    }
+    });
 }
 
 void
 UalRef::applySum(Matrix& matrix, const Matrix* zeroPoint)
 {
+    // Handle BF16 as unsupported
+    if (matrix.getMatrixType() == MatrixType::bf16) {
+        return;
+    }
+
     // For sum operations, we would typically add another matrix
-    // For now, this is a placeholder implementation
+    // Since no second matrix is provided, this is essentially a no-op
+    // But we implement it to maintain consistency with the multi-datatype
+    // pattern
+
+    // If zeroPoint is provided, we could subtract it from each element
+    if (zeroPoint && zeroPoint->getMatrixType() == MatrixType::f32) {
+        const float* zero_data =
+            reinterpret_cast<const float*>(zeroPoint->getData());
+        float zero_val = *zero_data; // Assume single value for now
+
+        // If already f32, apply directly
+        if (matrix.getMatrixType() == MatrixType::f32) {
+            float* data = reinterpret_cast<float*>(matrix.getData());
+            size_t size = matrix.getDataSizeBytes() / sizeof(float);
+
+            for (size_t i = 0; i < size; ++i) {
+                data[i] -= zero_val; // Subtract zero point
+            }
+            return;
+        }
+
+        // For other types, convert to float, apply operation, convert back
+        md_t rows = matrix.getRows();
+        md_t cols = matrix.getCols();
+        md_t ld   = cols; // Use simple row-major layout for temp matrix
+
+        // Create temporary float matrix
+        std::unique_ptr<float[]> temp_data(new float[rows * ld]);
+
+        // Convert to float
+        if (!copyMatrixToFloat(matrix, temp_data.get(), ld)) {
+            return;
+        }
+
+        // Apply zero point subtraction in float
+        size_t size = rows * cols;
+        for (size_t i = 0; i < size; ++i) {
+            temp_data[i] -= zero_val;
+        }
+
+        // Convert back to original type
+        copyFloatToMatrix(temp_data.get(), ld, matrix);
+    }
+
+    // If no zeroPoint provided, this is a no-op but we've maintained
+    // consistency
 }
 
 void
 UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
 {
-    if (!(matrix.getMatrixType() == MatrixType::f32 && scaleFactor)) {
+    if (!scaleFactor) {
         return;
     }
 
-    if (scaleFactor->getMatrixType() != MatrixType::f32) {
-        return; // currently support f32 only
+    // Handle BF16 as unsupported
+    if (matrix.getMatrixType() == MatrixType::bf16
+        || scaleFactor->getMatrixType() == MatrixType::bf16) {
+        return;
     }
-
-    float*       data = reinterpret_cast<float*>(matrix.getData());
-    const float* scale_data =
-        reinterpret_cast<const float*>(scaleFactor->getData());
-
-    md_t rows = matrix.getRows();
-    md_t cols = matrix.getCols();
-    md_t ld   = matrix.getLeadingDimension();
 
     // Determine scale length: 1 (per-tensor) or N (per-channel)
     bool per_channel = (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
 
     if (!per_channel) {
-        float scale = *scale_data;
+        // Single scale value - convert to float
+        float scale = convertToFloat(scaleFactor->getData(),
+                                     scaleFactor->getMatrixType(), 0);
+        applyUnifiedPostOp(matrix, [scale](float* data, size_t size) {
+            for (size_t i = 0; i < size; ++i) {
+                data[i] *= scale;
+            }
+        });
+        return;
+    }
+
+    // For per-channel scaling, we need to handle layout properly
+    md_t rows = matrix.getRows();
+    md_t cols = matrix.getCols();
+    md_t ld   = matrix.getLeadingDimension();
+
+    // Convert scale factor to float array
+    md_t scale_size = scaleFactor->getRows() * scaleFactor->getCols();
+    std::unique_ptr<float[]> scale_data(new float[scale_size]);
+
+    for (md_t i = 0; i < scale_size; ++i) {
+        scale_data[i] = convertToFloat(scaleFactor->getData(),
+                                       scaleFactor->getMatrixType(), i);
+    }
+
+    // If matrix is already f32, apply directly
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+
+        // Per-channel assumed along N (columns)
         for (md_t i = 0; i < rows; ++i) {
             for (md_t j = 0; j < cols; ++j) {
-                size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
-                                 ? (static_cast<size_t>(i) * ld + j)
-                                 : (static_cast<size_t>(j) * ld + i);
+                float  scale = scale_data[j % scale_size];
+                size_t idx   = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                                   ? (static_cast<size_t>(i) * ld + j)
+                                   : (static_cast<size_t>(j) * ld + i);
                 data[idx] *= scale;
             }
         }
         return;
     }
 
-    // Per-channel assumed along N (columns)
+    // For other types, convert to float, apply operation, convert back
+    md_t temp_ld = cols; // Use simple row-major layout for temp matrix
+
+    // Create temporary float matrix
+    std::unique_ptr<float[]> temp_data(new float[rows * temp_ld]);
+
+    // Convert to float
+    if (!copyMatrixToFloat(matrix, temp_data.get(), temp_ld)) {
+        return;
+    }
+
+    // Apply per-channel scaling in float
     for (md_t i = 0; i < rows; ++i) {
         for (md_t j = 0; j < cols; ++j) {
-            float scale =
-                scale_data[j
-                           % (scaleFactor->getRows() * scaleFactor->getCols())];
-            size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
-                             ? (static_cast<size_t>(i) * ld + j)
-                             : (static_cast<size_t>(j) * ld + i);
-            data[idx] *= scale;
+            float  scale = scale_data[j % scale_size];
+            size_t idx   = static_cast<size_t>(i) * temp_ld + j;
+            temp_data[idx] *= scale;
         }
     }
+
+    // Convert back to original type
+    copyFloatToMatrix(temp_data.get(), temp_ld, matrix);
 }
 
 void
 UalRef::applyBias(Matrix& matrix, const Matrix& bias)
 {
-    if (matrix.getMatrixType() == MatrixType::f32
-        && bias.getMatrixType() == MatrixType::f32) {
-        float*       data      = reinterpret_cast<float*>(matrix.getData());
-        const float* bias_data = reinterpret_cast<const float*>(bias.getData());
+    // Handle BF16 as unsupported
+    if (matrix.getMatrixType() == MatrixType::bf16
+        || bias.getMatrixType() == MatrixType::bf16) {
+        return;
+    }
 
-        md_t rows      = matrix.getRows();
-        md_t cols      = matrix.getCols();
-        md_t bias_size = bias.getRows() * bias.getCols();
+    md_t bias_size = bias.getRows() * bias.getCols();
+
+    // Convert bias to float array
+    std::unique_ptr<float[]> bias_data(new float[bias_size]);
+    for (md_t i = 0; i < bias_size; ++i) {
+        bias_data[i] = convertToFloat(bias.getData(), bias.getMatrixType(), i);
+    }
+
+    // If matrix is already f32, apply directly
+    if (matrix.getMatrixType() == MatrixType::f32) {
+        float* data = reinterpret_cast<float*>(matrix.getData());
+        md_t   rows = matrix.getRows();
+        md_t   cols = matrix.getCols();
 
         // Apply bias to each row/column depending on bias size
         for (md_t i = 0; i < rows; ++i) {
@@ -1183,7 +1566,33 @@ UalRef::applyBias(Matrix& matrix, const Matrix& bias)
                 data[idx] += bias_data[bias_idx];
             }
         }
+        return;
     }
+
+    // For other types, convert to float, apply operation, convert back
+    md_t rows = matrix.getRows();
+    md_t cols = matrix.getCols();
+    md_t ld   = cols; // Use simple row-major layout for temp matrix
+
+    // Create temporary float matrix
+    std::unique_ptr<float[]> temp_data(new float[rows * ld]);
+
+    // Convert to float
+    if (!copyMatrixToFloat(matrix, temp_data.get(), ld)) {
+        return;
+    }
+
+    // Apply bias in float
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            size_t idx      = static_cast<size_t>(i) * ld + j;
+            size_t bias_idx = j % bias_size; // Broadcast bias
+            temp_data[idx] += bias_data[bias_idx];
+        }
+    }
+
+    // Convert back to original type
+    copyFloatToMatrix(temp_data.get(), ld, matrix);
 }
 
 void
@@ -1191,16 +1600,23 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
                        const Matrix& addMatrix,
                        const Matrix* scaleFactor)
 {
+    // Handle BF16 as unsupported
+    if (matrix.getMatrixType() == MatrixType::bf16
+        || addMatrix.getMatrixType() == MatrixType::bf16) {
+        return;
+    }
+
+    float scale = 1.0f;
+    if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
+        scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+    }
+
+    // If both matrices are f32, apply directly
     if (matrix.getMatrixType() == MatrixType::f32
         && addMatrix.getMatrixType() == MatrixType::f32) {
         float*       data = reinterpret_cast<float*>(matrix.getData());
         const float* add_data =
             reinterpret_cast<const float*>(addMatrix.getData());
-
-        float scale = 1.0f;
-        if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
-            scale = *reinterpret_cast<const float*>(scaleFactor->getData());
-        }
 
         size_t size =
             std::min(matrix.getDataSizeBytes(), addMatrix.getDataSizeBytes())
@@ -1209,7 +1625,32 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
         for (size_t i = 0; i < size; ++i) {
             data[i] += add_data[i] * scale;
         }
+        return;
     }
+
+    // For other types, convert to float, apply operation, convert back
+    md_t rows = matrix.getRows();
+    md_t cols = matrix.getCols();
+    md_t ld   = cols; // Use simple row-major layout for temp matrix
+
+    // Create temporary float matrices
+    std::unique_ptr<float[]> temp_matrix(new float[rows * ld]);
+    std::unique_ptr<float[]> temp_add(new float[rows * ld]);
+
+    // Convert both matrices to float
+    if (!copyMatrixToFloat(matrix, temp_matrix.get(), ld)
+        || !copyMatrixToFloat(addMatrix, temp_add.get(), ld)) {
+        return;
+    }
+
+    // Apply matrix addition in float
+    size_t size = rows * cols;
+    for (size_t i = 0; i < size; ++i) {
+        temp_matrix[i] += temp_add[i] * scale;
+    }
+
+    // Convert back to original type
+    copyFloatToMatrix(temp_matrix.get(), ld, matrix);
 }
 
 void
@@ -1217,18 +1658,23 @@ UalRef::applyMatrixMul(Matrix&       matrix,
                        const Matrix& mulMatrix,
                        const Matrix* scaleFactor)
 {
-    // Matrix multiplication is more complex and would require proper GEMM
-    // For now, just element-wise multiplication
+    // Handle BF16 as unsupported
+    if (matrix.getMatrixType() == MatrixType::bf16
+        || mulMatrix.getMatrixType() == MatrixType::bf16) {
+        return;
+    }
+
+    float scale = 1.0f;
+    if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
+        scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+    }
+
+    // If both matrices are f32, apply directly
     if (matrix.getMatrixType() == MatrixType::f32
         && mulMatrix.getMatrixType() == MatrixType::f32) {
         float*       data = reinterpret_cast<float*>(matrix.getData());
         const float* mul_data =
             reinterpret_cast<const float*>(mulMatrix.getData());
-
-        float scale = 1.0f;
-        if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
-            scale = *reinterpret_cast<const float*>(scaleFactor->getData());
-        }
 
         size_t size =
             std::min(matrix.getDataSizeBytes(), mulMatrix.getDataSizeBytes())
@@ -1237,7 +1683,32 @@ UalRef::applyMatrixMul(Matrix&       matrix,
         for (size_t i = 0; i < size; ++i) {
             data[i] *= mul_data[i] * scale;
         }
+        return;
     }
+
+    // For other types, convert to float, apply operation, convert back
+    md_t rows = matrix.getRows();
+    md_t cols = matrix.getCols();
+    md_t ld   = cols; // Use simple row-major layout for temp matrix
+
+    // Create temporary float matrices
+    std::unique_ptr<float[]> temp_matrix(new float[rows * ld]);
+    std::unique_ptr<float[]> temp_mul(new float[rows * ld]);
+
+    // Convert both matrices to float
+    if (!copyMatrixToFloat(matrix, temp_matrix.get(), ld)
+        || !copyMatrixToFloat(mulMatrix, temp_mul.get(), ld)) {
+        return;
+    }
+
+    // Apply element-wise multiplication in float
+    size_t size = rows * cols;
+    for (size_t i = 0; i < size; ++i) {
+        temp_matrix[i] *= temp_mul[i] * scale;
+    }
+
+    // Convert back to original type
+    copyFloatToMatrix(temp_matrix.get(), ld, matrix);
 }
 
 } // namespace dlp::testing::classic
