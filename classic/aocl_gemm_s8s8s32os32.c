@@ -147,7 +147,14 @@ aocl_gemm_s8s8s32os32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
-
+    // A matrix packing is only done in column major case, or when
+    // A matrix is transposed in row major. PackA kernels for row-maj
+    // is not supported, hence we set it to unpacked and proceed with GEMM.
+    if ((is_row_major == TRUE) && (mtag_a == PACK)) {
+        mtag_a = UNPACKED;
+    } else if (is_column_major == TRUE && mtag_b == PACK) {
+        mtag_b = UNPACKED;
+    }
     // From 5-loop function point of view
     // B matrix needs to be packed in a certain format in order to be loaded
     // and used in bf16 instrution. As such the mtag_b always needs to be either
@@ -188,7 +195,6 @@ aocl_gemm_s8s8s32os32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
-
 #ifdef DLP_ENABLE_OPENMP
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {

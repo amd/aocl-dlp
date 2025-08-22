@@ -138,6 +138,12 @@ aocl_gemm_u8s8s32obf16(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
+    // A matrix packing is done only if the inputs are transposed in a
+    // row major scenario. A matrix packing in row major is not supported,
+    // hence it is changed to unpacked and proceed with the GEMM.
+    if (mtag_a == PACK) {
+        mtag_a = UNPACKED;
+    }
 
     // From 5-loop function point of view
     // B matrix needs to be packed in a certain format in order to be loaded
