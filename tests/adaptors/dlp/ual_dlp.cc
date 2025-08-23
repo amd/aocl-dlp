@@ -149,6 +149,20 @@ UalDlp::reorder(const Matrix& in,
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
                 effective_cols, nullptr);
         }
+    } else if (in.getMatrixType() == MatrixType::s8) {
+        // For s8, consider the accumulation type and output type
+        if (accType == MatrixType::s32) {
+            alloc_bytes = aocl_get_reorder_buf_size_u8s8s32os32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, nullptr);
+        } else {
+            // Handle other accumulation types - for now, fall back to standard
+            alloc_bytes = aocl_get_reorder_buf_size_u8s8s32os32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, nullptr);
+        }
     } else {
         return false;
     }
