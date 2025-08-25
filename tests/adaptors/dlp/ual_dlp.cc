@@ -38,9 +38,13 @@
 #include "adaptors/dlp/ual_dlp.hh"
 #include "adaptors/dlp/operation_dlp.hh"
 #include <cstddef>
+#include <cstring>
 #include <iostream>
+#include <memory>
 
 #include "aocl_dlp.h"
+#include "classic/aocl_gemm_post_ops.h"
+#include "classic/dlp_errors.h"
 
 using namespace dlp::testing::framework;
 
@@ -109,6 +113,8 @@ UalDlp::reorder(const Matrix& in,
                 MatrixType    C_type,
                 MatrixType    accType)
 {
+    dlp_metadata_t meta;
+    meta.error_hndl.error_code = DLP_CLSC_SUCCESS;
 
     // Use effective (logical) dimensions for reordering
     md_t effective_rows = in.getEffectiveRows();
@@ -126,14 +132,14 @@ UalDlp::reorder(const Matrix& in,
             alloc_bytes = aocl_get_reorder_buf_size_f32f32f32of32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, nullptr);
+                effective_cols, &meta);
         } else {
             // Handle mixed precision cases - for now, fall back to standard f32
             // reorder
             alloc_bytes = aocl_get_reorder_buf_size_f32f32f32of32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, nullptr);
+                effective_cols, &meta);
         }
     } else if (in.getMatrixType() == MatrixType::bf16) {
         // For bf16, consider the accumulation type and output type
@@ -141,13 +147,13 @@ UalDlp::reorder(const Matrix& in,
             alloc_bytes = aocl_get_reorder_buf_size_bf16bf16f32of32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, nullptr);
+                effective_cols, &meta);
         } else {
             // Handle other accumulation types - for now, fall back to standard
             alloc_bytes = aocl_get_reorder_buf_size_bf16bf16f32of32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, nullptr);
+                effective_cols, &meta);
         }
     } else if (in.getMatrixType() == MatrixType::s8) {
         // For s8, consider the accumulation type and output type
@@ -155,15 +161,19 @@ UalDlp::reorder(const Matrix& in,
             alloc_bytes = aocl_get_reorder_buf_size_u8s8s32os32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, nullptr);
+                effective_cols, &meta);
         } else {
             // Handle other accumulation types - for now, fall back to standard
             alloc_bytes = aocl_get_reorder_buf_size_u8s8s32os32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, nullptr);
+                effective_cols, &meta);
         }
     } else {
+        return false;
+    }
+
+    if (meta.error_hndl.error_code != DLP_CLSC_SUCCESS) {
         return false;
     }
 
@@ -198,7 +208,7 @@ UalDlp::reorder(const Matrix& in,
                     reinterpret_cast<float*>(
                         out.getMatrixData().getMatrixPtr()),
                     effective_rows, effective_cols, in.getLeadingDimension(),
-                    nullptr);
+                    &meta);
             } else {
                 // Handle mixed precision - for now, use standard f32 reorder
                 aocl_reorder_f32f32f32of32(
@@ -208,7 +218,7 @@ UalDlp::reorder(const Matrix& in,
                     reinterpret_cast<float*>(
                         out.getMatrixData().getMatrixPtr()),
                     effective_rows, effective_cols, in.getLeadingDimension(),
-                    nullptr);
+                    &meta);
             }
             break;
         case MatrixType::bf16:
@@ -218,7 +228,8 @@ UalDlp::reorder(const Matrix& in,
                 reinterpret_cast<const bfloat16*>(
                     in.getMatrixData().getMatrixPtr()),
                 reinterpret_cast<bfloat16*>(out.getMatrixData().getMatrixPtr()),
-                effective_rows, effective_cols, in.getLeadingDimension(), NULL);
+                effective_rows, effective_cols, in.getLeadingDimension(),
+                &meta);
             break;
         case MatrixType::s8:
             aocl_reorder_s8s8s32os32(
@@ -226,405 +237,18 @@ UalDlp::reorder(const Matrix& in,
                 reinterpret_cast<const int8_t*>(
                     in.getMatrixData().getMatrixPtr()),
                 reinterpret_cast<int8_t*>(out.getMatrixData().getMatrixPtr()),
-                effective_rows, effective_cols, in.getLeadingDimension(), NULL);
+                effective_rows, effective_cols, in.getLeadingDimension(),
+                &meta);
             break;
         default:
             return false;
     }
 
-    return true;
-}
-
-/**
- * @brief Validate GEMM parameters for correctness
- *
- * This function follows the exact logic from AOCL_GEMM_CHECK macro in
- * aocl_gemm_check.h
- *
- * @param A First input matrix
- * @param B Second input matrix
- * @param C Output matrix
- * @return bool True if parameters are valid, false otherwise
- */
-bool
-UalDlp::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
-{
-    // Get GEMM operation dimensions (logical dimensions)
-    uint32_t m = A.getEffectiveRows(); // Rows of A (and C)
-    uint32_t n = B.getEffectiveCols(); // Cols of B (and C)
-    uint32_t k = A.getEffectiveCols(); // Cols of A, Rows of B
-
-    bool col_stored = (A.getLayout() == MatrixLayout::COLUMN_MAJOR);
-    bool row_stored = (A.getLayout() == MatrixLayout::ROW_MAJOR);
-
-    bool nota = !A.isTransposed(); // not transposed A
-    bool notb = !B.isTransposed(); // not transposed B
-    bool ta   = A.isTransposed();  // transposed A
-    bool tb   = B.isTransposed();  // transposed B
-
-    // All matrices should have the same layout
-    if (A.getLayout() != B.getLayout() || A.getLayout() != C.getLayout()) {
-        return false;
-    }
-
-    // Check basic dimensions - must be positive (same as macro: m <= 0, n <= 0,
-    // k <= 0)
-    if (m <= 0) {
-        return false; // info = 4 in macro
-    }
-    if (n <= 0) {
-        return false; // info = 5 in macro
-    }
-    if (k <= 0) {
-        return false; // info = 6 in macro
-    }
-
-    // Check dimension compatibility for matrix multiplication
-    if (A.getEffectiveCols() != B.getEffectiveRows()) {
-        return false;
-    }
-
-    // Matrix A leading dimension checks (info = 9 in macro)
-    // For reordered matrices, skip the leading dimension check as they have
-    // custom layouts
-    if (!A.isReordered()) {
-        if (row_stored
-            && ((nota && (A.getLeadingDimension() < k))
-                || (ta && (A.getLeadingDimension() < m)))) {
-            return false;
-        }
-        if (col_stored
-            && ((nota && (A.getLeadingDimension() < m))
-                || (ta && (A.getLeadingDimension() < k)))) {
-            return false;
-        }
-    }
-
-    // Matrix B leading dimension checks (info = 12 in macro)
-    // For reordered matrices, skip the leading dimension check as they have
-    // custom layouts
-    if (!B.isReordered()) {
-        if (row_stored
-            && ((notb && (B.getLeadingDimension() < n))
-                || (tb && (B.getLeadingDimension() < k)))) {
-            return false;
-        }
-        if (col_stored
-            && ((notb && (B.getLeadingDimension() < k))
-                || (tb && (B.getLeadingDimension() < n)))) {
-            return false;
-        }
-    }
-
-    // Matrix C leading dimension checks (info = 16 in macro)
-    // C is never reordered, so always check
-    if (row_stored && (C.getLeadingDimension() < n)) {
-        return false;
-    }
-    if (col_stored && (C.getLeadingDimension() < m)) {
+    if (meta.error_hndl.error_code != DLP_CLSC_SUCCESS) {
         return false;
     }
 
     return true;
-}
-
-// Depriciated function
-/**
- * @brief Public GEMM interface that unpacks Matrix objects
- *
- * @param A First input matrix
- * @param B Second input matrix
- * @param C Output matrix
- * @param accType Accumulation type
- * @param alpha Scaling factor for A*B
- * @param beta Scaling factor for C
- * @return bool Success status
- */
-bool
-UalDlp::gemm(const Matrix& A,
-             const Matrix& B,
-             Matrix&       C,
-             MatrixType    accType,
-             double        alpha,
-             double        beta)
-{
-
-    // Validate parameters first
-    // NOTE: This client-side validation is not ideal - proper error handling
-    // should be implemented at the library level to provide consistent
-    // parameter validation across all UAL implementations.
-    if (!checkValidGemmParams(A, B, C)) {
-        return false;
-    }
-
-    uint64_t type = encode_types(A.getMatrixType(), B.getMatrixType(),
-                                 C.getMatrixType(), accType);
-
-    char transA = A.isTransposed() ? 't' : 'n';
-    char transB = B.isReordered() ? 'n' : (B.isTransposed() ? 't' : 'n');
-
-    char layoutA = A.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
-
-    // Determine memory format for matrices A and B
-    // Pack takes precedence over reorder since it includes optimization
-    char memFormatA = A.isPacked() ? 'p' : (A.isReordered() ? 'r' : 'n');
-    char memFormatB = B.isPacked() ? 'p' : (B.isReordered() ? 'r' : 'n');
-
-    // Validate leading dimensions
-    if (C.getLayout() == MatrixLayout::ROW_MAJOR) {
-        if (C.getLeadingDimension() < C.getCols()) {
-            return false;
-        }
-    } else {
-        if (C.getLeadingDimension() < C.getRows()) {
-            return false;
-        }
-    }
-
-    switch (type) {
-        case encode_types<MatrixType::f32, MatrixType::f32, MatrixType::f32,
-                          MatrixType::f32>(): {
-            // For f32 operations, alpha/beta are float type
-            float alpha_f32 = static_cast<float>(alpha);
-            float beta_f32  = static_cast<float>(beta);
-
-            aocl_gemm_f32f32f32of32(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
-                reinterpret_cast<float*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<float*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_f32,
-                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::f32,
-                          MatrixType::f32>(): {
-            float alpha_f32 = static_cast<float>(alpha);
-            float beta_f32  = static_cast<float>(beta);
-
-            aocl_gemm_bf16bf16f32of32(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
-                reinterpret_cast<bfloat16*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<bfloat16*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_f32,
-                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-        // Int8 GEMM cases
-        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s32,
-                          MatrixType::s32>(): {
-            // uint8 × int8 → int32 directly supported
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_u8s8s32os32(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<uint8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<int32_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::bf16,
-                          MatrixType::f32>(): {
-            float alpha_f32 = static_cast<float>(alpha);
-            float beta_f32  = static_cast<float>(beta);
-
-            aocl_gemm_bf16bf16f32obf16(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
-                reinterpret_cast<bfloat16*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<bfloat16*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_f32,
-                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s32,
-                          MatrixType::s32>(): {
-            // int8 × int8 → int32 directly supported
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_s8s8s32os32(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<int8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<int32_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::f32,
-                          MatrixType::s32>(): {
-            // uint8 × int8 → int32 directly supported
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_u8s8s32of32(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<uint8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s8,
-                          MatrixType::s32>(): {
-            // uint8 × int8 → int32 directly supported
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_u8s8s32os8(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<uint8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<int8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::u8,
-                          MatrixType::s32>(): {
-            // uint8 × int8 → int32 directly supported
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_u8s8s32os8(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<uint8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<int8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::bf16,
-                          MatrixType::s32>(): {
-            // uint8 × int8 → bf16 directly supported
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_u8s8s32obf16(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<uint8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::f32,
-                          MatrixType::s32>(): {
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_s8s8s32of32(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<int8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s8,
-                          MatrixType::s32>(): {
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_s8s8s32os8(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<int8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<int8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::u8,
-                          MatrixType::s32>(): {
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_s8s8s32ou8(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<int8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<uint8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::bf16,
-                          MatrixType::s32>(): {
-            int32_t alpha_s32 = static_cast<int32_t>(alpha);
-            int32_t beta_s32  = static_cast<int32_t>(beta);
-
-            aocl_gemm_s8s8s32obf16(
-                layoutA, transA, transB, A.getEffectiveRows(),
-                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                reinterpret_cast<int8_t*>(A.getMatrixData().getMatrixPtr()),
-                A.getLeadingDimension(), memFormatA,
-                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
-                B.getLeadingDimension(), memFormatB, beta_s32,
-                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), nullptr);
-
-            return true;
-        }
-
-        default:
-            return false;
-    }
 }
 
 /**
@@ -649,29 +273,30 @@ UalDlp::gemm(const Matrix&                      A,
              double                             alpha,
              double                             beta)
 {
+
     // For now, if no postOps are provided, delegate to the original gemm method
+    std::shared_ptr<dlp_metadata_t> aocl_postops;
     if (!postOps) {
-        return gemm(A, B, C, accType, alpha, beta);
-    }
+        // PostOps is still needed for error code.
+        // FIXME: Rename postops to metadata
+        aocl_postops = std::make_shared<dlp_metadata_t>();
+        std::memset(aocl_postops.get(), 0, sizeof(dlp_metadata_t));
+    } else {
+        // Cast to DlpOperation and access the serialized dlp_metadata_t
+        // structure
+        // using friend access
+        auto* dlpOp = dynamic_cast<DlpOperation*>(postOps.get());
+        if (!dlpOp) {
+            return false;
+        }
 
-    // Validate that the postOps are for DLP backend
-    if (postOps->getUALType() != UALType::DLP) {
-        return false;
-    }
+        // Validate that the postOps are for DLP backend
+        if (postOps->getUALType() != UALType::DLP) {
+            return false;
+        }
 
-    // Cast to DlpOperation and access the serialized dlp_metadata_t structure
-    // using friend access
-    const auto* dlpOp = dynamic_cast<const DlpOperation*>(postOps.get());
-    if (!dlpOp) {
-        return false;
-    }
-
-    // Get the serialized dlp_metadata_t structure using friend access
-    dlp_metadata_t* aocl_postops = dlpOp->toAoclPostOp();
-
-    // Validate parameters first
-    if (!checkValidGemmParams(A, B, C)) {
-        return false;
+        // Get the shared dlp_metadata_t structure using friend access
+        aocl_postops = dlpOp->m_postops;
     }
 
     uint64_t type = encode_types(A.getMatrixType(), B.getMatrixType(),
@@ -686,17 +311,6 @@ UalDlp::gemm(const Matrix&                      A,
     // Pack takes precedence over reorder since it includes optimization
     char memFormatA = A.isPacked() ? 'p' : (A.isReordered() ? 'r' : 'n');
     char memFormatB = B.isPacked() ? 'p' : (B.isReordered() ? 'r' : 'n');
-
-    // Validate leading dimensions
-    if (C.getLayout() == MatrixLayout::ROW_MAJOR) {
-        if (C.getLeadingDimension() < C.getCols()) {
-            return false;
-        }
-    } else {
-        if (C.getLeadingDimension() < C.getRows()) {
-            return false;
-        }
-    }
 
     switch (type) {
         case encode_types<MatrixType::f32, MatrixType::f32, MatrixType::f32,
@@ -713,9 +327,9 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<float*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_f32,
                 reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
+                C.getLeadingDimension(), aocl_postops.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::f32,
@@ -731,9 +345,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<bfloat16*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_f32,
                 reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::bf16,
@@ -749,9 +362,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<bfloat16*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_f32,
                 reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s32,
@@ -767,8 +379,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<int32_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s32,
@@ -785,9 +397,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<int32_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s8,
@@ -804,9 +415,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<int8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::f32,
@@ -823,9 +433,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::u8,
@@ -842,9 +451,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<uint8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::bf16,
@@ -861,9 +469,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::f32,
@@ -879,9 +486,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s8,
@@ -897,9 +503,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<int8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::u8,
@@ -915,9 +520,8 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<uint8_t*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::bf16,
@@ -933,14 +537,14 @@ UalDlp::gemm(const Matrix&                      A,
                 reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                C.getLeadingDimension(), aocl_postops);
-
-            return true;
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
         }
 
         default:
             return false;
     }
+    return aocl_postops->error_hndl.error_code == DLP_CLSC_SUCCESS;
 }
 
 bool

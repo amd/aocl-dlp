@@ -947,11 +947,11 @@ TEST(GEMMTest, Basic)
 
     // Perform GEMM
     std::unique_ptr<IUal> ual = UalFactory::createUal(UALType::DLP);
-    ual->gemm(A, B, C, MatrixType::f32);
+    ual->gemm(A, B, C, MatrixType::f32, nullptr);
 
     // Perform GEMM with reference implementation
     ual = UalFactory::createUal(UALType::REF);
-    ual->gemm(A, B, C_ref, MatrixType::f32);
+    ual->gemm(A, B, C_ref, MatrixType::f32, nullptr);
 
     // To compare with reference, we need to set the k dimension for tolerance
     C.setK(k);
@@ -979,10 +979,11 @@ TEST(GEMMTest, EdgeCases)
     C_small_ref = C_small;
 
     std::unique_ptr<IUal> ual = UalFactory::createUal(UALType::DLP);
-    ASSERT_TRUE(ual->gemm(A_small, B_small, C_small, MatrixType::f32));
+    ASSERT_TRUE(ual->gemm(A_small, B_small, C_small, MatrixType::f32, nullptr));
 
     ual = UalFactory::createUal(UALType::REF);
-    ASSERT_TRUE(ual->gemm(A_small, B_small, C_small_ref, MatrixType::f32));
+    ASSERT_TRUE(
+        ual->gemm(A_small, B_small, C_small_ref, MatrixType::f32, nullptr));
 
     // To compare with reference, we need to set the k dimension for tolerance
     C_small.setK(1);
@@ -1013,12 +1014,8 @@ TEST(GEMMTest, DebugDoubleFree)
         ual_dlp->reorder(B, B_reordered, MatrixType::f32, MatrixType::f32,
                          MatrixType::f32, MatrixType::f32);
 
-    // Assignment that might cause double-free
-    if (reorder_result) {
-        B = B_reordered;
-    }
-
-    // Objects will be destroyed here - this is where double-free might occur
+    // Reordering should fail and ldb is lower than min needed ldb.
+    EXPECT_EQ(reorder_result, false);
 }
 
 // ============================================================================

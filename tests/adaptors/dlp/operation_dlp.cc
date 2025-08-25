@@ -37,7 +37,7 @@ namespace dlp::testing::classic {
 DlpOperation::DlpOperation()
 {
     m_ual_type = dlp::testing::framework::UALType::DLP;
-    m_postops  = std::make_unique<dlp_metadata_t>();
+    m_postops  = std::make_shared<dlp_metadata_t>();
     std::memset(m_postops.get(), 0, sizeof(dlp_metadata_t));
 }
 

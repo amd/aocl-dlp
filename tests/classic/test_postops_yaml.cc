@@ -50,7 +50,7 @@ class PostOpsYamlTest : public ::testing::Test
 TEST_F(PostOpsYamlTest, BasicPostOpsParsingTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_postops.yaml";
+        "/yaml_framework_test_configs/yaml_test_postops.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -166,7 +166,7 @@ TEST_F(PostOpsYamlTest, BasicPostOpsParsingTest)
 TEST_F(PostOpsYamlTest, PostOpsCombinationCountTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_postops.yaml";
+        "/yaml_framework_test_configs/yaml_test_postops.yaml";
 
     try {
         YamlParser       parser(filepath, "yaml_test");
@@ -212,7 +212,7 @@ TEST_F(PostOpsYamlTest, PostOpsCombinationCountTest)
 TEST_F(PostOpsYamlTest, PostOpsWithGemmTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_postops.yaml";
+        "/yaml_framework_test_configs/yaml_test_postops.yaml";
 
     try {
         YamlParser       parser(filepath, "yaml_test");

@@ -735,7 +735,7 @@ UalRef::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
     return true;
 }
 
-// Depriciated function
+// Core GEMM
 /**
  * @brief Public GEMM interface that unpacks Matrix objects
  *

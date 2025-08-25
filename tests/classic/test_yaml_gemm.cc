@@ -45,7 +45,7 @@ TEST(YamlParserTest, ParseGemmTestConfig)
 {
     // Use a relative path to the test configuration file
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_range_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_range_list.yaml";
 
     // Create and test the parser
     try {
@@ -186,7 +186,8 @@ TEST(YamlParserTest, ParseGemmTestConfig)
 TEST(YamlParserTest, CartesianProductTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_range_list.yaml";
+        "/yaml_framework_yaml_framework_test_configs/"
+        "yaml_test_config_range_list.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -297,7 +298,7 @@ TEST(YamlParserTest, CartesianProductTest)
 TEST(YamlParserTest, MediumMatrixCartesianProductTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_range_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_range_list.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -433,7 +434,7 @@ TEST(YamlParserTest, MediumMatrixCartesianProductTest)
 TEST(YamlParserTest, ParseValueOnlyConfig)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_value.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_value.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -563,7 +564,7 @@ TEST(YamlParserTest, ParseValueOnlyConfig)
 TEST(YamlParserTest, ParseListOnlyConfig)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -724,9 +725,12 @@ TEST(YamlParserTest, YamlFileConsistencyCheck)
 {
     // Test files that should be compatible with GEMM testing
     std::vector<std::string> gemmConfigFiles = {
-        TEST_CONFIG_DIR "/test_configs/yaml_test_config_value.yaml",
-        TEST_CONFIG_DIR "/test_configs/yaml_test_config_list.yaml",
-        TEST_CONFIG_DIR "/test_configs/yaml_test_config_range_list.yaml"
+        TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_config_value.yaml",
+        TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_config_list.yaml",
+        TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_config_range_list.yaml"
     };
 
     std::vector<std::string> fileNames = { "yaml_test_config_value.yaml",
@@ -796,7 +800,7 @@ TEST(YamlParserTest, YamlFileConsistencyCheck)
 TEST(YamlParserTest, ElementWiseSimpleProductTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -882,7 +886,7 @@ TEST(YamlParserTest, ElementWiseSimpleProductTest)
 TEST(YamlParserTest, ElementWiseWithRangesTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_range_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_range_list.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -968,7 +972,7 @@ TEST(YamlParserTest, ElementWiseWithRangesTest)
 TEST(YamlParserTest, YieldTypeSwitchingTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -1024,7 +1028,7 @@ TEST(YamlParserTest, YieldTypeSwitchingTest)
 TEST(YamlParserTest, ElementWiseValueOnlyTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_value.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_value.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -1088,7 +1092,7 @@ TEST(YamlParserTest, ElementWiseValueOnlyTest)
 TEST(YamlParserTest, CartesianVsElementWiseComparisonTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
 
     try {
         // Test Cartesian Product first
@@ -1149,7 +1153,8 @@ TEST(YamlParserTest, CartesianVsElementWiseComparisonTest)
 TEST(YamlParserTest, MinimalPostOpsNoCartesianTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_minimal_no_cartesian.yaml";
+        "/yaml_framework_test_configs/"
+        "yaml_test_config_minimal_no_cartesian.yaml";
 
     try {
         YamlParser parser(filepath, "gemm_tests");
@@ -1236,7 +1241,7 @@ TEST(YamlParserTest, MinimalPostOpsNoCartesianTest)
 TEST(YamlParserTest, MinimalPostOpsDebugTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_minimal.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_minimal.yaml";
 
     try {
         YamlParser parser(filepath, "gemm_tests");
@@ -1358,7 +1363,8 @@ TEST(YamlParserTest, ElementwiseClipAlphaBetaParamsTest)
     try {
         // Use the new test configuration file with alpha/beta parameters
         std::string filepath = TEST_CONFIG_DIR
-            "/test_configs/yaml_test_elementwise_clip_with_params.yaml";
+            "/yaml_framework_test_configs/"
+            "yaml_test_elementwise_clip_with_params.yaml";
 
         YamlParser parser(filepath, "yaml_test");
 
@@ -1415,7 +1421,8 @@ TEST(YamlParserTest, ElementwiseParametersComprehensiveTest)
     try {
         // Use consolidated test configuration file
         std::string filepath = TEST_CONFIG_DIR
-            "/test_configs/yaml_test_elementwise_parameters.yaml";
+            "/yaml_framework_test_configs/"
+            "yaml_test_elementwise_parameters.yaml";
 
         YamlParser parser(filepath, "yaml_test");
 

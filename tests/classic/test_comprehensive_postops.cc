@@ -50,7 +50,7 @@ class ComprehensivePostOpsTest : public ::testing::Test
 TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesRangeListTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_range_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_range_list.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -139,7 +139,7 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesRangeListTest)
 TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesListTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
 
     try {
         YamlParser       parser(filepath, "yaml_test");
@@ -197,7 +197,7 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesListTest)
 TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesValueTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_value.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_value.yaml";
 
     try {
         YamlParser parser(filepath, "yaml_test");
@@ -247,7 +247,7 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesValueTest)
 TEST_F(ComprehensivePostOpsTest, PostOpsWithGemmIntegrationTest)
 {
     std::string filepath = TEST_CONFIG_DIR
-        "/test_configs/yaml_test_config_list.yaml";
+        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
 
     try {
         YamlParser       parser(filepath, "yaml_test");
@@ -349,7 +349,7 @@ TEST_F(ComprehensivePostOpsTest, BackwardCompatibilityTest)
     try {
         // This test uses our custom PostOps file without the second test case
         std::string filepath = TEST_CONFIG_DIR
-            "/test_configs/yaml_test_postops.yaml";
+            "/yaml_framework_test_configs/yaml_test_postops.yaml";
         YamlParser parser(filepath, "yaml_test");
 
         // Skip to the second test case (no PostOps)

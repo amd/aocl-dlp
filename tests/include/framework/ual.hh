@@ -97,24 +97,6 @@ class IUal
                          MatrixType    accType) = 0;
 
     /**
-     * @brief Perform general matrix multiplication: C = alpha*A*B + beta*C
-     *
-     * @param A First input matrix
-     * @param B Second input matrix
-     * @param C Output matrix
-     * @param accType Accumulation type
-     * @param alpha Scaling factor for A*B (default: 1.0)
-     * @param beta Scaling factor for C (default: 0.0)
-     * @return true on success
-     */
-    virtual bool gemm(const Matrix& A,
-                      const Matrix& B,
-                      Matrix&       C,
-                      MatrixType    accType,
-                      double        alpha = 1.0,
-                      double        beta  = 0.0) = 0;
-
-    /**
      * @brief Perform general matrix multiplication with post-operations: C =
      * alpha*A*B + beta*C + PostOps
      *

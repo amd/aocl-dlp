@@ -59,7 +59,7 @@ class UalDlp;
 class DlpOperation : public dlp::testing::framework::IOperation
 {
   private:
-    std::unique_ptr<dlp_metadata_t> m_postops;
+    std::shared_ptr<dlp_metadata_t> m_postops;
     bool                            m_finalized = false;
 
     // Collections for different operation types (filled during addOperation)
@@ -72,8 +72,11 @@ class DlpOperation : public dlp::testing::framework::IOperation
     std::vector<std::unique_ptr<dlp::testing::framework::MatrixMulParam>>
         m_matrix_mul_ops;
 
+    // Friend class - UalDlp can access private members and methods
+    friend class UalDlp;
+
     // Private method to get the backend-specific postops structure
-    dlp_metadata_t* toAoclPostOp() const { return m_postops.get(); }
+    dlp_metadata_t* toAoclPostOp() { return m_postops.get(); }
 
     // Helper methods for batch conversion (called once in finalize)
     void convertElementWiseOperations();
@@ -100,9 +103,6 @@ class DlpOperation : public dlp::testing::framework::IOperation
     void addOperation(std::unique_ptr<dlp::testing::framework::IOperationParam>
                           param) override;
     void finalize() override;
-
-    // Friend class - UalDlp can access private members and methods
-    friend class UalDlp;
 };
 
 } // namespace dlp::testing::classic
