@@ -967,10 +967,10 @@ jitAVX512GEMVM1::compute4x64<float, float, float>(bool nMask)
             add(regTmp2, 16 * sizeof(float));
         }
     } else {
-        vmovups(Xbyak::Zmm(bBaseIdx) | k0, ptr[regTmp2]);
-        vmovups(Xbyak::Zmm(bBaseIdx + 1) | k0, ptr[regTmp2 + regRsB]);
-        vmovups(Xbyak::Zmm(bBaseIdx + 2) | k0, ptr[regTmp2 + regRsB * 2]);
-        vmovups(Xbyak::Zmm(bBaseIdx + 3) | k0, ptr[regTmp2 + regTmp1]);
+        vmovups(Xbyak::Zmm(bBaseIdx) | k4, ptr[regTmp2]);
+        vmovups(Xbyak::Zmm(bBaseIdx + 1) | k4, ptr[regTmp2 + regRsB]);
+        vmovups(Xbyak::Zmm(bBaseIdx + 2) | k4, ptr[regTmp2 + regRsB * 2]);
+        vmovups(Xbyak::Zmm(bBaseIdx + 3) | k4, ptr[regTmp2 + regTmp1]);
 
         // For n0_mask
         vfmadd231ps(Xbyak::Zmm(accumBaseIdx + 0), Xbyak::Zmm(xBaseIdx),
@@ -1062,7 +1062,7 @@ jitAVX512GEMVM1::compute1x64<float, float, float>(bool nMask)
                     Xbyak::Zmm(bBaseIdx + 3));
 
     } else {
-        vmovups(Xbyak::Zmm(bBaseIdx) | k0, ptr[regTmp2]);
+        vmovups(Xbyak::Zmm(bBaseIdx) | k4, ptr[regTmp2]);
         vmovups(Xbyak::Zmm(bBaseIdx + 1) | k1,
                 ptr[regTmp2 + 16 * sizeof(float)]);
         vmovups(Xbyak::Zmm(bBaseIdx + 2) | k2,
@@ -1252,7 +1252,7 @@ jitAVX512GEMVM1::scaleYWithBeta<float>(bool nMask)
 
         } else {
             if (!isBetaOne) {
-                vfmadd231ps(Xbyak::Zmm(accumBaseIdx) | k0, Xbyak::Zmm(xBaseIdx),
+                vfmadd231ps(Xbyak::Zmm(accumBaseIdx) | k4, Xbyak::Zmm(xBaseIdx),
                             ptr[regTmpYptr]);
                 vfmadd231ps(Xbyak::Zmm(accumBaseIdx + 1) | k1,
                             Xbyak::Zmm(xBaseIdx),
@@ -1264,7 +1264,7 @@ jitAVX512GEMVM1::scaleYWithBeta<float>(bool nMask)
                             Xbyak::Zmm(xBaseIdx),
                             ptr[regTmpYptr + 48 * sizeof(float)]);
             } else {
-                vaddps(Xbyak::Zmm(accumBaseIdx) | k0, Xbyak::Zmm(accumBaseIdx),
+                vaddps(Xbyak::Zmm(accumBaseIdx) | k4, Xbyak::Zmm(accumBaseIdx),
                        ptr[regTmpYptr]);
                 vaddps(Xbyak::Zmm(accumBaseIdx + 1) | k1,
                        Xbyak::Zmm(accumBaseIdx + 1),
@@ -1297,7 +1297,7 @@ jitAVX512GEMVM1::storeYValues<float>(bool nMask)
         vmovups(ptr[regTmpYptr + 48 * sizeof(float)],
                 Xbyak::Zmm(accumBaseIdx + 3));
     } else {
-        vmovups(ptr[regTmpYptr] | k0, Xbyak::Zmm(accumBaseIdx));
+        vmovups(ptr[regTmpYptr] | k4, Xbyak::Zmm(accumBaseIdx));
         vmovups(ptr[regTmpYptr + 16 * sizeof(float)] | k1,
                 Xbyak::Zmm(accumBaseIdx + 1));
         vmovups(ptr[regTmpYptr + 32 * sizeof(float)] | k2,
@@ -1506,7 +1506,7 @@ jitAVX512GEMVM1::generateKernel<
     if (params.nfringe) {
 
         // If mask is used, we need to load the masks from runtime parameters
-        kmovw(k0,
+        kmovw(k4,
               ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n0_mask)]);
         kmovw(k1,
               ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n1_mask)]);
