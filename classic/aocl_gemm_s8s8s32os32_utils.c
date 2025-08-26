@@ -152,28 +152,20 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     // loaded; and since k_dim needs to be atleast 4, having n_dim atleast 16
     // should give 4x16=64 elements, enough for 1 zmm register.The padding is
     // not rounded to NR (=64), since that would result in memory wastage.
-// Not supported yet
-#if 0 // def DLP_KERNELS_ZEN4
+#ifdef DLP_KERNELS_ZEN4
     md_t n_reorder;
-    if( n == 1 )
-    {
+    if (n == 1) {
         n_reorder = 1;
-    }
-    else
-    {
-        n_reorder = make_multiple_of_n( n, 16 );
-
+    } else {
+        n_reorder = make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 4.
     md_t k_reorder;
-    if( n == 1 )
-    {
+    if (n == 1) {
         k_reorder = k;
-    }
-    else
-    {
-        k_reorder = make_multiple_of_n( k, 4 );
+    } else {
+        k_reorder = make_multiple_of_n(k, 4);
     }
 #else
     md_t n_reorder = make_multiple_of_n(n, 16);
@@ -358,21 +350,30 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         return; // A reorder not supported.
     }
-// Not supported yet
-#if 0 // def DLP_KERNELS_ZEN4
-    if( n == 1 )
-    {
-        int32_t* pack_b_column_sum = ( int32_t* ) ( reorder_buf_addr +
-                                       ( sizeof( int8_t ) * n * k ));
 
-        *pack_b_column_sum =  0;
+#ifdef DLP_KERNELS_ZEN4
+    if (n == 1) {
+        // Calculate the address of the beginning of the column sum buffer that
+        // is allocated after the reorder buffer.
+        int32_t* pack_b_column_sum =
+            (int32_t*)(reorder_buf_addr + (k * sizeof(int8_t)));
 
-        for( md_t k0 = 0; k0 < k; k0++ )
-        {
-            reorder_buf_addr[k0] = input_buf_addr[ k0 * rs_b ];
-            *pack_b_column_sum += reorder_buf_addr[k0];
+        // NOTE We're working under the assumption that group_size is a factor
+        // of k.
+        for (md_t k0 = 0; k0 < k; k0 += group_size) {
+            // Initialize the current column sum to 0.
+            *pack_b_column_sum = 0;
+            for (md_t group = 0; group < group_size; group++) {
+                reorder_buf_addr[k0 + group] =
+                    input_buf_addr[(k0 + group) * rs_b];
+                *pack_b_column_sum += reorder_buf_addr[k0 + group];
+            }
+
+            *pack_b_column_sum *= 128;
+            // Move the pack_b_column_sum pointer one step to the next group.
+            pack_b_column_sum += 1;
         }
-        *pack_b_column_sum *= 128;
+
         return;
     }
 #endif

@@ -36,6 +36,237 @@
 #include "sys_utils/lpgemm_sys.h"
 #include "threading/lpgemm_thread_utils.h"
 
+// NOTE
+// 1. Mandatory for matrix B to be reordered, i.e., mtag_b == REORDERED.
+// 2. K should be divisible by group_size.
+#ifdef DLP_KERNELS_ZEN4
+LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
+{
+    md_t NC = lcntx->blksz.NC;
+    md_t KC = lcntx->blksz.KC;
+    md_t MC = lcntx->blksz.MC;
+    md_t NR = lcntx->blksz.NR;
+
+    // Group size should always be <= KC to make sure that entire group is
+    // processed within one micro-kernel call. If group size is greater than KC,
+    // then KC will be updated to group size. This same change is done in
+    // reorder function to maintain consistency between reorder and GEMM
+    // execution.
+    if (grp_post_op_list->group_size > KC) {
+        KC = grp_post_op_list->group_size;
+    }
+
+    // Strides are updated based on matrix packing/reordering.
+    int8_t* a_use    = (int8_t*)a;
+    md_t    rs_a_use = rs_a;
+    md_t    cs_a_use = cs_a;
+
+    int8_t* b_use    = (int8_t*)b;
+    md_t    rs_b_use = rs_b;
+    md_t    cs_b_use = cs_b;
+
+    float* c_use = NULL;
+
+    lpgemm_post_op_attr post_ops_attr;
+
+    post_ops_attr.c_stor_type = c_downscale;
+    if (c_downscale < DLP_F32) {
+        post_ops_attr.buf_downscale = c;
+    } else {
+        post_ops_attr.buf_downscale = NULL;
+    }
+
+    msz_t mem_a_size_req = 0;
+
+    int8_t* pack_a_buffer_s8s8s32os32 = NULL;
+
+    lpgemm_grp_post_op_attr grp_post_ops_attr;
+
+    md_t group_size = grp_post_op_list->group_size;
+
+    // Initialize group post ops attributes.
+    grp_post_ops_attr.a_scale_factor     = grp_post_op_list->a_scale_factor;
+    grp_post_ops_attr.a_scale_factor_len = grp_post_op_list->a_scale_factor_len;
+    grp_post_ops_attr.b_scale_factor     = grp_post_op_list->b_scale_factor;
+    grp_post_ops_attr.b_scale_factor_len = grp_post_op_list->b_scale_factor_len;
+    grp_post_ops_attr.a_zp               = grp_post_op_list->a_zp;
+    grp_post_ops_attr.b_zp               = grp_post_op_list->b_zp;
+    grp_post_ops_attr.a_zp_len           = grp_post_op_list->a_zp_len;
+    grp_post_ops_attr.b_zp_len           = grp_post_op_list->b_zp_len;
+    grp_post_ops_attr.group_size         = group_size;
+    grp_post_ops_attr.sf_stor_type       = grp_post_op_list->sf_stor_type;
+    grp_post_ops_attr.zp_stor_type       = grp_post_op_list->zp_stor_type;
+
+    md_t num_groups                   = (k + group_size - 1) / group_size;
+    grp_post_ops_attr.grp_post_op_lda = num_groups;
+    grp_post_ops_attr.grp_post_op_ldb = n;
+
+    // Generate thrinfo objects for jc and ic loops from lpgemm_thrinfo_t.
+    dlp_task_id_t thread_jc;
+    dlp_task_id_t thread_ic;
+
+    lpgemm_gen_dlp_task_ids(thread, &thread_jc, &thread_ic);
+
+    if (n == 1) {
+        // Increased MR from 6 to 16 to make use of 32 ZMM registers
+        md_t MR = 16;
+
+        if (mtag_b == REORDERED) {
+            post_ops_attr.b_col_sum_vec = (int32_t*)(b + k);
+        } else if (mtag_b == PACK) {
+            // Unreordered B not supported.
+            return;
+        } else {
+            // Unpacked B not supported.
+            return;
+        }
+
+        // Compute the IC loop thread range for the current thread.
+        md_t ic_start, ic_end;
+        thread_ic.n_way   = (thread_ic.n_way == 1) ? (thread->n_threads)
+                                                   : (thread_ic.n_way);
+        thread_ic.work_id = thread->tid;
+        dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
+
+        grp_post_ops_attr.grp_post_op_k = 0;
+        for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            grp_post_ops_attr.grp_post_op_i = ic;
+
+            md_t mc0 = dlp_min((ic_end - ic), MC);
+
+            const int8_t* a_use = a + ic * rs_a;
+            c_use               = c + ic * rs_c;
+
+            post_ops_attr.post_op_c_i    = ic;
+            post_ops_attr.post_op_c_j    = 0;
+            post_ops_attr.rs_c_downscale = rs_c;
+
+            if (mtag_a == PACK) {
+                mem_a_size_req = sizeof(int8_t) * mc0 * k;
+
+                if (pack_a_buffer_s8s8s32os32 == NULL) {
+                    dlp_clsc_err_t ret_err;
+                    pack_a_buffer_s8s8s32os32 =
+                        dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
+                }
+
+                ((packa_s32)lcntx->packa_fun_ptr)(
+                    (uint8_t*)pack_a_buffer_s8s8s32os32,
+                    (uint8_t*)(a + (rs_a * ic)), rs_a, cs_a, mc0, k, &rs_a_use,
+                    &cs_a_use);
+                a_use = pack_a_buffer_s8s8s32os32;
+            }
+
+            // Call lpgemv_n_one kernel
+            lpgemv_n_one_s8s8s32os32_sym_quant(
+                mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
+                grp_post_ops_attr, post_op_list, &post_ops_attr);
+        }
+
+        // Release pack buffers
+        if (mtag_a == PACK && (pack_a_buffer_s8s8s32os32 != NULL)) {
+            dlp_free_page_aligned(pack_a_buffer_s8s8s32os32);
+        }
+    } else {
+        md_t gemm_MR = lcntx->blksz.MR;
+
+        md_t jc_start, jc_end;
+        thread_jc.n_way   = (thread_jc.n_way == 1) ? (thread->n_threads)
+                                                   : (thread_jc.n_way);
+        thread_jc.work_id = thread->tid;
+        dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
+
+        md_t packb_min_NR = get_packb_s8s8s32o32_min_NR();
+
+        // kc needs to be a multiple of 4 so that it can be used with vpdpbusd
+        // instruction. Padding is added in cases this condition is not
+        // satisfied, and therefore the k offset used for packed/reordered
+        // buffer needs to be updated.
+        md_t k_updated = make_multiple_of_n(k, 4);
+        md_t n_updated = make_multiple_of_n(n, 16);
+
+        rs_a_use = rs_a;
+        cs_a_use = 4;
+
+        if (mtag_a == PACK) {
+            mem_a_size_req = sizeof(uint8_t) * k;
+
+            if (pack_a_buffer_s8s8s32os32 == NULL) {
+                dlp_clsc_err_t ret_err;
+                pack_a_buffer_s8s8s32os32 =
+                    dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
+            }
+
+            ((packa_s32)lcntx->packa_fun_ptr)(
+                (uint8_t*)pack_a_buffer_s8s8s32os32, (uint8_t*)a, rs_a, cs_a, 1,
+                k, &rs_a_use, &cs_a_use);
+
+            get_packa_strides_mfringe_u8s8s32os32(rs_a, cs_a, &rs_a_use,
+                                                  &cs_a_use, gemm_MR, 1);
+
+            a_use = pack_a_buffer_s8s8s32os32;
+        }
+
+        grp_post_ops_attr.grp_post_op_k = 0;
+        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+            grp_post_ops_attr.grp_post_op_j = jc;
+
+            md_t nc0 = dlp_min((jc_end - jc), NC);
+            c_use    = c + jc;
+
+            md_t jc_cur_loop     = jc;
+            md_t jc_cur_loop_rem = 0;
+            md_t n_sub_updated   = 0;
+
+            md_t kc0_updated = make_multiple_of_n(k, 4);
+
+            if (mtag_b == REORDERED) {
+                get_B_panel_reordered_start_offset_width(
+                    jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
+                    &nc0, &n_sub_updated);
+
+                b_use = (int8_t*)(b + (jc_cur_loop * k_updated)
+                                  + (jc_cur_loop_rem * kc0_updated));
+
+                lpgemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
+
+                post_ops_attr.b_col_sum_vec =
+                    ((int32_t*)(b + (k_updated * n_updated))) + jc;
+
+                grp_post_ops_attr.grp_post_op_sum_ld = n_updated;
+            } else if (mtag_b == PACK) {
+                // Unreordered B not supported.
+                return;
+            } else {
+                // Unpacked B not supported.
+                return;
+            }
+
+            post_ops_attr.post_op_c_i    = 0;
+            post_ops_attr.post_op_c_j    = jc;
+            post_ops_attr.rs_c_downscale = rs_c;
+            post_ops_attr.b_sum_offset   = 0;
+
+            lpgemv_m_one_s8s8s32os32_sym_quant(
+                nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
+                n_sub_updated, jc_cur_loop_rem, grp_post_ops_attr, post_op_list,
+                &post_ops_attr);
+
+            if (mtag_b == REORDERED) {
+                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            }
+        } // jc loop
+
+        // Release pack buffers.
+        if (mtag_b == PACK && (pack_a_buffer_s8s8s32os32 != NULL)) {
+            dlp_free_page_aligned(pack_a_buffer_s8s8s32os32);
+        }
+    }
+}
+#endif
+
 // B should always be packed.
 LPGEMM_5LOOP2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 {
@@ -57,24 +288,26 @@ LPGEMM_5LOOP2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         // Error: can only work with packed B now.
         return;
     }
-// Not supported yet
-#if 0 // def DLP_KERNELS_ZEN4
 
-	if( ( m == 1 ) || ( n == 1 ) )
-	{
-		lpgemv_rowvar_s8s8s32o32( m, n, k,
-		                          a, rs_a, cs_a, mtag_a,
-		                          b, rs_b, cs_b, mtag_b,
-		                          c, rs_c, cs_c,
-		                          alpha,
-		                          beta,
-		                          rntm,
-		                          thread,
-		                          lcntx,
-		                          post_op_list,
-		                          c_downscale );
-		return;
-	}
+#ifdef DLP_KERNELS_ZEN4
+    // Invoke gemv kernels for m = 1 or n = 1.
+    if (((m == 1) || (n == 1)) && (mtag_b == REORDERED)) {
+        if ((k % grp_post_op_list->group_size != 0)
+            || (KC % grp_post_op_list->group_size != 0)) {
+            dlp_print_msg(
+                "Quantized GEMV is only supported only when k and KC are "
+                "divisible by group_size.",
+                __FILE__, __LINE__);
+            return; // Error
+        }
+
+        lpgemv_rowvar_s8s8s32o32_sym_quant(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
+            cs_c, alpha, beta, rntm, thread, lcntx, grp_post_op_list,
+            post_op_list, c_downscale);
+
+        return;
+    }
 
 #endif
 
