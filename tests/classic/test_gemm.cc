@@ -745,8 +745,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
     // Helper method to run the actual GEMM test
     void RunGemmTest()
     {
-        bool ret_reorder     = false;
-        bool ret_ref_reorder = false;
+        bool ret_reorder     = true;
+        bool ret_ref_reorder = true;
         // Create test matrices
         MatrixLayout layout = config_.storage_format;
 
