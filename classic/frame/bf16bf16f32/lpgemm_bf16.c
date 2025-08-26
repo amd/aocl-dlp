@@ -874,6 +874,7 @@ LPGEMV_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
             post_ops_attr.post_op_c_i    = 0;
             post_ops_attr.post_op_c_j    = jc;
             post_ops_attr.rs_c_downscale = rs_c;
+            post_ops_attr.is_first_k     = TRUE;
 
             ker_fp(nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
                    cs_b_use, f32_mtag_b, c_use, rs_c, cs_c, alpha, beta, f32_NR,
@@ -898,13 +899,12 @@ LPGEMM_5LOOP_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
 #if (!defined(LPGEMM_BF16_JIT))
     // Handle using LPGEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
-    // if ((n == 1) || (m == 1)) {
-    //     lpgemv_rowvar_avx2_bf16bf16f32of32(
-    //         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-    //         cs_c, alpha, beta, rntm, thread, lcntx, post_op_list,
-    //         c_downscale);
-    //     return;
-    // }
+    if ((n == 1) || (m == 1)) {
+        lpgemv_rowvar_avx2_bf16bf16f32of32(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
+            cs_c, alpha, beta, rntm, thread, lcntx, post_op_list, c_downscale);
+        return;
+    }
 #endif
     // DLP_BF16 Contexts
     md_t NC = lcntx->blksz.NC;

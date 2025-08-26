@@ -682,13 +682,13 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
             if (ldm == 1) {
                 selector1 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(_mm_load_si128(
+                    _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i))),
                     _mm256_set1_epi32(16)));
 
                 selector1 = _mm256_mul_ps(selector1, scl_fctr1);
                 selector2 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(_mm_load_si128(
+                    _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i
                                          + 8))),
                     _mm256_set1_epi32(16)));
@@ -790,13 +790,13 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
             if (ldm == 1) {
                 selector1 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(_mm_load_si128(
+                    _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i))),
                     _mm256_set1_epi32(16)));
 
                 selector1 = _mm256_mul_ps(selector1, scl_fctr1);
                 selector2 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(_mm_load_si128(
+                    _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i
                                          + 8))),
                     _mm256_set1_epi32(16)));

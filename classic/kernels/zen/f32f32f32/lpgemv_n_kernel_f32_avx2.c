@@ -488,28 +488,16 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
             bfloat16* matptr = (bfloat16*)post_ops_list_temp->op_args1;
             __m128i   _mask  = _mm_loadu_si128((__m128i*)mask[mr0]);
 
-            if (ldm == 1) {
-                selector1 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(_mm_maskload_epi32(
-                        (int const*)(matptr + post_ops_attr.post_op_c_i),
-                        _mask)),
-                    _mm256_set1_epi32(16)));
-
-                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                ymm8      = _mm256_add_ps(selector1, ymm8);
-            } else {
-                bfloat16 ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
-                    ctemp[i] =
-                        *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
-                }
-                selector1 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(
-                        _mm_maskload_epi32((int const*)(ctemp), _mask)),
-                    _mm256_set1_epi32(16)));
-                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                ymm8      = _mm256_add_ps(selector1, ymm8);
+            bfloat16 ctemp[16];
+            for (md_t i = 0; i < mr0; i++) {
+                ctemp[i] = *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
             }
+            selector1 = (__m256)(_mm256_sllv_epi32(
+                _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i const*)(ctemp))),
+                _mm256_set1_epi32(16)));
+            selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+            ymm8      = _mm256_add_ps(selector1, ymm8);
+
         } else {
             float* matptr = (float*)post_ops_list_temp->op_args1;
 
@@ -560,30 +548,16 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         }
         if (is_bf16 == TRUE) {
             bfloat16* matptr = (bfloat16*)post_ops_list_temp->op_args1;
-            __m128i   _mask  = _mm_loadu_si128((__m128i*)mask[mr0]);
 
-            if (ldm == 1) {
-                selector1 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(_mm_maskload_epi32(
-                        (int const*)(matptr + post_ops_attr.post_op_c_i),
-                        _mask)),
-                    _mm256_set1_epi32(16)));
-
-                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                ymm8      = _mm256_mul_ps(selector1, ymm8);
-            } else {
-                bfloat16 ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
-                    ctemp[i] =
-                        *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
-                }
-                selector1 = (__m256)(_mm256_sllv_epi32(
-                    _mm256_cvtepi16_epi32(
-                        _mm_maskload_epi32((int const*)(ctemp), _mask)),
-                    _mm256_set1_epi32(16)));
-                selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                ymm8      = _mm256_mul_ps(selector1, ymm8);
+            bfloat16 ctemp[16];
+            for (md_t i = 0; i < mr0; i++) {
+                ctemp[i] = *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
             }
+            selector1 = (__m256)(_mm256_sllv_epi32(
+                _mm256_cvtepi16_epi32(_mm_loadu_si128((__m128i const*)(ctemp))),
+                _mm256_set1_epi32(16)));
+            selector1 = _mm256_mul_ps(selector1, scl_fctr1);
+            ymm8      = _mm256_mul_ps(selector1, ymm8);
         } else {
             float* matptr = (float*)post_ops_list_temp->op_args1;
 
