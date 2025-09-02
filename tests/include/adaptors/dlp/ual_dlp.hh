@@ -144,11 +144,13 @@ class UalDlp : public IUal
      * @param matA_type Data type of matrix A
      * @param matA_layout Memory layout of matrix A
      * @param matA_transposed Whether matrix A is transposed
+     * @param matA_reordered Whether matrix A is reordered
      * @param matA_leadingDim Leading dimension of matrix A
      * @param matB Pointer to matrix B data
      * @param matB_type Data type of matrix B
      * @param matB_layout Memory layout of matrix B
      * @param matB_transposed Whether matrix B is transposed
+     * @param matB_reordered Whether matrix B is reordered
      * @param matB_leadingDim Leading dimension of matrix B
      * @param matC Pointer to matrix C data
      * @param matC_type Data type of matrix C
@@ -167,11 +169,13 @@ class UalDlp : public IUal
               MatrixType   matA_type,
               MatrixLayout matA_layout,
               bool         matA_transposed,
+              char         memFormatA,
               md_t         matA_leadingDim,
               void*        matB,
               MatrixType   matB_type,
               MatrixLayout matB_layout,
               bool         matB_transposed,
+              char         memFormatB,
               md_t         matB_leadingDim,
               void*        matC,
               MatrixType   matC_type,

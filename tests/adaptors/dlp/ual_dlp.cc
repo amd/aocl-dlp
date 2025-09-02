@@ -260,7 +260,7 @@ UalDlp::reorder(const Matrix& in,
  * @param B Second input matrix
  * @param C Output matrix
  * @param accType Accumulation type
- * @param postOps Post-operations to apply (nullptr for no post-ops)
+ * @param postOps Post-operations to apply (err_code.get() for no post-ops)
  * @param alpha Scaling factor for A*B
  * @param beta Scaling factor for C
  * @return bool Success status
@@ -556,11 +556,13 @@ UalDlp::gemm(md_t         m,
              MatrixType   matA_type,
              MatrixLayout matA_layout,
              bool         matA_transposed,
+             char         memFormatA,
              md_t         matA_leadingDim,
              void*        matB,
              MatrixType   matB_type,
              MatrixLayout matB_layout,
              bool         matB_transposed,
+             char         memFormatB,
              md_t         matB_leadingDim,
              void*        matC,
              MatrixType   matC_type,
@@ -571,15 +573,15 @@ UalDlp::gemm(md_t         m,
              double       alpha,
              double       beta) const
 {
+    // For now, if no postOps are provided, delegate to the original gemm method
+    std::unique_ptr<dlp_metadata_t> err_code =
+        std::make_unique<dlp_metadata_t>();
+
     uint64_t type = encode_types(matA_type, matB_type, matC_type, accType);
 
     char transA  = matA_transposed ? 't' : 'n';
     char transB  = matB_transposed ? 't' : 'n';
     char layoutA = matA_layout == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
-
-    // For benchmarking, assume normal memory format (no packing/reordering)
-    char memFormatA = 'n';
-    char memFormatB = 'n';
 
     switch (type) {
         case encode_types<MatrixType::f32, MatrixType::f32, MatrixType::f32,
@@ -593,9 +595,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<float*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<float*>(matB), matB_leadingDim, memFormatB,
                 beta_f32, reinterpret_cast<float*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::f32,
@@ -608,9 +610,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<bfloat16*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<bfloat16*>(matB), matB_leadingDim, memFormatB,
                 beta_f32, reinterpret_cast<float*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::bf16,
@@ -623,9 +625,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<bfloat16*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<bfloat16*>(matB), matB_leadingDim, memFormatB,
                 beta_f32, reinterpret_cast<bfloat16*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s32,
@@ -638,9 +640,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<uint8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<int32_t*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s8,
@@ -653,9 +655,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<uint8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<int8_t*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::u8,
@@ -668,9 +670,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<uint8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<uint8_t*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::f32,
@@ -683,9 +685,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<uint8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<float*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::bf16,
@@ -698,9 +700,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<uint8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<bfloat16*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s32,
@@ -713,9 +715,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<int8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<int32_t*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s8,
@@ -728,9 +730,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<int8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<int8_t*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::u8,
@@ -743,9 +745,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<int8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<uint8_t*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::f32,
@@ -758,9 +760,9 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<int8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<float*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::bf16,
@@ -773,14 +775,15 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<int8_t*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<bfloat16*>(matC), matC_leadingDim,
-                nullptr);
+                err_code.get());
 
-            return true;
+            break;
         }
 
         default:
             return false;
     }
+    return err_code->error_hndl.error_code == DLP_CLSC_SUCCESS;
 }
 
 } // namespace dlp::testing::classic
