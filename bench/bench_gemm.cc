@@ -425,65 +425,32 @@ generateTestName(const MicroTest& microTest,
 {
     std::ostringstream name;
 
-    // Start with base information
-    name << "yaml_" << testSetIndex << "_M" << microTest.getM() << "_N"
-         << microTest.getN() << "_K" << microTest.getK();
+    // Add data type information
+    name << microTest.getAType() << microTest.getBType()
+         << microTest.getAccType() << "o" << microTest.getCType();
 
-    // Add data type information if not default f32
-    if (microTest.getAType() != MatrixType::f32
-        || microTest.getBType() != MatrixType::f32
-        || microTest.getCType() != MatrixType::f32) {
-        name << "_" << microTest.getAType() << microTest.getBType()
-             << microTest.getCType();
-    }
+    // Add dimensions information
+    name << ",M:" << microTest.getM() << ",N:" << microTest.getN()
+         << ",K:" << microTest.getK();
 
-    // Add storage format if not row-major (which is typically default)
-    if (microTest.getStorageFormat() == MatrixLayout::COLUMN_MAJOR) {
-        name << "_ColMajor";
-    }
+    // Add storage format as stor:r/c
+    name << ",stor:"
+         << (microTest.getStorageFormat() == MatrixLayout::ROW_MAJOR ? "r"
+                                                                     : "c");
 
     // Add transposition information
-    if (microTest.getTransA())
-        name << "_transA";
-    if (microTest.getTransB())
-        name << "_transB";
+    name << (microTest.getTransA() ? ",trA:t" : ",trA:n");
+    name << (microTest.getTransB() ? ",trB:t" : ",trB:n");
 
-    // Add reordering information
-    if (microTest.getReorderA())
-        name << "_reorderA";
-    if (microTest.getReorderB())
-        name << "_reorderB";
+    // Add matrix format tags - combines packing/reordering information
+    std::string mtagA =
+        microTest.getPackA() ? "p" : (microTest.getReorderA() ? "r" : "n");
+    std::string mtagB =
+        microTest.getPackB() ? "p" : (microTest.getReorderB() ? "r" : "n");
+    name << ",mtagA:" << mtagA;
+    name << ",mtagB:" << mtagB;
 
-    // Add packing information
-    if (microTest.getPackA())
-        name << "_packA";
-    if (microTest.getPackB())
-        name << "_packB";
-
-    // Add alpha/beta information if non-standard values
-    if (microTest.getAlpha() != 1.0) {
-        // Convert decimal to GoogleTest-friendly format (replace . with p)
-        std::ostringstream alpha_stream;
-        alpha_stream << std::fixed << std::setprecision(1)
-                     << microTest.getAlpha();
-        std::string alpha_str = alpha_stream.str();
-        std::replace(alpha_str.begin(), alpha_str.end(), '.', 'p');
-        std::replace(alpha_str.begin(), alpha_str.end(), '-',
-                     'n'); // negative sign
-        name << "_alpha" << alpha_str;
-    }
-    if (microTest.getBeta() != 0.0) {
-        // Convert decimal to GoogleTest-friendly format (replace . with p)
-        std::ostringstream beta_stream;
-        beta_stream << std::fixed << std::setprecision(1)
-                    << microTest.getBeta();
-        std::string beta_str = beta_stream.str();
-        std::replace(beta_str.begin(), beta_str.end(), '.', 'p');
-        std::replace(beta_str.begin(), beta_str.end(), '-',
-                     'n'); // negative sign
-        name << "_beta" << beta_str;
-    }
-
+    // Add post-ops information
     auto postops_dlp = microTest.getPostOp(UALType::DLP);
     auto postops_ref = microTest.getPostOp(UALType::REF);
 
@@ -497,9 +464,6 @@ generateTestName(const MicroTest& microTest,
     if (!postops_desc.empty()) {
         name << postops_desc;
     }
-
-    // Add config index for uniqueness
-    name << "_" << configIndex;
 
     return name.str();
 }
@@ -690,38 +654,34 @@ BM_gemm(benchmark::State& state, GemmTestConfig config_)
     // via mem_format parameters in the DLP GEMM call.
     if (config_.packA) {
         A.setPacked(true);
-        // Reference implementation: pack is no-op, A_ref remains unchanged
     }
     if (config_.packB) {
         B.setPacked(true);
-        // Reference implementation: pack is no-op, B_ref remains unchanged
     }
 
     // Get raw pointers for high-performance benchmarking
-    auto a_ptr    = A.getMatrixData().getMatrixPtr();
-    auto b_ptr    = B.getMatrixData().getMatrixPtr();
-    auto c_ptr    = C.getMatrixData().getMatrixPtr();
-    auto a_type   = A.getMatrixType();
-    auto b_type   = B.getMatrixType();
-    auto c_type   = C.getMatrixType();
-    auto acc_type = config_.acc_type;
-    auto transA   = A.isTransposed();
-    auto transB   = B.isTransposed();
-    auto lda      = A.getLeadingDimension();
-    auto ldb      = B.getLeadingDimension();
-    auto ldc      = C.getLeadingDimension();
-    auto alpha    = config_.alpha;
-    auto beta     = config_.beta;
+    auto a_ptr           = A.getMatrixData().getMatrixPtr();
+    auto b_ptr           = B.getMatrixData().getMatrixPtr();
+    auto c_ptr           = C.getMatrixData().getMatrixPtr();
+    auto a_type          = A.getMatrixType();
+    auto b_type          = B.getMatrixType();
+    auto c_type          = C.getMatrixType();
+    auto acc_type        = config_.acc_type;
+    auto transA          = A.isTransposed();
+    auto transB          = B.isTransposed();
+    auto memFormatA      = A.isPacked() ? 'p' : (A.isReordered() ? 'r' : 'n');
+    auto memFormatB      = B.isPacked() ? 'p' : (B.isReordered() ? 'r' : 'n');
+    auto lda             = A.getLeadingDimension();
+    auto ldb             = B.getLeadingDimension();
+    auto ldc             = C.getLeadingDimension();
+    auto alpha           = config_.alpha;
+    auto beta            = config_.beta;
+    dlp_metadata_t* meta = new dlp_metadata_t();
 
     // Matrix dimensions for GEMM: C(m x n) = A(m x k) * B(k x n)
     auto m = config_.m;
     auto n = config_.n;
     auto k = config_.k;
-
-#ifdef BENCH_DEBUG
-    std::cout << "Address of A:" << a_ptr << " Address of B:" << b_ptr
-              << " Address of C:" << c_ptr << std::endl;
-#endif
 
     /* Actual benchmark loop */
     for (auto _ : state) {
@@ -730,32 +690,15 @@ BM_gemm(benchmark::State& state, GemmTestConfig config_)
         // Perform the GEMM operation using raw pointer API for maximum
         // performance
 
-#if 0
         bool result =
-            ual->gemm(m, n, k, a_ptr, a_type, layout, transA, lda, b_ptr,
-                      b_type, layout, transB, ldb, c_ptr, c_type, layout, false,
-                      ldc, acc_type, alpha, beta);
-#else
-        char _transA  = transA ? 't' : 'n';
-        char _transB  = transB ? 't' : 'n';
-        char _layoutA = layout == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
+            ual->gemm(m, n, k, a_ptr, a_type, layout, transA, memFormatA, lda,
+                      b_ptr, b_type, layout, transB, memFormatB, ldb, c_ptr,
+                      c_type, layout, false, ldc, acc_type, alpha, beta);
 
-        // For benchmarking, assume normal memory format (no packing/reordering)
-        char memFormatA = 'n';
-        char memFormatB = 'n';
-
-        aocl_gemm_f32f32f32of32(_layoutA, _transA, _transB, m, n, k, alpha,
-                                reinterpret_cast<float*>(a_ptr), lda,
-                                memFormatA, reinterpret_cast<float*>(b_ptr),
-                                ldb, memFormatB, beta,
-                                reinterpret_cast<float*>(c_ptr), ldc, nullptr);
-
-#endif
-
-        // if (!result) {
-        //     state.SkipWithError("GEMM operation failed");
-        //     return;
-        // }
+        if (!result) {
+            state.SkipWithError("GEMM operation failed");
+            return;
+        }
 
         // Prevent compiler optimization from eliminating the computation
         benchmark::DoNotOptimize(c_ptr);
@@ -771,21 +714,10 @@ BM_gemm(benchmark::State& state, GemmTestConfig config_)
     state.counters["FLOPS:"] = benchmark::Counter(
         ops_per_iteration, benchmark::Counter::kIsIterationInvariantRate,
         benchmark::Counter::kIs1000);
-
-    // Report matrix dimensions in the output
-    state.counters["M"] = config_.m;
-    state.counters["N"] = config_.n;
-    state.counters["K"] = config_.k;
-
-    // Calculate memory bandwidth (assuming all data is transferred)
-    const double total_bytes =
-        (config_.m * config_.k + config_.k * config_.n + config_.m * config_.n)
-        * sizeof(float);
-    state.counters["B/W:"] = benchmark::Counter(
-        total_bytes, benchmark::Counter::kIsRate, benchmark::Counter::kIs1024);
 };
 
-// Function to register all benchmarks for the test configurations
+// Benchmarks need to be registered initially for custom argument configurations
+// Function to register all benchmarks for the generated test configurations
 static void
 register_benchmarks()
 {
@@ -796,7 +728,7 @@ register_benchmarks()
     // Registering benchmarks for all test configurations generated
     for (auto& test_input : all_test_configs) {
         benchmark::RegisterBenchmark(test_input.name, BM_gemm, test_input)
-            ->Unit(benchmark::kMicrosecond)
+            ->Unit(benchmark::kSecond)
             ->MinTime(3);
     }
 
@@ -845,7 +777,7 @@ main(int argc, char** argv)
     std::cout << "=== UAL GEMM Benchmark ===" << std::endl;
     std::cout << "Benchmarking DLP UAL implementation for GEMM" << std::endl;
     std::cout << "Format: C = A * B (no post-operations)" << std::endl;
-    std::cout << "Metrics: GFLOPS, Memory Bandwidth (GB/s)" << std::endl;
+    std::cout << "Metrics: GFLOPS" << std::endl;
     std::cout << "=======================================" << std::endl;
 
     // Initialize Google Benchmark first
