@@ -1,0 +1,1027 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+    <title>API Overview &#8212; Home</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+
+  
+  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
+<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
+    <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=643846e8" />
+    <link rel="stylesheet" type="text/css" href="../_static/rocm_header.css?v=9557e3d1" />
+    <link rel="stylesheet" type="text/css" href="../_static/rocm_footer.css?v=7095035a" />
+    <link rel="stylesheet" type="text/css" href="../_static/fonts.css?v=fcff5274" />
+  
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
+  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+    <script src="../_static/documentation_options.js?v=58f7b4a7"></script>
+    <script src="../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script async="async" src="../_static/code_word_breaks.js?v=327952c4"></script>
+    <script async="async" src="../_static/renameVersionLinks.js?v=929fe5e4"></script>
+    <script async="async" src="../_static/rdcMisc.js?v=01f88d96"></script>
+    <script async="async" src="../_static/theme_mode_captions.js?v=15f4ec5d"></script>
+    <script defer="defer" src="../_static/search.js?v=90a4452c"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/overview';</script>
+    <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
+    <link rel="canonical" href="http://localhost:8082/api/overview.html" />
+    <link rel="icon" href="https://www.amd.com/content/dam/code/images/favicon/favicon.ico"/>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="GEMM Operations" href="gemm/index.html" />
+    <link rel="prev" title="API Reference" href="index.html" />
+    <meta name="google-site-verification" content="vo35SZt_GASsTHAEmdww7AYKPCvZyzLvOXBl8guBME4" />
+
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-primary-sidebar-checkbox"/>
+  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
+  
+  <input type="checkbox"
+          class="sidebar-toggle"
+          id="pst-secondary-sidebar-checkbox"/>
+  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
+  
+  <div class="search-button__wrapper">
+    <div class="search-button__overlay"></div>
+    <div class="search-button__search-container">
+<form class="bd-search d-flex align-items-center"
+      action="../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         id="search-input"
+         placeholder="Search..."
+         aria-label="Search..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form></div>
+  </div>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+
+<header class="common-header" >
+    <nav class="navbar navbar-expand-xl">
+        <div class="container-fluid main-nav rocm-header">
+            
+            <div class="header-logo">
+                <a class="navbar-brand" href="https://www.amd.com/">
+                    <img src="../_static/images/amd-header-logo.svg" alt="AMD Logo" title="AMD Logo" width="90" class="d-inline-block align-text-top hover-opacity"/>
+                </a>
+                <div class="vr vr mx-40 my-25"></div>
+                <a class="klavika-font hover-opacity" href="/">AOCL-DLP</a>
+                
+            </div>
+            <div class="icon-nav text-center d-flex ms-auto">
+            </div>
+        </div>
+    </nav>
+    
+</header>
+
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+      <div class="bd-sidebar-primary bd-sidebar">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+    
+    
+  </div>
+  
+    <div class="sidebar-primary-items__start sidebar-primary__section">
+        <div class="sidebar-primary-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../index.html">
+  
+  
+  
+  
+  
+  
+    <p class="title logo__title">Home</p>
+  
+</a></div>
+        <div class="sidebar-primary-item">
+
+ <script>
+ document.write(`
+   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass"></i>
+    <span class="search-button__default-text">Search</span>
+    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+   </button>
+ `);
+ </script></div>
+        <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
+    <div class="bd-toc-item navbar-nav active">
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<ul class="current nav bd-sidenav">
+<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
+<li class="toctree-l2 current active"><a class="current reference internal" href="#">API Overview</a></li>
+<li class="toctree-l2"><a class="reference internal" href="gemm/index.html">GEMM Operations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="post_ops/index.html">Post-Operations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="eltwise/index.html">Element-wise Operations</a></li>
+<li class="toctree-l2"><a class="reference internal" href="utils/index.html">Utility Functions</a></li>
+<li class="toctree-l2"><a class="reference internal" href="library/index.html">Library Management</a></li>
+<li class="toctree-l2 has-children"><a class="reference internal" href="classic/index.html">Classic C Headers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
+<li class="toctree-l3"><a class="reference internal" href="classic/gemm.html">GEMM API Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classic/eltwise.html">Eltwise API Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="classic/utils.html">Utils API Reference</a></li>
+<li class="toctree-l3"><a class="reference internal" href="library/index.html">Library Management</a></li>
+</ul>
+</details></li>
+</ul>
+</details></li>
+</ul>
+
+    </div>
+</nav></div>
+    </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+  </div>
+  
+  <div id="rtd-footer-container"></div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+
+<div class="sbt-scroll-pixel-helper"></div>
+
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item"><label class="sidebar-toggle primary-toggle btn btn-sm" for="__primary" title="Toggle primary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-angle-right"></span>
+  </label></div>
+      
+        <div class="header-article-item">
+
+
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="index.html" class="nav-link">API Reference</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page">API Overview</li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+    <div class="header-article-items__end">
+      
+        <div class="header-article-item">
+
+<div class="article-header-buttons">
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
+    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
+    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
+  </button>
+`);
+</script>
+
+
+<script>
+document.write(`
+  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <i class="fa-solid fa-magnifying-glass fa-lg"></i>
+  </button>
+`);
+</script>
+<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+    <span class="fa-solid fa-list"></span>
+</button>
+</div></div>
+      
+    </div>
+  
+</div>
+</div>
+              
+              
+
+<div id="jb-print-docs-body" class="onlyprint">
+    <h1>API Overview</h1>
+    <!-- Table of contents -->
+    <div id="print-main-content">
+        <div id="jb-print-toc">
+            
+            <div>
+                <h2> Contents </h2>
+            </div>
+            <nav aria-label="Page">
+                <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-concepts">Core Concepts</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#matrix-operations">Matrix Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-type-support">Data Type Support</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-categories">API Categories</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#core-gemm-operations">Core GEMM Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-operations">Batch Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#element-wise-operations">Element-wise Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#utility-functions">Utility Functions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#matrix-reordering">Matrix Reordering</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#library-management">Library Management</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-design-principles">API Design Principles</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#consistent-naming">Consistent Naming</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#memory-layout-flexibility">Memory Layout Flexibility</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#parameter-validation">Parameter Validation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-abstraction">Hardware Abstraction</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#post-operations-framework">Post-Operations Framework</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#operation-types">Operation Types</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#usage-pattern">Usage Pattern</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#performance-optimization">Performance Optimization</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-utilization">Hardware Utilization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#memory-optimization">Memory Optimization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#threading-configuration">Threading Configuration</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#common-usage-patterns">Common Usage Patterns</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#neural-network-inference">Neural Network Inference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#quantized-inference">Quantized Inference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-processing">Batch Processing</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#error-handling">Error Handling</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Parameter Validation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-compatibility">Hardware Compatibility</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#best-practices">Best Practices</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration-guide">Migration Guide</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-other-blas-libraries">From Other BLAS Libraries</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-previous-aocl-dlp-versions">From Previous AOCL-DLP Versions</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See Also</a></li>
+</ul>
+            </nav>
+        </div>
+    </div>
+</div>
+
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <section id="api-overview">
+<h1>API Overview<a class="headerlink" href="#api-overview" title="Link to this heading">#</a></h1>
+<p>AOCL-DLP provides a comprehensive set of APIs for high-performance deep learning primitives optimized for AMD processors. This overview introduces the key concepts, design principles, and usage patterns that apply across all APIs.</p>
+<section id="core-concepts">
+<h2>Core Concepts<a class="headerlink" href="#core-concepts" title="Link to this heading">#</a></h2>
+<section id="matrix-operations">
+<h3>Matrix Operations<a class="headerlink" href="#matrix-operations" title="Link to this heading">#</a></h3>
+<p>AOCL-DLP is built around optimized matrix operations, primarily General Matrix Multiplication (GEMM):</p>
+<div class="math notranslate nohighlight">
+\[C = \alpha \cdot op(A) \cdot op(B) + \beta \cdot C + \text{post\_ops}\]</div>
+<p>Where:
+- <span class="math notranslate nohighlight">\(op(X)\)</span> can be <span class="math notranslate nohighlight">\(X\)</span> (no transpose) or <span class="math notranslate nohighlight">\(X^T\)</span> (transpose)
+- <span class="math notranslate nohighlight">\(\alpha, \beta\)</span> are scalar multipliers
+- <span class="math notranslate nohighlight">\(\text{post\_ops}\)</span> represents fused post-processing operations</p>
+</section>
+<section id="data-type-support">
+<h3>Data Type Support<a class="headerlink" href="#data-type-support" title="Link to this heading">#</a></h3>
+<p>AOCL-DLP supports multiple precision formats to balance accuracy and performance:</p>
+<div class="pst-scrollable-table-container"><table class="table" id="id2">
+<caption><span class="caption-text">Supported Data Types</span><a class="headerlink" href="#id2" title="Link to this table">#</a></caption>
+<colgroup>
+<col style="width: 15.0%" />
+<col style="width: 20.0%" />
+<col style="width: 15.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Type</p></th>
+<th class="head"><p>Size (bits)</p></th>
+<th class="head"><p>Range</p></th>
+<th class="head"><p>Use Case</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">float32</span></code></p></td>
+<td><p>32</p></td>
+<td><p>±3.4×10³⁸</p></td>
+<td><p>High-precision training and inference</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">bfloat16</span></code></p></td>
+<td><p>16</p></td>
+<td><p>±3.4×10³⁸</p></td>
+<td><p>Memory-efficient inference with good range</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">int8</span></code></p></td>
+<td><p>8</p></td>
+<td><p>-128 to 127</p></td>
+<td><p>Quantized weights and activations</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">uint8</span></code></p></td>
+<td><p>8</p></td>
+<td><p>0 to 255</p></td>
+<td><p>Quantized activations (unsigned)</p></td>
+</tr>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">int4</span></code></p></td>
+<td><p>4</p></td>
+<td><p>-8 to 7</p></td>
+<td><p>Extreme quantization (packed in int8)</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">int32</span></code></p></td>
+<td><p>32</p></td>
+<td><p>±2.1×10⁹</p></td>
+<td><p>Accumulation and intermediate results</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</section>
+<section id="api-categories">
+<h2>API Categories<a class="headerlink" href="#api-categories" title="Link to this heading">#</a></h2>
+<section id="core-gemm-operations">
+<h3>Core GEMM Operations<a class="headerlink" href="#core-gemm-operations" title="Link to this heading">#</a></h3>
+<p>The fundamental matrix multiplication APIs:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Float32 precision</span>
+<span class="n">aocl_gemm_f32f32f32of32</span><span class="p">(...)</span>
+
+<span class="c1">// BFloat16 with float32 accumulation</span>
+<span class="n">aocl_gemm_bf16bf16f32of32</span><span class="p">(...)</span>
+
+<span class="c1">// Quantized integer operations</span>
+<span class="n">aocl_gemm_u8s8s32os32</span><span class="p">(...)</span>
+<span class="n">aocl_gemm_s8s8s32os8</span><span class="p">(...)</span>
+</pre></div>
+</div>
+</section>
+<section id="batch-operations">
+<h3>Batch Operations<a class="headerlink" href="#batch-operations" title="Link to this heading">#</a></h3>
+<p>For processing multiple GEMM operations efficiently:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Batch processing</span>
+<span class="n">aocl_batch_gemm_f32f32f32of32</span><span class="p">(...)</span>
+<span class="n">aocl_batch_gemm_bf16bf16f32of32</span><span class="p">(...)</span>
+</pre></div>
+</div>
+</section>
+<section id="element-wise-operations">
+<h3>Element-wise Operations<a class="headerlink" href="#element-wise-operations" title="Link to this heading">#</a></h3>
+<p>For applying operations without matrix multiplication:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Element-wise operations</span>
+<span class="n">aocl_gemm_eltwise_ops_f32of32</span><span class="p">(...)</span>
+<span class="n">aocl_gemm_eltwise_ops_bf16of32</span><span class="p">(...)</span>
+</pre></div>
+</div>
+</section>
+<section id="utility-functions">
+<h3>Utility Functions<a class="headerlink" href="#utility-functions" title="Link to this heading">#</a></h3>
+<p>Standalone mathematical operations:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Activation functions</span>
+<span class="n">aocl_gemm_gelu_tanh_f32</span><span class="p">(...)</span>
+<span class="n">aocl_gemm_gelu_erf_f32</span><span class="p">(...)</span>
+<span class="n">aocl_gemm_softmax_f32</span><span class="p">(...)</span>
+</pre></div>
+</div>
+</section>
+<section id="matrix-reordering">
+<h3>Matrix Reordering<a class="headerlink" href="#matrix-reordering" title="Link to this heading">#</a></h3>
+<p>For optimizing repeated operations:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Get buffer size for reordering</span>
+<span class="n">aocl_get_reorder_buf_size_f32f32f32of32</span><span class="p">(...)</span>
+
+<span class="c1">// Reorder matrix for optimal access</span>
+<span class="n">aocl_reorder_f32f32f32of32</span><span class="p">(...)</span>
+</pre></div>
+</div>
+</section>
+<section id="library-management">
+<h3>Library Management<a class="headerlink" href="#library-management" title="Link to this heading">#</a></h3>
+<p>For configuration and feature detection:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Thread configuration</span>
+<span class="n">dlp_thread_set_num_threads</span><span class="p">(...)</span>
+<span class="n">dlp_thread_set_ways</span><span class="p">(...)</span>
+
+<span class="c1">// Hardware feature detection</span>
+<span class="n">dlp_aocl_enable_instruction_query</span><span class="p">()</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="api-design-principles">
+<h2>API Design Principles<a class="headerlink" href="#api-design-principles" title="Link to this heading">#</a></h2>
+<section id="consistent-naming">
+<h3>Consistent Naming<a class="headerlink" href="#consistent-naming" title="Link to this heading">#</a></h3>
+<p>All APIs follow a systematic naming convention:</p>
+<div class="highlight-text notranslate"><div class="highlight"><pre><span></span>aocl_[operation]_[input_types]o[output_type]
+</pre></div>
+</div>
+<p>Examples:
+- <code class="docutils literal notranslate"><span class="pre">aocl_gemm_f32f32f32of32</span></code>: GEMM with float32 inputs and output
+- <code class="docutils literal notranslate"><span class="pre">aocl_gemm_u8s8s32os8</span></code>: GEMM with uint8/int8 inputs, int32 accumulation, int8 output
+- <code class="docutils literal notranslate"><span class="pre">aocl_batch_gemm_bf16bf16f32of32</span></code>: Batch GEMM with bfloat16 inputs, float32 output</p>
+</section>
+<section id="memory-layout-flexibility">
+<h3>Memory Layout Flexibility<a class="headerlink" href="#memory-layout-flexibility" title="Link to this heading">#</a></h3>
+<p>All APIs support multiple memory layouts:</p>
+<div class="pst-scrollable-table-container"><table class="table" id="id3">
+<caption><span class="caption-text">Memory Layout Options</span><a class="headerlink" href="#id3" title="Link to this table">#</a></caption>
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 30.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Format</p></th>
+<th class="head"><p>Description</p></th>
+<th class="head"><p>Use Case</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Row-major (<code class="docutils literal notranslate"><span class="pre">'R'</span></code>)</p></td>
+<td><p>C-style layout</p></td>
+<td><p>Most common, cache-friendly for many operations</p></td>
+</tr>
+<tr class="row-odd"><td><p>Column-major (<code class="docutils literal notranslate"><span class="pre">'C'</span></code>)</p></td>
+<td><p>Fortran-style layout</p></td>
+<td><p>Interoperability with Fortran/BLAS libraries</p></td>
+</tr>
+<tr class="row-even"><td><p>Reordered (<code class="docutils literal notranslate"><span class="pre">'R'</span></code>)</p></td>
+<td><p>Optimized layout</p></td>
+<td><p>Repeated operations with same matrix</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="parameter-validation">
+<h3>Parameter Validation<a class="headerlink" href="#parameter-validation" title="Link to this heading">#</a></h3>
+<p>AOCL-DLP APIs perform robust parameter validation:</p>
+<ul class="simple">
+<li><p><strong>Dimension checks</strong>: Ensure matrix dimensions are compatible</p></li>
+<li><p><strong>Pointer validation</strong>: Handle NULL pointers gracefully</p></li>
+<li><p><strong>Range validation</strong>: Check for valid enumeration values</p></li>
+<li><p><strong>Memory format validation</strong>: Verify supported layout combinations</p></li>
+</ul>
+</section>
+<section id="hardware-abstraction">
+<h3>Hardware Abstraction<a class="headerlink" href="#hardware-abstraction" title="Link to this heading">#</a></h3>
+<p>The library provides automatic hardware optimization:</p>
+<ul class="simple">
+<li><p><strong>Feature detection</strong>: Runtime detection of CPU capabilities</p></li>
+<li><p><strong>Automatic fallbacks</strong>: Graceful degradation when features unavailable</p></li>
+<li><p><strong>Optimal path selection</strong>: Choose best implementation for current hardware</p></li>
+</ul>
+</section>
+</section>
+<section id="post-operations-framework">
+<h2>Post-Operations Framework<a class="headerlink" href="#post-operations-framework" title="Link to this heading">#</a></h2>
+<p>AOCL-DLP supports fusing common operations with GEMM to improve performance:</p>
+<section id="operation-types">
+<h3>Operation Types<a class="headerlink" href="#operation-types" title="Link to this heading">#</a></h3>
+<div class="pst-scrollable-table-container"><table class="table" id="id4">
+<caption><span class="caption-text">Post-Operation Categories</span><a class="headerlink" href="#id4" title="Link to this table">#</a></caption>
+<colgroup>
+<col style="width: 20.0%" />
+<col style="width: 30.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Category</p></th>
+<th class="head"><p>Operations</p></th>
+<th class="head"><p>Performance Benefit</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>Activation</p></td>
+<td><p>ReLU, PReLU, GeLU, Tanh, Sigmoid, SWISH</p></td>
+<td><p>Eliminates separate activation pass</p></td>
+</tr>
+<tr class="row-odd"><td><p>Scaling</p></td>
+<td><p>Scale, Clip</p></td>
+<td><p>Fuses quantization/normalization</p></td>
+</tr>
+<tr class="row-even"><td><p>Addition</p></td>
+<td><p>Bias, Matrix Add</p></td>
+<td><p>Combines common DNN operations</p></td>
+</tr>
+<tr class="row-odd"><td><p>Multiplication</p></td>
+<td><p>Matrix Multiply</p></td>
+<td><p>Enables element-wise scaling</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="usage-pattern">
+<h3>Usage Pattern<a class="headerlink" href="#usage-pattern" title="Link to this heading">#</a></h3>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Initialize post-operations</span>
+<span class="n">aocl_post_op</span><span class="w"> </span><span class="n">post_ops</span><span class="p">;</span>
+<span class="n">aocl_post_op_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">);</span>
+
+<span class="c1">// Add bias operation</span>
+<span class="n">aocl_post_op_bias</span><span class="w"> </span><span class="n">bias_op</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{.</span><span class="n">bias</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bias_vector</span><span class="p">};</span>
+<span class="n">aocl_post_op_append_bias</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">bias_op</span><span class="p">);</span>
+
+<span class="c1">// Add activation</span>
+<span class="n">aocl_post_op_eltwise</span><span class="w"> </span><span class="n">relu_op</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{.</span><span class="n">algo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">AOCL_ELTWISE_RELU</span><span class="p">};</span>
+<span class="n">aocl_post_op_append_eltwise</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">relu_op</span><span class="p">);</span>
+
+<span class="c1">// Use in GEMM</span>
+<span class="n">aocl_gemm_f32f32f32of32</span><span class="p">(...,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">);</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="performance-optimization">
+<h2>Performance Optimization<a class="headerlink" href="#performance-optimization" title="Link to this heading">#</a></h2>
+<section id="hardware-utilization">
+<h3>Hardware Utilization<a class="headerlink" href="#hardware-utilization" title="Link to this heading">#</a></h3>
+<p>AOCL-DLP automatically leverages available CPU features:</p>
+<div class="pst-scrollable-table-container"><table class="table" id="id5">
+<caption><span class="caption-text">Hardware Features</span><a class="headerlink" href="#id5" title="Link to this table">#</a></caption>
+<colgroup>
+<col style="width: 25.0%" />
+<col style="width: 25.0%" />
+<col style="width: 50.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>Feature</p></th>
+<th class="head"><p>Availability</p></th>
+<th class="head"><p>Benefit</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p>AVX2/FMA3</p></td>
+<td><p>AMD Zen 1+</p></td>
+<td><p>Vectorized floating-point operations</p></td>
+</tr>
+<tr class="row-odd"><td><p>AVX512</p></td>
+<td><p>AMD Zen 4+</p></td>
+<td><p>Wider vector operations</p></td>
+</tr>
+<tr class="row-even"><td><p>AVX512_VNNI</p></td>
+<td><p>AMD Zen 4+</p></td>
+<td><p>Accelerated integer GEMM</p></td>
+</tr>
+<tr class="row-odd"><td><p>AVX512_BF16</p></td>
+<td><p>AMD Zen 4+</p></td>
+<td><p>Native bfloat16 operations</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="memory-optimization">
+<h3>Memory Optimization<a class="headerlink" href="#memory-optimization" title="Link to this heading">#</a></h3>
+<p>Key strategies for optimal memory performance:</p>
+<ol class="arabic simple">
+<li><p><strong>Data Layout</strong>: Use row-major layout when possible</p></li>
+<li><p><strong>Alignment</strong>: Align matrices to cache line boundaries (64 bytes)</p></li>
+<li><p><strong>Reordering</strong>: Reorder frequently-used matrices</p></li>
+<li><p><strong>Batch Processing</strong>: Group similar operations</p></li>
+<li><p><strong>Memory Bandwidth</strong>: Consider bandwidth limitations for large matrices</p></li>
+</ol>
+</section>
+<section id="threading-configuration">
+<h3>Threading Configuration<a class="headerlink" href="#threading-configuration" title="Link to this heading">#</a></h3>
+<p>Optimize parallel execution:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Set thread count (typically number of CPU cores)</span>
+<span class="n">dlp_thread_set_num_threads</span><span class="p">(</span><span class="mi">8</span><span class="p">);</span>
+
+<span class="c1">// Configure workload distribution</span>
+<span class="n">dlp_thread_set_ways</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">);</span><span class="w">  </span><span class="c1">// 3D parallelization</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="common-usage-patterns">
+<h2>Common Usage Patterns<a class="headerlink" href="#common-usage-patterns" title="Link to this heading">#</a></h2>
+<section id="neural-network-inference">
+<h3>Neural Network Inference<a class="headerlink" href="#neural-network-inference" title="Link to this heading">#</a></h3>
+<p>Typical workflow for neural network layers:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// 1. Initialize weights (once)</span>
+<span class="kt">float</span><span class="w"> </span><span class="o">*</span><span class="n">weights</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">load_weights</span><span class="p">();</span>
+
+<span class="c1">// 2. Reorder weights for optimal performance (once)</span>
+<span class="kt">size_t</span><span class="w"> </span><span class="n">reorder_size</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">aocl_get_reorder_buf_size_f32f32f32of32</span><span class="p">(...);</span>
+<span class="kt">float</span><span class="w"> </span><span class="o">*</span><span class="n">weights_reordered</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">malloc</span><span class="p">(</span><span class="n">reorder_size</span><span class="p">);</span>
+<span class="n">aocl_reorder_f32f32f32of32</span><span class="p">(...,</span><span class="w"> </span><span class="n">weights</span><span class="p">,</span><span class="w"> </span><span class="n">weights_reordered</span><span class="p">,</span><span class="w"> </span><span class="p">...);</span>
+
+<span class="c1">// 3. Set up post-operations (bias + activation)</span>
+<span class="n">aocl_post_op</span><span class="w"> </span><span class="n">post_ops</span><span class="p">;</span>
+<span class="n">setup_post_ops</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">,</span><span class="w"> </span><span class="n">bias</span><span class="p">,</span><span class="w"> </span><span class="n">activation_type</span><span class="p">);</span>
+
+<span class="c1">// 4. Process inputs (repeated)</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">batch</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">batch</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">num_batches</span><span class="p">;</span><span class="w"> </span><span class="n">batch</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">aocl_gemm_f32f32f32of32</span><span class="p">(</span>
+<span class="w">        </span><span class="sc">&#39;R&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">batch_size</span><span class="p">,</span><span class="w"> </span><span class="n">output_dim</span><span class="p">,</span><span class="w"> </span><span class="n">input_dim</span><span class="p">,</span>
+<span class="w">        </span><span class="mf">1.0f</span><span class="p">,</span><span class="w"> </span><span class="n">input</span><span class="p">[</span><span class="n">batch</span><span class="p">],</span><span class="w"> </span><span class="n">input_dim</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span>
+<span class="w">        </span><span class="n">weights_reordered</span><span class="p">,</span><span class="w"> </span><span class="n">output_dim</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;R&#39;</span><span class="p">,</span>
+<span class="w">        </span><span class="mf">0.0f</span><span class="p">,</span><span class="w"> </span><span class="n">output</span><span class="p">[</span><span class="n">batch</span><span class="p">],</span><span class="w"> </span><span class="n">output_dim</span><span class="p">,</span>
+<span class="w">        </span><span class="o">&amp;</span><span class="n">post_ops</span>
+<span class="w">    </span><span class="p">);</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="quantized-inference">
+<h3>Quantized Inference<a class="headerlink" href="#quantized-inference" title="Link to this heading">#</a></h3>
+<p>Workflow for quantized neural networks:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// 1. Load quantized weights and scales</span>
+<span class="kt">int8_t</span><span class="w"> </span><span class="o">*</span><span class="n">weights_q</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">load_quantized_weights</span><span class="p">();</span>
+<span class="kt">float</span><span class="w"> </span><span class="o">*</span><span class="n">scales</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">load_scales</span><span class="p">();</span>
+
+<span class="c1">// 2. Set up quantization post-ops</span>
+<span class="n">aocl_post_op</span><span class="w"> </span><span class="n">post_ops</span><span class="p">;</span>
+<span class="n">setup_quantization_post_ops</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">,</span><span class="w"> </span><span class="n">scales</span><span class="p">,</span><span class="w"> </span><span class="n">zero_points</span><span class="p">);</span>
+
+<span class="c1">// 3. Process quantized inputs</span>
+<span class="n">aocl_gemm_u8s8s32os8</span><span class="p">(</span>
+<span class="w">    </span><span class="sc">&#39;R&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span>
+<span class="w">    </span><span class="mi">1</span><span class="p">,</span><span class="w"> </span><span class="n">input_q</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="n">weights_q</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="mi">0</span><span class="p">,</span><span class="w"> </span><span class="n">output_q</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
+<span class="w">    </span><span class="o">&amp;</span><span class="n">post_ops</span>
+<span class="p">);</span>
+</pre></div>
+</div>
+</section>
+<section id="batch-processing">
+<h3>Batch Processing<a class="headerlink" href="#batch-processing" title="Link to this heading">#</a></h3>
+<p>Efficient processing of multiple similar operations:</p>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Prepare batch data</span>
+<span class="kt">float</span><span class="w"> </span><span class="o">**</span><span class="n">a_array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">malloc</span><span class="p">(</span><span class="n">batch_count</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">sizeof</span><span class="p">(</span><span class="kt">float</span><span class="o">*</span><span class="p">));</span>
+<span class="kt">float</span><span class="w"> </span><span class="o">**</span><span class="n">b_array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">malloc</span><span class="p">(</span><span class="n">batch_count</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">sizeof</span><span class="p">(</span><span class="kt">float</span><span class="o">*</span><span class="p">));</span>
+<span class="kt">float</span><span class="w"> </span><span class="o">**</span><span class="n">c_array</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">malloc</span><span class="p">(</span><span class="n">batch_count</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="k">sizeof</span><span class="p">(</span><span class="kt">float</span><span class="o">*</span><span class="p">));</span>
+
+<span class="c1">// Fill arrays with matrix pointers</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kt">int</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="n">batch_count</span><span class="p">;</span><span class="w"> </span><span class="n">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">a_array</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">input_matrices</span><span class="p">[</span><span class="n">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">k</span><span class="p">];</span>
+<span class="w">    </span><span class="n">b_array</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">weight_matrices</span><span class="p">[</span><span class="n">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="p">];</span>
+<span class="w">    </span><span class="n">c_array</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">output_matrices</span><span class="p">[</span><span class="n">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">m</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">n</span><span class="p">];</span>
+<span class="p">}</span>
+
+<span class="c1">// Process batch</span>
+<span class="n">aocl_batch_gemm_f32f32f32of32</span><span class="p">(</span>
+<span class="w">    </span><span class="sc">&#39;R&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span>
+<span class="w">    </span><span class="mf">1.0f</span><span class="p">,</span><span class="w"> </span><span class="n">a_array</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span>
+<span class="w">    </span><span class="n">b_array</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
+<span class="w">    </span><span class="mf">0.0f</span><span class="p">,</span><span class="w"> </span><span class="n">c_array</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span>
+<span class="w">    </span><span class="n">batch_count</span><span class="p">,</span><span class="w"> </span><span class="nb">NULL</span>
+<span class="p">);</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="error-handling">
+<h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading">#</a></h2>
+<p>AOCL-DLP uses defensive programming practices:</p>
+<section id="id1">
+<h3>Parameter Validation<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// APIs validate parameters and handle gracefully</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">m</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// No operation performed, function returns safely</span>
+<span class="w">    </span><span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">a</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nb">NULL</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">b</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nb">NULL</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">c</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="nb">NULL</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// NULL pointers handled without crash</span>
+<span class="w">    </span><span class="k">return</span><span class="p">;</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+<section id="hardware-compatibility">
+<h3>Hardware Compatibility<a class="headerlink" href="#hardware-compatibility" title="Link to this heading">#</a></h3>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Check hardware support</span>
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="n">dlp_aocl_enable_instruction_query</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="n">printf</span><span class="p">(</span><span class="s">&quot;Warning: Some optimizations not available</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+<span class="w">    </span><span class="c1">// Library will use fallback implementations</span>
+<span class="p">}</span>
+</pre></div>
+</div>
+</section>
+</section>
+<section id="best-practices">
+<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading">#</a></h2>
+<ol class="arabic simple">
+<li><p><strong>Choose Appropriate Precision</strong>
+- Use lowest precision that meets accuracy requirements
+- Consider mixed precision (e.g., bf16 inputs, f32 accumulation)</p></li>
+<li><p><strong>Optimize Memory Access</strong>
+- Prefer row-major layout
+- Align matrices to cache boundaries
+- Use reordering for repeated operations</p></li>
+<li><p><strong>Leverage Hardware Features</strong>
+- Use feature detection to select optimal algorithms
+- Test on target hardware for validation</p></li>
+<li><p><strong>Fuse Operations</strong>
+- Use post-operations to minimize memory traffic
+- Group related computations</p></li>
+<li><p><strong>Profile and Validate</strong>
+- Measure performance with representative workloads
+- Validate numerical accuracy for your use case</p></li>
+</ol>
+</section>
+<section id="migration-guide">
+<h2>Migration Guide<a class="headerlink" href="#migration-guide" title="Link to this heading">#</a></h2>
+<section id="from-other-blas-libraries">
+<h3>From Other BLAS Libraries<a class="headerlink" href="#from-other-blas-libraries" title="Link to this heading">#</a></h3>
+<p>AOCL-DLP APIs are designed to be familiar to BLAS users:</p>
+<div class="pst-scrollable-table-container"><table class="table" id="id6">
+<caption><span class="caption-text">BLAS to AOCL-DLP Mapping</span><a class="headerlink" href="#id6" title="Link to this table">#</a></caption>
+<colgroup>
+<col style="width: 30.0%" />
+<col style="width: 40.0%" />
+<col style="width: 30.0%" />
+</colgroup>
+<thead>
+<tr class="row-odd"><th class="head"><p>BLAS Function</p></th>
+<th class="head"><p>AOCL-DLP Equivalent</p></th>
+<th class="head"><p>Key Differences</p></th>
+</tr>
+</thead>
+<tbody>
+<tr class="row-even"><td><p><code class="docutils literal notranslate"><span class="pre">sgemm</span></code></p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">aocl_gemm_f32f32f32of32</span></code></p></td>
+<td><p>Additional post-operations support</p></td>
+</tr>
+<tr class="row-odd"><td><p><code class="docutils literal notranslate"><span class="pre">dgemm</span></code></p></td>
+<td><p>Use <code class="docutils literal notranslate"><span class="pre">f32f32f32of32</span></code> variant</p></td>
+<td><p>AOCL-DLP focuses on single precision</p></td>
+</tr>
+<tr class="row-even"><td><p>Custom quantized GEMM</p></td>
+<td><p><code class="docutils literal notranslate"><span class="pre">aocl_gemm_u8s8s32os8</span></code></p></td>
+<td><p>Built-in quantization support</p></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+<section id="from-previous-aocl-dlp-versions">
+<h3>From Previous AOCL-DLP Versions<a class="headerlink" href="#from-previous-aocl-dlp-versions" title="Link to this heading">#</a></h3>
+<p>When upgrading:</p>
+<ol class="arabic simple">
+<li><p><strong>Check API compatibility</strong>: Review function signatures</p></li>
+<li><p><strong>Update post-operations</strong>: New post-op framework may require changes</p></li>
+<li><p><strong>Validate performance</strong>: Re-benchmark with new version</p></li>
+<li><p><strong>Test accuracy</strong>: Verify numerical results remain acceptable</p></li>
+</ol>
+</section>
+</section>
+<section id="see-also">
+<h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<ul class="simple">
+<li><p><a class="reference internal" href="gemm/index.html"><span class="doc">GEMM Operations</span></a> - Detailed GEMM API documentation</p></li>
+<li><p><a class="reference internal" href="post_ops/index.html"><span class="doc">Post-Operations</span></a> - Post-operations reference</p></li>
+<li><p><span class="xref std std-doc">../tutorials/index</span> - Step-by-step tutorials</p></li>
+<li><p><span class="xref std std-doc">../examples/index</span> - Practical examples</p></li>
+</ul>
+</section>
+</section>
+
+
+                </article>
+              
+
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+    <a class="left-prev"
+       href="index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">API Reference</p>
+      </div>
+    </a>
+    <a class="right-next"
+       href="gemm/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">GEMM Operations</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+
+
+  <div class="sidebar-secondary-item">
+  <div class="page-toc tocsection onthispage">
+    <i class="fa-solid fa-list"></i> Contents
+  </div>
+  <nav class="bd-toc-nav page-toc">
+    <ul class="visible nav section-nav flex-column">
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-concepts">Core Concepts</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#matrix-operations">Matrix Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#data-type-support">Data Type Support</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-categories">API Categories</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#core-gemm-operations">Core GEMM Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-operations">Batch Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#element-wise-operations">Element-wise Operations</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#utility-functions">Utility Functions</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#matrix-reordering">Matrix Reordering</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#library-management">Library Management</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#api-design-principles">API Design Principles</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#consistent-naming">Consistent Naming</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#memory-layout-flexibility">Memory Layout Flexibility</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#parameter-validation">Parameter Validation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-abstraction">Hardware Abstraction</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#post-operations-framework">Post-Operations Framework</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#operation-types">Operation Types</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#usage-pattern">Usage Pattern</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#performance-optimization">Performance Optimization</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-utilization">Hardware Utilization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#memory-optimization">Memory Optimization</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#threading-configuration">Threading Configuration</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#common-usage-patterns">Common Usage Patterns</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#neural-network-inference">Neural Network Inference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#quantized-inference">Quantized Inference</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#batch-processing">Batch Processing</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#error-handling">Error Handling</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Parameter Validation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-compatibility">Hardware Compatibility</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#best-practices">Best Practices</a></li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#migration-guide">Migration Guide</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-other-blas-libraries">From Other BLAS Libraries</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#from-previous-aocl-dlp-versions">From Previous AOCL-DLP Versions</a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See Also</a></li>
+</ul>
+  </nav></div>
+
+</div></div>
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            <p>
+  </p>
+          </footer>
+        
+
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
+<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+
+<footer class="rocm-footer">
+    <div class="container-lg">
+        <section class="bottom-menu menu py-45">
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <ul>
+                        <li><a href="https://www.amd.com/en/corporate/copyright" target="_blank">Terms and Conditions</a></li>
+                        <li><a>2024, Advanced Micro Devices, Inc</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/privacy" target="_blank">Privacy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/trademarks" target="_blank">Trademarks</a></li>
+                        <li><a href="https://www.amd.com/content/dam/amd/en/documents/corporate/cr/supply-chain-transparency.pdf" target="_blank">Supply Chain Transparency</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/competition" target="_blank">Fair and Open Competition</a></li>
+                        <li><a href="https://www.amd.com/system/files/documents/amd-uk-tax-strategy.pdf" target="_blank">UK Tax Strategy</a></li>
+                        <li><a href="https://www.amd.com/en/corporate/cookies" target="_blank">Cookie Policy</a></li>
+                        <!-- OneTrust Cookies Settings button start -->
+                        <li><a href="#cookie-settings" id="ot-sdk-btn" class="ot-sdk-show-settings">Cookie Settings</a></li>
+                        <!-- OneTrust Cookies Settings button end -->
+                    </ul>
+                </div>
+            </div>
+            <div class="row d-flex align-items-center">
+                <div class="col-12 text-center">
+                    <div>
+                        <span class="copyright">© 2025 Advanced Micro Devices, Inc</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+</footer>
+
+<!-- <div id="rdc-watermark-container">
+    <img id="rdc-watermark" src="../_static/images/alpha-watermark.svg" alt="DRAFT watermark"/>
+</div> -->
+  </body>
+</html>
