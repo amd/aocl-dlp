@@ -123,7 +123,7 @@ function setup_pre_commit {
 }
 
 function setup_docs {
-    git worktree add docs/internal docs
+    git worktree add docs/internal docs-internal
 }
 
 function setup_exp {
