@@ -278,8 +278,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             // GEMV N1 kernels.
             return std::nullopt;
         }
-    }
-    if (gemmIn->m == 1) {
+    } else if (gemmIn->m == 1) {
         if (isZen) {
             return std::nullopt;
         } else if (isZen4) {

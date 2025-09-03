@@ -174,6 +174,7 @@ LPGEMV(float, float, float, f32f32f32of32)
             MR       = 8;
             ker_fp   = lpgemv_n_one_f32f32f32of32_avx2;
             packa_fp = packa_mr8_f32f32f32of32_col_major;
+
 #ifdef DLP_KERNELS_ZEN4
         }
 #endif

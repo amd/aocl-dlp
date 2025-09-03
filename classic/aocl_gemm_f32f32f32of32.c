@@ -193,14 +193,115 @@ aocl_gemm_f32f32f32of32(const char      order,
         mtag_b = PACK;
     }
 
+    // Temporary variables to store/transform the input for kernel generation
+    // and execution.
+    md_t            m_use = m, n_use = n, k_use = k;
+    const float*    a_use    = a;
+    const float*    b_use    = b;
+    float*          c_use    = c;
+    md_t            rs_a_use = rs_a, cs_a_use = cs_a;
+    md_t            rs_b_use = rs_b, cs_b_use = cs_b;
+    md_t            rs_c_use = rs_c, cs_c_use = cs_c;
+    AOCL_MEMORY_TAG mtag_a_use = mtag_a;
+    AOCL_MEMORY_TAG mtag_b_use = mtag_b;
+    // char            order_use  = order; // Unused for now(future scope)
+
     // Convert post op struct to post op linked list format.
     lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
     dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
-        metadata, post_op_list, (void*)c, (void*)(&order), m, n);
+        metadata, post_op_list, (void*)c_use, (void*)(&order), m,
+        n); // To use order_reuse in future, when we support post-ops on
+            // row-major with transpose toggled.
 
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
+    }
+
+    // Induce operation transpose and/or swapped strides based on the input.
+    // NOTE :
+    // This logic is primarily used to decide what JIT kernels are to be
+    // generated. Any logical induce that we perform(swapping strides/matrices)
+    // would reflect in the DE when generating the kernel. Since the 5-loop
+    // algorithm(framework) is detached from the CPP layer, it is expected
+    // that the induced ordering is maintained when calling the 5-loop, which
+    // would internally call the execute handler, thus mapping to the correct
+    // kernel.
+
+    // Handling row-major storage.
+    if (is_row_major == TRUE) {
+        // For now(with row major inputs), we enable operation transpose only
+        // for GEMV(when the appropriate operand transpose is toggled). This is
+        // done in order to avoid packing cost.
+        // GEMV : Output is always a vector, and thus tranposing a "row-stored"
+        // contiguous vector is still a contiguous vector(logically).
+        // GEMM : Output is a matrix, and thus transposing a "row-major" matrix
+        // would lead to a "column-major" matrix, which is not compatible with
+        // the underlying kernels for now.
+
+        // This optimization is currently enabled only when post-ops are
+        // disabled.
+        if (post_op_list[0].op_code == POST_OPS_DISABLE) {
+            // For GEMV_M1
+            if ((m == 1) && dlp_is_trans(dlp_transb) && (mtag_b != REORDERED)) {
+                // NOTE : We will reorder the inputs such that we use the
+                // GEMV_N1 kernel instead of GEMV_M1, in order to avoid packing
+                // of B matrix(if not already reordered). The GEMV_N1 kernels
+                // support both unit/non-unit strided loads/stores for C vector.
+                // Thus, we would be packing the input vector alone(if needed).
+                m_use      = n;
+                n_use      = m;
+                a_use      = b;
+                rs_a_use   = cs_b;
+                cs_a_use   = rs_b;
+                b_use      = a;
+                rs_b_use   = cs_a;
+                cs_b_use   = rs_a;
+                rs_c_use   = cs_c;
+                cs_c_use   = rs_c;
+                mtag_a_use = UNPACKED;
+                mtag_b_use = mtag_a;
+                // order_use  = 'c';
+            }
+            // For GEMV_N1
+            // The library does not support reorder of A, thereby not needing an
+            // explicit check.
+            else if ((n == 1) && dlp_is_trans(dlp_transa) && (rs_c == 1)) {
+                // NOTE : We will reorder the inputs such that we use the
+                // GEMV_M1 kernel instead of GEMV_N1, in order to avoid packing
+                // of A matrix. The GEMV_M1 kernels(both classic and JIT)
+                // support only unit-strided C vector(row-stored). Thus, we need
+                // an explicit check for that.
+                m_use      = n;
+                n_use      = m;
+                a_use      = b;
+                rs_a_use   = cs_b;
+                cs_a_use   = rs_b;
+                b_use      = a;
+                rs_b_use   = cs_a;
+                cs_b_use   = rs_a;
+                rs_c_use   = cs_c;
+                cs_c_use   = rs_c;
+                mtag_a_use = mtag_b;
+                mtag_b_use = UNPACKED;
+                // order_use  = 'c';
+            }
+        }
+    }
+    // Handling column-major storage.
+    else {
+        m_use      = n;
+        n_use      = m;
+        a_use      = b;
+        rs_a_use   = rs_b;
+        cs_a_use   = cs_b;
+        b_use      = a;
+        rs_b_use   = rs_a;
+        cs_b_use   = cs_a;
+        rs_c_use   = rs_c;
+        cs_c_use   = cs_c;
+        mtag_a_use = mtag_b;
+        mtag_b_use = mtag_a;
     }
 
     // Initialize a local runtime with global settings if necessary. Note
@@ -213,61 +314,34 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     // Only enable JIT kernels if AOCL_ENABLE_INSTRUCTIONS is not set.
     if (dlp_aocl_enable_instruction_query() == FALSE) {
-        if (is_row_major == TRUE) {
-            lcntx_g->dlp_kernel_hndl = dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_F32F32F32OF32, order, mtag_a, mtag_b, m, n, k, rs_a,
-                cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta,
-                post_op_list, lcntx_g->blksz.MR, lcntx_g->blksz.NR,
-                lcntx_g->blksz.KC);
-        } else {
-            lcntx_g->dlp_kernel_hndl = dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_F32F32F32OF32, order, mtag_b, mtag_a, n, m, k, rs_b,
-                cs_b, rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta,
-                post_op_list, lcntx_g->blksz.MR, lcntx_g->blksz.NR,
-                lcntx_g->blksz.KC);
-        }
+        lcntx_g->dlp_kernel_hndl = dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_F32F32F32OF32, order, mtag_a_use, mtag_b_use, m_use,
+            n_use, k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use,
+            cs_c_use, (void*)&alpha, (void*)&beta, post_op_list,
+            lcntx_g->blksz.MR, lcntx_g->blksz.NR, lcntx_g->blksz.KC);
     }
 
     if (is_single_thread(&rntm_g) == TRUE) {
-        if ((is_row_major == TRUE)
-            && (is_tiny_input_f32(m, n, k, lcntx_g) == TRUE)) {
+        if (is_tiny_input_f32(m_use, n_use, k_use, lcntx_g) == TRUE) {
             lpgemm_rowvar_tiny_f32f32f32of32(
-                m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-                cs_c, alpha, beta, lcntx_g, post_op_list, DLP_F32);
-
-            return;
-        } else if ((is_column_major == TRUE)
-                   && (is_tiny_input_f32(n, m, k, lcntx_g) == TRUE)) {
-            lpgemm_rowvar_tiny_f32f32f32of32(
-                n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, c, rs_c,
-                cs_c, alpha, beta, lcntx_g, post_op_list, DLP_F32);
+                m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use,
+                b_use, rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use,
+                cs_c_use, alpha, beta, lcntx_g, post_op_list, DLP_F32);
 
             return;
         }
     }
 
 #ifdef DLP_ENABLE_OPENMP
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        lpgemm_f32f32f32of32_openmp_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
-    } else {
-        lpgemm_f32f32f32of32_openmp_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
-    }
+    lpgemm_f32f32f32of32_openmp_thread_decorator(
+        m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+        rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use, cs_c_use, alpha, beta,
+        &rntm_g, lcntx_g, post_op_list, DLP_F32);
 #else
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        lpgemm_f32f32f32of32_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
-    } else {
-        lpgemm_f32f32f32of32_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
-    }
+    lpgemm_f32f32f32of32_thread_decorator(
+        m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+        rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use, cs_c_use, alpha, beta,
+        &rntm_g, lcntx_g, post_op_list, DLP_F32);
 #endif
 
 err_hndl:;
