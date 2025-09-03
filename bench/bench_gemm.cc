@@ -660,23 +660,22 @@ BM_gemm(benchmark::State& state, GemmTestConfig config_)
     }
 
     // Get raw pointers for high-performance benchmarking
-    auto a_ptr           = A.getMatrixData().getMatrixPtr();
-    auto b_ptr           = B.getMatrixData().getMatrixPtr();
-    auto c_ptr           = C.getMatrixData().getMatrixPtr();
-    auto a_type          = A.getMatrixType();
-    auto b_type          = B.getMatrixType();
-    auto c_type          = C.getMatrixType();
-    auto acc_type        = config_.acc_type;
-    auto transA          = A.isTransposed();
-    auto transB          = B.isTransposed();
-    auto memFormatA      = A.isPacked() ? 'p' : (A.isReordered() ? 'r' : 'n');
-    auto memFormatB      = B.isPacked() ? 'p' : (B.isReordered() ? 'r' : 'n');
-    auto lda             = A.getLeadingDimension();
-    auto ldb             = B.getLeadingDimension();
-    auto ldc             = C.getLeadingDimension();
-    auto alpha           = config_.alpha;
-    auto beta            = config_.beta;
-    dlp_metadata_t* meta = new dlp_metadata_t();
+    auto a_ptr      = A.getMatrixData().getMatrixPtr();
+    auto b_ptr      = B.getMatrixData().getMatrixPtr();
+    auto c_ptr      = C.getMatrixData().getMatrixPtr();
+    auto a_type     = A.getMatrixType();
+    auto b_type     = B.getMatrixType();
+    auto c_type     = C.getMatrixType();
+    auto acc_type   = config_.acc_type;
+    auto transA     = A.isTransposed();
+    auto transB     = B.isTransposed();
+    auto memFormatA = A.isPacked() ? 'p' : (A.isReordered() ? 'r' : 'n');
+    auto memFormatB = B.isPacked() ? 'p' : (B.isReordered() ? 'r' : 'n');
+    auto lda        = A.getLeadingDimension();
+    auto ldb        = B.getLeadingDimension();
+    auto ldc        = C.getLeadingDimension();
+    auto alpha      = config_.alpha;
+    auto beta       = config_.beta;
 
     // Matrix dimensions for GEMM: C(m x n) = A(m x k) * B(k x n)
     auto m = config_.m;

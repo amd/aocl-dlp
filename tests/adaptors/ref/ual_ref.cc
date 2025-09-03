@@ -329,6 +329,82 @@ UalRef::toString(UALType type)
 }
 
 /**
+ * @brief Templated helper function for matrix reordering
+ *
+ * @tparam T Data type of the matrix elements
+ * @param in Input matrix
+ * @param out Output matrix (already created)
+ * @param input_rows Number of input rows
+ * @param input_cols Number of input columns
+ * @param layout Matrix layout (ROW_MAJOR or COLUMN_MAJOR)
+ * @param transposed Whether input matrix is transposed
+ * @return bool Success status
+ */
+template<typename T>
+bool
+reorderTyped(const Matrix& in,
+             Matrix&       out,
+             md_t          input_rows,
+             md_t          input_cols,
+             MatrixLayout  layout,
+             bool          transposed)
+{
+    const T* src_data = reinterpret_cast<const T*>(in.getData());
+    T*       dst_data = reinterpret_cast<T*>(out.getData());
+
+    md_t src_ld = in.getLeadingDimension();
+    md_t dst_ld = out.getLeadingDimension();
+
+    // Pre-calculate bounds for efficiency
+    size_t max_src_elements = in.getDataSizeBytes() / sizeof(T);
+    size_t max_dst_elements = out.getDataSizeBytes() / sizeof(T);
+
+    // Copy data with proper layout handling using templated helper
+    auto copyMatrix = [&](auto getSrcIndex, auto getDstIndex) {
+        for (md_t i = 0; i < input_rows; ++i) {
+            for (md_t j = 0; j < input_cols; ++j) {
+                auto src_idx = getSrcIndex(i, j, src_ld);
+                auto dst_idx = getDstIndex(i, j, dst_ld);
+
+                // Optimized bounds check - check once per row if possible
+                if (static_cast<size_t>(src_idx) < max_src_elements
+                    && static_cast<size_t>(dst_idx) < max_dst_elements) {
+                    dst_data[dst_idx] = src_data[src_idx];
+                }
+            }
+        }
+    };
+
+    if (layout == MatrixLayout::ROW_MAJOR) {
+        if (transposed) {
+            // Input is transposed: src[i][j] represents logical[j][i]
+            // Output is not transposed: dst[i][j] represents logical[i][j]
+            // So we need: dst[j][i] = src[i][j]
+            copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
+                       [](md_t i, md_t j, md_t ld) { return j * ld + i; });
+        } else {
+            // Direct copy for non-transposed matrices
+            copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
+                       [](md_t i, md_t j, md_t ld) { return i * ld + j; });
+        }
+    } else { // COLUMN_MAJOR
+        if (transposed) {
+            // Input is transposed column-major: src[j][i] represents
+            // logical[i][j] Output is non-transposed column-major: dst[i][j]
+            // represents logical[i][j] So we need: dst[i][j] = src[j][i]
+            copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
+                       [](md_t i, md_t j, md_t ld) { return i * ld + j; });
+        } else {
+            // Direct copy for non-transposed matrices
+            copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
+                       [](md_t i, md_t j, md_t ld) { return j * ld + i; });
+        }
+    }
+
+    return true;
+}
+
+/**
  * @brief Public reorder interface that unpacks Matrix object
  *
  * @param in Input matrix to reorder
@@ -373,16 +449,9 @@ UalRef::reorder(const Matrix& in,
     // For reordering, we need to determine the output matrix dimensions
     // If the input matrix is transposed, we need to swap dimensions to get the
     // logical layout
+
     md_t output_rows, output_cols, min_leading_dim;
-    if (layout == MatrixLayout::ROW_MAJOR) {
-        if (in.getLeadingDimension() < in.getCols()) {
-            return false;
-        }
-    } else if (layout == MatrixLayout::COLUMN_MAJOR) {
-        if (in.getLeadingDimension() < in.getRows()) {
-            return false;
-        }
-    }
+
     if (transposed) {
         // Swap dimensions to match logical layout (like DLP does)
         output_rows = input_cols;
@@ -410,213 +479,24 @@ UalRef::reorder(const Matrix& in,
                  true   // mark as reordered
     );
 
-    // Copy data from input to output with proper layout
-    if (input_type == MatrixType::f32) {
-        const float* src_data = reinterpret_cast<const float*>(in.getData());
-        float*       dst_data = reinterpret_cast<float*>(out.getData());
-
-        md_t src_ld = in.getLeadingDimension();
-        md_t dst_ld = out.getLeadingDimension();
-
-        // Copy data with proper layout handling using templated helper
-        auto copyMatrix = [&](auto getSrcIndex, auto getDstIndex) {
-            for (md_t i = 0; i < input_rows; ++i) {
-                for (md_t j = 0; j < input_cols; ++j) {
-                    auto src_idx = getSrcIndex(i, j, src_ld);
-                    auto dst_idx = getDstIndex(i, j, dst_ld);
-
-                    // Bounds check to prevent access violations
-                    if (static_cast<size_t>(src_idx)
-                            < in.getDataSizeBytes() / sizeof(float)
-                        && static_cast<size_t>(dst_idx)
-                               < out.getDataSizeBytes() / sizeof(float)) {
-                        dst_data[dst_idx] = src_data[src_idx];
-                    }
-                }
-            }
-        };
-
-        if (layout == MatrixLayout::ROW_MAJOR) {
-            if (transposed) {
-                // Input is transposed: src[i][j] represents logical[j][i]
-                // Output is not transposed: dst[i][j] represents logical[i][j]
-                // So we need: dst[j][i] = src[i][j]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            }
-        } else { // COLUMN_MAJOR
-            if (transposed) {
-                // Input is transposed: src[j][i] represents logical[j][i]
-                // Output is not transposed: dst[j][i] represents logical[j][i]
-                // So we need: dst[i][j] = src[j][i]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            }
-        }
-    } else if (input_type == MatrixType::bf16) {
-        const bfloat16* src_data =
-            reinterpret_cast<const bfloat16*>(in.getData());
-        bfloat16* dst_data = reinterpret_cast<bfloat16*>(out.getData());
-
-        md_t src_ld = in.getLeadingDimension();
-        md_t dst_ld = out.getLeadingDimension();
-
-        // Copy data with proper layout handling using templated helper
-        auto copyMatrix = [&](auto getSrcIndex, auto getDstIndex) {
-            for (md_t i = 0; i < input_rows; ++i) {
-                for (md_t j = 0; j < input_cols; ++j) {
-                    auto src_idx = getSrcIndex(i, j, src_ld);
-                    auto dst_idx = getDstIndex(i, j, dst_ld);
-
-                    // Bounds check to prevent access violations
-                    if (static_cast<size_t>(src_idx)
-                            < in.getDataSizeBytes() / sizeof(bfloat16)
-                        && static_cast<size_t>(dst_idx)
-                               < out.getDataSizeBytes() / sizeof(bfloat16)) {
-                        dst_data[dst_idx] = src_data[src_idx];
-                    }
-                }
-            }
-        };
-
-        if (layout == MatrixLayout::ROW_MAJOR) {
-            if (transposed) {
-                // Input is transposed: src[i][j] represents logical[j][i]
-                // Output is not transposed: dst[i][j] represents logical[i][j]
-                // So we need: dst[j][i] = src[i][j]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            }
-        } else { // COLUMN_MAJOR
-            if (transposed) {
-                // Input is transposed: src[j][i] represents logical[j][i]
-                // Output is not transposed: dst[j][i] represents logical[j][i]
-                // So we need: dst[i][j] = src[j][i]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            }
-        }
-    } else if (input_type == MatrixType::u8) {
-        const uint8_t* src_data =
-            reinterpret_cast<const uint8_t*>(in.getData());
-        uint8_t* dst_data = reinterpret_cast<uint8_t*>(out.getData());
-
-        md_t src_ld = in.getLeadingDimension();
-        md_t dst_ld = out.getLeadingDimension();
-
-        // Copy data with proper layout handling using templated helper
-        auto copyMatrix = [&](auto getSrcIndex, auto getDstIndex) {
-            for (md_t i = 0; i < input_rows; ++i) {
-                for (md_t j = 0; j < input_cols; ++j) {
-                    auto src_idx = getSrcIndex(i, j, src_ld);
-                    auto dst_idx = getDstIndex(i, j, dst_ld);
-
-                    // Bounds check to prevent access violations
-                    if (static_cast<size_t>(src_idx)
-                            < in.getDataSizeBytes() / sizeof(uint8_t)
-                        && static_cast<size_t>(dst_idx)
-                               < out.getDataSizeBytes() / sizeof(uint8_t)) {
-                        dst_data[dst_idx] = src_data[src_idx];
-                    }
-                }
-            }
-        };
-
-        if (layout == MatrixLayout::ROW_MAJOR) {
-            if (transposed) {
-                // Input is transposed: src[i][j] represents logical[j][i]
-                // Output is not transposed: dst[i][j] represents logical[i][j]
-                // So we need: dst[j][i] = src[i][j]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            }
-        } else { // COLUMN_MAJOR
-            if (transposed) {
-                // Input is transposed: src[j][i] represents logical[j][i]
-                // Output is not transposed: dst[j][i] represents logical[j][i]
-                // So we need: dst[i][j] = src[j][i]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            }
-        }
-    } else if (input_type == MatrixType::s8) {
-        const int8_t* src_data = reinterpret_cast<const int8_t*>(in.getData());
-        int8_t*       dst_data = reinterpret_cast<int8_t*>(out.getData());
-
-        md_t src_ld = in.getLeadingDimension();
-        md_t dst_ld = out.getLeadingDimension();
-
-        // Copy data with proper layout handling using templated helper
-        auto copyMatrix = [&](auto getSrcIndex, auto getDstIndex) {
-            for (md_t i = 0; i < input_rows; ++i) {
-                for (md_t j = 0; j < input_cols; ++j) {
-                    auto src_idx = getSrcIndex(i, j, src_ld);
-                    auto dst_idx = getDstIndex(i, j, dst_ld);
-
-                    // Bounds check to prevent access violations
-                    if (static_cast<size_t>(src_idx)
-                            < in.getDataSizeBytes() / sizeof(int8_t)
-                        && static_cast<size_t>(dst_idx)
-                               < out.getDataSizeBytes() / sizeof(int8_t)) {
-                        dst_data[dst_idx] = src_data[src_idx];
-                    }
-                }
-            }
-        };
-
-        if (layout == MatrixLayout::ROW_MAJOR) {
-            if (transposed) {
-                // Input is transposed: src[i][j] represents logical[j][i]
-                // Output is not transposed: dst[i][j] represents logical[i][j]
-                // So we need: dst[j][i] = src[i][j]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return i * ld + j; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            }
-        } else { // COLUMN_MAJOR
-            if (transposed) {
-                // Input is transposed: src[j][i] represents logical[j][i]
-                // Output is not transposed: dst[j][i] represents logical[j][i]
-                // So we need: dst[i][j] = src[j][i]
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return i * ld + j; });
-            } else {
-                // Direct copy for non-transposed matrices
-                copyMatrix([](md_t i, md_t j, md_t ld) { return j * ld + i; },
-                           [](md_t i, md_t j, md_t ld) { return j * ld + i; });
-            }
-        }
-    } else {
-        // For other data types, we'd need similar implementations
-        // For now, just return false for unsupported types
-        return false;
+    // Templated reorder implementation to avoid code duplication
+    switch (input_type) {
+        case MatrixType::f32:
+            return reorderTyped<float>(in, out, input_rows, input_cols, layout,
+                                       transposed);
+        case MatrixType::bf16:
+            return reorderTyped<bfloat16>(in, out, input_rows, input_cols,
+                                          layout, transposed);
+        case MatrixType::u8:
+            return reorderTyped<uint8_t>(in, out, input_rows, input_cols,
+                                         layout, transposed);
+        case MatrixType::s8:
+            return reorderTyped<int8_t>(in, out, input_rows, input_cols, layout,
+                                        transposed);
+        default:
+            // For other data types, we'd need similar implementations
+            // For now, just return false for unsupported types
+            return false;
     }
 
     return true;
@@ -662,7 +542,10 @@ UalRef::reorder(void*        A,
  * @return bool True if parameters are valid, false otherwise
  */
 bool
-UalRef::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
+UalRef::checkValidGemmParams(const Matrix& A,
+                             const Matrix& B,
+                             const Matrix& C,
+                             bool          hasMetadata)
 {
     // Get GEMM operation dimensions (logical dimensions)
     uint32_t m = A.getEffectiveRows(); // Rows of A (and C)
@@ -676,6 +559,26 @@ UalRef::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
     bool notb = !B.isTransposed(); // not transposed B
     bool ta   = A.isTransposed();  // transposed A
     bool tb   = B.isTransposed();  // transposed B
+
+    if (col_stored) {
+        switch (A.getMatrixType()) {
+            case MatrixType::u8:
+                return false;
+            case MatrixType::s8:
+                if (C.getMatrixType() == MatrixType::u8)
+                    return false;
+                if (hasMetadata)
+                    return false;
+                break;
+
+            case MatrixType::f32:
+            case MatrixType::bf16:
+                break;
+            default:
+                // Unsupported matrix type
+                break;
+        }
+    }
 
     // All matrices should have the same layout
     if (A.getLayout() != B.getLayout() || A.getLayout() != C.getLayout()) {
@@ -713,6 +616,8 @@ UalRef::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
                 || (ta && (A.getLeadingDimension() < k)))) {
             return false;
         }
+    } else {
+        return false;
     }
 
     // Matrix B leading dimension checks (info = 12 in macro)
@@ -727,6 +632,17 @@ UalRef::checkValidGemmParams(const Matrix& A, const Matrix& B, const Matrix& C)
         if (col_stored
             && ((notb && (B.getLeadingDimension() < k))
                 || (tb && (B.getLeadingDimension() < n)))) {
+            return false;
+        }
+    } else {
+        if (row_stored) {
+            if (notb && (B.getLeadingDimension() < B.getCols())) {
+                return false;
+            }
+            if (tb && (B.getLeadingDimension() < B.getRows())) {
+                return false;
+            }
+        } else {
             return false;
         }
     }
@@ -763,12 +679,7 @@ UalRef::gemm(const Matrix& A,
              double        alpha,
              double        beta)
 {
-
-    // Validate parameters first
-    if (!checkValidGemmParams(A, B, C)) {
-        return false;
-    }
-
+    // Validation Check Removed Intentionally
     uint64_t type = encode_types(A.getMatrixType(), B.getMatrixType(),
                                  C.getMatrixType(), accType);
 
@@ -1158,7 +1069,8 @@ UalRef::gemm(const Matrix&                      A,
 {
     // For now, if no postOps are provided, delegate to the original gemm method
     if (!postOps) {
-        return gemm(A, B, C, accType, alpha, beta);
+        return checkValidGemmParams(A, B, C, false)
+               && gemm(A, B, C, accType, alpha, beta);
     }
 
     // Validate that the postOps are for REF backend
@@ -1173,7 +1085,8 @@ UalRef::gemm(const Matrix&                      A,
     }
 
     // First perform the GEMM operation
-    bool result = gemm(A, B, C, accType, alpha, beta);
+    bool result = checkValidGemmParams(A, B, C, true)
+                  && gemm(A, B, C, accType, alpha, beta);
     if (!result) {
         return false;
     }

@@ -47,7 +47,7 @@ gemm_tests:
   # llm test cases for u8s8s32os32
   - name: "mixed_size_matrix_u8s8os32"
     a_type: "u8"
-    b_type: "us"
+    b_type: "s8"
     c_type: "s32"
     acc_type: "s32"
     storage_format: "row-major"

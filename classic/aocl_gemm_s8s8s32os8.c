@@ -97,7 +97,8 @@ aocl_gemm_s8s8s32os8(const char      order,
 
     // Column major support disabled for int API's till micro-kernel
     // post-ops are updated to account for column major.
-    if ((is_column_major == TRUE) && (metadata != NULL)) {
+    if ((is_column_major == TRUE) && (metadata != NULL)
+        && (metadata->seq_length > 0)) {
         dlp_print_msg("Column major inputs not supported with Post-ops.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);

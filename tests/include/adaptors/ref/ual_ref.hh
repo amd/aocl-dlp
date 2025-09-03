@@ -217,7 +217,8 @@ class UalRef : public IUal
      */
     bool checkValidGemmParams(const Matrix& A,
                               const Matrix& B,
-                              const Matrix& C);
+                              const Matrix& C,
+                              bool          hasMetadata);
 
     /**
      * @brief Internal implementation of reorder with layout and

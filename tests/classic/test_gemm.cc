@@ -178,6 +178,31 @@ check_valid_params(const GemmTestConfig& config)
         return false; // info = 6 in macro
     }
 
+    // Column Major API support checks
+    if (col_stored) {
+        switch (config.a_type) {
+            // u8 api does not support column major
+            case MatrixType::u8:
+                return false;
+
+            // s8s8 api supports column major without post-ops
+            // s8s8ou8 does not support column major
+            case MatrixType::s8:
+                if (config.c_type == MatrixType::u8)
+                    return false;
+                if (config.has_postops)
+                    return false;
+                break;
+
+            case MatrixType::f32:
+            case MatrixType::bf16:
+                break;
+
+            // Add cases for other data types as needed
+            default:
+                break;
+        }
+    }
     // Leading dimension checks for matrix A (info = 9 in macro)
     // Skip leading dimension checks for reordered matrices as they have custom
     // layouts
@@ -192,6 +217,8 @@ check_valid_params(const GemmTestConfig& config)
                 || (ta && (config.lda < config.k)))) {
             return false;
         }
+    } else {
+        return false;
     }
 
     // Leading dimension checks for matrix B (info = 12 in macro)
@@ -206,6 +233,17 @@ check_valid_params(const GemmTestConfig& config)
         if (col_stored
             && ((notb && (config.ldb < config.k))
                 || (tb && (config.ldb < config.n)))) {
+            return false;
+        }
+    } else {
+        if (row_stored) {
+            if (notb && (config.ldb < config.n)) {
+                return false;
+            }
+            if (tb && (config.ldb < config.k)) {
+                return false;
+            }
+        } else {
             return false;
         }
     }
@@ -745,8 +783,6 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
     // Helper method to run the actual GEMM test
     void RunGemmTest()
     {
-        bool ret_reorder     = true;
-        bool ret_ref_reorder = true;
         // Create test matrices
         MatrixLayout layout = config_.storage_format;
 
@@ -810,12 +846,15 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             A.setReordered(true);
             A_ref.setReordered(true);
         }
+        bool params_valid  = check_valid_params(config_);
+        bool dlp_isReorder = true;
+        bool ref_isReorder = true;
         if (config_.reorderB) {
             // Create reordered matrix with custom allocation size in bytes
             Matrix B_reordered;
             Matrix B_ref_reordered;
 
-            ret_reorder =
+            dlp_isReorder =
                 ual_dlp->reorder(B, B_reordered, config_.a_type, config_.b_type,
                                  config_.c_type, config_.acc_type);
             B = B_reordered;
@@ -824,9 +863,13 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             // same parameters
             std::unique_ptr<IUal> ual_ref_for_reorder =
                 UalFactory::createUal(UALType::REF);
-            ret_ref_reorder = ual_ref_for_reorder->reorder(
-                B_ref, B_ref_reordered, config_.a_type, config_.b_type,
-                config_.c_type, config_.acc_type);
+
+            // Check if the config is valid then reorder
+            ref_isReorder =
+                params_valid
+                && ual_ref_for_reorder->reorder(
+                    B_ref, B_ref_reordered, config_.a_type, config_.b_type,
+                    config_.c_type, config_.acc_type);
             B_ref = B_ref_reordered;
             // Reset packing state after reordering assignment
             B_ref.setPacked(false);
@@ -861,10 +904,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             ual_ref->gemm(A_ref, B_ref, C_ref, config_.acc_type,
                           config_.postops_ref, config_.alpha, config_.beta);
 
-        bool params_valid = false;
-        if (ret_reorder)
-            // Check if parameters are valid
-            params_valid = check_valid_params(config_);
+        // Check if parameters are valid
 
         if (params_valid) {
             // For valid parameters, both implementations should succeed
@@ -887,10 +927,10 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         } else {
             // For invalid parameters, both implementations should fail
             // gracefully
-            EXPECT_FALSE(dlp_result && ret_reorder)
+            EXPECT_FALSE(dlp_result && dlp_isReorder)
                 << "DLP GEMM should fail gracefully with invalid parameters:"
                 << printConfigDetails(config_);
-            EXPECT_FALSE(ref_result && ret_ref_reorder)
+            EXPECT_FALSE(ref_result && ref_isReorder)
                 << "Reference GEMM should fail gracefully "
                    "with invalid parameters:"
                 << printConfigDetails(config_);

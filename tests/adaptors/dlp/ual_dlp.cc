@@ -277,6 +277,7 @@ UalDlp::gemm(const Matrix&                      A,
 
     // For now, if no postOps are provided, delegate to the original gemm method
     std::shared_ptr<dlp_metadata_t> aocl_postops;
+
     if (!postOps) {
         // PostOps is still needed for error code.
         // FIXME: Rename postops to metadata
