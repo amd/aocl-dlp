@@ -90,13 +90,9 @@ gemmF32DEBackend::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             break;
         case POST_OPS_GELU_TANH:
             metaData->type = kernel_frame::kernelOps::geluTanh;
-            metaData->paramStorageDt =
-                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
             break;
         case POST_OPS_GELU_ERF:
             metaData->type = kernel_frame::kernelOps::geluErf;
-            metaData->paramStorageDt =
-                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
             break;
         case POST_OPS_CLIP:
             metaData->type = kernel_frame::kernelOps::clip;
@@ -110,18 +106,12 @@ gemmF32DEBackend::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             break;
         case POST_OPS_TANH:
             metaData->type = kernel_frame::kernelOps::tanh;
-            metaData->paramStorageDt =
-                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
             break;
         case POST_OPS_SIGMOID:
             metaData->type = kernel_frame::kernelOps::sigmoid;
-            metaData->paramStorageDt =
-                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
             break;
         case POST_OPS_DOWNSCALE: {
-            metaData->type           = kernel_frame::kernelOps::downscale;
-            metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
-                static_cast<DLP_TYPE>(post_op->stor_type));
+            metaData->type = kernel_frame::kernelOps::downscale;
             char storFormatC =
                 std::tolower(*(static_cast<char*>(post_op->op_args2)));
             metaData->cMatFormat    = (storFormatC == 'c')

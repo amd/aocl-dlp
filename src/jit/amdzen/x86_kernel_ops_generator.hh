@@ -43,6 +43,19 @@ namespace amdzen::x86gen {
             return jitGeneratorError::notSupported;                            \
     }
 
+#define DISPATCH_BY_DUAL_DATATYPE(sfDt, matOpDt, func, ...)                    \
+    switch (sfDt) {                                                            \
+        case DataType::f32:                                                    \
+            switch (matOpDt) {                                                 \
+                case DataType::f32:                                            \
+                    return func<float, float>(__VA_ARGS__);                    \
+                default:                                                       \
+                    return jitGeneratorError::notSupported;                    \
+            }                                                                  \
+        default:                                                               \
+            return jitGeneratorError::notSupported;                            \
+    }
+
 template<utils::kernelInstrType KType>
 class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 {
@@ -74,9 +87,9 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     dlp::jit::jitGeneratorError reluScale(
         dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError geluTanh(
-        dlp::kernel_frame::kernelOpsMetaData& op) override;
+        [[maybe_unused]] dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError geluErf(
-        dlp::kernel_frame::kernelOpsMetaData& op) override;
+        [[maybe_unused]] dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError clip(
         dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError downscale(
@@ -88,9 +101,9 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     dlp::jit::jitGeneratorError swish(
         dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError tanh(
-        dlp::kernel_frame::kernelOpsMetaData& op) override;
+        [[maybe_unused]] dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError sigmoid(
-        dlp::kernel_frame::kernelOpsMetaData& op) override;
+        [[maybe_unused]] dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError embedKernelOpsAttributes() override;
 
     void advancePostOpsPtr() override;
@@ -148,6 +161,12 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     template<typename T>
     dlp::jit::jitGeneratorError clipImpl();
 
+    dlp::jit::jitGeneratorError scaleFactorImpl(
+        dlp::kernel_frame::kernelOpsMetaData& op);
+
+    dlp::jit::jitGeneratorError zeroPointImpl(
+        dlp::kernel_frame::kernelOpsMetaData& op);
+
     template<typename T>
     dlp::jit::jitGeneratorError scaleFactorScalarImpl();
 
@@ -182,7 +201,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
         columnVector
     };
 
-    template<typename T>
+    template<typename sfDt, typename matOpDt>
     dlp::jit::jitGeneratorError matOpScaleFactorImpl(matOpType      opType,
                                                      matOpScaleType sclType);
 
@@ -251,7 +270,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     Xbyak::Label  erf_end;
     Xbyak::Label  tables;
-    Xbyak::Opmask maskReg;
+    Xbyak::Opmask maskReg = Xbyak::Opmask(3);
 
     Xbyak::Ymm ymmMask;
 

@@ -269,7 +269,7 @@ kernelOpsGeneratorX86<KType>::biasColMajorImpl()
     for (int i = 0; i < MR; i++) {
         RegType bcstReg = popAndGetScratchReg();
         if constexpr (std::is_same_v<T, float>) {
-            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp1 + i * sizeof(float)]);
+            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp1 + i * sizeof(T)]);
         } else {
             return jitGeneratorError::notSupported;
         }
@@ -309,7 +309,6 @@ kernelOpsGeneratorX86<KType>::bias(kernelOpsMetaData& op)
                             + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
         DISPATCH_BY_DATATYPE(op.paramStorageDt, biasColMajorImpl);
     }
-    return jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
@@ -479,7 +478,7 @@ kernelOpsGeneratorX86<KType>::scaleFactorColMajorImpl()
     for (int i = 0; i < MR; i++) {
         RegType bcstReg = popAndGetScratchReg();
         if constexpr (std::is_same_v<T, float>) {
-            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp3 + i * sizeof(float)]);
+            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp3 + i * sizeof(T)]);
         } else {
             return jitGeneratorError::notSupported;
         }
@@ -553,7 +552,7 @@ kernelOpsGeneratorX86<KType>::zeroPointColMajorImpl()
     for (int i = 0; i < MR; i++) {
         RegType bcstReg = popAndGetScratchReg();
         if constexpr (std::is_same_v<T, float>) {
-            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp3 + i * sizeof(float)]);
+            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp3 + i * sizeof(T)]);
         } else {
             return jitGeneratorError::notSupported;
         }
@@ -569,7 +568,7 @@ kernelOpsGeneratorX86<KType>::zeroPointColMajorImpl()
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-kernelOpsGeneratorX86<KType>::downscale(kernelOpsMetaData& op)
+kernelOpsGeneratorX86<KType>::scaleFactorImpl(kernelOpsMetaData& op)
 {
     jit_->mov(
         regTmp1,
@@ -582,7 +581,13 @@ kernelOpsGeneratorX86<KType>::downscale(kernelOpsMetaData& op)
     } else {
         DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorColMajorImpl);
     }
+    return jitGeneratorError::success;
+}
 
+template<utils::kernelInstrType KType>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::zeroPointImpl(kernelOpsMetaData& op)
+{
     jit_->mov(regTmp1,
               jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
     if (op.scalarZeroPointRequired) {
@@ -592,19 +597,31 @@ kernelOpsGeneratorX86<KType>::downscale(kernelOpsMetaData& op)
     } else {
         DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointColMajorImpl);
     }
-
     return jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
-template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::downscale(kernelOpsMetaData& op)
+{
+    jitGeneratorError err_sf = scaleFactorImpl(op);
+    jitGeneratorError err_zp = zeroPointImpl(op);
+    if (err_sf != jitGeneratorError::success
+        || err_zp != jitGeneratorError::success) {
+        return jitGeneratorError::notSupported;
+    }
+    return jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+template<typename sfDt, typename matOpDt>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::matOpScaleFactorImpl(matOpType      opType,
                                                    matOpScaleType sclType)
 {
-    md_t sf_reg = scratchBcstRegIdx;
+    md_t sf_reg = scratchLoadRegIdx;
     if (sclType == matOpScaleType::scalar) {
-        if constexpr (std::is_same_v<T, float>) {
+        if constexpr (std::is_same_v<sfDt, float>) {
             jit_->vbroadcastss(RegType(sf_reg), jit_->ptr[regTmp1]);
         } else {
             return jitGeneratorError::notSupported;
@@ -613,7 +630,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImpl(matOpType      opType,
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
                                  + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
-    jit_->lea(regTmp7, jit_->ptr[regTmp7 * sizeof(float)]);
+    jit_->lea(regTmp7, jit_->ptr[regTmp7 * sizeof(matOpDt)]);
     jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
                                  + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
 
@@ -621,7 +638,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImpl(matOpType      opType,
         jit_->lea(regTmp3, jit_->ptr[regTmp1]);
         jit_->add(regTmp3, regTmp7);
         // load NR elements of scale factor
-        if constexpr (std::is_same_v<T, float>) {
+        if constexpr (std::is_same_v<sfDt, float>) {
             loadRowF32(regTmp3, sf_reg);
         } else {
             return jitGeneratorError::notSupported;
@@ -636,7 +653,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImpl(matOpType      opType,
               jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args3)]);
     // ldm is pointer, need to dereference again to get actual ldm value.
     jit_->mov(regTmp3, jit_->ptr[regTmp3]);
-    jit_->lea(regTmp3, jit_->ptr[regTmp3 * sizeof(float)]);
+    jit_->lea(regTmp3, jit_->ptr[regTmp3 * sizeof(matOpDt)]);
 
     jit_->imul(regTmp6, regTmp3);
     jit_->add(regTmp7, regTmp6);
@@ -646,24 +663,42 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImpl(matOpType      opType,
         jit_->mov(regTmp6,
                   jit_->ptr[regkernelOpsAttr
                             + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-        jit_->lea(regTmp6, jit_->ptr[regTmp6 * sizeof(float)]);
+        jit_->lea(regTmp6, jit_->ptr[regTmp6 * sizeof(sfDt)]);
         jit_->add(regTmp6, regTmp1);
     }
 
-    auto opLambda = [&](matOpType opType, int sfRegIdx, int scratchLoadRegIdx,
-                        int accumRegIdx, int sclIdx, int loadIdx) -> void {
+    auto opLambda = [&](matOpType opType, int sfRegIdx, int matRegIdx,
+                        int accumRegIdx, int sclIdx, int loadIdx,
+                        bool useMask) -> jitGeneratorError {
         // load matOp elements
-        jit_->vmovups(RegType(scratchLoadRegIdx), jit_->ptr[regTmp2 + loadIdx]);
+        if constexpr (std::is_same_v<matOpDt, float>) {
+            if (useMask) {
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    jit_->vmaskmovps(RegType(matRegIdx), ymmMask,
+                                     jit_->ptr[regTmp2 + loadIdx]);
+                } else {
+                    jit_->vmovups(RegType(matRegIdx) | maskReg,
+                                  jit_->ptr[regTmp2 + loadIdx]);
+                }
+            } else {
+                jit_->vmovups(RegType(matRegIdx), jit_->ptr[regTmp2 + loadIdx]);
+            }
+        } else {
+            return jitGeneratorError::notSupported;
+        }
+
         // multiply scale factor with matOp
-        jit_->vmulps(RegType(scratchLoadRegIdx), RegType(scratchLoadRegIdx),
+        jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
                      RegType(sfRegIdx + sclIdx));
         if (opType == matOpType::matOpAdd) {
             jit_->vaddps(RegType(accumRegIdx), RegType(accumRegIdx),
-                         RegType(scratchLoadRegIdx));
+                         RegType(matRegIdx));
         } else if (opType == matOpType::matOpMul) {
             jit_->vmulps(RegType(accumRegIdx), RegType(accumRegIdx),
-                         RegType(scratchLoadRegIdx));
+                         RegType(matRegIdx));
         }
+        return jitGeneratorError::success;
     };
 
     int sclIdx = 0;
@@ -671,9 +706,9 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImpl(matOpType      opType,
         if (sclType == matOpScaleType::columnVector) {
             // broadcast scale factor along the m dimension since the A and B
             // matrices are swapped for column major inputs.
-            if constexpr (std::is_same_v<T, float>) {
+            if constexpr (std::is_same_v<sfDt, float>) {
                 jit_->vbroadcastss(RegType(sf_reg),
-                                   jit_->ptr[regTmp6 + i * sizeof(float)]);
+                                   jit_->ptr[regTmp6 + i * sizeof(sfDt)]);
             } else {
                 return jitGeneratorError::notSupported;
             }
@@ -682,17 +717,25 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImpl(matOpType      opType,
             if (sclType == matOpScaleType::rowVector) {
                 sclIdx = j;
             }
-            opLambda(opType, sf_reg, scratchLoadRegIdx,
-                     (cRegStartIdx + (i * numRegsPerRow) + j), sclIdx,
-                     (j * RegBytes));
+            jitGeneratorError err =
+                opLambda(opType, sf_reg, scratchBcstRegIdx,
+                         (cRegStartIdx + (i * numRegsPerRow) + j), sclIdx,
+                         (j * RegBytes), false);
+            if (err != jitGeneratorError::success) {
+                return err;
+            }
         }
         if (numMaskRegsPerRow > 0) {
             if (sclType == matOpScaleType::rowVector) {
                 sclIdx = numFullRegsPerRow;
             }
-            opLambda(opType, sf_reg, scratchLoadRegIdx,
-                     (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow),
-                     sclIdx, (numFullRegsPerRow * RegBytes));
+            jitGeneratorError err = opLambda(
+                opType, sf_reg, scratchBcstRegIdx,
+                (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow),
+                sclIdx, (numFullRegsPerRow * RegBytes), true);
+            if (err != jitGeneratorError::success) {
+                return err;
+            }
         }
         // add ldm to matadd pointer
         jit_->add(regTmp2, regTmp3);
@@ -709,14 +752,17 @@ kernelOpsGeneratorX86<KType>::matadd(kernelOpsMetaData& op)
         jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
 
     if (op.scalarScaleFactorRequired) {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, matOpScaleFactorImpl,
-                             matOpType::matOpAdd, matOpScaleType::scalar);
+        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
+                                  matOpScaleFactorImpl, matOpType::matOpAdd,
+                                  matOpScaleType::scalar);
     } else if (op.cMatFormat == storageFormat::rowMajor) {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, matOpScaleFactorImpl,
-                             matOpType::matOpAdd, matOpScaleType::rowVector);
+        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
+                                  matOpScaleFactorImpl, matOpType::matOpAdd,
+                                  matOpScaleType::rowVector);
     } else {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, matOpScaleFactorImpl,
-                             matOpType::matOpAdd, matOpScaleType::columnVector);
+        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
+                                  matOpScaleFactorImpl, matOpType::matOpAdd,
+                                  matOpScaleType::columnVector);
     }
 
     return jitGeneratorError::success;
@@ -731,14 +777,17 @@ kernelOpsGeneratorX86<KType>::matmul(kernelOpsMetaData& op)
         jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
 
     if (op.scalarScaleFactorRequired) {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, matOpScaleFactorImpl,
-                             matOpType::matOpMul, matOpScaleType::scalar);
+        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
+                                  matOpScaleFactorImpl, matOpType::matOpMul,
+                                  matOpScaleType::scalar);
     } else if (op.cMatFormat == storageFormat::rowMajor) {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, matOpScaleFactorImpl,
-                             matOpType::matOpMul, matOpScaleType::rowVector);
+        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
+                                  matOpScaleFactorImpl, matOpType::matOpMul,
+                                  matOpScaleType::rowVector);
     } else {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, matOpScaleFactorImpl,
-                             matOpType::matOpMul, matOpScaleType::columnVector);
+        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
+                                  matOpScaleFactorImpl, matOpType::matOpMul,
+                                  matOpScaleType::columnVector);
     }
 
     return jitGeneratorError::success;
