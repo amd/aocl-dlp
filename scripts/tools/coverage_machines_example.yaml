@@ -1,0 +1,121 @@
+# AOCL-DLP Multi-Machine Coverage Configuration Example
+# This is a practical example showing how to configure coverage collection
+# from multiple build machines
+
+# Global settings for coverage aggregation
+global:
+  # Temporary directory for collecting coverage data
+  temp_dir: "/tmp/aocl_coverage_aggregate"
+
+  # Output directory for final aggregated coverage reports
+  output_dir: "coverage_reports_aggregated"
+
+  # Clean temp directory after successful aggregation
+  cleanup_temp: true
+
+  # Timeout for rsync operations (5 minutes)
+  rsync_timeout: 300
+
+  # Number of parallel data collection operations
+  parallel_limit: 3
+
+  # SSH connection timeout
+  ssh_timeout: 30
+
+# Coverage data sources configuration
+sources:
+  # Example 1: Remote build server with standard SSH setup
+  - name: "linux-x86-64-server"
+    type: "remote"
+    host: "build01.company.com"
+    username: "builduser"
+    build_path: "/home/builduser/aocl-dlp/build"
+    ssh_port: 22
+    compression: true
+    archive_mode: true
+    validate_connection: true
+    rsync_extra_opts: ["--exclude=*.tmp", "--exclude=CMakeFiles/CMakeTmp"]
+
+  # Example 2: Remote server with custom SSH key and port
+  - name: "arm-cross-compile"
+    type: "remote"
+    host: "arm-builder.internal"
+    username: "developer"
+    build_path: "/opt/cross-builds/aocl-dlp/build"
+    ssh_port: 2222
+    ssh_key: "~/.ssh/arm_builder_key"
+    compression: false  # Local network, skip compression for speed
+    archive_mode: true
+    validate_connection: true
+
+  # Example 3: Server accessible via jump host
+  - name: "secure-build-env"
+    type: "remote"
+    host: "10.0.1.100"
+    username: "secure_user"
+    build_path: "/secure/builds/aocl-dlp/build"
+    ssh_proxy_jump: "jumphost.company.com"
+    ssh_extra_opts: ["-o", "StrictHostKeyChecking=no"]
+    compression: true
+    archive_mode: true
+    validate_connection: true
+
+  # Example 4: Local build directory
+  - name: "local-debug-build"
+    type: "local"
+    build_path: "./build"
+    archive_mode: true
+
+  # Example 5: Another local build (e.g., different configuration)
+  - name: "local-release-build"
+    type: "local"
+    build_path: "./build-release"
+    archive_mode: true
+
+  # Example 6: Docker container build (via SSH to Docker host)
+  - name: "docker-ubuntu-build"
+    type: "remote"
+    host: "docker-host.company.com"
+    username: "docker"
+    build_path: "/var/lib/docker/volumes/aocl_build/_data/build"
+    compression: true
+    archive_mode: true
+    validate_connection: true
+    rsync_extra_opts: ["--exclude=*.docker*"]
+
+# Aggregation settings
+aggregation:
+  # How to merge coverage data (add is recommended)
+  merge_strategy: "add"
+
+  # Normalize file paths relative to project root
+  normalize_paths: true
+
+  # Additional exclusion patterns beyond defaults
+  extra_exclusions:
+    - "*/debug/*"
+    - "*/release/*"
+    - "*_backup*"
+    - "*/container_builds/*"
+
+  # Coverage threshold for warnings
+  coverage_threshold: 80.0
+
+  # Keep individual reports for each source
+  preserve_individual_reports: false
+
+# Advanced settings
+advanced:
+  # Retry failed transfers
+  retry_failed: true
+  max_retries: 2
+  retry_delay: 15  # seconds between retries
+
+  # Verify file integrity after transfer
+  verify_checksums: false  # Set to true for critical environments
+
+  # Logging level
+  log_level: "INFO"
+
+  # Maximum total download size (0 = unlimited)
+  max_download_size: 0

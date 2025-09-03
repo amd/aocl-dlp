@@ -1,0 +1,135 @@
+# AOCL-DLP Multi-Machine Coverage Configuration Schema
+# This file defines the structure for coverage collection across multiple machines
+
+# Global settings for coverage aggregation
+global:
+  # Temporary directory for collecting coverage data (default: /tmp/aocl_coverage_aggregate)
+  temp_dir: "/tmp/aocl_coverage_aggregate"
+
+  # Output directory for final aggregated coverage reports
+  output_dir: "coverage_reports_aggregated"
+
+  # Whether to clean temp directory after successful aggregation
+  cleanup_temp: true
+
+  # Timeout for rsync operations (in seconds)
+  rsync_timeout: 300
+
+  # Number of parallel rsync operations (default: 3)
+  parallel_limit: 3
+
+  # SSH connection timeout (in seconds)
+  ssh_timeout: 30
+
+# Coverage data sources - can be remote machines or local paths
+sources:
+  # Example remote machine configuration
+  - name: "build-server-1"
+    type: "remote"
+    host: "192.168.1.100"
+    username: "builduser"
+    build_path: "/path/to/aocl-dlp/build"
+
+    # Optional SSH port (default: 22)
+    ssh_port: 22
+
+    # Optional SSH key file (if not using default)
+    ssh_key: "~/.ssh/id_rsa"
+
+    # Rsync options
+    compression: true      # Use compression during transfer
+    archive_mode: true     # Preserve permissions, timestamps, etc.
+
+    # Additional rsync options (optional)
+    rsync_extra_opts: ["--exclude=*.tmp", "--exclude=CMakeFiles"]
+
+    # Connection validation (ping before attempting rsync)
+    validate_connection: true
+
+  # Example for another remote machine with different settings
+  - name: "build-server-2"
+    type: "remote"
+    host: "build-node-02.company.com"
+    username: "developer"
+    build_path: "/home/developer/projects/aocl-dlp/build"
+    compression: false     # Faster if on local network
+    archive_mode: true
+    validate_connection: true
+
+  # Example local path configuration
+  - name: "local-build"
+    type: "local"
+    build_path: "./build"
+
+    # For local paths, only archive_mode is relevant
+    archive_mode: true
+
+  # Example for a machine accessible via SSH jump host
+  - name: "restricted-server"
+    type: "remote"
+    host: "10.0.1.50"
+    username: "testuser"
+    build_path: "/opt/builds/aocl-dlp/build"
+    ssh_port: 2222
+
+    # SSH ProxyJump configuration (optional)
+    ssh_proxy_jump: "jumphost.company.com"
+
+    compression: true
+    archive_mode: true
+
+    # Custom SSH options (optional)
+    ssh_extra_opts: ["-o", "StrictHostKeyChecking=no"]
+
+# Aggregation settings
+aggregation:
+  # LCOV merge strategy
+  merge_strategy: "add"  # Options: "add" (default), "merge"
+
+  # Whether to normalize paths relative to project root
+  normalize_paths: true
+
+  # Custom exclusion patterns (in addition to defaults)
+  extra_exclusions:
+    - "*/debug/*"
+    - "*/release/*"
+    - "*_backup*"
+
+  # Minimum coverage threshold for warnings
+  coverage_threshold: 80.0
+
+  # Generate individual source reports before aggregation
+  preserve_individual_reports: false
+
+# Notification settings (optional)
+notifications:
+  # Email notification on completion (requires configured mail system)
+  email:
+    enabled: false
+    recipients: ["team@company.com"]
+    smtp_server: "smtp.company.com"
+
+  # Slack webhook notification (optional)
+  slack:
+    enabled: false
+    webhook_url: "https://hooks.slack.com/services/..."
+    channel: "#build-notifications"
+
+# Advanced settings
+advanced:
+  # Retry failed rsync operations
+  retry_failed: true
+  max_retries: 3
+  retry_delay: 10  # seconds
+
+  # Verify integrity of transferred files
+  verify_checksums: true
+
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  log_level: "INFO"
+
+  # Custom working directory (default: current directory)
+  working_directory: null
+
+  # Maximum total size to download (in MB, 0 = unlimited)
+  max_download_size: 0

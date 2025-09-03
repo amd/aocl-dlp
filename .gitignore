@@ -8,7 +8,7 @@ venv
 .venv
 
 # Ignore build directories
-*build*
+*build*/
 
 # Ignore install directories
 *install*
@@ -37,3 +37,7 @@ coverage
 *.txt
 *.css
 *.info
+
+# Docker tool generated files
+scripts/tools/Dockerfile
+.buildx-cache/

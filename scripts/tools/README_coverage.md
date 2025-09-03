@@ -334,9 +334,254 @@ When working with the project's memory bank system, update the relevant document
 echo "Generated comprehensive coverage reports in coverage_reports/" >> memory-bank/progress.md
 ```
 
+## Tool 3: Multi-Machine Coverage Aggregator (`multi_machine_coverage.py`)
+
+The multi-machine coverage aggregator allows you to collect coverage data from multiple build machines and combine them into a unified coverage report. This is particularly useful for distributed builds, cross-platform testing, or CI/CD environments with multiple build agents.
+
+### Configuration
+
+Create a YAML configuration file defining your coverage sources:
+
+```yaml
+# coverage_machines.yaml
+global:
+  temp_dir: "/tmp/aocl_coverage_aggregate"
+  output_dir: "coverage_reports_aggregated"
+  parallel_limit: 3
+
+sources:
+  # Remote build server
+  - name: "linux-server-1"
+    type: "remote"
+    host: "192.168.1.100"
+    username: "builduser"
+    build_path: "/path/to/aocl-dlp/build"
+    compression: true
+    archive_mode: true
+
+  # Local build directory
+  - name: "local-build"
+    type: "local"
+    build_path: "./build"
+    archive_mode: true
+```
+
+### Basic Usage
+
+```bash
+# Create example configuration
+./scripts/tools/multi_machine_coverage.py --create-example-config coverage_machines.yaml
+
+# Run multi-machine coverage aggregation
+./scripts/tools/multi_machine_coverage.py --config coverage_machines.yaml
+
+# With verbose output
+./scripts/tools/multi_machine_coverage.py --config coverage_machines.yaml --verbose
+
+# Custom output directory
+./scripts/tools/multi_machine_coverage.py --config coverage_machines.yaml --output-dir ./combined_coverage
+```
+
+### Advanced Configuration Options
+
+#### Source Types
+
+**Remote Sources:**
+```yaml
+- name: "build-server-1"
+  type: "remote"
+  host: "build01.company.com"
+  username: "builduser"
+  build_path: "/home/builduser/aocl-dlp/build"
+  ssh_port: 22                    # Custom SSH port
+  ssh_key: "~/.ssh/build_key"     # Custom SSH key
+  ssh_proxy_jump: "jumphost.com"  # SSH jump host
+  compression: true               # Enable compression
+  archive_mode: true              # Preserve file attributes
+  validate_connection: true       # Test connection before transfer
+```
+
+**Local Sources:**
+```yaml
+- name: "local-debug"
+  type: "local"
+  build_path: "./build-debug"
+  archive_mode: true
+```
+
+#### Aggregation Settings
+
+```yaml
+aggregation:
+  merge_strategy: "add"              # How to combine coverage data
+  normalize_paths: true              # Normalize paths to project root
+  extra_exclusions:                  # Additional exclusion patterns
+    - "*/debug/*"
+    - "*_backup*"
+  coverage_threshold: 80.0           # Warning threshold
+  preserve_individual_reports: false # Keep per-source reports
+```
+
+#### Advanced Features
+
+```yaml
+advanced:
+  retry_failed: true        # Retry failed transfers
+  max_retries: 3           # Maximum retry attempts
+  retry_delay: 10          # Seconds between retries
+  verify_checksums: true   # Verify file integrity
+  log_level: "INFO"        # Logging verbosity
+  max_download_size: 0     # Size limit (0 = unlimited)
+```
+
+### Command Line Options
+
+| Option | Description |
+|--------|-------------|
+| `--config FILE` | YAML configuration file |
+| `--create-example-config FILE` | Create example configuration |
+| `--output-dir DIR` | Override output directory |
+| `--temp-dir DIR` | Override temporary directory |
+| `--verbose` | Enable verbose output |
+| `--dry-run` | Show what would be done without executing |
+
+### SSH Configuration
+
+For seamless operation with remote sources, configure SSH key-based authentication:
+
+```bash
+# Generate SSH key pair
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/aocl_build_key
+
+# Copy public key to remote servers
+ssh-copy-id -i ~/.ssh/aocl_build_key.pub builduser@build-server.com
+
+# Test connection
+ssh -i ~/.ssh/aocl_build_key builduser@build-server.com "echo 'Connection successful'"
+```
+
+For jump hosts, add to your `~/.ssh/config`:
+```
+Host build-server
+    HostName internal-build-server.com
+    User builduser
+    ProxyJump jumphost.company.com
+    IdentityFile ~/.ssh/aocl_build_key
+```
+
+### Output Structure
+
+The aggregator generates:
+```
+coverage_reports_aggregated/
+├── merged_coverage.info      # Raw merged LCOV data
+├── coverage.info            # Filtered LCOV data
+├── summary.txt              # Text summary with stats
+├── html/                    # Combined HTML report
+│   ├── index.html          # Main coverage page
+│   └── ...                 # Per-file coverage pages
+└── individual_<source>/     # Per-source reports (if enabled)
+    └── html/
+```
+
+### Multi-Machine Workflow Example
+
+Here's a complete workflow for distributed coverage collection:
+
+```bash
+# 1. Build with coverage on multiple machines
+# On each build machine:
+cmake -B build -DCMAKE_BUILD_TYPE=Coverage -DCMAKE_CXX_COMPILER=g++ -DCMAKE_C_COMPILER=gcc
+cmake --build build
+./build/tests/classic/test_gemm
+
+# 2. Create configuration file
+./scripts/tools/multi_machine_coverage.py --create-example-config machines.yaml
+
+# 3. Edit configuration to match your environment
+vim machines.yaml
+
+# 4. Run aggregation
+./scripts/tools/multi_machine_coverage.py --config machines.yaml --verbose
+
+# 5. View combined results
+# HTML report: coverage_reports_aggregated/html/index.html
+# Summary: coverage_reports_aggregated/summary.txt
+```
+
+### Integration with CI/CD
+
+Example GitHub Actions workflow:
+
+```yaml
+- name: Aggregate Multi-Machine Coverage
+  run: |
+    # Create configuration for CI environment
+    cat > ci_coverage.yaml << EOF
+    global:
+      temp_dir: "/tmp/ci_coverage"
+      output_dir: "aggregated_coverage"
+    sources:
+      - name: "linux-build"
+        type: "local"
+        build_path: "./build-linux"
+      - name: "windows-build"
+        type: "remote"
+        host: "windows-runner.company.com"
+        username: "runner"
+        build_path: "C:/builds/aocl-dlp/build"
+    EOF
+
+    # Run aggregation
+    ./scripts/tools/multi_machine_coverage.py --config ci_coverage.yaml
+
+- name: Upload Combined Coverage
+  uses: actions/upload-artifact@v3
+  with:
+    name: combined-coverage-report
+    path: aggregated_coverage/html/
+```
+
+### Troubleshooting Multi-Machine Coverage
+
+#### Common Issues
+
+1. **SSH connection failures**
+   ```
+   Error: SSH connection failed for build-server: Permission denied
+   ```
+   **Solution**: Ensure SSH keys are properly configured and accessible
+
+2. **No coverage data found**
+   ```
+   Warning: No coverage data found in build-server:/path/to/build
+   ```
+   **Solution**: Verify builds were done with `CMAKE_BUILD_TYPE=Coverage` and tests were run
+
+3. **Transfer timeouts**
+   ```
+   Error: Transfer timeout for build-server
+   ```
+   **Solution**: Increase `rsync_timeout` in configuration or check network connectivity
+
+4. **Path normalization issues**
+   ```
+   Warning: Failed to normalize paths
+   ```
+   **Solution**: Ensure all builds use consistent relative paths from project root
+
+#### Debugging Tips
+
+- Use `--verbose` flag for detailed logging
+- Test connections with `--dry-run` before actual collection
+- Check individual source reports with `preserve_individual_reports: true`
+- Verify SSH connectivity manually before running aggregation
+- Monitor network bandwidth and adjust `parallel_limit` accordingly
+
 ## File Locations
 
-- **Tools**: `scripts/tools/coverage_to_html.sh`, `scripts/tools/coverage_analyzer.py`
+- **Tools**: `scripts/tools/coverage_to_html.sh`, `scripts/tools/coverage_analyzer.py`, `scripts/tools/multi_machine_coverage.py`
+- **Configuration**: `scripts/tools/coverage_config_schema.yaml`, `scripts/tools/coverage_machines_example.yaml`
 - **Common Infrastructure**: `scripts/common/config.py`, `scripts/common/utils.py`
 - **CMake Support**: `cmake/dlp_compiler_flags_linux.cmake`
 - **Documentation**: This file (`scripts/tools/README_coverage.md`)

@@ -1,0 +1,39 @@
+# AOCL-DLP Development Environment Dockerfile Template
+# This file will be processed by build.py to generate the final Dockerfile
+
+FROM {BASE_IMAGE}
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TERM=xterm-256color
+
+# Update package lists and install system packages
+RUN apt-get update && apt-get install -y \
+    {SYSTEM_PACKAGES} \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Configure SSH
+RUN mkdir -p /var/run/sshd \
+    && sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config \
+    && sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/' /etc/ssh/sshd_config \
+    && sed -i 's/#Port 22/Port {SSH_PORT}/' /etc/ssh/sshd_config
+
+# Create workspace directory
+RUN mkdir -p {WORKSPACE_MOUNT}
+
+# Set up SSH keys directory for root
+RUN mkdir -p /root/.ssh \
+    && chmod 700 /root/.ssh
+
+# Stay as root user (no USER directive needed)
+
+# Set working directory
+WORKDIR {WORKSPACE_MOUNT}
+
+# Expose SSH port
+EXPOSE {SSH_PORT}
+
+# Default command
+CMD ["/bin/bash"]
