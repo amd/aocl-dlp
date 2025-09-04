@@ -31,7 +31,6 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "kernels/lpgemm_utils_kernels.h"
 #include "lpgemm_types.h"
-#include "sys_utils/dlp_cpu_arch.h"
 
 void
 aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx)

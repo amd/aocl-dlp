@@ -28,6 +28,7 @@
 
 #include <string.h>
 
+#include "bindings/c_wrappers/capi_env_config.h"
 #include "logging/lpgemm_logger.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
@@ -317,7 +318,8 @@ lpgemm_write_logger_time_break_fn(FILE* fd, double stime)
 void
 _lpgemm_init_logger()
 {
-    lpgemm_logger_enabled = dlp_get_env_var("AOCL_ENABLE_LPGEMM_LOGGER", FALSE);
+    lpgemm_logger_enabled =
+        dlp_env_get_bool("AOCL_ENABLE_LPGEMM_LOGGER", FALSE);
 }
 
 void

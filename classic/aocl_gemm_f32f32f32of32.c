@@ -37,7 +37,6 @@
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
-#include "sys_utils/dlp_cpu_arch.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 
 static inline bool
@@ -310,16 +309,14 @@ aocl_gemm_f32f32f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32F32F32OF32);
-    lcntx_g->dlp_kernel_hndl.kernel_base = NULL;
 
-    // Only enable JIT kernels if AOCL_ENABLE_INSTRUCTIONS is not set.
-    if (dlp_aocl_enable_instruction_query() == FALSE) {
-        lcntx_g->dlp_kernel_hndl = dlp_init_and_get_kernel_hndl(
-            DLP_KERNEL_F32F32F32OF32, order, mtag_a_use, mtag_b_use, m_use,
-            n_use, k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use,
-            cs_c_use, (void*)&alpha, (void*)&beta, post_op_list,
-            lcntx_g->blksz.MR, lcntx_g->blksz.NR, lcntx_g->blksz.KC);
-    }
+    // Initialize DLP Plus kernel path.
+    lcntx_g->dlp_kernel_hndl.kernel_base = NULL;
+    lcntx_g->dlp_kernel_hndl             = dlp_init_and_get_kernel_hndl(
+        DLP_KERNEL_F32F32F32OF32, order, mtag_a_use, mtag_b_use, m_use, n_use,
+        k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
+        (void*)&alpha, (void*)&beta, post_op_list, lcntx_g->blksz.MR,
+        lcntx_g->blksz.NR, lcntx_g->blksz.KC);
 
     if (is_single_thread(&rntm_g) == TRUE) {
         if (is_tiny_input_f32(m_use, n_use, k_use, lcntx_g) == TRUE) {

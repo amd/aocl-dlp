@@ -34,7 +34,6 @@
 #include "f32f32f32/lpgemm_reorder_f32.h"
 #include "gemm_utils/lpgemm_utils.h"
 #include "kernels/f32f32f32/lpgemm_pack_f32.h"
-#include "sys_utils/dlp_cpu_arch.h"
 
 #ifdef DLP_ENABLE_OPENMP
 #include <omp.h>

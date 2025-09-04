@@ -51,6 +51,7 @@ class gemmF32DEBackend : public iDEBackend
         kernel_frame::kernelDatatype          k_dtype);
     bool isZen4;
     bool isZen;
+    bool canGenerateKernelInfo;
 
   public:
     gemmF32DEBackend();

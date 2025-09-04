@@ -34,7 +34,6 @@
 #include "lpgemm_5loop_interface_apis.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
-#include "sys_utils/dlp_cpu_arch.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 
 void

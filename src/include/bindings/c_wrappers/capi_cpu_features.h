@@ -29,6 +29,8 @@
 #ifndef CAPI_CPU_FEATURES_H
 #define CAPI_CPU_FEATURES_H
 
+#include <stdbool.h>
+
 #include "classic/dlp_base_types.h"
 #include "classic/dlp_macros.h"
 
@@ -89,9 +91,10 @@ dlp_cpuid_is_similar_zen4_arch();
 bool
 dlp_cpuid_is_similar_zen_arch();
 
-// API to get
+// API to get underlying architecture (also modifiable
+// via AOCL_ENABLE_INSTRUCTIONS)
 dlp_arch_t
-dlp_cpuid_query_arch_id(void);
+dlp_get_arch(void);
 
 DLP_END_EXTERN_C
 
