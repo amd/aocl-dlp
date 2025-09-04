@@ -1,0 +1,117 @@
+#
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its contributors
+#    may be used to endorse or promote products derived from this software without
+#    specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
+# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+# AoclDlpConfigVersion.cmake - Version compatibility checking for AOCL-DLP
+#
+# This file is used by find_package(AoclDlp) to check version compatibility
+# between the requested version and the installed version.
+#
+# Version compatibility policy:
+# - Same major version is required (SameMajorVersion)
+# - Higher minor/patch versions are backward compatible
+# - Lower minor/patch versions may not be forward compatible
+
+# Set the version of the installed package
+set(PACKAGE_VERSION "@PROJECT_VERSION@")
+set(PACKAGE_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@")
+set(PACKAGE_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
+set(PACKAGE_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
+
+# Check if the requested version is compatible
+if(PACKAGE_FIND_VERSION)
+    # Split the requested version into components
+    string(REGEX MATCH "^([0-9]+)" PACKAGE_FIND_VERSION_MAJOR "${PACKAGE_FIND_VERSION}")
+    string(REGEX MATCH "^[0-9]+\\.([0-9]+)" PACKAGE_FIND_VERSION_MINOR_MATCH "${PACKAGE_FIND_VERSION}")
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.([0-9]+)" PACKAGE_FIND_VERSION_PATCH_MATCH "${PACKAGE_FIND_VERSION}")
+
+    if(PACKAGE_FIND_VERSION_MINOR_MATCH)
+        set(PACKAGE_FIND_VERSION_MINOR "${CMAKE_MATCH_1}")
+    else()
+        set(PACKAGE_FIND_VERSION_MINOR "0")
+    endif()
+
+    if(PACKAGE_FIND_VERSION_PATCH_MATCH)
+        set(PACKAGE_FIND_VERSION_PATCH "${CMAKE_MATCH_1}")
+    else()
+        set(PACKAGE_FIND_VERSION_PATCH "0")
+    endif()
+
+    # Check major version compatibility (must be the same)
+    if(NOT PACKAGE_FIND_VERSION_MAJOR STREQUAL PACKAGE_VERSION_MAJOR)
+        set(PACKAGE_VERSION_COMPATIBLE FALSE)
+        set(PACKAGE_VERSION_UNSUITABLE TRUE)
+        return()
+    endif()
+
+    # Check if the installed version is sufficient
+    # We use SameMajorVersion compatibility - same major, installed >= requested
+    if(PACKAGE_VERSION_MINOR GREATER PACKAGE_FIND_VERSION_MINOR)
+        # Installed minor version is higher - compatible
+        set(PACKAGE_VERSION_COMPATIBLE TRUE)
+    elseif(PACKAGE_VERSION_MINOR EQUAL PACKAGE_FIND_VERSION_MINOR)
+        # Same minor version - check patch version
+        if(PACKAGE_VERSION_PATCH GREATER_EQUAL PACKAGE_FIND_VERSION_PATCH)
+            set(PACKAGE_VERSION_COMPATIBLE TRUE)
+        else()
+            set(PACKAGE_VERSION_COMPATIBLE FALSE)
+        endif()
+    else()
+        # Installed minor version is lower - not compatible
+        set(PACKAGE_VERSION_COMPATIBLE FALSE)
+    endif()
+
+    # Check for exact version match
+    if(PACKAGE_FIND_VERSION STREQUAL PACKAGE_VERSION)
+        set(PACKAGE_VERSION_EXACT TRUE)
+    else()
+        set(PACKAGE_VERSION_EXACT FALSE)
+    endif()
+
+else()
+    # No specific version requested - any version is compatible
+    set(PACKAGE_VERSION_COMPATIBLE TRUE)
+    set(PACKAGE_VERSION_EXACT FALSE)
+endif()
+
+# Handle the EXACT keyword
+if(PACKAGE_FIND_VERSION_EXACT AND NOT PACKAGE_VERSION_EXACT)
+    set(PACKAGE_VERSION_COMPATIBLE FALSE)
+endif()
+
+# Provide detailed information about version compatibility
+if(NOT PACKAGE_VERSION_COMPATIBLE)
+    if(PACKAGE_FIND_VERSION_EXACT)
+        set(_aocl_dlp_version_msg "Exact version ${PACKAGE_FIND_VERSION} was requested, but installed version is ${PACKAGE_VERSION}")
+    elseif(PACKAGE_VERSION_UNSUITABLE)
+        set(_aocl_dlp_version_msg "Major version mismatch: requested ${PACKAGE_FIND_VERSION_MAJOR}.x, but installed version is ${PACKAGE_VERSION}")
+    else()
+        set(_aocl_dlp_version_msg "Requested version ${PACKAGE_FIND_VERSION} is higher than installed version ${PACKAGE_VERSION}")
+    endif()
+
+    if(NOT AoclDlp_FIND_QUIETLY)
+        message(STATUS "AOCL-DLP version compatibility check failed: ${_aocl_dlp_version_msg}")
+    endif()
+endif()

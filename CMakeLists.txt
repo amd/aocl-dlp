@@ -78,30 +78,48 @@ set(DLP_SRCS "")
 # Create the library target
 add_library(${PROJECT_NAME} SHARED ${DLP_SRCS})
 
-# Create the static library target
-add_library(${PROJECT_NAME}_static STATIC ${DLP_SRCS})
+# Create the static library target including object libraries
+add_library(${PROJECT_NAME}_static STATIC
+    ${DLP_SRCS}
+    $<TARGET_OBJECTS:aocl_dlp_classic>
+    $<TARGET_OBJECTS:aocl_dlp_plus>
+    $<TARGET_OBJECTS:dlp_kernel_zen>
+    $<TARGET_OBJECTS:dlp_kernel_zen4>
+)
 
 # Set OS dependant definitions/target properties dlp_compiler_flags_<platform>.cmake
 dlp_set_platform_options()
 
 # Link with the classic object library and dependencies
 target_link_libraries(${PROJECT_NAME}
-    PUBLIC
+    PRIVATE
         ${CLASSIC_TARGETS}
         ${DLP_PLUS_TARGETS}
     PUBLIC
-        dlp::openmp
         Threads::Threads
 )
 
-# Link with the classic object static library and dependencies
+# Apply OpenMP flags directly if enabled (without linking to interface target)
+if(DLP_ENABLE_OPENMP AND OpenMP_FOUND)
+    target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
+    if(OpenMP_CXX_LIBRARIES)
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_LIBRARIES})
+    endif()
+endif()
+
+# Link with dependencies for static library (no object libraries needed as they're included)
 target_link_libraries(${PROJECT_NAME}_static
     PUBLIC
-        ${CLASSIC_TARGETS}
-        ${DLP_PLUS_TARGETS}
-    PUBLIC
-        dlp::openmp
+        Threads::Threads
 )
+
+# Apply OpenMP flags directly if enabled (without linking to interface target)
+if(DLP_ENABLE_OPENMP AND OpenMP_FOUND)
+    target_compile_options(${PROJECT_NAME}_static PRIVATE ${OpenMP_CXX_FLAGS})
+    if(OpenMP_CXX_LIBRARIES)
+        target_link_libraries(${PROJECT_NAME}_static PRIVATE ${OpenMP_CXX_LIBRARIES})
+    endif()
+endif()
 
 # Add all sanitizers to the target
 dlp_add_all_sanitizers(${PROJECT_NAME} ${PROJECT_NAME}_static)
@@ -122,12 +140,33 @@ target_include_directories(${PROJECT_NAME}_static
         $<INSTALL_INTERFACE:include>
 )
 
-# Apply centralized compiler flags
-dlp_set_global_compile_flags(${PROJECT_NAME})
+# Apply centralized compiler flags directly to avoid interface target export issues
+# Get the generic compiler flags and apply them directly
+get_target_property(GENERIC_FLAGS dlp_compiler_flags INTERFACE_COMPILE_OPTIONS)
+if(GENERIC_FLAGS)
+    target_compile_options(${PROJECT_NAME} PRIVATE ${GENERIC_FLAGS})
+    target_compile_options(${PROJECT_NAME}_static PRIVATE ${GENERIC_FLAGS})
+endif()
+
+# Apply release-specific flags for Release builds
+get_target_property(RELEASE_FLAGS dlp_compiler_flags_release INTERFACE_COMPILE_OPTIONS)
+if(RELEASE_FLAGS AND CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_options(${PROJECT_NAME} PRIVATE ${RELEASE_FLAGS})
+    target_compile_options(${PROJECT_NAME}_static PRIVATE ${RELEASE_FLAGS})
+endif()
 
 # Apply installation rules from dlp_install.cmake
 dlp_install(${PROJECT_NAME})
 dlp_install(${PROJECT_NAME}_static)
+
+# Set up CMake package configuration variables
+set(AOCL_DLP_REQUIRED_COMPONENTS "aocl-dlp;aocl-dlp_static")
+set(AOCL_DLP_AVAILABLE_COMPONENTS "aocl-dlp;aocl-dlp_static")
+
+# Generate config header
+dlp_generate_config_header()
+# Install CMake package configuration files
+dlp_install_package_config()
 
 # Enable testing
 if(BUILD_TESTING)
@@ -160,9 +199,3 @@ endif()
 if(BUILD_SPHINX)
     dlp_generate_sphinx_docs()
 endif()
-
-# Generate config file with version info
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/aocl_dlp_config.h.in
-    ${CMAKE_CURRENT_BINARY_DIR}/include/aocl_dlp_config.h
-)

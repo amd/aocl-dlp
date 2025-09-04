@@ -50,12 +50,24 @@ foreach(source ${BENCH_SOURCES})
         # Create the executable
         add_executable(${exec_name} ${source} ${BENCH_HELPER_SOURCES})
 
+        # Set include directories for the benchmark executable
+        target_include_directories(${exec_name}
+            PRIVATE
+                ${CLASSIC_INCLUDES}
+                ${CMAKE_BINARY_DIR}/include  # For aocl_dlp_config.h
+        )
+
         # Link against the AOCL DLP library
         target_link_libraries(${exec_name}
             PRIVATE
                 aocl-dlp
                 $<$<BOOL:${UNIX}>:m>  # Link math library for any math functions (Unix-like platforms)
         )
+
+        # Link with OpenMP if it's enabled (benchmarks may use OpenMP functions directly)
+        if(TARGET OpenMP::OpenMP_C AND DLP_THREADING_MODEL STREQUAL "openmp")
+            target_link_libraries(${exec_name} PRIVATE OpenMP::OpenMP_C)
+        endif()
 
         # Set compile flags (ensuring all executables use -fPIC for consistency)
         set_target_properties(${exec_name} PROPERTIES

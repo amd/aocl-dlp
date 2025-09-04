@@ -1,0 +1,150 @@
+#
+# Copyright © Advanced Micro Devices, Inc., or its affiliates.
+#
+# Redistribution and use in source and binary forms, with or without modification,
+# are permitted provided that the following conditions are met:
+# 1. Redistributions of source code must retain the above copyright notice, this
+#    list of conditions and the following disclaimer.
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+#    this list of conditions and the following disclaimer in the documentation
+#    and/or other materials provided with the distribution.
+# 3. Neither the name of the copyright holder nor the names of its contributors
+#    may be used to endorse or promote products derived from this software without
+#    specific prior written permission.
+#
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+# ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+# WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+# ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (
+# INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS
+# OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+# THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+# NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
+# EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
+
+# AoclDlpConfig.cmake - CMake configuration file for AOCL-DLP
+#
+# This file is used by find_package(AoclDlp) to locate and configure
+# the AOCL Deep Learning Primitives library.
+#
+# After successful configuration, the following targets are available:
+#   AoclDlp::aocl-dlp        - Shared library target
+#   AoclDlp::aocl-dlp_static - Static library target
+#
+# Variables set by this configuration:
+#   AoclDlp_FOUND         - True if AOCL-DLP was found
+#   AoclDlp_VERSION       - Version of AOCL-DLP found
+#   AoclDlp_INCLUDE_DIRS  - Include directories for AOCL-DLP
+#   AoclDlp_LIBRARIES     - Libraries to link against (for legacy support)
+
+@PACKAGE_INIT@
+
+# Include required CMake modules
+include(CMakeFindDependencyMacro)
+
+# Set version information
+set(AoclDlp_VERSION @PROJECT_VERSION@)
+set(AoclDlp_VERSION_MAJOR @PROJECT_VERSION_MAJOR@)
+set(AoclDlp_VERSION_MINOR @PROJECT_VERSION_MINOR@)
+set(AoclDlp_VERSION_PATCH @PROJECT_VERSION_PATCH@)
+
+# Find required dependencies
+# These dependencies are required for AOCL-DLP to function properly
+
+# Find Threads (required for multi-threading support)
+find_dependency(Threads REQUIRED)
+
+# Find OpenMP if it was enabled during build
+# Note: OpenMP might be optional depending on build configuration
+set(DLP_ENABLE_OPENMP @DLP_ENABLE_OPENMP@)
+if(DLP_ENABLE_OPENMP)
+    # Try to find OpenMP with the same configuration as used during build
+    set(DLP_USE_LLVM_OPENMP @DLP_USE_LLVM_OPENMP@)
+    set(DLP_OPENMP_ROOT "@DLP_OPENMP_ROOT@")
+
+        # Store original CMAKE_PREFIX_PATH to restore later if needed
+    set(_AoclDlp_original_prefix_path "${CMAKE_PREFIX_PATH}")
+
+    # If custom OpenMP root was specified during build, add it to prefix path
+    if(DLP_OPENMP_ROOT AND NOT DLP_OPENMP_ROOT STREQUAL "")
+        list(APPEND CMAKE_PREFIX_PATH "${DLP_OPENMP_ROOT}")
+    endif()
+
+    find_dependency(OpenMP)
+
+    # Restore original prefix path
+    if(DLP_OPENMP_ROOT AND NOT DLP_OPENMP_ROOT STREQUAL "")
+        set(CMAKE_PREFIX_PATH "${_AoclDlp_original_prefix_path}")
+    endif()
+endif()
+
+# Get the directory where this config file is located
+get_filename_component(AoclDlp_CMAKE_DIR "${CMAKE_CURRENT_LIST_FILE}" PATH)
+
+# Include the targets file which defines the actual targets
+if(NOT TARGET AoclDlp::aocl-dlp)
+    include("${AoclDlp_CMAKE_DIR}/AoclDlpTargets.cmake")
+endif()
+
+# Add OpenMP as interface dependency for static library if enabled during build
+if(DLP_ENABLE_OPENMP AND OpenMP_FOUND AND TARGET AoclDlp::aocl-dlp_static)
+    set_property(TARGET AoclDlp::aocl-dlp_static APPEND PROPERTY INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_CXX)
+endif()
+
+# Add OpenMP as interface dependency for shared library if enabled during build
+if(DLP_ENABLE_OPENMP AND OpenMP_FOUND AND TARGET AoclDlp::aocl-dlp)
+    set_property(TARGET AoclDlp::aocl-dlp APPEND PROPERTY INTERFACE_LINK_LIBRARIES OpenMP::OpenMP_CXX)
+endif()
+
+# Set up legacy variables for compatibility
+get_target_property(AoclDlp_INCLUDE_DIRS AoclDlp::aocl-dlp INTERFACE_INCLUDE_DIRECTORIES)
+set(AoclDlp_LIBRARIES AoclDlp::aocl-dlp)
+
+# Provide both shared and static library targets as variables for legacy support
+set(AoclDlp_SHARED_LIBRARY AoclDlp::aocl-dlp)
+set(AoclDlp_STATIC_LIBRARY AoclDlp::aocl-dlp_static)
+
+# Check that all required components are available
+set(_aoclDlp_required_components @AOCL_DLP_REQUIRED_COMPONENTS@)
+set(_aoclDlp_available_components @AOCL_DLP_AVAILABLE_COMPONENTS@)
+
+# Verify all required targets exist
+foreach(_comp ${_aocl_dlp_required_components})
+    if(NOT TARGET AoclDlp::${_comp})
+        set(AoclDlp_FOUND False)
+        set(AoclDlp_NOT_FOUND_MESSAGE "Required component ${_comp} not found")
+        return()
+    endif()
+endforeach()
+
+# Handle component-specific requests
+if(AoclDlp_FIND_COMPONENTS)
+    foreach(_comp ${AoclDlp_FIND_COMPONENTS})
+        if(NOT _comp IN_LIST _aocl_dlp_available_components)
+            if(AoclDlp_FIND_REQUIRED_${_comp})
+                set(AoclDlp_FOUND False)
+                set(AoclDlp_NOT_FOUND_MESSAGE "Required component ${_comp} not available")
+                return()
+            else()
+                message(STATUS "Optional component ${_comp} not available")
+            endif()
+        endif()
+    endforeach()
+endif()
+
+# Mark package as found
+set(AoclDlp_FOUND True)
+
+# Print status message
+if(NOT AoclDlp_FIND_QUIETLY)
+    message(STATUS "Found AOCL-DLP: ${AoclDlp_VERSION}")
+    if(DLP_ENABLE_OPENMP AND OpenMP_FOUND)
+        message(STATUS "  OpenMP support: enabled")
+    else()
+        message(STATUS "  OpenMP support: disabled")
+    endif()
+    message(STATUS "  Shared library: AoclDlp::aocl-dlp")
+    message(STATUS "  Static library: AoclDlp::aocl-dlp_static")
+endif()

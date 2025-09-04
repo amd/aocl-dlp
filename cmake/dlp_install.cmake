@@ -26,15 +26,56 @@
 
 
 function(dlp_install target_name)
-    # Installation rules
+    # Installation rules with export set
     install(TARGETS ${target_name}
+        EXPORT AoclDlpTargets
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib
         RUNTIME DESTINATION bin
+        INCLUDES DESTINATION include
     )
 
     install(DIRECTORY include/
         DESTINATION include
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp"
     )
+endfunction()
+
+# Function to install CMake package configuration files
+function(dlp_install_package_config)
+    include(CMakePackageConfigHelpers)
+
+    # Set up the package configuration directory
+    set(AOCL_DLP_CMAKE_CONFIG_DIR "lib/cmake/AoclDlp")
+
+        # Configure the main config file
+    configure_package_config_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AoclDlpConfig.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/AoclDlpConfig.cmake"
+        INSTALL_DESTINATION "${AOCL_DLP_CMAKE_CONFIG_DIR}"
+        PATH_VARS CMAKE_INSTALL_PREFIX
+    )
+
+    # Configure the version file using our custom template
+    configure_file(
+        "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AoclDlpConfigVersion.cmake.in"
+        "${CMAKE_CURRENT_BINARY_DIR}/AoclDlpConfigVersion.cmake"
+        @ONLY
+    )
+
+    # Install the export targets file
+    install(EXPORT AoclDlpTargets
+        FILE AoclDlpTargets.cmake
+        NAMESPACE AoclDlp::
+        DESTINATION "${AOCL_DLP_CMAKE_CONFIG_DIR}"
+    )
+
+    # Install the configured config files
+    install(FILES
+        "${CMAKE_CURRENT_BINARY_DIR}/AoclDlpConfig.cmake"
+        "${CMAKE_CURRENT_BINARY_DIR}/AoclDlpConfigVersion.cmake"
+        DESTINATION "${AOCL_DLP_CMAKE_CONFIG_DIR}"
+    )
+
+    # Config header installation is handled in dlp_platform.cmake
 endfunction()

@@ -149,14 +149,16 @@ else()
   message(STATUS "Endianness: Little Endian")
 endif()
 
-# Add compiler and platform information to config header
-configure_file(
-  "${CMAKE_SOURCE_DIR}/cmake/aocl_dlp_config.h.in"
-  "${CMAKE_BINARY_DIR}/include/aocl_dlp_config.h"
-)
+function(dlp_generate_config_header)
+  # Add compiler and platform information to config header
+  configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/aocl_dlp_config.h.in"
+    "${CMAKE_BINARY_DIR}/include/aocl_dlp_config.h"
+  )
 
-# Install the generated config header
-install(
-  FILES "${CMAKE_BINARY_DIR}/include/aocl_dlp_config.h"
-  DESTINATION include
-)
+  # Install the generated config header
+  install(
+    FILES "${CMAKE_BINARY_DIR}/include/aocl_dlp_config.h"
+    DESTINATION include
+  )
+endfunction()

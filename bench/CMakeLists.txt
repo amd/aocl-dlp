@@ -35,6 +35,7 @@ set(BENCH_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/tests/include
     ${PROJECT_BINARY_DIR}/tests/classic
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CLASSIC_INCLUDES}
 )
 
 # Fetch google benchmark

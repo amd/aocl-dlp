@@ -154,6 +154,8 @@ function(dlp_setup_openmp)
         target_compile_options(dlp_openmp_dep INTERFACE -fopenmp)
     endif()
 
-    # Make the interface library globally accessible
+    # Make the interface library globally accessible and exportable
     add_library(dlp::openmp ALIAS dlp_openmp_dep)
+    # Set export name for the interface library
+    set_target_properties(dlp_openmp_dep PROPERTIES EXPORT_NAME openmp)
 endfunction()
