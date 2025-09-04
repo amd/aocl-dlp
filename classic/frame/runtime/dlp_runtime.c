@@ -28,6 +28,7 @@
 
 #include <stdlib.h>
 
+#include "bindings/c_wrappers/capi_env_config.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "runtime/dlp_runtime.h"
 #include "sys_utils/lpgemm_sys.h"
@@ -62,7 +63,7 @@ dlp_init_threading(void)
     // 4. Number of cores
     //
     // Try to read DLP_NUM_THREADS first.
-    nt = dlp_get_env_var("DLP_NUM_THREADS", -1);
+    nt = dlp_env_get_int("DLP_NUM_THREADS", -1);
 
     // Mark flag to denote threading set by DLP and not external entities
     // like OpenMP. This will be used to decide who control threading
@@ -86,8 +87,8 @@ dlp_init_threading(void)
 
     // Read the environment variables for the number of threads (ways
     // of parallelism) for each individual loop.
-    jc = dlp_get_env_var("DLP_JC_NT", -1);
-    ic = dlp_get_env_var("DLP_IC_NT", -1);
+    jc = dlp_env_get_int("DLP_JC_NT", -1);
+    ic = dlp_env_get_int("DLP_IC_NT", -1);
 
     if (jc != -1 || ic != -1) {
         jc = (jc == -1) ? 1 : jc;

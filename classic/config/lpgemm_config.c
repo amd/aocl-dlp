@@ -45,7 +45,6 @@
 #include "lpgemm_blksz_map.h"
 #include "lpgemm_func_map.h"
 #include "lpgemm_types.h"
-#include "sys_utils/dlp_cpu_arch.h"
 #include "sys_utils/lpgemm_sys.h"
 #include "threading/lpgemm_thread_utils.h"
 

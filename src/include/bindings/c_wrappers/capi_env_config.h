@@ -12,7 +12,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
@@ -26,10 +26,45 @@
  *
  */
 
-#ifndef DLP_CPU_ARCH_H
-#define DLP_CPU_ARCH_H
+#ifndef CAPI_ENV_CONFIG_H
+#define CAPI_ENV_CONFIG_H
 
+#include "classic/dlp_base_types.h"
+// Include the legacy type definition
+#include "bindings/c_wrappers/capi_cpu_features.h"
+
+DLP_BEGIN_EXTERN_C
+
+/**
+ * @brief C API wrapper for environment variable architecture parsing
+ * @param env_var_name Name of the environment variable to parse
+ * @return dlp_arch_t enum value, compatible with existing C code
+ *
+ * This function provides a drop-in replacement for
+ * dlp_env_get_var_arch_type() but uses the new C++ environment
+ * configuration manager internally.
+ */
 dlp_arch_t
-dlp_get_arch(void);
+dlp_env_get_var_arch_type(const char* env_var_name);
 
-#endif // DLP_CPU_ARCH_H
+/**
+ * @brief C API wrapper for integer environment variable access
+ * @param env_var_name Name of the environment variable to read
+ * @param default_value Default value if parsing fails
+ * @return Parsed integer value or default value
+ */
+md_t
+dlp_env_get_int(const char* env_var_name, int default_value);
+
+/**
+ * @brief C API wrapper for boolean environment variable access
+ * @param env_var_name Name of the environment variable to read
+ * @param default_value Default value if parsing fails
+ * @return 1 for true, 0 for false
+ */
+int
+dlp_env_get_bool(const char* env_var_name, int default_value);
+
+DLP_END_EXTERN_C
+
+#endif // CAPI_ENV_CONFIG_H

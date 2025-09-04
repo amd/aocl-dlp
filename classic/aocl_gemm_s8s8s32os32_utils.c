@@ -35,7 +35,6 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "lpgemm_types.h"
 #include "s8s8s32/lpgemm_reorder_s8.h"
-#include "sys_utils/dlp_cpu_arch.h"
 
 msz_t
 aocl_get_reorder_buf_size_s8s8s32os32(const char      order,

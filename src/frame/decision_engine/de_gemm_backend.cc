@@ -28,6 +28,7 @@
 
 #include <cctype>
 
+#include "arch_utils/arch_config_manager.hh"
 #include "cpu_utils/cpu_features.hh"
 #include "decision_engine/de_backend.hh"
 #include "kernel_frame/kernel_frame_base.hh"
@@ -38,27 +39,27 @@ namespace dlp::de {
 gemmF32DEBackend::gemmF32DEBackend()
     : isZen4(false)
     , isZen(false)
+    , canGenerateKernelInfo(true)
 {
-    // Determine if machine is zen4 or zen.
-    std::vector<cpu_utils::isaFeature> reqFeaturesZen4{
-        cpu_utils::isaFeature::sse3,       cpu_utils::isaFeature::ssse3,
-        cpu_utils::isaFeature::sse41,      cpu_utils::isaFeature::sse42,
-        cpu_utils::isaFeature::avx,        cpu_utils::isaFeature::fma3,
-        cpu_utils::isaFeature::avx2,       cpu_utils::isaFeature::avx512f,
-        cpu_utils::isaFeature::avx512dq,   cpu_utils::isaFeature::avx512cd,
-        cpu_utils::isaFeature::avx512bw,   cpu_utils::isaFeature::avx512vl,
-        cpu_utils::isaFeature::avx512vnni, cpu_utils::isaFeature::avx512bf16
-    };
-    isZen4 = cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeaturesZen4);
+    isZen4 = arch_utils::archConfigManager::getInstance().isZen4SimilarArch();
 
     // isZen is only checked for and set to true if machine is guaranteed
     // to not be zen4 or zen5.
     if (!isZen4) {
-        std::vector<cpu_utils::isaFeature> reqFeaturesZen{
-            cpu_utils::isaFeature::avx, cpu_utils::isaFeature::fma3,
-            cpu_utils::isaFeature::avx2
-        };
-        isZen = cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeaturesZen);
+        isZen = arch_utils::archConfigManager::getInstance().isZenSimilarArch();
+    }
+
+    // Check if the DE can be enabled depending on the underlying ISA
+    // and the configured arch.
+    auto thisArch = arch_utils::archConfigManager::getInstance().getArch();
+    if (isZen4 && (thisArch != arch_utils::ArchitectureType::Zen5)
+        && (thisArch != arch_utils::ArchitectureType::Zen4)) {
+        canGenerateKernelInfo = false;
+    }
+    if (isZen
+        && ((thisArch == arch_utils::ArchitectureType::Generic)
+            || (thisArch == arch_utils::ArchitectureType::Error))) {
+        canGenerateKernelInfo = false;
     }
 }
 
@@ -178,7 +179,7 @@ std::optional<kernel_frame::kernelInfo>
 gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
 {
     auto gemmIn = static_cast<gemmDEInput*>(in);
-    if (gemmIn == nullptr) {
+    if ((gemmIn == nullptr) || (!canGenerateKernelInfo)) {
         return std::nullopt;
     }
 

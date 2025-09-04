@@ -93,7 +93,4 @@ dlp_clock(void);
 DLP_CLASSIC_EXPORT double
 dlp_clock_min_diff(double time_min, double time_start);
 
-DLP_CLASSIC_EXPORT md_t
-dlp_get_env_var(const char* env, md_t fallback);
-
 #endif // LPGEMM_SYS_UTILS_H

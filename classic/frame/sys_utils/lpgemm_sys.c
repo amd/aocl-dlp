@@ -221,25 +221,3 @@ dlp_clock_min_diff(double time_min, double time_start)
 
     return time_min;
 }
-
-md_t
-dlp_get_env_var(const char* env, md_t fallback)
-{
-    md_t  r_val;
-    char* str;
-
-    // Query the environment variable and store the result in str.
-    str = getenv(env);
-
-    // Set the return value based on the string obtained from getenv().
-    if (str != NULL) {
-        // If there was no error, convert the string to an integer and
-        // prepare to return that integer.
-        r_val = (md_t)strtol(str, NULL, 10);
-    } else {
-        // If there was an error, use the "fallback" as the return value.
-        r_val = fallback;
-    }
-
-    return r_val;
-}

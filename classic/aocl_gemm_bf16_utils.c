@@ -34,7 +34,6 @@
 #include "config/lpgemm_config.h"
 #include "gemm_utils/lpgemm_utils.h"
 #include "lpgemm_types.h"
-#include "sys_utils/dlp_cpu_arch.h"
 
 void
 aocl_reorder_bf16bf16f32of32_reference(const char      order,

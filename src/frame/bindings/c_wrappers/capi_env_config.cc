@@ -26,80 +26,24 @@
  *
  */
 
-#include <tuple>
+#include <string>
 
 #include "arch_utils/arch_config_manager.hh"
-#include "bindings/c_wrappers/capi_cpu_features.h"
 #include "bindings/c_wrappers/capi_env_config.h"
-#include "cpu_utils/cpu_features.hh"
-
-// The implementation for one of the C apis is in DLP Plus, so guarding
-// its header file to avoid name mangling.
-DLP_BEGIN_EXTERN_C
-#include "classic/aocl_lib_interface_apis.h"
-DLP_END_EXTERN_C
-
-using namespace dlp::cpu_utils;
-using namespace dlp::arch_utils;
-
-// Determine if the CPU has support for AVX2 and FMA3.
-bool
-dlp_cpuid_is_avx2fma3_supported(void)
-{
-    return archConfigManager::getInstance().isAvx2Fma3SupportedByArch();
-}
-
-// Determine if the CPU has support for AVX512.
-bool
-dlp_cpuid_is_avx512_supported(void)
-{
-    return archConfigManager::getInstance().isAvx512SupportedByArch();
-}
-
-// Determine if the CPU has support for AVX512_VNNI.
-bool
-dlp_cpuid_is_avx512vnni_supported(void)
-{
-    return archConfigManager::getInstance().isAvx512VnniSupportedByArch();
-}
-
-// Determine if the CPU has support for AVX512_BF16.
-bool
-dlp_cpuid_is_avx512bf16_supported(void)
-{
-    return archConfigManager::getInstance().isAvx512Bf16SupportedByArch();
-}
-
-uint32_t
-dlp_cpuid_query_fp_datapath(void)
-{
-    return archConfigManager::getInstance().getFpDatapathWidthOfArch();
-}
-
-bool
-dlp_cpuid_is_similar_zen5_arch()
-{
-    return archConfigManager::getInstance().isZen5SimilarArch();
-}
-
-bool
-dlp_cpuid_is_similar_zen4_arch()
-{
-    return archConfigManager::getInstance().isZen4SimilarArch();
-}
-
-bool
-dlp_cpuid_is_similar_zen_arch()
-{
-    return archConfigManager::getInstance().isZenSimilarArch();
-}
+#include "env_utils/env_var_manager.hh"
 
 dlp_arch_t
-dlp_get_arch(void)
+dlp_env_get_var_arch_type(const char* env_var_name)
 {
-    static const dlp_arch_t arch_id = []() -> dlp_arch_t {
-        ArchitectureType thisArch = archConfigManager::getInstance().getArch();
-        switch (thisArch) {
+    if (env_var_name == nullptr) {
+        return DLP_ARCH_ERROR;
+    }
+
+    try {
+        auto& manager =
+            dlp::env_utils::EnvironmentVariableManager::getInstance();
+        auto arch_type = manager.getArchitectureFromEnv(env_var_name);
+        switch (arch_type) {
             case dlp::arch_utils::ArchitectureType::Zen5:
                 return DLP_ARCH_ZEN5;
             case dlp::arch_utils::ArchitectureType::Zen4:
@@ -115,28 +59,43 @@ dlp_get_arch(void)
             default:
                 return DLP_ARCH_ERROR;
         }
-    }();
-    return arch_id;
+    } catch (...) {
+        // Ensure no exceptions escape to C code
+        return DLP_ARCH_ERROR;
+    }
 }
 
-static bool
-dlp_get_aocl_enable_instr(void)
+md_t
+dlp_env_get_int(const char* env_var_name, int default_value)
 {
-    auto arch_id = dlp_env_get_var_arch_type("AOCL_ENABLE_INSTRUCTIONS");
-
-    bool aocl_e_i = false;
-    if (arch_id != DLP_ARCH_ERROR) {
-        aocl_e_i = true;
+    if (env_var_name == nullptr) {
+        return default_value;
     }
 
-    return aocl_e_i;
+    try {
+        auto& manager =
+            dlp::env_utils::EnvironmentVariableManager::getInstance();
+        return manager.getIntFromEnv(env_var_name, default_value);
+    } catch (...) {
+        // Ensure no exceptions escape to C code
+        return default_value;
+    }
 }
 
-bool
-dlp_aocl_enable_instruction_query(void)
+int
+dlp_env_get_bool(const char* env_var_name, int default_value)
 {
-    // Check whether the AOCL_ENABLE_INSTRUCTIONS environment variable
-    // is set or not.
-    static const bool aocl_e_i = dlp_get_aocl_enable_instr();
-    return aocl_e_i;
+    if (env_var_name == nullptr) {
+        return default_value;
+    }
+
+    try {
+        auto& manager =
+            dlp::env_utils::EnvironmentVariableManager::getInstance();
+        bool result = manager.getBoolFromEnv(env_var_name, default_value != 0);
+        return result ? 1 : 0;
+    } catch (...) {
+        // Ensure no exceptions escape to C code
+        return default_value;
+    }
 }

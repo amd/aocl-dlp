@@ -33,7 +33,6 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
-#include "sys_utils/dlp_cpu_arch.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 
 DLP_INLINE void

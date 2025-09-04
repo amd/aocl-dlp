@@ -33,7 +33,6 @@
 #include "config/lpgemm_config.h"
 #include "gemm_utils/lpgemm_utils.h"
 #include "lpgemm_types.h"
-#include "sys_utils/dlp_cpu_arch.h"
 #include "u8s8s32/lpgemm_reorder.h"
 
 msz_t

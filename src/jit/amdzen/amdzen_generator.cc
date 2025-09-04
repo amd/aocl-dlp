@@ -27,6 +27,7 @@
  */
 
 #include "amdzen_generator.hh"
+#include "arch_utils/arch_config_manager.hh"
 #include "avx2_generator.hh"
 #include "avx512_gemv.hh"
 #include "avx512_generator.hh"
@@ -42,34 +43,14 @@ jitAmdZenFP32::jitAmdZenFP32()
     , isZen4(false)
     , isZen(false)
 {
-    // Determine if machine is zen4 or zen.
-    std::vector<dlp::cpu_utils::isaFeature> reqFeaturesZen4{
-        dlp::cpu_utils::isaFeature::sse3,
-        dlp::cpu_utils::isaFeature::ssse3,
-        dlp::cpu_utils::isaFeature::sse41,
-        dlp::cpu_utils::isaFeature::sse42,
-        dlp::cpu_utils::isaFeature::avx,
-        dlp::cpu_utils::isaFeature::fma3,
-        dlp::cpu_utils::isaFeature::avx2,
-        dlp::cpu_utils::isaFeature::avx512f,
-        dlp::cpu_utils::isaFeature::avx512dq,
-        dlp::cpu_utils::isaFeature::avx512cd,
-        dlp::cpu_utils::isaFeature::avx512bw,
-        dlp::cpu_utils::isaFeature::avx512vl,
-        dlp::cpu_utils::isaFeature::avx512vnni,
-        dlp::cpu_utils::isaFeature::avx512bf16
-    };
-    isZen4 = dlp::cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeaturesZen4);
+    isZen4 =
+        dlp::arch_utils::archConfigManager::getInstance().isZen4SimilarArch();
 
     // isZen is only checked for and set to true if machine is guaranteed
     // to not be zen4 or zen5.
     if (!isZen4) {
-        std::vector<dlp::cpu_utils::isaFeature> reqFeaturesZen{
-            dlp::cpu_utils::isaFeature::avx, dlp::cpu_utils::isaFeature::fma3,
-            dlp::cpu_utils::isaFeature::avx2
-        };
-        isZen =
-            dlp::cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeaturesZen);
+        isZen = dlp::arch_utils::archConfigManager::getInstance()
+                    .isZenSimilarArch();
     }
 }
 

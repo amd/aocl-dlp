@@ -30,7 +30,6 @@
 #define LPGEMM_CONFIG_H
 
 #include "lpgemm_types.h"
-#include "sys_utils/dlp_cpu_arch.h"
 
 #define LPGEMM_BF16_MR 6
 #define LPGEMM_BF16_NR 64
