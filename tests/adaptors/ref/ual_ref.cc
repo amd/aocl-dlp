@@ -1148,11 +1148,25 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
         return;
     }
 
-    // If already f32, apply operation directly
+    // If already f32, apply operation directly with proper indexing
     if (original_type == MatrixType::f32) {
         float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
-        operation(data, size);
+        md_t   rows = matrix.getRows();
+        md_t   cols = matrix.getCols();
+        md_t   ld   = matrix.getLeadingDimension();
+
+        // Apply operation element by element with proper leading dimension
+        // handling
+        for (md_t i = 0; i < rows; ++i) {
+            for (md_t j = 0; j < cols; ++j) {
+                size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                                 ? (static_cast<size_t>(i) * ld + j)
+                                 : (static_cast<size_t>(j) * ld + i);
+                float  temp_val = data[idx];
+                operation(&temp_val, 1);
+                data[idx] = temp_val;
+            }
+        }
         return;
     }
 
@@ -1169,9 +1183,15 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
         return;
     }
 
-    // Apply operation in float
-    size_t size = rows * cols;
-    operation(temp_data.get(), size);
+    // Apply operation in float with proper indexing
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            size_t idx      = static_cast<size_t>(i) * ld + j;
+            float  temp_val = temp_data[idx];
+            operation(&temp_val, 1);
+            temp_data[idx] = temp_val;
+        }
+    }
 
     // Convert back to original type
     copyFloatToMatrix(temp_data.get(), ld, matrix);
@@ -1484,12 +1504,24 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
         const float* add_data =
             reinterpret_cast<const float*>(addMatrix.getData());
 
-        size_t size =
-            std::min(matrix.getDataSizeBytes(), addMatrix.getDataSizeBytes())
-            / sizeof(float);
+        md_t rows          = matrix.getRows();
+        md_t cols          = matrix.getCols();
+        md_t matrix_ld     = matrix.getLeadingDimension();
+        md_t add_matrix_ld = addMatrix.getLeadingDimension();
 
-        for (size_t i = 0; i < size; ++i) {
-            data[i] += add_data[i] * scale;
+        // Apply matrix addition with proper leading dimension handling
+        for (md_t i = 0; i < rows; ++i) {
+            for (md_t j = 0; j < cols; ++j) {
+                size_t matrix_idx =
+                    (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                        ? (static_cast<size_t>(i) * matrix_ld + j)
+                        : (static_cast<size_t>(j) * matrix_ld + i);
+                size_t add_idx =
+                    (addMatrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                        ? (static_cast<size_t>(i) * add_matrix_ld + j)
+                        : (static_cast<size_t>(j) * add_matrix_ld + i);
+                data[matrix_idx] += add_data[add_idx] * scale;
+            }
         }
         return;
     }
@@ -1509,10 +1541,12 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
         return;
     }
 
-    // Apply matrix addition in float
-    size_t size = rows * cols;
-    for (size_t i = 0; i < size; ++i) {
-        temp_matrix[i] += temp_add[i] * scale;
+    // Apply matrix addition in float with proper indexing
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            size_t idx = static_cast<size_t>(i) * ld + j;
+            temp_matrix[idx] += temp_add[idx] * scale;
+        }
     }
 
     // Convert back to original type
@@ -1542,12 +1576,24 @@ UalRef::applyMatrixMul(Matrix&       matrix,
         const float* mul_data =
             reinterpret_cast<const float*>(mulMatrix.getData());
 
-        size_t size =
-            std::min(matrix.getDataSizeBytes(), mulMatrix.getDataSizeBytes())
-            / sizeof(float);
+        md_t rows          = matrix.getRows();
+        md_t cols          = matrix.getCols();
+        md_t matrix_ld     = matrix.getLeadingDimension();
+        md_t mul_matrix_ld = mulMatrix.getLeadingDimension();
 
-        for (size_t i = 0; i < size; ++i) {
-            data[i] *= mul_data[i] * scale;
+        // Apply matrix multiplication with proper leading dimension handling
+        for (md_t i = 0; i < rows; ++i) {
+            for (md_t j = 0; j < cols; ++j) {
+                size_t matrix_idx =
+                    (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                        ? (static_cast<size_t>(i) * matrix_ld + j)
+                        : (static_cast<size_t>(j) * matrix_ld + i);
+                size_t mul_idx =
+                    (mulMatrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                        ? (static_cast<size_t>(i) * mul_matrix_ld + j)
+                        : (static_cast<size_t>(j) * mul_matrix_ld + i);
+                data[matrix_idx] *= mul_data[mul_idx] * scale;
+            }
         }
         return;
     }
@@ -1567,10 +1613,12 @@ UalRef::applyMatrixMul(Matrix&       matrix,
         return;
     }
 
-    // Apply element-wise multiplication in float
-    size_t size = rows * cols;
-    for (size_t i = 0; i < size; ++i) {
-        temp_matrix[i] *= temp_mul[i] * scale;
+    // Apply element-wise multiplication in float with proper indexing
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            size_t idx = static_cast<size_t>(i) * ld + j;
+            temp_matrix[idx] *= temp_mul[idx] * scale;
+        }
     }
 
     // Convert back to original type
