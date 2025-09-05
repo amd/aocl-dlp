@@ -1,0 +1,1948 @@
+# Comprehensive GEMM test configuration for weekend coverage and regression testing
+# Tests all APIs, data types, and post-operations for maximum coverage
+# Includes systematic regression testing patterns to catch API breaking changes
+# Optimized for thorough testing with manageable computational expense
+
+gemm_tests:
+  # =============================================================================
+  # REGRESSION TESTING BASELINE SCENARIOS
+  # =============================================================================
+
+  # Critical regression baselines - must always pass (Test Set 0)
+  - name: "regression_baseline_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 4, 8, 16, 32, 64, 128, 256]  # Powers of 2 + edge cases
+    n: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+    k: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+    alpha: [0.0, 1.0, -1.0]  # Critical values
+    beta: [0.0, 1.0, -1.0]
+    lda: [5, 64, 128, 256]  # Aligned dimensions
+    ldb: [5, 64, 128, 256]
+    ldc: [5, 64, 128, 256]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-6  # Strict tolerance for regression
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Critical regression baselines for integer types (Test Set 1)
+  - name: "regression_baseline_int8"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 4, 8, 16, 32, 64, 128]
+    n: [1, 2, 4, 8, 16, 32, 64, 128]
+    k: [1, 2, 4, 8, 16, 32, 64, 128]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [5, 64, 128]
+    ldb: [5, 64, 128]
+    ldc: [5, 64, 128]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-6
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Critical regression baselines for BF16 (Test Set 2)
+  - name: "regression_baseline_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 4, 8, 16, 32, 64, 128]
+    n: [1, 2, 4, 8, 16, 32, 64, 128]
+    k: [1, 2, 4, 8, 16, 32, 64, 128]
+    alpha: [0.0, 1.0, -1.0]
+    beta: [0.0, 1.0, -1.0]
+    lda: [5, 64, 128]
+    ldb: [5, 64, 128]
+    ldc: [5, 64, 128]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-3  # Strict BF16 tolerance for regression
+      int8: 0
+
+  # =============================================================================
+  # SINGLE PRECISION FLOATING POINT (F32) TESTS
+  # =============================================================================
+
+  # =============================================================================
+  # API COMPATIBILITY AND REGRESSION TESTING
+  # =============================================================================
+
+  # Extended API regression matrix - tests all output type combinations (Test Set 3)
+  - name: "api_regression_matrix_extended"
+    a_type: ["u8", "s8"]
+    b_type: ["s8", "s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [6, 32, 64]  # Include kernel-specific size (6)
+    n: [16, 32, 64]  # Include fringe sizes
+    k: [4, 16, 32]   # Include VNNI-aligned
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-6
+      bfloat16: 1.0e-3
+      int8: 0
+
+  # Not SUPPORTED YET
+  # # Batch API regression testing
+  # - name: "batch_api_regression_matrix"
+  #   a_type: ["f32", "bf16", "u8", "s8"]
+  #   b_type: ["f32", "bf16", "s8", "s8"]
+  #   c_type: ["f32", "f32", "s32", "s32"]
+  #   acc_type: ["f32", "f32", "s32", "s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   batch_size: [1, 2, 4, 8]
+  #   m: [1, 8, 16, 32]
+  #   n: [1, 8, 16, 32]
+  #   k: [1, 8, 16, 32]
+  #   alpha: [1.0]
+  #   beta: [0.0, 1.0]
+  #   lda: [32, 40]
+  #   ldb: [32, 40]
+  #   ldc: [32, 40]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-6
+  #     bfloat16: 1.0e-3
+  #     int8: 0
+
+  # Post-operations regression matrix - critical for API stability
+  # Split into separate valid API combinations to avoid unsupported types (Test Set 4)
+  - name: "postops_regression_matrix_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual RELU post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+
+  # Post-operations regression matrix for integer types (Test Set 5)
+  - name: "postops_regression_matrix_int8"
+    a_type: ["u8", "s8"]
+    b_type: ["s8", "s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual RELU post-op test for integer types
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+
+  # F32 individual post-op tests
+  - name: "f32_individual_prelu_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual PRELU post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+            alpha: [0.1]
+
+  - name: "f32_individual_gelu_tanh_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual GELU-TANH post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-TANH"
+          params: {}
+
+  - name: "f32_individual_gelu_erf_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual GELU-ERF post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-ERF"
+          params: {}
+
+  - name: "f32_individual_clip_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual CLIP post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-CLIP"
+          params:
+            alpha: [0.0]
+            alpha_type: ["f32"]
+            beta: [6.0]
+            beta_type: ["f32"]
+
+  - name: "f32_individual_swish_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual SWISH post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-SWISH"
+          params:
+            alpha: [1.0]
+            alpha_type: ["f32"]
+
+  - name: "f32_individual_tanh_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual TANH post-op test
+    post_operations:
+      operations:
+        - type: "Elementwise-TANH"
+          params: {}
+
+  - name: "f32_individual_sigmoid_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual SIGMOID post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-SIGMOID"
+          params: {}
+
+  - name: "f32_individual_bias_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual BIAS post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+
+  - name: "f32_individual_scale_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual SCALE post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["n"]
+
+  - name: "f32_individual_matrix_add_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual MATRIX-ADD post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            scale_factor: [1.0]
+            scale_factor_type: ["f32"]
+
+  - name: "f32_individual_matrix_mul_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    # Individual MATRIX-MUL post-op test
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            scale_factor: [1.0]
+            scale_factor_type: ["f32"]
+
+  # =============================================================================
+  # KERNEL REGRESSION TESTING - SPECIFIC SIZES
+  # =============================================================================
+
+  # Kernel-specific regression tests for known working configurations
+  - name: "kernel_regression_f32_6x16"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [6, 12, 18, 24]     # Multiples of kernel MR
+    n: [16, 32, 48, 64]    # Multiples of kernel NR
+    k: [1, 4, 8, 16, 32]   # Various k sizes
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5  # Very strict for kernel regression
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Kernel-specific regression tests for u8s8 6x64
+  - name: "kernel_regression_u8s8_6x64"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [6, 12, 18, 24]      # Multiples of kernel MR
+    n: [64, 128, 192, 256]  # Multiples of kernel NR
+    k: [4, 8, 16, 32]       # VNNI-aligned
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-7
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Fringe kernel regression tests - F32 types
+  - name: "kernel_regression_fringe_cases_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned M
+    n: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned N
+    k: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]  # Non-VNNI-aligned K
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [32]
+    ldb: [32]
+    ldc: [32]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-6
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Fringe kernel regression tests - Integer types
+  - name: "kernel_regression_fringe_cases_int8"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned M
+    n: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned N
+    k: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]  # Non-VNNI-aligned K
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [32]
+    ldb: [32]
+    ldc: [32]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-6
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Fringe kernel regression tests - BFloat type
+  - name: "kernel_regression_fringe_cases_bfloat"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16", "f32"]
+    acc_type: ["bf16"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned M
+    n: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned N
+    k: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]  # Non-VNNI-aligned K
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [32]
+    ldb: [32]
+    ldc: [32]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-6
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # =============================================================================
+  # NUMERICAL STABILITY REGRESSION TESTS
+  # =============================================================================
+
+  # Critical numerical cases that have caused regressions
+  - name: "numerical_regression_critical_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    # Critical alpha/beta combinations that expose numerical issues
+    alpha: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    beta: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    lda: [64, 65]  # Aligned and unaligned
+    ldb: [64, 65]
+    ldc: [64, 65]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-4  # Relaxed for extreme values
+      bfloat16: 1.0e-2
+      int8: 0
+
+  - name: "numerical_regression_critical_bfloat"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16", "f32"]
+    acc_type: ["bf16"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    # Critical alpha/beta combinations that expose numerical issues
+    alpha: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    beta: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    lda: [64, 65]  # Aligned and unaligned
+    ldb: [64, 65]
+    ldc: [64, 65]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-4  # Relaxed for extreme values
+      bfloat16: 1.0e-2
+      int8: 0
+
+  - name: "numerical_regression_critical_int8"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "s32"]
+    acc_type: ["s32", "s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    # Critical alpha/beta combinations that expose numerical issues
+    alpha: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    beta: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    lda: [64, 65]  # Aligned and unaligned
+    ldb: [64, 65]
+    ldc: [64, 65]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-4  # Relaxed for extreme values
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # =============================================================================
+  # SINGLE PRECISION FLOATING POINT (F32) TESTS
+  # =============================================================================
+
+  #  Post-ops Chaining
+  # # F32 API comprehensive coverage with all post-ops
+  # - name: "f32_comprehensive_postops"
+  #   a_type: ["f32"]
+  #   b_type: ["f32"]
+  #   c_type: ["f32"]
+  #   acc_type: ["f32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   alpha: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Elementwise-CLIP"
+  #         params:
+  #           alpha: [0.0, -6.0]
+  #           alpha_type: ["f32"]
+  #           beta: [6.0, 100.0]
+  #           beta_type: ["f32"]
+  #       - type: "Elementwise-SWISH"
+  #         params:
+  #           alpha: [1.0, 1.67326324]
+  #           alpha_type: ["f32"]
+  #       - type: "Elementwise-TANH"
+  #         params: {}
+  #       - type: "Elementwise-SIGMOID"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32"]
+  #           bias_dim: ["n", "1"]
+  #       - type: "Scale"
+  #         params:
+  #           scale_factor_type: ["f32"]
+  #           scale_factor_len: ["n", "1"]
+  #       - type: "Sum"
+  #         params:
+  #           scale_factor: [0.5, 1.0, 2.0]
+  #           scale_factor_type: ["f32"]
+
+  # F32 edge cases and numerical limits
+  - name: "f32_numerical_edge_cases"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 16, 32, 64]
+    n: [1, 16, 32, 64]
+    k: [1, 16, 32, 64]
+    alpha: [0.0, 1e-6, 1e6, -1e6, 1.0, -1.0]
+    beta: [0.0, 1e-6, 1e6, -1e6, 1.0, -1.0]
+    lda: [64, 65, 128]
+    ldb: [64, 65, 128]
+    ldc: [64, 65, 128]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-3
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # =============================================================================
+  # BFLOAT16 TESTS
+  # =============================================================================
+
+  # Post Ops Chaining
+  # # BF16BF16F32OF32 comprehensive coverage
+  # - name: "bf16bf16f32of32_comprehensive_postops"
+  #   a_type: ["bf16"]
+  #   b_type: ["bf16"]
+  #   c_type: ["f32"]
+  #   acc_type: ["f32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   alpha: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-4
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Elementwise-TANH"
+  #         params: {}
+  #       - type: "Elementwise-SIGMOID"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32"]
+  #           bias_dim: ["n", "1"]
+
+  # Individual Post-Op Cases for BF16BF16F32O(F32/BF16) (replacing chained cases)
+  - name: "bf16bf16f32of32_relu"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+
+  - name: "bf16bf16f32of32_prelu"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+            alpha: [0.01, 0.1, 0.2, 1.0]
+
+  - name: "bf16bf16f32of32_gelu_tanh"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-TANH"
+          params: {}
+
+  - name: "bf16bf16f32of32_gelu_erf"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-ERF"
+          params: {}
+
+  - name: "bf16bf16f32of32_tanh"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-TANH"
+          params: {}
+
+  - name: "bf16bf16f32of32_sigmoid"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-SIGMOID"
+          params: {}
+
+  - name: "bf16bf16f32of32_bias"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n", "1"]
+
+  #  NOT SUPPORTED YET
+  # # BF16S4F32OF32 (sparse weights) coverage
+  # - name: "bf16s4f32of32_comprehensive"
+  #   a_type: ["bf16"]
+  #   b_type: ["s4"]
+  #   c_type: ["f32"]
+  #   acc_type: ["f32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64]
+  #   alpha: [1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0]
+  #   lda: [64, 72]
+  #   ldb: [64, 72]
+  #   ldc: [64, 72]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-4
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+
+  # =============================================================================
+  # INTEGER QUANTIZED TESTS (U8S8)
+  # =============================================================================
+
+  # POST-OPS Chaining
+  # # U8S8S32OS32 comprehensive coverage with all post-ops
+  # - name: "u8s8s32os32_comprehensive_postops"
+  #   a_type: ["u8"]
+  #   b_type: ["s8"]
+  #   c_type: ["s32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   alpha: [1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, 2.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Elementwise-CLIP"
+  #         params:
+  #           alpha: [0.0, -128.0]
+  #           alpha_type: ["f32"]
+  #           beta: [127.0, 1000.0]
+  #           beta_type: ["f32"]
+  #       - type: "Elementwise-SWISH"
+  #         params:
+  #           alpha: [1.0, 1.67326324]
+  #           alpha_type: ["f32"]
+  #       - type: "Elementwise-TANH"
+  #         params: {}
+  #       - type: "Elementwise-SIGMOID"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["s32", "f32"]
+  #           bias_dim: ["n", "1"]
+  #       - type: "Scale"
+  #         params:
+  #           scale_factor_type: ["f32"]
+  #           scale_factor_len: ["n", "1"]
+
+  # Post Ops Chaining
+  # # U8S8S32OF32 comprehensive coverage
+  # - name: "u8s8s32of32_comprehensive_postops"
+  #   a_type: ["u8"]
+  #   b_type: ["s8"]
+  #   c_type: ["f32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   alpha: [1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, 2.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none"]  # Pack A causes issues
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Elementwise-CLIP"
+  #         params:
+  #           alpha: [0.0, -6.0]
+  #           alpha_type: ["f32"]
+  #           beta: [6.0, 100.0]
+  #           beta_type: ["f32"]
+  #       - type: "Elementwise-SWISH"
+  #         params:
+  #           alpha: [1.0, 1.67326324]
+  #           alpha_type: ["f32"]
+  #       - type: "Elementwise-TANH"
+  #         params: {}
+  #       - type: "Elementwise-SIGMOID"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32"]
+  #           bias_dim: ["n", "1"]
+  #       - type: "Scale"
+  #         params:
+  #           scale_factor_type: ["f32"]
+  #           scale_factor_len: ["n", "1"]
+  #       - type: "Sum"
+  #         params:
+  #           scale_factor: [0.5, 1.0, 2.0]
+  #           scale_factor_type: ["f32"]
+
+  # Post Ops Chaining
+  # # U8S8S32OBF16 comprehensive coverage
+  # - name: "u8s8s32obf16_comprehensive_postops"
+  #   a_type: ["u8"]
+  #   b_type: ["s8"]
+  #   c_type: ["bf16"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   alpha: [1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, 2.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-4
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32", "bf16"]
+  #           bias_dim: ["n", "1"]
+
+  # Individual Post-Op Cases for int (replacing chained cases)
+  - name: "int_relu"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+
+  - name: "int_prelu"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+            alpha: [0.01, 0.1, 0.2, 1.0]
+
+  - name: "int_gelu_tanh"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-TANH"
+          params: {}
+
+  - name: "int_gelu_erf"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-ERF"
+          params: {}
+
+  - name: "int_bias"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32", "bf16"]
+            bias_dim: ["n", "1"]
+
+  - name: "int_sigmoid"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-SIGMOID"
+          params: {}
+
+  - name: "int_scale"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["n", "1"]
+
+  - name: "int_matrix_add"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            scale_factor: [1.0, 0.5, 2.0]
+            scale_factor_type: ["f32"]
+
+  - name: "int_matrix_mul"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["s32", "f32", "bf16", "s8", "u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            scale_factor: [1.0, 0.5, 2.0]
+            scale_factor_type: ["f32"]
+
+  # =============================================================================
+  # INTEGER QUANTIZED TESTS (S8S8)
+  # =============================================================================
+
+  #  Chaining of Postops
+
+  # # S8S8S32OS32 comprehensive coverage
+  # - name: "s8s8s32os32_comprehensive_postops"
+  #   a_type: ["s8"]
+  #   b_type: ["s8"]
+  #   c_type: ["s32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   alpha: [1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, 2.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["s32", "f32"]
+  #           bias_dim: ["n", "1"]
+  #       - type: "Scale"
+  #         params:
+  #           scale_factor_type: ["f32"]
+  #           scale_factor_len: ["n", "1"]
+
+  # # S8S8S32OF32 comprehensive coverage
+  # - name: "s8s8s32of32_comprehensive_postops"
+  #   a_type: ["s8"]
+  #   b_type: ["s8"]
+  #   c_type: ["f32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   m: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   n: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   k: [1, 2, 3, 4, 5, 6, 7, 8, 15, 16, 17, 31, 32, 33, 48, 64, 96, 128]
+  #   alpha: [1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, 2.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Elementwise-CLIP"
+  #         params:
+  #           alpha: [0.0, -6.0]
+  #           alpha_type: ["f32"]
+  #           beta: [6.0, 100.0]
+  #           beta_type: ["f32"]
+  #       - type: "Elementwise-SWISH"
+  #         params:
+  #           alpha: [1.0, 1.67326324]
+  #           alpha_type: ["f32"]
+  #       - type: "Elementwise-TANH"
+  #         params: {}
+  #       - type: "Elementwise-SIGMOID"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32"]
+  #           bias_dim: ["n", "1"]
+  #       - type: "Scale"
+  #         params:
+  #           scale_factor_type: ["f32"]
+  #           scale_factor_len: ["n", "1"]
+  #       - type: "Sum"
+  #         params:
+  #           scale_factor: [0.5, 1.0, 2.0]
+  #           scale_factor_type: ["f32"]
+
+  # # S8S8S32OBF16 comprehensive coverage
+  # - name: "s8s8s32obf16_comprehensive_postops"
+  #   a_type: ["s8"]
+  #   b_type: ["s8"]
+  #   c_type: ["bf16", "f32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false]
+  #   transB: [false]
+  #   m: [32]
+  #   n: [32]
+  #   k: [32]
+  #   alpha: [1.0]
+  #   beta: [0.0]
+  #   lda: [64, 72, 128, 136]
+  #   ldb: [64, 72, 128, 136]
+  #   ldc: [64, 72, 128, 136]
+  #   mtagA: ["none"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-4
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Elementwise-GELU-ERF"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32", "bf16"]
+  #           bias_dim: ["n", "1"]
+
+  # =============================================================================
+  # BATCH GEMM TESTS
+  # =============================================================================
+
+  # # Batch F32 comprehensive coverage
+  # - name: "batch_f32_comprehensive_postops"
+  #   a_type: ["f32"]
+  #   b_type: ["f32"]
+  #   c_type: ["f32"]
+  #   acc_type: ["f32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   batch_size: [1, 2, 4, 8, 16]
+  #   m: [1, 2, 4, 8, 16, 32, 64]
+  #   n: [1, 2, 4, 8, 16, 32, 64]
+  #   k: [1, 2, 4, 8, 16, 32, 64]
+  #   alpha: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   lda: [64, 72]
+  #   ldb: [64, 72]
+  #   ldc: [64, 72]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Elementwise-GELU-TANH"
+  #         params: {}
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32"]
+  #           bias_dim: ["n", "1"]
+
+  # # Batch BF16 comprehensive coverage
+  # - name: "batch_bf16_comprehensive_postops"
+  #   a_type: ["bf16"]
+  #   b_type: ["bf16"]
+  #   c_type: ["f32"]
+  #   acc_type: ["f32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   batch_size: [1, 2, 4, 8, 16]
+  #   m: [1, 2, 4, 8, 16, 32, 64]
+  #   n: [1, 2, 4, 8, 16, 32, 64]
+  #   k: [1, 2, 4, 8, 16, 32, 64]
+  #   alpha: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0, -1.0, 0.5, 2.0]
+  #   lda: [64, 72]
+  #   ldb: [64, 72]
+  #   ldc: [64, 72]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-4
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["f32"]
+  #           bias_dim: ["n", "1"]
+
+  # # Batch BF16S4 (sparse weights) coverage
+  # - name: "batch_bf16s4_comprehensive"
+  #   a_type: ["bf16"]
+  #   b_type: ["s4"]
+  #   c_type: ["f32"]
+  #   acc_type: ["f32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false, true]
+  #   transB: [false, true]
+  #   batch_size: [1, 2, 4, 8]
+  #   m: [1, 2, 4, 8, 16, 32]
+  #   n: [1, 2, 4, 8, 16, 32]
+  #   k: [1, 2, 4, 8, 16, 32]
+  #   alpha: [1.0, 0.5, 2.0]
+  #   beta: [0.0, 1.0]
+  #   lda: [32, 40]
+  #   ldb: [32, 40]
+  #   ldc: [32, 40]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-4
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+
+  # # Batch U8S8 comprehensive coverage
+  # - name: "batch_u8s8_comprehensive_postops"
+  #   a_type: ["u8"]
+  #   b_type: ["s8"]
+  #   c_type: ["s32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false]
+  #   transB: [false]
+  #   batch_size: [2]
+  #   m: [32]
+  #   n: [32]
+  #   k: [32]
+  #   alpha: [1.0]
+  #   beta: [0.0]
+  #   lda: [64, 72]
+  #   ldb: [64, 72]
+  #   ldc: [64, 72]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["s32", "f32"]
+  #           bias_dim: ["n", "1"]
+
+  # # Batch S8S8 comprehensive coverage
+  # - name: "batch_s8s8_comprehensive_postops"
+  #   a_type: ["s8"]
+  #   b_type: ["s8"]
+  #   c_type: ["s32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false]
+  #   transB: [false]
+  #   batch_size: [2]
+  #   m: [32]
+  #   n: [32]
+  #   k: [32]
+  #   alpha: [1.0]
+  #   beta: [0.0]
+  #   lda: [64, 72]
+  #   ldb: [64, 72]
+  #   ldc: [64, 72]
+  #   mtagA: ["none", "pack"]
+  #   mtagB: ["none", "pack", "reorder"]
+  #   tolerances:
+  #     float: 1.0e-5
+  #     bfloat16: 1.0e-2
+  #     int8: 0
+  #   post_operations:
+  #     cartesian: true
+  #     operations:
+  #       - type: "Elementwise-RELU"
+  #         params: {}
+  #       - type: "Elementwise-PRELU"
+  #         params:
+  #           alpha_type: ["f32"]
+  #           alpha: [0.01, 0.1, 0.2, 1.0]
+  #       - type: "Bias"
+  #         params:
+  #           bias_type: ["s32", "f32"]
+  #           bias_dim: ["n", "1"]
+
+  # =============================================================================
+  # PERFORMANCE REGRESSION DETECTION
+  # =============================================================================
+
+  # Performance-critical sizes for regression detection
+  - name: "performance_regression_critical_sizes_int"
+    a_type: ["u8", "s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16", "s32", "u8", "s8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # Sizes commonly used in ML workloads - regression in these is critical
+    m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
+    n: [128, 256, 512, 1024, 2048, 4096]
+    k: [128, 256, 512, 1024, 2048, 4096]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [512, 1024, 2048, 4096]
+    ldb: [512, 1024, 2048, 4096]
+    ldc: [512, 1024, 2048, 4096]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  - name: "performance_regression_critical_sizes_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
+    n: [128, 256, 512, 1024, 2048, 4096]
+    k: [128, 256, 512, 1024, 2048, 4096]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [512, 1024, 2048, 4096]
+    ldb: [512, 1024, 2048, 4096]
+    ldc: [512, 1024, 2048, 4096]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+
+  - name: "performance_regression_critical_sizes_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16", "f32"]
+    acc_type: ["bf16"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
+    n: [128, 256, 512, 1024, 2048, 4096]
+    k: [128, 256, 512, 1024, 2048, 4096]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [512, 1024, 2048, 4096]
+    ldb: [512, 1024, 2048, 4096]
+    ldc: [512, 1024, 2048, 4096]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2

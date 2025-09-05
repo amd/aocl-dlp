@@ -451,7 +451,6 @@ UalRef::reorder(const Matrix& in,
     // logical layout
 
     md_t output_rows, output_cols, min_leading_dim;
-
     if (transposed) {
         // Swap dimensions to match logical layout (like DLP does)
         output_rows = input_cols;

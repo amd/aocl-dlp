@@ -661,7 +661,8 @@ aocl_batch_gemm_s8s8s32of32(const char*      order,
         bool is_column_major = ((order[gc_i] == 'c') || (order[gc_i] == 'C'));
         // Column major support disabled for int API's till micro-kernel
         // post-ops are updated to account for column major.
-        if ((is_column_major == TRUE) && (metadata[gc_i] != NULL)) {
+        if ((is_column_major == TRUE) && (metadata[gc_i] != NULL)
+            && (metadata[gc_i]->seq_length > 0)) {
             dlp_print_msg("Column major inputs not supported with Post-ops.",
                           __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
