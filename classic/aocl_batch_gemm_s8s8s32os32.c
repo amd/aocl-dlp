@@ -117,8 +117,8 @@ aocl_batch_gemm_s8s8s32os32(const char*      order,
         lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
 
         dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
-            metadata[gc_i], post_op_list, (void*)c[gc_i],
-            (void*)((order + gc_i)), m[gc_i], n[gc_i]);
+            metadata[gc_i], post_op_list, (void*)c[gc_i], (void*)(order + gc_i),
+            m[gc_i], n[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -167,8 +167,8 @@ aocl_batch_gemm_s8s8s32os32(const char*      order,
 
                 // Inputs swapped in column major, A becomes B from kernel point
                 // of view. Reorder is not supported for column major matrices.
-                if (((mtag_b[gs_i] == REORDERED)
-                     || (mtag_a[gs_i] == REORDERED))) {
+                if ((mtag_b[gs_i] == REORDERED)
+                    || (mtag_a[gs_i] == REORDERED)) {
                     dlp_print_msg(" Reordering of column major matrices is not "
                                   "supported.",
                                   __FILE__, __LINE__);
@@ -181,7 +181,7 @@ aocl_batch_gemm_s8s8s32os32(const char*      order,
                 // case, inputs are swapped and B becomes A from kernel point of
                 // view. Hence, if B is packed, set B to unpacked and proceed
                 // with GEMM.
-                if ((mtag_b[gs_i] == PACK)) {
+                if (mtag_b[gs_i] == PACK) {
                     mtag_b[gs_i] = UNPACKED;
                 }
                 // From 5-loop function point of view,
@@ -381,8 +381,8 @@ aocl_batch_gemm_s8s8s32os8(const char*      order,
         lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
 
         dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
-            metadata[gc_i], post_op_list, (void*)c[gc_i],
-            (void*)((order + gc_i)), m[gc_i], n[gc_i]);
+            metadata[gc_i], post_op_list, (void*)c[gc_i], (void*)(order + gc_i),
+            m[gc_i], n[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -431,8 +431,8 @@ aocl_batch_gemm_s8s8s32os8(const char*      order,
 
                 // Inputs swapped in column major, A becomes B from kernel point
                 // of view. Reorder is not supported for column major matrices.
-                if (((mtag_b[gs_i] == REORDERED)
-                     || (mtag_a[gs_i] == REORDERED))) {
+                if ((mtag_b[gs_i] == REORDERED)
+                    || (mtag_a[gs_i] == REORDERED)) {
                     dlp_print_msg(" Reordering of column major matrices is not "
                                   "supported.",
                                   __FILE__, __LINE__);
@@ -445,7 +445,7 @@ aocl_batch_gemm_s8s8s32os8(const char*      order,
                 // case, inputs are swapped and B becomes A from kernel point of
                 // view. Hence, if B is packed, set B to unpacked and proceed
                 // with GEMM.
-                if ((mtag_b[gs_i] == PACK)) {
+                if (mtag_b[gs_i] == PACK) {
                     mtag_b[gs_i] = UNPACKED;
                 }
                 // From 5-loop function point of view,
@@ -643,8 +643,8 @@ aocl_batch_gemm_s8s8s32of32(const char*      order,
         lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
 
         dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
-            metadata[gc_i], post_op_list, (void*)c[gc_i],
-            (void*)((order + gc_i)), m[gc_i], n[gc_i]);
+            metadata[gc_i], post_op_list, (void*)c[gc_i], (void*)(order + gc_i),
+            m[gc_i], n[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -694,8 +694,8 @@ aocl_batch_gemm_s8s8s32of32(const char*      order,
 
                 // Inputs swapped in column major, A becomes B from kernel point
                 // of view. Reorder is not supported for column major matrices.
-                if (((mtag_b[gs_i] == REORDERED)
-                     || (mtag_a[gs_i] == REORDERED))) {
+                if ((mtag_b[gs_i] == REORDERED)
+                    || (mtag_a[gs_i] == REORDERED)) {
                     dlp_print_msg(" Reordering of column major matrices is not "
                                   "supported.",
                                   __FILE__, __LINE__);
@@ -708,7 +708,7 @@ aocl_batch_gemm_s8s8s32of32(const char*      order,
                 // case, inputs are swapped and B becomes A from kernel point of
                 // view. Hence, if B is packed, set B to unpacked and proceed
                 // with GEMM.
-                if ((mtag_b[gs_i] == PACK)) {
+                if (mtag_b[gs_i] == PACK) {
                     mtag_b[gs_i] = UNPACKED;
                 }
                 // From 5-loop function point of view,
@@ -908,8 +908,8 @@ aocl_batch_gemm_s8s8s32obf16(const char*      order,
         lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
 
         dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
-            metadata[gc_i], post_op_list, (void*)c[gc_i],
-            (void*)((order + gc_i)), m[gc_i], n[gc_i]);
+            metadata[gc_i], post_op_list, (void*)c[gc_i], (void*)(order + gc_i),
+            m[gc_i], n[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -955,8 +955,8 @@ aocl_batch_gemm_s8s8s32obf16(const char*      order,
 
                 // Inputs swapped in column major, A becomes B from kernel point
                 // of view. Reorder is not supported for column major matrices.
-                if (((mtag_b[gs_i] == REORDERED)
-                     || (mtag_a[gs_i] == REORDERED))) {
+                if ((mtag_b[gs_i] == REORDERED)
+                    || (mtag_a[gs_i] == REORDERED)) {
                     dlp_print_msg(" Reordering of column major matrices is not "
                                   "supported.",
                                   __FILE__, __LINE__);
@@ -969,7 +969,7 @@ aocl_batch_gemm_s8s8s32obf16(const char*      order,
                 // case, inputs are swapped and B becomes A from kernel point of
                 // view. Hence, if B is packed, set B to unpacked and proceed
                 // with GEMM.
-                if ((mtag_b[gs_i] == PACK)) {
+                if (mtag_b[gs_i] == PACK) {
                     mtag_b[gs_i] = UNPACKED;
                 }
                 // From 5-loop function point of view,
@@ -1167,8 +1167,8 @@ aocl_batch_gemm_s8s8s32ou8(const char*      order,
         lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
 
         dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
-            metadata[gc_i], post_op_list, (void*)c[gc_i],
-            (void*)((order + gc_i)), m[gc_i], n[gc_i]);
+            metadata[gc_i], post_op_list, (void*)c[gc_i], (void*)(order + gc_i),
+            m[gc_i], n[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -1217,8 +1217,8 @@ aocl_batch_gemm_s8s8s32ou8(const char*      order,
 
                 // Inputs swapped in column major, A becomes B from kernel point
                 // of view. Reorder is not supported for column major matrices.
-                if (((mtag_b[gs_i] == REORDERED)
-                     || (mtag_a[gs_i] == REORDERED))) {
+                if ((mtag_b[gs_i] == REORDERED)
+                    || (mtag_a[gs_i] == REORDERED)) {
                     dlp_print_msg(" Reordering of column major matrices is not "
                                   "supported.",
                                   __FILE__, __LINE__);
@@ -1231,7 +1231,7 @@ aocl_batch_gemm_s8s8s32ou8(const char*      order,
                 // case, inputs are swapped and B becomes A from kernel point of
                 // view. Hence, if B is packed, set B to unpacked and proceed
                 // with GEMM.
-                if ((mtag_b[gs_i] == PACK)) {
+                if (mtag_b[gs_i] == PACK) {
                     mtag_b[gs_i] = UNPACKED;
                 }
                 // From 5-loop function point of view,

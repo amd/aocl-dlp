@@ -318,5 +318,4 @@ dlpJitGeneratorRegisterInstance()
                   "Requires classes derived from jitGeneratorBase.");          \
     static auto className##__FILE__##__LINE =                                  \
         dlp::jit::dlpJitGeneratorRegisterInstance().registerGemmJitGenerator(  \
-            std::move(std::make_unique<className>()),                          \
-            std::string{ kernelFamily });
+            std::make_unique<className>(), std::string{ kernelFamily });

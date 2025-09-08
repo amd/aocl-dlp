@@ -151,7 +151,7 @@
 #define erf_c15 _mm256_set1_pd((0x1.c6a4181da4ef76f22bd39bb5dcp-25))
 
 // Hexadecimal representation of FLT_MAX (3.402823466E+38F)
-#define ERF_UBOUND (0x407AD447)
+#define ERF_UBOUND (0x1.FFFFFEp+127f)
 
 #define POLY_EVAL_HORNER_16_0_AVX2(x, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9,        \
                                    c10, c11, c12, c13, c14, c15)                     \

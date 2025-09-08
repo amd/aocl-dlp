@@ -601,13 +601,13 @@ jitAVX512GEMVN1::process8RowBlock<float, float, float>(int mSize, bool isFringe)
         }
         if ((remaining == 1) || (remaining == 2) || (remaining == 4)) {
             lea(regTmpAptr, ptr[regTmpAptr + regRsA * remaining]);
-        } else if ((remaining == 3)) {
+        } else if (remaining == 3) {
             lea(regTmpAptr, ptr[regTmpAptr + regTmp1]);
-        } else if ((remaining == 5)) {
+        } else if (remaining == 5) {
             lea(regTmpAptr, ptr[regTmpAptr + regTmp2]);
-        } else if ((remaining == 6)) {
+        } else if (remaining == 6) {
             lea(regTmpAptr, ptr[regTmpAptr + regTmp1 * 2]);
-        } else if ((remaining == 7)) {
+        } else if (remaining == 7) {
             lea(regTmpAptr, ptr[regTmpAptr + regTmp3]);
         }
     }

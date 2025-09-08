@@ -82,7 +82,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     }
 
     dlp::kernels::kernelError executeKernel(
-        dlp::kernels::kernelParams* _params);
+        dlp::kernels::kernelParams* _params) override;
 
     std::unique_ptr<jitGeneratorBase> clone() override
     {
