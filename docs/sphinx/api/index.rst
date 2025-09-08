@@ -13,7 +13,6 @@ Complete API reference for AOCL-DLP (AMD Optimizing CPU Libraries - Deep Learnin
    eltwise/index
    utils/index
    library/index
-   classic/index
 
 Quick API Lookup
 ----------------

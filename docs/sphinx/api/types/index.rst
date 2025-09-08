@@ -3,11 +3,6 @@ Data Types and Structures
 
 Data types, structures, and constants used throughout AOCL-DLP.
 
-.. doxygengroup:: data_types
-   :project: aocl-dlp
-   :members:
-   :content-only:
-
 Overview
 --------
 

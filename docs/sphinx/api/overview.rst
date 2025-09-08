@@ -13,12 +13,13 @@ AOCL-DLP is built around optimized matrix operations, primarily General Matrix M
 
 .. math::
 
-   C = \alpha \cdot op(A) \cdot op(B) + \beta \cdot C + \text{post\_ops}
+   C = \text{post_ops} (\alpha \cdot op(A) \cdot op(B) + \beta \cdot C)
 
 Where:
+
 - :math:`op(X)` can be :math:`X` (no transpose) or :math:`X^T` (transpose)
 - :math:`\alpha, \beta` are scalar multipliers
-- :math:`\text{post\_ops}` represents fused post-processing operations
+- :math:`\text{post_ops}` represents fused post-processing operations
 
 Data Type Support
 ~~~~~~~~~~~~~~~~~~
@@ -477,6 +478,5 @@ See Also
 --------
 
 * :doc:`gemm/index` - Detailed GEMM API documentation
-* :doc:`post_ops/index` - Post-operations reference
-* :doc:`../tutorials/index` - Step-by-step tutorials
-* :doc:`../examples/index` - Practical examples
+* :doc:`gemm/post_ops` - Post-operations reference
+* `AOCL-DLP Examples and Tutorials (GitHub Wiki) <https://github.com/AMD-AOCL/aocl-dlp/wiki/Examples-and-Tutorials>`_

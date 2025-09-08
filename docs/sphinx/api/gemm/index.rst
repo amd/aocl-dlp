@@ -8,16 +8,16 @@ General Matrix Multiplication (GEMM) operations with support for multiple data t
 
 
 
-Function Reference
+GEMM
 ------------------
 
-Float32 GEMM
+Float32
 ~~~~~~~~~~~~
 .. _fn-aocl-gemm-f32f32f32of32:
 .. doxygenfunction:: aocl_gemm_f32f32f32of32
    :project: aocl-dlp
 
-BFloat16 GEMM
+BFloat16
 ~~~~~~~~~~~~~
 .. _fn-aocl-gemm-bf16bf16f32of32:
 .. doxygenfunction:: aocl_gemm_bf16bf16f32of32
@@ -26,7 +26,7 @@ BFloat16 GEMM
 .. doxygenfunction:: aocl_gemm_bf16bf16f32obf16
    :project: aocl-dlp
 
-Int8 GEMM
+Int8
 ~~~~~~~~~~~~~~
 .. _fn-aocl-gemm-u8s8s32os32:
 .. doxygenfunction:: aocl_gemm_u8s8s32os32
@@ -200,6 +200,9 @@ Unreordering Functions
 
 .. doxygenfunction:: aocl_unreorder_s8s8s32os32_reference
    :project: aocl-dlp
+
+
+.. include:: post_ops.rst
 
 .. rubric:: See Also
 
