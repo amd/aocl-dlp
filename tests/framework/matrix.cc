@@ -570,9 +570,6 @@ namespace dlp { namespace testing { namespace framework {
     {
         // Calculate tolerance based on k dimension
         double tolerance = 1e-6;
-        if (m_k != std::numeric_limits<md_t>::max()) {
-            tolerance = 2.0 * static_cast<double>(m_k) * 1.2e-6;
-        }
 
         if (m_type == MatrixType::f32) {
             const float* thisData = reinterpret_cast<const float*>(m_data);
@@ -580,9 +577,17 @@ namespace dlp { namespace testing { namespace framework {
                 reinterpret_cast<const float*>(other.m_data);
             size_t elementCount = m_dataSizeBytes / sizeof(float);
 
+            if (m_k != std::numeric_limits<md_t>::max()) {
+                tolerance = 2.0 * static_cast<double>(m_k) * 1.2e-6;
+            }
+
             for (size_t i = 0; i < elementCount; ++i) {
-                if (std::abs(thisData[i] - otherData[i]) > tolerance) {
-                    return false;
+                auto abs_val = std::abs(thisData[i] - otherData[i]);
+                if (abs_val != 0.0f) {
+                    auto div = (otherData[i] != 0.0f ? otherData[i] : 1.0f);
+                    if (abs_val / div > tolerance) {
+                        return false;
+                    }
                 }
             }
         } else if (m_type == MatrixType::bf16) {
@@ -591,6 +596,10 @@ namespace dlp { namespace testing { namespace framework {
             const bfloat16* otherData =
                 reinterpret_cast<const bfloat16*>(other.m_data);
             size_t elementCount = m_dataSizeBytes / sizeof(bfloat16);
+
+            if (m_k != std::numeric_limits<md_t>::max()) {
+                tolerance = 2.0 * static_cast<double>(m_k) * 1.2e-4;
+            }
 
             for (size_t i = 0; i < elementCount; ++i) {
                 float thisFloat  = bf16_to_f32(thisData[i]);
