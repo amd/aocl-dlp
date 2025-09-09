@@ -46,7 +46,6 @@
  * @return Size of the buffer in bytes.
  */
 DLP_CLASSIC_EXPORT msz_t
-/// @ref aocl_get_reorder_buf_size_f32f32f32of32
 aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
                                         const char      trans,
                                         const char      mat_type,
@@ -54,7 +53,6 @@ aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
                                         const md_t      n,
                                         dlp_metadata_t* metadata);
 DLP_CLASSIC_EXPORT msz_t
-/// @ref aocl_get_reorder_buf_size_u8s8s32os32
 aocl_get_reorder_buf_size_u8s8s32os32(const char      order,
                                       const char      trans,
                                       const char      mat_type,
@@ -62,7 +60,6 @@ aocl_get_reorder_buf_size_u8s8s32os32(const char      order,
                                       const md_t      n,
                                       dlp_metadata_t* metadata);
 DLP_CLASSIC_EXPORT msz_t
-/// @ref aocl_get_reorder_buf_size_bf16bf16f32of32
 aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
                                           const char      trans,
                                           const char      mat_type,
@@ -70,7 +67,6 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
                                           const md_t      n,
                                           dlp_metadata_t* metadata);
 DLP_CLASSIC_EXPORT msz_t
-/// @ref aocl_get_reorder_buf_size_s8s8s32os32
 aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
                                       const char      trans,
                                       const char      mat_type,
@@ -78,7 +74,6 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
                                       const md_t      n,
                                       dlp_metadata_t* metadata);
 DLP_CLASSIC_EXPORT msz_t
-/// @ref aocl_get_reorder_buf_size_u8s4s32os32
 aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
                                       const char      trans,
                                       const char      mat_type,
@@ -86,7 +81,6 @@ aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
                                       const md_t      n,
                                       dlp_metadata_t* metadata);
 DLP_CLASSIC_EXPORT msz_t
-/// @ref aocl_get_reorder_buf_size_bf16s4f32of32
 aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
                                         const char      trans,
                                         const char      mat_type,
@@ -108,7 +102,6 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
  * @return Size of the buffer in bytes.
  */
 DLP_CLASSIC_EXPORT msz_t
-/// @ref aocl_get_reorder_buf_size_s8s8s32os32_sym_quant
 aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     const char           order,
     const char           trans,
@@ -321,13 +314,12 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
  */
 
 /**
- * @param[in] order Array of memory layouts (row-major or column-major).
- * @param[in] transa Array of transpose options for A matrices.
- * @param[in] transb Array of transpose options for B matrices.
- * @param[in] batch_size Number of matrices in the batch.
- * @param[in] m Array of row dimensions for each matrix in the batch.
- * @param[in] n Array of column dimensions for each matrix in the batch.
- * @param[in] k Array of inner dimensions for each matrix in the batch.
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] transa Transpose option for matrix A.
+ * @param[in] transb Transpose option for matrix B.
+ * @param[in] m Row dimensions.
+ * @param[in] n Column dimensions.
+ * @param[in] k Inner dimensions.
  * @param[in] alpha Scalar multiplier for the product of matrices A and B.
  * @param[in] a Pointer to matrix A.
  * @param[in] lda Leading dimension of matrix A.
@@ -340,10 +332,7 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
-
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_u8s8s32os32
-void
+DLP_CLASSIC_EXPORT void
 aocl_gemm_u8s8s32os32(const char      order,
                       const char      transa,
                       const char      transb,
@@ -362,9 +351,8 @@ aocl_gemm_u8s8s32os32(const char      order,
                       const md_t      ldc,
                       dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_u8s8s32os8
-void
+/// Refer to @ref aocl_gemm_u8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_u8s8s32os8(const char      order,
                      const char      transa,
                      const char      transb,
@@ -383,9 +371,8 @@ aocl_gemm_u8s8s32os8(const char      order,
                      const md_t      ldc,
                      dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_u8s8s32of32
-void
+/// Refer to @ref aocl_gemm_u8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_u8s8s32of32(const char      order,
                       const char      transa,
                       const char      transb,
@@ -404,9 +391,8 @@ aocl_gemm_u8s8s32of32(const char      order,
                       const md_t      ldc,
                       dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_u8s8s32obf16
-void
+/// Refer to @ref aocl_gemm_u8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_u8s8s32obf16(const char      order,
                        const char      transa,
                        const char      transb,
@@ -425,9 +411,8 @@ aocl_gemm_u8s8s32obf16(const char      order,
                        const md_t      ldc,
                        dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_u8s8s32ou8
-void
+/// Refer to @ref aocl_gemm_u8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_u8s8s32ou8(const char      order,
                      const char      transa,
                      const char      transb,
@@ -447,13 +432,12 @@ aocl_gemm_u8s8s32ou8(const char      order,
                      dlp_metadata_t* metadata);
 
 /**
- * @param[in] order Array of memory layouts (row-major or column-major).
- * @param[in] transa Array of transpose options for A matrices.
- * @param[in] transb Array of transpose options for B matrices.
- * @param[in] batch_size Number of matrices in the batch.
- * @param[in] m Array of row dimensions for each matrix in the batch.
- * @param[in] n Array of column dimensions for each matrix in the batch.
- * @param[in] k Array of inner dimensions for each matrix in the batch.
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] transa Transpose option for matrix A.
+ * @param[in] transb Transpose option for matrix B.
+ * @param[in] m Row dimensions.
+ * @param[in] n Column dimensions.
+ * @param[in] k Inner dimensions.
  * @param[in] alpha Scalar multiplier for the product of matrices A and B.
  * @param[in] a Pointer to matrix A.
  * @param[in] lda Leading dimension of matrix A.
@@ -466,10 +450,7 @@ aocl_gemm_u8s8s32ou8(const char      order,
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
-
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_s8s8s32os32
-void
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32os32(const char      order,
                       const char      transa,
                       const char      transb,
@@ -488,9 +469,8 @@ aocl_gemm_s8s8s32os32(const char      order,
                       const md_t      ldc,
                       dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_s8s8s32os8
-void
+/// Refer to @ref aocl_gemm_s8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32os8(const char      order,
                      const char      transa,
                      const char      transb,
@@ -509,9 +489,8 @@ aocl_gemm_s8s8s32os8(const char      order,
                      const md_t      ldc,
                      dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_s8s8s32of32
-void
+/// Refer to @ref aocl_gemm_s8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32of32(const char      order,
                       const char      transa,
                       const char      transb,
@@ -530,9 +509,8 @@ aocl_gemm_s8s8s32of32(const char      order,
                       const md_t      ldc,
                       dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_s8s8s32obf16
-void
+/// Refer to @ref aocl_gemm_s8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32obf16(const char      order,
                        const char      transa,
                        const char      transb,
@@ -551,9 +529,8 @@ aocl_gemm_s8s8s32obf16(const char      order,
                        const md_t      ldc,
                        dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_s8s8s32ou8
-void
+/// Refer to @ref aocl_gemm_s8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32ou8(const char      order,
                      const char      transa,
                      const char      transb,
@@ -573,13 +550,12 @@ aocl_gemm_s8s8s32ou8(const char      order,
                      dlp_metadata_t* metadata);
 
 /**
- * @param[in] order Array of memory layouts (row-major or column-major).
- * @param[in] transa Array of transpose options for A matrices.
- * @param[in] transb Array of transpose options for B matrices.
- * @param[in] batch_size Number of matrices in the batch.
- * @param[in] m Array of row dimensions for each matrix in the batch.
- * @param[in] n Array of column dimensions for each matrix in the batch.
- * @param[in] k Array of inner dimensions for each matrix in the batch.
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] transa Transpose option for matrix A.
+ * @param[in] transb Transpose option for matrix B.
+ * @param[in] m Row dimensions.
+ * @param[in] n Column dimensions.
+ * @param[in] k Inner dimensions.
  * @param[in] alpha Scalar multiplier for the product of matrices A and B.
  * @param[in] a Pointer to matrix A.
  * @param[in] lda Leading dimension of matrix A.
@@ -592,10 +568,7 @@ aocl_gemm_s8s8s32ou8(const char      order,
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
-
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_s8s8s32of32_sym_quant
-void
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32of32_sym_quant(const char      order,
                                 const char      transa,
                                 const char      transb,
@@ -614,9 +587,8 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
                                 const md_t      ldc,
                                 dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_s8s8s32obf16_sym_quant
-void
+/// Refer to @ref aocl_gemm_s8s8s32of32_sym_quant for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
                                  const char      transa,
                                  const char      transb,
@@ -636,13 +608,12 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
                                  dlp_metadata_t* metadata);
 
 /**
- * @param[in] order Array of memory layouts (row-major or column-major).
- * @param[in] transa Array of transpose options for A matrices.
- * @param[in] transb Array of transpose options for B matrices.
- * @param[in] batch_size Number of matrices in the batch.
- * @param[in] m Array of row dimensions for each matrix in the batch.
- * @param[in] n Array of column dimensions for each matrix in the batch.
- * @param[in] k Array of inner dimensions for each matrix in the batch.
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] transa Transpose option for matrix A.
+ * @param[in] transb Transpose option for matrix B.
+ * @param[in] m Row dimensions.
+ * @param[in] n Column dimensions.
+ * @param[in] k Inner dimensions.
  * @param[in] alpha Scalar multiplier for the product of matrices A and B.
  * @param[in] a Pointer to matrix A.
  * @param[in] lda Leading dimension of matrix A.
@@ -655,9 +626,7 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_bf16bf16f32of32
-void
+DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16bf16f32of32(const char      order,
                           const char      transa,
                           const char      transb,
@@ -676,9 +645,9 @@ aocl_gemm_bf16bf16f32of32(const char      order,
                           const md_t      ldc,
                           dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_bf16bf16f32obf16
-void
+/// User needs to pass Scale Factor for downscaling C Matrix to bfloat16.
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16bf16f32obf16(const char      order,
                            const char      transa,
                            const char      transb,
@@ -697,9 +666,8 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
                            const md_t      ldc,
                            dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_bf16s4f32of32
-void
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16s4f32of32(const char      order,
                         const char      transa,
                         const char      transb,
@@ -718,9 +686,8 @@ aocl_gemm_bf16s4f32of32(const char      order,
                         const md_t      ldc,
                         dlp_metadata_t* metadata);
 
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_bf16s4f32obf16
-void
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16s4f32obf16(const char      order,
                          const char      transa,
                          const char      transb,
@@ -740,13 +707,12 @@ aocl_gemm_bf16s4f32obf16(const char      order,
                          dlp_metadata_t* metadata);
 
 /**
- * @param[in] order Array of memory layouts (row-major or column-major).
- * @param[in] transa Array of transpose options for A matrices.
- * @param[in] transb Array of transpose options for B matrices.
- * @param[in] batch_size Number of matrices in the batch.
- * @param[in] m Array of row dimensions for each matrix in the batch.
- * @param[in] n Array of column dimensions for each matrix in the batch.
- * @param[in] k Array of inner dimensions for each matrix in the batch.
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] transa Transpose option for matrix A.
+ * @param[in] transb Transpose option for matrix B.
+ * @param[in] m Row dimensions.
+ * @param[in] n Column dimensions.
+ * @param[in] k Inner dimensions.
  * @param[in] alpha Scalar multiplier for the product of matrices A and B.
  * @param[in] a Pointer to matrix A.
  * @param[in] lda Leading dimension of matrix A.
@@ -759,10 +725,7 @@ aocl_gemm_bf16s4f32obf16(const char      order,
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
-
-DLP_CLASSIC_EXPORT
-/// @ref aocl_gemm_f32f32f32of32
-void
+DLP_CLASSIC_EXPORT void
 aocl_gemm_f32f32f32of32(const char      order,
                         const char      transa,
                         const char      transb,
@@ -806,7 +769,6 @@ aocl_gemm_f32f32f32of32(const char      order,
  * @param[in] metadata Array of pointers to post-operation structures.
  */
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_bf16bf16f32of32
 aocl_batch_gemm_bf16bf16f32of32(const char*      order,
                                 const char*      transa,
                                 const char*      transb,
@@ -826,8 +788,10 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
                                 const char*      mem_format_a,
                                 const char*      mem_format_b,
                                 dlp_metadata_t** metadata);
+
+/// User needs to pass Scale Factor for downscaling C Matrix to bfloat16.
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_bf16bf16f32obf16
 aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
                                  const char*      transa,
                                  const char*      transb,
@@ -847,8 +811,9 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
                                  const char*      mem_format_a,
                                  const char*      mem_format_b,
                                  dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_bf16s4f32of32
 aocl_batch_gemm_bf16s4f32of32(const char*      order,
                               const char*      transa,
                               const char*      transb,
@@ -868,8 +833,9 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
                               const char*      mem_format_a,
                               const char*      mem_format_b,
                               dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_bf16s4f32obf16
 aocl_batch_gemm_bf16s4f32obf16(const char*      order,
                                const char*      transa,
                                const char*      transb,
@@ -889,8 +855,9 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
                                const char*      mem_format_a,
                                const char*      mem_format_b,
                                dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_f32f32f32of32
 aocl_batch_gemm_f32f32f32of32(const char*      order,
                               const char*      transa,
                               const char*      transb,
@@ -910,8 +877,9 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
                               const char*      mem_format_a,
                               const char*      mem_format_b,
                               dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_u8s8s32os32
 aocl_batch_gemm_u8s8s32os32(const char*      order,
                             const char*      transa,
                             const char*      transb,
@@ -931,8 +899,9 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
                             const char*      mem_format_a,
                             const char*      mem_format_b,
                             dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_u8s8s32os8
 aocl_batch_gemm_u8s8s32os8(const char*      order,
                            const char*      transa,
                            const char*      transb,
@@ -952,8 +921,9 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
                            const char*      mem_format_a,
                            const char*      mem_format_b,
                            dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_u8s8s32of32
 aocl_batch_gemm_u8s8s32of32(const char*      order,
                             const char*      transa,
                             const char*      transb,
@@ -973,8 +943,9 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
                             const char*      mem_format_a,
                             const char*      mem_format_b,
                             dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_u8s8s32obf16
 aocl_batch_gemm_u8s8s32obf16(const char*      order,
                              const char*      transa,
                              const char*      transb,
@@ -994,8 +965,9 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
                              const char*      mem_format_a,
                              const char*      mem_format_b,
                              dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_u8s8s32ou8
 aocl_batch_gemm_u8s8s32ou8(const char*      order,
                            const char*      transa,
                            const char*      transb,
@@ -1015,8 +987,9 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
                            const char*      mem_format_a,
                            const char*      mem_format_b,
                            dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_s8s8s32os32
 aocl_batch_gemm_s8s8s32os32(const char*      order,
                             const char*      transa,
                             const char*      transb,
@@ -1036,8 +1009,9 @@ aocl_batch_gemm_s8s8s32os32(const char*      order,
                             const char*      mem_format_a,
                             const char*      mem_format_b,
                             dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_s8s8s32os8
 aocl_batch_gemm_s8s8s32os8(const char*      order,
                            const char*      transa,
                            const char*      transb,
@@ -1057,8 +1031,9 @@ aocl_batch_gemm_s8s8s32os8(const char*      order,
                            const char*      mem_format_a,
                            const char*      mem_format_b,
                            dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_s8s8s32of32
 aocl_batch_gemm_s8s8s32of32(const char*      order,
                             const char*      transa,
                             const char*      transb,
@@ -1078,8 +1053,9 @@ aocl_batch_gemm_s8s8s32of32(const char*      order,
                             const char*      mem_format_a,
                             const char*      mem_format_b,
                             dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_s8s8s32obf16
 aocl_batch_gemm_s8s8s32obf16(const char*      order,
                              const char*      transa,
                              const char*      transb,
@@ -1099,8 +1075,9 @@ aocl_batch_gemm_s8s8s32obf16(const char*      order,
                              const char*      mem_format_a,
                              const char*      mem_format_b,
                              dlp_metadata_t** metadata);
+
+/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
-/// @ref aocl_batch_gemm_s8s8s32ou8
 aocl_batch_gemm_s8s8s32ou8(const char*      order,
                            const char*      transa,
                            const char*      transb,
