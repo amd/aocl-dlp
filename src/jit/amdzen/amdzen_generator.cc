@@ -40,17 +40,17 @@ jitAmdZenFP32::jitAmdZenFP32()
     : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f32f32f32of32 })
     // TODO: Hardcoded for now, need to make it dynamic
     , mIsaFeaturesRequired{}
-    , isZen4(false)
-    , isZen(false)
+    , isAvx512(false)
+    , isAvx2(false)
 {
-    isZen4 =
-        dlp::arch_utils::archConfigManager::getInstance().isZen4SimilarArch();
+    isAvx512 = dlp::arch_utils::archConfigManager::getInstance()
+                   .isAvx512SupportedByArch();
 
-    // isZen is only checked for and set to true if machine is guaranteed
+    // isAvx2 is only checked for and set to true if machine is guaranteed
     // to not be zen4 or zen5.
-    if (!isZen4) {
-        isZen = dlp::arch_utils::archConfigManager::getInstance()
-                    .isZenSimilarArch();
+    if (!isAvx512) {
+        isAvx2 = dlp::arch_utils::archConfigManager::getInstance()
+                     .isAvx2Fma3SupportedByArch();
     }
 }
 
@@ -67,7 +67,7 @@ jitAmdZenFP32::getGeneratorKernelType(
     dlp::kernel_frame::kernelInstrPreference kInstPref)
 {
     utils::kernelInstrType _kType = utils::kernelInstrType::none;
-    if (isZen4) {
+    if (isAvx512) {
         // Set to using zmm register by default for zen4 machines.
         _kType = utils::kernelInstrType::avx512_zmm_32_reg;
         if (kInstPref
@@ -77,8 +77,16 @@ jitAmdZenFP32::getGeneratorKernelType(
                    == dlp::kernel_frame::kernelInstrPreference::
                        avx512_xmm_favour) {
             _kType = utils::kernelInstrType::avx512_xmm_32_reg;
+        } else if (kInstPref
+                   == dlp::kernel_frame::kernelInstrPreference::
+                       avx2_ymm_favour) {
+            // TODO: This is inconsistent, and ideally should have been set to
+            // avx2_ymm_16_reg. However the existing logic in classic lpgemm
+            // prevents us from doing that (i.e. MR,NR = 6,64 even when zen3
+            // arch is enabled). Need to revisit this later.
+            _kType = utils::kernelInstrType::avx512_ymm_32_reg;
         }
-    } else if (isZen) {
+    } else if (isAvx2) {
         // Set to using ymm register by default for zen machines.
         _kType = utils::kernelInstrType::avx2_ymm_16_reg;
         if (kInstPref
@@ -102,9 +110,9 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     K_UNROLL           = (jI.kI).k_unroll;
     int numElemsPerReg = 0; // RegBytes / this->sizeofType<accumType>();
 
-    if (isZen4) {
+    if (isAvx512) {
         numElemsPerReg = 16; // AVX512 SIMD width
-    } else if (isZen) {
+    } else if (isAvx2) {
         numElemsPerReg = 8; // AVX2 SIMD width
     } else {
         // Unsupported architecture
@@ -155,7 +163,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             kernelCodeBlocks[i - 1] = codeBuffer;
 
             // Architecture specific dispatch happens here.
-            if (isZen4) {
+            if (isAvx512) {
                 // Create a new instance of jitAVX512GEMVN1 with the code buffer
                 // and size
                 avx512gen::jitAVX512GEMVM1 base(codeBuffer,
@@ -165,7 +173,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
-            } else if (isZen) { // AVX2 generation not supported yet
+            } else if (isAvx2) { // AVX2 generation not supported yet
                 return dlp::jit::jitGeneratorError::error;
             } else {
                 return dlp::jit::jitGeneratorError::error;
@@ -259,7 +267,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 kernelCodeBlocks[m_left * 4 + j] = codeBuffer;
 
                 // Architecture specific dispatch happens here.
-                if (isZen4) {
+                if (isAvx512) {
                     // Create a new instance of jitAVX512GEMVN1 with the code
                     // buffer and size
                     avx512gen::jitAVX512GEMVN1 base(codeBuffer,
@@ -269,7 +277,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     if (err != dlp::jit::jitGeneratorError::success) {
                         goto cleanup;
                     }
-                } else if (isZen) { // AVX2 generation not supported yet
+                } else if (isAvx2) { // AVX2 generation not supported yet
                     return dlp::jit::jitGeneratorError::error;
                 } else {
                     return dlp::jit::jitGeneratorError::error;
@@ -347,7 +355,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
 
                 // Architecture specific dispatch happens here.
-                if (isZen4) {
+                if (isAvx512) {
                     // Create a new instance of jitAVX512 with the code buffer
                     // and size
                     avx512gen::jitAVX512 base(codeBuffer,
@@ -357,7 +365,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     if (err != dlp::jit::jitGeneratorError::success) {
                         goto cleanup;
                     }
-                } else if (isZen) {
+                } else if (isAvx2) {
                     // Create a new instance of jitAVX2 with the code buffer and
                     // size
                     avx2gen::jitAVX2 base(codeBuffer, utils::JIT_KERNEL_SIZE);
@@ -492,9 +500,9 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
 
         int numElemsPerReg = 0; // RegBytes / this->sizeofType<accumType>();
 
-        if (isZen4) {
+        if (isAvx512) {
             numElemsPerReg = 16; // AVX512 SIMD width
-        } else if (isZen) {
+        } else if (isAvx2) {
             numElemsPerReg = 8; // AVX2 SIMD width
         } else {
             // Unsupported architecture
@@ -523,10 +531,10 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
 
             params->a = aPtr;
             params->c = c_jr;
-            if (isZen4) {
+            if (isAvx512) {
                 // maskF32 would be used for AVX512 fringe handling
                 params->maskF32 = 0xFFFF >> (numElemsPerReg - nElemsProcessing);
-            } else if (isZen) {
+            } else if (isAvx2) {
                 // Array would be used for AVX2 fringe handling
                 for (int i = 0; i < 8; i++) {
                     params->maskArray[i] = (i < nElemsProcessing) ? 0xFFFFFFFF

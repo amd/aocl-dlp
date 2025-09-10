@@ -274,65 +274,49 @@ archConfigManager::queryUnderlyingArch(void)
 
     auto vendor = cpu_utils::cpuFeaturesInstance().getCpuVendor();
     if (vendor == cpu_utils::cpuVendor::intel) {
-        // Check for each Intel configuration that is enabled, check for that
-        // microarchitecture. We check from most recent to most dated.
-#ifdef DLP_CONFIG_ZEN4
-        // Even if not optimized for Intel processors, this should
-        // generally perform better than skx codepath.
-        // Currently only enabled for zen4 and amdzen configurations
-        if (isAvx512Supported) {
-            archId = ArchitectureType::Zen4;
+        // Map non amd x86_64 machines to generic variants that can be used to
+        // convey arch ISA properties.
+        if (isAvx512Bf16Supported) {
+            archId = ArchitectureType::GenericAvx512Bf16;
+        } else if (isAvx512VnniSupported) {
+            archId = ArchitectureType::GenericAvx512Vnni;
+        } else if (isAvx512Supported) {
+            archId = ArchitectureType::GenericAvx512;
+        } else if (isAvx2Fma3Supported) {
+            archId = ArchitectureType::GenericAvx2;
         }
-#endif
-#ifdef DLP_CONFIG_ZEN3
-        // Even if not optimized for Intel processors, this should
-        // generally perform better than haswell codepath.
-        // Currently only enabled for zen3 and amdzen configurations
-        if (isAvx2Fma3Supported) {
-            archId = ArchitectureType::Zen3;
-        }
-#endif
     } else if (vendor == cpu_utils::cpuVendor::amd) {
         // The ARCH is decided based on the dlp config set during compile
         // time and the ISA supported. The model and family id is NOT used
         // for determining the same.
-#ifdef DLP_CONFIG_ZEN5
         if (isZen5) {
             archId = ArchitectureType::Zen5;
+        } else if (isZen4) {
+            archId = ArchitectureType::Zen4;
+        } else if (isZen) {
+            archId = ArchitectureType::Zen3;
+#ifdef DLP_CONFIG_ZEN2
+            archId = ArchitectureType::Zen2;
+#endif
+#ifdef DLP_CONFIG_ZEN
+            archId = ArchitectureType::Zen;
+#endif
         } else if (isAvx512Bf16Supported) {
             // Fallback test for future AMD processors
             // Assume zen5 (if available) is preferable to zen4.
             archId = ArchitectureType::Zen5;
-        }
-#endif
 #ifdef DLP_CONFIG_ZEN4
-        if (isZen4) {
             archId = ArchitectureType::Zen4;
-        } else if (isAvx512Bf16Supported) {
-            // Fallback test for future AMD processors
-            // Use zen4 if zen5 is not available.
-            archId = ArchitectureType::Zen4;
-        }
 #endif
-#ifdef DLP_CONFIG_ZEN3
-        if (isZen) {
-            archId = ArchitectureType::Zen3;
         } else if (isAvx2Fma3Supported) {
-            // Fallback test for future AMD processors
-            // Use zen3 if AVX512 support is not available but AVX2 is.
             archId = ArchitectureType::Zen3;
-        }
-#endif
 #ifdef DLP_CONFIG_ZEN2
-        if (isZen) {
             archId = ArchitectureType::Zen2;
-        }
 #endif
 #ifdef DLP_CONFIG_ZEN
-        if (isZen) {
             archId = ArchitectureType::Zen;
-        }
 #endif
+        }
     }
 
     return archId;
@@ -351,38 +335,14 @@ archConfigManager::setArch(void)
     if (thisArch != ArchitectureType::Error) {
         aocl_e_i = true;
     } else {
-        // Architecture families.
-#if defined DLP_FAMILY_INTEL64 || defined DLP_FAMILY_AMDZEN                    \
-    || defined DLP_FAMILY_AMD64_LEGACY || defined DLP_FAMILY_X86_64
         thisArch = actualArch;
-#endif
-        // AMD microarchitectures.
-#ifdef DLP_FAMILY_ZEN5
-        thisArch = ArchitectureType::Zen5;
-#endif
-#ifdef DLP_FAMILY_ZEN4
-        thisArch = ArchitectureType::Zen4;
-#endif
-#ifdef DLP_FAMILY_ZEN3
-        thisArch = ArchitectureType::Zen3;
-#endif
-#ifdef DLP_FAMILY_ZEN2
-        thisArch = ArchitectureType::Zen2;
-#endif
-#ifdef DLP_FAMILY_ZEN
-        thisArch = ArchitectureType::Zen;
-#endif
     }
 
     ArchitectureType origThisArch = thisArch;
 
     if ((origThisArch != ArchitectureType::Error) && (aocl_e_i == true)) {
-        // If AVX2 test fails here we assume either:
-        // 1. Config was either zen, zen2, zen3, zen4, zen5, haswell or skx,
-        //    so there is no fallback code path, hence error checking
-        //    above will fail.
-        // 2. Config was amdzen, intel64 or x86_64, and will have
-        //    generic code path.
+        // If AVX2 test fails here we assume that the arch was configured as
+        // zen, zen2, zen3, zen4, zen5 and should be reset to actual arch.
         if (!isAvx2Fma3Supported) {
             switch (origThisArch) {
                 case ArchitectureType::Zen5:
@@ -396,12 +356,9 @@ archConfigManager::setArch(void)
                     break;
             }
         }
-        // If AVX512 test fails here we assume either:
-        // 1. Config was either zen5, zen4 or skx, so there is
-        //    no fallback code path, hence error checking
-        //    above will fail.
-        // 2. Config was amdzen, intel64 or x86_64, and will have
-        //    appropriate avx2 code path to try.
+
+        // If AVX512 test fails here we assume that the arch was configured
+        // as zen4, zen5 and should be reset to actual arch.
         if (!isAvx512Supported) {
             switch (origThisArch) {
                 case ArchitectureType::Zen5:

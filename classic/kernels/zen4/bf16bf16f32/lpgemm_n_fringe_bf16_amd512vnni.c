@@ -4425,7 +4425,6 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x48)
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
     POST_OPS_RELU_6x48: {
-        // printf("relu\n");
         selector1 = _mm512_setzero_ps();
 
         // c[0,0-15]

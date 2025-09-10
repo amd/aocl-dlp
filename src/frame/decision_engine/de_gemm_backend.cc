@@ -31,32 +31,52 @@
 #include "arch_utils/arch_config_manager.hh"
 #include "cpu_utils/cpu_features.hh"
 #include "decision_engine/de_backend.hh"
+#include "env_utils/env_var_manager.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 #include "utils/ctype_utils.hh"
 
 namespace dlp::de {
 
 gemmF32DEBackend::gemmF32DEBackend()
-    : isZen4(false)
-    , isZen(false)
+    : isAvx512(false)
+    , isAvx2(false)
     , canGenerateKernelInfo(true)
 {
-    isZen4 = arch_utils::archConfigManager::getInstance().isZen4SimilarArch();
+    // Use this eKernelInstPref to generate kernelInfo for the 32 Ymm register
+    // based f32 kernel generation.
+    eKernelInstPref =
+        dlp::env_utils::EnvironmentVariableManager::getInstance()
+            .getKernelInstructionPreferenceFromEnv("AOCL_ENABLE_INSTRUCTIONS");
 
-    // isZen is only checked for and set to true if machine is guaranteed
-    // to not be zen4 or zen5.
-    if (!isZen4) {
-        isZen = arch_utils::archConfigManager::getInstance().isZenSimilarArch();
+    isAvx512 =
+        arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
+
+    // isAvx2 is only checked for and set to true if machine is guaranteed
+    // to not support Avx512 isa.
+    if (!isAvx512) {
+        isAvx2 = arch_utils::archConfigManager::getInstance()
+                     .isAvx2Fma3SupportedByArch();
     }
 
     // Check if the DE can be enabled depending on the underlying ISA
     // and the configured arch.
     auto thisArch = arch_utils::archConfigManager::getInstance().getArch();
-    if (isZen4 && (thisArch != arch_utils::ArchitectureType::Zen5)
-        && (thisArch != arch_utils::ArchitectureType::Zen4)) {
-        canGenerateKernelInfo = false;
+    if (isAvx512 && (thisArch != arch_utils::ArchitectureType::Zen5)
+        && (thisArch != arch_utils::ArchitectureType::Zen4)
+        && (thisArch != arch_utils::ArchitectureType::GenericAvx512Bf16)
+        && (thisArch != arch_utils::ArchitectureType::GenericAvx512Vnni)
+        && (thisArch != arch_utils::ArchitectureType::GenericAvx512)) {
+        // Switch to Avx2 if the arch is selected as such.
+        if ((thisArch != arch_utils::ArchitectureType::Generic)
+            && (thisArch != arch_utils::ArchitectureType::Error)) {
+            isAvx2   = true;
+            isAvx512 = false;
+        } else {
+            // This is an invalid case, disable jit kernel generation.
+            canGenerateKernelInfo = false;
+        }
     }
-    if (isZen
+    if (isAvx2
         && ((thisArch == arch_utils::ArchitectureType::Generic)
             || (thisArch == arch_utils::ArchitectureType::Error))) {
         canGenerateKernelInfo = false;
@@ -202,20 +222,21 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
     //             AOCL_ENABLE_INSTRUCTIONS
     kernel_frame::kernelInstrPreference kInstPref =
         kernel_frame::kernelInstrPreference::none;
-    if (isZen4) {
+    if (isAvx512) {
+        // TODO: Use eKernelInstPref here to set the right kernel type.
         kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
-    } else if (isZen) {
+    } else if (isAvx2) {
         kInstPref = kernel_frame::kernelInstrPreference::avx2_ymm_favour;
     }
 
     if (gemmIn->n == 1) {
 
-        if (isZen) {
+        if (isAvx2) {
             return std::nullopt; // We resort to using classic AVX2 kernels on
                                  // Zen machines(for now).
         }
 
-        else if (isZen4) {
+        else if (isAvx512) {
             // NOTE : Since the standard interface send the post-ops
             //        list, even with no-post ops, we will still have
             //        one node which mentions the opcode as POST_OPS_DISABLE.
@@ -270,9 +291,9 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             return std::nullopt;
         }
     } else if (gemmIn->m == 1) {
-        if (isZen) {
+        if (isAvx2) {
             return std::nullopt;
-        } else if (isZen4) {
+        } else if (isAvx512) {
             // NOTE : Since the standard interface send the post-ops
             //        list, even with no-post ops, we will still have
             //        one node which mentions the opcode as POST_OPS_DISABLE.

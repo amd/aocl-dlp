@@ -29,14 +29,18 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <utility>
 
 #include "arch_utils/arch_config_manager.hh"
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "classic/dlp_base_types.h"
+#include "kernel_frame/kernel_frame_base.hh"
 
 namespace dlp::env_utils {
 
@@ -88,10 +92,31 @@ class EnvironmentVariableManager final
         const std::string& env_var_name);
 
     /**
-     * @brief Get string value from environment variable with optional default
+     * @brief Get kernel instruction preference from environment variable
+     * @param env_var_name Name of the environment variable to read for kernel
+     * instruction preference
+     * @return kernel_frame::kernelInstrPreference enum value based on
+     * environment variable setting
+     *
+     * Supports the following string mappings (case-insensitive):
+     * - "zen5" -> kernelInstrPreference::avx512_zmm_favour
+     * - "zen4" -> kernelInstrPreference::avx512_zmm_favour
+     * - "zen3" -> kernelInstrPreference::avx2_ymm_favour
+     * - "zen2" -> kernelInstrPreference::avx2_ymm_favour
+     * - "zen", "zen1" -> kernelInstrPreference::avx2_ymm_favour
+     * - "avx512" -> kernelInstrPreference::avx512_zmm_favour
+     * - "avx512_ymm" -> kernelInstrPreference::avx512_ymm_favour (alias)
+     * - "avx2" -> kernelInstrPreference::avx2_ymm_favour
+     */
+    kernel_frame::kernelInstrPreference getKernelInstructionPreferenceFromEnv(
+        const std::string& env_var_name);
+
+    /**
+     * @brief Get string value from environment variable with optional
+     * default
      * @param env_var_name Name of the environment variable to read
-     * @param default_value Default value to return if environment variable is
-     * not set
+     * @param default_value Default value to return if environment variable
+     * is not set
      * @return Environment variable value or default value
      *
      * Thread-safe and caches results for performance.
@@ -136,20 +161,23 @@ class EnvironmentVariableManager final
     EnvironmentVariableManager();
     ~EnvironmentVariableManager() = default;
 
-    /**
-     * @brief Convert string to lowercase in-place
-     * @param str String to convert (modified in-place)
-     */
     void toLowerInPlace(std::string& str) noexcept;
 
-    /**
-     * @brief Parse architecture string to ArchitectureType enum
-     * @param arch_str Architecture string (will be converted to lowercase)
-     * @return ArchitectureType enum value, or ArchitectureType::Error if
-     * parsing fails
-     */
-    arch_utils::ArchitectureType parseArchitectureString(
-        const std::string& arch_str) noexcept;
+    template<typename T, uint64_t N>
+    T parsePredefinedString(
+        const std::string&                                   keyStr,
+        const std::array<std::pair<std::string_view, T>, N>& strMap,
+        T                                                    errVal) noexcept
+    {
+        // Linear search through the sorted lookup table
+        for (const auto& [preDefName, preDefType] : strMap) {
+            if (keyStr == preDefName) {
+                return preDefType;
+            }
+        }
+
+        return errVal;
+    }
 
     /**
      * @brief Get raw environment variable value

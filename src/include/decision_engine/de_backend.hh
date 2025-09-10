@@ -49,9 +49,10 @@ class gemmF32DEBackend : public iDEBackend
         dlp::kernel_frame::kernelOpsMetaData* metaData,
         lpgemm_post_op*                       post_op,
         kernel_frame::kernelDatatype          k_dtype);
-    bool isZen4;
-    bool isZen;
-    bool canGenerateKernelInfo;
+    bool                                isAvx512;
+    bool                                isAvx2;
+    kernel_frame::kernelInstrPreference eKernelInstPref;
+    bool                                canGenerateKernelInfo;
 
   public:
     gemmF32DEBackend();

@@ -1115,7 +1115,6 @@ packa_mr8_u8s8s32o32_col_major(uint8_t*       pack_a_buffer_u8s8s32o32,
                                const md_t     cs,
                                const md_t     KC)
 {
-    // printf("in mr 8 - ");
     md_t    kr = 0;
     __m128i a_reg[16], b_reg[16];
 

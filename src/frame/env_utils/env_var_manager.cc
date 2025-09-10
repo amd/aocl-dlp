@@ -27,7 +27,6 @@
  */
 
 #include <algorithm>
-#include <array>
 #include <cctype>
 #include <charconv>
 #include <cstdlib>
@@ -64,6 +63,24 @@ constexpr std::array<std::pair<std::string_view, arch_utils::ArchitectureType>,
           { "ssse3", arch_utils::ArchitectureType::Generic },
           { "sse3", arch_utils::ArchitectureType::Generic },
           { "sse2", arch_utils::ArchitectureType::Generic } }
+    };
+
+// Static lookup table for isa preference string mappings
+// Using std::array for compile-time initialization and better cache locality
+constexpr std::array<
+    std::pair<std::string_view, kernel_frame::kernelInstrPreference>,
+    9>
+    INSTR_PREF_STRING_MAP = {
+        { { "zen5", kernel_frame::kernelInstrPreference::avx512_zmm_favour },
+          { "zen4", kernel_frame::kernelInstrPreference::avx512_zmm_favour },
+          { "zen3", kernel_frame::kernelInstrPreference::avx2_ymm_favour },
+          { "zen2", kernel_frame::kernelInstrPreference::avx2_ymm_favour },
+          { "zen", kernel_frame::kernelInstrPreference::avx2_ymm_favour },
+          { "zen1", kernel_frame::kernelInstrPreference::avx2_ymm_favour },
+          { "avx512", kernel_frame::kernelInstrPreference::avx512_zmm_favour },
+          { "avx512_ymm",
+            kernel_frame::kernelInstrPreference::avx512_ymm_favour },
+          { "avx2", kernel_frame::kernelInstrPreference::avx2_ymm_favour } }
     };
 
 // Static lookup table for boolean string parsing
@@ -118,10 +135,25 @@ EnvironmentVariableManager::getArchitectureFromEnv(
     // Check cache first
     auto cache_it = env_cache_.find(env_var_name);
     if (cache_it != env_cache_.end()) {
-        return parseArchitectureString(cache_it->second);
+        return parsePredefinedString(cache_it->second, ARCH_STRING_MAP,
+                                     arch_utils::ArchitectureType::Error);
     }
 
     return arch_utils::ArchitectureType::Error;
+}
+
+kernel_frame::kernelInstrPreference
+EnvironmentVariableManager::getKernelInstructionPreferenceFromEnv(
+    const std::string& env_var_name)
+{
+    // Check cache first
+    auto cache_it = env_cache_.find(env_var_name);
+    if (cache_it != env_cache_.end()) {
+        return parsePredefinedString(cache_it->second, INSTR_PREF_STRING_MAP,
+                                     kernel_frame::kernelInstrPreference::none);
+    }
+
+    return kernel_frame::kernelInstrPreference::none;
 }
 
 std::string
@@ -195,20 +227,6 @@ EnvironmentVariableManager::toLowerInPlace(std::string& str) noexcept
 {
     std::transform(str.begin(), str.end(), str.begin(),
                    [](unsigned char c) { return std::tolower(c); });
-}
-
-arch_utils::ArchitectureType
-EnvironmentVariableManager::parseArchitectureString(
-    const std::string& arch_str) noexcept
-{
-    // Binary search through the sorted lookup table
-    for (const auto& [arch_name, arch_type] : ARCH_STRING_MAP) {
-        if (arch_str == arch_name) {
-            return arch_type;
-        }
-    }
-
-    return arch_utils::ArchitectureType::Error;
 }
 
 std::optional<std::string>

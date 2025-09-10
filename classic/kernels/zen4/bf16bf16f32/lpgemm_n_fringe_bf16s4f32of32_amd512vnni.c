@@ -169,13 +169,6 @@ LPGEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
                               + pre_op_sf_off)));
                     }
 
-                    // float temp[16];
-                    // _mm512_storeu_ps( temp, scale0 );
-                    // printf("group:%ld, scale_factors:", group);
-                    // for( md_t i = 0; i < 16; i++ )
-                    // {
-                    // 	printf( " %f ", temp[i] );
-                    // } printf("\n");
                     scale1 = scale0;
                 }
 
@@ -5536,7 +5529,6 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
     POST_OPS_RELU_6x48: {
-        // printf("relu\n");
         selector1 = _mm512_setzero_ps();
 
         // c[0,0-15]

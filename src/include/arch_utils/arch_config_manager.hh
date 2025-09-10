@@ -44,6 +44,13 @@ enum class ArchitectureType : int16_t
     Zen3,
     Zen2,
     Zen,
+
+    // These archs are used to represent non zen architectures. However kernel
+    // dispatch is to be done based on the underlying ISA instead of arch.
+    GenericAvx512Bf16,
+    GenericAvx512Vnni,
+    GenericAvx512,
+    GenericAvx2
 };
 
 /**

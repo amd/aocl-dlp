@@ -494,7 +494,6 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 _mm_maskz_loadu_epi8(_cvtu32_mask16(0x0001),
                                      ((int8_t*)post_ops_list_temp->op_args1))));
         } else if (post_ops_list_temp->stor_type == DLP_U8) {
-            printf("DLP_U8\n");
             b0 = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(
                 _mm_maskz_loadu_epi8(_cvtu32_mask16(0x0001),
                                      ((int8_t*)post_ops_list_temp->op_args1))));
