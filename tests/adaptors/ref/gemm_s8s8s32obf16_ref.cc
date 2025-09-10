@@ -32,7 +32,7 @@
 namespace dlp::testing::classic::ref {
 
 using dlp::testing::utils::bf16_to_f32;
-using dlp::testing::utils::f32_to_bf16;
+using dlp::testing::utils::f32_to_bf16_vcvtneps2bf16;
 
 void
 aocl_gemm_s8s8s32obf16_ref(const char      order,
@@ -52,10 +52,20 @@ aocl_gemm_s8s8s32obf16_ref(const char      order,
                            dlp_metadata_t* post_ops)
 {
     // Reference implementation that mimics the VNNI vpdpbusd instruction
-    // behavior vpdpbusd performs: unsigned_A × signed_B + accumulator To
-    // compute s8×s8, we convert A to unsigned (A+128), then apply bias
-    // correction Final result: (A+128)×B - 128×sum(B) = A×B + 128×B -
-    // 128×sum(B) = A×B
+    // behavior. The vpdpbusd instruction performs: dst = dst + unsigned_A ×
+    // signed_B (with accumulation).
+    //
+    // To compute s8×s8 using vpdpbusd (which expects unsigned×signed), we:
+    // 1. Convert signed A to unsigned by adding 128: A_unsigned = A_signed +
+    // 128
+    // 2. Compute: (A_signed + 128) × B_signed + accumulator
+    // 3. Apply bias correction to get the correct s8×s8 result
+    //
+    // Mathematical derivation:
+    // (A_signed + 128) × B_signed = A_signed × B_signed + 128 × B_signed
+    // Therefore: A_signed × B_signed = (A_signed + 128) × B_signed - 128 ×
+    // B_signed Final result: A_signed × B_signed = dot_product - 128 ×
+    // sum(B_signed)
 
     // Implementation of the reference kernel
     md_t i, j, l;
@@ -133,7 +143,7 @@ aocl_gemm_s8s8s32obf16_ref(const char      order,
 
             // Step 2: Convert int32 result to float32 (matches kernel:
             // _mm512_cvtepi32_ps)
-            float result_f32 = static_cast<float>(alpha_times_sum);
+            int32_t result_i32 = alpha_times_sum;
 
             // Step 3: Handle beta*C term in float32 domain (matches kernel
             // post-ops flow)
@@ -144,17 +154,20 @@ aocl_gemm_s8s8s32obf16_ref(const char      order,
                 else
                     c_f32 = bf16_to_f32(C[j * ldc + i]);
 
-                result_f32 += static_cast<float>(beta) * c_f32;
+                int32_t c_int32 = static_cast<int32_t>(c_f32);
+                int32_t betaC   = (beta * c_int32);
+                result_i32 += betaC;
             }
-            result_f32 = std::round(result_f32);
+
             // Step 4: Convert final float32 result to bf16 (matches kernel
             // output)
-            bfloat16 result_bf16 = f32_to_bf16(result_f32);
+            float    result_f32 = static_cast<float>(result_i32);
+            bfloat16 bf_result  = f32_to_bf16_vcvtneps2bf16(result_f32);
 
             if (order == 'R' || order == 'r')
-                C[i * ldc + j] = result_bf16;
+                C[i * ldc + j] = bf_result;
             else
-                C[j * ldc + i] = result_bf16;
+                C[j * ldc + i] = bf_result;
         }
     }
 }

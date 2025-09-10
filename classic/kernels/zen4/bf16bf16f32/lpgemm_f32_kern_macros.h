@@ -93,7 +93,7 @@
                                  + (post_ops_attr.rs_c_downscale               \
                                     * (post_ops_attr.post_op_c_i + m_ind))     \
                                  + post_ops_attr.post_op_c_j + (n_ind * 16),   \
-                             mask_all1, (__m256i)_mm512_cvtneps_pbh(reg))
+                             mask_all1, (__m256i)_mm512_cvtneps_pbh(reg));
 
 #define CVT_STORE_F32_BF16_POST_OPS_MASK(reg, mask, m_ind, n_ind)              \
     _mm256_mask_storeu_epi16(b_q + (rs_b * (ir + m_ind))                       \

@@ -27,11 +27,12 @@
 
 #include "adaptors/ref/gemm_ref.hh"
 #include "utils/conversion_utils.hh"
+#include <cmath>
 
 namespace dlp::testing::classic::ref {
 
 using dlp::testing::utils::bf16_to_f32;
-using dlp::testing::utils::f32_to_bf16;
+using dlp::testing::utils::f32_to_bf16_vcvtneps2bf16;
 
 void
 aocl_gemm_u8s8s32obf16_ref(const char      order,
@@ -50,6 +51,24 @@ aocl_gemm_u8s8s32obf16_ref(const char      order,
                            int             ldc,
                            dlp_metadata_t* post_ops)
 {
+    // Reference implementation for u8×s8 matrix multiplication using VNNI-style
+    // computation. This function computes C = alpha * A * B + beta * C where:
+    // - A is unsigned 8-bit (u8): values 0 to 255
+    // - B is signed 8-bit (s8): values -128 to 127
+    // - C is bfloat16 output
+    //
+    // Unlike s8×s8 computation, u8×s8 directly matches the vpdpbusd instruction
+    // behavior without requiring bias correction, since:
+    // - vpdpbusd expects: unsigned_A × signed_B + accumulator
+    // - We have: unsigned_A (u8) × signed_B (s8) + accumulator
+    //
+    // Algorithm:
+    // 1. For each element: u8_val × s8_val = result (no conversion needed)
+    // 2. Accumulate results in int32 domain
+    // 3. Apply alpha scaling
+    // 4. Add beta*C term if beta != 0
+    // 5. Convert final result to bfloat16
+
     // Implementation of the reference kernel
     md_t i, j, l;
 
@@ -114,7 +133,7 @@ aocl_gemm_u8s8s32obf16_ref(const char      order,
 
             // Step 2: Convert int32 result to float32 (matches kernel:
             // _mm512_cvtepi32_ps)
-            float result_f32 = static_cast<float>(alpha_times_sum);
+            int32_t result_i32 = alpha_times_sum;
 
             // Step 3: Handle beta*C term in float32 domain (matches kernel
             // post-ops flow)
@@ -125,12 +144,15 @@ aocl_gemm_u8s8s32obf16_ref(const char      order,
                 else
                     c_f32 = bf16_to_f32(C[j * ldc + i]);
 
-                result_f32 += static_cast<float>(beta) * c_f32;
+                int32_t c_int32 = static_cast<int32_t>(c_f32);
+                int32_t betaC   = (beta * c_int32);
+                result_i32 += betaC;
             }
 
             // Step 4: Convert final float32 result to bf16 (matches kernel
             // output)
-            bfloat16 bf_result = f32_to_bf16(result_f32);
+            float    result_f32 = static_cast<float>(result_i32);
+            bfloat16 bf_result  = f32_to_bf16_vcvtneps2bf16(result_f32);
 
             if (order == 'R' || order == 'r')
                 C[i * ldc + j] = bf_result;

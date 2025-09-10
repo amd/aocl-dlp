@@ -30,6 +30,7 @@
 // INCLUDES AND DEPENDENCIES
 // ============================================================================
 
+#include "classic/aocl_bf16_type.h"
 #include "framework/operation.hh"
 #include "framework/ual.hh"
 #include "framework/ual_factory.hh"

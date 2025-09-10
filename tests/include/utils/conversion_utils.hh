@@ -55,6 +55,18 @@ namespace dlp { namespace testing { namespace utils {
      */
     bfloat16 f32_to_bf16(float f32_val);
 
+    /**
+     * @brief Convert float32 to bfloat16 using VCVTNEPS2BF16 algorithm
+     *
+     * This function implements the conversion from float32 to bfloat16
+     * following the VCVTNEPS2BF16 instruction semantics, which includes
+     * specific handling for zero, denormals, infinities, NaNs, and normal
+     * numbers.
+     * @param f32_val The float32 value to convert
+     * @return bfloat16 The corresponding bfloat16 value
+     */
+    bfloat16 f32_to_bf16_vcvtneps2bf16(float f32_val);
+
 }}} // namespace dlp::testing::utils
 
 #endif // DLP_TESTING_UTILS_CONVERSION_UTILS_HH

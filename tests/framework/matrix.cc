@@ -38,6 +38,7 @@
  */
 
 #include "framework/matrix.hh"
+#include "aocl_dlp_config.h"
 #include "classic/aocl_bf16_type.h"
 #include "classic/dlp_base_types.h"
 #include "utils/conversion_utils.hh"
@@ -60,7 +61,8 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Default constructor implementation
      *
-     * Creates an empty matrix with default values. No memory is allocated.
+     * Creates an empty matrix with default values. Initializes all member
+     * variables to default states but does not allocate any memory.
      */
     Matrix::Matrix()
         : m_rows(0)
@@ -82,7 +84,9 @@ namespace dlp { namespace testing { namespace framework {
      * @brief Main constructor with external memory management
      *
      * Creates a matrix with specified dimensions, data type, layout, and
-     * externally provided memory. Takes ownership of the unique_ptr.
+     * externally provided memory. Takes ownership of the provided raw pointer.
+     * The caller must ensure the memory remains valid for the lifetime of this
+     * matrix object.
      */
     Matrix::Matrix(md_t         rows,
                    md_t         cols,
@@ -174,6 +178,7 @@ namespace dlp { namespace testing { namespace framework {
             size_t alignedSize =
                 (m_dataSizeBytes + alignment - 1) & ~(alignment - 1);
 
+            // Use C++17 aligned allocation for aligned memory
             m_data = static_cast<uint8_t*>(
                 std::aligned_alloc(alignment, alignedSize));
             if (!m_data) {
@@ -183,7 +188,7 @@ namespace dlp { namespace testing { namespace framework {
             // Update size to reflect actual allocated size
             m_dataSizeBytes = alignedSize;
         } else {
-            // Use regular allocation
+            // Use regular new[] allocation for unaligned memory
             m_data = new uint8_t[m_dataSizeBytes];
         }
     }
@@ -634,7 +639,17 @@ namespace dlp { namespace testing { namespace framework {
 
         switch (m_type) {
             case MatrixType::f32: {
+#if DLP_ENABLE_HIGH_PRECISION_FLOAT
                 std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
+                float* data         = reinterpret_cast<float*>(m_data);
+                size_t elementCount = m_dataSizeBytes / sizeof(float);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    float value = dis(gen);
+                    data[i]     = value;
+                }
+                break;
+#else
+                std::uniform_real_distribution<float> dis(-5.0f, 5.0f);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
                 for (size_t i = 0; i < elementCount; ++i) {
@@ -644,6 +659,7 @@ namespace dlp { namespace testing { namespace framework {
                     data[i]     = std::trunc(value); // Truncates toward zero
                 }
                 break;
+#endif
             }
             case MatrixType::u8: {
                 std::uniform_int_distribution<uint8_t> dis(0, 255);
@@ -699,6 +715,7 @@ namespace dlp { namespace testing { namespace framework {
                 break;
             }
             case MatrixType::bf16: {
+#if DLP_ENABLE_HIGH_PRECISION_FLOAT // Enable this to get a proper test case.
                 // For BF16, fill with random uint16_t values
                 std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
                 uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
@@ -707,6 +724,16 @@ namespace dlp { namespace testing { namespace framework {
                     data[i] = f32_to_bf16(dis(gen));
                 }
                 break;
+#else
+                // For BF16, fill with random uint16_t values
+                std::uniform_int_distribution<int16_t> dis(0, 5);
+                uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = f32_to_bf16(static_cast<float>(dis(gen)));
+                }
+                break;
+#endif
             }
             case MatrixType::u4:
             case MatrixType::s4: {

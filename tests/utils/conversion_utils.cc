@@ -59,4 +59,74 @@ namespace dlp { namespace testing { namespace utils {
         return static_cast<bfloat16>(bf16_upper);
     }
 
+    /**
+     * @brief Convert float32 to bfloat16 using VCVTNEPS2BF16 instruction
+     * behavior
+     *
+     * This function mimics the exact behavior of the Intel VCVTNEPS2BF16
+     * instruction which converts packed single-precision floating-point values
+     * to packed BF16 values using specific rounding and special case handling.
+     *
+     * Algorithm overview:
+     * 1. Handle special cases: zero/denormal, infinity, NaN
+     * 2. For normal numbers: apply round-to-nearest-even with bias
+     * 3. Truncate to upper 16 bits to get BF16 result
+     *
+     * The instruction pseudocode reference:
+     * FOR j := 0 to elements-1
+     *     IF input[j] is zero or denormal THEN
+     *         result[j] := sign-preserving zero
+     *     ELSE IF input[j] is infinity THEN
+     *         result[j] := input[j][31:16] (preserve sign and infinity)
+     *     ELSE IF input[j] is NaN THEN
+     *         result[j] := input[j][31:16] with MSB of mantissa set (force
+     * QNAN) ELSE // normal number result[j] :=
+     * round_to_nearest_even(input[j])[31:16] ENDIF ENDFOR
+     */
+    bfloat16 f32_to_bf16_vcvtneps2bf16(float f32_val)
+    {
+        union
+        {
+            float    f;
+            uint32_t u;
+        } x;
+        x.f = f32_val;
+
+        // Extract components
+        uint32_t sign     = x.u & 0x80000000U;
+        uint32_t exp      = x.u & 0x7F800000U;
+        uint32_t mantissa = x.u & 0x007FFFFFU;
+
+        uint16_t dest;
+
+        // Check if x is zero or denormal
+        if (exp == 0) {
+            // Sign preserving zero (denormal go to zero)
+            dest = static_cast<uint16_t>(sign >> 16U); // dest[15] := x[31]
+            // dest[14:0] := 0 (already handled by the sign shift)
+        }
+        // Check if x is infinity
+        else if (exp == 0x7F800000U && mantissa == 0) {
+            dest = static_cast<uint16_t>(x.u >> 16U); // dest[15:0] := x[31:16]
+        }
+        // Check if x is NaN
+        else if (exp == 0x7F800000U && mantissa != 0) {
+            dest = static_cast<uint16_t>(
+                x.u >> 16U); // dest[15:0] := x[31:16] (truncate)
+            dest |= 0x0040U; // dest[6] := 1 (set MSB of mantissa to force QNAN)
+        }
+        // Normal number
+        else {
+            uint32_t lsb = (x.u >> 16U) & 1U; // LSB := x[16]
+            uint32_t rounding_bias =
+                0x00007FFFU + lsb; // rounding_bias := 0x00007FFF + LSB
+            uint32_t temp = x.u + rounding_bias; // temp[31:0] := x[31:0] +
+                                                 // rounding_bias (integer add)
+            dest =
+                static_cast<uint16_t>(temp >> 16U); // dest[15:0] := temp[31:16]
+        }
+
+        return static_cast<bfloat16>(dest);
+    }
+
 }}} // namespace dlp::testing::utils
