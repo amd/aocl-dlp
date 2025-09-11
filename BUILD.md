@@ -24,13 +24,39 @@ Before building AOCL-DLP, ensure your system meets the following requirements:
 
 AOCL-DLP uses CMake for its build system with several configurable options:
 
-| Option             | Default | Description                                   |
-|--------------------|---------|-----------------------------------------------|
-| BUILD_EXAMPLES     | OFF     | Build example programs                         |
-| BUILD_BENCHMARKS   | OFF     | Build benchmark programs                       |
-| DLP_THREADING_MODEL| "none"  | Threading model ("none", "openmp", "pthread") |
-| DLP_OPENMP_ROOT    | ""      | Custom path to OpenMP installation            |
-| DLP_USE_LLVM_OPENMP| OFF     | Force using LLVM OpenMP implementation        |
+| Option                        | Default      | Description                                                        |
+|-------------------------------|--------------|--------------------------------------------------------------------|
+| **General Build Options**     |              |                                                                    |
+| BUILD_EXAMPLES                | OFF          | Build example programs                                             |
+| BUILD_BENCHMARKS              | OFF          | Build benchmark programs                                           |
+| BUILD_TESTING                 | OFF          | Build test programs (requires DLP_CTEST_DISABLED=OFF for CTest)   |
+| BUILD_DOXYGEN                 | OFF          | Build Doxygen documentation                                        |
+| BUILD_SPHINX                  | OFF          | Build Sphinx documentation                                         |
+| CMAKE_EXPORT_COMPILE_COMMANDS | OFF          | Generate compile_commands.json for tooling                         |
+| CMAKE_BUILD_TYPE              | Release      | Build type ("Release", "Debug", "RelWithDebInfo", "Coverage")      |
+| CMAKE_INSTALL_PREFIX          | /usr/local   | Installation directory                                             |
+|                               |              |                                                                    |
+| **Compiler Options**          |              |                                                                    |
+| CMAKE_CXX_COMPILER            | system       | Specify C++ compiler (e.g., g++)                                   |
+| CMAKE_C_COMPILER              | system       | Specify C compiler (e.g., gcc)                                     |
+|                               |              |                                                                    |
+| **Threading & Sanitizers**    |              |                                                                    |
+| DLP_THREADING_MODEL           | "none"       | Threading model ("none", "openmp", "pthread")                      |
+| DLP_ENABLE_OPENMP             | ON           | Override OpenMP support (auto-enabled by threading model)         |
+| DLP_OPENMP_ROOT               | ""           | Custom path to OpenMP installation                                 |
+| DLP_USE_LLVM_OPENMP           | OFF          | Force using LLVM OpenMP implementation                             |
+| DLP_ENABLE_ASAN               | OFF          | Enable AddressSanitizer                                            |
+| DLP_ENABLE_TSAN               | OFF          | Enable ThreadSanitizer                                             |
+| DLP_ENABLE_UBSAN              | OFF          | Enable UndefinedBehaviorSanitizer                                  |
+| DLP_CTEST_DISABLED            | ON           | Disable CTest integration (set to OFF to enable with BUILD_TESTING)|
+|                               |              |                                                                    |
+| **Advanced Options**          |              |                                                                    |
+| DLP_ENABLE_HIGH_PRECISION_FLOAT | OFF        | Enable high precision float (double) support                       |
+
+**Note:**
+- Options can be set via `-D<option>=<value>` when invoking `cmake`.
+- Some options (like `-GNinja`) are passed as command-line arguments, not as variables.
+- For a full list of options, see `cmake/dlp_options.cmake` and `CMakeLists.txt`.
 
 ## Quick Start Build
 
@@ -66,7 +92,7 @@ AOCL-DLP uses CMake for its build system with several configurable options:
    ninja
    ```
 
-5. For installation instructions, see `INSTALL.md`.
+5. For installation instructions, see [INSTALL.md](INSTALL.md).
 
 ---
 
@@ -74,11 +100,19 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 
 ### Enabling Additional Components
 
-To enable benchmarks, use the following CMake options:
+To enable benchmarks:
 
 ```bash
 cmake -DBUILD_BENCHMARKS=ON ..
 ```
+
+To enable testing with full CTest integration:
+
+```bash
+cmake -DBUILD_TESTING=ON -DDLP_CTEST_DISABLED=OFF ..
+```
+
+**Note:** Both `BUILD_TESTING=ON` and `DLP_CTEST_DISABLED=OFF` are required for full CTest integration. Using only `BUILD_TESTING=ON` builds tests but uses traditional testing instead of Google Test discovery.
 
 ### Threading Model Configuration
 
@@ -95,10 +129,20 @@ cmake -DDLP_THREADING_MODEL=openmp ..
 cmake -DDLP_THREADING_MODEL=pthread ..
 ```
 
+**Note:** Setting `DLP_THREADING_MODEL=openmp` automatically enables OpenMP support. The separate `DLP_ENABLE_OPENMP` option (default: ON) provides additional control and can disable OpenMP entirely with `-DDLP_ENABLE_OPENMP=OFF`.
+
 For custom OpenMP installation:
 
 ```bash
 cmake -DDLP_THREADING_MODEL=openmp -DDLP_OPENMP_ROOT=/path/to/openmp ..
+```
+
+### High Precision Float Support
+
+Enable high precision float (double) support:
+
+```bash
+cmake -DDLP_ENABLE_HIGH_PRECISION_FLOAT=ON ..
 ```
 
 ### Specifying Build Type
@@ -114,33 +158,16 @@ cmake -DCMAKE_BUILD_TYPE=Release ..
 
 # Release with debug info
 cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
+
+# Coverage build (for code coverage analysis)
+cmake -DCMAKE_BUILD_TYPE=Coverage ..
 ```
 
-## 🏁 Benchmarking
+## Benchmarking
 
 Enable and run tests and benchmarks in one place:
 
-```bash
-# Configure with tests and benchmarks
-cmake -DBUILD_BENCHMARKS=ON ..
 
-# Build (make or ninja)
-make -j$(nproc)
-# or
-ninja
-
-# Run benchmarks
-cd ../
-./build/bench/classic/bench_lpgemm  -m p -n 50 -i bench/classic/bench_input.txt
-```
-
-Input files for benchmarks are available in the `bench/classic` directory:
-- bench_input.txt
-- bench_batch_input.txt
-- bench_sym_quant_input.txt
-- bench_unpack_input.txt
-- bench_utils_input.txt
-- bench_eltwise_ops_input.txt
 
 ## Developer Tips
 
