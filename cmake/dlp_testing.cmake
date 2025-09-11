@@ -28,13 +28,18 @@ include(FetchContent)
 include(GoogleTest)
 
 function(fetch_gtest)
-    FetchContent_Declare(
-        gtest
-        GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG        v1.17.0
-    )
+    if(NOT gtest_FETCHED)
+        MESSAGE(WARNING "By enabling Google Test, you agree to its license terms: https://github.com/google/googletest/blob/main/LICENSE")
 
-    FetchContent_MakeAvailable(gtest)
+        FetchContent_Declare(
+            gtest
+            GIT_REPOSITORY https://github.com/google/googletest.git
+            GIT_TAG        v1.17.0
+        )
+
+        FetchContent_MakeAvailable(gtest)
+        set(gtest_FETCHED TRUE CACHE INTERNAL "gtest already fetched")
+    endif()
 endfunction()
 
 function(create_test_config)
