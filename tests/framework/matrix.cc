@@ -163,33 +163,14 @@ namespace dlp { namespace testing { namespace framework {
         m_dataSizeBytes = MatrixMemory::calculateRequiredBytes(
             type, rows, cols, layout, m_leadingDim);
 
-        // Allocate memory based on alignment requirements
-        if (alignment > 0) {
-            // Validate alignment requirements for std::aligned_alloc
-            if ((alignment & (alignment - 1)) != 0) {
-                throw std::invalid_argument("Alignment must be a power of 2");
-            }
-            if (alignment < sizeof(void*)) {
-                throw std::invalid_argument(
-                    "Alignment must be at least sizeof(void*)");
-            }
+        // Allocate memory using helper method
+        m_data = allocateAlignedMemory(m_dataSizeBytes, alignment);
 
-            // Ensure size is a multiple of alignment for std::aligned_alloc
+        // Update size to reflect actual allocated size if aligned
+        if (alignment > 0) {
             size_t alignedSize =
                 (m_dataSizeBytes + alignment - 1) & ~(alignment - 1);
-
-            // Use C++17 aligned allocation for aligned memory
-            m_data = static_cast<uint8_t*>(
-                std::aligned_alloc(alignment, alignedSize));
-            if (!m_data) {
-                throw std::bad_alloc();
-            }
-
-            // Update size to reflect actual allocated size
             m_dataSizeBytes = alignedSize;
-        } else {
-            // Use regular new[] allocation for unaligned memory
-            m_data = new uint8_t[m_dataSizeBytes];
         }
     }
 
@@ -212,16 +193,8 @@ namespace dlp { namespace testing { namespace framework {
         , m_reordered(other.m_reordered)
         , m_packed(other.m_packed)
     {
-        // Allocate new memory using same alignment as source
-        if (m_alignment > 0) {
-            m_data = static_cast<uint8_t*>(
-                std::aligned_alloc(m_alignment, m_dataSizeBytes));
-            if (!m_data) {
-                throw std::bad_alloc();
-            }
-        } else {
-            m_data = new uint8_t[m_dataSizeBytes];
-        }
+        // Allocate new memory using helper method
+        m_data = allocateAlignedMemory(m_dataSizeBytes, m_alignment);
 
         // Copy the data
         if (other.m_data && m_dataSizeBytes > 0) {
@@ -267,15 +240,7 @@ namespace dlp { namespace testing { namespace framework {
      */
     Matrix::~Matrix()
     {
-        if (m_data) {
-            if (m_alignment > 0) {
-                // Memory was allocated with std::aligned_alloc
-                std::free(m_data);
-            } else {
-                // Memory was allocated with new[]
-                delete[] m_data;
-            }
-        }
+        deallocateAlignedMemory(m_data, m_alignment);
     }
 
     /**
@@ -290,14 +255,8 @@ namespace dlp { namespace testing { namespace framework {
             return *this;
         }
 
-        // Free existing memory
-        if (m_data) {
-            if (m_alignment > 0) {
-                std::free(m_data);
-            } else {
-                delete[] m_data;
-            }
-        }
+        // Free existing memory using helper method
+        deallocateAlignedMemory(m_data, m_alignment);
 
         // Copy metadata
         m_rows          = other.m_rows;
@@ -312,16 +271,8 @@ namespace dlp { namespace testing { namespace framework {
         m_reordered     = other.m_reordered;
         m_packed        = other.m_packed;
 
-        // Allocate new memory using same alignment as source
-        if (m_alignment > 0) {
-            m_data = static_cast<uint8_t*>(
-                std::aligned_alloc(m_alignment, m_dataSizeBytes));
-            if (!m_data) {
-                throw std::bad_alloc();
-            }
-        } else {
-            m_data = new uint8_t[m_dataSizeBytes];
-        }
+        // Allocate new memory using helper method
+        m_data = allocateAlignedMemory(m_dataSizeBytes, m_alignment);
 
         // Copy the data
         if (other.m_data && m_dataSizeBytes > 0) {
@@ -343,14 +294,8 @@ namespace dlp { namespace testing { namespace framework {
             return *this;
         }
 
-        // Free existing memory
-        if (m_data) {
-            if (m_alignment > 0) {
-                std::free(m_data);
-            } else {
-                delete[] m_data;
-            }
-        }
+        // Free existing memory using helper method
+        deallocateAlignedMemory(m_data, m_alignment);
 
         // Transfer ownership
         m_rows          = other.m_rows;
@@ -566,6 +511,54 @@ namespace dlp { namespace testing { namespace framework {
     bool Matrix::operator!=(const Matrix& other) const
     {
         return !(*this == other);
+    }
+
+    /**
+     * @brief Allocate aligned memory with proper size rounding
+     */
+    uint8_t* Matrix::allocateAlignedMemory(size_t sizeBytes, size_t alignment)
+    {
+        if (alignment > 0) {
+            // Validate alignment requirements for std::aligned_alloc
+            if ((alignment & (alignment - 1)) != 0) {
+                throw std::invalid_argument("Alignment must be a power of 2");
+            }
+            if (alignment < sizeof(void*)) {
+                throw std::invalid_argument(
+                    "Alignment must be at least sizeof(void*)");
+            }
+
+            // Ensure size is a multiple of alignment for std::aligned_alloc
+            size_t alignedSize = (sizeBytes + alignment - 1) & ~(alignment - 1);
+
+            // Use C++17 aligned allocation for aligned memory
+            uint8_t* data = static_cast<uint8_t*>(
+                std::aligned_alloc(alignment, alignedSize));
+            if (!data) {
+                throw std::bad_alloc();
+            }
+
+            return data;
+        } else {
+            // Use regular new[] allocation for unaligned memory
+            return new uint8_t[sizeBytes];
+        }
+    }
+
+    /**
+     * @brief Deallocate aligned memory
+     */
+    void Matrix::deallocateAlignedMemory(uint8_t* ptr, size_t alignment)
+    {
+        if (ptr) {
+            if (alignment > 0) {
+                // Memory was allocated with std::aligned_alloc
+                std::free(ptr);
+            } else {
+                // Memory was allocated with new[]
+                delete[] ptr;
+            }
+        }
     }
 
     /**

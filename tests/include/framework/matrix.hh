@@ -563,6 +563,26 @@ namespace dlp { namespace testing { namespace framework {
          */
         bool compareFloatingPointData(const Matrix& other) const;
 
+        /**
+         * @brief Allocate aligned memory with proper size rounding
+         *
+         * @param sizeBytes Requested size in bytes
+         * @param alignment Required alignment (0 for no special alignment)
+         * @return Pointer to allocated memory
+         * @throws std::bad_alloc if allocation fails
+         * @throws std::invalid_argument if alignment is invalid
+         */
+        uint8_t* allocateAlignedMemory(size_t sizeBytes, size_t alignment);
+
+        /**
+         * @brief Deallocate aligned memory
+         *
+         * @param ptr Pointer to memory to deallocate
+         * @param alignment Alignment used during allocation (0 for regular
+         * allocation)
+         */
+        void deallocateAlignedMemory(uint8_t* ptr, size_t alignment);
+
         md_t m_rows; ///< Number of rows in the matrix
         md_t m_cols; ///< Number of columns in the matrix
         md_t m_k = std::numeric_limits<md_t>::max(); ///< K Dim for tolerance
