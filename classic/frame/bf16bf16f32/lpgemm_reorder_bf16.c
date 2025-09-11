@@ -52,8 +52,8 @@ reorderb_nr64_bf16bf16f32of32_reference(lpgemm_obj_t*  b,
     md_t n    = b->width;
     md_t k    = b->length;
 
-    md_t rs_b_reorder;
-    md_t cs_b_reorder;
+    md_t rs_b_reorder = rs_b;
+    md_t cs_b_reorder = cs_b;
 
     // k needs to be a multiple of 2 so that it can be used with dpbf
     // instruction. Padding is added in cases this condition is not
@@ -250,8 +250,8 @@ reorderb_nr64_bf16bf16f32of32(lpgemm_obj_t*  b,
     md_t n    = b->width;
     md_t k    = b->length;
 
-    md_t rs_b_reorder;
-    md_t cs_b_reorder;
+    md_t rs_b_reorder = rs_b;
+    md_t cs_b_reorder = cs_b;
 
     // k needs to be a multiple of 2 so that it can be used with dpbf
     // instruction. Padding is added in cases this condition is not
@@ -449,8 +449,8 @@ reorderb_nr64_bf16s4f32of32(lpgemm_obj_t*  b,
     md_t             k        = b->length;
     AOCL_MATRIX_TYPE mat_type = b->mat_type;
 
-    md_t rs_b_reorder;
-    md_t cs_b_reorder;
+    md_t rs_b_reorder = rs_b;
+    md_t cs_b_reorder = cs_b;
 
     // k needs to be a multiple of 2 so that it can be used with dpbf
     // instruction. Padding is added in cases this condition is not
@@ -572,8 +572,8 @@ reorderb_mxp_nr64_f32obf16(lpgemm_obj_t*  b,
     md_t n    = b->width;
     md_t k    = b->length;
 
-    md_t rs_b_reorder;
-    md_t cs_b_reorder;
+    md_t rs_b_reorder = rs_b;
+    md_t cs_b_reorder = cs_b;
 
     // k needs to be a multiple of 2 so that it can be used with dpbf
     // instruction. Padding is added in cases this condition is not

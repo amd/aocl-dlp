@@ -119,7 +119,7 @@ aocl_gemm_bf16bf16f32of32(const char      order,
                       " kernels using JIT.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return;
+        goto err_hndl;
     }
 #endif
 
@@ -230,7 +230,7 @@ aocl_gemm_bf16bf16f32of32(const char      order,
         lpgemm_rowvar_tiny_bf16bf16f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
             cs_c, alpha, beta, lcntx_g, post_op_list, DLP_F32);
-        return;
+        goto err_hndl;
     }
 #endif
 

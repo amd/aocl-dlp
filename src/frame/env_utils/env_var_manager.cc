@@ -38,7 +38,7 @@ namespace dlp::env_utils {
 // Static lookup table for architecture string mappings
 // Using std::array for compile-time initialization and better cache locality
 constexpr std::array<std::pair<std::string_view, arch_utils::ArchitectureType>,
-                     18>
+                     19>
     ARCH_STRING_MAP = {
         { // Primary AMD architecture names
           { "zen5", arch_utils::ArchitectureType::Zen5 },
@@ -50,6 +50,7 @@ constexpr std::array<std::pair<std::string_view, arch_utils::ArchitectureType>,
 
           // ISA aliases mapped to suitable architectures
           { "avx512", arch_utils::ArchitectureType::Zen4 },
+          { "avx512_ymm", arch_utils::ArchitectureType::Zen4 },
           { "avx2", arch_utils::ArchitectureType::Zen3 },
           { "avx", arch_utils::ArchitectureType::Generic },
 

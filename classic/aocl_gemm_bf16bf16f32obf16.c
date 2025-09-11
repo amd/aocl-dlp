@@ -116,7 +116,7 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
                       " kernels using JIT.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        return;
+        goto err_hndl;
     }
 #endif
 
@@ -228,14 +228,14 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
                                                b, rs_b, cs_b, mtag_b, (float*)c,
                                                rs_c, cs_c, alpha, beta, lcntx_g,
                                                post_op_list, DLP_BF16);
-            return;
+            goto err_hndl;
         } else if ((is_column_major == TRUE)
                    && (is_tiny_input_bf16obf16(n, m, k, lcntx_g) == TRUE)) {
             lpgemm_rowvar_tiny_bf16bf16f32of32(n, m, k, b, rs_b, cs_b, mtag_b,
                                                a, rs_a, cs_a, mtag_a, (float*)c,
                                                rs_c, cs_c, alpha, beta, lcntx_g,
                                                post_op_list, DLP_BF16);
-            return;
+            goto err_hndl;
         }
     }
 #endif

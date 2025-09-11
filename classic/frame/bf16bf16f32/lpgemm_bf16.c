@@ -74,7 +74,15 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
     bfloat16* pack_a_buffer_bf16 = NULL;
 
     lpgemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type = c_downscale;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.is_first_k        = TRUE;
+    post_ops_attr.is_last_k         = TRUE;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
+
     if (c_downscale < DLP_F32)
         post_ops_attr.buf_downscale = c;
     else
@@ -320,7 +328,13 @@ LPGEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
     bool is_first_k = FALSE;
 
     lpgemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type = c_downscale;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
+
     if (c_downscale < DLP_F32) {
         post_ops_attr.buf_downscale = c;
     } else {
@@ -657,7 +671,15 @@ LPGEMV_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
     msz_t mem_a_size_req = 0;
 
     lpgemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type = c_downscale;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.is_first_k        = TRUE;
+    post_ops_attr.is_last_k         = TRUE;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
+
     if (c_downscale < DLP_F32) {
         post_ops_attr.buf_downscale = c;
     } else {
@@ -957,7 +979,13 @@ LPGEMM_5LOOP_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
     bool is_first_k = FALSE;
 
     lpgemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type = c_downscale;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
+
     if (c_downscale < DLP_F32) {
         post_ops_attr.buf_downscale = c;
     } else {

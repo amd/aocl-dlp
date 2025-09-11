@@ -66,12 +66,15 @@ LPGEMM_ELTWISE_OPS_IFACE(bfloat16, float, bf16of32)
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-    post_ops_attr.post_op_c_i    = ic_start;
-    post_ops_attr.post_op_c_j    = jc_start;
-    post_ops_attr.rs_c_downscale = rs_b;
-    post_ops_attr.cs_c_downscale = cs_b;
-    post_ops_attr.is_first_k     = FALSE;
-    post_ops_attr.is_last_k      = TRUE; // Should always be TRUE here.
+    post_ops_attr.post_op_c_i       = ic_start;
+    post_ops_attr.post_op_c_j       = jc_start;
+    post_ops_attr.rs_c_downscale    = rs_b;
+    post_ops_attr.cs_c_downscale    = cs_b;
+    post_ops_attr.is_first_k        = FALSE;
+    post_ops_attr.is_last_k         = TRUE; // Should always be TRUE here.
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
 
     // Advance the matrix to the right positions based on thread id.
     // To note that float and bfloat16 are both handled using this same

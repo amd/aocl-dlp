@@ -76,7 +76,7 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
 
 #ifdef LPGEMM_BF16_JIT
     dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);
-    return;
+    goto err_hndl;
 #endif
 
     // offset to get subsequent matrix when group_count > 1
@@ -286,7 +286,7 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
 
 #ifdef LPGEMM_BF16_JIT
     dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);
-    return;
+    goto err_hndl;
 #endif
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;

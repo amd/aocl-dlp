@@ -120,7 +120,15 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
     dlp_clsc_err_t err                         = DLP_CLSC_SUCCESS;
 
     lpgemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type = c_downscale;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.is_first_k        = TRUE;
+    post_ops_attr.is_last_k         = TRUE;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
+
     if (c_downscale < DLP_F32)
         post_ops_attr.buf_downscale = c;
     else
@@ -334,7 +342,12 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
     const md_t cs_c_use = 1;
 
     lpgemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type = c_downscale;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
 
     if (c_downscale < DLP_F32) {
         post_ops_attr.buf_downscale = c;

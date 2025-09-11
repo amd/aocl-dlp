@@ -325,7 +325,7 @@ aocl_gemm_f32f32f32of32(const char      order,
                 b_use, rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use,
                 cs_c_use, alpha, beta, lcntx_g, post_op_list, DLP_F32);
 
-            return;
+            goto err_hndl;
         }
     }
 

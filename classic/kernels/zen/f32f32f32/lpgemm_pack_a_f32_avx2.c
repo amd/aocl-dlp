@@ -300,14 +300,16 @@ packa_f32f32f32of32_row_major_avx2(float*       pack_a_buf,
 
 #define F32_COL_MAJOR_K_PACK_LOAD_MEMCPY(cp_st, dst, src)                      \
     cp_st = 0;                                                                 \
+    /* It is guaranteed that m_partial_4 and m_partial_2 will not be > 0 at    \
+     * the same time. Since if that is the case, then m_partial >= (6 = MR),   \
+     * and it will not be m partial/fringe anymore. */                         \
     if (m_partial_4 > 0) {                                                     \
         (dst)[cp_st + 0] = (src)[cp_st + 0];                                   \
         (dst)[cp_st + 1] = (src)[cp_st + 1];                                   \
         (dst)[cp_st + 2] = (src)[cp_st + 2];                                   \
         (dst)[cp_st + 3] = (src)[cp_st + 3];                                   \
         cp_st += 4;                                                            \
-    }                                                                          \
-    if (m_partial_2 > 0) {                                                     \
+    } else if (m_partial_2 > 0) {                                              \
         (dst)[cp_st + 0] = (src)[cp_st + 0];                                   \
         (dst)[cp_st + 1] = (src)[cp_st + 1];                                   \
         cp_st += 2;                                                            \

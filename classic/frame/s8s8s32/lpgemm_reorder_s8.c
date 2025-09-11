@@ -120,10 +120,10 @@ reorderb_nr64_s8s8s32o32(lpgemm_obj_t*  b,
     md_t KC = lcntx->blksz.KC;
     md_t NR = lcntx->blksz.NR;
 
-    md_t rs_b = b->rs;
-    md_t cs_b = b->cs;
-    md_t rs_b_reorder;
-    md_t cs_b_reorder;
+    md_t rs_b         = b->rs;
+    md_t cs_b         = b->cs;
+    md_t rs_b_reorder = rs_b;
+    md_t cs_b_reorder = cs_b;
 
     md_t n = b->width;
     md_t k = b->length;
@@ -257,10 +257,10 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
         KC = group_size;
     }
 
-    md_t rs_b = b->rs;
-    md_t cs_b = b->cs;
-    md_t rs_b_reorder;
-    md_t cs_b_reorder;
+    md_t rs_b         = b->rs;
+    md_t cs_b         = b->cs;
+    md_t rs_b_reorder = rs_b;
+    md_t cs_b_reorder = cs_b;
 
     md_t n = b->width;
     md_t k = b->length;
@@ -436,9 +436,9 @@ reordera_mr6_s8s8s32o32(lpgemm_obj_t*  a,
     md_t MC = lcntx->blksz.MC;
     md_t KC = lcntx->blksz.KC;
 
-    md_t rs_a = a->rs;
-    md_t rs_a_reorder;
-    md_t cs_a_reorder;
+    md_t rs_a         = a->rs;
+    md_t rs_a_reorder = rs_a;
+    md_t cs_a_reorder = a->cs;
 
     md_t k = a->width;
     md_t m = a->length;

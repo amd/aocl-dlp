@@ -174,28 +174,31 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
 
         // At this point we are sure that sf and zp types of both matrices
         // match.
-        DLP_TYPE tmp_sf_stor_type =
-            get_stor_type((metadata->a_scl)->scale_factor_type);
+        DLP_TYPE tmp_sf_stor_type = DLP_INVALID;
+        if (metadata->a_scl != NULL) {
+            tmp_sf_stor_type =
+                get_stor_type((metadata->a_scl)->scale_factor_type);
+        }
 
         lpgemm_set_group_post_ops_node_params(
             post_op_list, group_size,
             // A zero-point
-            metadata->a_zp == NULL ? NULL : (metadata->a_zp)->zero_point,
+            (metadata->a_zp == NULL) ? NULL : (metadata->a_zp)->zero_point,
             // A scale factor
-            (metadata->a_scl)->scale_factor,
+            (metadata->a_scl == NULL) ? NULL : (metadata->a_scl)->scale_factor,
             // A zero-point length
-            metadata->a_zp == NULL ? 0 : (metadata->a_zp)->zero_point_len,
+            (metadata->a_zp == NULL) ? 0 : (metadata->a_zp)->zero_point_len,
             // A scale factor length
-            (metadata->a_scl)->scale_factor_len,
+            (metadata->a_scl == NULL) ? 0 : (metadata->a_scl)->scale_factor_len,
             // B zero-point
-            metadata->b_zp == NULL ? NULL : (metadata->b_zp)->zero_point,
+            (metadata->b_zp == NULL) ? NULL : (metadata->b_zp)->zero_point,
             // B scale factor
-            (metadata->b_scl)->scale_factor,
+            (metadata->b_scl == NULL) ? NULL : (metadata->b_scl)->scale_factor,
             // B zero-point length
-            metadata->b_zp == NULL ? 0 : (metadata->b_zp)->zero_point_len,
+            (metadata->b_zp == NULL) ? 0 : (metadata->b_zp)->zero_point_len,
             // B scale factor length
-            (metadata->b_scl)->scale_factor_len, tmp_sf_stor_type,
-            tmp_zp_stor_type);
+            (metadata->b_scl) ? 0 : (metadata->b_scl)->scale_factor_len,
+            tmp_sf_stor_type, tmp_zp_stor_type);
 
         // Simulating linked link using an array.
         if (i < (metadata->seq_length - 1)) {
@@ -257,15 +260,23 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
         }
         lpgemm_set_pre_ops_node_params(
             pre_op_list, group_size,
-            pre_op_unparsed->b_zp == NULL ? NULL
-                                          : (pre_op_unparsed->b_zp)->zero_point,
-            (pre_op_unparsed->b_scl)->scale_factor,
-            pre_op_unparsed->b_zp == NULL
+            (pre_op_unparsed->b_zp == NULL)
+                ? NULL
+                : (pre_op_unparsed->b_zp)->zero_point,
+            (pre_op_unparsed->b_scl == NULL)
+                ? NULL
+                : (pre_op_unparsed->b_scl)->scale_factor,
+            (pre_op_unparsed->b_zp == NULL)
                 ? 0
                 : (pre_op_unparsed->b_zp)->zero_point_len,
-            (pre_op_unparsed->b_scl)->scale_factor_len,
-            (pre_op_unparsed->b_scl)->scale_factor_type == DLP_BF16 ? DLP_BF16
-                                                                    : DLP_F32);
+            (pre_op_unparsed->b_scl == NULL)
+                ? 0
+                : (pre_op_unparsed->b_scl)->scale_factor_len,
+            (pre_op_unparsed->b_scl == NULL)
+                ? DLP_INVALID
+                : (((pre_op_unparsed->b_scl)->scale_factor_type == DLP_BF16)
+                       ? DLP_BF16
+                       : DLP_F32));
 
         // Simulating linked link using an array.
         if (i < (pre_op_unparsed->seq_length - 1)) {
