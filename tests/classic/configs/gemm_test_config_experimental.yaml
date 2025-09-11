@@ -4,6 +4,154 @@
 # Optimized for thorough testing with manageable computational expense
 
 gemm_tests:
+  # Experimental post-ops test.
+   # 6
+  - name: "small_matrix_int_postops"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # Non optional
+    m:
+      lb: 10
+      ub: 20
+      step: 1
+    n:
+      lb: 10
+      ub: 10
+      step: 1
+    k:
+      lb: 10
+      ub: 20
+      step: 1
+    alpha: [1]
+    beta: [1]
+    # Optional Params
+    lda: [10, 20, 30]
+    ldb:
+      lb: 10
+      ub: 10
+      step: -1
+    ldc: 10
+    mtagA: ["none","pack"]
+    mtagB: ["reorder","pack","none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+            alpha: 2.0
+        # - type: "Bias"
+        #   params:
+        #     bias_type: ["s32"]
+        #     bias_dim: ["n","1"]
+        # Sum disabled due to test suite issues
+        # - type: "Sum"
+        #   params:
+        #     scale_factor_len: ["n","1"]
+
+      # 3
+  - name: "small_matrix_postops_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # Non optional
+    m:
+      lb: 10
+      ub: 20
+      step: 5
+    n:
+      lb: 10
+      ub: 10
+      step: -1
+    k:
+      lb: 10
+      ub: 10
+      step: -1
+    alpha: [2.5, 0, -2.5]
+    beta: [2.5, 0, -2.5]
+    # Optional Params
+    lda: [10, 20, 30]
+    ldb:
+      lb: 10
+      ub: 10
+      step: -1
+    ldc: 10
+    mtagA: ["none","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["f32"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n","1"]
+        # Sum disabled due to test suite issues
+        # - type: "Sum"
+        #   params:
+        #     scale_factor_len: ["n","1"]
+  - name: "small_matrix_postops_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # Non optional
+    m:
+      lb: 10
+      ub: 20
+      step: 5
+    n:
+      lb: 10
+      ub: 10
+      step: -1
+    k:
+      lb: 10
+      ub: 10
+      step: -1
+    alpha: [2.5, 0, -2.5]
+    beta: [2.5, 0, -2.5]
+    # Optional Params
+    lda: [10, 20, 30]
+    ldb:
+      lb: 10
+      ub: 10
+      step: -1
+    ldc: 10
+    mtagA: ["none","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Elementwise-PRELU"
+          params:
+            alpha_type: ["s32"]
+
   # =============================================================================
   # REGRESSION TESTING BASELINE SCENARIOS
   # =============================================================================
