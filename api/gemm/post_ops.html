@@ -50,14 +50,12 @@
     <script async="async" src="../../_static/theme_mode_captions.js?v=15f4ec5d"></script>
     <script defer="defer" src="../../_static/search.js?v=90a4452c"></script>
     <script src="../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
-    <script>DOCUMENTATION_OPTIONS.pagename = 'api/post_ops/index';</script>
+    <script>DOCUMENTATION_OPTIONS.pagename = 'api/gemm/post_ops';</script>
     <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
-    <link rel="canonical" href="http://localhost:8082/api/post_ops/index.html" />
+    <link rel="canonical" href="http://localhost:8082/api/gemm/post_ops.html" />
     <link rel="icon" href="https://www.amd.com/content/dam/code/images/favicon/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
-    <link rel="next" title="Element-wise Operations" href="../eltwise/index.html" />
-    <link rel="prev" title="GEMM Operations" href="../gemm/index.html" />
     <meta name="google-site-verification" content="vo35SZt_GASsTHAEmdww7AYKPCvZyzLvOXBl8guBME4" />
 
   </head>
@@ -137,6 +135,8 @@
       
       
       
+        
+      
       <div class="bd-sidebar-primary bd-sidebar">
         
 
@@ -178,24 +178,14 @@
  </script></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Reference</span></p>
-<ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="../index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2"><a class="reference internal" href="../overview.html">API Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../gemm/index.html">GEMM Operations</a></li>
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">Post-Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../eltwise/index.html">Element-wise Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../utils/index.html">Utility Functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../library/index.html">Library Management</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../classic/index.html">Classic C Headers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../classic/gemm.html">GEMM API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../classic/eltwise.html">Eltwise API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../classic/utils.html">Utils API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../library/index.html">Library Management</a></li>
-</ul>
-</details></li>
-</ul>
-</details></li>
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Categories</span></p>
+<ul class="nav bd-sidenav">
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">API Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="index.html">GEMM Operations</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="../eltwise/index.html">Element-wise Operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../utils/index.html">Utility Functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../library/index.html">Library Management</a></li>
 </ul>
 
     </div>
@@ -241,9 +231,6 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    
-    <li class="breadcrumb-item"><a href="../index.html" class="nav-link">API Reference</a></li>
-    
     <li class="breadcrumb-item active" aria-current="page">Post-Operations</li>
   </ul>
 </nav>
@@ -446,7 +433,7 @@ document.write(`
 <h2>Data Structures<a class="headerlink" href="#data-structures" title="Link to this heading">#</a></h2>
 <dl class="cpp struct" id="struct-dlp-metadata-t">
 <dt class="sig sig-object cpp" id="_CPPv414dlp_metadata_t">
-<span id="_CPPv314dlp_metadata_t"></span><span id="_CPPv214dlp_metadata_t"></span><span id="dlp_metadata_t"></span><span class="target" id="structdlp__metadata__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_metadata_t</span></span></span><a class="headerlink" href="#_CPPv414dlp_metadata_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv314dlp_metadata_t"></span><span id="_CPPv214dlp_metadata_t"></span><span id="dlp_metadata_t"></span><span class="target" id="structdlp__metadata__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_metadata_t</span></span></span><br /></dt>
 <dd><p>Main metadata structure containing all post-operation configurations. </p>
 <p>This structure serves as the main container for all post-operation metadata, defining the sequence and parameters of operations to be applied after GEMM. It supports multiple post-operations that can be chained together in a specific order.</p>
 <p>Main metadata structure for post-operation configurations.</p>
@@ -455,67 +442,67 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t5scaleE">
-<span id="_CPPv3N14dlp_metadata_t5scaleE"></span><span id="_CPPv2N14dlp_metadata_t5scaleE"></span><span id="dlp_metadata_t::scale__dlp_scale_tP"></span><span class="target" id="structdlp__metadata__t_1a0d94502c953f36ebbb3ae2d557429e46"></span><a class="reference internal" href="#_CPPv411dlp_scale_t" title="dlp_scale_t"><span class="n"><span class="pre">dlp_scale_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">scale</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t5scaleE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t5scaleE"></span><span id="_CPPv2N14dlp_metadata_t5scaleE"></span><span id="dlp_metadata_t::scale__dlp_scale_tP"></span><span class="target" id="structdlp__metadata__t_1a0d94502c953f36ebbb3ae2d557429e46"></span><a class="reference internal" href="index.html#_CPPv411dlp_scale_t" title="dlp_scale_t"><span class="n"><span class="pre">dlp_scale_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">scale</span></span></span><br /></dt>
 <dd><p>Scale post-operations (multiple allowed) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t7eltwiseE">
-<span id="_CPPv3N14dlp_metadata_t7eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t7eltwiseE"></span><span id="dlp_metadata_t::eltwise__dlp_post_op_eltwiseP"></span><span class="target" id="structdlp__metadata__t_1aa2a182f0bcda2d3eb539f3cec7dcc344"></span><a class="reference internal" href="#_CPPv419dlp_post_op_eltwise" title="dlp_post_op_eltwise"><span class="n"><span class="pre">dlp_post_op_eltwise</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">eltwise</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t7eltwiseE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t7eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t7eltwiseE"></span><span id="dlp_metadata_t::eltwise__dlp_post_op_eltwiseP"></span><span class="target" id="structdlp__metadata__t_1aa2a182f0bcda2d3eb539f3cec7dcc344"></span><a class="reference internal" href="index.html#_CPPv419dlp_post_op_eltwise" title="dlp_post_op_eltwise"><span class="n"><span class="pre">dlp_post_op_eltwise</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">eltwise</span></span></span><br /></dt>
 <dd><p>Element-wise post-operations (multiple allowed) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t4biasE">
-<span id="_CPPv3N14dlp_metadata_t4biasE"></span><span id="_CPPv2N14dlp_metadata_t4biasE"></span><span id="dlp_metadata_t::bias__dlp_post_op_biasP"></span><span class="target" id="structdlp__metadata__t_1a01c330ff2ac492632871c1628eff59b9"></span><a class="reference internal" href="#_CPPv416dlp_post_op_bias" title="dlp_post_op_bias"><span class="n"><span class="pre">dlp_post_op_bias</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bias</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t4biasE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t4biasE"></span><span id="_CPPv2N14dlp_metadata_t4biasE"></span><span id="dlp_metadata_t::bias__dlp_post_op_biasP"></span><span class="target" id="structdlp__metadata__t_1a01c330ff2ac492632871c1628eff59b9"></span><a class="reference internal" href="index.html#_CPPv416dlp_post_op_bias" title="dlp_post_op_bias"><span class="n"><span class="pre">dlp_post_op_bias</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bias</span></span></span><br /></dt>
 <dd><p>Bias addition post-operation </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10matrix_addE">
-<span id="_CPPv3N14dlp_metadata_t10matrix_addE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_addE"></span><span id="dlp_metadata_t::matrix_add__dlp_post_op_matrix_addP"></span><span class="target" id="structdlp__metadata__t_1a4d48c3610d759f4391eb4be3a7e4c25e"></span><a class="reference internal" href="#_CPPv422dlp_post_op_matrix_add" title="dlp_post_op_matrix_add"><span class="n"><span class="pre">dlp_post_op_matrix_add</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_add</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t10matrix_addE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10matrix_addE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_addE"></span><span id="dlp_metadata_t::matrix_add__dlp_post_op_matrix_addP"></span><span class="target" id="structdlp__metadata__t_1a4d48c3610d759f4391eb4be3a7e4c25e"></span><a class="reference internal" href="index.html#_CPPv422dlp_post_op_matrix_add" title="dlp_post_op_matrix_add"><span class="n"><span class="pre">dlp_post_op_matrix_add</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_add</span></span></span><br /></dt>
 <dd><p>Matrix addition post-operation </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10matrix_mulE">
-<span id="_CPPv3N14dlp_metadata_t10matrix_mulE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_mulE"></span><span id="dlp_metadata_t::matrix_mul__dlp_post_op_matrix_mulP"></span><span class="target" id="structdlp__metadata__t_1a4eda120352cc25d282bc7fa375bbc246"></span><a class="reference internal" href="#_CPPv422dlp_post_op_matrix_mul" title="dlp_post_op_matrix_mul"><span class="n"><span class="pre">dlp_post_op_matrix_mul</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_mul</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t10matrix_mulE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10matrix_mulE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_mulE"></span><span id="dlp_metadata_t::matrix_mul__dlp_post_op_matrix_mulP"></span><span class="target" id="structdlp__metadata__t_1a4eda120352cc25d282bc7fa375bbc246"></span><a class="reference internal" href="index.html#_CPPv422dlp_post_op_matrix_mul" title="dlp_post_op_matrix_mul"><span class="n"><span class="pre">dlp_post_op_matrix_mul</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_mul</span></span></span><br /></dt>
 <dd><p>Matrix multiplication post-operation </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10seq_lengthE">
-<span id="_CPPv3N14dlp_metadata_t10seq_lengthE"></span><span id="_CPPv2N14dlp_metadata_t10seq_lengthE"></span><span id="dlp_metadata_t::seq_length__md_t"></span><span class="target" id="structdlp__metadata__t_1ab9ab0d1de055bce89cdf72983c8d2660"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">seq_length</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t10seq_lengthE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10seq_lengthE"></span><span id="_CPPv2N14dlp_metadata_t10seq_lengthE"></span><span id="dlp_metadata_t::seq_length__md_t"></span><span class="target" id="structdlp__metadata__t_1ab9ab0d1de055bce89cdf72983c8d2660"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">seq_length</span></span></span><br /></dt>
 <dd><p>Number of operations in the sequence (e.g., 2) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10seq_vectorE">
-<span id="_CPPv3N14dlp_metadata_t10seq_vectorE"></span><span id="_CPPv2N14dlp_metadata_t10seq_vectorE"></span><span id="dlp_metadata_t::seq_vector__DLP_POST_OP_TYPEP"></span><span class="target" id="structdlp__metadata__t_1a4f4125a96644d2591d993714c88e30b2"></span><a class="reference internal" href="#_CPPv416DLP_POST_OP_TYPE" title="DLP_POST_OP_TYPE"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">seq_vector</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t10seq_vectorE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10seq_vectorE"></span><span id="_CPPv2N14dlp_metadata_t10seq_vectorE"></span><span id="dlp_metadata_t::seq_vector__DLP_POST_OP_TYPEP"></span><span class="target" id="structdlp__metadata__t_1a4f4125a96644d2591d993714c88e30b2"></span><a class="reference internal" href="index.html#_CPPv416DLP_POST_OP_TYPE" title="DLP_POST_OP_TYPE"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">seq_vector</span></span></span><br /></dt>
 <dd><p>Sequence of post-operations to apply in order (e.g., seq_vector[0]=BIAS, seq_vector[1]=ELTWISE means bias followed by element-wise operation) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t7pre_opsE">
-<span id="_CPPv3N14dlp_metadata_t7pre_opsE"></span><span id="_CPPv2N14dlp_metadata_t7pre_opsE"></span><span id="dlp_metadata_t::pre_ops__dlp_pre_opP"></span><span class="target" id="structdlp__metadata__t_1a132361013ea9b399bc9872ab48879382"></span><a class="reference internal" href="#_CPPv410dlp_pre_op" title="dlp_pre_op"><span class="n"><span class="pre">dlp_pre_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">pre_ops</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t7pre_opsE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t7pre_opsE"></span><span id="_CPPv2N14dlp_metadata_t7pre_opsE"></span><span id="dlp_metadata_t::pre_ops__dlp_pre_opP"></span><span class="target" id="structdlp__metadata__t_1a132361013ea9b399bc9872ab48879382"></span><a class="reference internal" href="index.html#_CPPv410dlp_pre_op" title="dlp_pre_op"><span class="n"><span class="pre">dlp_pre_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">pre_ops</span></span></span><br /></dt>
 <dd><p>Pre-operations to be applied before GEMM </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t11post_op_grpE">
-<span id="_CPPv3N14dlp_metadata_t11post_op_grpE"></span><span id="_CPPv2N14dlp_metadata_t11post_op_grpE"></span><span id="dlp_metadata_t::post_op_grp__dlp_group_post_opP"></span><span class="target" id="structdlp__metadata__t_1a14858783a4796cab10675213cdc3134e"></span><a class="reference internal" href="#_CPPv417dlp_group_post_op" title="dlp_group_post_op"><span class="n"><span class="pre">dlp_group_post_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">post_op_grp</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t11post_op_grpE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t11post_op_grpE"></span><span id="_CPPv2N14dlp_metadata_t11post_op_grpE"></span><span id="dlp_metadata_t::post_op_grp__dlp_group_post_opP"></span><span class="target" id="structdlp__metadata__t_1a14858783a4796cab10675213cdc3134e"></span><a class="reference internal" href="index.html#_CPPv417dlp_group_post_op" title="dlp_group_post_op"><span class="n"><span class="pre">dlp_group_post_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">post_op_grp</span></span></span><br /></dt>
 <dd><p>Grouped post-operations for different quantization groups </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t11num_eltwiseE">
-<span id="_CPPv3N14dlp_metadata_t11num_eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t11num_eltwiseE"></span><span id="dlp_metadata_t::num_eltwise__md_t"></span><span class="target" id="structdlp__metadata__t_1a9a4798fbc25386bf0f226ed9321f82b5"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">num_eltwise</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t11num_eltwiseE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t11num_eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t11num_eltwiseE"></span><span id="dlp_metadata_t::num_eltwise__md_t"></span><span class="target" id="structdlp__metadata__t_1a9a4798fbc25386bf0f226ed9321f82b5"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">num_eltwise</span></span></span><br /></dt>
 <dd><p>Number of element-wise operations to track </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10error_hndlE">
-<span id="_CPPv3N14dlp_metadata_t10error_hndlE"></span><span id="_CPPv2N14dlp_metadata_t10error_hndlE"></span><span id="dlp_metadata_t::error_hndl__dlp_error_hndl_t"></span><span class="target" id="structdlp__metadata__t_1a05e379d63fd45f37452f3ee22f327b44"></span><span class="n"><span class="pre">dlp_error_hndl_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">error_hndl</span></span></span><a class="headerlink" href="#_CPPv4N14dlp_metadata_t10error_hndlE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10error_hndlE"></span><span id="_CPPv2N14dlp_metadata_t10error_hndlE"></span><span id="dlp_metadata_t::error_hndl__dlp_error_hndl_t"></span><span class="target" id="structdlp__metadata__t_1a05e379d63fd45f37452f3ee22f327b44"></span><span class="n"><span class="pre">dlp_error_hndl_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">error_hndl</span></span></span><br /></dt>
 <dd><p>Error handle for the routine, currently wrapped as part of the metadata. </p>
 </dd></dl>
 
@@ -527,7 +514,7 @@ document.write(`
 <h2>Post-Op Building Blocks<a class="headerlink" href="#post-op-building-blocks" title="Link to this heading">#</a></h2>
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv418dlp_eltwise_algo_t">
-<span id="_CPPv318dlp_eltwise_algo_t"></span><span id="_CPPv218dlp_eltwise_algo_t"></span><span id="dlp_eltwise_algo_t"></span><span class="target" id="structdlp__eltwise__algo__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_eltwise_algo_t</span></span></span><a class="headerlink" href="#_CPPv418dlp_eltwise_algo_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv318dlp_eltwise_algo_t"></span><span id="_CPPv218dlp_eltwise_algo_t"></span><span id="dlp_eltwise_algo_t"></span><span class="target" id="structdlp__eltwise__algo__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_eltwise_algo_t</span></span></span><br /></dt>
 <dd><p>Structure defining element-wise algorithm parameters. </p>
 <p>This structure contains the parameters needed for element-wise operations such as activation functions in post-operations.</p>
 <p>Parameters for element-wise algorithm in post-ops.</p>
@@ -536,19 +523,19 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N18dlp_eltwise_algo_t5alphaE">
-<span id="_CPPv3N18dlp_eltwise_algo_t5alphaE"></span><span id="_CPPv2N18dlp_eltwise_algo_t5alphaE"></span><span id="dlp_eltwise_algo_t::alpha__voidP"></span><span class="target" id="structdlp__eltwise__algo__t_1acc0eca691b980d0f91d4713720bb07d0"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">alpha</span></span></span><a class="headerlink" href="#_CPPv4N18dlp_eltwise_algo_t5alphaE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N18dlp_eltwise_algo_t5alphaE"></span><span id="_CPPv2N18dlp_eltwise_algo_t5alphaE"></span><span id="dlp_eltwise_algo_t::alpha__voidP"></span><span class="target" id="structdlp__eltwise__algo__t_1acc0eca691b980d0f91d4713720bb07d0"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">alpha</span></span></span><br /></dt>
 <dd><p>Alpha parameter for the algorithm (e.g., leak factor for PReLU) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N18dlp_eltwise_algo_t4betaE">
-<span id="_CPPv3N18dlp_eltwise_algo_t4betaE"></span><span id="_CPPv2N18dlp_eltwise_algo_t4betaE"></span><span id="dlp_eltwise_algo_t::beta__voidP"></span><span class="target" id="structdlp__eltwise__algo__t_1a4e4ee232281d4bd1f1bda38543884d82"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">beta</span></span></span><a class="headerlink" href="#_CPPv4N18dlp_eltwise_algo_t4betaE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N18dlp_eltwise_algo_t4betaE"></span><span id="_CPPv2N18dlp_eltwise_algo_t4betaE"></span><span id="dlp_eltwise_algo_t::beta__voidP"></span><span class="target" id="structdlp__eltwise__algo__t_1a4e4ee232281d4bd1f1bda38543884d82"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">beta</span></span></span><br /></dt>
 <dd><p>Beta parameter for the algorithm (e.g., upper bound for CLIP) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N18dlp_eltwise_algo_t9algo_typeE">
-<span id="_CPPv3N18dlp_eltwise_algo_t9algo_typeE"></span><span id="_CPPv2N18dlp_eltwise_algo_t9algo_typeE"></span><span id="dlp_eltwise_algo_t::algo_type__DLP_ELT_ALGO_TYPE"></span><span class="target" id="structdlp__eltwise__algo__t_1a6cf1b4fc47d5eccf27d51bf451f9fa53"></span><a class="reference internal" href="#_CPPv417DLP_ELT_ALGO_TYPE" title="DLP_ELT_ALGO_TYPE"><span class="n"><span class="pre">DLP_ELT_ALGO_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">algo_type</span></span></span><a class="headerlink" href="#_CPPv4N18dlp_eltwise_algo_t9algo_typeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N18dlp_eltwise_algo_t9algo_typeE"></span><span id="_CPPv2N18dlp_eltwise_algo_t9algo_typeE"></span><span id="dlp_eltwise_algo_t::algo_type__DLP_ELT_ALGO_TYPE"></span><span class="target" id="structdlp__eltwise__algo__t_1a6cf1b4fc47d5eccf27d51bf451f9fa53"></span><a class="reference internal" href="index.html#_CPPv417DLP_ELT_ALGO_TYPE" title="DLP_ELT_ALGO_TYPE"><span class="n"><span class="pre">DLP_ELT_ALGO_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">algo_type</span></span></span><br /></dt>
 <dd><p>Type of element-wise algorithm to apply </p>
 </dd></dl>
 
@@ -557,7 +544,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv48dlp_zp_t">
-<span id="_CPPv38dlp_zp_t"></span><span id="_CPPv28dlp_zp_t"></span><span id="dlp_zp_t"></span><span class="target" id="structdlp__zp__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_zp_t</span></span></span><a class="headerlink" href="#_CPPv48dlp_zp_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv38dlp_zp_t"></span><span id="_CPPv28dlp_zp_t"></span><span id="dlp_zp_t"></span><span class="target" id="structdlp__zp__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_zp_t</span></span></span><br /></dt>
 <dd><p>Structure defining zero-point parameters for quantization. </p>
 <p>This structure contains zero-point information used in quantized operations. Zero-point represents the quantized value that corresponds to the real value zero.</p>
 <p>Zero-point parameters for quantization.</p>
@@ -566,19 +553,19 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N8dlp_zp_t10zero_pointE">
-<span id="_CPPv3N8dlp_zp_t10zero_pointE"></span><span id="_CPPv2N8dlp_zp_t10zero_pointE"></span><span id="dlp_zp_t::zero_point__voidP"></span><span class="target" id="structdlp__zp__t_1ad008e797b9782512f1aff6c658f3563d"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">zero_point</span></span></span><a class="headerlink" href="#_CPPv4N8dlp_zp_t10zero_pointE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8dlp_zp_t10zero_pointE"></span><span id="_CPPv2N8dlp_zp_t10zero_pointE"></span><span id="dlp_zp_t::zero_point__voidP"></span><span class="target" id="structdlp__zp__t_1ad008e797b9782512f1aff6c658f3563d"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">zero_point</span></span></span><br /></dt>
 <dd><p>Pointer to zero-point values </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N8dlp_zp_t14zero_point_lenE">
-<span id="_CPPv3N8dlp_zp_t14zero_point_lenE"></span><span id="_CPPv2N8dlp_zp_t14zero_point_lenE"></span><span id="dlp_zp_t::zero_point_len__md_t"></span><span class="target" id="structdlp__zp__t_1a4a758555a3d0ea18e8f5d860c57dda3f"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">zero_point_len</span></span></span><a class="headerlink" href="#_CPPv4N8dlp_zp_t14zero_point_lenE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8dlp_zp_t14zero_point_lenE"></span><span id="_CPPv2N8dlp_zp_t14zero_point_lenE"></span><span id="dlp_zp_t::zero_point_len__md_t"></span><span class="target" id="structdlp__zp__t_1a4a758555a3d0ea18e8f5d860c57dda3f"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">zero_point_len</span></span></span><br /></dt>
 <dd><p>Length of zero-point array (1 for per-tensor, n for per-channel) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N8dlp_zp_t15zero_point_typeE">
-<span id="_CPPv3N8dlp_zp_t15zero_point_typeE"></span><span id="_CPPv2N8dlp_zp_t15zero_point_typeE"></span><span id="dlp_zp_t::zero_point_type__DLP_TYPE"></span><span class="target" id="structdlp__zp__t_1a1dbeabacbacd1fe8088d9a3c9010c1c4"></span><a class="reference internal" href="#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">zero_point_type</span></span></span><a class="headerlink" href="#_CPPv4N8dlp_zp_t15zero_point_typeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8dlp_zp_t15zero_point_typeE"></span><span id="_CPPv2N8dlp_zp_t15zero_point_typeE"></span><span id="dlp_zp_t::zero_point_type__DLP_TYPE"></span><span class="target" id="structdlp__zp__t_1a1dbeabacbacd1fe8088d9a3c9010c1c4"></span><a class="reference internal" href="index.html#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">zero_point_type</span></span></span><br /></dt>
 <dd><p>Data type of zero-point values </p>
 </dd></dl>
 
@@ -587,7 +574,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv48dlp_sf_t">
-<span id="_CPPv38dlp_sf_t"></span><span id="_CPPv28dlp_sf_t"></span><span id="dlp_sf_t"></span><span class="target" id="structdlp__sf__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_sf_t</span></span></span><a class="headerlink" href="#_CPPv48dlp_sf_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv38dlp_sf_t"></span><span id="_CPPv28dlp_sf_t"></span><span id="dlp_sf_t"></span><span class="target" id="structdlp__sf__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_sf_t</span></span></span><br /></dt>
 <dd><p>Structure defining scale factor parameters for quantization. </p>
 <p>This structure contains scale factor information used in quantized operations. Scale factor represents the scaling applied during quantization/dequantization.</p>
 <p>Scale factor parameters for quantization.</p>
@@ -596,19 +583,19 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N8dlp_sf_t12scale_factorE">
-<span id="_CPPv3N8dlp_sf_t12scale_factorE"></span><span id="_CPPv2N8dlp_sf_t12scale_factorE"></span><span id="dlp_sf_t::scale_factor__voidP"></span><span class="target" id="structdlp__sf__t_1a10346708cea76f3dc64990641742fbd4"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">scale_factor</span></span></span><a class="headerlink" href="#_CPPv4N8dlp_sf_t12scale_factorE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8dlp_sf_t12scale_factorE"></span><span id="_CPPv2N8dlp_sf_t12scale_factorE"></span><span id="dlp_sf_t::scale_factor__voidP"></span><span class="target" id="structdlp__sf__t_1a10346708cea76f3dc64990641742fbd4"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">scale_factor</span></span></span><br /></dt>
 <dd><p>Pointer to scale factor values </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N8dlp_sf_t16scale_factor_lenE">
-<span id="_CPPv3N8dlp_sf_t16scale_factor_lenE"></span><span id="_CPPv2N8dlp_sf_t16scale_factor_lenE"></span><span id="dlp_sf_t::scale_factor_len__md_t"></span><span class="target" id="structdlp__sf__t_1abc9323b11a1b5420b0a5e39d6a17430d"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">scale_factor_len</span></span></span><a class="headerlink" href="#_CPPv4N8dlp_sf_t16scale_factor_lenE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8dlp_sf_t16scale_factor_lenE"></span><span id="_CPPv2N8dlp_sf_t16scale_factor_lenE"></span><span id="dlp_sf_t::scale_factor_len__md_t"></span><span class="target" id="structdlp__sf__t_1abc9323b11a1b5420b0a5e39d6a17430d"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">scale_factor_len</span></span></span><br /></dt>
 <dd><p>Length of scale factor array (1 for per-tensor, n for per-channel) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N8dlp_sf_t17scale_factor_typeE">
-<span id="_CPPv3N8dlp_sf_t17scale_factor_typeE"></span><span id="_CPPv2N8dlp_sf_t17scale_factor_typeE"></span><span id="dlp_sf_t::scale_factor_type__DLP_TYPE"></span><span class="target" id="structdlp__sf__t_1a54e3b717972ca65ba4cc3332c3547b5c"></span><a class="reference internal" href="#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">scale_factor_type</span></span></span><a class="headerlink" href="#_CPPv4N8dlp_sf_t17scale_factor_typeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8dlp_sf_t17scale_factor_typeE"></span><span id="_CPPv2N8dlp_sf_t17scale_factor_typeE"></span><span id="dlp_sf_t::scale_factor_type__DLP_TYPE"></span><span class="target" id="structdlp__sf__t_1a54e3b717972ca65ba4cc3332c3547b5c"></span><a class="reference internal" href="index.html#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">scale_factor_type</span></span></span><br /></dt>
 <dd><p>Data type of scale factor values </p>
 </dd></dl>
 
@@ -617,7 +604,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv419dlp_post_op_eltwise">
-<span id="_CPPv319dlp_post_op_eltwise"></span><span id="_CPPv219dlp_post_op_eltwise"></span><span id="dlp_post_op_eltwise"></span><span class="target" id="structdlp__post__op__eltwise"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_eltwise</span></span></span><a class="headerlink" href="#_CPPv419dlp_post_op_eltwise" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv319dlp_post_op_eltwise"></span><span id="_CPPv219dlp_post_op_eltwise"></span><span id="dlp_post_op_eltwise"></span><span class="target" id="structdlp__post__op__eltwise"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_eltwise</span></span></span><br /></dt>
 <dd><p>Structure defining element-wise post-operation parameters. </p>
 <p>This structure contains parameters for element-wise post-operations such as activation functions applied to the GEMM result.</p>
 <p>Element-wise post-operation parameters.</p>
@@ -626,13 +613,13 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N19dlp_post_op_eltwise2sfE">
-<span id="_CPPv3N19dlp_post_op_eltwise2sfE"></span><span id="_CPPv2N19dlp_post_op_eltwise2sfE"></span><span id="dlp_post_op_eltwise::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__eltwise_1a976bf26b5897c0780808aaa069364b23"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><a class="headerlink" href="#_CPPv4N19dlp_post_op_eltwise2sfE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N19dlp_post_op_eltwise2sfE"></span><span id="_CPPv2N19dlp_post_op_eltwise2sfE"></span><span id="dlp_post_op_eltwise::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__eltwise_1a976bf26b5897c0780808aaa069364b23"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><br /></dt>
 <dd><p>Scale factor parameters </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N19dlp_post_op_eltwise4algoE">
-<span id="_CPPv3N19dlp_post_op_eltwise4algoE"></span><span id="_CPPv2N19dlp_post_op_eltwise4algoE"></span><span id="dlp_post_op_eltwise::algo__dlp_eltwise_algo_t"></span><span class="target" id="structdlp__post__op__eltwise_1adb2cea4bf1e249a3d03a3879fe719357"></span><a class="reference internal" href="#_CPPv418dlp_eltwise_algo_t" title="dlp_eltwise_algo_t"><span class="n"><span class="pre">dlp_eltwise_algo_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">algo</span></span></span><a class="headerlink" href="#_CPPv4N19dlp_post_op_eltwise4algoE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N19dlp_post_op_eltwise4algoE"></span><span id="_CPPv2N19dlp_post_op_eltwise4algoE"></span><span id="dlp_post_op_eltwise::algo__dlp_eltwise_algo_t"></span><span class="target" id="structdlp__post__op__eltwise_1adb2cea4bf1e249a3d03a3879fe719357"></span><a class="reference internal" href="index.html#_CPPv418dlp_eltwise_algo_t" title="dlp_eltwise_algo_t"><span class="n"><span class="pre">dlp_eltwise_algo_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">algo</span></span></span><br /></dt>
 <dd><p>Element-wise algorithm parameters </p>
 </dd></dl>
 
@@ -641,7 +628,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv411dlp_scale_t">
-<span id="_CPPv311dlp_scale_t"></span><span id="_CPPv211dlp_scale_t"></span><span id="dlp_scale_t"></span><span class="target" id="structdlp__scale__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_scale_t</span></span></span><a class="headerlink" href="#_CPPv411dlp_scale_t" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv311dlp_scale_t"></span><span id="_CPPv211dlp_scale_t"></span><span id="dlp_scale_t"></span><span class="target" id="structdlp__scale__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_scale_t</span></span></span><br /></dt>
 <dd><p>Structure defining scale operation parameters. </p>
 <p>This structure contains parameters for scaling operations, which can be applied as post-operations. It uses structured scale factor and zero-point parameters for better organization and type safety.</p>
 <p>Scale operation parameters for post-ops.</p>
@@ -650,13 +637,13 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N11dlp_scale_t2sfE">
-<span id="_CPPv3N11dlp_scale_t2sfE"></span><span id="_CPPv2N11dlp_scale_t2sfE"></span><span id="dlp_scale_t::sf__dlp_sf_tP"></span><span class="target" id="structdlp__scale__t_1a2c4d52b1d18f26761ed08711dd361167"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><a class="headerlink" href="#_CPPv4N11dlp_scale_t2sfE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N11dlp_scale_t2sfE"></span><span id="_CPPv2N11dlp_scale_t2sfE"></span><span id="dlp_scale_t::sf__dlp_sf_tP"></span><span class="target" id="structdlp__scale__t_1a2c4d52b1d18f26761ed08711dd361167"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><br /></dt>
 <dd><p>Scale factor parameters </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N11dlp_scale_t2zpE">
-<span id="_CPPv3N11dlp_scale_t2zpE"></span><span id="_CPPv2N11dlp_scale_t2zpE"></span><span id="dlp_scale_t::zp__dlp_zp_tP"></span><span class="target" id="structdlp__scale__t_1a3a6c2d3bc72b38777fafa2a18d793471"></span><a class="reference internal" href="#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">zp</span></span></span><a class="headerlink" href="#_CPPv4N11dlp_scale_t2zpE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N11dlp_scale_t2zpE"></span><span id="_CPPv2N11dlp_scale_t2zpE"></span><span id="dlp_scale_t::zp__dlp_zp_tP"></span><span class="target" id="structdlp__scale__t_1a3a6c2d3bc72b38777fafa2a18d793471"></span><a class="reference internal" href="index.html#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">zp</span></span></span><br /></dt>
 <dd><p>Zero-point parameters </p>
 </dd></dl>
 
@@ -665,7 +652,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv416dlp_post_op_bias">
-<span id="_CPPv316dlp_post_op_bias"></span><span id="_CPPv216dlp_post_op_bias"></span><span id="dlp_post_op_bias"></span><span class="target" id="structdlp__post__op__bias"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_bias</span></span></span><a class="headerlink" href="#_CPPv416dlp_post_op_bias" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv316dlp_post_op_bias"></span><span id="_CPPv216dlp_post_op_bias"></span><span id="dlp_post_op_bias"></span><span class="target" id="structdlp__post__op__bias"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_bias</span></span></span><br /></dt>
 <dd><p>Structure defining bias post-operation parameters. </p>
 <p>This structure contains parameters for bias addition post-operations, which add a bias vector to the GEMM result.</p>
 <p>Bias post-operation parameters.</p>
@@ -674,19 +661,19 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N16dlp_post_op_bias4biasE">
-<span id="_CPPv3N16dlp_post_op_bias4biasE"></span><span id="_CPPv2N16dlp_post_op_bias4biasE"></span><span id="dlp_post_op_bias::bias__voidP"></span><span class="target" id="structdlp__post__op__bias_1a6f9f144468bc4f9f49c0cc3936d1f700"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bias</span></span></span><a class="headerlink" href="#_CPPv4N16dlp_post_op_bias4biasE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16dlp_post_op_bias4biasE"></span><span id="_CPPv2N16dlp_post_op_bias4biasE"></span><span id="dlp_post_op_bias::bias__voidP"></span><span class="target" id="structdlp__post__op__bias_1a6f9f144468bc4f9f49c0cc3936d1f700"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bias</span></span></span><br /></dt>
 <dd><p>Pointer to bias values </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N16dlp_post_op_bias9stor_typeE">
-<span id="_CPPv3N16dlp_post_op_bias9stor_typeE"></span><span id="_CPPv2N16dlp_post_op_bias9stor_typeE"></span><span id="dlp_post_op_bias::stor_type__DLP_TYPE"></span><span class="target" id="structdlp__post__op__bias_1ad2d3c3ab7b7a3ea39af2b428c2633d05"></span><a class="reference internal" href="#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">stor_type</span></span></span><a class="headerlink" href="#_CPPv4N16dlp_post_op_bias9stor_typeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16dlp_post_op_bias9stor_typeE"></span><span id="_CPPv2N16dlp_post_op_bias9stor_typeE"></span><span id="dlp_post_op_bias::stor_type__DLP_TYPE"></span><span class="target" id="structdlp__post__op__bias_1ad2d3c3ab7b7a3ea39af2b428c2633d05"></span><a class="reference internal" href="index.html#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">stor_type</span></span></span><br /></dt>
 <dd><p>Storage type of bias values </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N16dlp_post_op_bias2sfE">
-<span id="_CPPv3N16dlp_post_op_bias2sfE"></span><span id="_CPPv2N16dlp_post_op_bias2sfE"></span><span id="dlp_post_op_bias::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__bias_1a27dc529dad25b93a4163e3b7401650e3"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><a class="headerlink" href="#_CPPv4N16dlp_post_op_bias2sfE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16dlp_post_op_bias2sfE"></span><span id="_CPPv2N16dlp_post_op_bias2sfE"></span><span id="dlp_post_op_bias::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__bias_1a27dc529dad25b93a4163e3b7401650e3"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><br /></dt>
 <dd><p><dl>
 <dt class="sig sig-object cpp">
 <em><span class="pre">Todo:</span></em></dt>
@@ -701,7 +688,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv422dlp_post_op_matrix_add">
-<span id="_CPPv322dlp_post_op_matrix_add"></span><span id="_CPPv222dlp_post_op_matrix_add"></span><span id="dlp_post_op_matrix_add"></span><span class="target" id="structdlp__post__op__matrix__add"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_matrix_add</span></span></span><a class="headerlink" href="#_CPPv422dlp_post_op_matrix_add" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv322dlp_post_op_matrix_add"></span><span id="_CPPv222dlp_post_op_matrix_add"></span><span id="dlp_post_op_matrix_add"></span><span class="target" id="structdlp__post__op__matrix__add"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_matrix_add</span></span></span><br /></dt>
 <dd><p>Structure defining matrix addition post-operation parameters. </p>
 <p>This structure contains parameters for matrix addition post-operations, which add another matrix to the GEMM result.</p>
 <p>Matrix addition post-operation parameters.</p>
@@ -710,25 +697,25 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_add6matrixE">
-<span id="_CPPv3N22dlp_post_op_matrix_add6matrixE"></span><span id="_CPPv2N22dlp_post_op_matrix_add6matrixE"></span><span id="dlp_post_op_matrix_add::matrix__voidP"></span><span class="target" id="structdlp__post__op__matrix__add_1a57d14f127d3302aef719116879fcf0de"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_add6matrixE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_add6matrixE"></span><span id="_CPPv2N22dlp_post_op_matrix_add6matrixE"></span><span id="dlp_post_op_matrix_add::matrix__voidP"></span><span class="target" id="structdlp__post__op__matrix__add_1a57d14f127d3302aef719116879fcf0de"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix</span></span></span><br /></dt>
 <dd><p>Pointer to matrix to be added </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_add3ldmE">
-<span id="_CPPv3N22dlp_post_op_matrix_add3ldmE"></span><span id="_CPPv2N22dlp_post_op_matrix_add3ldmE"></span><span id="dlp_post_op_matrix_add::ldm__md_t"></span><span class="target" id="structdlp__post__op__matrix__add_1afd4f54d9afcfc9427e560bb25e829d45"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ldm</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_add3ldmE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_add3ldmE"></span><span id="_CPPv2N22dlp_post_op_matrix_add3ldmE"></span><span id="dlp_post_op_matrix_add::ldm__md_t"></span><span class="target" id="structdlp__post__op__matrix__add_1afd4f54d9afcfc9427e560bb25e829d45"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ldm</span></span></span><br /></dt>
 <dd><p>Leading dimension of the matrix </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_add9stor_typeE">
-<span id="_CPPv3N22dlp_post_op_matrix_add9stor_typeE"></span><span id="_CPPv2N22dlp_post_op_matrix_add9stor_typeE"></span><span id="dlp_post_op_matrix_add::stor_type__DLP_TYPE"></span><span class="target" id="structdlp__post__op__matrix__add_1a3b52cbe076a10d92b369e2c5fa4460a8"></span><a class="reference internal" href="#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">stor_type</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_add9stor_typeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_add9stor_typeE"></span><span id="_CPPv2N22dlp_post_op_matrix_add9stor_typeE"></span><span id="dlp_post_op_matrix_add::stor_type__DLP_TYPE"></span><span class="target" id="structdlp__post__op__matrix__add_1a3b52cbe076a10d92b369e2c5fa4460a8"></span><a class="reference internal" href="index.html#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">stor_type</span></span></span><br /></dt>
 <dd><p>Storage type of matrix values </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_add2sfE">
-<span id="_CPPv3N22dlp_post_op_matrix_add2sfE"></span><span id="_CPPv2N22dlp_post_op_matrix_add2sfE"></span><span id="dlp_post_op_matrix_add::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__matrix__add_1a94e5d433b560801d9ac8ac028cfff824"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_add2sfE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_add2sfE"></span><span id="_CPPv2N22dlp_post_op_matrix_add2sfE"></span><span id="dlp_post_op_matrix_add::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__matrix__add_1a94e5d433b560801d9ac8ac028cfff824"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><br /></dt>
 <dd><p>Scale factor parameters </p>
 </dd></dl>
 
@@ -737,7 +724,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv422dlp_post_op_matrix_mul">
-<span id="_CPPv322dlp_post_op_matrix_mul"></span><span id="_CPPv222dlp_post_op_matrix_mul"></span><span id="dlp_post_op_matrix_mul"></span><span class="target" id="structdlp__post__op__matrix__mul"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_matrix_mul</span></span></span><a class="headerlink" href="#_CPPv422dlp_post_op_matrix_mul" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv322dlp_post_op_matrix_mul"></span><span id="_CPPv222dlp_post_op_matrix_mul"></span><span id="dlp_post_op_matrix_mul"></span><span class="target" id="structdlp__post__op__matrix__mul"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_post_op_matrix_mul</span></span></span><br /></dt>
 <dd><p>Structure defining matrix multiplication post-operation parameters. </p>
 <p>This structure contains parameters for matrix multiplication post-operations, which multiply the GEMM result with another matrix.</p>
 <p>Matrix multiplication post-operation parameters.</p>
@@ -746,25 +733,25 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_mul6matrixE">
-<span id="_CPPv3N22dlp_post_op_matrix_mul6matrixE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul6matrixE"></span><span id="dlp_post_op_matrix_mul::matrix__voidP"></span><span class="target" id="structdlp__post__op__matrix__mul_1ae0bf0eaaa471438cfc0312dd06da514e"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_mul6matrixE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_mul6matrixE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul6matrixE"></span><span id="dlp_post_op_matrix_mul::matrix__voidP"></span><span class="target" id="structdlp__post__op__matrix__mul_1ae0bf0eaaa471438cfc0312dd06da514e"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix</span></span></span><br /></dt>
 <dd><p>Pointer to matrix to be multiplied </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_mul3ldmE">
-<span id="_CPPv3N22dlp_post_op_matrix_mul3ldmE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul3ldmE"></span><span id="dlp_post_op_matrix_mul::ldm__md_t"></span><span class="target" id="structdlp__post__op__matrix__mul_1a454ef272d35c705df57363d5a4d1869b"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ldm</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_mul3ldmE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_mul3ldmE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul3ldmE"></span><span id="dlp_post_op_matrix_mul::ldm__md_t"></span><span class="target" id="structdlp__post__op__matrix__mul_1a454ef272d35c705df57363d5a4d1869b"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ldm</span></span></span><br /></dt>
 <dd><p>Leading dimension of the matrix </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_mul9stor_typeE">
-<span id="_CPPv3N22dlp_post_op_matrix_mul9stor_typeE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul9stor_typeE"></span><span id="dlp_post_op_matrix_mul::stor_type__DLP_TYPE"></span><span class="target" id="structdlp__post__op__matrix__mul_1ae288cbc00c3c8b897d9c081fc9f3630c"></span><a class="reference internal" href="#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">stor_type</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_mul9stor_typeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_mul9stor_typeE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul9stor_typeE"></span><span id="dlp_post_op_matrix_mul::stor_type__DLP_TYPE"></span><span class="target" id="structdlp__post__op__matrix__mul_1ae288cbc00c3c8b897d9c081fc9f3630c"></span><a class="reference internal" href="index.html#_CPPv48DLP_TYPE" title="DLP_TYPE"><span class="n"><span class="pre">DLP_TYPE</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">stor_type</span></span></span><br /></dt>
 <dd><p>Storage type of matrix values </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N22dlp_post_op_matrix_mul2sfE">
-<span id="_CPPv3N22dlp_post_op_matrix_mul2sfE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul2sfE"></span><span id="dlp_post_op_matrix_mul::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__matrix__mul_1a957b440ef973cfaec3f11b8455adbf2e"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><a class="headerlink" href="#_CPPv4N22dlp_post_op_matrix_mul2sfE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N22dlp_post_op_matrix_mul2sfE"></span><span id="_CPPv2N22dlp_post_op_matrix_mul2sfE"></span><span id="dlp_post_op_matrix_mul::sf__dlp_sf_tP"></span><span class="target" id="structdlp__post__op__matrix__mul_1a957b440ef973cfaec3f11b8455adbf2e"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">sf</span></span></span><br /></dt>
 <dd><p>Scale factor parameters </p>
 </dd></dl>
 
@@ -773,7 +760,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv410dlp_pre_op">
-<span id="_CPPv310dlp_pre_op"></span><span id="_CPPv210dlp_pre_op"></span><span id="dlp_pre_op"></span><span class="target" id="structdlp__pre__op"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_pre_op</span></span></span><a class="headerlink" href="#_CPPv410dlp_pre_op" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv310dlp_pre_op"></span><span id="_CPPv210dlp_pre_op"></span><span id="dlp_pre_op"></span><span class="target" id="structdlp__pre__op"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_pre_op</span></span></span><br /></dt>
 <dd><p>Structure defining pre-operation parameters. </p>
 <p>This structure contains parameters for operations that are applied before the main GEMM computation, typically for quantization adjustments.</p>
 <p>Pre-operation parameters for GEMM.</p>
@@ -782,25 +769,25 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N10dlp_pre_op4b_zpE">
-<span id="_CPPv3N10dlp_pre_op4b_zpE"></span><span id="_CPPv2N10dlp_pre_op4b_zpE"></span><span id="dlp_pre_op::b_zp__dlp_zp_tP"></span><span class="target" id="structdlp__pre__op_1a63b3b20bf378cb3777c4108fdb28b5f9"></span><a class="reference internal" href="#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_zp</span></span></span><a class="headerlink" href="#_CPPv4N10dlp_pre_op4b_zpE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N10dlp_pre_op4b_zpE"></span><span id="_CPPv2N10dlp_pre_op4b_zpE"></span><span id="dlp_pre_op::b_zp__dlp_zp_tP"></span><span class="target" id="structdlp__pre__op_1a63b3b20bf378cb3777c4108fdb28b5f9"></span><a class="reference internal" href="index.html#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_zp</span></span></span><br /></dt>
 <dd><p>Zero-point parameters for matrix B </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N10dlp_pre_op5b_sclE">
-<span id="_CPPv3N10dlp_pre_op5b_sclE"></span><span id="_CPPv2N10dlp_pre_op5b_sclE"></span><span id="dlp_pre_op::b_scl__dlp_sf_tP"></span><span class="target" id="structdlp__pre__op_1aebdc7142e65b3ffb3f76a53664f18968"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_scl</span></span></span><a class="headerlink" href="#_CPPv4N10dlp_pre_op5b_sclE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N10dlp_pre_op5b_sclE"></span><span id="_CPPv2N10dlp_pre_op5b_sclE"></span><span id="dlp_pre_op::b_scl__dlp_sf_tP"></span><span class="target" id="structdlp__pre__op_1aebdc7142e65b3ffb3f76a53664f18968"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_scl</span></span></span><br /></dt>
 <dd><p>Scale factor parameters for matrix B </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N10dlp_pre_op10seq_lengthE">
-<span id="_CPPv3N10dlp_pre_op10seq_lengthE"></span><span id="_CPPv2N10dlp_pre_op10seq_lengthE"></span><span id="dlp_pre_op::seq_length__md_t"></span><span class="target" id="structdlp__pre__op_1ac5288b5b8bdc7ad3cea1606d3f13e165"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">seq_length</span></span></span><a class="headerlink" href="#_CPPv4N10dlp_pre_op10seq_lengthE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N10dlp_pre_op10seq_lengthE"></span><span id="_CPPv2N10dlp_pre_op10seq_lengthE"></span><span id="dlp_pre_op::seq_length__md_t"></span><span class="target" id="structdlp__pre__op_1ac5288b5b8bdc7ad3cea1606d3f13e165"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">seq_length</span></span></span><br /></dt>
 <dd><p>Sequence length for the operation </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N10dlp_pre_op10group_sizeE">
-<span id="_CPPv3N10dlp_pre_op10group_sizeE"></span><span id="_CPPv2N10dlp_pre_op10group_sizeE"></span><span id="dlp_pre_op::group_size__md_t"></span><span class="target" id="structdlp__pre__op_1a860a71f5f1a58b13cc0ecfcfd83896a7"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">group_size</span></span></span><a class="headerlink" href="#_CPPv4N10dlp_pre_op10group_sizeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N10dlp_pre_op10group_sizeE"></span><span id="_CPPv2N10dlp_pre_op10group_sizeE"></span><span id="dlp_pre_op::group_size__md_t"></span><span class="target" id="structdlp__pre__op_1a860a71f5f1a58b13cc0ecfcfd83896a7"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">group_size</span></span></span><br /></dt>
 <dd><p>Group size for grouped operations </p>
 </dd></dl>
 
@@ -809,7 +796,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv417dlp_group_post_op">
-<span id="_CPPv317dlp_group_post_op"></span><span id="_CPPv217dlp_group_post_op"></span><span id="dlp_group_post_op"></span><span class="target" id="structdlp__group__post__op"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_group_post_op</span></span></span><a class="headerlink" href="#_CPPv417dlp_group_post_op" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv317dlp_group_post_op"></span><span id="_CPPv217dlp_group_post_op"></span><span id="dlp_group_post_op"></span><span class="target" id="structdlp__group__post__op"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_group_post_op</span></span></span><br /></dt>
 <dd><p>Structure defining grouped post-operation parameters. </p>
 <p>This structure contains parameters for grouped post-operations, which apply different quantization parameters to different groups of the matrices involved in GEMM.</p>
 <p>Grouped post-operation parameters for GEMM.</p>
@@ -818,37 +805,37 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N17dlp_group_post_op10group_sizeE">
-<span id="_CPPv3N17dlp_group_post_op10group_sizeE"></span><span id="_CPPv2N17dlp_group_post_op10group_sizeE"></span><span id="dlp_group_post_op::group_size__md_t"></span><span class="target" id="structdlp__group__post__op_1a7cddc613d8e0210f24342f636534c05a"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">group_size</span></span></span><a class="headerlink" href="#_CPPv4N17dlp_group_post_op10group_sizeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17dlp_group_post_op10group_sizeE"></span><span id="_CPPv2N17dlp_group_post_op10group_sizeE"></span><span id="dlp_group_post_op::group_size__md_t"></span><span class="target" id="structdlp__group__post__op_1a7cddc613d8e0210f24342f636534c05a"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">group_size</span></span></span><br /></dt>
 <dd><p>Size of each group for grouped operations </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N17dlp_group_post_op10seq_lengthE">
-<span id="_CPPv3N17dlp_group_post_op10seq_lengthE"></span><span id="_CPPv2N17dlp_group_post_op10seq_lengthE"></span><span id="dlp_group_post_op::seq_length__md_t"></span><span class="target" id="structdlp__group__post__op_1a2145d2c344a6539717ead2c9fb827349"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">seq_length</span></span></span><a class="headerlink" href="#_CPPv4N17dlp_group_post_op10seq_lengthE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17dlp_group_post_op10seq_lengthE"></span><span id="_CPPv2N17dlp_group_post_op10seq_lengthE"></span><span id="dlp_group_post_op::seq_length__md_t"></span><span class="target" id="structdlp__group__post__op_1a2145d2c344a6539717ead2c9fb827349"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">seq_length</span></span></span><br /></dt>
 <dd><p>Sequence length for the operation </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N17dlp_group_post_op5a_sclE">
-<span id="_CPPv3N17dlp_group_post_op5a_sclE"></span><span id="_CPPv2N17dlp_group_post_op5a_sclE"></span><span id="dlp_group_post_op::a_scl__dlp_sf_tP"></span><span class="target" id="structdlp__group__post__op_1a90da006f011b45d41bc540a0ebb241d6"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">a_scl</span></span></span><a class="headerlink" href="#_CPPv4N17dlp_group_post_op5a_sclE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17dlp_group_post_op5a_sclE"></span><span id="_CPPv2N17dlp_group_post_op5a_sclE"></span><span id="dlp_group_post_op::a_scl__dlp_sf_tP"></span><span class="target" id="structdlp__group__post__op_1a90da006f011b45d41bc540a0ebb241d6"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">a_scl</span></span></span><br /></dt>
 <dd><p>Scale factor parameters for matrix A </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N17dlp_group_post_op5b_sclE">
-<span id="_CPPv3N17dlp_group_post_op5b_sclE"></span><span id="_CPPv2N17dlp_group_post_op5b_sclE"></span><span id="dlp_group_post_op::b_scl__dlp_sf_tP"></span><span class="target" id="structdlp__group__post__op_1a09532072b5916d897c153c5a6840ea29"></span><a class="reference internal" href="#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_scl</span></span></span><a class="headerlink" href="#_CPPv4N17dlp_group_post_op5b_sclE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17dlp_group_post_op5b_sclE"></span><span id="_CPPv2N17dlp_group_post_op5b_sclE"></span><span id="dlp_group_post_op::b_scl__dlp_sf_tP"></span><span class="target" id="structdlp__group__post__op_1a09532072b5916d897c153c5a6840ea29"></span><a class="reference internal" href="index.html#_CPPv48dlp_sf_t" title="dlp_sf_t"><span class="n"><span class="pre">dlp_sf_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_scl</span></span></span><br /></dt>
 <dd><p>Scale factor parameters for matrix B </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N17dlp_group_post_op4a_zpE">
-<span id="_CPPv3N17dlp_group_post_op4a_zpE"></span><span id="_CPPv2N17dlp_group_post_op4a_zpE"></span><span id="dlp_group_post_op::a_zp__dlp_zp_tP"></span><span class="target" id="structdlp__group__post__op_1a3e98ab61fc40ac3c4dc9e146cc8605ff"></span><a class="reference internal" href="#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">a_zp</span></span></span><a class="headerlink" href="#_CPPv4N17dlp_group_post_op4a_zpE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17dlp_group_post_op4a_zpE"></span><span id="_CPPv2N17dlp_group_post_op4a_zpE"></span><span id="dlp_group_post_op::a_zp__dlp_zp_tP"></span><span class="target" id="structdlp__group__post__op_1a3e98ab61fc40ac3c4dc9e146cc8605ff"></span><a class="reference internal" href="index.html#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">a_zp</span></span></span><br /></dt>
 <dd><p>Zero-point parameters for matrix A </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N17dlp_group_post_op4b_zpE">
-<span id="_CPPv3N17dlp_group_post_op4b_zpE"></span><span id="_CPPv2N17dlp_group_post_op4b_zpE"></span><span id="dlp_group_post_op::b_zp__dlp_zp_tP"></span><span class="target" id="structdlp__group__post__op_1a5f90af2e9fe6fc8b419e120075900929"></span><a class="reference internal" href="#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_zp</span></span></span><a class="headerlink" href="#_CPPv4N17dlp_group_post_op4b_zpE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17dlp_group_post_op4b_zpE"></span><span id="_CPPv2N17dlp_group_post_op4b_zpE"></span><span id="dlp_group_post_op::b_zp__dlp_zp_tP"></span><span class="target" id="structdlp__group__post__op_1a5f90af2e9fe6fc8b419e120075900929"></span><a class="reference internal" href="index.html#_CPPv48dlp_zp_t" title="dlp_zp_t"><span class="n"><span class="pre">dlp_zp_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">b_zp</span></span></span><br /></dt>
 <dd><p>Zero-point parameters for matrix B </p>
 </dd></dl>
 
@@ -857,7 +844,7 @@ document.write(`
 
 <dl class="cpp struct">
 <dt class="sig sig-object cpp" id="_CPPv419DLP_SYMM_STAT_QUANT">
-<span id="_CPPv319DLP_SYMM_STAT_QUANT"></span><span id="_CPPv219DLP_SYMM_STAT_QUANT"></span><span id="DLP_SYMM_STAT_QUANT"></span><span class="target" id="structDLP__SYMM__STAT__QUANT"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_SYMM_STAT_QUANT</span></span></span><a class="headerlink" href="#_CPPv419DLP_SYMM_STAT_QUANT" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv319DLP_SYMM_STAT_QUANT"></span><span id="_CPPv219DLP_SYMM_STAT_QUANT"></span><span id="DLP_SYMM_STAT_QUANT"></span><span class="target" id="structDLP__SYMM__STAT__QUANT"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_SYMM_STAT_QUANT</span></span></span><br /></dt>
 <dd><p>Structure defining symmetric static quantization parameters. </p>
 <p>This structure contains parameters for symmetric static quantization, where the quantization is performed with symmetric range around zero.</p>
 <p>Symmetric static quantization parameters.</p>
@@ -866,7 +853,7 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N19DLP_SYMM_STAT_QUANT10group_sizeE">
-<span id="_CPPv3N19DLP_SYMM_STAT_QUANT10group_sizeE"></span><span id="_CPPv2N19DLP_SYMM_STAT_QUANT10group_sizeE"></span><span id="DLP_SYMM_STAT_QUANT::group_size__md_t"></span><span class="target" id="structDLP__SYMM__STAT__QUANT_1a04776834f245cc142c9e62f726aeb94c"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">group_size</span></span></span><a class="headerlink" href="#_CPPv4N19DLP_SYMM_STAT_QUANT10group_sizeE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N19DLP_SYMM_STAT_QUANT10group_sizeE"></span><span id="_CPPv2N19DLP_SYMM_STAT_QUANT10group_sizeE"></span><span id="DLP_SYMM_STAT_QUANT::group_size__md_t"></span><span class="target" id="structDLP__SYMM__STAT__QUANT_1a04776834f245cc142c9e62f726aeb94c"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">group_size</span></span></span><br /></dt>
 <dd><p>Group size for grouped quantization </p>
 </dd></dl>
 
@@ -878,7 +865,7 @@ document.write(`
 <h2>Enums<a class="headerlink" href="#enums" title="Link to this heading">#</a></h2>
 <dl class="cpp enum">
 <dt class="sig sig-object cpp" id="_CPPv416DLP_POST_OP_TYPE">
-<span id="_CPPv316DLP_POST_OP_TYPE"></span><span id="_CPPv216DLP_POST_OP_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></span><a class="headerlink" href="#_CPPv416DLP_POST_OP_TYPE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv316DLP_POST_OP_TYPE"></span><span id="_CPPv216DLP_POST_OP_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></span><br /></dt>
 <dd><p>Enumeration of post-operation types that can be applied to GEMM results. </p>
 <p>This enum defines the different types of operations that can be performed on the output matrix after GEMM computation.</p>
 <p>Post-operation types for GEMM results.</p>
@@ -886,31 +873,31 @@ document.write(`
 <p><em>Values:</em></p>
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE7ELTWISEE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE7ELTWISEE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a44cd7058a54a981f3eabc2499a2d1aec"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ELTWISE</span></span></span><a class="headerlink" href="#_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16DLP_POST_OP_TYPE7ELTWISEE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE7ELTWISEE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a44cd7058a54a981f3eabc2499a2d1aec"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ELTWISE</span></span></span><br /></dt>
 <dd><p>Element-wise operations (activations) </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE4BIASE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE4BIASE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE4BIASE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a3912ef9909d39fcdcdbbb0b6f5ad6e96"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BIAS</span></span></span><a class="headerlink" href="#_CPPv4N16DLP_POST_OP_TYPE4BIASE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16DLP_POST_OP_TYPE4BIASE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE4BIASE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a3912ef9909d39fcdcdbbb0b6f5ad6e96"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BIAS</span></span></span><br /></dt>
 <dd><p>Bias addition operation </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE5SCALEE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE5SCALEE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE5SCALEE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a593be05a10070b4e7e0856e20590eaaf"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SCALE</span></span></span><a class="headerlink" href="#_CPPv4N16DLP_POST_OP_TYPE5SCALEE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16DLP_POST_OP_TYPE5SCALEE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE5SCALEE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a593be05a10070b4e7e0856e20590eaaf"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SCALE</span></span></span><br /></dt>
 <dd><p>Scaling operation </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE10MATRIX_ADDE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE10MATRIX_ADDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a063213dec4a2ed8c95a49a58a6dcbc3d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">MATRIX_ADD</span></span></span><a class="headerlink" href="#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16DLP_POST_OP_TYPE10MATRIX_ADDE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE10MATRIX_ADDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a063213dec4a2ed8c95a49a58a6dcbc3d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">MATRIX_ADD</span></span></span><br /></dt>
 <dd><p>Matrix addition operation </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE10MATRIX_MULE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE10MATRIX_MULE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4aea4dbdaedf616c124529ea2c3c7ed5fa"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">MATRIX_MUL</span></span></span><a class="headerlink" href="#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N16DLP_POST_OP_TYPE10MATRIX_MULE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE10MATRIX_MULE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4aea4dbdaedf616c124529ea2c3c7ed5fa"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">MATRIX_MUL</span></span></span><br /></dt>
 <dd><p>Matrix multiplication operation </p>
 </dd></dl>
 
@@ -918,7 +905,7 @@ document.write(`
 
 <dl class="cpp enum">
 <dt class="sig sig-object cpp" id="_CPPv417DLP_ELT_ALGO_TYPE">
-<span id="_CPPv317DLP_ELT_ALGO_TYPE"></span><span id="_CPPv217DLP_ELT_ALGO_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_ELT_ALGO_TYPE</span></span></span><a class="headerlink" href="#_CPPv417DLP_ELT_ALGO_TYPE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv317DLP_ELT_ALGO_TYPE"></span><span id="_CPPv217DLP_ELT_ALGO_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_ELT_ALGO_TYPE</span></span></span><br /></dt>
 <dd><p>Enumeration of element-wise algorithm types supported in post-operations. </p>
 <p>This enum defines the various activation functions and element-wise operations that can be applied as post-operations in GEMM computations.</p>
 <p>Element-wise algorithm types for post-operations.</p>
@@ -926,49 +913,49 @@ document.write(`
 <p><em>Values:</em></p>
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4RELUE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4RELUE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a9b69aa04edddb5cade1fea783ef633a3"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RELU</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4RELUE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4RELUE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a9b69aa04edddb5cade1fea783ef633a3"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RELU</span></span></span><br /></dt>
 <dd><p>Rectified Linear Unit activation: max(0, x) </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE5PRELUE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE5PRELUE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ae38a71c2a212332cb2bfe2ab1bc78de4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PRELU</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE5PRELUE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE5PRELUE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ae38a71c2a212332cb2bfe2ab1bc78de4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PRELU</span></span></span><br /></dt>
 <dd><p>Parametric ReLU activation: max(alpha*x, x) </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE9GELU_TANHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE9GELU_TANHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a702fa4c565f7605bc5d3e86454331b48"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GELU_TANH</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE9GELU_TANHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE9GELU_TANHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a702fa4c565f7605bc5d3e86454331b48"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GELU_TANH</span></span></span><br /></dt>
 <dd><p>GELU activation using tanh approximation </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE8GELU_ERFE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE8GELU_ERFE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ac3fe0e80c6d25e36d718701cc4ab9dbc"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GELU_ERF</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE8GELU_ERFE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE8GELU_ERFE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ac3fe0e80c6d25e36d718701cc4ab9dbc"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GELU_ERF</span></span></span><br /></dt>
 <dd><p>GELU activation using error function </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4CLIPE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4CLIPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ad4624417d4872d4ff7b0a75ec2f8a4c7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CLIP</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4CLIPE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4CLIPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ad4624417d4872d4ff7b0a75ec2f8a4c7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CLIP</span></span></span><br /></dt>
 <dd><p>Clipping operation: min(max(x, min_val), max_val) </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE5SWISHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE5SWISHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a681708022d3dfd3ceb050218d63c6649"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SWISH</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE5SWISHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE5SWISHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a681708022d3dfd3ceb050218d63c6649"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SWISH</span></span></span><br /></dt>
 <dd><p>Swish activation: x * sigmoid(x) </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4TANHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4TANHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a5cf05eaf3e6d14026cfec37f90ca44e4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TANH</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4TANHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4TANHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a5cf05eaf3e6d14026cfec37f90ca44e4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TANH</span></span></span><br /></dt>
 <dd><p>Hyperbolic tangent activation </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE7SIGMOIDE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE7SIGMOIDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a11c1096689b7d3504dbcc4f61d854883"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SIGMOID</span></span></span><a class="headerlink" href="#_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N17DLP_ELT_ALGO_TYPE7SIGMOIDE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE7SIGMOIDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a11c1096689b7d3504dbcc4f61d854883"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SIGMOID</span></span></span><br /></dt>
 <dd><p>Sigmoid activation: 1 / (1 + exp(-x)) </p>
 </dd></dl>
 
@@ -976,7 +963,7 @@ document.write(`
 
 <dl class="cpp enum">
 <dt class="sig sig-object cpp" id="_CPPv48DLP_TYPE">
-<span id="_CPPv38DLP_TYPE"></span><span id="_CPPv28DLP_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_TYPE</span></span></span><a class="headerlink" href="#_CPPv48DLP_TYPE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv38DLP_TYPE"></span><span id="_CPPv28DLP_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_TYPE</span></span></span><br /></dt>
 <dd><p>Enumeration of supported data types for parameter storage. </p>
 <p>This enum defines the various data types that can be used for storing parameters in GEMM operations and post-operations.</p>
 <p>Supported data types for GEMM and post-op parameters.</p>
@@ -984,85 +971,85 @@ document.write(`
 <p><em>Values:</em></p>
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE11DLP_INVALIDE">
-<span id="_CPPv3N8DLP_TYPE11DLP_INVALIDE"></span><span id="_CPPv2N8DLP_TYPE11DLP_INVALIDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42ac52e0dda6e44108cb0d737e311a2627b"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_INVALID</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE11DLP_INVALIDE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE11DLP_INVALIDE"></span><span id="_CPPv2N8DLP_TYPE11DLP_INVALIDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42ac52e0dda6e44108cb0d737e311a2627b"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_INVALID</span></span></span><br /></dt>
 <dd><p>Invalid or unspecified type </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE6DLP_S4E">
-<span id="_CPPv3N8DLP_TYPE6DLP_S4E"></span><span id="_CPPv2N8DLP_TYPE6DLP_S4E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a2cb16edbe484481ccc166aa724181241"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S4</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE6DLP_S4E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE6DLP_S4E"></span><span id="_CPPv2N8DLP_TYPE6DLP_S4E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a2cb16edbe484481ccc166aa724181241"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S4</span></span></span><br /></dt>
 <dd><p>Signed 4-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE6DLP_U4E">
-<span id="_CPPv3N8DLP_TYPE6DLP_U4E"></span><span id="_CPPv2N8DLP_TYPE6DLP_U4E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aa107427b3ff37c7920c957b9dd751515"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U4</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE6DLP_U4E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE6DLP_U4E"></span><span id="_CPPv2N8DLP_TYPE6DLP_U4E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aa107427b3ff37c7920c957b9dd751515"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U4</span></span></span><br /></dt>
 <dd><p>Unsigned 4-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE6DLP_F4E">
-<span id="_CPPv3N8DLP_TYPE6DLP_F4E"></span><span id="_CPPv2N8DLP_TYPE6DLP_F4E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42ad3774a58abf6702a6985a120ce385bae"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_F4</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE6DLP_F4E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE6DLP_F4E"></span><span id="_CPPv2N8DLP_TYPE6DLP_F4E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42ad3774a58abf6702a6985a120ce385bae"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_F4</span></span></span><br /></dt>
 <dd><p>4-bit floating point </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE6DLP_S8E">
-<span id="_CPPv3N8DLP_TYPE6DLP_S8E"></span><span id="_CPPv2N8DLP_TYPE6DLP_S8E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a2e0e55517a46205c08e72c392aa4bac9"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S8</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE6DLP_S8E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE6DLP_S8E"></span><span id="_CPPv2N8DLP_TYPE6DLP_S8E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a2e0e55517a46205c08e72c392aa4bac9"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S8</span></span></span><br /></dt>
 <dd><p>Signed 8-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE6DLP_U8E">
-<span id="_CPPv3N8DLP_TYPE6DLP_U8E"></span><span id="_CPPv2N8DLP_TYPE6DLP_U8E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42adc968ce7799cae4f099262c63ddd8984"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U8</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE6DLP_U8E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE6DLP_U8E"></span><span id="_CPPv2N8DLP_TYPE6DLP_U8E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42adc968ce7799cae4f099262c63ddd8984"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U8</span></span></span><br /></dt>
 <dd><p>Unsigned 8-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE7DLP_S16E">
-<span id="_CPPv3N8DLP_TYPE7DLP_S16E"></span><span id="_CPPv2N8DLP_TYPE7DLP_S16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aa2578d9ebfcee1cc0748a1dd8ce385ac"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S16</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE7DLP_S16E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE7DLP_S16E"></span><span id="_CPPv2N8DLP_TYPE7DLP_S16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aa2578d9ebfcee1cc0748a1dd8ce385ac"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S16</span></span></span><br /></dt>
 <dd><p>Signed 16-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE7DLP_U16E">
-<span id="_CPPv3N8DLP_TYPE7DLP_U16E"></span><span id="_CPPv2N8DLP_TYPE7DLP_U16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aef24b926a58feec7dc88e34b001663d7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U16</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE7DLP_U16E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE7DLP_U16E"></span><span id="_CPPv2N8DLP_TYPE7DLP_U16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aef24b926a58feec7dc88e34b001663d7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U16</span></span></span><br /></dt>
 <dd><p>Unsigned 16-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE7DLP_F16E">
-<span id="_CPPv3N8DLP_TYPE7DLP_F16E"></span><span id="_CPPv2N8DLP_TYPE7DLP_F16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a626ded07806dcd9ef6c1318d3c9d34e8"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_F16</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE7DLP_F16E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE7DLP_F16E"></span><span id="_CPPv2N8DLP_TYPE7DLP_F16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a626ded07806dcd9ef6c1318d3c9d34e8"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_F16</span></span></span><br /></dt>
 <dd><p>16-bit floating point </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE8DLP_BF16E">
-<span id="_CPPv3N8DLP_TYPE8DLP_BF16E"></span><span id="_CPPv2N8DLP_TYPE8DLP_BF16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a49b0e24d3a4f6daf19096f5ce62b9c0f"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_BF16</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE8DLP_BF16E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE8DLP_BF16E"></span><span id="_CPPv2N8DLP_TYPE8DLP_BF16E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a49b0e24d3a4f6daf19096f5ce62b9c0f"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_BF16</span></span></span><br /></dt>
 <dd><p>Brain floating point 16-bit </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE7DLP_S32E">
-<span id="_CPPv3N8DLP_TYPE7DLP_S32E"></span><span id="_CPPv2N8DLP_TYPE7DLP_S32E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42ae5cc784ced3ddd3b304fec7fa30a1ba7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S32</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE7DLP_S32E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE7DLP_S32E"></span><span id="_CPPv2N8DLP_TYPE7DLP_S32E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42ae5cc784ced3ddd3b304fec7fa30a1ba7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_S32</span></span></span><br /></dt>
 <dd><p>Signed 32-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE7DLP_U32E">
-<span id="_CPPv3N8DLP_TYPE7DLP_U32E"></span><span id="_CPPv2N8DLP_TYPE7DLP_U32E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a2383c59f1866a19f0fe54509ca6177bb"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U32</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE7DLP_U32E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE7DLP_U32E"></span><span id="_CPPv2N8DLP_TYPE7DLP_U32E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a2383c59f1866a19f0fe54509ca6177bb"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_U32</span></span></span><br /></dt>
 <dd><p>Unsigned 32-bit integer </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE7DLP_F32E">
-<span id="_CPPv3N8DLP_TYPE7DLP_F32E"></span><span id="_CPPv2N8DLP_TYPE7DLP_F32E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aa7149c5daec0205d822f635a6d48f7ac"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_F32</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE7DLP_F32E" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE7DLP_F32E"></span><span id="_CPPv2N8DLP_TYPE7DLP_F32E"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42aa7149c5daec0205d822f635a6d48f7ac"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_F32</span></span></span><br /></dt>
 <dd><p>32-bit floating point </p>
 </dd></dl>
 
 <dl class="cpp enumerator">
 <dt class="sig sig-object cpp" id="_CPPv4N8DLP_TYPE7DLP_MAXE">
-<span id="_CPPv3N8DLP_TYPE7DLP_MAXE"></span><span id="_CPPv2N8DLP_TYPE7DLP_MAXE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a87ea7cc3c4f7781a7b79d34f36dc9ed9"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_MAX</span></span></span><a class="headerlink" href="#_CPPv4N8DLP_TYPE7DLP_MAXE" title="Link to this definition">#</a><br /></dt>
+<span id="_CPPv3N8DLP_TYPE7DLP_MAXE"></span><span id="_CPPv2N8DLP_TYPE7DLP_MAXE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aeb654284bcfe0902935d8f802d6a4d42a87ea7cc3c4f7781a7b79d34f36dc9ed9"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_MAX</span></span></span><br /></dt>
 <dd><p>Maximum value (enum boundary) </p>
 </dd></dl>
 
@@ -1070,7 +1057,7 @@ document.write(`
 
 <p class="rubric">See Also</p>
 <ul class="simple">
-<li><p><a class="reference internal" href="../gemm/index.html"><span class="doc">GEMM Operations</span></a> - GEMM operations</p></li>
+<li><p><a class="reference internal" href="index.html"><span class="doc">GEMM Operations</span></a> - GEMM operations</p></li>
 <li><p><a class="reference internal" href="../eltwise/index.html"><span class="doc">Element-wise Operations</span></a> - Element-wise operations</p></li>
 <li><p><a class="reference internal" href="../utils/index.html"><span class="doc">Utility Functions</span></a> - Utility functions</p></li>
 </ul>
@@ -1091,24 +1078,6 @@ document.write(`
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
-    <a class="left-prev"
-       href="../gemm/index.html"
-       title="previous page">
-      <i class="fa-solid fa-angle-left"></i>
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">GEMM Operations</p>
-      </div>
-    </a>
-    <a class="right-next"
-       href="../eltwise/index.html"
-       title="next page">
-      <div class="prev-next-info">
-        <p class="prev-next-subtitle">next</p>
-        <p class="prev-next-title">Element-wise Operations</p>
-      </div>
-      <i class="fa-solid fa-angle-right"></i>
-    </a>
 </div>
                 </footer>
               

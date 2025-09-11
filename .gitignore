@@ -1,0 +1,81 @@
+# .gitignore for Sphinx HTML documentation (GitHub Pages)
+# This file controls what gets committed to the GitHub Pages branch
+
+# =============================================================================
+# IGNORE: Build artifacts and temporary files (based on cleanup.sh)
+# =============================================================================
+
+# Sphinx build metadata
+.buildinfo
+
+# Log files
+*.log
+sphinx.log
+
+# Source files (not needed for hosting)
+_sources/
+_sources/**
+
+# Temporary files
+*.tmp
+*.temp
+*~
+
+# Backup files
+*.bak
+*.orig
+
+# Cache directories
+__pycache__/
+**/__pycache__/
+.cache/
+**/.cache/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# =============================================================================
+# TRACK: Essential files for GitHub Pages hosting
+# =============================================================================
+
+# All HTML files are tracked (essential for hosting)
+# *.html files are tracked by default
+
+# All CSS files are tracked (styling)
+# *.css files are tracked by default
+
+# All JavaScript files are tracked (search functionality)
+# *.js files are tracked by default
+
+# All image files are tracked (documentation assets)
+# *.png, *.svg, *.ico files are tracked by default
+
+# All font files are tracked (typography)
+# *.woff, *.woff2, *.ttf, *.eot files are tracked by default
+
+# Static assets directory (CSS, JS, images, fonts)
+# _static/ directory is tracked by default
+
+# API documentation directory
+# api/ directory is tracked by default
+
+# Search functionality files
+# searchindex.js and objects.inv are tracked by default
+
+# =============================================================================
+# SPECIAL CASES
+# =============================================================================
+
+# Keep the cleanup script
+!scripts/cleanup.sh
+
+# Ignore empty directories (Git doesn't track them anyway)
+# But if there are any hidden files creating empty dirs, ignore them
+**/.gitkeep

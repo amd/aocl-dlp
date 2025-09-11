@@ -58,7 +58,7 @@
     <link rel="index" title="Index" href="../genindex.html" />
     <link rel="search" title="Search" href="../search.html" />
     <link rel="next" title="GEMM Operations" href="gemm/index.html" />
-    <link rel="prev" title="API Reference" href="index.html" />
+    <link rel="prev" title="AOCL-DLP API Documentation" href="../index.html" />
     <meta name="google-site-verification" content="vo35SZt_GASsTHAEmdww7AYKPCvZyzLvOXBl8guBME4" />
 
   </head>
@@ -179,24 +179,14 @@
  </script></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Categories</span></p>
 <ul class="current nav bd-sidenav">
-<li class="toctree-l1 current active has-children"><a class="reference internal" href="index.html">API Reference</a><details open="open"><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul class="current">
-<li class="toctree-l2 current active"><a class="current reference internal" href="#">API Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="gemm/index.html">GEMM Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="post_ops/index.html">Post-Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="eltwise/index.html">Element-wise Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="utils/index.html">Utility Functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="library/index.html">Library Management</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="classic/index.html">Classic C Headers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="classic/gemm.html">GEMM API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="classic/eltwise.html">Eltwise API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="classic/utils.html">Utils API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="library/index.html">Library Management</a></li>
-</ul>
-</details></li>
-</ul>
-</details></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">API Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="gemm/index.html">GEMM Operations</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="eltwise/index.html">Element-wise Operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="utils/index.html">Utility Functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="library/index.html">Library Management</a></li>
 </ul>
 
     </div>
@@ -242,9 +232,6 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    
-    <li class="breadcrumb-item"><a href="index.html" class="nav-link">API Reference</a></li>
-    
     <li class="breadcrumb-item active" aria-current="page">API Overview</li>
   </ul>
 </nav>
@@ -371,11 +358,13 @@ document.write(`
 <h3>Matrix Operations<a class="headerlink" href="#matrix-operations" title="Link to this heading">#</a></h3>
 <p>AOCL-DLP is built around optimized matrix operations, primarily General Matrix Multiplication (GEMM):</p>
 <div class="math notranslate nohighlight">
-\[C = \alpha \cdot op(A) \cdot op(B) + \beta \cdot C + \text{post\_ops}\]</div>
-<p>Where:
-- <span class="math notranslate nohighlight">\(op(X)\)</span> can be <span class="math notranslate nohighlight">\(X\)</span> (no transpose) or <span class="math notranslate nohighlight">\(X^T\)</span> (transpose)
-- <span class="math notranslate nohighlight">\(\alpha, \beta\)</span> are scalar multipliers
-- <span class="math notranslate nohighlight">\(\text{post\_ops}\)</span> represents fused post-processing operations</p>
+\[C = \text{post_ops} (\alpha \cdot op(A) \cdot op(B) + \beta \cdot C)\]</div>
+<p>Where:</p>
+<ul class="simple">
+<li><p><span class="math notranslate nohighlight">\(op(X)\)</span> can be <span class="math notranslate nohighlight">\(X\)</span> (no transpose) or <span class="math notranslate nohighlight">\(X^T\)</span> (transpose)</p></li>
+<li><p><span class="math notranslate nohighlight">\(\alpha, \beta\)</span> are scalar multipliers</p></li>
+<li><p><span class="math notranslate nohighlight">\(\text{post_ops}\)</span> represents fused post-processing operations</p></li>
+</ul>
 </section>
 <section id="data-type-support">
 <h3>Data Type Support<a class="headerlink" href="#data-type-support" title="Link to this heading">#</a></h3>
@@ -866,9 +855,8 @@ document.write(`
 <h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="gemm/index.html"><span class="doc">GEMM Operations</span></a> - Detailed GEMM API documentation</p></li>
-<li><p><a class="reference internal" href="post_ops/index.html"><span class="doc">Post-Operations</span></a> - Post-operations reference</p></li>
-<li><p><span class="xref std std-doc">../tutorials/index</span> - Step-by-step tutorials</p></li>
-<li><p><span class="xref std std-doc">../examples/index</span> - Practical examples</p></li>
+<li><p><a class="reference internal" href="gemm/post_ops.html"><span class="doc">Post-Operations</span></a> - Post-operations reference</p></li>
+<li><p><a class="reference external" href="https://github.com/AMD-AOCL/aocl-dlp/wiki/Examples-and-Tutorials">AOCL-DLP Examples and Tutorials (GitHub Wiki)</a></p></li>
 </ul>
 </section>
 </section>
@@ -885,12 +873,12 @@ document.write(`
                   
 <div class="prev-next-area">
     <a class="left-prev"
-       href="index.html"
+       href="../index.html"
        title="previous page">
       <i class="fa-solid fa-angle-left"></i>
       <div class="prev-next-info">
         <p class="prev-next-subtitle">previous</p>
-        <p class="prev-next-title">API Reference</p>
+        <p class="prev-next-title">AOCL-DLP API Documentation</p>
       </div>
     </a>
     <a class="right-next"

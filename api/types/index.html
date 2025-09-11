@@ -178,24 +178,14 @@
  </script></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
-        <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+        <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Categories</span></p>
 <ul class="nav bd-sidenav">
-<li class="toctree-l1 has-children"><a class="reference internal" href="../index.html">API Reference</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l2"><a class="reference internal" href="../overview.html">API Overview</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../gemm/index.html">GEMM Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../post_ops/index.html">Post-Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../eltwise/index.html">Element-wise Operations</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../utils/index.html">Utility Functions</a></li>
-<li class="toctree-l2"><a class="reference internal" href="../library/index.html">Library Management</a></li>
-<li class="toctree-l2 has-children"><a class="reference internal" href="../classic/index.html">Classic C Headers</a><details><summary><span class="toctree-toggle" role="presentation"><i class="fa-solid fa-chevron-down"></i></span></summary><ul>
-<li class="toctree-l3"><a class="reference internal" href="../classic/gemm.html">GEMM API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../classic/eltwise.html">Eltwise API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../classic/utils.html">Utils API Reference</a></li>
-<li class="toctree-l3"><a class="reference internal" href="../library/index.html">Library Management</a></li>
-</ul>
-</details></li>
-</ul>
-</details></li>
+<li class="toctree-l1"><a class="reference internal" href="../overview.html">API Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../gemm/index.html">GEMM Operations</a></li>
+
+<li class="toctree-l1"><a class="reference internal" href="../eltwise/index.html">Element-wise Operations</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../utils/index.html">Utility Functions</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../library/index.html">Library Management</a></li>
 </ul>
 
     </div>
@@ -389,10 +379,6 @@ document.write(`
   <section id="data-types-and-structures">
 <h1>Data Types and Structures<a class="headerlink" href="#data-types-and-structures" title="Link to this heading">#</a></h1>
 <p>Data types, structures, and constants used throughout AOCL-DLP.</p>
-<div class="admonition warning">
-<p class="admonition-title">Warning</p>
-<p>doxygengroup: Cannot find group “data_types” in doxygen xml output for project “aocl-dlp” from directory: /home/abhiram/aocl-dlp/build/docs/doxygen/xml</p>
-</div>
 <section id="overview">
 <h2>Overview<a class="headerlink" href="#overview" title="Link to this heading">#</a></h2>
 <p>AOCL-DLP defines various data types and structures to support different precision levels and operation configurations. Understanding these types is essential for effective use of the library.</p>
@@ -429,31 +415,31 @@ document.write(`
 <p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t5scaleE">
-<span id="_CPPv3N14dlp_metadata_t5scaleE"></span><span id="_CPPv2N14dlp_metadata_t5scaleE"></span><span id="dlp_metadata_t::scale__dlp_scale_tP"></span><span class="target" id="structdlp__metadata__t_1a0d94502c953f36ebbb3ae2d557429e46"></span><a class="reference internal" href="../post_ops/index.html#_CPPv411dlp_scale_t" title="dlp_scale_t"><span class="n"><span class="pre">dlp_scale_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">scale</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t5scaleE"></span><span id="_CPPv2N14dlp_metadata_t5scaleE"></span><span id="dlp_metadata_t::scale__dlp_scale_tP"></span><span class="target" id="structdlp__metadata__t_1a0d94502c953f36ebbb3ae2d557429e46"></span><a class="reference internal" href="../gemm/index.html#_CPPv411dlp_scale_t" title="dlp_scale_t"><span class="n"><span class="pre">dlp_scale_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">scale</span></span></span><br /></dt>
 <dd><p>Scale post-operations (multiple allowed) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t7eltwiseE">
-<span id="_CPPv3N14dlp_metadata_t7eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t7eltwiseE"></span><span id="dlp_metadata_t::eltwise__dlp_post_op_eltwiseP"></span><span class="target" id="structdlp__metadata__t_1aa2a182f0bcda2d3eb539f3cec7dcc344"></span><a class="reference internal" href="../post_ops/index.html#_CPPv419dlp_post_op_eltwise" title="dlp_post_op_eltwise"><span class="n"><span class="pre">dlp_post_op_eltwise</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">eltwise</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t7eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t7eltwiseE"></span><span id="dlp_metadata_t::eltwise__dlp_post_op_eltwiseP"></span><span class="target" id="structdlp__metadata__t_1aa2a182f0bcda2d3eb539f3cec7dcc344"></span><a class="reference internal" href="../gemm/index.html#_CPPv419dlp_post_op_eltwise" title="dlp_post_op_eltwise"><span class="n"><span class="pre">dlp_post_op_eltwise</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">eltwise</span></span></span><br /></dt>
 <dd><p>Element-wise post-operations (multiple allowed) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t4biasE">
-<span id="_CPPv3N14dlp_metadata_t4biasE"></span><span id="_CPPv2N14dlp_metadata_t4biasE"></span><span id="dlp_metadata_t::bias__dlp_post_op_biasP"></span><span class="target" id="structdlp__metadata__t_1a01c330ff2ac492632871c1628eff59b9"></span><a class="reference internal" href="../post_ops/index.html#_CPPv416dlp_post_op_bias" title="dlp_post_op_bias"><span class="n"><span class="pre">dlp_post_op_bias</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bias</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t4biasE"></span><span id="_CPPv2N14dlp_metadata_t4biasE"></span><span id="dlp_metadata_t::bias__dlp_post_op_biasP"></span><span class="target" id="structdlp__metadata__t_1a01c330ff2ac492632871c1628eff59b9"></span><a class="reference internal" href="../gemm/index.html#_CPPv416dlp_post_op_bias" title="dlp_post_op_bias"><span class="n"><span class="pre">dlp_post_op_bias</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bias</span></span></span><br /></dt>
 <dd><p>Bias addition post-operation </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10matrix_addE">
-<span id="_CPPv3N14dlp_metadata_t10matrix_addE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_addE"></span><span id="dlp_metadata_t::matrix_add__dlp_post_op_matrix_addP"></span><span class="target" id="structdlp__metadata__t_1a4d48c3610d759f4391eb4be3a7e4c25e"></span><a class="reference internal" href="../post_ops/index.html#_CPPv422dlp_post_op_matrix_add" title="dlp_post_op_matrix_add"><span class="n"><span class="pre">dlp_post_op_matrix_add</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_add</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10matrix_addE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_addE"></span><span id="dlp_metadata_t::matrix_add__dlp_post_op_matrix_addP"></span><span class="target" id="structdlp__metadata__t_1a4d48c3610d759f4391eb4be3a7e4c25e"></span><a class="reference internal" href="../gemm/index.html#_CPPv422dlp_post_op_matrix_add" title="dlp_post_op_matrix_add"><span class="n"><span class="pre">dlp_post_op_matrix_add</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_add</span></span></span><br /></dt>
 <dd><p>Matrix addition post-operation </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10matrix_mulE">
-<span id="_CPPv3N14dlp_metadata_t10matrix_mulE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_mulE"></span><span id="dlp_metadata_t::matrix_mul__dlp_post_op_matrix_mulP"></span><span class="target" id="structdlp__metadata__t_1a4eda120352cc25d282bc7fa375bbc246"></span><a class="reference internal" href="../post_ops/index.html#_CPPv422dlp_post_op_matrix_mul" title="dlp_post_op_matrix_mul"><span class="n"><span class="pre">dlp_post_op_matrix_mul</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_mul</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10matrix_mulE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_mulE"></span><span id="dlp_metadata_t::matrix_mul__dlp_post_op_matrix_mulP"></span><span class="target" id="structdlp__metadata__t_1a4eda120352cc25d282bc7fa375bbc246"></span><a class="reference internal" href="../gemm/index.html#_CPPv422dlp_post_op_matrix_mul" title="dlp_post_op_matrix_mul"><span class="n"><span class="pre">dlp_post_op_matrix_mul</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_mul</span></span></span><br /></dt>
 <dd><p>Matrix multiplication post-operation </p>
 </dd></dl>
 
@@ -465,19 +451,19 @@ document.write(`
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10seq_vectorE">
-<span id="_CPPv3N14dlp_metadata_t10seq_vectorE"></span><span id="_CPPv2N14dlp_metadata_t10seq_vectorE"></span><span id="dlp_metadata_t::seq_vector__DLP_POST_OP_TYPEP"></span><span class="target" id="structdlp__metadata__t_1a4f4125a96644d2591d993714c88e30b2"></span><a class="reference internal" href="../post_ops/index.html#_CPPv416DLP_POST_OP_TYPE" title="DLP_POST_OP_TYPE"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">seq_vector</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t10seq_vectorE"></span><span id="_CPPv2N14dlp_metadata_t10seq_vectorE"></span><span id="dlp_metadata_t::seq_vector__DLP_POST_OP_TYPEP"></span><span class="target" id="structdlp__metadata__t_1a4f4125a96644d2591d993714c88e30b2"></span><a class="reference internal" href="../gemm/index.html#_CPPv416DLP_POST_OP_TYPE" title="DLP_POST_OP_TYPE"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">seq_vector</span></span></span><br /></dt>
 <dd><p>Sequence of post-operations to apply in order (e.g., seq_vector[0]=BIAS, seq_vector[1]=ELTWISE means bias followed by element-wise operation) </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t7pre_opsE">
-<span id="_CPPv3N14dlp_metadata_t7pre_opsE"></span><span id="_CPPv2N14dlp_metadata_t7pre_opsE"></span><span id="dlp_metadata_t::pre_ops__dlp_pre_opP"></span><span class="target" id="structdlp__metadata__t_1a132361013ea9b399bc9872ab48879382"></span><a class="reference internal" href="../post_ops/index.html#_CPPv410dlp_pre_op" title="dlp_pre_op"><span class="n"><span class="pre">dlp_pre_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">pre_ops</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t7pre_opsE"></span><span id="_CPPv2N14dlp_metadata_t7pre_opsE"></span><span id="dlp_metadata_t::pre_ops__dlp_pre_opP"></span><span class="target" id="structdlp__metadata__t_1a132361013ea9b399bc9872ab48879382"></span><a class="reference internal" href="../gemm/index.html#_CPPv410dlp_pre_op" title="dlp_pre_op"><span class="n"><span class="pre">dlp_pre_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">pre_ops</span></span></span><br /></dt>
 <dd><p>Pre-operations to be applied before GEMM </p>
 </dd></dl>
 
 <dl class="cpp var">
 <dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t11post_op_grpE">
-<span id="_CPPv3N14dlp_metadata_t11post_op_grpE"></span><span id="_CPPv2N14dlp_metadata_t11post_op_grpE"></span><span id="dlp_metadata_t::post_op_grp__dlp_group_post_opP"></span><span class="target" id="structdlp__metadata__t_1a14858783a4796cab10675213cdc3134e"></span><a class="reference internal" href="../post_ops/index.html#_CPPv417dlp_group_post_op" title="dlp_group_post_op"><span class="n"><span class="pre">dlp_group_post_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">post_op_grp</span></span></span><br /></dt>
+<span id="_CPPv3N14dlp_metadata_t11post_op_grpE"></span><span id="_CPPv2N14dlp_metadata_t11post_op_grpE"></span><span id="dlp_metadata_t::post_op_grp__dlp_group_post_opP"></span><span class="target" id="structdlp__metadata__t_1a14858783a4796cab10675213cdc3134e"></span><a class="reference internal" href="../gemm/index.html#_CPPv417dlp_group_post_op" title="dlp_group_post_op"><span class="n"><span class="pre">dlp_group_post_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">post_op_grp</span></span></span><br /></dt>
 <dd><p>Grouped post-operations for different quantization groups </p>
 </dd></dl>
 
@@ -831,7 +817,7 @@ document.write(`
 <h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="../gemm/index.html"><span class="doc">GEMM Operations</span></a> - GEMM operations using these types</p></li>
-<li><p><a class="reference internal" href="../post_ops/index.html"><span class="doc">Post-Operations</span></a> - Post-operations metadata structures</p></li>
+<li><p><span class="xref std std-doc">../post_ops/index</span> - Post-operations metadata structures</p></li>
 <li><p><a class="reference internal" href="../eltwise/index.html"><span class="doc">Element-wise Operations</span></a> - Element-wise type conversions</p></li>
 </ul>
 </section>
