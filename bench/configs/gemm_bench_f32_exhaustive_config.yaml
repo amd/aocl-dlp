@@ -1,6 +1,6 @@
 # GEMM benchmarking configuration file
 gemm_tests:
-  # exhaustive test cases
+  # exhaustive test cases generated using cartesian product of inputs
   - name: "mixed_size_matrix"
     a_type: ["f32"]
     b_type: ["f32"]

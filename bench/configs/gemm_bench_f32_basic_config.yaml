@@ -19,8 +19,8 @@ gemm_tests:
     lda: [10, 10, 64]
     ldb: [10, 10, 64]
     ldc: [10, 10, 64]
-    mtagA: ["reorder","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    mtagA: ["none","pack","pack"]
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
@@ -45,7 +45,7 @@ gemm_tests:
     ldb: [160, 512, 16000]
     ldc: [160, 512, 16000]
     mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
@@ -70,7 +70,7 @@ gemm_tests:
     ldb: 16000
     ldc: 16000
     mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
