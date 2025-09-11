@@ -24,9 +24,6 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# Add classic benchmarks, not depending on google benchmark
-add_subdirectory(classic)
-
 # Create bench config
 create_bench_config(${CMAKE_CURRENT_SOURCE_DIR}/configs ${CMAKE_CURRENT_SOURCE_DIR}/include/bench_config.hh.in ${CMAKE_CURRENT_BINARY_DIR}/bench_config.hh)
 

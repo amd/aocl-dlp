@@ -56,7 +56,7 @@ using namespace dlp::testing::classic;
 // Global variable to store configurable YAML file path
 // This can be set via command line arguments or defaults to the built-in config
 static std::string g_yaml_config_file = BENCH_CONFIG_DIR
-    "/gemm_bench_basic_config.yaml";
+    "/gemm_bench_f32_basic_config.yaml";
 
 // ============================================================================
 // UAL GEMM FP32 BENCHMARK
