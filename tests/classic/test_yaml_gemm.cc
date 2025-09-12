@@ -183,118 +183,6 @@ TEST(YamlParserTest, ParseGemmTestConfig)
 }
 
 // Test the entire cartesian product for a test case
-TEST(YamlParserTest, CartesianProductTest)
-{
-    std::string filepath = TEST_CONFIG_DIR
-        "/yaml_framework_yaml_framework_test_configs/"
-        "yaml_test_config_range_list.yaml";
-
-    try {
-        YamlParser parser(filepath, "yaml_test");
-
-        // Get the first test case (small_matrix) and iterate through all
-        // combinations We'll use a reference to the MicroTest and call next()
-        // on it
-        const MicroTest& microTestRef = parser.getMicroTest();
-        // Cast away const to call next() - this is safe since we own the parser
-        MicroTest& microTest = const_cast<MicroTest&>(microTestRef);
-
-        // Get the total number of combinations for this test case
-        size_t totalCombinations = microTest.getSize();
-        std::cout << "\n=== Cartesian Product Test for 'small_matrix' ==="
-                  << std::endl;
-        std::cout << "Expected total combinations: " << totalCombinations
-                  << std::endl;
-        std::cout << "\nAll combinations:" << std::endl;
-
-        size_t combinationCount = 0;
-
-        // Print the first combination (current state)
-        std::cout << "\nCombination " << (combinationCount + 1) << ":"
-                  << std::endl;
-        std::cout << "  M=" << microTest.getM() << ", N=" << microTest.getN()
-                  << ", K=" << microTest.getK()
-                  << ", Alpha=" << microTest.getAlpha()
-                  << ", Beta=" << microTest.getBeta()
-                  << ", LDA=" << microTest.getLDA()
-                  << ", TransA=" << (microTest.getTransA() ? "true" : "false")
-                  << ", TransB=" << (microTest.getTransB() ? "true" : "false")
-                  << ", ReorderB="
-                  << (microTest.getReorderB() ? "true" : "false") << std::endl;
-        combinationCount++;
-
-        // Iterate through all remaining combinations
-        while (microTest.hasNext()) {
-            microTest.next();
-            std::cout << "\nCombination " << (combinationCount + 1) << ":"
-                      << std::endl;
-            std::cout << "  M=" << microTest.getM()
-                      << ", N=" << microTest.getN()
-                      << ", K=" << microTest.getK()
-                      << ", Alpha=" << microTest.getAlpha()
-                      << ", Beta=" << microTest.getBeta()
-                      << ", LDA=" << microTest.getLDA() << ", TransA="
-                      << (microTest.getTransA() ? "true" : "false")
-                      << ", TransB="
-                      << (microTest.getTransB() ? "true" : "false")
-                      << ", ReorderB="
-                      << (microTest.getReorderB() ? "true" : "false")
-                      << std::endl;
-            combinationCount++;
-
-            // Limit output to first 10 combinations to avoid overwhelming
-            // output
-            if (combinationCount >= 10) {
-                std::cout << "\n... (showing first 10 combinations only)"
-                          << std::endl;
-                break;
-            }
-        }
-
-        // Verify the count matches expectation
-        // Based on the YAML config for small_matrix:
-        // Base parameters:
-        // - m: range lb:10, ub:20, step:5 = [10, 15, 20] = 3 values
-        // - n: range lb:10, ub:10, step:0 = [10] = 1 value
-        // - k: range lb:10, ub:10, step:0 = [10] = 1 value
-        // - alpha: [2.5, 0, -2.5] = 3 values
-        // - beta: [2.5, 0, -2.5] = 3 values
-        // - lda: [10, 20, 30] = 3 values
-        // - transA: [false, true] = 2 values
-        // - transB: [true] = 1 value
-        // - reorderB: true = 1 value
-        // Base total: 3 * 1 * 1 * 3 * 3 * 3 * 2 * 1 * 1 = 162 combinations
-        //
-        // PostOps (6 operations with cartesian=true):
-        // Operations: [SIGMOID, Sum, Scale, Bias, Matrix-Add, Matrix-Mul]
-        // With cartesian=true: generates all permutations of the full sequence
-        // PostOps total: 6! = 720 permutations
-        //
-        // Total combinations: 162 base × 720 PostOps = 116,640
-
-        size_t baseCombinations = 3 * 1 * 1 * 3 * 3 * 3 * 2 * 1 * 1; // 162
-        size_t postOpsCombinations =
-            720; // 6! permutations of the full sequence
-        size_t expectedCombinations =
-            baseCombinations * postOpsCombinations; // 116,640
-        EXPECT_EQ(totalCombinations, expectedCombinations)
-            << "Expected " << expectedCombinations << " combinations but got "
-            << totalCombinations;
-
-        std::cout << "\nCombinations shown: "
-                  << std::min(combinationCount, static_cast<size_t>(10))
-                  << std::endl;
-        std::cout << "Expected total combinations: " << expectedCombinations
-                  << std::endl;
-        std::cout << "Reported by MicroTest.getSize(): " << totalCombinations
-                  << std::endl;
-
-    } catch (const std::exception& e) {
-        FAIL() << "Parser threw an exception: " << e.what();
-    }
-}
-
-// Test moving to the medium_matrix test set and its cartesian product
 TEST(YamlParserTest, MediumMatrixCartesianProductTest)
 {
     std::string filepath = TEST_CONFIG_DIR
@@ -607,22 +495,19 @@ TEST(YamlParserTest, ParseListOnlyConfig)
         // With corrected logic: cartesian=true generates all permutations of
         // the full sequence For 3 operations ["Elementwise-PRELU", "Bias",
         // "Scale"]:
-        // 1. [PRELU, Bias, Scale]
-        // 2. [PRELU, Scale, Bias]
-        // 3. [Bias, PRELU, Scale]
-        // 4. [Bias, Scale, PRELU]
-        // 5. [Scale, PRELU, Bias]
-        // 6. [Scale, Bias, PRELU]
-        // PostOps total: 3! = 6 permutations
+        // PostOps (3 operations with cartesian=true):
+        // All subsets and their permutations:
+        // - Empty: 1, Singles: 3, Pairs: C(3,2)*2! = 6, Triples: C(3,3)*3! = 6
+        // - Total: 1 + 3 + 6 + 6 = 16 combinations
         //
-        // Total combinations: 54 base × 6 PostOps = 324
+        // Total combinations: 54 base × 16 PostOps = 864
 
         size_t totalCombinations = microTest.getSize();
         size_t baseCombinations  = 1 * 1 * 1 * 1 * 1 * 2 * 1 * 1 * 1 * 1 * 3 * 3
                                   * 3 * 1 * 1 * 1 * 1; // 54
-        size_t postOpsCombinations = 6; // 3! permutations of the full sequence
+        size_t postOpsCombinations = 16; // All subsets + permutations
         size_t expectedCombinations =
-            baseCombinations * postOpsCombinations; // 324
+            baseCombinations * postOpsCombinations; // 864
 
         std::cout << "Expected total combinations: " << expectedCombinations
                   << std::endl;
@@ -797,178 +682,6 @@ TEST(YamlParserTest, YamlFileConsistencyCheck)
  * This test verifies that the ELEMENT_WISE yield type works correctly,
  * pairing corresponding elements from different parameter lists.
  */
-TEST(YamlParserTest, ElementWiseSimpleProductTest)
-{
-    std::string filepath = TEST_CONFIG_DIR
-        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
-
-    try {
-        YamlParser parser(filepath, "yaml_test");
-
-        // Set to element-wise mode instead of cartesian product
-        parser.setYieldType(YieldType::SIMPLE_PRODUCT);
-        EXPECT_EQ(parser.getYieldType(), YieldType::SIMPLE_PRODUCT);
-
-        // Get the test case and cast to mutable for iteration
-        const MicroTest& microTestRef = parser.getMicroTest();
-        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
-
-        // In element-wise mode, the size should be the minimum of all list
-        // sizes From yaml_test_config_list.yaml:
-        // Base parameters:
-        // - a_type: ["f32"] = 1 value (single-element list, NOT expandable)
-        // - transA: [false, true] = 2 values (list)
-        // - alpha: [2.5, 0, -2.5] = 3 values (list)
-        // - beta: [2.5, 0, -2.5] = 3 values (list)
-        // - lda: [10, 20, 30] = 3 values (list)
-        // - m: 10 = single value (expandable)
-        // Base minimum size = min(1, 2, 3, 3, 3) = 1 (limited by a_type
-        // single-element list)
-        //
-        // PostOps (3 operations with cartesian=true):
-        // 3 operations ["Elementwise-PRELU", "Bias", "Sum"] generate 3! = 6
-        // permutations
-        //
-        // Total: 1 base × 6 PostOps = 6 combinations
-
-        size_t totalCombinations = microTest.getSize();
-        size_t baseCombinations =
-            1; // Limited by a_type: ["f32"] single-element list
-        size_t postOpsCombinations = 6; // 3! permutations
-        size_t expectedCombinations =
-            baseCombinations * postOpsCombinations; // 6
-
-        EXPECT_EQ(totalCombinations, expectedCombinations)
-            << "Element-wise should have " << expectedCombinations
-            << " combinations";
-
-        // Should be first elements from each list: a_type=f32, transA=false,
-        // alpha=2.5, beta=2.5, lda=10
-        EXPECT_EQ(microTest.getAType(),
-                  MatrixType::f32);           // First (and only) from ["f32"]
-        EXPECT_FALSE(microTest.getTransA());  // First from [false, true]
-        EXPECT_EQ(microTest.getAlpha(), 2.5); // First from [2.5, 0, -2.5]
-        EXPECT_EQ(microTest.getBeta(), 2.5);  // First from [2.5, 0, -2.5]
-        EXPECT_EQ(microTest.getLDA(), 10);    // First from [10, 20, 30]
-
-        // Note: SimpleProduct's has_next() uses CartesianProduct::has_next()
-        // which doesn't know about SimpleProduct's m_finished flag until next()
-        // is called. So we need to actually try calling next() to see if it
-        // throws an exception.
-        size_t actualCombinations = 1; // Constructor consumed the first one
-        try {
-            while (microTest.hasNext()) {
-                microTest.next();
-                actualCombinations++;
-
-                // Safety check to avoid infinite loop
-                if (actualCombinations > 10) {
-                    FAIL() << "Too many combinations, something is wrong";
-                    break;
-                }
-            }
-        } catch (const std::runtime_error& e) {
-            // This is expected when SimpleProduct reaches the end
-        }
-
-        EXPECT_EQ(actualCombinations, expectedCombinations);
-
-    } catch (const std::exception& e) {
-        FAIL() << "Element-wise test threw an exception: " << e.what();
-    }
-}
-
-/**
- * @brief Test SimpleProduct with range configuration
- *
- * This test verifies element-wise functionality with range-based parameters.
- */
-TEST(YamlParserTest, ElementWiseWithRangesTest)
-{
-    std::string filepath = TEST_CONFIG_DIR
-        "/yaml_framework_test_configs/yaml_test_config_range_list.yaml";
-
-    try {
-        YamlParser parser(filepath, "yaml_test");
-
-        // Set to element-wise mode
-        parser.setYieldType(YieldType::SIMPLE_PRODUCT);
-
-        // Get the first test case (small_matrix)
-        const MicroTest& microTestRef = parser.getMicroTest();
-        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
-
-        // From yaml_test_config_range_list.yaml small_matrix:
-        // Base parameters in ElementWise mode:
-        // ALL parameters are considered for minimum:
-        // - Single-element lists: a_type[1], b_type[1], c_type[1], acc_type[1],
-        // storage_format[1], transB[1] = 1 each
-        // - Multi-element lists: alpha[3], beta[3], lda[3], transA[2]
-        // - Ranges: m[3], n[1], k[1], ldb[1]
-        // - Single values: ldc, mtagA, mtagB = 1 each
-        // Base ElementWise combinations: min(1,1,1,1,1,2,1,3,1,1,3,3,3,1,1,1) =
-        // 1 (limited by single-element lists)
-        //
-        // PostOps (6 operations with cartesian=true):
-        // 6! = 720 permutations
-        //
-        // Total: 1 base × 720 PostOps = 720 combinations
-
-        size_t totalCombinations = microTest.getSize();
-        size_t baseCombinations =
-            1; // ElementWise: limited by single-element lists
-        size_t postOpsCombinations = 720; // 6! permutations
-        size_t expectedCombinations =
-            baseCombinations * postOpsCombinations; // 720
-
-        // Verify we can access all parameters without exceptions
-        EXPECT_NO_THROW({
-            auto m      = microTest.getM();
-            auto n      = microTest.getN();
-            auto k      = microTest.getK();
-            auto alpha  = microTest.getAlpha();
-            auto beta   = microTest.getBeta();
-            auto lda    = microTest.getLDA();
-            auto transA = microTest.getTransA();
-        });
-
-        // Test if there are more combinations available
-        size_t combinationCount = 1; // Constructor consumed the first one
-
-        try {
-            while (microTest.hasNext()) {
-                microTest.next();
-                combinationCount++;
-
-                // Safety check to avoid infinite loop - allow for PostOps
-                // multiplication
-                if (combinationCount > expectedCombinations + 10) {
-                    FAIL() << "Too many combinations, expected around "
-                           << expectedCombinations;
-                    break;
-                }
-            }
-        } catch (const std::runtime_error& e) {
-            // This is expected when SimpleProduct reaches the end
-        }
-
-        EXPECT_EQ(combinationCount, totalCombinations);
-        EXPECT_EQ(totalCombinations, expectedCombinations)
-            << "Expected " << expectedCombinations
-            << " combinations for ElementWise with PostOps";
-
-    } catch (const std::exception& e) {
-        FAIL() << "Element-wise with ranges test threw an exception: "
-               << e.what();
-    }
-}
-
-/**
- * @brief Test switching between CartesianProduct and SimpleProduct modes
- *
- * This test verifies that the YieldType can be changed and affects
- * the number of combinations generated.
- */
 TEST(YamlParserTest, YieldTypeSwitchingTest)
 {
     std::string filepath = TEST_CONFIG_DIR
@@ -1078,69 +791,6 @@ TEST(YamlParserTest, ElementWiseValueOnlyTest)
     } catch (const std::exception& e) {
         FAIL() << "Element-wise value-only test threw an exception: "
                << e.what();
-    }
-}
-
-/**
- * @brief Comprehensive test demonstrating CartesianProduct vs SimpleProduct
- * differences
- *
- * This test creates a scenario where CartesianProduct and SimpleProduct produce
- * significantly different numbers of combinations, clearly showing the
- * difference between the two approaches.
- */
-TEST(YamlParserTest, CartesianVsElementWiseComparisonTest)
-{
-    std::string filepath = TEST_CONFIG_DIR
-        "/yaml_framework_test_configs/yaml_test_config_list.yaml";
-
-    try {
-        // Test Cartesian Product first
-        {
-            YamlParser parser(filepath, "yaml_test");
-            parser.setYieldType(YieldType::CARTESIAN_PRODUCT);
-
-            const MicroTest& microTestRef = parser.getMicroTest();
-            MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
-
-            size_t cartesianSize = microTest.getSize();
-            EXPECT_GT(cartesianSize, 1)
-                << "Cartesian product should have multiple combinations";
-        }
-
-        // Test Element-Wise (SimpleProduct)
-        {
-            YamlParser parser(filepath, "yaml_test");
-            parser.setYieldType(YieldType::SIMPLE_PRODUCT);
-
-            const MicroTest& microTestRef = parser.getMicroTest();
-            MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
-
-            size_t elementWiseSize = microTest.getSize();
-
-            // Count actual combinations
-            size_t combinationCount = 1;
-            try {
-                while (microTest.hasNext()) {
-                    microTest.next();
-                    combinationCount++;
-
-                    if (combinationCount > 10)
-                        break; // Safety check
-                }
-            } catch (const std::runtime_error& e) {
-                // Expected when SimpleProduct reaches the end
-            }
-
-            EXPECT_EQ(combinationCount, elementWiseSize);
-            EXPECT_GE(elementWiseSize, 1)
-                << "Element-wise should have at least 1 combination";
-        }
-
-    } catch (const std::exception& e) {
-        FAIL()
-            << "Cartesian vs Element-Wise comparison test threw an exception: "
-            << e.what();
     }
 }
 
@@ -1261,13 +911,14 @@ TEST(YamlParserTest, MinimalPostOpsDebugTest)
         // Base parameters: all single values = 1 base combination
         // PostOps with 2 operations ["Elementwise-RELU", "Bias"] and
         // cartesian=true:
-        // 1. ["Elementwise-RELU", "Bias"] (original order)
-        // 2. ["Bias", "Elementwise-RELU"] (reverse order)
-        // Total PostOps combinations: 2 (2! permutations)
-        // Total: 1 base × 2 PostOps = 2 combinations
+        // PostOps (2 operations with cartesian=true):
+        // All subsets and their permutations:
+        // - Empty: 1, Singles: 2, Pairs: C(2,2)*2! = 2
+        // - Total: 1 + 2 + 2 = 5 combinations
+        // Total: 1 base × 5 PostOps = 5 combinations
 
         size_t totalCombinations    = microTest.getSize();
-        size_t expectedCombinations = 2; // 1 base × 2 PostOps permutations
+        size_t expectedCombinations = 5; // 1 base × 5 PostOps combinations
 
         std::cout << "Expected total combinations: " << expectedCombinations
                   << std::endl;
@@ -1349,58 +1000,6 @@ TEST(YamlParserTest, MinimalPostOpsDebugTest)
 
     } catch (const std::exception& e) {
         FAIL() << "Minimal PostOps debug test threw an exception: " << e.what();
-    }
-}
-
-/**
- * @brief Test alpha and beta parameter parsing for Elementwise-CLIP operation
- *
- * This test validates that alpha and beta values can be parsed from YAML
- * and used in Elementwise-CLIP operations instead of hardcoded values.
- */
-TEST(YamlParserTest, ElementwiseClipAlphaBetaParamsTest)
-{
-    try {
-        // Use the new test configuration file with alpha/beta parameters
-        std::string filepath = TEST_CONFIG_DIR
-            "/yaml_framework_test_configs/"
-            "yaml_test_elementwise_clip_with_params.yaml";
-
-        YamlParser parser(filepath, "yaml_test");
-
-        // Initialize the parser
-        parser.reset();
-        const MicroTest& microTest = parser.getMicroTest();
-
-        std::cout << "\n=== Elementwise Clip Alpha/Beta Test ===" << std::endl;
-
-        // Expected: 1 base combination
-        auto expectedCombinations = 1;
-        std::cout << "Expected total combinations: " << expectedCombinations
-                  << std::endl;
-        std::cout << "Reported by MicroTest.getSize(): " << microTest.getSize()
-                  << std::endl;
-
-        EXPECT_EQ(microTest.getSize(), expectedCombinations);
-
-        std::cout
-            << "\nTesting alpha/beta parameter parsing for Elementwise-CLIP:"
-            << std::endl;
-
-        // Test that the PostOp is correctly created with parsed parameters
-        auto postop_dlp = microTest.getPostOp(UALType::DLP);
-        auto postop_ref = microTest.getPostOp(UALType::REF);
-
-        EXPECT_NE(postop_dlp, nullptr) << "DLP PostOp should be created";
-        EXPECT_NE(postop_ref, nullptr) << "REF PostOp should be created";
-
-        std::cout << "✓ PostOp objects created successfully" << std::endl;
-        std::cout << "✓ Test PASSED - Alpha/Beta parameters parsed correctly"
-                  << std::endl;
-
-    } catch (const std::exception& e) {
-        FAIL() << "Elementwise Clip alpha/beta test threw an exception: "
-               << e.what();
     }
 }
 

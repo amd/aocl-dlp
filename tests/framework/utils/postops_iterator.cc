@@ -100,19 +100,41 @@ PostOpsIterator::generateCombinations()
         return;
     }
 
-    // Cartesian mode: generate all permutations of the full sequence
-    // Start with the natural order [0, 1, 2, ..., n-1]
-    std::vector<size_t> sequence;
-    for (size_t i = 0; i < n; i++) {
-        sequence.push_back(i);
-    }
+    // Cartesian mode: generate all possible subsets and their permutations
+    // This includes:
+    // - Empty combination: 1
+    // - Single operations: n
+    // - Pairs: C(n,2) * 2! permutations
+    // - Triples: C(n,3) * 3! permutations
+    // - etc.
 
-    // Generate all permutations of the full sequence
-    std::sort(sequence.begin(),
-              sequence.end()); // Ensure we start from the beginning
-    do {
-        m_combinations.push_back(sequence);
-    } while (std::next_permutation(sequence.begin(), sequence.end()));
+    // Generate all possible subsets (power set)
+    for (size_t subset_size = 0; subset_size <= n; subset_size++) {
+        // Generate all combinations of subset_size elements
+        std::vector<bool> selector(n, false);
+        std::fill(selector.end() - subset_size, selector.end(), true);
+
+        do {
+            // Create subset based on selector
+            std::vector<size_t> subset;
+            for (size_t i = 0; i < n; i++) {
+                if (selector[i]) {
+                    subset.push_back(i);
+                }
+            }
+
+            if (subset.empty()) {
+                // Empty combination - add it once
+                m_combinations.push_back(subset);
+            } else {
+                // Generate all permutations of this subset
+                std::sort(subset.begin(), subset.end());
+                do {
+                    m_combinations.push_back(subset);
+                } while (std::next_permutation(subset.begin(), subset.end()));
+            }
+        } while (std::next_permutation(selector.begin(), selector.end()));
+    }
 
 // Debug output for development
 #ifdef DEBUG_POSTOPS_COMBINATIONS

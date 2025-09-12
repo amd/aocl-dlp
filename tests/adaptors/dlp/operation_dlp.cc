@@ -69,6 +69,26 @@ DlpOperation::~DlpOperation()
             }
         }
 
+        // Clean up manually allocated memory for scale factors in MatrixAdd
+        // operations
+        if (m_postops->matrix_add) {
+            for (size_t i = 0; i < m_matrix_add_ops.size(); ++i) {
+                if (m_postops->matrix_add[i].sf) {
+                    delete m_postops->matrix_add[i].sf;
+                }
+            }
+        }
+
+        // Clean up manually allocated memory for scale factors in MatrixMul
+        // operations
+        if (m_postops->matrix_mul) {
+            for (size_t i = 0; i < m_matrix_mul_ops.size(); ++i) {
+                if (m_postops->matrix_mul[i].sf) {
+                    delete m_postops->matrix_mul[i].sf;
+                }
+            }
+        }
+
         // Clean up all allocated arrays
         delete[] m_postops->eltwise;
         delete[] m_postops->scale;
