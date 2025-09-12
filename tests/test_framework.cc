@@ -696,13 +696,13 @@ TEST_F(MatrixReorderTest, ReorderWithoutTranspose)
     }
 
     // Reorder using reference implementation
-    UalRef ual_ref;
-    Matrix output;
-    bool   result =
+    UalRef   ual_ref;
+    Matrix   output;
+    UALError result =
         ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
                         MatrixType::f32, MatrixType::f32);
 
-    EXPECT_TRUE(result);
+    EXPECT_EQ(result, UALError::UAL_SUCCESS);
 
     // Check output matrix properties
     EXPECT_EQ(output.getRows(), 3); // Should keep same dimensions
@@ -744,13 +744,13 @@ TEST_F(MatrixReorderTest, ReorderWithTranspose)
     }
 
     // Reorder using reference implementation
-    UalRef ual_ref;
-    Matrix output;
-    bool   result =
+    UalRef   ual_ref;
+    Matrix   output;
+    UALError result =
         ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
                         MatrixType::f32, MatrixType::f32);
 
-    EXPECT_TRUE(result);
+    EXPECT_EQ(result, UALError::UAL_SUCCESS);
 
     // Check output matrix properties
     // Input was 3x4 transposed, so logical size was 4x3
@@ -790,13 +790,13 @@ TEST_F(MatrixReorderTest, EffectiveDimensionsAfterReorder)
     EXPECT_EQ(input.getEffectiveCols(), 256);
 
     // Reorder
-    UalRef ual_ref;
-    Matrix output;
-    bool   result =
+    UalRef   ual_ref;
+    Matrix   output;
+    UALError result =
         ual_ref.reorder(input, output, MatrixType::f32, MatrixType::f32,
                         MatrixType::f32, MatrixType::f32);
 
-    EXPECT_TRUE(result);
+    EXPECT_EQ(result, UALError::UAL_SUCCESS);
 
     // After reorder: should be physical 320x256, transposed=false
     EXPECT_EQ(output.getRows(), 320);

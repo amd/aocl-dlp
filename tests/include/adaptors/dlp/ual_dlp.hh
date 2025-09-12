@@ -37,6 +37,7 @@ using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
 using dlp::testing::framework::MatrixLayout;
 using dlp::testing::framework::MatrixType;
+using dlp::testing::framework::UALError;
 using dlp::testing::framework::UALType;
 
 /**
@@ -103,14 +104,14 @@ class UalDlp : public IUal
      * @param B_type Type of matrix B in GEMM context
      * @param C_type Type of matrix C in GEMM context
      * @param accType Accumulation type
-     * @return true on success
+     * @return UALError Error code indicating success or failure
      */
-    bool reorder(const Matrix& in,
-                 Matrix&       out,
-                 MatrixType    A_type,
-                 MatrixType    B_type,
-                 MatrixType    C_type,
-                 MatrixType    accType) override;
+    UALError reorder(const Matrix& in,
+                     Matrix&       out,
+                     MatrixType    A_type,
+                     MatrixType    B_type,
+                     MatrixType    C_type,
+                     MatrixType    accType) override;
 
     /**
      * @brief Perform general matrix multiplication with post-operations: C =
@@ -123,15 +124,15 @@ class UalDlp : public IUal
      * @param postOps Post-operations to apply (nullptr for no post-ops)
      * @param alpha Scaling factor for A*B (default: 1.0)
      * @param beta Scaling factor for C (default: 0.0)
-     * @return true on success
+     * @return UALError Error code indicating success or failure
      */
-    bool gemm(const Matrix&                      A,
-              const Matrix&                      B,
-              Matrix&                            C,
-              MatrixType                         accType,
-              const std::shared_ptr<IOperation>& postOps,
-              double                             alpha = 1.0,
-              double                             beta  = 0.0) override;
+    UALError gemm(const Matrix&                      A,
+                  const Matrix&                      B,
+                  Matrix&                            C,
+                  MatrixType                         accType,
+                  const std::shared_ptr<IOperation>& postOps,
+                  double                             alpha = 1.0,
+                  double                             beta  = 0.0) override;
 
     /**
      * @brief Perform general matrix multiplication with raw pointers for
@@ -160,31 +161,32 @@ class UalDlp : public IUal
      * @param accType Accumulation type
      * @param alpha Scaling factor for A*B
      * @param beta Scaling factor for C
-     * @return true on success
+     * @return UAL_SUCCESS on success, or an appropriate UALError error code on
+     * failure
      */
-    bool gemm(md_t         m,
-              md_t         n,
-              md_t         k,
-              void*        matA,
-              MatrixType   matA_type,
-              MatrixLayout matA_layout,
-              bool         matA_transposed,
-              char         memFormatA,
-              md_t         matA_leadingDim,
-              void*        matB,
-              MatrixType   matB_type,
-              MatrixLayout matB_layout,
-              bool         matB_transposed,
-              char         memFormatB,
-              md_t         matB_leadingDim,
-              void*        matC,
-              MatrixType   matC_type,
-              MatrixLayout matC_layout,
-              bool         matC_transposed,
-              md_t         matC_leadingDim,
-              MatrixType   accType,
-              double       alpha = 1.0,
-              double       beta  = 0.0) const override;
+    UALError gemm(md_t         m,
+                  md_t         n,
+                  md_t         k,
+                  void*        matA,
+                  MatrixType   matA_type,
+                  MatrixLayout matA_layout,
+                  bool         matA_transposed,
+                  char         memFormatA,
+                  md_t         matA_leadingDim,
+                  void*        matB,
+                  MatrixType   matB_type,
+                  MatrixLayout matB_layout,
+                  bool         matB_transposed,
+                  char         memFormatB,
+                  md_t         matB_leadingDim,
+                  void*        matC,
+                  MatrixType   matC_type,
+                  MatrixLayout matC_layout,
+                  bool         matC_transposed,
+                  md_t         matC_leadingDim,
+                  MatrixType   accType,
+                  double       alpha = 1.0,
+                  double       beta  = 0.0) const override;
 };
 
 } // namespace dlp::testing::classic

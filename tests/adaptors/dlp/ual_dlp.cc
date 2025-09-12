@@ -103,9 +103,9 @@ UalDlp::toString(UALType type)
  * @param B_type Type of matrix B in GEMM context
  * @param C_type Type of matrix C in GEMM context
  * @param accType Target accumulation type
- * @return bool Success status
+ * @return UALError Error code indicating success or failure
  */
-bool
+UALError
 UalDlp::reorder(const Matrix& in,
                 Matrix&       out,
                 MatrixType    A_type,
@@ -170,11 +170,14 @@ UalDlp::reorder(const Matrix& in,
                 effective_cols, &meta);
         }
     } else {
-        return false;
+        return UALError::UAL_NOT_SUPPORTED;
     }
 
+    if (meta.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+        return UALError::UAL_NOT_SUPPORTED;
+    }
     if (meta.error_hndl.error_code != DLP_CLSC_SUCCESS) {
-        return false;
+        return UALError::UAL_FAILURE;
     }
 
     // Create output matrix with dimensions that preserve the logical operation
@@ -242,14 +245,17 @@ UalDlp::reorder(const Matrix& in,
                 &meta);
             break;
         default:
-            return false;
+            return UALError::UAL_NOT_SUPPORTED;
     }
 
+    if (meta.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+        return UALError::UAL_NOT_SUPPORTED;
+    }
     if (meta.error_hndl.error_code != DLP_CLSC_SUCCESS) {
-        return false;
+        return UALError::UAL_FAILURE;
     }
 
-    return true;
+    return UALError::UAL_SUCCESS;
 }
 
 /**
@@ -265,7 +271,7 @@ UalDlp::reorder(const Matrix& in,
  * @param beta Scaling factor for C
  * @return bool Success status
  */
-bool
+UALError
 UalDlp::gemm(const Matrix&                      A,
              const Matrix&                      B,
              Matrix&                            C,
@@ -289,12 +295,12 @@ UalDlp::gemm(const Matrix&                      A,
         // using friend access
         auto* dlpOp = dynamic_cast<DlpOperation*>(postOps.get());
         if (!dlpOp) {
-            return false;
+            return UALError::UAL_CAST_ERROR;
         }
 
         // Validate that the postOps are for DLP backend
         if (postOps->getUALType() != UALType::DLP) {
-            return false;
+            return UALError::UAL_POSTOPS_MISMATCH;
         }
 
         // Get the shared dlp_metadata_t structure using friend access
@@ -544,12 +550,19 @@ UalDlp::gemm(const Matrix&                      A,
         }
 
         default:
-            return false;
+            return UALError::UAL_FAILURE;
     }
-    return aocl_postops->error_hndl.error_code == DLP_CLSC_SUCCESS;
+
+    if (aocl_postops->error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
+        return UALError::UAL_NOT_SUPPORTED;
+
+    if (aocl_postops->error_hndl.error_code == DLP_CLSC_SUCCESS)
+        return UALError::UAL_SUCCESS;
+
+    return UALError::UAL_FAILURE;
 }
 
-bool
+UALError
 UalDlp::gemm(md_t         m,
              md_t         n,
              md_t         k,
@@ -782,9 +795,15 @@ UalDlp::gemm(md_t         m,
         }
 
         default:
-            return false;
+            return UALError::UAL_FAILURE;
     }
-    return err_code->error_hndl.error_code == DLP_CLSC_SUCCESS;
+
+    if (err_code->error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
+        return UALError::UAL_NOT_SUPPORTED;
+
+    return err_code->error_hndl.error_code == DLP_CLSC_SUCCESS
+               ? UALError::UAL_SUCCESS
+               : UALError::UAL_FAILURE;
 }
 
 } // namespace dlp::testing::classic

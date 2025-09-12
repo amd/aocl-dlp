@@ -46,5 +46,6 @@
 
 // Testing Config
 #cmakedefine01 DLP_ENABLE_HIGH_PRECISION_FLOAT
+#cmakedefine01 DLP_ENABLE_DETAILED_DEBUG
 
 #endif // AOCL_DLP_CONFIG_H

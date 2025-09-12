@@ -52,6 +52,16 @@ enum class UALType : uint32_t
     REF,    ///< Reference implementation
 };
 
+enum class UALError
+{
+    UAL_SUCCESS = 0,      /**< Operation completed successfully */
+    UAL_FAILURE,          /**< General failure occurred */
+    UAL_POSTOPS_MISMATCH, /**< Post-operations mismatch occurred */
+    UAL_CAST_ERROR,       /**< Casting error occurred */
+    UAL_NOT_SUPPORTED,    /**< Operation or feature not supported */
+    UAL_ERROR_MAX         /**< Maximum error code value (for bounds checking) */
+};
+
 /**
  * @class IUal
  * @brief Interface for Unified Abstraction Layer
@@ -87,14 +97,14 @@ class IUal
      * @param B_type Type of matrix B in GEMM context
      * @param C_type Type of matrix C in GEMM context
      * @param accType Accumulation type
-     * @return true on success
+     * @return UALError Error code indicating success or failure
      */
-    virtual bool reorder(const Matrix& in,
-                         Matrix&       out,
-                         MatrixType    A_type,
-                         MatrixType    B_type,
-                         MatrixType    C_type,
-                         MatrixType    accType) = 0;
+    virtual UALError reorder(const Matrix& in,
+                             Matrix&       out,
+                             MatrixType    A_type,
+                             MatrixType    B_type,
+                             MatrixType    C_type,
+                             MatrixType    accType) = 0;
 
     /**
      * @brief Perform general matrix multiplication with post-operations: C =
@@ -109,13 +119,13 @@ class IUal
      * @param beta Scaling factor for C (default: 0.0)
      * @return true on success
      */
-    virtual bool gemm(const Matrix&                      A,
-                      const Matrix&                      B,
-                      Matrix&                            C,
-                      MatrixType                         accType,
-                      const std::shared_ptr<IOperation>& postOps,
-                      double                             alpha = 1.0,
-                      double                             beta  = 0.0) = 0;
+    virtual UALError gemm(const Matrix&                      A,
+                          const Matrix&                      B,
+                          Matrix&                            C,
+                          MatrixType                         accType,
+                          const std::shared_ptr<IOperation>& postOps,
+                          double                             alpha = 1.0,
+                          double                             beta  = 0.0) = 0;
 
     /**
      * @brief Perform general matrix multiplication with raw pointers for
@@ -144,29 +154,29 @@ class IUal
      * @param beta Scaling factor for C
      * @return true on success
      */
-    virtual bool gemm(md_t         m,
-                      md_t         n,
-                      md_t         k,
-                      void*        matA,
-                      MatrixType   matA_type,
-                      MatrixLayout matA_layout,
-                      bool         matA_transposed,
-                      char         memFormatA,
-                      md_t         matA_leadingDim,
-                      void*        matB,
-                      MatrixType   matB_type,
-                      MatrixLayout matB_layout,
-                      bool         matB_transposed,
-                      char         memFormatB,
-                      md_t         matB_leadingDim,
-                      void*        matC,
-                      MatrixType   matC_type,
-                      MatrixLayout matC_layout,
-                      bool         matC_transposed,
-                      md_t         matC_leadingDim,
-                      MatrixType   accType,
-                      double       alpha = 1.0,
-                      double       beta  = 0.0) const = 0;
+    virtual UALError gemm(md_t         m,
+                          md_t         n,
+                          md_t         k,
+                          void*        matA,
+                          MatrixType   matA_type,
+                          MatrixLayout matA_layout,
+                          bool         matA_transposed,
+                          char         memFormatA,
+                          md_t         matA_leadingDim,
+                          void*        matB,
+                          MatrixType   matB_type,
+                          MatrixLayout matB_layout,
+                          bool         matB_transposed,
+                          char         memFormatB,
+                          md_t         matB_leadingDim,
+                          void*        matC,
+                          MatrixType   matC_type,
+                          MatrixLayout matC_layout,
+                          bool         matC_transposed,
+                          md_t         matC_leadingDim,
+                          MatrixType   accType,
+                          double       alpha = 1.0,
+                          double       beta  = 0.0) const = 0;
 
     /**
      * @brief Get string representation of UAL type

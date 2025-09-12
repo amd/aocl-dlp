@@ -689,12 +689,12 @@ BM_gemm(benchmark::State& state, GemmTestConfig config_)
         // Perform the GEMM operation using raw pointer API for maximum
         // performance
 
-        bool result =
+        UALError status =
             ual->gemm(m, n, k, a_ptr, a_type, layout, transA, memFormatA, lda,
                       b_ptr, b_type, layout, transB, memFormatB, ldb, c_ptr,
                       c_type, layout, false, ldc, acc_type, alpha, beta);
 
-        if (!result) {
+        if (status != UALError::UAL_SUCCESS) {
             state.SkipWithError("GEMM operation failed");
             return;
         }

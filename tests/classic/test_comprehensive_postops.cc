@@ -285,28 +285,33 @@ TEST_F(ComprehensivePostOpsTest, PostOpsWithGemmIntegrationTest)
             if (postops_dlp || postops_ref) {
                 try {
                     // Test GEMM with PostOps
-                    bool dlp_result = false;
-                    bool ref_result = false;
+                    UALError dlp_status = UALError::UAL_FAILURE;
+                    UALError ref_status = UALError::UAL_FAILURE;
 
                     if (postops_dlp) {
-                        dlp_result = ual_dlp->gemm(A, B, C_dlp, MatrixType::f32,
+                        dlp_status = ual_dlp->gemm(A, B, C_dlp, MatrixType::f32,
                                                    postops_dlp);
                     }
 
                     if (postops_ref) {
-                        ref_result = ual_ref->gemm(A, B, C_ref, MatrixType::f32,
+                        ref_status = ual_ref->gemm(A, B, C_ref, MatrixType::f32,
                                                    postops_ref);
                     }
 
-                    if (dlp_result || ref_result) {
+                    if (dlp_status == UALError::UAL_SUCCESS
+                        || ref_status == UALError::UAL_SUCCESS) {
                         successful_gemm_ops++;
 
                         if (total_tested < 5) {
                             std::cout << "  GEMM " << total_tested + 1
                                       << ": DLP="
-                                      << (dlp_result ? "SUCCESS" : "SKIPPED")
+                                      << (dlp_status == UALError::UAL_SUCCESS
+                                              ? "SUCCESS"
+                                              : "SKIPPED")
                                       << ", REF="
-                                      << (ref_result ? "SUCCESS" : "SKIPPED")
+                                      << (ref_status == UALError::UAL_SUCCESS
+                                              ? "SUCCESS"
+                                              : "SKIPPED")
                                       << std::endl;
                         }
                     }
@@ -380,10 +385,11 @@ TEST_F(ComprehensivePostOpsTest, BackwardCompatibilityTest)
         B.fillValue(0.2f);
         C.fillValue(0.0f);
 
-        auto ual_dlp = UalFactory::createUal(UALType::DLP);
-        bool result  = ual_dlp->gemm(A, B, C, MatrixType::f32, postops_dlp);
+        auto     ual_dlp = UalFactory::createUal(UALType::DLP);
+        UALError status  = ual_dlp->gemm(A, B, C, MatrixType::f32, postops_dlp);
 
-        EXPECT_TRUE(result) << "GEMM without PostOps should work";
+        EXPECT_EQ(status, UALError::UAL_SUCCESS)
+            << "GEMM without PostOps should work";
         std::cout << "  GEMM without PostOps: SUCCESS" << std::endl;
 
     } catch (const std::exception& e) {

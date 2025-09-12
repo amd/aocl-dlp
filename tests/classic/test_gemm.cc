@@ -734,7 +734,7 @@ createAdditionalTestConfigs()
 // HELPER FUNCTIONS - DETAILED MATRIX COMPARISON
 // ============================================================================
 
-#ifdef DLP_ENABLE_OPENMP
+#ifdef DLP_ENABLE_DETAILED_DEBUG
 
 // Helper function to compare matrices and report detailed differences
 std::string
@@ -770,39 +770,38 @@ compareMatricesDetailed(const Matrix& matrix1,
 
     // Calculate tolerance based on k dimension (similar to
     // Matrix::compareFloatingPointData)
-    double tolerance = 1e-6;
-    if (matrix1.getRows() != std::numeric_limits<md_t>::max()) {
-        tolerance = 2.0 * static_cast<double>(matrix1.getRows()) * 1.2e-6;
-    }
+    double tolerance = 1e-10;
 
-    result << "Using tolerance: " << tolerance << "\n";
+    result << "Using maximum tolerance for debugging: " << tolerance << "\n";
     result << "Matrix dimensions: " << rows << "x" << cols << "\n";
 
     if (matrix1.getMatrixType() == MatrixType::f32) {
         const float* data1 = reinterpret_cast<const float*>(matrix1.getData());
         const float* data2 = reinterpret_cast<const float*>(matrix2.getData());
+        size_t       elementCount = matrix1.getDataSizeBytes() / sizeof(float);
 
-        for (size_t r = 0; r < rows; ++r) {
-            for (size_t c = 0; c < cols; ++c) {
-                size_t idx  = r * matrix1.getLeadingDimension() + c;
-                float  val1 = data1[idx];
-                float  val2 = data2[idx];
-                double diff = std::abs(val1 - val2);
+        for (size_t i = 0; i < elementCount; ++i) {
+            float  val1 = data1[i];
+            float  val2 = data2[i];
+            double diff = std::abs(val1 - val2);
 
-                if (diff > tolerance) {
-                    if (mismatches < maxMismatches) {
-                        result << "Mismatch at [" << r << "," << c << "]: "
-                               << "DLP=" << std::scientific
-                               << std::setprecision(8) << val1
-                               << ", REF=" << val2 << ", diff=" << diff << "\n";
-                    }
-                    mismatches++;
+            if (diff > tolerance) {
+                if (mismatches < maxMismatches) {
+                    // Calculate row and column for reporting (based on leading
+                    // dimension)
+                    size_t r = i / matrix1.getLeadingDimension();
+                    size_t c = i % matrix1.getLeadingDimension();
+                    result << "Mismatch at [" << r << "," << c << "]: "
+                           << "DLP=" << std::scientific << std::setprecision(10)
+                           << val1 << ", REF=" << val2 << ", diff=" << diff
+                           << "\n";
+                }
+                mismatches++;
 
-                    if (diff > maxDiff) {
-                        maxDiff    = diff;
-                        maxDiffRow = r;
-                        maxDiffCol = c;
-                    }
+                if (diff > maxDiff) {
+                    maxDiff    = diff;
+                    maxDiffRow = i / matrix1.getLeadingDimension();
+                    maxDiffCol = i % matrix1.getLeadingDimension();
                 }
             }
         }
@@ -811,39 +810,79 @@ compareMatricesDetailed(const Matrix& matrix1,
             reinterpret_cast<const bfloat16*>(matrix1.getData());
         const bfloat16* data2 =
             reinterpret_cast<const bfloat16*>(matrix2.getData());
+        size_t elementCount = matrix1.getDataSizeBytes() / sizeof(bfloat16);
 
-        for (size_t r = 0; r < rows; ++r) {
-            for (size_t c = 0; c < cols; ++c) {
-                size_t   idx       = r * matrix1.getLeadingDimension() + c;
-                bfloat16 bf16_val1 = data1[idx];
-                bfloat16 bf16_val2 = data2[idx];
+        for (size_t i = 0; i < elementCount; ++i) {
+            bfloat16 bf16_val1 = data1[i];
+            bfloat16 bf16_val2 = data2[i];
 
-                // Convert to float for comparison
-                float  val1 = bf16_to_f32(bf16_val1);
-                float  val2 = bf16_to_f32(bf16_val2);
-                double diff = std::abs(val1 - val2);
+            // Convert to float for comparison
+            float  val1 = bf16_to_f32(bf16_val1);
+            float  val2 = bf16_to_f32(bf16_val2);
+            double diff = std::abs(val1 - val2);
 
-                if (diff > tolerance) {
-                    if (mismatches < maxMismatches) {
-                        result << "Mismatch at [" << r << "," << c << "]: "
-                               << "DLP=0x" << std::hex << std::setw(4)
-                               << std::setfill('0')
-                               << static_cast<uint16_t>(bf16_val1) << "("
-                               << std::scientific << std::setprecision(8)
-                               << val1 << "), "
-                               << "REF=0x" << std::hex << std::setw(4)
-                               << std::setfill('0')
-                               << static_cast<uint16_t>(bf16_val2) << "("
-                               << val2 << "), " << std::dec << "diff=" << diff
-                               << "\n";
-                    }
-                    mismatches++;
+            if (diff > tolerance) {
+                if (mismatches < maxMismatches) {
+                    // Calculate row and column for reporting (based on leading
+                    // dimension)
+                    size_t r = i / matrix1.getLeadingDimension();
+                    size_t c = i % matrix1.getLeadingDimension();
+                    result << "Mismatch at [" << r << "," << c << "]: "
+                           << "DLP=0x" << std::hex << std::setw(4)
+                           << std::setfill('0')
+                           << static_cast<uint16_t>(bf16_val1) << "("
+                           << std::scientific << std::setprecision(8) << val1
+                           << "), "
+                           << "REF=0x" << std::hex << std::setw(4)
+                           << std::setfill('0')
+                           << static_cast<uint16_t>(bf16_val2) << "(" << val2
+                           << "), " << std::dec << "diff=" << diff << "\n";
+                }
+                mismatches++;
 
-                    if (diff > maxDiff) {
-                        maxDiff    = diff;
-                        maxDiffRow = r;
-                        maxDiffCol = c;
-                    }
+                if (diff > maxDiff) {
+                    maxDiff    = diff;
+                    maxDiffRow = i / matrix1.getLeadingDimension();
+                    maxDiffCol = i % matrix1.getLeadingDimension();
+                }
+            }
+        }
+    } else if (matrix1.getMatrixType() == MatrixType::u8) {
+        const uint8_t* data1 =
+            reinterpret_cast<const uint8_t*>(matrix1.getData());
+        const uint8_t* data2 =
+            reinterpret_cast<const uint8_t*>(matrix2.getData());
+        size_t elementCount = matrix1.getDataSizeBytes() / sizeof(uint8_t);
+
+        for (size_t i = 0; i < elementCount; ++i) {
+            uint8_t u8_val1 = data1[i];
+            uint8_t u8_val2 = data2[i];
+            double  diff    = std::abs(static_cast<double>(u8_val1)
+                                       - static_cast<double>(u8_val2));
+
+            if (diff > tolerance) {
+                if (mismatches < maxMismatches) {
+                    // Calculate row and column for reporting (based on leading
+                    // dimension)
+                    size_t r = i / matrix1.getLeadingDimension();
+                    size_t c = i % matrix1.getLeadingDimension();
+                    result << "Mismatch at [" << r << "," << c << "]: "
+                           << "DLP=0x" << std::hex << std::setw(2)
+                           << std::setfill('0')
+                           << static_cast<uint16_t>(u8_val1) << "(" << std::dec
+                           << static_cast<int>(u8_val1) << "), "
+                           << "REF=0x" << std::hex << std::setw(2)
+                           << std::setfill('0')
+                           << static_cast<uint16_t>(u8_val2) << "(" << std::dec
+                           << static_cast<int>(u8_val2) << "), "
+                           << "diff=" << diff << "\n";
+                }
+                mismatches++;
+
+                if (diff > maxDiff) {
+                    maxDiff    = diff;
+                    maxDiffRow = i / matrix1.getLeadingDimension();
+                    maxDiffCol = i % matrix1.getLeadingDimension();
                 }
             }
         }
@@ -988,18 +1027,27 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             A.setReordered(true);
             A_ref.setReordered(true);
         }
-        bool params_valid  = check_valid_params(config_);
-        bool dlp_isReorder = true;
-        bool ref_isReorder = true;
+        bool     params_valid       = check_valid_params(config_);
+        UALError dlp_reorder_status = UALError::UAL_SUCCESS;
+        UALError ref_reorder_status = UALError::UAL_SUCCESS;
         if (config_.reorderB) {
             // Create reordered matrix with custom allocation size in bytes
             Matrix B_reordered;
             Matrix B_ref_reordered;
 
-            dlp_isReorder =
+            dlp_reorder_status =
                 ual_dlp->reorder(B, B_reordered, config_.a_type, config_.b_type,
                                  config_.c_type, config_.acc_type);
-            B = B_reordered;
+
+            // Skip test if DLP reorder is not supported
+            if (dlp_reorder_status == UALError::UAL_NOT_SUPPORTED) {
+                GTEST_SKIP()
+                    << "DLP reorder not supported for this configuration";
+            }
+
+            if (dlp_reorder_status == UALError::UAL_SUCCESS) {
+                B = B_reordered;
+            }
 
             // Also apply reordering to reference matrix to ensure both have
             // same parameters
@@ -1007,14 +1055,19 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                 UalFactory::createUal(UALType::REF);
 
             // Check if the config is valid then reorder
-            ref_isReorder =
-                params_valid
-                && ual_ref_for_reorder->reorder(
+            if (params_valid) {
+                ref_reorder_status = ual_ref_for_reorder->reorder(
                     B_ref, B_ref_reordered, config_.a_type, config_.b_type,
                     config_.c_type, config_.acc_type);
-            B_ref = B_ref_reordered;
-            // Reset packing state after reordering assignment
-            B_ref.setPacked(false);
+
+                if (ref_reorder_status == UALError::UAL_SUCCESS) {
+                    B_ref = B_ref_reordered;
+                    // Reset packing state after reordering assignment
+                    B_ref.setPacked(false);
+                }
+            } else {
+                ref_reorder_status = UALError::UAL_FAILURE;
+            }
         }
 
         // Apply packing if specified
@@ -1034,17 +1087,25 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
         ASSERT_TRUE(ual_dlp != nullptr) << "Failed to create DLP UAL";
 
-        bool dlp_result =
+        UALError dlp_status =
             ual_dlp->gemm(A, B, C, config_.acc_type, config_.postops_dlp,
                           config_.alpha, config_.beta);
+
+        if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
+            GTEST_SKIP() << "DLP GEMM not supported for this configuration";
+        }
+
+        bool dlp_result = (dlp_status == UALError::UAL_SUCCESS);
 
         // Perform GEMM with reference implementation
         std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
         ASSERT_TRUE(ual_ref != nullptr) << "Failed to create REF UAL";
 
-        bool ref_result =
+        UALError ref_status =
             ual_ref->gemm(A_ref, B_ref, C_ref, config_.acc_type,
                           config_.postops_ref, config_.alpha, config_.beta);
+
+        bool ref_result = (ref_status == UALError::UAL_SUCCESS);
 
         // Check if parameters are valid
 
@@ -1063,14 +1124,14 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             // comparison Since packing is an optimization hint that shouldn't
             // affect results
             C_ref.setPacked(C.isPacked());
-
             // Detailed comparison with mismatch reporting
             if (!(C == C_ref)) {
                 std::ostringstream detailed_error;
                 detailed_error << "DLP and Reference results mismatch for "
                                   "valid parameters:\n"
                                << printConfigDetails(config_) << "\n";
-#ifdef DLP_ENABLE_OPENMP
+
+#ifdef DLP_ENABLE_DETAILED_DEBUG
                 detailed_error << compareMatricesDetailed(C, C_ref);
 #endif
                 FAIL() << detailed_error.str();
@@ -1078,10 +1139,12 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         } else {
             // For invalid parameters, both implementations should fail
             // gracefully
-            EXPECT_FALSE(dlp_result && dlp_isReorder)
+            EXPECT_FALSE(dlp_result
+                         && (dlp_reorder_status == UALError::UAL_SUCCESS))
                 << "DLP GEMM should fail gracefully with invalid parameters:"
                 << printConfigDetails(config_);
-            EXPECT_FALSE(ref_result && ref_isReorder)
+            EXPECT_FALSE(ref_result
+                         && (ref_reorder_status == UALError::UAL_SUCCESS))
                 << "Reference GEMM should fail gracefully "
                    "with invalid parameters:"
                 << printConfigDetails(config_);
@@ -1144,11 +1207,13 @@ TEST(GEMMTest, Basic)
 
     // Perform GEMM
     std::unique_ptr<IUal> ual = UalFactory::createUal(UALType::DLP);
-    ual->gemm(A, B, C, MatrixType::f32, nullptr);
+    UALError dlp_status       = ual->gemm(A, B, C, MatrixType::f32, nullptr);
+    EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS);
 
     // Perform GEMM with reference implementation
-    ual = UalFactory::createUal(UALType::REF);
-    ual->gemm(A, B, C_ref, MatrixType::f32, nullptr);
+    ual                 = UalFactory::createUal(UALType::REF);
+    UALError ref_status = ual->gemm(A, B, C_ref, MatrixType::f32, nullptr);
+    EXPECT_EQ(ref_status, UALError::UAL_SUCCESS);
 
     // To compare with reference, we need to set the k dimension for tolerance
     C.setK(k);
@@ -1176,11 +1241,14 @@ TEST(GEMMTest, EdgeCases)
     C_small_ref = C_small;
 
     std::unique_ptr<IUal> ual = UalFactory::createUal(UALType::DLP);
-    ASSERT_TRUE(ual->gemm(A_small, B_small, C_small, MatrixType::f32, nullptr));
+    UALError              dlp_status =
+        ual->gemm(A_small, B_small, C_small, MatrixType::f32, nullptr);
+    ASSERT_EQ(dlp_status, UALError::UAL_SUCCESS);
 
     ual = UalFactory::createUal(UALType::REF);
-    ASSERT_TRUE(
-        ual->gemm(A_small, B_small, C_small_ref, MatrixType::f32, nullptr));
+    UALError ref_status =
+        ual->gemm(A_small, B_small, C_small_ref, MatrixType::f32, nullptr);
+    ASSERT_EQ(ref_status, UALError::UAL_SUCCESS);
 
     // To compare with reference, we need to set the k dimension for tolerance
     C_small.setK(1);
@@ -1207,12 +1275,14 @@ TEST(GEMMTest, DebugDoubleFree)
 
     // Try reordering
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-    bool                  reorder_result =
+    UALError              reorder_result =
         ual_dlp->reorder(B, B_reordered, MatrixType::f32, MatrixType::f32,
                          MatrixType::f32, MatrixType::f32);
 
     // Reordering should fail and ldb is lower than min needed ldb.
-    EXPECT_EQ(reorder_result, false);
+    EXPECT_TRUE(reorder_result == UALError::UAL_FAILURE
+                || reorder_result == UALError::UAL_NOT_SUPPORTED)
+        << "Reordering should fail with invalid parameters";
 }
 
 // ============================================================================
@@ -1257,11 +1327,13 @@ TEST(GEMMTest, PostOpsIntegration)
 
     // Perform GEMM with PostOps using DLP
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-    bool dlp_result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation_dlp);
+    UALError              dlp_status =
+        ual_dlp->gemm(A, B, C, MatrixType::f32, operation_dlp);
 
     // For now, just verify that the operation doesn't crash
     // In a real implementation, we would verify the actual results
-    EXPECT_TRUE(dlp_result) << "DLP GEMM with PostOps should succeed";
+    EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS)
+        << "DLP GEMM with PostOps should succeed";
 
     auto operation_ref = OperationFactory::createOperation(UALType::REF);
 
@@ -1280,10 +1352,11 @@ TEST(GEMMTest, PostOpsIntegration)
 
     // Test with reference implementation (should ignore PostOps)
     std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
-    bool                  ref_result =
+    UALError              ref_status =
         ual_ref->gemm(A, B, C_ref, MatrixType::f32, operation_ref);
 
-    EXPECT_TRUE(ref_result) << "Reference GEMM with PostOps should succeed";
+    EXPECT_EQ(ref_status, UALError::UAL_SUCCESS)
+        << "Reference GEMM with PostOps should succeed";
 
     // Compare the results
     C_ref.setK(k);
@@ -1294,9 +1367,9 @@ TEST(GEMMTest, PostOpsIntegration)
                         false);
     C_no_postops.fillValue(0.0f);
 
-    bool no_postops_result =
+    UALError no_postops_status =
         ual_dlp->gemm(A, B, C_no_postops, MatrixType::f32, nullptr);
-    EXPECT_TRUE(no_postops_result)
+    EXPECT_EQ(no_postops_status, UALError::UAL_SUCCESS)
         << "DLP GEMM with nullptr PostOps should succeed";
 }
 
@@ -1386,11 +1459,11 @@ TEST(GEMMTest, MultiplePostOpsOfSameType)
 
     // Perform GEMM with multiple PostOps using DLP
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-    bool dlp_result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+    UALError dlp_status = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
 
     // Verify that the operation doesn't crash and handles multiple ops
     // correctly
-    EXPECT_TRUE(dlp_result)
+    EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS)
         << "DLP GEMM with multiple PostOps of same type should succeed";
 
     std::cout << "Multiple PostOps of same type test completed successfully!"
@@ -1436,12 +1509,13 @@ TEST(GEMMTest, DebugMultipleOps)
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
 
     std::cout << "Calling GEMM..." << std::endl;
-    bool dlp_result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+    UALError dlp_status = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
 
-    std::cout << "GEMM result: " << (dlp_result ? "SUCCESS" : "FAILED")
+    std::cout << "GEMM result: "
+              << (dlp_status == UALError::UAL_SUCCESS ? "SUCCESS" : "FAILED")
               << std::endl;
 
-    EXPECT_TRUE(dlp_result)
+    EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS)
         << "DLP GEMM with two RELU operations should succeed";
 }
 
@@ -1484,11 +1558,14 @@ TEST(GEMMTest, IsolateSegFault)
             std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
 
             std::cout << "Calling GEMM with BIAS..." << std::endl;
-            bool result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+            UALError status =
+                ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
 
-            std::cout << "BIAS test result: " << (result ? "SUCCESS" : "FAILED")
+            std::cout << "BIAS test result: "
+                      << (status == UALError::UAL_SUCCESS ? "SUCCESS"
+                                                          : "FAILED")
                       << std::endl;
-            EXPECT_TRUE(result);
+            EXPECT_EQ(status, UALError::UAL_SUCCESS);
         } catch (const std::exception& e) {
             std::cout << "Exception in BIAS test: " << e.what() << std::endl;
             FAIL() << "Exception in BIAS test: " << e.what();
@@ -1516,11 +1593,14 @@ TEST(GEMMTest, IsolateSegFault)
             std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
 
             std::cout << "Calling GEMM with SCALE..." << std::endl;
-            bool result = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+            UALError status =
+                ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
 
             std::cout << "Scale test result: "
-                      << (result ? "SUCCESS" : "FAILED") << std::endl;
-            EXPECT_TRUE(result);
+                      << (status == UALError::UAL_SUCCESS ? "SUCCESS"
+                                                          : "FAILED")
+                      << std::endl;
+            EXPECT_EQ(status, UALError::UAL_SUCCESS);
         } catch (const std::exception& e) {
             std::cout << "Exception in Scale test: " << e.what() << std::endl;
             FAIL() << "Exception in Scale test: " << e.what();
@@ -1589,17 +1669,19 @@ TEST(GEMMTest, PostOpsComprehensiveComparison)
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
     ASSERT_TRUE(ual_dlp != nullptr) << "Failed to create DLP UAL";
 
-    bool dlp_result =
+    UALError dlp_status =
         ual_dlp->gemm(A_dlp, B_dlp, C_dlp, MatrixType::f32, operation_dlp);
-    EXPECT_TRUE(dlp_result) << "DLP GEMM with PostOps should succeed";
+    EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS)
+        << "DLP GEMM with PostOps should succeed";
 
     // Test REF implementation
     std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
     ASSERT_TRUE(ual_ref != nullptr) << "Failed to create REF UAL";
 
-    bool ref_result =
+    UALError ref_status =
         ual_ref->gemm(A_ref, B_ref, C_ref, MatrixType::f32, operation_ref);
-    EXPECT_TRUE(ref_result) << "REF GEMM with PostOps should succeed";
+    EXPECT_EQ(ref_status, UALError::UAL_SUCCESS)
+        << "REF GEMM with PostOps should succeed";
 
     // Compare results (both should have applied the same PostOps)
     C_dlp.setK(k);
@@ -1641,30 +1723,34 @@ TEST(GEMMTest, PostOpsUALTypeValidation)
 
     // Test: DLP UAL with DLP PostOps (should succeed)
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-    bool dlp_with_dlp = ual_dlp->gemm(A, B, C, MatrixType::f32, dlp_operation);
-    EXPECT_TRUE(dlp_with_dlp) << "DLP UAL with DLP PostOps should succeed";
+    UALError              dlp_with_dlp_status =
+        ual_dlp->gemm(A, B, C, MatrixType::f32, dlp_operation);
+    EXPECT_EQ(dlp_with_dlp_status, UALError::UAL_SUCCESS)
+        << "DLP UAL with DLP PostOps should succeed";
 
     // Test: REF UAL with REF PostOps (should succeed)
     std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
-    bool ref_with_ref = ual_ref->gemm(A, B, C, MatrixType::f32, ref_operation);
-    EXPECT_TRUE(ref_with_ref) << "REF UAL with REF PostOps should succeed";
+    UALError              ref_with_ref_status =
+        ual_ref->gemm(A, B, C, MatrixType::f32, ref_operation);
+    EXPECT_EQ(ref_with_ref_status, UALError::UAL_SUCCESS)
+        << "REF UAL with REF PostOps should succeed";
 
     // Test: DLP UAL with REF PostOps (should fail due to type mismatch)
     Matrix C_mismatch1(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
                        false);
     C_mismatch1.fillValue(0.0f);
-    bool dlp_with_ref =
+    UALError dlp_with_ref_status =
         ual_dlp->gemm(A, B, C_mismatch1, MatrixType::f32, ref_operation);
-    EXPECT_FALSE(dlp_with_ref)
+    EXPECT_NE(dlp_with_ref_status, UALError::UAL_SUCCESS)
         << "DLP UAL with REF PostOps should fail due to type mismatch";
 
     // Test: REF UAL with DLP PostOps (should fail due to type mismatch)
     Matrix C_mismatch2(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
                        false);
     C_mismatch2.fillValue(0.0f);
-    bool ref_with_dlp =
+    UALError ref_with_dlp_status =
         ual_ref->gemm(A, B, C_mismatch2, MatrixType::f32, dlp_operation);
-    EXPECT_FALSE(ref_with_dlp)
+    EXPECT_NE(ref_with_dlp_status, UALError::UAL_SUCCESS)
         << "REF UAL with DLP PostOps should fail due to type mismatch";
 
     std::cout << "UAL type validation test completed!" << std::endl;

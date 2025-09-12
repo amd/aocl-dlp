@@ -239,19 +239,24 @@ TEST_F(PostOpsYamlTest, PostOpsWithGemmTest)
         auto ual_ref = UalFactory::createUal(UALType::REF);
 
         // Test GEMM with PostOps (should not crash)
-        bool dlp_result =
+        UALError dlp_status =
             ual_dlp->gemm(A, B, C_dlp, MatrixType::f32, postops_dlp);
-        bool ref_result =
+        UALError ref_status =
             ual_ref->gemm(A, B, C_ref, MatrixType::f32, postops_ref);
 
         std::cout << "GEMM with PostOps:" << std::endl;
-        std::cout << "  DLP result: " << (dlp_result ? "SUCCESS" : "FAILED")
+        std::cout << "  DLP result: "
+                  << (dlp_status == UALError::UAL_SUCCESS ? "SUCCESS"
+                                                          : "FAILED")
                   << std::endl;
-        std::cout << "  REF result: " << (ref_result ? "SUCCESS" : "FAILED")
+        std::cout << "  REF result: "
+                  << (ref_status == UALError::UAL_SUCCESS ? "SUCCESS"
+                                                          : "FAILED")
                   << std::endl;
 
         // The operations should complete without crashing
-        EXPECT_TRUE(dlp_result || ref_result)
+        EXPECT_TRUE(dlp_status == UALError::UAL_SUCCESS
+                    || ref_status == UALError::UAL_SUCCESS)
             << "At least one GEMM operation should succeed";
 
     } catch (const std::exception& e) {

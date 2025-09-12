@@ -470,6 +470,7 @@ gemm_tests:
             beta: [6.0]
             beta_type: ["f32"]
 
+  # 10
   - name: "f32_individual_swish_postop"
     a_type: ["f32"]
     b_type: ["f32"]
@@ -620,6 +621,7 @@ gemm_tests:
             scale_factor_type: ["f32"]
             scale_factor_len: ["n"]
 
+  # 15
   - name: "f32_individual_matrix_add_postop"
     a_type: ["f32"]
     b_type: ["f32"]
@@ -686,6 +688,7 @@ gemm_tests:
   # KERNEL REGRESSION TESTING - SPECIFIC SIZES
   # =============================================================================
 
+  # 17
   # Kernel-specific regression tests for known working configurations
   - name: "kernel_regression_f32_6x16"
     a_type: ["f32"]
@@ -835,6 +838,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
+  #
   - name: "numerical_regression_critical_bfloat"
     a_type: ["bf16"]
     b_type: ["bf16"]

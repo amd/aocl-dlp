@@ -52,6 +52,8 @@ extern "C"
 
 namespace dlp::testing::classic {
 
+using dlp::testing::framework::UALError;
+
 // Type conversion utilities for multi-datatype support
 namespace {
 
@@ -413,9 +415,9 @@ reorderTyped(const Matrix& in,
  * @param B_type Type of matrix B in GEMM context
  * @param C_type Type of matrix C in GEMM context
  * @param accType Target accumulation type
- * @return bool Success status
+ * @return UALError Error code indicating success or failure
  */
-bool
+UALError
 UalRef::reorder(const Matrix& in,
                 Matrix&       out,
                 MatrixType    A_type,
@@ -479,26 +481,30 @@ UalRef::reorder(const Matrix& in,
     );
 
     // Templated reorder implementation to avoid code duplication
+    bool success = false;
     switch (input_type) {
         case MatrixType::f32:
-            return reorderTyped<float>(in, out, input_rows, input_cols, layout,
-                                       transposed);
-        case MatrixType::bf16:
-            return reorderTyped<bfloat16>(in, out, input_rows, input_cols,
+            success = reorderTyped<float>(in, out, input_rows, input_cols,
                                           layout, transposed);
+            break;
+        case MatrixType::bf16:
+            success = reorderTyped<bfloat16>(in, out, input_rows, input_cols,
+                                             layout, transposed);
+            break;
         case MatrixType::u8:
-            return reorderTyped<uint8_t>(in, out, input_rows, input_cols,
-                                         layout, transposed);
+            success = reorderTyped<uint8_t>(in, out, input_rows, input_cols,
+                                            layout, transposed);
+            break;
         case MatrixType::s8:
-            return reorderTyped<int8_t>(in, out, input_rows, input_cols, layout,
-                                        transposed);
+            success = reorderTyped<int8_t>(in, out, input_rows, input_cols,
+                                           layout, transposed);
+            break;
         default:
-            // For other data types, we'd need similar implementations
-            // For now, just return false for unsupported types
-            return false;
+            // For other data types, return not supported
+            return UALError::UAL_NOT_SUPPORTED;
     }
 
-    return true;
+    return success ? UALError::UAL_SUCCESS : UALError::UAL_FAILURE;
 }
 
 /**
@@ -1057,7 +1063,7 @@ UalRef::applyPostOperation(Matrix& matrix,
  * @param beta Scaling factor for C
  * @return bool Success status
  */
-bool
+UALError
 UalRef::gemm(const Matrix&                      A,
              const Matrix&                      B,
              Matrix&                            C,
@@ -1068,26 +1074,27 @@ UalRef::gemm(const Matrix&                      A,
 {
     // For now, if no postOps are provided, delegate to the original gemm method
     if (!postOps) {
-        return checkValidGemmParams(A, B, C, false)
-               && gemm(A, B, C, accType, alpha, beta);
+        bool success = checkValidGemmParams(A, B, C, false)
+                       && gemm(A, B, C, accType, alpha, beta);
+        return success ? UALError::UAL_SUCCESS : UALError::UAL_FAILURE;
     }
 
     // Validate that the postOps are for REF backend
     if (postOps->getUALType() != UALType::REF) {
-        return false;
+        return UALError::UAL_FAILURE;
     }
 
     // Cast to RefOperation and use the iterator pattern
     const auto* refOp = dynamic_cast<const RefOperation*>(postOps.get());
     if (!refOp) {
-        return false;
+        return UALError::UAL_CAST_ERROR;
     }
 
     // First perform the GEMM operation
     bool result = checkValidGemmParams(A, B, C, true)
                   && gemm(A, B, C, accType, alpha, beta);
     if (!result) {
-        return false;
+        return UALError::UAL_FAILURE;
     }
 
     // Apply post-operations using the iterator pattern
@@ -1101,10 +1108,10 @@ UalRef::gemm(const Matrix&                      A,
         }
     }
 
-    return true;
+    return UALError::UAL_SUCCESS;
 }
 
-bool
+UALError
 UalRef::gemm(md_t         m,
              md_t         n,
              md_t         k,
@@ -1129,10 +1136,10 @@ UalRef::gemm(md_t         m,
              double       alpha,
              double       beta) const
 {
-    // For now, this is a stub implementation that returns false
+    // For now, this is a stub implementation that returns failure
     // indicating the operation is not supported in the reference implementation
     // TODO: Implement reference GEMM logic if needed for benchmarking
-    return false;
+    return UALError::UAL_FAILURE;
 }
 
 // Unified postop helper that handles type conversion
