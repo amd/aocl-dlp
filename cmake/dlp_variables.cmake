@@ -36,7 +36,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 # Project
 set(PROJECT_NAME "aocl-dlp")
-set(PROJECT_VERSION "5.1.0")
+set(PROJECT_VERSION "5.1.1")
+set(PROJECT_VERSION_MAJOR "5")
+set(PROJECT_VERSION_MINOR "1")
+set(PROJECT_VERSION_PATCH "1")
 
 # Set default build type to Release if not specified
 if(NOT CMAKE_BUILD_TYPE)
