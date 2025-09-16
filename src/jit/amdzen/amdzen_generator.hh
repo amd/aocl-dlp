@@ -42,6 +42,8 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
     bool                                           isAvx512;
     bool                                           isAvx2;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
 
     utils::kernelInstrType getGeneratorKernelType(
         dlp::kernel_frame::kernelInstrPreference kInstPref);

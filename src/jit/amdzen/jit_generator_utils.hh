@@ -351,6 +351,8 @@ struct gemvM1GeneratorParams
     int NR; // Vector length (number of elements to process at once) - typically
             // 64 for AVX512
     int KC; // K-dimension blocksize
+    int K_SUB_ITER; // Sub-iterations size(since KC is usually large, and thus
+                    // is further iterated over in blocks of K_SUB_ITER)
 
     AOCL_MEMORY_TAG mtag_b; // Memory tag for the B matrix
 
@@ -369,6 +371,7 @@ struct gemvM1GeneratorParams
     // Constructor
     gemvM1GeneratorParams(int                              _NR,
                           int                              _KC,
+                          int                              _K_SUB_ITER,
                           AOCL_MEMORY_TAG                  _mtag_b,
                           bool                             _nloop,
                           bool                             _kloop,
@@ -380,6 +383,7 @@ struct gemvM1GeneratorParams
                           kernelInstrType                  _kType)
         : NR(_NR)
         , KC(_KC)
+        , K_SUB_ITER(_K_SUB_ITER)
         , mtag_b(_mtag_b)
         , nloop(_nloop)
         , kloop(_kloop)
@@ -396,6 +400,7 @@ struct gemvM1GeneratorParams
     gemvM1GeneratorParams(const gemvM1GeneratorParams& other)
         : NR(other.NR)
         , KC(other.KC)
+        , K_SUB_ITER(other.K_SUB_ITER)
         , mtag_b(other.mtag_b)
         , nloop(other.nloop)
         , kloop(other.kloop)
@@ -414,6 +419,7 @@ struct gemvM1GeneratorParams
         if (this != std::addressof(other)) {
             NR               = other.NR;
             KC               = other.KC;
+            K_SUB_ITER       = other.K_SUB_ITER;
             mtag_b           = other.mtag_b;
             nloop            = other.nloop;
             kloop            = other.kloop;
@@ -431,6 +437,7 @@ struct gemvM1GeneratorParams
     gemvM1GeneratorParams(gemvM1GeneratorParams&& other)
         : NR(other.NR)
         , KC(other.KC)
+        , K_SUB_ITER(other.K_SUB_ITER)
         , mtag_b(other.mtag_b)
         , nloop(other.nloop)
         , kloop(other.kloop)
@@ -449,6 +456,7 @@ struct gemvM1GeneratorParams
         if (this != std::addressof(other)) {
             NR               = other.NR;
             KC               = other.KC;
+            K_SUB_ITER       = other.K_SUB_ITER;
             mtag_b           = other.mtag_b;
             nloop            = other.nloop;
             kloop            = other.kloop;
