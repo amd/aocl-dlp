@@ -32,7 +32,9 @@
 #include "avx512_gemv.hh"
 #include "avx512_generator.hh"
 #include "cpu_utils/cpu_features.hh"
+#include "f32_gemv.hh"
 #include "jit_register/jit_register.hh"
+#include "traits.hh"
 
 namespace amdzen::gen {
 
@@ -42,6 +44,8 @@ jitAmdZenFP32::jitAmdZenFP32()
     , mIsaFeaturesRequired{}
     , isAvx512(false)
     , isAvx2(false)
+    , kType(utils::kernelInstrType::none)
+    , numElemsPerReg(0)
 {
     isAvx512 = dlp::arch_utils::archConfigManager::getInstance()
                    .isAvx512SupportedByArch();
@@ -84,7 +88,7 @@ jitAmdZenFP32::getGeneratorKernelType(
             // avx2_ymm_16_reg. However the existing logic in classic lpgemm
             // prevents us from doing that (i.e. MR,NR = 6,64 even when zen3
             // arch is enabled). Need to revisit this later.
-            _kType = utils::kernelInstrType::avx512_ymm_32_reg;
+            _kType = utils::kernelInstrType::avx2_ymm_16_reg;
         }
     } else if (isAvx2) {
         // Set to using ymm register by default for zen machines.
@@ -104,27 +108,17 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
-    MR                 = (jI.kI).mr;
-    NR                 = (jI.kI).nr;
-    KC                 = (jI.kI).kc;
-    K_UNROLL           = (jI.kI).k_unroll;
-    int numElemsPerReg = 0; // RegBytes / this->sizeofType<accumType>();
-
-    if (isAvx512) {
-        numElemsPerReg = 16; // AVX512 SIMD width
-    } else if (isAvx2) {
-        numElemsPerReg = 8; // AVX2 SIMD width
-    } else {
-        // Unsupported architecture
-        return dlp::jit::jitGeneratorError::notSupported;
-    }
+    MR       = (jI.kI).mr;
+    NR       = (jI.kI).nr;
+    KC       = (jI.kI).kc;
+    K_UNROLL = (jI.kI).k_unroll;
 
     // Hardcoding the FP32 kernel datatype for now
     const dlp::kernel_frame::kernelDatatype kdt =
         dlp::kernel_frame::kernelDatatype::f32f32f32of32;
 
     // Convert kernelInstrPreference to kernelType
-    utils::kernelInstrType _kType = getGeneratorKernelType(jI.kI.kInstPref);
+    kType = getGeneratorKernelType(jI.kI.kInstPref);
 
     if (MR == 1) {
         // Generate kernel for GEMV(when MR == 1)
@@ -139,16 +133,17 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelCodeBlocks.resize(numKernelVariants);
 
         utils::gemvM1GeneratorParams params(
-            0, 0, mtag_b, true, true, true, true,
+            0, 0, 0, mtag_b, true, true, true, true,
             dlp::kernel_frame::storageFormat::rowMajor,
-            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, _kType);
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
-        params.NR      = NR;
-        params.KC      = KC;
-        params.nloop   = true;
-        params.kloop   = true;
-        params.nfringe = true;
-        params.kfringe = true;
+        params.NR         = NR;
+        params.KC         = KC;
+        params.K_SUB_ITER = K_UNROLL;
+        params.nloop      = true;
+        params.kloop      = true;
+        params.nfringe    = true;
+        params.kfringe    = true;
 
         for (int i = 1; i <= 3; i += 1) {
             params.nfringe = (i % 2) ? true : false;
@@ -163,22 +158,82 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             kernelCodeBlocks[i - 1] = codeBuffer;
 
             // Architecture specific dispatch happens here.
-            if (isAvx512) {
-                // Create a new instance of jitAVX512GEMVN1 with the code buffer
-                // and size
-                avx512gen::jitAVX512GEMVM1 base(codeBuffer,
-                                                utils::JIT_KERNEL_SIZE);
+            if (isAvx2) {
+                // For an architecture with only AVX2 support, we generate only
+                // the pure AVX2 kernel.
+                if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    // Acquiring the SIMD width of the kernel type
+                    numElemsPerReg =
+                        traits::ArchitectureTraits<
+                            utils::kernelInstrType::avx2_ymm_16_reg>::regBytes
+                        / sizeof(float);
 
-                err = base.generateKernel<kdt>(params);
+                    codegen::jitF32GEMVM1<
+                        utils::kernelInstrType::avx2_ymm_16_reg>
+                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
+
+                    err = base.generateKernel(params);
+                    if (err != dlp::jit::jitGeneratorError::success) {
+                        goto cleanup;
+                    }
+                } else {
+                    return dlp::jit::jitGeneratorError::error;
+                }
+            } else if (isAvx512) {
+                // Handle different kernel types for AVX-512
+                switch (kType) {
+                    case utils::kernelInstrType::avx2_ymm_16_reg: {
+                        // Acquiring the SIMD width of the kernel type
+                        numElemsPerReg =
+                            traits::ArchitectureTraits<
+                                utils::kernelInstrType::avx2_ymm_16_reg>::
+                                regBytes
+                            / sizeof(float);
+
+                        codegen::jitF32GEMVM1<
+                            utils::kernelInstrType::avx2_ymm_16_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = base.generateKernel(params);
+                        break;
+                    }
+                    case utils::kernelInstrType::avx512_ymm_32_reg: {
+                        // Acquiring the SIMD width of the kernel type
+                        numElemsPerReg =
+                            traits::ArchitectureTraits<
+                                utils::kernelInstrType::avx512_ymm_32_reg>::
+                                regBytes
+                            / sizeof(float);
+
+                        codegen::jitF32GEMVM1<
+                            utils::kernelInstrType::avx512_ymm_32_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = base.generateKernel(params);
+                        break;
+                    }
+                    case utils::kernelInstrType::avx512_zmm_32_reg: {
+                        // Acquiring the SIMD width of the kernel type
+                        numElemsPerReg =
+                            traits::ArchitectureTraits<
+                                utils::kernelInstrType::avx512_zmm_32_reg>::
+                                regBytes
+                            / sizeof(float);
+
+                        codegen::jitF32GEMVM1<
+                            utils::kernelInstrType::avx512_zmm_32_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = base.generateKernel(params);
+                        break;
+                    }
+                    default:
+                        err = dlp::jit::jitGeneratorError::error;
+                }
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
-            } else if (isAvx2) { // AVX2 generation not supported yet
-                return dlp::jit::jitGeneratorError::error;
             } else {
                 return dlp::jit::jitGeneratorError::error;
             }
-#ifdef DLP_JIT_DUMP_CODE
+#ifdef DLP_DUMP_JIT_CODE
             // The file naming is as such : jit_gemv_m1_kernel.
             utils::jitHelperUtils::dump_jit_code(
                 kernelCodeBlocks[i - 1], utils::JIT_KERNEL_SIZE,
@@ -229,7 +284,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         utils::gemvN1GeneratorParams params(
             0, 0, 0, false, false, false, false,
             dlp::kernel_frame::storageFormat::rowMajor,
-            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, _kType);
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
         params.MR      = MR;
         params.MR_LEFT = 0;
@@ -325,7 +380,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         // Initializing with default values.
         utils::generatorParams params(0, 0, (jI.kI).k_unroll, false, false,
                                       (jI.kI).alphaScalingType,
-                                      (jI.kI).betaScalingType, _kType);
+                                      (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
@@ -401,6 +456,8 @@ cleanup:
 dlp::kernels::kernelError
 jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
 {
+
+    // For GEMV(M1) execution
     if (MR == 1) {
         auto params = static_cast<dlp::kernels::gemvM1Params*>(_params);
         // Setting the remaining values of gemvM1Params(that are not set as part
@@ -410,42 +467,61 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         params->k_iter = params->k / KC;
         params->k_left = params->k % KC;
 
-        // NOTE :
-        // The parameterized constructor sets the masks to 0 by default
-        // Based on the fringe case, we have to set the appropriate mask
-        // to it's value. Again, the JIT generator for MR == 1 is written
-        // specific to the architecture's kernel dimension(64), thereby
-        // needing 4 masks. The generator would be further generalized in
-        // the future, similar to how the backend support exists for NR == 1
+        params->k_iter_sub_iter = KC / K_UNROLL;
+        params->k_iter_sub_left = KC % K_UNROLL;
+        params->k_left_sub_iter = (params->k_left) / K_UNROLL;
+        params->k_left_sub_left = (params->k_left) % K_UNROLL;
 
-        // All masks are intially set to 0x111...1
-        params->n0_mask = 0xFFFF;
-        params->n1_mask = 0xFFFF;
-        params->n2_mask = 0xFFFF;
-        params->n3_mask = 0xFFFF;
+        int full_bands = params->n_left
+                         / numElemsPerReg; // Number of complete 8-element bands
+        int partial_elements =
+            params->n_left % numElemsPerReg; // Elements in partial band
 
-        uint16_t nmask = 0xFFFF >> (16 - ((params->n_left) % 16));
+        // Mask setting logic
+        if (params->n_left > 0) {
+            if (isAvx2
+                || (isAvx512
+                    && (kType == utils::kernelInstrType::avx2_ymm_16_reg))) {
+                // Set full bands to all -1s
+                for (int band = 0; band < full_bands; band++) {
+                    for (int i = 0; i < 8; i++) {
+                        params->nmask_avx2[band][i] = -1;
+                    }
+                }
 
-        if (params->n_left >= 48) {
-            params->n3_mask = nmask;
-        } else if (params->n_left >= 32) {
-            params->n3_mask = 0;
-            params->n2_mask = nmask;
-        } else if (params->n_left >= 16) {
-            params->n3_mask = 0;
-            params->n2_mask = 0;
-            params->n1_mask = nmask;
-        } else {
-            params->n3_mask = 0;
-            params->n2_mask = 0;
-            params->n1_mask = 0;
-            params->n0_mask = nmask;
+                // Set partial band if any
+                if (partial_elements) {
+                    for (int i = 0; i < 8; i++) {
+                        params->nmask_avx2[full_bands][i] =
+                            (i < partial_elements) ? -1 : 0;
+                    }
+                }
+            } else if (isAvx512) {
+                if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                    for (int i = 0; i < full_bands; i++) {
+                        params->nmask_avx512[i] = 0xFFFF;
+                    }
+
+                    if (partial_elements) {
+                        uint16_t nmask =
+                            0xFFFF >> (numElemsPerReg - partial_elements);
+
+                        params->nmask_avx512[full_bands] = nmask;
+                    }
+                } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
+                    for (int i = 0; i < full_bands; i++) {
+                        params->nmask_avx512_256[i] = 0xFF;
+                    }
+
+                    if (partial_elements) {
+                        uint8_t nmask =
+                            0xFF >> (numElemsPerReg - partial_elements);
+
+                        params->nmask_avx512_256[full_bands] = nmask;
+                    }
+                }
+            }
         }
-
-        params->k_iter_sub_iter = KC / 4;
-        params->k_iter_sub_left = KC % 4;
-        params->k_left_sub_iter = (params->k_left) / 4;
-        params->k_left_sub_left = (params->k_left) % 4;
 
         // Deploy the associated kernel
         int  kernel_idx = 0;
@@ -459,11 +535,11 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
 
     } else if (NR == 1) {
         auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);
-        // Setting the remaining values of gemvN1Params(that are not set as part
-        // of it's parameterized constructor)
-        // NOTE : The associated NR value for the generated kernels is 16.
-        //        The mdulo operations are added when calcuating the masks, to
-        //        make sure we use the same code for generic NR values in
+        // Setting the remaining values of gemvN1Params(that are not set as
+        // part of it's parameterized constructor) NOTE : The associated NR
+        // value for the generated kernels is 16.
+        //        The mdulo operations are added when calcuating the masks,
+        //        to make sure we use the same code for generic NR values in
         //        future.
         params->m_iter = params->m / MR;
         params->m_left = params->m % MR;
@@ -507,8 +583,8 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         } else {
             // Unsupported architecture
             // NOTE : As part of kernel generation, we have already checked
-            //        for the architecture support. So, this should not happen.
-            //        This is purely defensive programming.
+            //        for the architecture support. So, this should not
+            //        happen. This is purely defensive programming.
             return dlp::kernels::kernelError::error;
         }
 
@@ -567,18 +643,19 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
             c_jr      = (float*)(c_jr) + n_idx * numElemsPerReg;
             n -= nElemsProcessing;
 
-            // This is the case where a fringe is encountered, with the fringe
-            // itself composed of a part which is a multiple of numElemsPerReg
-            // and a part which is < numElemsPerReg.
+            // This is the case where a fringe is encountered, with the
+            // fringe itself composed of a part which is a multiple of
+            // numElemsPerReg and a part which is < numElemsPerReg.
             (params->kernelOpsAttr).post_op_c_j += nElemsProcessing;
 
-            // The following line is necessary to ensure a subtle bug does not
-            // occur. Unlike the classic kernels where the kernelOpsAttr is
-            // passed by value to the fringe kernels, here it is kind of passed
-            // by reference, since the params ptr is the only kernel argument
-            // (inside which is the kernelOpsAttr). Since the while(n) loop can
-            // execute multiple times, any state variable, like post_op_c_i, if
-            // modified inside kernel, it needs to be reverted.
+            // The following line is necessary to ensure a subtle bug does
+            // not occur. Unlike the classic kernels where the kernelOpsAttr
+            // is passed by value to the fringe kernels, here it is kind of
+            // passed by reference, since the params ptr is the only kernel
+            // argument (inside which is the kernelOpsAttr). Since the
+            // while(n) loop can execute multiple times, any state variable,
+            // like post_op_c_i, if modified inside kernel, it needs to be
+            // reverted.
             (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
         }
     }
