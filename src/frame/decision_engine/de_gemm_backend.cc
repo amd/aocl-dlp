@@ -60,7 +60,8 @@ gemmF32DEBackend::gemmF32DEBackend()
 
     // A hack to carry forward the inconsistency in the classic framework.
     // With this, we force the AVX512_256 path even when the env var is set to
-    // AVX2.
+    // AVX2. This hack should be removed in future, once we change the "classic"
+    // framework.
     if (isAvx512
         && (eKernelInstPref
             == kernel_frame::kernelInstrPreference::avx2_ymm_favour)) {
@@ -71,6 +72,10 @@ gemmF32DEBackend::gemmF32DEBackend()
     // Check if the DE can be enabled depending on the underlying ISA
     // and the configured arch.
     auto thisArch = arch_utils::archConfigManager::getInstance().getArch();
+
+    // Checking if the underlying architecture supports AVX512, and if
+    // thisArch(configured architecture) demands a different ISA not as part of
+    // the default codepath.
     if (isAvx512 && (thisArch != arch_utils::ArchitectureType::Zen5)
         && (thisArch != arch_utils::ArchitectureType::Zen4)
         && (thisArch != arch_utils::ArchitectureType::GenericAvx512Bf16)
@@ -79,17 +84,50 @@ gemmF32DEBackend::gemmF32DEBackend()
         // Switch to Avx2 if the arch is selected as such.
         if ((thisArch != arch_utils::ArchitectureType::Generic)
             && (thisArch != arch_utils::ArchitectureType::Error)) {
-            isAvx2   = true;
-            isAvx512 = false;
+
+            // Double check if avx2 also is supported by machine.
+            isAvx2 = arch_utils::archConfigManager::getInstance()
+                         .isAvx2Fma3SupportedByArch();
+            if (!isAvx2) {
+                canGenerateKernelInfo = false;
+            }
         } else {
             // This is an invalid case, disable jit kernel generation.
             canGenerateKernelInfo = false;
         }
     }
-    if (isAvx2
-        && ((thisArch == arch_utils::ArchitectureType::Generic)
-            || (thisArch == arch_utils::ArchitectureType::Error))) {
-        canGenerateKernelInfo = false;
+    // This condition can be taken in two cases :
+    // - isAvx512 is false, but isAvx2 is true.
+    // - Both isAvx512 and isAvx2 are true, but the configured arch demands that
+    //   we run Avx2 kernels.
+    if (isAvx2) {
+        // This conditional block facilitates downgrading of eKernelInstPref on
+        // an avx2 machine. For now, we do not downgrade to avx2 on avx512
+        // machines, since the "classic" framework demands that we run the
+        // avx512_256 path in such cases(refer to the code-section from line
+        // 61-70).
+        if ((thisArch != arch_utils::ArchitectureType::Generic)
+            && (thisArch != arch_utils::ArchitectureType::Error)) {
+            if (!isAvx512) {
+                if ((eKernelInstPref
+                     != dlp::kernel_frame::kernelInstrPreference::
+                         avx2_xmm_favour)
+                    && (eKernelInstPref
+                        != dlp::kernel_frame::kernelInstrPreference::
+                            avx2_ymm_favour)
+                    && (eKernelInstPref
+                        != dlp::kernel_frame::kernelInstrPreference::none)) {
+                    eKernelInstPref =
+                        dlp::kernel_frame::kernelInstrPreference::none;
+                }
+            }
+            // This would be false already if it's an avx2 machine.
+            // If it is originally an avx512 machine, we set it to false here,
+            // since the configured hardware is avx2.
+            isAvx512 = false;
+        } else {
+            canGenerateKernelInfo = false;
+        }
     }
 }
 
@@ -313,9 +351,9 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
         // avx2, isAvx2 would be set to true by the constructor.
         if (isAvx2) {
             mr = 1;
-            // This setting is a follow-up of the hack we have defined in the DE
-            // constructor. With this, we force the AVX512_256 path even when
-            // the env var is set to AVX2.
+            // This setting is a follow-up of the hack we have defined in
+            // the DE constructor. With this, we force the AVX512_256 path
+            // even when the env var is set to AVX2.
             nr       = (eKernelInstPref
                   == kernel_frame::kernelInstrPreference::avx2_ymm_favour)
                            ? 16

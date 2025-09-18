@@ -256,16 +256,21 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     const md_t erf_consts_off  = lpgemm_exp_off + sizeof(lpgemm_exp);
     const md_t lpgemm_erf_off  = erf_consts_off + sizeof(erf_consts);
 
-    Xbyak::Address get_constant(md_t table_off, md_t value_off)
+    template<typename T>
+    Xbyak::Address get_constant_T(md_t table_off, md_t value_off)
     {
         return jit_->ptr[jit_->rip + tables + table_off
-                         + (value_off * (md_t)sizeof(float))];
+                         + (value_off * (md_t)sizeof(T))];
+    }
+
+    Xbyak::Address get_constant(md_t table_off, md_t value_off)
+    {
+        return get_constant_T<float>(table_off, value_off);
     }
 
     Xbyak::Address get_constant_dbl(md_t table_off, md_t value_off)
     {
-        return jit_->ptr[jit_->rip + tables + table_off
-                         + (value_off * (md_t)sizeof(double))];
+        return get_constant_T<double>(table_off, value_off);
     }
 
     Xbyak::Label  erf_end;

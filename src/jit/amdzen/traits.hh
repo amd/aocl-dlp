@@ -72,6 +72,18 @@ struct ArchitectureTraits<utils::kernelInstrType::avx2_ymm_16_reg>
 };
 
 template<>
+struct ArchitectureTraits<utils::kernelInstrType::avx2_xmm_16_reg>
+{
+    using RegType                        = Xbyak::Xmm;
+    using halfRegType                    = Xbyak::Xmm;
+    static constexpr int  regSize        = 128;
+    static constexpr int  regBytes       = regSize / 8;
+    static constexpr int  numRegs        = 16;
+    static constexpr bool hasMaskSupport = false;
+    static constexpr bool isAVX512       = false;
+};
+
+template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx512_zmm_32_reg>
 {
     using RegType                        = Xbyak::Zmm;
@@ -89,6 +101,18 @@ struct ArchitectureTraits<utils::kernelInstrType::avx512_ymm_32_reg>
     using RegType                        = Xbyak::Ymm;
     using halfRegType                    = Xbyak::Xmm;
     static constexpr int  regSize        = 256;
+    static constexpr int  regBytes       = regSize / 8;
+    static constexpr int  numRegs        = 32;
+    static constexpr bool hasMaskSupport = true;
+    static constexpr bool isAVX512       = true;
+};
+
+template<>
+struct ArchitectureTraits<utils::kernelInstrType::avx512_xmm_32_reg>
+{
+    using RegType                        = Xbyak::Xmm;
+    using halfRegType                    = Xbyak::Xmm;
+    static constexpr int  regSize        = 128;
     static constexpr int  regBytes       = regSize / 8;
     static constexpr int  numRegs        = 32;
     static constexpr bool hasMaskSupport = true;
