@@ -68,7 +68,7 @@ gemm_tests:
     # Optional Params
     lda: [10, 20, 30]
     ldb:
-      lb: 20
+      lb: 10
       ub: 10
       step: -1
     ldc: 10
