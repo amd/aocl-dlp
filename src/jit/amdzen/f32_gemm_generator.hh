@@ -26,126 +26,94 @@
  *
  */
 
-#ifndef AVX2_GENERATOR_HH
-#define AVX2_GENERATOR_HH
+#pragma once
 
 #include <cstdint>
 #include <vector>
 
 #include "jit/jit_generator_base.hh"
 #include "jit/xbyak/xbyak.h"
-#include "jit/xbyak/xbyak_util.h"
 #include "jit_generator_utils.hh"
 #include "kernel_ops_handler.hh"
 #include "kernels/kernel_base.hh"
 #include "traits.hh"
+#include <iostream>
 
-namespace amdzen::avx2gen {
+namespace amdzen::GEMMcodeGenerator {
 
-typedef void (*jit_kernel)(dlp::kernels::gemmParams*);
-
-/**
- * @brief AVX2 JIT GEMM kernel generator
- *
- * Generates optimized GEMM kernels using AVX2 instructions following the
- * 5-loop tiled algorithm with IR-loop implementation.
- *
- * Optimized Register allocation strategy:
- * - 2 YMM registers: A matrix broadcasting (alternating for optimal ILP)
- * - Variable YMM registers: B matrix loading (based on NR requirements)
- * - Remaining YMM registers: C accumulation (maximized for performance)
- *
- * The A register alternation (i % 2) provides optimal instruction-level
- * parallelism regardless of MR value, while freeing up registers for
- * additional C accumulation.
- */
-class jitAVX2 : public Xbyak::CodeGenerator
+template<utils::kernelInstrType KType>
+class jitGEMMF32 : public Xbyak::CodeGenerator
 {
   public:
     // Constructor that takes buffer and its size for JIT code dumping
-    jitAVX2(void* buffer, size_t bufferSize);
-    ~jitAVX2()                         = default;
-    jitAVX2(const jitAVX2&)            = delete;
-    jitAVX2& operator=(const jitAVX2&) = delete;
-    jitAVX2(jitAVX2&&)                 = delete;
-    jitAVX2& operator=(jitAVX2&&)      = delete;
+    jitGEMMF32(void* buffer, size_t bufferSize);
+    ~jitGEMMF32()                       = default;
+    jitGEMMF32(jitGEMMF32&)             = delete;
+    jitGEMMF32& operator=(jitGEMMF32&)  = delete;
+    jitGEMMF32(jitGEMMF32&&)            = delete;
+    jitGEMMF32& operator=(jitGEMMF32&&) = delete;
 
-    template<dlp::kernel_frame::kernelDatatype KDT>
     dlp::jit::jitGeneratorError generateKernel(utils::generatorParams& params);
 
   private:
-    using Traits = amdzen::traits::ArchitectureTraits<
-        utils::kernelInstrType::avx2_ymm_16_reg>;
+    using Traits  = amdzen::traits::ArchitectureTraits<KType>;
+    using RegType = typename Traits::RegType;
 
     // Configuration and state
     int numRegs  = Traits::numRegs;
     int RegSize  = Traits::regSize;
     int RegBytes = Traits::regBytes;
     int aReg, bReg, bFullReg, bMaskReg, cReg;
-    int aRegIdx, bRegIdx, cRegIdx, ymmMaskIdx;
+    int aRegIdx, bRegIdx, cRegIdx, maskRegIdx;
     int MR, NR;
 
+    // Register allocations
     Xbyak::Reg64 regTmpAptr, regBptr, regTmpCptr, regRsA, regCsA, regRsB,
-        regRsC;
-    Xbyak::Reg64 regMiter, regKIter;
+        regRsC, regKIter;
+    Xbyak::Reg64 regMiter;
     Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
 
-    Xbyak::Label m_loop;
-    Xbyak::Label k_loop;
-    Xbyak::Label k_rem_loop;
+    Xbyak::Reg64 regkernelOpsList, regkernelOpsAttr;
+
     Xbyak::Label label_store_result;
 
     bool useMask =
         false; // Flag to indicate if masked instructions are generated
 
-    void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
-
-    // Register initialization and utility methods
-    void regInitYmm();
-
-    // C buffer prefetching for performance optimization
-    template<typename cType>
-    void prefetchCBuffer();
-
-    // Core kernel generation methods
-    template<typename accumType>
+    // Core kernel generation methods - simplified for F32 only
     dlp::jit::jitGeneratorError allocateReg();
 
-    template<typename aType, typename bType, typename cType>
     void initializeParameters(bool addIrLoop);
 
-    template<typename aType, typename bType, typename cType, typename accumType>
     dlp::jit::jitGeneratorError generateIrLoop(utils::generatorParams& params);
 
-    template<typename aType, typename bType, typename cType, typename accumType>
-    dlp::jit::jitGeneratorError loadAValuesYmm(bool useMask = false);
+    // Memory operations
+    dlp::jit::jitGeneratorError loadBValues();
 
-    template<typename bType>
-    dlp::jit::jitGeneratorError loadBValuesYmm();
+    dlp::jit::jitGeneratorError BroadcastAFMAwithB();
 
-    template<typename aType, typename bType, typename accumType>
-    dlp::jit::jitGeneratorError BroadcastAandComputeFMAwithYmm();
+    dlp::jit::jitGeneratorError kernelUnroll(int unroll);
 
-    template<typename aType, typename bType, typename cType, typename accumType>
-    dlp::jit::jitGeneratorError kernelUnrollYmm(int loopCount);
-
-    template<typename accumType, typename cType>
     dlp::jit::jitGeneratorError storeResult();
 
-    template<typename accumType>
+    // Setup and initialization
+    void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
+    void regInit();
+    void moveCPtr();
+
+    // Scaling operations
     dlp::jit::jitGeneratorError scaleAlpha();
 
-    template<typename accumType, typename cType>
     dlp::jit::jitGeneratorError scaleBeta();
-#if 0 // TODO: Placeholder for beta = 1.0
-    template<typename accumType, typename cType>
-    dlp::jit::jitGeneratorError addCBufferBetaOne();
-#endif
-    void moveCPtr();
 };
 
-} // namespace amdzen::avx2gen
-
-#endif // AVX2_GENERATOR_HH
+// Type aliases for specific instruction sets
+using jitGemmGenerator_f32_avx512 =
+    jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>;
+using jitGemmGenerator_f32_avx512_256 =
+    jitGEMMF32<utils::kernelInstrType::avx512_ymm_32_reg>;
+using jitGemmGenerator_f32_avx2 =
+    jitGEMMF32<utils::kernelInstrType::avx2_ymm_16_reg>;
+} // namespace amdzen::GEMMcodeGenerator

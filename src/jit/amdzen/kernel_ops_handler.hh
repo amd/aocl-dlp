@@ -60,6 +60,11 @@ class kernelOpsHandler
             kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
                 utils::kernelInstrType::avx512_zmm_32_reg>>(
                 jit, MR, NR, useMask, cRegStartIdx, cRegCount);
+            // ToDO: Enable once this path is completely up
+            //  } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
+            //      kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
+            //          utils::kernelInstrType::avx512_ymm_32_reg>>(
+            //          jit, MR, NR, useMask, cRegStartIdx, cRegCount);
         } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
             kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
                 utils::kernelInstrType::avx2_ymm_16_reg>>(
