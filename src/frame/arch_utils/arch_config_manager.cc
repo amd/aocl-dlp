@@ -344,7 +344,9 @@ archConfigManager::setArch(void)
         // If AVX2 test fails here we assume that the arch was configured as
         // zen, zen2, zen3, zen4, zen5 and should be reset to actual arch.
         if (!isAvx2Fma3Supported) {
-            switch (origThisArch) {
+            // Falling over the possible values for "thisArch" that has to be
+            // downgraded.
+            switch (thisArch) {
                 case ArchitectureType::Zen5:
                 case ArchitectureType::Zen4:
                 case ArchitectureType::Zen3:
@@ -360,7 +362,9 @@ archConfigManager::setArch(void)
         // If AVX512 test fails here we assume that the arch was configured
         // as zen4, zen5 and should be reset to actual arch.
         if (!isAvx512Supported) {
-            switch (origThisArch) {
+            // Falling over the possible values for "thisArch" that has to be
+            // downgraded.
+            switch (thisArch) {
                 case ArchitectureType::Zen5:
                 case ArchitectureType::Zen4:
                     thisArch = actualArch;
