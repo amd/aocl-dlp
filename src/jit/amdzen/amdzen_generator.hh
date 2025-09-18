@@ -61,6 +61,9 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     jitAmdZenFP32(jitAmdZenFP32&&)                 = delete;
     jitAmdZenFP32& operator=(jitAmdZenFP32&&)      = delete;
 
+    /* Function to retrieve the process block size of the kernel */
+    int getProcessBlockSize() const;
+
     dlp::jit::jitGeneratorError generateAllKernels(
         const dlp::jit::jitGeneratorContext& jI);
 
