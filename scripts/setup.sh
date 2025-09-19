@@ -222,7 +222,7 @@ else
         echo "Directory docs/internal now points to docs branch"
     else
         echo "Failed to set up documentation."
-        exit 1
+        echo "Continuing without docs worktree."
     fi
 
     if ( setup_exp ); then
@@ -230,7 +230,7 @@ else
         echo "Directory exp now points to experiments branch"
     else
         echo "Failed to set up experimentation."
-        exit 1
+        echo "Continuing without exp worktree."
     fi
 
     # Prompt user to add venv activation to shell config
