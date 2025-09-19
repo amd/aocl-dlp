@@ -217,13 +217,10 @@ dlp_thread_set_num_threads(md_t n_threads)
 void
 dlp_version_query(int* major, int* minor, int* patch)
 {
-    char* AOCL_DLP_VERSION_MAJOR_STR = AOCL_DLP_VERSION_MAJOR;
-    char* AOCL_DLP_VERSION_MINOR_STR = AOCL_DLP_VERSION_MINOR;
-    char* AOCL_DLP_VERSION_PATCH_STR = AOCL_DLP_VERSION_PATCH;
     if (major)
-        *major = atoi(AOCL_DLP_VERSION_MAJOR_STR);
+        *major = atoi(AOCL_DLP_VERSION_MAJOR);
     if (minor)
-        *minor = atoi(AOCL_DLP_VERSION_MINOR_STR);
+        *minor = atoi(AOCL_DLP_VERSION_MINOR);
     if (patch)
-        *patch = atoi(AOCL_DLP_VERSION_PATCH_STR);
+        *patch = atoi(AOCL_DLP_VERSION_PATCH);
 }
