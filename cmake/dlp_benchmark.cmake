@@ -29,6 +29,7 @@ include(FetchContent)
 function(fetch_benchmark)
     if(NOT benchmark_FETCHED)
         MESSAGE(WARNING "By enabling Google Benchmark, you agree to its license terms: https://github.com/google/benchmark/blob/main/LICENSE")
+    endif()
 
         fetch_gtest()
 
@@ -39,7 +40,6 @@ function(fetch_benchmark)
         )
         FetchContent_MakeAvailable(benchmark)
         set(benchmark_FETCHED TRUE CACHE INTERNAL "benchmark already fetched")
-    endif()
 endfunction()
 
 function(create_bench_config)

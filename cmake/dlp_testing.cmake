@@ -30,6 +30,7 @@ include(GoogleTest)
 function(fetch_gtest)
     if(NOT gtest_FETCHED)
         MESSAGE(WARNING "By enabling Google Test, you agree to its license terms: https://github.com/google/googletest/blob/main/LICENSE")
+    endif()
 
         FetchContent_Declare(
             gtest
@@ -39,7 +40,6 @@ function(fetch_gtest)
 
         FetchContent_MakeAvailable(gtest)
         set(gtest_FETCHED TRUE CACHE INTERNAL "gtest already fetched")
-    endif()
 endfunction()
 
 function(create_test_config)

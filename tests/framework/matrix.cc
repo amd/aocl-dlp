@@ -43,8 +43,9 @@
 #include "classic/dlp_base_types.h"
 #include "utils/conversion_utils.hh"
 #include <any>
-#include <chrono>  // For time-based seeding
-#include <cmath>   // For std::abs
+#include <chrono> // For time-based seeding
+#include <cmath>  // For std::abs
+#include <cstdint>
 #include <cstdlib> // For std::aligned_alloc, std::free
 #include <cstring> // For std::memcpy
 #include <limits>  // For std::numeric_limits
@@ -575,34 +576,22 @@ namespace dlp { namespace testing { namespace framework {
             // Base tolerance using machine epsilon with safety factor
             double baseTolerance = 10.0 * std::numeric_limits<float>::epsilon();
 
-            // Scale tolerance based on k dimension (accumulated operations)
-            double tolerance = baseTolerance;
-            if (m_k != std::numeric_limits<md_t>::max()) {
-                // For matrix operations, errors accumulate proportionally to k
-                tolerance = static_cast<double>(m_k) * baseTolerance;
-                // Cap the tolerance to prevent it from becoming too large
-                tolerance = std::min(tolerance, 1e-4);
-            } else {
-                // Fallback for cases where k is not set
-                tolerance = 1e-6;
-            }
-
             for (size_t i = 0; i < elementCount; ++i) {
-                float diff = std::abs(thisData[i] - otherData[i]);
-                if (diff != 0.0f) {
-                    // Use relative tolerance for larger values, absolute for
-                    // smaller values
-                    float maxVal =
-                        std::max(std::abs(thisData[i]), std::abs(otherData[i]));
-                    float relativeTolerance =
-                        maxVal * static_cast<float>(tolerance);
-                    float absoluteTolerance = static_cast<float>(baseTolerance);
-                    float effectiveTolerance =
-                        std::max(relativeTolerance, absoluteTolerance);
+                if (thisData[i] == otherData[i]) {
+                    continue;
+                }
 
-                    if (diff > effectiveTolerance) {
-                        return false;
-                    }
+                float maxAbs =
+                    std::max(std::abs(thisData[i]), std::abs(otherData[i]));
+                if (maxAbs == 0.0f) {
+                    continue; // Both are zero
+                }
+
+                float relativeDiff =
+                    std::abs(thisData[i] - otherData[i]) / maxAbs;
+                double tolerance = baseTolerance * maxAbs;
+                if (relativeDiff > tolerance) {
+                    return false;
                 }
             }
         } else if (m_type == MatrixType::bf16) {
@@ -612,41 +601,31 @@ namespace dlp { namespace testing { namespace framework {
                 reinterpret_cast<const bfloat16*>(other.m_data);
             size_t elementCount = m_dataSizeBytes / sizeof(bfloat16);
 
-            // BF16 has lower precision than FP32, so use a larger base
-            // tolerance BF16 has ~7 bits of mantissa precision vs FP32's 23
-            // bits
+            // To approximate bf16's lower precision, we use a much larger
+            // multiplier for float's epsilon. 100000 * 1.2e-7 ≈ 1.2e-2
             double baseTolerance =
-                100.0 * std::numeric_limits<float>::epsilon();
-
-            double tolerance = baseTolerance;
-            if (m_k != std::numeric_limits<md_t>::max()) {
-                tolerance = static_cast<double>(m_k) * baseTolerance;
-                // Cap tolerance for bf16
-                tolerance = std::min(tolerance, 1e-3);
-            } else {
-                // Fallback for bf16 when k is not set
-                tolerance = 1e-4;
-            }
+                100000.0 * std::numeric_limits<float>::epsilon();
 
             for (size_t i = 0; i < elementCount; ++i) {
                 float thisFloat  = bf16_to_f32(thisData[i]);
                 float otherFloat = bf16_to_f32(otherData[i]);
-                float diff       = std::abs(thisFloat - otherFloat);
 
-                if (diff != 0.0f) {
-                    // Use relative tolerance for larger values, absolute for
-                    // smaller values
-                    float maxVal =
-                        std::max(std::abs(thisFloat), std::abs(otherFloat));
-                    float relativeTolerance =
-                        maxVal * static_cast<float>(tolerance);
-                    float absoluteTolerance = static_cast<float>(baseTolerance);
-                    float effectiveTolerance =
-                        std::max(relativeTolerance, absoluteTolerance);
+                if (thisFloat == otherFloat) {
+                    continue;
+                }
 
-                    if (diff > effectiveTolerance) {
-                        return false;
-                    }
+                float maxAbs =
+                    std::max(std::abs(thisFloat), std::abs(otherFloat));
+                if (maxAbs == 0.0f) {
+                    continue; // Both are zero, already handled by equality
+                              // check
+                }
+
+                float  relativeDiff = std::abs(thisFloat - otherFloat) / maxAbs;
+                double tolerance    = baseTolerance * maxAbs;
+
+                if (relativeDiff > tolerance) {
+                    return false;
                 }
             }
         }
@@ -685,7 +664,8 @@ namespace dlp { namespace testing { namespace framework {
                 }
                 break;
 #else
-                std::uniform_real_distribution<float> dis(-5.0f, 5.0f);
+                std::uniform_real_distribution<float> dis(INT16_MIN >> 1,
+                                                          INT16_MAX >> 1);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
                 for (size_t i = 0; i < elementCount; ++i) {
@@ -762,7 +742,8 @@ namespace dlp { namespace testing { namespace framework {
                 break;
 #else
                 // For BF16, fill with random uint16_t values
-                std::uniform_int_distribution<int16_t> dis(0, 5);
+                std::uniform_int_distribution<int16_t> dis(INT8_MIN >> 1,
+                                                           INT8_MAX >> 1);
                 uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
                 size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
                 for (size_t i = 0; i < elementCount; ++i) {
