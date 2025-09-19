@@ -91,18 +91,30 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
               jit_->ptr[postOpsArgWrapperPtrReg
                         + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)]);
 
-    if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-        jit_->lea(regTmp1,
-                  jit_->ptr[postOpsArgWrapperPtrReg
-                            + offsetof(dlp::kernels::gemmParams, maskArray)]);
-        jit_->vmovdqu(ymmMask,
-                      jit_->ptr[regTmp1]); // Load all 8 floats (32 bytes)
-    } else {
-        if (useMask) {
+    if (useMask) {
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             jit_->kmovw(
                 maskReg,
                 jit_->ptr[postOpsArgWrapperPtrReg
                           + offsetof(dlp::kernels::gemmParams, maskF32)]);
+        } else if constexpr (KType
+                             == utils::kernelInstrType::avx512_ymm_32_reg) {
+            jit_->kmovb(
+                maskReg,
+                jit_->ptr[postOpsArgWrapperPtrReg
+                          + offsetof(dlp::kernels::gemmParams, maskF32_8)]);
+        } else if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            jit_->lea(
+                regTmp1,
+                jit_->ptr[postOpsArgWrapperPtrReg
+                          + offsetof(dlp::kernels::gemmParams, maskArray)]);
+            jit_->vmovdqu(ymmMask,
+                          jit_->ptr[regTmp1]); // Load all 8 floats (32 bytes)
+        } else {
+            // Currently returning not supported, will have to add
+            // the required mask parameter for each configuration as
+            // the support gets enabled.
+            return jitGeneratorError::notSupported;
         }
     }
 
@@ -1249,9 +1261,6 @@ template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::geluErf(kernelOpsMetaData& op)
 {
-    if constexpr (KType == utils::kernelInstrType::avx512_ymm_32_reg) {
-        return jitGeneratorError::notSupported;
-    }
     apply_post_ops_in_high_reg_pressure(
         num_gelu_regs,
         std::bind(&kernelOpsGeneratorX86<KType>::GELU_ERF_F32_DEF, this,
