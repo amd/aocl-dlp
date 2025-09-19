@@ -67,7 +67,15 @@ aocl_gemm_s8s8s32obf16(const char      order,
     // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
-                      "cannot perform s8s8s32 gemm.",
+                      "cannot perform s8s8s32obf16 gemm.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+    // Check for avx512_bf16 ISA support necessary for BF16.
+    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
+        dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
+                      "cannot perform s8s8s32obf16 gemm.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
