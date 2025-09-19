@@ -34,6 +34,7 @@ set(EXAMPLE_SOURCES
     quantization.c
     post_ops_combinations.c
     eltwise_ops.c
+    version.c
 )
 
 # Create an executable for each example source file

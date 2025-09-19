@@ -28,6 +28,7 @@
 
 #include <stdlib.h>
 
+#include "aocl_dlp_config.h"
 #include "bindings/c_wrappers/capi_env_config.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "runtime/dlp_runtime.h"
@@ -211,4 +212,18 @@ dlp_thread_set_num_threads(md_t n_threads)
     // DLP artifacts is used to set threading. Need to ensure OMP API or
     // env variables will not be of effect going forward.
     dlp_tl_rntm.ext_mt_ctr_var = FALSE;
+}
+
+void
+dlp_version_query(int* major, int* minor, int* patch)
+{
+    char* AOCL_DLP_VERSION_MAJOR_STR = AOCL_DLP_VERSION_MAJOR;
+    char* AOCL_DLP_VERSION_MINOR_STR = AOCL_DLP_VERSION_MINOR;
+    char* AOCL_DLP_VERSION_PATCH_STR = AOCL_DLP_VERSION_PATCH;
+    if (major)
+        *major = atoi(AOCL_DLP_VERSION_MAJOR_STR);
+    if (minor)
+        *minor = atoi(AOCL_DLP_VERSION_MINOR_STR);
+    if (patch)
+        *patch = atoi(AOCL_DLP_VERSION_PATCH_STR);
 }
