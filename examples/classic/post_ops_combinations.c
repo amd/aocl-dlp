@@ -146,12 +146,12 @@ main()
     md_t ldc = n;
 
     // Allocate memory for matrices
-    float* a  = (float*)malloc(lda * m * sizeof(float));
-    float* b  = (float*)malloc(ldb * k * sizeof(float));
-    float* c1 = (float*)malloc(ldc * m * sizeof(float)); // For fused operations
+    float* a  = (float*)calloc(lda * m * sizeof(float));
+    float* b  = (float*)calloc(ldb * k * sizeof(float));
+    float* c1 = (float*)calloc(ldc * m * sizeof(float)); // For fused operations
     float* c2 =
-        (float*)malloc(ldc * m * sizeof(float));     // For separate operations
-    float* bias = (float*)malloc(n * sizeof(float)); // Bias vector
+        (float*)calloc(ldc * m * sizeof(float));     // For separate operations
+    float* bias = (float*)calloc(n * sizeof(float)); // Bias vector
 
     if (!a || !b || !c1 || !c2 || !bias) {
         printf("Memory allocation failed\n");
@@ -194,19 +194,18 @@ main()
     apply_scale(c2, m, n, scale_factor);
 
     // Method 2: Set up post-ops for combined operations: bias + ReLU + scale
-    dlp_metadata_t* metadata = (dlp_metadata_t*)malloc(sizeof(dlp_metadata_t));
+    dlp_metadata_t* metadata = (dlp_metadata_t*)calloc(sizeof(dlp_metadata_t));
     if (!metadata) {
         printf("Memory allocation for post-ops failed\n");
         goto cleanup;
     }
-    memset(metadata, 0, sizeof(dlp_metadata_t));
 
     // Initialize post-ops structure for 3 operations
     metadata->seq_length = 3; // Three operations: bias + ReLU + scale
 
     // Allocate sequence vector
     metadata->seq_vector =
-        (DLP_POST_OP_TYPE*)malloc(3 * sizeof(DLP_POST_OP_TYPE));
+        (DLP_POST_OP_TYPE*)calloc(3 * sizeof(DLP_POST_OP_TYPE));
     if (!metadata->seq_vector) {
         printf("Memory allocation for sequence vector failed\n");
         goto cleanup;
@@ -218,7 +217,7 @@ main()
     metadata->seq_vector[2] = SCALE;   // Third operation
 
     // 1. Set up bias operation
-    metadata->bias = (dlp_post_op_bias*)malloc(sizeof(dlp_post_op_bias));
+    metadata->bias = (dlp_post_op_bias*)calloc(sizeof(dlp_post_op_bias));
     if (!metadata->bias) {
         printf("Memory allocation for bias post-op failed\n");
         goto cleanup;
@@ -230,7 +229,7 @@ main()
 
     // 2. Set up ReLU operation (elementwise)
     metadata->eltwise =
-        (dlp_post_op_eltwise*)malloc(sizeof(dlp_post_op_eltwise));
+        (dlp_post_op_eltwise*)calloc(sizeof(dlp_post_op_eltwise));
     if (!metadata->eltwise) {
         printf("Memory allocation for eltwise post-op failed\n");
         goto cleanup;
@@ -242,20 +241,20 @@ main()
     metadata->eltwise->algo.algo_type = RELU; // Use ReLU activation
 
     // 3. Set up scale operation
-    metadata->scale = (dlp_scale_t*)malloc(sizeof(dlp_scale_t));
+    metadata->scale = (dlp_scale_t*)calloc(sizeof(dlp_scale_t));
     if (!metadata->scale) {
         printf("Memory allocation for sum/scale post-op failed\n");
         goto cleanup;
     }
 
     // Allocate and set up scale factor structure
-    metadata->scale->sf = malloc(sizeof(dlp_sf_t));
+    metadata->scale->sf = calloc(sizeof(dlp_sf_t));
     if (!metadata->scale->sf) {
         printf("Memory allocation for scale factor structure failed\n");
         goto cleanup;
     }
 
-    metadata->scale->sf->scale_factor = malloc(sizeof(float));
+    metadata->scale->sf->scale_factor = calloc(sizeof(float));
     if (!metadata->scale->sf->scale_factor) {
         printf("Memory allocation for scale factor data failed\n");
         goto cleanup;
@@ -266,13 +265,13 @@ main()
     metadata->scale->sf->scale_factor_type       = DLP_F32;
 
     // Allocate and set up zero point structure
-    metadata->scale->zp = malloc(sizeof(dlp_zp_t));
+    metadata->scale->zp = calloc(sizeof(dlp_zp_t));
     if (!metadata->scale->zp) {
         printf("Memory allocation for zero point structure failed\n");
         goto cleanup;
     }
 
-    metadata->scale->zp->zero_point = malloc(sizeof(int8_t));
+    metadata->scale->zp->zero_point = calloc(sizeof(int8_t));
     if (!metadata->scale->zp->zero_point) {
         printf("Memory allocation for zero point data failed\n");
         goto cleanup;
@@ -352,10 +351,17 @@ cleanup:
         if (metadata->eltwise)
             free(metadata->eltwise);
         if (metadata->scale) {
-            if (metadata->scale->sf)
+            if (metadata->scale->sf) {
+                if (metadata->scale->sf->scale_factor)
+                    free(metadata->scale->sf->scale_factor);
                 free(metadata->scale->sf);
-            if (metadata->scale->zp)
+            }
+            if (metadata->scale->zp) {
+                if (metadata->scale->zp->zero_point) {
+                    free(metadata->scale->zp->zero_point);
+                }
                 free(metadata->scale->zp);
+            }
             free(metadata->scale);
         }
         free(metadata);
