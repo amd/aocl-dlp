@@ -225,16 +225,16 @@ main()
 
     // Allocate memory for float matrices (for reference calculation and initial
     // data)
-    float* a_f32     = (float*)calloc(lda * m * sizeof(float));
-    float* b_f32     = (float*)calloc(ldb * k * sizeof(float));
-    float* c_ref     = (float*)calloc(ldc * m * sizeof(float));
-    float* c_dequant = (float*)calloc(ldc * m * sizeof(float));
+    float* a_f32     = (float*)calloc(lda * m, sizeof(float));
+    float* b_f32     = (float*)calloc(ldb * k, sizeof(float));
+    float* c_ref     = (float*)calloc(ldc * m, sizeof(float));
+    float* c_dequant = (float*)calloc(ldc * m, sizeof(float));
 
     // Allocate memory for quantized matrices
-    uint8_t* a_u8  = (uint8_t*)calloc(lda * m * sizeof(uint8_t));
-    int8_t*  b_s8  = (int8_t*)calloc(ldb * k * sizeof(int8_t));
-    int32_t* c_s32 = (int32_t*)calloc(ldc * m * sizeof(int32_t));
-    int8_t*  c_s8  = (int8_t*)calloc(ldc * m * sizeof(int8_t));
+    uint8_t* a_u8  = (uint8_t*)calloc(lda * m, sizeof(uint8_t));
+    int8_t*  b_s8  = (int8_t*)calloc(ldb * k, sizeof(int8_t));
+    int32_t* c_s32 = (int32_t*)calloc(ldc * m, sizeof(int32_t));
+    int8_t*  c_s8  = (int8_t*)calloc(ldc * m, sizeof(int8_t));
 
     if (!a_f32 || !b_f32 || !c_ref || !c_dequant || !a_u8 || !b_s8 || !c_s32
         || !c_s8) {
@@ -298,7 +298,8 @@ main()
            c_zero_point);
 
     // Step 6: Set up post-op for output quantization
-    dlp_metadata_t* metadata = (dlp_metadata_t*)calloc(sizeof(dlp_metadata_t));
+    dlp_metadata_t* metadata =
+        (dlp_metadata_t*)calloc(1, sizeof(dlp_metadata_t));
     if (!metadata) {
         printf("Memory allocation for post-ops failed\n");
         goto cleanup;
@@ -308,7 +309,8 @@ main()
     metadata->seq_length = 1; // One operation: scale
 
     // Allocate sequence vector
-    metadata->seq_vector = (DLP_POST_OP_TYPE*)calloc(sizeof(DLP_POST_OP_TYPE));
+    metadata->seq_vector =
+        (DLP_POST_OP_TYPE*)calloc(1, sizeof(DLP_POST_OP_TYPE));
     if (!metadata->seq_vector) {
         printf("Memory allocation for sequence vector failed\n");
         goto cleanup;
@@ -316,20 +318,20 @@ main()
     metadata->seq_vector[0] = SCALE; // First operation is scaling
 
     // Allocate and set up sum post-op for scaling
-    metadata->scale = (dlp_scale_t*)calloc(sizeof(dlp_scale_t));
+    metadata->scale = (dlp_scale_t*)calloc(1, sizeof(dlp_scale_t));
     if (!metadata->scale) {
         printf("Memory allocation for sum post-op failed\n");
         goto cleanup;
     }
 
     // Allocate and set up scale factor structure
-    metadata->scale->sf = calloc(sizeof(dlp_sf_t));
+    metadata->scale->sf = calloc(1, sizeof(dlp_sf_t));
     if (!metadata->scale->sf) {
         printf("Memory allocation for scale factor structure failed\n");
         goto cleanup;
     }
 
-    metadata->scale->sf->scale_factor = calloc(sizeof(float));
+    metadata->scale->sf->scale_factor = calloc(1, sizeof(float));
     if (!metadata->scale->sf->scale_factor) {
         printf("Memory allocation for scale factor data failed\n");
         goto cleanup;
@@ -341,13 +343,13 @@ main()
     metadata->scale->sf->scale_factor_type       = DLP_F32;
 
     // Allocate and set up zero point structure
-    metadata->scale->zp = calloc(sizeof(dlp_zp_t));
+    metadata->scale->zp = calloc(1, sizeof(dlp_zp_t));
     if (!metadata->scale->zp) {
         printf("Memory allocation for zero point structure failed\n");
         goto cleanup;
     }
 
-    metadata->scale->zp->zero_point = calloc(sizeof(int8_t));
+    metadata->scale->zp->zero_point = calloc(1, sizeof(int8_t));
     if (!metadata->scale->zp->zero_point) {
         printf("Memory allocation for zero point data failed\n");
         goto cleanup;
