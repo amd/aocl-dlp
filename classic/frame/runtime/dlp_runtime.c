@@ -218,9 +218,9 @@ void
 dlp_version_query(int* major, int* minor, int* patch)
 {
     if (major)
-        *major = atoi(AOCL_DLP_VERSION_MAJOR);
+        *major = AOCL_DLP_VERSION_MAJOR;
     if (minor)
-        *minor = atoi(AOCL_DLP_VERSION_MINOR);
+        *minor = AOCL_DLP_VERSION_MINOR;
     if (patch)
-        *patch = atoi(AOCL_DLP_VERSION_PATCH);
+        *patch = AOCL_DLP_VERSION_PATCH;
 }
