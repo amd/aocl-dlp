@@ -54,8 +54,10 @@ target_include_directories(aocl_dlp_classic
         $<BUILD_INTERFACE:${CMAKE_BINARY_DIR}/include> # For aocl_dlp_config.h
 )
 
-# Link with OpenMP for threading support
-target_link_libraries(aocl_dlp_classic PRIVATE dlp::openmp)
+# Link with OpenMP if enabled
+if(DLP_ENABLE_OPENMP)
+    target_link_libraries(aocl_dlp_classic PRIVATE dlp::openmp)
+endif()
 
 set(CLASSIC_TARGETS
     aocl_dlp_classic

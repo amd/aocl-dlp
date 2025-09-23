@@ -99,12 +99,9 @@ target_link_libraries(${PROJECT_NAME}
         Threads::Threads
 )
 
-# Apply OpenMP flags directly if enabled (without linking to interface target)
-if(DLP_ENABLE_OPENMP AND OpenMP_FOUND)
-    target_compile_options(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_FLAGS})
-    if(OpenMP_CXX_LIBRARIES)
-        target_link_libraries(${PROJECT_NAME} PRIVATE ${OpenMP_CXX_LIBRARIES})
-    endif()
+# Link with OpenMP if enabled
+if(DLP_ENABLE_OPENMP)
+    target_link_libraries(${PROJECT_NAME} PRIVATE dlp::openmp)
 endif()
 
 # Link with dependencies for static library (no object libraries needed as they're included)
@@ -113,12 +110,9 @@ target_link_libraries(${PROJECT_NAME}_static
         Threads::Threads
 )
 
-# Apply OpenMP flags directly if enabled (without linking to interface target)
-if(DLP_ENABLE_OPENMP AND OpenMP_FOUND)
-    target_compile_options(${PROJECT_NAME}_static PRIVATE ${OpenMP_CXX_FLAGS})
-    if(OpenMP_CXX_LIBRARIES)
-        target_link_libraries(${PROJECT_NAME}_static PRIVATE ${OpenMP_CXX_LIBRARIES})
-    endif()
+# Link with OpenMP if enabled
+if(DLP_ENABLE_OPENMP)
+    target_link_libraries(${PROJECT_NAME}_static PRIVATE dlp::openmp)
 endif()
 
 # Add all sanitizers to the target
