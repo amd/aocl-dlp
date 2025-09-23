@@ -26,19 +26,15 @@
  *
  */
 
-#ifndef AOCL_LIB_INTERFACE_H
-#define AOCL_LIB_INTERFACE_H
+#include "aocl_dlp.h"
 
-#include "classic/dlp_base_types.h"
+#include <stdio.h>
 
-// Threading runtime setters.
-DLP_CLASSIC_EXPORT void
-dlp_thread_set_ways(md_t jc, md_t ic);
-DLP_CLASSIC_EXPORT void
-dlp_thread_set_num_threads(md_t n_threads);
-DLP_CLASSIC_EXPORT bool
-dlp_aocl_enable_instruction_query(void);
-DLP_CLASSIC_EXPORT void
-dlp_version_query(int* major, int* minor, int* patch);
-
-#endif // AOCL_LIB_INTERFACE_H
+int
+main()
+{
+    int major, minor, patch;
+    dlp_version_query(&major, &minor, &patch);
+    printf("AOCL-DLP Version: %d.%d.%d\n", major, minor, patch);
+    return 0;
+}
