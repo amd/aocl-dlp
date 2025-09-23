@@ -35,6 +35,7 @@ set(EXAMPLE_SOURCES
     quantization.c
     post_ops_combinations.c
     eltwise_ops.c
+    version.c
 )
 
 find_package(OpenMP REQUIRED COMPONENTS C CXX)
