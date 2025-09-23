@@ -223,10 +223,8 @@ struct generatorParams
 struct gemvN1GeneratorParams
 {
     // Dimensions and loop control
-    int MR;      // Vector length (number of rows to process at once)
-    int M_LEFT;  // M-dimension left over elements
-    int MR_LEFT; // MR-dimension left over elements(used when loading/storing
-                 // from C)
+    int MR;     // Vector length (number of rows to process at once)
+    int M_LEFT; // M-dimension left over elements
 
     bool mloop;   // Whether to loop in m direction in steps of MR
     bool kloop;   // Whether to loop in k direction in steps of numElemsPerReg
@@ -245,7 +243,6 @@ struct gemvN1GeneratorParams
     // Constructor
     gemvN1GeneratorParams(int                              _MR,
                           int                              _M_LEFT,
-                          int                              _MR_LEFT,
                           bool                             _mloop,
                           bool                             _kloop,
                           bool                             _mfringe,
@@ -256,7 +253,6 @@ struct gemvN1GeneratorParams
                           kernelInstrType                  _kType)
         : MR(_MR)
         , M_LEFT(_M_LEFT)
-        , MR_LEFT(_MR_LEFT)
         , mloop(_mloop)
         , kloop(_kloop)
         , mfringe(_mfringe)
@@ -272,7 +268,6 @@ struct gemvN1GeneratorParams
     gemvN1GeneratorParams(const gemvN1GeneratorParams& other)
         : MR(other.MR)
         , M_LEFT(other.M_LEFT)
-        , MR_LEFT(other.MR_LEFT)
         , mloop(other.mloop)
         , kloop(other.kloop)
         , mfringe(other.mfringe)
@@ -289,7 +284,6 @@ struct gemvN1GeneratorParams
         if (this != std::addressof(other)) {
             MR               = other.MR;
             M_LEFT           = other.M_LEFT;
-            MR_LEFT          = other.MR_LEFT;
             mloop            = other.mloop;
             kloop            = other.kloop;
             mfringe          = other.mfringe;
@@ -306,7 +300,6 @@ struct gemvN1GeneratorParams
     gemvN1GeneratorParams(gemvN1GeneratorParams&& other)
         : MR(other.MR)
         , M_LEFT(other.M_LEFT)
-        , MR_LEFT(other.MR_LEFT)
         , mloop(other.mloop)
         , kloop(other.kloop)
         , mfringe(other.mfringe)
@@ -324,7 +317,6 @@ struct gemvN1GeneratorParams
         if (this != std::addressof(other)) {
             MR               = other.MR;
             M_LEFT           = other.M_LEFT;
-            MR_LEFT          = other.MR_LEFT;
             mloop            = other.mloop;
             kloop            = other.kloop;
             mfringe          = other.mfringe;

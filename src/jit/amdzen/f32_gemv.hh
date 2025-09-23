@@ -45,6 +45,143 @@
 namespace amdzen::codegen {
 
 template<utils::kernelInstrType KType>
+class jitF32GEMVN1 : public Xbyak::CodeGenerator
+{
+  private:
+    int RegBytes;  // Size of ZMM register in bytes
+    int numRegs;   // Number of ZMM registers
+    int simdWidth; // SIMD width
+
+    int MR;          // Number of rows to process at once
+    int M_LEFT;      // M-dimension left over elements
+    int LOAD_UNROLL; // Number of regsiters to be used explicitly for loading
+                     // from A
+    dlp::kernel_frame::storageFormat yFormat; // Storage format of C matrix
+    dlp::kernel_frame::scalingType alphaScalingType; // Type of kernel operation
+    dlp::kernel_frame::scalingType betaScalingType;  // Type of beta scaling
+
+    // Register counts and indices
+    int yReg;     // Number of registers for loading/storing from Y
+    int aReg;     // Number of registers for matrix A
+    int xReg;     // Number of registers for vector x
+    int accumReg; // Number of registers for accumulation (partial dot products)
+    int tmpReg;   // Number of registers for temporary use
+    int maskReg;  // Number of registers for mask
+    int yBaseIdx; // Starting index for accumulation registers (from end)
+    int aBaseIdx; // Starting index for A registers (from beginning)
+    int xBaseIdx; // Starting index for x registers (after A registers)
+    int accumBaseIdx; // Starting index for accumulation registers (after A and
+                      // x
+    int tmpBaseIdx;   // Starting index for temporary registers (after A and x
+    int maskBaseIdx;  // Starting index for mask registers
+
+    // Matrix/Vector pointers and strides
+    Xbyak::Reg64 stackPtr;            // Stack frame pointer
+    Xbyak::Reg64 regAptr, regTmpAptr; // Pointer to matrix A and its temp
+    Xbyak::Reg64 regXptr;             // Pointer to vector x
+    Xbyak::Reg64 regYptr, regTmpYptr; // Pointer to vector y and its temp
+    Xbyak::Reg64 regRsA;              // Row stride for A
+    Xbyak::Reg64 regCsA;              // Column stride for A
+    Xbyak::Reg64 regRsC;              // Row stride for C
+    Xbyak::Reg64 regMIter;            // M-loop iterator
+    Xbyak::Reg64 regKIter;            // K-loop iterator
+    Xbyak::Reg64 regTmp1;             // General purpose temporary register 1
+    Xbyak::Reg64 regTmp2;             // General purpose temporary register 2
+    Xbyak::Reg64 regTmp3;             // General purpose temporary register 3
+
+    // Add mask register array (for AVX512)
+    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
+    static constexpr int MASK_START_IDX   = 1;        // Start from k1
+    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+
+    // Labels for code sections
+    Xbyak::Label label_m_loop_start;            // Main m-dimension loop
+    Xbyak::Label label_m_loop_end;              // End of m-dimension loop
+    Xbyak::Label label_m_loop_k_loop_start;     // Main k-dimension loop
+    Xbyak::Label label_m_loop_k_loop_end;       // End of k-dimension loop
+    Xbyak::Label label_m_fringe_k_loop_start;   // Main k-dimension loop
+    Xbyak::Label label_m_fringe_k_loop_end;     // End of k-dimension loop
+    Xbyak::Label label_m_fringe_start;          // Handle m-dimension remainder
+    Xbyak::Label label_m_fringe_end;            // End of m-dimension remainder
+    Xbyak::Label label_m_loop_k_fringe_start;   // Handle k-dimension remainder
+    Xbyak::Label label_m_loop_k_fringe_end;     // End of k-dimension remainder
+    Xbyak::Label label_m_fringe_k_fringe_start; // Handle k-dimension remainder
+    Xbyak::Label label_m_fringe_k_fringe_end;   // End of k-dimension remainder
+    Xbyak::Label label_reduce_start;            // Reduction operations
+    Xbyak::Label label_store_result;            // Store final results
+
+    // Defining the architecture specific type aliases
+    using Traits  = traits::ArchitectureTraits<KType>;
+    using RegType = typename Traits::RegType;
+
+    // Stack frame management
+    void initializeStackFrame(Xbyak::util::StackFrame&);
+
+    // Register initialization
+    void regInit(int, int);
+
+    // Implementation utilities
+    dlp::jit::jitGeneratorError allocateRegisters();
+
+    void initializeParameters(const utils::gemvN1GeneratorParams&);
+
+    // Core computation functions
+    dlp::jit::jitGeneratorError loadAValues(int, bool = false);
+
+    dlp::jit::jitGeneratorError loadXValues(bool = false);
+
+    dlp::jit::jitGeneratorError loadYValues(int);
+
+    dlp::jit::jitGeneratorError computeFMA(int, int);
+
+    dlp::jit::jitGeneratorError computeLoadFMA(int, bool = false);
+
+    dlp::jit::jitGeneratorError reduceToXmm(int, int, int);
+
+    dlp::jit::jitGeneratorError reduceAccumulation(int);
+
+    dlp::jit::jitGeneratorError scaleAccumulationWithAlpha(int);
+
+    dlp::jit::jitGeneratorError scaleYWithBetaColStored(int, bool = false);
+
+    dlp::jit::jitGeneratorError scaleYWithBetaRowStored(int, bool = false);
+
+    dlp::jit::jitGeneratorError scaleYWithBeta(int);
+
+    dlp::jit::jitGeneratorError storeYValuesColStored(int);
+
+    dlp::jit::jitGeneratorError storeYValuesRowStored(int);
+
+    dlp::jit::jitGeneratorError storeYValues(int);
+
+    dlp::jit::jitGeneratorError processMRBlock(int, bool = false);
+
+    dlp::jit::jitGeneratorError loadMasks();
+
+  public:
+    // Enforcing RAII, disallowing copy/move operations
+    jitF32GEMVN1(void* buffer = nullptr, size_t size = 0);
+    ~jitF32GEMVN1()                         = default;
+    jitF32GEMVN1(jitF32GEMVN1&)             = delete;
+    jitF32GEMVN1& operator=(jitF32GEMVN1&)  = delete;
+    jitF32GEMVN1(jitF32GEMVN1&&)            = delete;
+    jitF32GEMVN1& operator=(jitF32GEMVN1&&) = delete;
+
+    // Main kernel generation interface
+    dlp::jit::jitGeneratorError generateKernel(
+        const utils::gemvN1GeneratorParams& params);
+
+    // Get the generated kernel function pointer
+    // This class will also contain the pointer type to the JIT kernel
+    // That way, this typedef is available only when an instance of this class
+    // is created.
+    // utils::jit_gemv_n1_kernel getKernel()
+    // {
+    //     return getCode<jit_gemv_n1_kernel>();
+    // }
+};
+
+template<utils::kernelInstrType KType>
 class jitF32GEMVM1 : public Xbyak::CodeGenerator
 {
   private:

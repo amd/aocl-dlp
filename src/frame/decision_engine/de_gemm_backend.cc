@@ -284,65 +284,47 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
     }
 
     if (gemmIn->n == 1) {
-
         if (isAvx2) {
-            return std::nullopt; // We resort to using classic AVX2 kernels
-                                 // on Zen machines(for now).
-        }
-
-        else if (isAvx512) {
-            // NOTE : Since the standard interface send the post-ops
-            //        list, even with no-post ops, we will still have
-            //        one node which mentions the opcode as
-            //        POST_OPS_DISABLE. The null-pointer check is purely
-            //        defensive.
-
+            mr       = (kInstPref
+                  == kernel_frame::kernelInstrPreference::avx2_ymm_favour)
+                           ? 8
+                           : 16;
+            nr       = 1;
+            k_unroll = 1; // k-unroll is 1 for GEMV N1
+        } else if (isAvx512) {
             mr       = 16;
             nr       = 1;
             k_unroll = 1; // k-unroll is 1 for GEMV N1
-
-            if (gemmIn->metadata == nullptr) {
-                kernel_frame::kernelInfo kI{ mr,
-                                             nr,
-                                             k_unroll,
-                                             kc,
-                                             alphaScalingType,
-                                             betaScalingType,
-                                             mtag_a,
-                                             mtag_b,
-                                             nullptr,
-                                             0,
-                                             anyKOpsOrder,
-                                             kInstPref };
-                return std::make_optional(kI);
-            } else if (gemmIn->metadata[0].op_code == POST_OPS_DISABLE) {
-                // This condition is not combined with the previous 'if'
-                // clause, since we don't want unfriendly short-curcuiting.
-                // Ex : Hypothetically, if gemmIn->metadata is NULL, then we
-                //      should ensure that this condition is strictly
-                //      evaluated after null check.
-                kernel_frame::kernelInfo kI{ mr,
-                                             nr,
-                                             k_unroll,
-                                             kc,
-                                             alphaScalingType,
-                                             betaScalingType,
-                                             mtag_a,
-                                             mtag_b,
-                                             nullptr,
-                                             0,
-                                             anyKOpsOrder,
-                                             kInstPref };
-                return std::make_optional(kI);
-
-            } else {
-                // We generate JIT based AVX512 GEMV N1 kernels only when
-                // post-ops is not required.
-                return std::nullopt;
-            }
         } else {
-            // If the machine is neither Zen nor Zen4, then we don't support
-            // GEMV N1 kernels.
+            return std::nullopt;
+        }
+
+        // NOTE : Since the standard interface send the post-ops
+        //        list, even with no-post ops, we will still have
+        //        one node which mentions the opcode as
+        //        POST_OPS_DISABLE. The null-pointer check is purely
+        //        defensive.
+        if (gemmIn->metadata == nullptr) {
+            kernel_frame::kernelInfo kI{
+                mr,     nr,     k_unroll, kc, alphaScalingType, betaScalingType,
+                mtag_a, mtag_b, nullptr,  0,  anyKOpsOrder,     kInstPref
+            };
+            return std::make_optional(kI);
+        } else if (gemmIn->metadata[0].op_code == POST_OPS_DISABLE) {
+            // This condition is not combined with the previous 'if'
+            // clause, since we don't want unfriendly short-curcuiting.
+            // Ex : Hypothetically, if gemmIn->metadata is NULL, then we
+            //      should ensure that this condition is strictly
+            //      evaluated after null check.
+            kernel_frame::kernelInfo kI{
+                mr,     nr,     k_unroll, kc, alphaScalingType, betaScalingType,
+                mtag_a, mtag_b, nullptr,  0,  anyKOpsOrder,     kInstPref
+            };
+            return std::make_optional(kI);
+
+        } else {
+            // We generate JIT based AVX512 GEMV N1 kernels only when
+            // post-ops is not required.
             return std::nullopt;
         }
     } else if (gemmIn->m == 1) {
@@ -354,7 +336,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             // This setting is a follow-up of the hack we have defined in
             // the DE constructor. With this, we force the AVX512_256 path
             // even when the env var is set to AVX2.
-            nr       = (eKernelInstPref
+            nr       = (kInstPref
                   == kernel_frame::kernelInstrPreference::avx2_ymm_favour)
                            ? 16
                            : 64;
@@ -364,7 +346,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             mr = 1;
             nr = 64;
             k_unroll =
-                (eKernelInstPref
+                (kInstPref
                  == kernel_frame::kernelInstrPreference::avx512_ymm_favour)
                     ? 2
                     : 4;

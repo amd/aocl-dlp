@@ -35,6 +35,7 @@
 #include "jit_register/jit_register.hh"
 #include "traits.hh"
 
+// #define DLP_DUMP_JIT_CODE 1
 namespace amdzen::gen {
 
 jitAmdZenFP32::jitAmdZenFP32()
@@ -264,12 +265,11 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
         // Initializing with default values.
         utils::gemvN1GeneratorParams params(
-            0, 0, 0, false, false, false, false,
+            0, 0, false, false, false, false,
             dlp::kernel_frame::storageFormat::rowMajor,
             (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
         params.MR      = MR;
-        params.MR_LEFT = 0;
         params.mloop   = true;
         params.kloop   = true;
         params.mfringe = false;
@@ -280,7 +280,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.mfringe = (m_left != 0); // The first two kernels that we
                                             // generate are main kernels
             for (int j = 0; j < 4; j++) {
-                // We generate 4 kernels for each MR_LEFT, and index them as
+                // We generate 4 kernels for each M_LEFT, and index them as
                 // follows:
                 // 0: row-stored, without mloop
                 // 1: row-stored, with mloop
@@ -309,10 +309,25 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
                         // Create a new instance of jitAVX512GEMVN1 with the
                         // code buffer and size
-                        avx512gen::jitAVX512GEMVN1 base(codeBuffer,
-                                                        utils::JIT_KERNEL_SIZE);
+                        codegen::jitF32GEMVN1<
+                            utils::kernelInstrType::avx512_zmm_32_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
 
-                        err = base.generateKernel<kdt>(params);
+                        err = base.generateKernel(params);
+                        break;
+                    }
+                    case utils::kernelInstrType::avx512_ymm_32_reg: {
+                        codegen::jitF32GEMVN1<
+                            utils::kernelInstrType::avx512_ymm_32_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = base.generateKernel(params);
+                        break;
+                    }
+                    case utils::kernelInstrType::avx2_ymm_16_reg: {
+                        codegen::jitF32GEMVN1<
+                            utils::kernelInstrType::avx2_ymm_16_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = base.generateKernel(params);
                         break;
                     }
                     default: {
@@ -325,12 +340,13 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 }
 
 #ifdef DLP_DUMP_JIT_CODE
+                int m_left_suf = (m_left != 0) ? m_left : params.MR;
                 // The file naming is as such : jit_gemv_n1_kernels_MR_idx.
                 // The idx represents what configuration was used to generate
                 // the kernel.
                 utils::jitHelperUtils::dump_jit_code(
                     kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
-                    "jit_gemv_n1_kernel", params.MR, m_left * 4 + j);
+                    "jit_gemv_n1_kernel", m_left_suf, j);
 #endif
             }
         }
@@ -550,15 +566,29 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         //        future.
         params->m_iter = params->m / MR;
         params->m_left = params->m % MR;
-        params->k_iter = params->k / 16;
-        params->k_left = params->k % 16;
-        params->m_mask = 0xFFFF >> (16 - (params->m_left % 16));
-        params->k_mask = 0xFFFF >> (16 - (params->k_left) % 16);
-        params->mr_mask =
-            0xFFFF
-            >> (16
-                - ((MR > 16) ? (MR % 16) : 0)); // TODO: Update generator params
-                                                // to have this as a parameter
+        params->k_iter = params->k / numElemsPerReg;
+        params->k_left = params->k % numElemsPerReg;
+
+        if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            params->mmask_avx512 =
+                0xFFFF >> (numElemsPerReg - (params->m_left % numElemsPerReg));
+            params->kmask_avx512 =
+                0xFFFF >> (numElemsPerReg - (params->k_left) % numElemsPerReg);
+        } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
+            params->mmask_avx512_256 =
+                0xFF >> (numElemsPerReg - (params->m_left) % numElemsPerReg);
+            params->kmask_avx512_256 =
+                0xFF >> (numElemsPerReg - (params->k_left) % numElemsPerReg);
+        } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            int m_iter_left = (params->m_left) % numElemsPerReg;
+            int k_iter_left = (params->k_left) % numElemsPerReg;
+            for (int i = 0; i < m_iter_left; i++) {
+                params->mmask_avx2[i] = -1;
+            }
+            for (int i = 0; i < k_iter_left; i++) {
+                params->kmask_avx2[i] = -1;
+            }
+        }
 
         int is_m_loop     = ((params->m) >= MR);
         int is_col_stored = ((params->rsC) == 1);

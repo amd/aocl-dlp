@@ -35,6 +35,811 @@
 namespace amdzen::codegen {
 
 template<utils::kernelInstrType KType>
+jitF32GEMVN1<KType>::jitF32GEMVN1(void* buffer, size_t size)
+    : Xbyak::CodeGenerator(size, buffer) // Call base class constructor
+{
+}
+
+template<utils::kernelInstrType KType>
+void
+jitF32GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
+{
+    stackPtr   = frame.p[0];
+    regAptr    = frame.t[0];
+    regTmpAptr = frame.t[1];
+    regXptr    = frame.t[2];
+    regYptr    = frame.t[3];
+    regTmpYptr = frame.t[4];
+    regRsA     = frame.t[5];
+    regCsA     = frame.t[6];
+    regRsC     = frame.t[7];
+    regMIter   = frame.t[8];
+    regKIter   = frame.t[9];
+    regTmp1    = frame.t[10];
+    regTmp2    = frame.t[11];
+    regTmp3    = frame.t[12];
+}
+
+template<utils::kernelInstrType KType>
+void
+jitF32GEMVN1<KType>::initializeParameters(
+    const utils::gemvN1GeneratorParams& params)
+{
+    // Set dimensions from params
+    MR               = params.MR; // Number of rows to process
+    M_LEFT           = params.M_LEFT;
+    yFormat          = params.yFormat;          // Storage format of C matrix
+    alphaScalingType = params.alphaScalingType; // Type of alpha scaling
+    betaScalingType  = params.betaScalingType;  // Type of beta scaling
+
+    RegBytes = Traits::regBytes;
+    numRegs  = Traits::numRegs;
+
+    simdWidth = RegBytes / sizeof(float); // For f32
+
+    // Load pointers and strides from the stack
+    mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, rsA)]);
+    mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, csA)]);
+    mov(regRsC, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, rsC)]);
+
+    // Scale strides by data type size
+    lea(regRsA, ptr[regRsA * sizeof(float)]);
+    lea(regCsA, ptr[regCsA * sizeof(float)]);
+    lea(regRsC, ptr[regRsC * sizeof(float)]);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::allocateRegisters()
+{
+    // Check if MR is valid
+    if (MR <= 0) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    // Allocate registers according to the rules:
+    maskReg = 0; // Set this only when AVX512 codepath is disabled.
+
+    // 1. Accumulation registers : MR registers for partial dot products
+    accumReg     = MR;
+    accumBaseIdx = numRegs - accumReg; // Start from the end
+
+    yReg     = MR / simdWidth;
+    yBaseIdx = numRegs - yReg; // Start from the end
+
+    // NOTE : Before loading from y, we would be using MR registers from the end
+    //        for accumulating alpha*A*B. This would then be reduced to MR/16
+    //        registers, starting from accumBaseIdx. We would still have
+    //        15*MR/16 registers left, which we would use for storing the
+    //        result, indexed from yBaseIdx(which would be the last MR/16
+    //        registers).
+
+    // Ex : If MR is 16
+    //      accumReg = 16
+    //      accumBaseIdx = 32 - 16 = 16
+    //      yReg = 16 / (64 / 4) = 1
+    //      yBaseIdx = 31
+    //      tmpReg = 4
+    //      tmpBaseIdx = 0
+    //      xReg = 31 - 16 - 4 = 11
+    //      xBaseIdx = 11
+
+    // Temporary registers (tmpReg): Use remaining registers for reduction
+    tmpReg     = 4;
+    tmpBaseIdx = 0; // To make sure we index YMM greater than 16
+
+    // X registers (xReg): Use remaining registers for vector x
+    // We need to only consider accumReg, tmpReg and xReg for total register
+    // count.
+    xReg     = 1;
+    xBaseIdx = tmpReg;
+
+    maskBaseIdx = xBaseIdx;
+
+    if (!Traits::hasMaskSupport) { // Native mask register-file is not supported
+        maskReg     = 2;
+        maskBaseIdx = xBaseIdx + xReg;
+    }
+
+    // Check if we have enough registers
+    if (maskBaseIdx >= accumBaseIdx) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+void
+jitF32GEMVN1<KType>::regInit(int baseIdx, int numRegs)
+{
+    // Zero out accumulation registers
+    vxorps(RegType(baseIdx), RegType(baseIdx), RegType(baseIdx));
+    for (int i = 1; i < numRegs; i++) {
+        vmovaps(RegType(baseIdx + i), RegType(baseIdx));
+    }
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::loadAValues(int aRegIdx, bool isFringe)
+{
+    if (isFringe) {
+        vmovups(RegType(tmpBaseIdx + aRegIdx) | mask_regs[0],
+                ptr[regTmpAptr + regTmp1]);
+    } else {
+        vmovups(RegType(tmpBaseIdx + aRegIdx), ptr[regTmpAptr + regTmp1]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadAValues(
+    int aRegIdx, bool isFringe)
+{
+    if (isFringe) {
+        vmaskmovps(Xbyak::Ymm(tmpBaseIdx + aRegIdx), Xbyak::Ymm(maskBaseIdx),
+                   ptr[regTmpAptr + regTmp1]);
+    } else {
+        vmovups(Xbyak::Ymm(tmpBaseIdx + aRegIdx), ptr[regTmpAptr + regTmp1]);
+    }
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::loadXValues(bool isFringe)
+{
+    if (isFringe) {
+        vmovups(RegType(xBaseIdx) | mask_regs[0], ptr[regXptr]);
+    } else {
+        vmovups(RegType(xBaseIdx), ptr[regXptr]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadXValues(
+    bool isFringe)
+{
+    if (isFringe) {
+        vmaskmovps(Xbyak::Ymm(xBaseIdx), Xbyak::Ymm(maskBaseIdx), ptr[regXptr]);
+    } else {
+        vmovups(Xbyak::Ymm(xBaseIdx), ptr[regXptr]);
+    }
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::computeFMA(int aRegIdx, int accumRegIdx)
+{
+    vfmadd231ps(RegType(accumBaseIdx + accumRegIdx), RegType(xBaseIdx),
+                RegType(tmpBaseIdx + aRegIdx));
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::computeLoadFMA(int rowIdx, bool isFringe)
+{
+    if (isFringe) {
+        vfmadd231ps(RegType(accumBaseIdx + rowIdx) | mask_regs[0],
+                    RegType(xBaseIdx), ptr[regTmpAptr + regTmp1]);
+    } else {
+        vfmadd231ps(RegType(accumBaseIdx + rowIdx), RegType(xBaseIdx),
+                    ptr[regTmpAptr + regTmp1]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
+{
+    // Perform the compute over the MR rows
+    int mLeft = mSize % 4;
+    xor_(regTmp1, regTmp1);
+    regInit(tmpBaseIdx, tmpReg);
+    for (int i = 0; i < mSize / 4; i++) {
+
+        for (int j = 0; j < 4; j++) {
+            RETURN_IF_ERROR((loadAValues(j, isFringe)));
+            RETURN_IF_ERROR((computeFMA(j, i * 4 + j)));
+
+            add(regTmp1, regRsA);
+        }
+        // RETURN_IF_ERROR((computeLoadFMA(i, isFringe)));
+        // add(regTmp1, regRsA);
+    }
+
+    for (int j = 0; j < mLeft; j++) {
+        RETURN_IF_ERROR((loadAValues(j, isFringe)));
+        RETURN_IF_ERROR((computeFMA(j, (mSize / 4) * 4 + j)));
+        add(regTmp1, regRsA);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
+{
+    // Function only handles blocks of 4 or fewer ZMMs
+    if (blockSize > 4) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    // Zero out the temporary registers we'll need
+    for (int i = 0; i < 4; i++) {
+        vxorps(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
+               Xbyak::Ymm(tmpIdx + i));
+    }
+
+    // Extract upper 256-bits and add to lower 256-bits for valid inputs
+    // This extact + add logic is specific to AVX512 ISA, when using ZMM
+    // registers. In case of using YMM registers, just move it onto temporary
+    // registers.
+    for (int i = 0; i < blockSize; i++) {
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            // Extract upper 256-bits to temp YMM
+            vextractf32x8(Xbyak::Ymm(tmpIdx + i), Xbyak::Zmm(startIdx + i), 1);
+            // Add to lower 256-bits of input ZMM, storing in original ZMM's YMM
+            // part
+            vaddps(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
+                   Xbyak::Ymm(startIdx + i));
+        } else {
+            vmovups(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(startIdx + i));
+        }
+    }
+
+    // First round of horizontal adds
+    vhaddps(Xbyak::Ymm(tmpIdx), Xbyak::Ymm(tmpIdx),
+            Xbyak::Ymm(tmpIdx + 1)); // First pair (with zero if blockSize=1)
+
+    // Second round of horizontal adds
+    vhaddps(Xbyak::Ymm(tmpIdx + 2), Xbyak::Ymm(tmpIdx + 2),
+            Xbyak::Ymm(tmpIdx + 3));
+
+    // Third round of horizontal adds
+    vhaddps(Xbyak::Ymm(tmpIdx), Xbyak::Ymm(tmpIdx), Xbyak::Ymm(tmpIdx + 2));
+
+    // Final reduction from YMM to XMM
+    vextractf128(Xbyak::Xmm(tmpIdx + 1), Xbyak::Ymm(tmpIdx),
+                 1); // Extract upper 128-bits
+    vaddps(Xbyak::Xmm(tmpIdx), Xbyak::Xmm(tmpIdx + 1),
+           Xbyak::Xmm(tmpIdx)); // Add to lower 128-bits
+
+    // Result is now in the XMM portion of startIdx
+    // - For blockSize=1: Only first float is valid
+    // - For blockSize=2: First two floats are valid
+    // - For blockSize=3: First three floats are valid
+    // - For blockSize=4: All four floats are valid
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::reduceAccumulation(int mSize)
+{
+    // Process mSize registers in blocks of the simdWidth
+    for (int i = 0; i < mSize; i += simdWidth) {
+        // Number of registers to process in this ZMM block
+        int blockSize = (mSize - i) < simdWidth ? (mSize - i) : simdWidth;
+
+        // Process this block in groups of 4 registers
+        for (int j = 0; j < blockSize; j += 4) {
+            int subBlockSize = (blockSize - j) < 4 ? (blockSize - j) : 4;
+
+            // Reduce 4 (or fewer) ZMMs to one XMM
+            RETURN_IF_ERROR(
+                (reduceToXmm(accumBaseIdx + i + j, tmpBaseIdx, subBlockSize)));
+
+            // Insert the resulting XMM
+            // into the appropriate
+            // position in destination
+            // ZMM
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vinsertf128(Xbyak::Ymm(accumBaseIdx + i / simdWidth),
+                            Xbyak::Ymm(accumBaseIdx + i / simdWidth),
+                            Xbyak::Xmm(tmpBaseIdx), j / 4);
+            } else {
+                vinsertf32x4(RegType(accumBaseIdx + i / simdWidth),
+                             RegType(accumBaseIdx + i / simdWidth),
+                             Xbyak::Xmm(tmpBaseIdx), j / 4);
+            }
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::scaleAccumulationWithAlpha(int mSize)
+{
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, alpha)]);
+    vbroadcastss(RegType(tmpBaseIdx), ptr[regKIter]);
+    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+        vmulps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+               RegType(tmpBaseIdx));
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
+{
+    if (!betaOne) {
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
+        vbroadcastss(RegType(xBaseIdx), ptr[regKIter]);
+    }
+    int mLeft = mSize % simdWidth;
+    for (int i = 0; i < mSize / simdWidth; i += 1) {
+        if (betaOne) {
+            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                   ptr[regTmpYptr]);
+        } else {
+            vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                        ptr[regTmpYptr]);
+        }
+        lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(float)]);
+    }
+    if (mLeft) {
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            vmaskmovps(Xbyak::Ymm(yBaseIdx), Xbyak::Ymm(maskBaseIdx + 1),
+                       ptr[regTmpYptr]);
+            if (betaOne) {
+                vaddps(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
+                       Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
+                       Xbyak::Ymm(yBaseIdx));
+            } else {
+                vfmadd231ps(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
+                            Xbyak::Ymm(xBaseIdx), Xbyak::Ymm(yBaseIdx));
+            }
+        } else {
+            if (betaOne) {
+                vaddps(RegType(accumBaseIdx + (mSize / simdWidth))
+                           | mask_regs[1],
+                       RegType(accumBaseIdx + (mSize / simdWidth)),
+                       ptr[regTmpYptr]);
+            } else {
+                vfmadd231ps(RegType(accumBaseIdx + (mSize / simdWidth))
+                                | mask_regs[1],
+                            RegType(xBaseIdx), ptr[regTmpYptr]);
+            }
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
+{
+    if (!betaOne) {
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
+        vbroadcastss(RegType(xBaseIdx), ptr[regKIter]);
+    }
+    // Store offsets for Y, using it's row-stride
+    lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = rsC + 2*rsC
+    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+        int blockSize  = (mSize - i * simdWidth) < simdWidth
+                             ? (mSize - i * simdWidth)
+                             : simdWidth;
+        int num_blocks = blockSize / 4;
+        int rem_block  = blockSize % 4;
+        regInit(tmpBaseIdx, tmpReg);
+        for (int j = 0; j < num_blocks; j += 1) {
+            vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
+            vbroadcastss(RegType(tmpBaseIdx + 1), ptr[regTmpYptr + regRsC]);
+            vbroadcastss(RegType(tmpBaseIdx + 2), ptr[regTmpYptr + 2 * regRsC]);
+            vbroadcastss(RegType(tmpBaseIdx + 3), ptr[regTmpYptr + regTmp3]);
+            vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                      RegType(tmpBaseIdx + 1));
+            vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                      RegType(tmpBaseIdx + 3));
+            vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                    RegType(tmpBaseIdx + 2), 0x44);
+
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vinsertf128(Xbyak::Ymm(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i),
+                            Xbyak::Xmm(tmpBaseIdx), j);
+            } else {
+                vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                             Xbyak::Xmm(tmpBaseIdx), j);
+            }
+            lea(regTmpYptr, ptr[regTmpYptr + regRsC * 4]);
+        }
+        if (rem_block) {
+            switch (rem_block) {
+                case 3:
+                    vbroadcastss(RegType(tmpBaseIdx + 2),
+                                 ptr[regTmpYptr + regRsC * 2]);
+                case 2:
+                    vbroadcastss(RegType(tmpBaseIdx + 1),
+                                 ptr[regTmpYptr + regRsC]);
+                case 1:
+                    vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
+                case 0:
+                    break;
+            }
+            vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                      RegType(tmpBaseIdx + 1));
+            vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                      RegType(tmpBaseIdx + 3));
+            vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                    RegType(tmpBaseIdx + 2), 0x44);
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vinsertf128(Xbyak::Ymm(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i),
+                            Xbyak::Xmm(tmpBaseIdx), num_blocks);
+            } else {
+                vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                             Xbyak::Xmm(tmpBaseIdx), num_blocks);
+            }
+        }
+
+        if (betaOne) {
+            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                   RegType(yBaseIdx + i));
+        } else {
+            vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                        RegType(yBaseIdx + i));
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::scaleYWithBeta(int mSize)
+{
+    bool is_beta_one = (betaScalingType == dlp::kernel_frame::scalingType::one);
+    if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
+        mov(regTmpYptr, regYptr);
+        if (yFormat == dlp::kernel_frame::storageFormat::colMajor) {
+            RETURN_IF_ERROR((scaleYWithBetaColStored(mSize, is_beta_one)));
+        } else {
+            RETURN_IF_ERROR((scaleYWithBetaRowStored(mSize, is_beta_one)));
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
+{
+    int mLeft = mSize % simdWidth;
+    for (int i = 0; i < mSize / simdWidth; i += 1) {
+        vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + i));
+        lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(float)]);
+    }
+    if (mLeft) {
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            vmaskmovps(ptr[regTmpYptr], Xbyak::Ymm(maskBaseIdx + 1),
+                       Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)));
+        } else {
+            vmovups(ptr[regTmpYptr] | mask_regs[1],
+                    RegType(accumBaseIdx + (mSize / simdWidth)));
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
+{
+    // Process each ZMM register (which contains 16 elements)
+    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i++) {
+        int elements_in_reg = (i < mSize / simdWidth) ? simdWidth
+                                                      : (mSize % simdWidth);
+        if (elements_in_reg == 0)
+            break;
+
+        // Extract 4 chunks of 128-bits (4 floats each) from the ZMM
+        for (int j = 0; j < elements_in_reg; j += 4) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vextractf128(Xbyak::Xmm(tmpBaseIdx + j / 4),
+                             RegType(accumBaseIdx + i), j / 4);
+            } else {
+                vextractf32x4(Xbyak::Xmm(tmpBaseIdx + j / 4), // ISA specific
+                              RegType(accumBaseIdx + i), j / 4);
+            }
+        }
+
+        // Now store each extracted value to its proper row-strided location
+        for (int j = 0; j < elements_in_reg; j++) {
+            int tmp_reg    = j / 4; // Which temp register has our value
+            int pos_in_reg = j % 4; // Position within that temp register
+
+            if (pos_in_reg == 0) {
+                // First element in XMM can be stored directly
+                vmovss(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg));
+            } else {
+                // Extract the 32-bit float to memory directly
+                vpextrd(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
+                        pos_in_reg);
+            }
+
+            // Move to next row
+            add(regTmpYptr, regRsC);
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::storeYValues(int mSize)
+{
+    // Store values from Y
+    mov(regTmpYptr, regYptr);
+    if (yFormat == dlp::kernel_frame::storageFormat::colMajor) {
+        RETURN_IF_ERROR((storeYValuesColStored(mSize)));
+    } else {
+        RETURN_IF_ERROR((storeYValuesRowStored(mSize)));
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::loadMasks()
+{
+    // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
+    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
+    }
+
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        // Loading the masks
+        kmovw(
+            mask_regs[0],
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kmask_avx512)]);
+        kmovw(
+            mask_regs[1],
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, mmask_avx512)]);
+    } else if constexpr (KType == utils::kernelInstrType::avx512_ymm_32_reg) {
+        kmovb(mask_regs[0],
+              ptr[stackPtr
+                  + offsetof(dlp::kernels::gemvN1Params, kmask_avx512_256)]);
+        kmovb(mask_regs[1],
+              ptr[stackPtr
+                  + offsetof(dlp::kernels::gemvN1Params, mmask_avx512_256)]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadMasks()
+{
+    lea(regMIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kmask_avx2)]);
+    vmovdqu(Xbyak::Ymm(maskBaseIdx), ptr[regMIter]);
+    lea(regMIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, mmask_avx2)]);
+    vmovdqu(Xbyak::Ymm(maskBaseIdx + 1), ptr[regMIter]);
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
+{
+
+    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    initializeStackFrame(frame);
+
+    initializeParameters(params);
+    RETURN_IF_ERROR((allocateRegisters()));
+
+    // Acquire the addresses of A and Y
+    mov(regAptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, a)]);
+    mov(regYptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, y)]);
+
+    inLocalLabel();
+
+    loadMasks();
+
+    // Set the for-loop sequence for m-dimension
+    if (params.mloop) {
+        mov(regMIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, m_iter)]);
+        test(regMIter, regMIter);
+        jz(label_m_loop_end, T_NEAR);
+        L(label_m_loop_start);
+        // }
+
+        // Zero out accumulator registers for this m iteration
+        regInit(accumBaseIdx, MR);
+
+        // Y prefetch, before the k-loop
+        if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
+            prefetcht0(ptr[regYptr]);
+        }
+
+        // K-loop is not needed if alpha is zero
+        if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+            // Acquire the pointers for A
+            // One is used in the m-loop, while other in the k-loop
+            mov(regTmpAptr, regAptr);
+            mov(regTmpYptr, regAptr);
+
+            // Acquire the address of X
+            mov(regXptr,
+                ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, x)]);
+
+            // Set the for-loop sequence for k-dimension
+            if (params.kloop) {
+                mov(regKIter,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
+                test(regKIter, regKIter);
+                jz(label_m_loop_k_loop_end, T_NEAR);
+                L(label_m_loop_k_loop_start);
+
+                // Load the X vector
+                RETURN_IF_ERROR((loadXValues()));
+
+                // Process all rows including fringe
+                RETURN_IF_ERROR((processMRBlock(MR)));
+
+                // Save current A pointer and update pointers for next k
+                // iteration
+                mov(regTmp1, simdWidth);
+                imul(regTmp1, regCsA);
+                add(regTmpYptr, regTmp1);
+                mov(regTmpAptr, regTmpYptr);
+                add(regXptr, RegBytes); // Since B will be unit-strided
+
+                dec(regKIter);
+                jnz(label_m_loop_k_loop_start, T_NEAR);
+            }
+            L(label_m_loop_k_loop_end);
+
+            if (params.kfringe) {
+                mov(regKIter,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvN1Params, k_left)]);
+                test(regKIter, regKIter);
+                jz(label_m_loop_k_fringe_end, T_NEAR);
+                L(label_m_loop_k_fringe_start);
+
+                RETURN_IF_ERROR((loadXValues(true)));
+                RETURN_IF_ERROR((processMRBlock(MR, true)));
+            }
+
+            L(label_m_loop_k_fringe_end);
+
+            // Reduce the accumulation registers to XMMs, and put it in
+            // ZMMs
+            reduceAccumulation(MR);
+
+            // Alpha scaling
+            if (params.alphaScalingType
+                != dlp::kernel_frame::scalingType::one) {
+                scaleAccumulationWithAlpha(MR);
+            }
+        }
+
+        // Working good for element-wise loads/stores for C.
+        scaleYWithBeta(MR);
+        storeYValues(MR);
+
+        // if (params.mloop) {
+        // Update pointers for next m iteration(for A and y)
+        mov(regTmp2, MR);
+        imul(regTmp2, regRsA);
+        add(regAptr, regTmp2);
+        mov(regTmp1, MR);
+        imul(regTmp1, regRsC);
+        add(regYptr, regTmp1);
+
+        dec(regMIter);
+        jnz(label_m_loop_start, T_NEAR);
+    }
+
+    L(label_m_loop_end);
+    if (params.mfringe) {
+        mov(regMIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, m_left)]);
+        test(regMIter, regMIter);
+        jz(label_m_fringe_end, T_NEAR);
+        L(label_m_fringe_start);
+
+        regInit(accumBaseIdx, M_LEFT);
+
+        // K-loop is not needed if alpha is zero
+        if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+            // Acquire the pointers for A
+            mov(regTmpAptr, regAptr);
+            mov(regTmpYptr, regAptr);
+
+            // Acquire the address of X
+            mov(regXptr,
+                ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, x)]);
+
+            // Set the for-loop sequence for k-dimension
+            if (params.kloop) {
+                mov(regKIter,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
+                test(regKIter, regKIter);
+                jz(label_m_fringe_k_loop_end, T_NEAR);
+                L(label_m_fringe_k_loop_start);
+
+                // Load the X vector
+                RETURN_IF_ERROR((loadXValues()));
+
+                // Process all rows including fringe
+                RETURN_IF_ERROR((processMRBlock(M_LEFT)));
+
+                // Update pointers for next k iteration
+                mov(regTmp1, simdWidth);
+                imul(regTmp1, regCsA);
+                add(regTmpYptr, regTmp1);
+                mov(regTmpAptr, regTmpYptr);
+                add(regXptr, RegBytes); // Since B will be unit-strided
+
+                dec(regKIter);
+                jnz(label_m_fringe_k_loop_start, T_NEAR);
+            }
+            L(label_m_fringe_k_loop_end);
+            if (params.kfringe) {
+                mov(regKIter,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvN1Params, k_left)]);
+                test(regKIter, regKIter);
+                jz(label_m_fringe_k_fringe_end, T_NEAR);
+                L(label_m_fringe_k_fringe_start);
+
+                RETURN_IF_ERROR((loadXValues(true)));
+
+                RETURN_IF_ERROR((processMRBlock(M_LEFT, true)));
+            }
+            L(label_m_fringe_k_fringe_end);
+
+            // Reduce the accumulation registers to XMMs, and put it in
+            // ZMMs
+            reduceAccumulation(M_LEFT);
+            // Alpha scaling
+            if (params.alphaScalingType
+                != dlp::kernel_frame::scalingType::one) {
+                scaleAccumulationWithAlpha(M_LEFT);
+            }
+        }
+
+        scaleYWithBeta(M_LEFT);
+        storeYValues(M_LEFT);
+    }
+    L(label_m_fringe_end);
+    outLocalLabel();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
 jitF32GEMVM1<KType>::jitF32GEMVM1(void* buffer, size_t size)
     : Xbyak::CodeGenerator(size, buffer) // Call base class constructor
 {
@@ -662,12 +1467,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::generateKernel(const utils::gemvM1GeneratorParams& params)
 {
-    // Defining type based aliases
-    using bType     = float;
-    using xType     = float;
-    using yType     = float;
-    using accumType = float;
-
     // Using Xbyak's utility for managing the stack frame
     Xbyak::util::StackFrame frame(this, 1, 13, 0);
     initializeStackFrame(frame);
@@ -1004,7 +1803,12 @@ jitF32GEMVM1<KType>::generateKernel(const utils::gemvM1GeneratorParams& params)
 }
 
 } // namespace amdzen::codegen
-
+template class amdzen::codegen::jitF32GEMVN1<
+    amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;
+template class amdzen::codegen::jitF32GEMVN1<
+    amdzen::utils::kernelInstrType::avx512_ymm_32_reg>;
+template class amdzen::codegen::jitF32GEMVN1<
+    amdzen::utils::kernelInstrType::avx512_zmm_32_reg>;
 template class amdzen::codegen::jitF32GEMVM1<
     amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;
 template class amdzen::codegen::jitF32GEMVM1<

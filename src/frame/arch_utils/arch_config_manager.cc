@@ -346,7 +346,7 @@ archConfigManager::setArch(void)
         if (!isAvx2Fma3Supported) {
             // Falling over the possible values for "thisArch" that has to be
             // downgraded.
-            switch (thisArch) {
+            switch (origThisArch) {
                 case ArchitectureType::Zen5:
                 case ArchitectureType::Zen4:
                 case ArchitectureType::Zen3:
@@ -364,7 +364,7 @@ archConfigManager::setArch(void)
         if (!isAvx512Supported) {
             // Falling over the possible values for "thisArch" that has to be
             // downgraded.
-            switch (thisArch) {
+            switch (origThisArch) {
                 case ArchitectureType::Zen5:
                 case ArchitectureType::Zen4:
                     thisArch = actualArch;
