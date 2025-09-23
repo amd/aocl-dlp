@@ -693,15 +693,6 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                             kernelCodeBlocks[m_idx * numNRVariants
                                              + kernel_n_idx]);
                     kernel(params);
-                    // The following line is necessary to ensure a subtle bug
-                    // does not occur. Unlike the classic kernels where the
-                    // kernelOpsAttr is passed by value to the fringe kernels,
-                    // here it is kind of passed by reference, since the params
-                    // ptr is the only kernel argument (inside which is the
-                    // kernelOpsAttr). Since the while(n) loop can execute
-                    // multiple times, any state variable, like post_op_c_i, if
-                    // modified inside kernel, it needs to be reverted.
-                    (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
                 }
 
                 if (mPartialPieces) {
@@ -721,6 +712,15 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                 c_jr      = (float*)(c_jr) + elementsToProcess;
                 n -= elementsToProcess;
                 (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
+                // The following line is necessary to ensure a subtle bug
+                // does not occur. Unlike the classic kernels where the
+                // kernelOpsAttr is passed by value to the fringe kernels,
+                // here it is kind of passed by reference, since the params
+                // ptr is the only kernel argument (inside which is the
+                // kernelOpsAttr). Since the while(n) loop can execute
+                // multiple times, any state variable, like post_op_c_i, if
+                // modified inside kernel, it needs to be reverted.
+                (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
             }
 
             // Process remainder with mask (if any)
@@ -751,15 +751,6 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                             kernelCodeBlocks[m_idx * numNRVariants
                                              + kernel_n_idx]);
                     kernel(params);
-                    // The following line is necessary to ensure a subtle bug
-                    // does not occur. Unlike the classic kernels where the
-                    // kernelOpsAttr is passed by value to the fringe kernels,
-                    // here it is kind of passed by reference, since the params
-                    // ptr is the only kernel argument (inside which is the
-                    // kernelOpsAttr). Since the while(n) loop can execute
-                    // multiple times, any state variable, like post_op_c_i, if
-                    // modified inside kernel, it needs to be reverted.
-                    (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
                 }
                 if (mPartialPieces) {
                     (params->a) =
@@ -779,6 +770,15 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                 c_jr      = (float*)(c_jr) + nRemainder;
                 n -= nRemainder;
                 (params->kernelOpsAttr).post_op_c_j += nRemainder;
+                // The following line is necessary to ensure a subtle bug
+                // does not occur. Unlike the classic kernels where the
+                // kernelOpsAttr is passed by value to the fringe kernels,
+                // here it is kind of passed by reference, since the params
+                // ptr is the only kernel argument (inside which is the
+                // kernelOpsAttr). Since the while(n) loop can execute
+                // multiple times, any state variable, like post_op_c_i, if
+                // modified inside kernel, it needs to be reverted.
+                (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
             }
         }
     }

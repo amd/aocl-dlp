@@ -294,7 +294,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 // Type aliases using kernelInstrType
 using kernelOpsGeneratorAvx2 =
     kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>;
-using kernelOpsGeneratorAvx512_16_reg =
+using kernelOpsGeneratorAvx512_ymm =
     kernelOpsGeneratorX86<utils::kernelInstrType::avx512_ymm_32_reg>;
 using kernelOpsGeneratorAvx512 =
     kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>;
