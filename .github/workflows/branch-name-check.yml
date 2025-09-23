@@ -6,7 +6,7 @@ on:
 
 jobs:
   check_branch_name:
-    runs-on: Linux  # Using your self-hosted runner labeled 'Linux'
+    runs-on: amd_linux  # Using your self-hosted runner labeled 'amd_linux'
 
     steps:
     - name: Check out code
@@ -17,24 +17,22 @@ jobs:
         BRANCH_NAME: ${{ github.event.pull_request.head.ref }}
         USER: ${{ github.actor }}
       run: |
-        echo "Original USER: $USER"
-        BASE_USER=${USER%_amdeng}  # Trim the trailing _amdeng from the USER
-        echo "Trimmed USER: $BASE_USER"
-
+        echo "Actor USER: $USER"
         echo "Checking branch name: $BRANCH_NAME"
         # Use case-insensitive regex by converting branch name to lowercase
         LOWER_BRANCH_NAME=$(echo "$BRANCH_NAME" | tr '[:upper:]' '[:lower:]')
-        LOWER_BASE_USER=$(echo "$BASE_USER" | tr '[:upper:]' '[:lower:]')
+        LOWER_USER=$(echo "$USER" | tr '[:upper:]' '[:lower:]')
 
-        PR_PATTERN="^u/${LOWER_BASE_USER}/pr/"
-        WIP_PATTERN="^u/${LOWER_BASE_USER}/wip/"
+        # Accept branch names with any username in the format 'u/<username>/pr/*' or 'u/<username>/wip/*'
+        PR_PATTERN="^u/.+/pr/"
+        WIP_PATTERN="^u/.+/wip/"
 
         if [[ "${LOWER_BRANCH_NAME}" =~ $PR_PATTERN ]]; then
           echo "Branch name '$BRANCH_NAME' is recognized as a PR branch."
         elif [[ "${LOWER_BRANCH_NAME}" =~ $WIP_PATTERN ]]; then
           echo "Branch name '$BRANCH_NAME' is recognized as a WIP branch."
         else
-          echo "Error: Branch name '$BRANCH_NAME' does not match the required naming conventions 'u/$BASE_USER/pr/*' or 'u/$BASE_USER/wip/*'. Examples of acceptable formats include 'u/$BASE_USER/PR/*', 'u/$BASE_USER/pr/*', 'u/$BASE_USER/WIP/*', or 'u/$BASE_USER/wip/*' (case-insensitive)."
+          echo "Error: Branch name '$BRANCH_NAME' does not match required naming conventions 'u/<username>/pr/*' or 'u/<username>/wip/*'. Examples: 'u/johndoe/pr/feature', 'u/amy/wip/test'."
           exit 1
         fi
       shell: bash
