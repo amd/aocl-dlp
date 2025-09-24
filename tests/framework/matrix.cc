@@ -664,8 +664,7 @@ namespace dlp { namespace testing { namespace framework {
                 }
                 break;
 #else
-                std::uniform_real_distribution<float> dis(INT16_MIN >> 1,
-                                                          INT16_MAX >> 1);
+                std::uniform_real_distribution<float> dis(-20.0f, 20.0f);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
                 for (size_t i = 0; i < elementCount; ++i) {
