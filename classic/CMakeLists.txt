@@ -59,6 +59,10 @@ if(DLP_ENABLE_OPENMP)
     target_link_libraries(aocl_dlp_classic PRIVATE dlp::openmp)
 endif()
 
+if(DLP_ENABLE_LOGGING)
+    target_compile_definitions(aocl_dlp_classic PRIVATE AOCL_LPGEMM_LOGGER_SUPPORT=1)
+endif()
+
 set(CLASSIC_TARGETS
     aocl_dlp_classic
     ${KERNEL_TARGETS}

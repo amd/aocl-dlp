@@ -65,6 +65,14 @@ dlp_env_get_int(const char* env_var_name, int default_value);
 int
 dlp_env_get_bool(const char* env_var_name, int default_value);
 
+/**
+ * @brief C API wrapper for checking if AOCL_ENABLE_LPGEMM_LOGGER environment
+ * is set or not.
+ * @return 1/true for enabled, 0/false otherwise.
+ */
+bool
+dlp_env_is_logger_enabled();
+
 DLP_END_EXTERN_C
 
 #endif // CAPI_ENV_CONFIG_H

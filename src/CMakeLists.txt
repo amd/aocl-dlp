@@ -54,7 +54,13 @@ target_include_directories(aocl_dlp_plus
 )
 
 # Link with OpenMP for threading support
-target_link_libraries(aocl_dlp_plus PRIVATE dlp::openmp)
+if(DLP_ENABLE_OPENMP)
+    target_link_libraries(aocl_dlp_plus PRIVATE dlp::openmp)
+endif()
+
+if(DLP_ENABLE_LOGGING)
+    target_compile_definitions(aocl_dlp_plus PRIVATE AOCL_LPGEMM_LOGGER_SUPPORT=1)
+endif()
 
 set(DLP_PLUS_TARGETS
     aocl_dlp_plus
