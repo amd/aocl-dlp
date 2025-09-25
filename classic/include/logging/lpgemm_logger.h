@@ -41,9 +41,9 @@
 #define AOCL_LPGEMM_LOG_FILE_EXT  ".txt"
 
 FILE*
-lpgemm_start_logger_fn(void);
+lpgemm_start_logger_fn(double* aocl_lpgemm_logger_start_time);
 void
-lpgemm_stop_logger_fn(FILE* fd);
+lpgemm_stop_logger_fn(FILE* fd, double* aocl_lpgemm_logger_start_time);
 void
 lpgemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str);
 void
@@ -86,19 +86,13 @@ batch_lpgemm_write_logger_gemm_fn(FILE*            fd,
                                   const float*     beta,
                                   const md_t*      ldc,
                                   dlp_metadata_t** metadata);
-void
-lpgemm_write_logger_time_break_fn(FILE* fd, double stime);
 
 #define LPGEMM_START_LOGGER()                                                  \
-    FILE*  fd                            = lpgemm_start_logger_fn();           \
-    double aocl_lpgemm_logger_start_time = dlp_clock();
+    double aocl_lpgemm_logger_start_time = 0;                                  \
+    FILE*  fd = lpgemm_start_logger_fn(&aocl_lpgemm_logger_start_time);
 
 #define LPGEMM_STOP_LOGGER()                                                   \
-    double aocl_lpgemm_logger_stop_time = DBL_MAX;                             \
-    aocl_lpgemm_logger_stop_time        = dlp_clock_min_diff(                  \
-        aocl_lpgemm_logger_stop_time, aocl_lpgemm_logger_start_time);   \
-    lpgemm_write_logger_time_break_fn(fd, aocl_lpgemm_logger_stop_time);       \
-    lpgemm_stop_logger_fn(fd);
+    lpgemm_stop_logger_fn(fd, &aocl_lpgemm_logger_start_time);
 
 #define LPGEMM_WRITE_LOGGER(...) lpgemm_write_logger_gemm_fn(fd, __VA_ARGS__);
 
@@ -134,13 +128,8 @@ lpgemm_write_logger_time_break_fn(FILE* fd, double stime);
 
 #define LPGEMM_WRITE_LOGGER(...)
 
-#define BATCH_LPGEMM_WRITE_LOGGER(op_type, order, transa, transb, batch_size,  \
-                                  m, n, k, alpha, lda, mem_format_a, ldb,      \
-                                  mem_format_b, beta, ldc, metadata)
+#define BATCH_LPGEMM_WRITE_LOGGER(...)
 
 #endif
-
-void
-lpgemm_init_logger();
 
 #endif // LPGEMM_LOGGER_H

@@ -36,38 +36,38 @@
 
 #ifdef AOCL_LPGEMM_LOGGER_SUPPORT
 
-static dlp_pthread_once_t once_check_lpgemm_logger_init = DLP_PTHREAD_ONCE_INIT;
-
-static bool lpgemm_logger_enabled = FALSE;
-
 bool
 is_logger_enabled()
 {
-    return lpgemm_logger_enabled;
+    return dlp_env_is_logger_enabled();
 }
 
 FILE*
-lpgemm_start_logger_fn(void)
+lpgemm_start_logger_fn(double* aocl_lpgemm_logger_start_time)
 {
-    lpgemm_init_logger();
-
     FILE* fd = NULL;
 
-    if (lpgemm_logger_enabled == TRUE) {
+    if (dlp_env_is_logger_enabled() == TRUE) {
         char log_file[255] = { 0 };
         sprintf(log_file, "%s_P%lu_T%lu%s", AOCL_LPGEMM_LOG_FILE_PRFX,
                 lpgemm_getpid(), lpgemm_gettid(), AOCL_LPGEMM_LOG_FILE_EXT);
 
         fd = fopen(log_file, "a");
+
+        (*aocl_lpgemm_logger_start_time) = dlp_clock();
     }
 
     return fd;
 }
 
 void
-lpgemm_stop_logger_fn(FILE* fd)
+lpgemm_stop_logger_fn(FILE* fd, double* aocl_lpgemm_logger_start_time)
 {
-    if ((lpgemm_logger_enabled == TRUE) && (fd != NULL)) {
+    if ((dlp_env_is_logger_enabled() == TRUE) && (fd != NULL)) {
+        double aocl_lpgemm_logger_stop_time = DBL_MAX;
+        aocl_lpgemm_logger_stop_time        = dlp_clock_min_diff(
+            aocl_lpgemm_logger_stop_time, *aocl_lpgemm_logger_start_time);
+        fprintf(fd, "time:%f \n", aocl_lpgemm_logger_stop_time);
         fflush(fd);
         fclose(fd);
     }
@@ -252,7 +252,7 @@ lpgemm_write_logger_gemm_fn(FILE*           fd,
                             const md_t      ldc,
                             dlp_metadata_t* metadata)
 {
-    if ((lpgemm_logger_enabled == TRUE) && (fd != NULL)) {
+    if ((dlp_env_is_logger_enabled() == TRUE) && (fd != NULL)) {
         char pre_ops_str[1024] = { 0 };
         lpgemm_get_pre_ops_str(metadata, pre_ops_str);
 
@@ -287,7 +287,7 @@ batch_lpgemm_write_logger_gemm_fn(FILE*            fd,
                                   const md_t*      ldc,
                                   dlp_metadata_t** metadata)
 {
-    if ((lpgemm_logger_enabled == TRUE) && (fd != NULL)) {
+    if ((dlp_env_is_logger_enabled() == TRUE) && (fd != NULL)) {
         char pre_ops_str[1024] = { 0 };
 
         char post_ops_str[2048] = { 0 };
@@ -307,32 +307,6 @@ batch_lpgemm_write_logger_gemm_fn(FILE*            fd,
     }
 }
 
-void
-lpgemm_write_logger_time_break_fn(FILE* fd, double stime)
-{
-    if ((lpgemm_logger_enabled == TRUE) && (fd != NULL)) {
-        fprintf(fd, "time:%f \n", stime);
-    }
-}
-
-void
-_lpgemm_init_logger()
-{
-    lpgemm_logger_enabled =
-        dlp_env_get_bool("AOCL_ENABLE_LPGEMM_LOGGER", FALSE);
-}
-
-void
-lpgemm_init_logger()
-{
-    dlp_pthread_once(&once_check_lpgemm_logger_init, _lpgemm_init_logger);
-}
-
 #else
-
-void
-lpgemm_init_logger()
-{
-}
 
 #endif

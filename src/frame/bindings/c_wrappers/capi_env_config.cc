@@ -99,3 +99,11 @@ dlp_env_get_bool(const char* env_var_name, int default_value)
         return default_value;
     }
 }
+
+bool
+dlp_env_is_logger_enabled()
+{
+    static const bool dlpLoggerEnabled =
+        dlp_env_get_bool("AOCL_ENABLE_LPGEMM_LOGGER", FALSE);
+    return dlpLoggerEnabled;
+}

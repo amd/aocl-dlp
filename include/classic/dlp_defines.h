@@ -39,7 +39,6 @@
 #define DLP_KERNELS_ZEN1
 #define DLP_KERNELS_ZEN
 #define DLP_CLANG // or DLP_GCC
-#define AOCL_LPGEMM_LOGGER_SUPPORT
 // Handled by aocl_dlp_config.h
 // #define DLP_ENABLE_OPENMP
 // #define DLP_ENABLE_PTHREADS

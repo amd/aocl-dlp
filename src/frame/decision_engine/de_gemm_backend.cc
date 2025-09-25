@@ -253,8 +253,14 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
 
     kernel_frame::scalingType alphaScalingType =
         kernel_frame::scalingType::generic;
+    if (*(static_cast<float*>(gemmIn->alpha)) == 1.0f) {
+        alphaScalingType = kernel_frame::scalingType::one;
+    }
     kernel_frame::scalingType betaScalingType =
         kernel_frame::scalingType::generic;
+    if (*(static_cast<float*>(gemmIn->beta)) == 0.0f) {
+        betaScalingType = kernel_frame::scalingType::zero;
+    }
 
     md_t            mr           = gemmIn->mr_hint;
     md_t            nr           = gemmIn->nr_hint;

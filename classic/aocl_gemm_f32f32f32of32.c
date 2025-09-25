@@ -26,6 +26,8 @@
  *
  */
 
+#include <string.h>
+
 #include "aocl_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
 #include "classic/aocl_lib_interface_apis.h"
@@ -309,21 +311,25 @@ aocl_gemm_f32f32f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32F32F32OF32);
+    lpgemm_cntx_t  lcntx_l;
+    // Create local copy, since each thread in a multi-instance setup
+    // modified the context object.
+    lcntx_l = *lcntx_g;
 
     // Initialize DLP Plus kernel path.
-    lcntx_g->dlp_kernel_hndl.kernel_base = NULL;
-    lcntx_g->dlp_kernel_hndl             = dlp_init_and_get_kernel_hndl(
+    lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+    lcntx_l.dlp_kernel_hndl             = dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_F32F32F32OF32, order, mtag_a_use, mtag_b_use, m_use, n_use,
         k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
-        (void*)&alpha, (void*)&beta, post_op_list, lcntx_g->blksz.MR,
-        lcntx_g->blksz.NR, lcntx_g->blksz.KC);
+        (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
+        lcntx_l.blksz.NR, lcntx_l.blksz.KC);
 
     if (is_single_thread(&rntm_g) == TRUE) {
-        if (is_tiny_input_f32(m_use, n_use, k_use, lcntx_g) == TRUE) {
+        if (is_tiny_input_f32(m_use, n_use, k_use, &lcntx_l) == TRUE) {
             lpgemm_rowvar_tiny_f32f32f32of32(
                 m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use,
                 b_use, rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use,
-                cs_c_use, alpha, beta, lcntx_g, post_op_list, DLP_F32);
+                cs_c_use, alpha, beta, &lcntx_l, post_op_list, DLP_F32);
 
             goto err_hndl;
         }
@@ -333,12 +339,12 @@ aocl_gemm_f32f32f32of32(const char      order,
     lpgemm_f32f32f32of32_openmp_thread_decorator(
         m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
         rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use, cs_c_use, alpha, beta,
-        &rntm_g, lcntx_g, post_op_list, DLP_F32);
+        &rntm_g, &lcntx_l, post_op_list, DLP_F32);
 #else
     lpgemm_f32f32f32of32_thread_decorator(
         m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
         rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use, cs_c_use, alpha, beta,
-        &rntm_g, lcntx_g, post_op_list, DLP_F32);
+        &rntm_g, &lcntx_l, post_op_list, DLP_F32);
 #endif
 
 err_hndl:;
