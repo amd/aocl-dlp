@@ -62,8 +62,7 @@ jitF32GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 
 template<utils::kernelInstrType KType>
 void
-jitF32GEMVN1<KType>::initializeParameters(
-    const utils::gemvN1GeneratorParams& params)
+jitF32GEMVN1<KType>::initializeParameters(utils::gemvN1GeneratorParams& params)
 {
     // Set dimensions from params
     MR               = params.MR; // Number of rows to process
@@ -645,7 +644,7 @@ jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadMasks()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
+jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
 
     Xbyak::util::StackFrame frame(this, 1, 13, 0);
@@ -745,6 +744,17 @@ jitF32GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
 
         // Working good for element-wise loads/stores for C.
         scaleYWithBeta(MR);
+
+        if (!params.kernelOps.empty()) {
+            gen::kernelOpsHandler kernelOpsHandler(
+                this, params.MR, 1, false, accumBaseIdx, yReg, params.kType);
+
+            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+                params.kernelOps, stackPtr)));
+
+            kernelOpsHandler.generateKernelOpsAttributes();
+        }
+
         storeYValues(MR);
 
         // if (params.mloop) {
@@ -831,6 +841,18 @@ jitF32GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
         }
 
         scaleYWithBeta(M_LEFT);
+
+        if (!params.kernelOps.empty()) {
+            gen::kernelOpsHandler kernelOpsHandler(
+                this, params.M_LEFT, 1, true, accumBaseIdx, M_LEFT / simdWidth,
+                params.kType);
+
+            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+                params.kernelOps, stackPtr)));
+
+            kernelOpsHandler.generateKernelOpsAttributes();
+        }
+
         storeYValues(M_LEFT);
     }
     L(label_m_fringe_end);
@@ -867,10 +889,10 @@ jitF32GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 
 template<utils::kernelInstrType KType>
 void
-jitF32GEMVM1<KType>::initializeParameters(
-    const utils::gemvM1GeneratorParams& params)
+jitF32GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
 {
     NR               = params.NR;
+    N_LEFT           = params.N_LEFT;
     KC               = params.KC;
     K_SUB_ITER       = params.K_SUB_ITER;
     yFormat          = params.yFormat;
@@ -925,7 +947,7 @@ jitF32GEMVM1<KType>::allocateRegisters()
 
     if (!Traits::hasMaskSupport) { // Native mask register-file is not supported
                                    // by the architecture.
-        maskReg     = NR / simdWidth;
+        maskReg     = 1;
         maskBaseIdx = bBaseIdx - maskReg;
     }
 
@@ -974,25 +996,15 @@ jitF32GEMVM1<KType>::loadMasks()
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 
-    // Load the masks until the required number, capping on the available
-    // registers
-    // In case of AVX512, required number is 4
-    // In case of AVX512_256, required number is 8
-    // The cap is 7(since we can't use k0).
-    for (int i = 0; i < NR / simdWidth && i < NUM_USABLE_MASKS; i++) {
-
-        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            kmovw(mask_regs[i],
-                  ptr[stackPtr
-                      + offsetof(dlp::kernels::gemvM1Params, nmask_avx512)
-                      + (i * sizeof(uint16_t))]);
-        } else if constexpr (KType
-                             == utils::kernelInstrType::avx512_ymm_32_reg) {
-            kmovb(mask_regs[i],
-                  ptr[stackPtr
-                      + offsetof(dlp::kernels::gemvM1Params, nmask_avx512_256)
-                      + (i * sizeof(uint8_t))]);
-        }
+    // Load the masks
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        kmovw(
+            mask_regs[0],
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, nmask_avx512)]);
+    } else if constexpr (KType == utils::kernelInstrType::avx512_ymm_32_reg) {
+        kmovb(mask_regs[0],
+              ptr[stackPtr
+                  + offsetof(dlp::kernels::gemvM1Params, nmask_avx512_256)]);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1002,12 +1014,9 @@ template<>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::loadMasks()
 {
-    for (int i = 0; i < NR / simdWidth; i++) {
-        lea(regNIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, nmask_avx2)
-                + (i * sizeof(std::array<int32_t, 8>))]);
-        vmovdqu(Xbyak::Ymm(maskBaseIdx + i), ptr[regNIter]);
-    }
+    lea(regNIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, nmask_avx2)]);
+    vmovdqu(Xbyak::Ymm(maskBaseIdx), ptr[regNIter]);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -1035,92 +1044,31 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::maskLoadB(int regIdx,
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32GEMVM1<KType>::updateMask(int regIdx, int maskIdx)
-{
-    // Reuse the masks in a round-robin fashion, if we exceed the set limit
-    if (regIdx >= NUM_USABLE_MASKS) {
-        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            kmovw(mask_regs[maskIdx],
-                  ptr[stackPtr
-                      + offsetof(dlp::kernels::gemvM1Params, nmask_avx512)
-                      + (regIdx * sizeof(uint16_t))]);
-        } else if constexpr (KType
-                             == utils::kernelInstrType::avx512_ymm_32_reg) {
-            kmovb(mask_regs[maskIdx],
-                  ptr[stackPtr
-                      + offsetof(dlp::kernels::gemvM1Params, nmask_avx512_256)
-                      + (regIdx * sizeof(uint8_t))]);
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<>
-dlp::jit::jitGeneratorError
-jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::updateMask(int regIdx,
-                                                                  int maskIdx)
-{
-    // An empty function in case of AVX2
-    return dlp::jit::jitGeneratorError::notSupported;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitF32GEMVM1<KType>::restoreMask(int regIdx, int maskIdx)
-{
-    // Retrieve the original mask
-    if (regIdx >= NUM_USABLE_MASKS) {
-        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            kmovw(mask_regs[maskIdx],
-                  ptr[stackPtr
-                      + offsetof(dlp::kernels::gemvM1Params, nmask_avx512)
-                      + (maskIdx * sizeof(uint16_t))]);
-        } else if constexpr (KType
-                             == utils::kernelInstrType::avx512_ymm_32_reg) {
-            kmovb(mask_regs[maskIdx],
-                  ptr[stackPtr
-                      + offsetof(dlp::kernels::gemvM1Params, nmask_avx512_256)
-                      + (maskIdx * sizeof(uint8_t))]);
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<>
-dlp::jit::jitGeneratorError
-jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::restoreMask(int regIdx,
-                                                                   int maskIdx)
-{
-    // An empty function in case of AVX2
-    return dlp::jit::jitGeneratorError::notSupported;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::computeKxnfringe()
 {
     for (int j = 0; j < K_SUB_ITER; j++) {
         vbroadcastss(RegType(xBaseIdx + j), ptr[regXptr + j * sizeof(float)]);
     }
 
-    int m = 0;
-    for (int i = 0; i < NR / simdWidth; i++) {
-        m = i % NUM_USABLE_MASKS;
-        updateMask(i, m);
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
+    for (int i = 0; i < n_iter; i++) {
         for (int j = 0; j < K_SUB_ITER; j++) {
             offsetBPtr(j); // Calculated into regTmp1
-            maskLoadB(j, m);
+            vmovups(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
             vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
                         RegType(xBaseIdx + j), RegType(bBaseIdx + j));
         }
-        restoreMask(i, m);
-
-        // Update the pointer for B
         add(regTmp2, simdWidth * sizeof(float));
     }
-
+    if (n_left) {
+        for (int j = 0; j < K_SUB_ITER; j++) {
+            offsetBPtr(j); // Calculated into regTmp1
+            maskLoadB(j, 0);
+            vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter + j),
+                        RegType(xBaseIdx + j), RegType(bBaseIdx + j));
+        }
+    }
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -1158,18 +1106,24 @@ jitF32GEMVM1<KType>::compute1xnfringe()
 {
     vbroadcastss(RegType(xBaseIdx), ptr[regXptr]);
 
-    int m = 0;
-    int j = 0;
-    for (int i = 0; i < NR / simdWidth; i++) {
-        m = i % NUM_USABLE_MASKS;
+    int j      = 0;
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
+    for (int i = 0; i < n_iter; i++) {
         j = i % K_SUB_ITER;
-        updateMask(i, m);
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * simdWidth * sizeof(float)]);
-        maskLoadB(j, m);
+        vmovups(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
         vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
                     RegType(bBaseIdx + j));
-        restoreMask(i, m);
+    }
+    if (n_left) {
+        j = 0;
+        xor_(regTmp1, regTmp1);
+        lea(regTmp1, ptr[regTmp1 + n_iter * simdWidth * sizeof(float)]);
+        maskLoadB(j, 0);
+        vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter),
+                    RegType(xBaseIdx), RegType(bBaseIdx + j));
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1331,25 +1285,27 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
 {
-    int m = 0;
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
     if (!isBetaOne) {
-        for (int i = 0; i < NR / simdWidth; i++) {
-            m = i % NUM_USABLE_MASKS;
-            updateMask(i, m);
-            vfmadd231ps(RegType(accumBaseIdx + i) | mask_regs[m],
-                        RegType(xBaseIdx),
+        for (int i = 0; i < n_iter; i++) {
+            vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
                         ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
-            restoreMask(i, m);
         }
-
+        if (n_left) {
+            vfmadd231ps(RegType(accumBaseIdx + n_iter) | mask_regs[0],
+                        RegType(xBaseIdx),
+                        ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
+        }
     } else {
-        for (int i = 0; i < NR / simdWidth; i++) {
-            m = i % NUM_USABLE_MASKS;
-            updateMask(i, m);
-            vaddps(RegType(accumBaseIdx + i) | mask_regs[m],
-                   RegType(accumBaseIdx + i),
+        for (int i = 0; i < n_iter; i++) {
+            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                    ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
-            restoreMask(i, m);
+        }
+        if (n_left) {
+            vaddps(RegType(accumBaseIdx + n_iter) | mask_regs[0],
+                   RegType(accumBaseIdx + n_iter),
+                   ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
         }
     }
 
@@ -1361,19 +1317,32 @@ dlp::jit::jitGeneratorError
 jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::scaleYWithBetaFringe(
     bool isBetaOne)
 {
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
     if (!isBetaOne) {
-        for (int i = 0; i < NR / simdWidth; i++) {
-            vmaskmovps(Xbyak::Ymm(yBaseIdx + i), Xbyak::Ymm(maskBaseIdx + i),
-                       ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+        for (int i = 0; i < n_iter; i++) {
             vfmadd231ps(Xbyak::Ymm(accumBaseIdx + i), Xbyak::Ymm(xBaseIdx),
-                        Xbyak::Ymm(yBaseIdx + i));
+                        ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+        }
+        if (n_left) {
+            vmaskmovps(Xbyak::Ymm(yBaseIdx + n_iter),
+                       Xbyak::Ymm(maskBaseIdx + n_iter),
+                       ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
+            vfmadd231ps(Xbyak::Ymm(accumBaseIdx + n_iter), Xbyak::Ymm(xBaseIdx),
+                        Xbyak::Ymm(yBaseIdx + n_iter));
         }
     } else {
-        for (int i = 0; i < NR / simdWidth; i++) {
-            vmaskmovps(Xbyak::Ymm(yBaseIdx + i), Xbyak::Ymm(maskBaseIdx + i),
-                       ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+        for (int i = 0; i < n_iter; i++) {
             vaddps(Xbyak::Ymm(accumBaseIdx + i), Xbyak::Ymm(accumBaseIdx + i),
-                   Xbyak::Ymm(yBaseIdx + i));
+                   ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+        }
+        if (n_left) {
+            vmaskmovps(Xbyak::Ymm(yBaseIdx + n_iter),
+                       Xbyak::Ymm(maskBaseIdx + n_iter),
+                       ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
+            vaddps(Xbyak::Ymm(accumBaseIdx + n_iter),
+                   Xbyak::Ymm(accumBaseIdx + n_iter),
+                   Xbyak::Ymm(yBaseIdx + n_iter));
         }
     }
 
@@ -1421,13 +1390,16 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::storeYValuesFringe()
 {
-    int m = 0;
-    for (int i = 0; i < NR / simdWidth; i++) {
-        m = i % NUM_USABLE_MASKS;
-        updateMask(i, m);
-        vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)] | mask_regs[m],
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
+    for (int i = 0; i < n_iter; i++) {
+        vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
                 RegType(accumBaseIdx + i));
-        restoreMask(i, m);
+    }
+    if (n_left) {
+        vmovups(ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]
+                    | mask_regs[0],
+                RegType(accumBaseIdx + n_iter));
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1437,11 +1409,17 @@ template<>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::storeYValuesFringe()
 {
-    for (int i = 0; i < NR / simdWidth; i++) {
-        vmaskmovps(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
-                   Xbyak::Ymm(maskBaseIdx + i), Xbyak::Ymm(accumBaseIdx + i));
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
+    for (int i = 0; i < n_iter; i++) {
+        vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
+                Xbyak::Ymm(accumBaseIdx + i));
     }
-
+    if (n_left) {
+        vmaskmovps(ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)],
+                   Xbyak::Ymm(maskBaseIdx + n_iter),
+                   Xbyak::Ymm(accumBaseIdx + n_iter));
+    }
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -1465,7 +1443,7 @@ jitF32GEMVM1<KType>::storeYValues(bool nMask)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32GEMVM1<KType>::generateKernel(const utils::gemvM1GeneratorParams& params)
+jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
     // Using Xbyak's utility for managing the stack frame
     Xbyak::util::StackFrame frame(this, 1, 13, 0);
@@ -1644,6 +1622,17 @@ jitF32GEMVM1<KType>::generateKernel(const utils::gemvM1GeneratorParams& params)
 
         // Scale the result by beta, and store it accordingly
         scaleYWithBeta(false);
+
+        if (!params.kernelOps.empty()) {
+            gen::kernelOpsHandler kernelOpsHandler(
+                this, 1, params.NR, false, accumBaseIdx, yReg, params.kType);
+
+            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+                params.kernelOps, stackPtr)));
+
+            kernelOpsHandler.generateKernelOpsAttributes();
+        }
+
         storeYValues(false);
 
         // Update the pointers for next n iteration(NOTE : B pointer is set
@@ -1793,6 +1782,18 @@ jitF32GEMVM1<KType>::generateKernel(const utils::gemvM1GeneratorParams& params)
 
         // Scale the result by beta, and store it accordingly
         scaleYWithBeta(true);
+
+        if (!params.kernelOps.empty()) {
+            gen::kernelOpsHandler kernelOpsHandler(
+                this, 1, params.N_LEFT, true, accumBaseIdx, N_LEFT / simdWidth,
+                params.kType);
+
+            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+                params.kernelOps, stackPtr)));
+
+            kernelOpsHandler.generateKernelOpsAttributes();
+        }
+
         storeYValues(true);
     }
 

@@ -239,6 +239,8 @@ struct gemvN1GeneratorParams
     dlp::kernel_frame::scalingType betaScalingType;  // Scaling type for beta
 
     kernelInstrType kType; // Instruction type for the kernel
+    std::vector<dlp::kernel_frame::kernelOpsMetaData>
+        kernelOps; // List of post-ops
 
     // Constructor
     gemvN1GeneratorParams(int                              _MR,
@@ -276,6 +278,7 @@ struct gemvN1GeneratorParams
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
+        , kernelOps(other.kernelOps)
     {
     }
     // Copy assignment operator
@@ -292,6 +295,7 @@ struct gemvN1GeneratorParams
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
+            kernelOps        = other.kernelOps;
         }
         return *this;
     }
@@ -308,6 +312,7 @@ struct gemvN1GeneratorParams
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
+        , kernelOps(std::move(other.kernelOps))
     {
     }
 
@@ -325,6 +330,7 @@ struct gemvN1GeneratorParams
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
+            kernelOps        = std::move(other.kernelOps);
         }
         return *this;
     }
@@ -342,7 +348,8 @@ struct gemvM1GeneratorParams
     // Dimensions and loop control
     int NR; // Vector length (number of elements to process at once) - typically
             // 64 for AVX512
-    int KC; // K-dimension blocksize
+    int N_LEFT;     // N-dimension left over elements
+    int KC;         // K-dimension blocksize
     int K_SUB_ITER; // Sub-iterations size(since KC is usually large, and thus
                     // is further iterated over in blocks of K_SUB_ITER)
 
@@ -359,9 +366,12 @@ struct gemvM1GeneratorParams
     dlp::kernel_frame::scalingType betaScalingType;  // Scaling type for beta
 
     kernelInstrType kType; // Instruction type for the kernel
+    std::vector<dlp::kernel_frame::kernelOpsMetaData>
+        kernelOps; // List of post-ops
 
     // Constructor
     gemvM1GeneratorParams(int                              _NR,
+                          int                              _N_LEFT,
                           int                              _KC,
                           int                              _K_SUB_ITER,
                           AOCL_MEMORY_TAG                  _mtag_b,
@@ -374,6 +384,7 @@ struct gemvM1GeneratorParams
                           dlp::kernel_frame::scalingType   _betaScalingType,
                           kernelInstrType                  _kType)
         : NR(_NR)
+        , N_LEFT(_N_LEFT)
         , KC(_KC)
         , K_SUB_ITER(_K_SUB_ITER)
         , mtag_b(_mtag_b)
@@ -391,6 +402,7 @@ struct gemvM1GeneratorParams
     // Copy constructor
     gemvM1GeneratorParams(const gemvM1GeneratorParams& other)
         : NR(other.NR)
+        , N_LEFT(other.N_LEFT)
         , KC(other.KC)
         , K_SUB_ITER(other.K_SUB_ITER)
         , mtag_b(other.mtag_b)
@@ -402,6 +414,7 @@ struct gemvM1GeneratorParams
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
+        , kernelOps(other.kernelOps)
     {
     }
 
@@ -410,6 +423,7 @@ struct gemvM1GeneratorParams
     {
         if (this != std::addressof(other)) {
             NR               = other.NR;
+            N_LEFT           = other.N_LEFT;
             KC               = other.KC;
             K_SUB_ITER       = other.K_SUB_ITER;
             mtag_b           = other.mtag_b;
@@ -421,6 +435,7 @@ struct gemvM1GeneratorParams
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
+            kernelOps        = other.kernelOps;
         }
         return *this;
     }
@@ -428,6 +443,7 @@ struct gemvM1GeneratorParams
     // Move constructor
     gemvM1GeneratorParams(gemvM1GeneratorParams&& other)
         : NR(other.NR)
+        , N_LEFT(other.N_LEFT)
         , KC(other.KC)
         , K_SUB_ITER(other.K_SUB_ITER)
         , mtag_b(other.mtag_b)
@@ -439,6 +455,7 @@ struct gemvM1GeneratorParams
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
+        , kernelOps(other.kernelOps)
     {
     }
 
@@ -447,6 +464,7 @@ struct gemvM1GeneratorParams
     {
         if (this != std::addressof(other)) {
             NR               = other.NR;
+            N_LEFT           = other.N_LEFT;
             KC               = other.KC;
             K_SUB_ITER       = other.K_SUB_ITER;
             mtag_b           = other.mtag_b;
@@ -458,6 +476,7 @@ struct gemvM1GeneratorParams
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
+            kernelOps        = other.kernelOps;
         }
         return *this;
     }

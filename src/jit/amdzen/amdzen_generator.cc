@@ -28,7 +28,6 @@
 
 #include "amdzen_generator.hh"
 #include "arch_utils/arch_config_manager.hh"
-#include "avx512_gemv.hh"
 #include "cpu_utils/cpu_features.hh"
 #include "f32_gemm_generator.hh"
 #include "f32_gemv.hh"
@@ -152,30 +151,33 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         // Generate kernel for GEMV(when MR == 1)
         AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
 
-        // We generate only 3 kernels for now, with the following combinations:
-        // kloop = true, kfringe = true
-        // Index 0 : nloop = false, nfringe = true
-        // Index 1 : nloop = true, nfringe = false
-        // Index 2 : nloop = true, nfringe = true
-        numKernelVariants = 3;
+        // We will be generating NR kernels, each having the main loop
+        // and having the specific fringe case implemented.
+        numKernelVariants = NR;
         kernelCodeBlocks.resize(numKernelVariants);
 
         utils::gemvM1GeneratorParams params(
-            0, 0, 0, mtag_b, true, true, true, true,
+            0, 0, 0, 0, mtag_b, true, true, true, true,
             dlp::kernel_frame::storageFormat::rowMajor,
             (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
         params.NR         = NR;
+        params.N_LEFT     = 0;
         params.KC         = KC;
         params.K_SUB_ITER = K_UNROLL;
         params.nloop      = true;
         params.kloop      = true;
-        params.nfringe    = true;
+        params.nfringe    = false;
         params.kfringe    = true;
 
-        for (int i = 1; i <= 3; i += 1) {
-            params.nfringe = (i % 2) ? true : false;
-            params.nloop   = (i > 1) ? true : false;
+        for (int i = 0; i < NR; i += 1) {
+            params.N_LEFT  = i;
+            params.nfringe = (i != 0);
 
             void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
                 utils::JIT_KERNEL_SIZE);
@@ -183,7 +185,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
                 goto cleanup;
             }
-            kernelCodeBlocks[i - 1] = codeBuffer;
+            kernelCodeBlocks[i] = codeBuffer;
 
             // Handle different kernel types based on instruction preference.
             switch (kType) {
@@ -217,10 +219,11 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 goto cleanup;
             }
 #ifdef DLP_DUMP_JIT_CODE
+            int n_left_suf = (i != 0) ? i : params.NR;
             // The file naming is as such : jit_gemv_m1_kernel.
             utils::jitHelperUtils::dump_jit_code(
-                kernelCodeBlocks[i - 1], utils::JIT_KERNEL_SIZE,
-                "jit_gemv_m1_kernel", params.NR, i);
+                kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
+                "jit_gemv_m1_kernel", 1, n_left_suf);
 #endif
         }
 
@@ -268,6 +271,11 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             0, 0, false, false, false, false,
             dlp::kernel_frame::storageFormat::rowMajor,
             (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
 
         params.MR      = MR;
         params.mloop   = true;
@@ -478,8 +486,9 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
     // For GEMV(M1) execution
     if (MR == 1) {
         auto params = static_cast<dlp::kernels::gemvM1Params*>(_params);
-        // Setting the remaining values of gemvM1Params(that are not set as part
-        // of it's parameterized constructor)
+        // Setting the remaining values of gemvM1Params(that are not set as
+        // part of it's parameterized constructor)
+
         params->n_iter = params->n / NR;
         params->n_left = params->n % NR;
         params->k_iter = params->k / KC;
@@ -490,54 +499,26 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         params->k_left_sub_iter = (params->k_left) / K_UNROLL;
         params->k_left_sub_left = (params->k_left) % K_UNROLL;
 
-        int full_bands = params->n_left
-                         / numElemsPerReg; // Number of complete 8-element bands
+        int full_bands =
+            params->n_left / numElemsPerReg; // Number of complete 8-element
         int partial_elements =
             params->n_left % numElemsPerReg; // Elements in partial band
 
-        // Mask setting logic
         if (params->n_left > 0) {
             switch (kType) {
                 case utils::kernelInstrType::avx512_zmm_32_reg: {
-                    for (int i = 0; i < full_bands; i++) {
-                        params->nmask_avx512[i] = 0xFFFF;
-                    }
-
-                    if (partial_elements) {
-                        uint16_t nmask =
-                            0xFFFF >> (numElemsPerReg - partial_elements);
-
-                        params->nmask_avx512[full_bands] = nmask;
-                    }
+                    params->nmask_avx512 =
+                        0xFFFF >> (numElemsPerReg - partial_elements);
                     break;
                 }
                 case utils::kernelInstrType::avx512_ymm_32_reg: {
-                    for (int i = 0; i < full_bands; i++) {
-                        params->nmask_avx512_256[i] = 0xFF;
-                    }
-
-                    if (partial_elements) {
-                        uint8_t nmask =
-                            0xFF >> (numElemsPerReg - partial_elements);
-
-                        params->nmask_avx512_256[full_bands] = nmask;
-                    }
+                    params->nmask_avx512_256 =
+                        0xFF >> (numElemsPerReg - partial_elements);
                     break;
                 }
                 case utils::kernelInstrType::avx2_ymm_16_reg: {
-                    // Set full bands to all -1s
-                    for (int band = 0; band < full_bands; band++) {
-                        for (int i = 0; i < 8; i++) {
-                            params->nmask_avx2[band][i] = -1;
-                        }
-                    }
-
-                    // Set partial band if any
-                    if (partial_elements) {
-                        for (int i = 0; i < 8; i++) {
-                            params->nmask_avx2[full_bands][i] =
-                                (i < partial_elements) ? -1 : 0;
-                        }
+                    for (int i = 0; i < 8; i++) {
+                        params->nmask_avx2[i] = (i < partial_elements) ? -1 : 0;
                     }
                     break;
                 }
@@ -547,13 +528,11 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         }
 
         // Deploy the associated kernel
-        int  kernel_idx = 0;
-        bool nloop      = (params->n_iter) ? true : false;
-        bool nleft      = (params->n_left) ? true : false;
-        kernel_idx += 2 * nloop + nleft;
+        int kernel_idx = params->n_left;
+
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
-                kernelCodeBlocks[kernel_idx - 1]);
+                kernelCodeBlocks[kernel_idx]);
         kernel(params);
 
     } else if (NR == 1) {

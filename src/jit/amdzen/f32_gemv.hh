@@ -123,7 +123,7 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     // Implementation utilities
     dlp::jit::jitGeneratorError allocateRegisters();
 
-    void initializeParameters(const utils::gemvN1GeneratorParams&);
+    void initializeParameters(utils::gemvN1GeneratorParams&);
 
     // Core computation functions
     dlp::jit::jitGeneratorError loadAValues(int, bool = false);
@@ -169,7 +169,7 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
 
     // Main kernel generation interface
     dlp::jit::jitGeneratorError generateKernel(
-        const utils::gemvN1GeneratorParams& params);
+        utils::gemvN1GeneratorParams& params);
 
     // Get the generated kernel function pointer
     // This class will also contain the pointer type to the JIT kernel
@@ -189,6 +189,7 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     int                              numRegs;   // Number of ZMM registers
     int                              simdWidth; // SIMD width
     int                              NR;
+    int                              N_LEFT;
     int                              KC;
     int                              K_SUB_ITER;
     AOCL_MEMORY_TAG                  mtag_b;
@@ -251,7 +252,7 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     void initializeStackFrame(Xbyak::util::StackFrame&);
 
     // Initializing the parameters
-    void initializeParameters(const utils::gemvM1GeneratorParams&);
+    void initializeParameters(utils::gemvM1GeneratorParams&);
 
     // Allocating the registers
     dlp::jit::jitGeneratorError allocateRegisters();
@@ -307,7 +308,7 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
 
     // Main kernel generation interface
     dlp::jit::jitGeneratorError generateKernel(
-        const utils::gemvM1GeneratorParams& params);
+        utils::gemvM1GeneratorParams& params);
 
     // Get the generated kernel function pointer
     // utils::jit_gemv_m1_kernel getKernel() {

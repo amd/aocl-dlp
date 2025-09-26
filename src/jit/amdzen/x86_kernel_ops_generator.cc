@@ -82,39 +82,125 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
     rG.saveRegister(regTmp7);
 
     // Load the post-ops node and post-ops attr pointers.
-    jit_->mov(regkernelOpsList,
-              jit_->ptr[postOpsArgWrapperPtrReg
-                        + offsetof(dlp::kernels::gemmParams, kernelOpsList)]);
+    if (MR == 1) {
+        jit_->mov(
+            regkernelOpsList,
+            jit_->ptr[postOpsArgWrapperPtrReg
+                      + offsetof(dlp::kernels::gemvM1Params, kernelOpsList)]);
 
-    // Load pointer to kernelOpsAttr struct instead of the struct itself.
-    jit_->lea(regkernelOpsAttr,
-              jit_->ptr[postOpsArgWrapperPtrReg
-                        + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)]);
+        // Load pointer to kernelOpsAttr struct instead of the struct itself.
+        jit_->lea(
+            regkernelOpsAttr,
+            jit_->ptr[postOpsArgWrapperPtrReg
+                      + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)]);
 
-    if (useMask) {
-        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            jit_->kmovw(
-                maskReg,
-                jit_->ptr[postOpsArgWrapperPtrReg
-                          + offsetof(dlp::kernels::gemmParams, maskF32)]);
-        } else if constexpr (KType
-                             == utils::kernelInstrType::avx512_ymm_32_reg) {
-            jit_->kmovb(
-                maskReg,
-                jit_->ptr[postOpsArgWrapperPtrReg
-                          + offsetof(dlp::kernels::gemmParams, maskF32_8)]);
-        } else if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-            jit_->lea(
-                regTmp1,
-                jit_->ptr[postOpsArgWrapperPtrReg
-                          + offsetof(dlp::kernels::gemmParams, maskArray)]);
-            jit_->vmovdqu(ymmMask,
-                          jit_->ptr[regTmp1]); // Load all 8 floats (32 bytes)
-        } else {
-            // Currently returning not supported, will have to add
-            // the required mask parameter for each configuration as
-            // the support gets enabled.
-            return jitGeneratorError::notSupported;
+        if (useMask) {
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                jit_->kmovw(maskReg,
+                            jit_->ptr[postOpsArgWrapperPtrReg
+                                      + offsetof(dlp::kernels::gemvM1Params,
+                                                 nmask_avx512)]);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                jit_->kmovb(maskReg,
+                            jit_->ptr[postOpsArgWrapperPtrReg
+                                      + offsetof(dlp::kernels::gemvM1Params,
+                                                 nmask_avx512_256)]);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx2_ymm_16_reg) {
+                jit_->lea(regTmp1,
+                          jit_->ptr[postOpsArgWrapperPtrReg
+                                    + offsetof(dlp::kernels::gemvM1Params,
+                                               nmask_avx2)]);
+                jit_->vmovdqu(
+                    ymmMask,
+                    jit_->ptr[regTmp1]); // Load all 8 floats (32 bytes)
+            } else {
+                // Currently returning not supported, will have to add
+                // the required mask parameter for each configuration as
+                // the support gets enabled.
+                return jitGeneratorError::notSupported;
+            }
+        }
+    } else if (NR == 1) {
+        jit_->mov(
+            regkernelOpsList,
+            jit_->ptr[postOpsArgWrapperPtrReg
+                      + offsetof(dlp::kernels::gemvN1Params, kernelOpsList)]);
+
+        // Load pointer to kernelOpsAttr struct instead of the struct itself.
+        jit_->lea(
+            regkernelOpsAttr,
+            jit_->ptr[postOpsArgWrapperPtrReg
+                      + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)]);
+
+        if (useMask) {
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                jit_->kmovw(maskReg,
+                            jit_->ptr[postOpsArgWrapperPtrReg
+                                      + offsetof(dlp::kernels::gemvN1Params,
+                                                 mmask_avx512)]);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                jit_->kmovb(maskReg,
+                            jit_->ptr[postOpsArgWrapperPtrReg
+                                      + offsetof(dlp::kernels::gemvN1Params,
+                                                 mmask_avx512_256)]);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx2_ymm_16_reg) {
+                jit_->lea(regTmp1,
+                          jit_->ptr[postOpsArgWrapperPtrReg
+                                    + offsetof(dlp::kernels::gemvN1Params,
+                                               mmask_avx2)]);
+                jit_->vmovdqu(
+                    ymmMask,
+                    jit_->ptr[regTmp1]); // Load all 8 floats (32 bytes)
+            } else {
+                // Currently returning not supported, will have to add
+                // the required mask parameter for each configuration as
+                // the support gets enabled.
+                return jitGeneratorError::notSupported;
+            }
+        }
+    } else {
+        jit_->mov(
+            regkernelOpsList,
+            jit_->ptr[postOpsArgWrapperPtrReg
+                      + offsetof(dlp::kernels::gemmParams, kernelOpsList)]);
+
+        // Load pointer to kernelOpsAttr struct instead of the struct itself.
+        jit_->lea(
+            regkernelOpsAttr,
+            jit_->ptr[postOpsArgWrapperPtrReg
+                      + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)]);
+
+        if (useMask) {
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                jit_->kmovw(
+                    maskReg,
+                    jit_->ptr[postOpsArgWrapperPtrReg
+                              + offsetof(dlp::kernels::gemmParams, maskF32)]);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                jit_->kmovb(
+                    maskReg,
+                    jit_->ptr[postOpsArgWrapperPtrReg
+                              + offsetof(dlp::kernels::gemmParams, maskF32_8)]);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx2_ymm_16_reg) {
+                jit_->lea(
+                    regTmp1,
+                    jit_->ptr[postOpsArgWrapperPtrReg
+                              + offsetof(dlp::kernels::gemmParams, maskArray)]);
+                jit_->vmovdqu(
+                    ymmMask,
+                    jit_->ptr[regTmp1]); // Load all 8 floats (32 bytes)
+            } else {
+                // Currently returning not supported, will have to add
+                // the required mask parameter for each configuration as
+                // the support gets enabled.
+                return jitGeneratorError::notSupported;
+            }
         }
     }
 

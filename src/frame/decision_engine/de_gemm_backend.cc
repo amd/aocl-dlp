@@ -258,7 +258,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
     }
     kernel_frame::scalingType betaScalingType =
         kernel_frame::scalingType::generic;
-    if (*(static_cast<float*>(gemmIn->beta)) == 0.0f) {
+    if ((*(static_cast<float*>(gemmIn->beta)) == 0.0f)
+        && (gemmIn->k <= gemmIn->kc_hint)) {
         betaScalingType = kernel_frame::scalingType::zero;
     }
 
@@ -329,9 +330,58 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             return std::make_optional(kI);
 
         } else {
-            // We generate JIT based AVX512 GEMV N1 kernels only when
-            // post-ops is not required.
-            return std::nullopt;
+            // Iterate over the post_ops list to get the number of post-ops.
+            md_t            numPostOps    = 0;
+            lpgemm_post_op* temp_post_ops = gemmIn->metadata;
+            while ((temp_post_ops != NULL)
+                   && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
+                temp_post_ops = temp_post_ops->next;
+                numPostOps++;
+            }
+
+            if (numPostOps == 0) {
+                kernel_frame::kernelInfo kI{ mr,
+                                             nr,
+                                             k_unroll,
+                                             kc,
+                                             alphaScalingType,
+                                             betaScalingType,
+                                             mtag_a,
+                                             mtag_b,
+                                             nullptr,
+                                             0,
+                                             anyKOpsOrder,
+                                             kInstPref };
+                return std::make_optional(kI);
+            } else {
+                kernel_frame::kernelInfo kI{ mr,
+                                             nr,
+                                             k_unroll,
+                                             kc,
+                                             alphaScalingType,
+                                             betaScalingType,
+                                             mtag_a,
+                                             mtag_b,
+                                             nullptr,
+                                             0,
+                                             anyKOpsOrder,
+                                             kInstPref };
+                kI.kOpsArrSize = numPostOps;
+                kI.kOpsArr = kernel_frame::kernelInfo::allocateKernelOpsArray(
+                    numPostOps);
+
+                md_t ii       = 0;
+                temp_post_ops = gemmIn->metadata;
+                while ((temp_post_ops != NULL)
+                       && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
+                    setKernelOps(std::addressof(kI.kOpsArr[ii]), temp_post_ops,
+                                 gemmIn->k_dtype);
+                    temp_post_ops = temp_post_ops->next;
+                    ii++;
+                }
+
+                return std::make_optional(kI);
+            }
         }
     } else if (gemmIn->m == 1) {
         // The booleans isAvx2 and isAvx512 represent the configured
@@ -383,7 +433,58 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             };
             return std::make_optional(kI);
         } else {
-            return std::nullopt;
+            // Iterate over the post_ops list to get the number of post-ops.
+            md_t            numPostOps    = 0;
+            lpgemm_post_op* temp_post_ops = gemmIn->metadata;
+            while ((temp_post_ops != NULL)
+                   && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
+                temp_post_ops = temp_post_ops->next;
+                numPostOps++;
+            }
+
+            if (numPostOps == 0) {
+                kernel_frame::kernelInfo kI{ mr,
+                                             nr,
+                                             k_unroll,
+                                             kc,
+                                             alphaScalingType,
+                                             betaScalingType,
+                                             mtag_a,
+                                             mtag_b,
+                                             nullptr,
+                                             0,
+                                             anyKOpsOrder,
+                                             kInstPref };
+                return std::make_optional(kI);
+            } else {
+                kernel_frame::kernelInfo kI{ mr,
+                                             nr,
+                                             k_unroll,
+                                             kc,
+                                             alphaScalingType,
+                                             betaScalingType,
+                                             mtag_a,
+                                             mtag_b,
+                                             nullptr,
+                                             0,
+                                             anyKOpsOrder,
+                                             kInstPref };
+                kI.kOpsArrSize = numPostOps;
+                kI.kOpsArr = kernel_frame::kernelInfo::allocateKernelOpsArray(
+                    numPostOps);
+
+                md_t ii       = 0;
+                temp_post_ops = gemmIn->metadata;
+                while ((temp_post_ops != NULL)
+                       && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
+                    setKernelOps(std::addressof(kI.kOpsArr[ii]), temp_post_ops,
+                                 gemmIn->k_dtype);
+                    temp_post_ops = temp_post_ops->next;
+                    ii++;
+                }
+
+                return std::make_optional(kI);
+            }
         }
     } else {
         if (gemmIn->metadata == nullptr) {
