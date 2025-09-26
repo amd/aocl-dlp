@@ -688,7 +688,7 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                 }
 
                 params->b = (float*)(params->b) + elementsToProcess;
-                c_jr      = (float*)(c_jr) + elementsToProcess;
+                c_jr      = (float*)(c_jr) + elementsToProcess * params->csC;
                 n -= elementsToProcess;
                 (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
                 // The following line is necessary to ensure a subtle bug
@@ -746,7 +746,7 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
 
                 // update pointers for next iteration
                 params->b = (float*)(params->b) + nRemainder;
-                c_jr      = (float*)(c_jr) + nRemainder;
+                c_jr      = (float*)(c_jr) + nRemainder * params->csC;
                 n -= nRemainder;
                 (params->kernelOpsAttr).post_op_c_j += nRemainder;
                 // The following line is necessary to ensure a subtle bug

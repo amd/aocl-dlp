@@ -170,30 +170,6 @@ aocl_gemm_f32f32f32of32(const char      order,
         goto err_hndl;
     }
 
-    // By default enable packing for B matrix. Before the 5 loop, based on
-    // the input dimensions, the smart threading logic will adjust it
-    // (disable/enable) accordingly.
-    if ((is_row_major == TRUE) && (dlp_is_trans(dlp_transb))
-        && (mtag_b == UNPACKED)) {
-        mtag_b = PACK;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    else if ((is_column_major == TRUE) && (dlp_is_trans(dlp_transa))
-             && (mtag_a == UNPACKED)) {
-        mtag_a = PACK;
-    }
-
-    // From 5-loop function point of view,
-    // A matrix when in column major storage needs to be packed to row-major
-    // storage as kernel expects A matrix to be in row-major format.
-    if ((is_row_major == TRUE) && (dlp_is_trans(dlp_transa))) {
-        mtag_a = PACK;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    else if ((is_column_major == TRUE) && (dlp_is_trans(dlp_transb))) {
-        mtag_b = PACK;
-    }
-
     // Temporary variables to store/transform the input for kernel generation
     // and execution.
     md_t            m_use = m, n_use = n, k_use = k;
@@ -205,19 +181,11 @@ aocl_gemm_f32f32f32of32(const char      order,
     md_t            rs_c_use = rs_c, cs_c_use = cs_c;
     AOCL_MEMORY_TAG mtag_a_use = mtag_a;
     AOCL_MEMORY_TAG mtag_b_use = mtag_b;
-    // char            order_use  = order; // Unused for now(future scope)
+    char            order_use  = order;
 
     // Convert post op struct to post op linked list format.
     lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
-    dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
-        metadata, post_op_list, (void*)c_use, (void*)(&order), m,
-        n); // To use order_reuse in future, when we support post-ops on
-            // row-major with transpose toggled.
-
-    if (err != DLP_CLSC_SUCCESS) {
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
+    dlp_clsc_err_t err;
 
     // Induce operation transpose and/or swapped strides based on the input.
     // NOTE :
@@ -231,6 +199,65 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     // Handling row-major storage.
     if (is_row_major == TRUE) {
+
+        if (mtag_b != REORDERED) {
+            // If B is not reordered, and if both A and B are transposed
+            // instead of packing both the matrices to make them row-major,
+            // induce a transpose and store C in col-major format.
+            // After inducing transpose, A, B matrices are row-major, and C
+            // matrix is column-major. This optimization is currently supported
+            // only by AVX512 JIT kernel.
+
+            // Matadd and Matmul in GEMV-intrinsics code doesn't support
+            // accessing the matptr correctly incase C is not contiguous. so
+            // commenting this optimization out for GEMV for now.
+            // TODO: remove this once GEMV JIT kernels support post-ops.
+            if (dlp_cpuid_is_avx512_supported() && (m != 1) && (n != 1)
+                && lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3
+                && dlp_is_trans(dlp_transb) && (dlp_is_trans(dlp_transa))) {
+                // induce transpose here
+                m_use      = n;
+                n_use      = m;
+                a_use      = b;
+                rs_a_use   = cs_b;
+                cs_a_use   = rs_b;
+                b_use      = a;
+                rs_b_use   = cs_a;
+                cs_b_use   = rs_a;
+                rs_c_use   = cs_c;
+                cs_c_use   = rs_c;
+                mtag_a_use = mtag_b;
+                mtag_b_use = mtag_a;
+                order_use  = 'c';
+            } else {
+                // If any of the above conditions fail, then we need to pack the
+                // matrices.
+                if (dlp_is_trans(dlp_transb)) {
+                    // set mtag_b to PACK
+                    mtag_b     = PACK;
+                    mtag_b_use = PACK;
+                }
+                if (dlp_is_trans(dlp_transa)) {
+                    // set mtag_a to PACK
+                    mtag_a     = PACK;
+                    mtag_a_use = PACK;
+                }
+            }
+        } else if (dlp_is_trans(dlp_transa)) {
+            mtag_a     = PACK;
+            mtag_a_use = PACK;
+        }
+
+        err = lpgemm_translate_to_post_ops_list(
+            metadata, post_op_list, (void*)c_use, (void*)(&order_use), m,
+            n); // To use order_reuse in future, when we support post-ops on
+                // row-major with transpose toggled.
+
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata, err);
+            goto err_hndl;
+        }
+
         // For now(with row major inputs), we enable operation transpose only
         // for GEMV(when the appropriate operand transpose is toggled). This is
         // done in order to avoid packing cost.
@@ -262,7 +289,7 @@ aocl_gemm_f32f32f32of32(const char      order,
                 cs_c_use   = rs_c;
                 mtag_a_use = UNPACKED;
                 mtag_b_use = mtag_a;
-                // order_use  = 'c';
+                order_use  = order;
             }
             // For GEMV_N1
             // The library does not support reorder of A, thereby not needing an
@@ -285,24 +312,71 @@ aocl_gemm_f32f32f32of32(const char      order,
                 cs_c_use   = rs_c;
                 mtag_a_use = mtag_b;
                 mtag_b_use = UNPACKED;
-                // order_use  = 'c';
+                order_use  = order;
             }
         }
     }
     // Handling column-major storage.
     else {
-        m_use      = n;
-        n_use      = m;
-        a_use      = b;
-        rs_a_use   = rs_b;
-        cs_a_use   = cs_b;
-        b_use      = a;
-        rs_b_use   = rs_a;
-        cs_b_use   = cs_a;
-        rs_c_use   = rs_c;
-        cs_c_use   = cs_c;
-        mtag_a_use = mtag_b;
-        mtag_b_use = mtag_a;
+
+        // If both A and B are transposed, don't induce transpose here.
+        // Instead, store C matrix in col-major format.
+        // A and B matrices are row-major, and C matrix is column-major.
+
+        // Matadd and Matmul in GEMV-intrinsics code doesn't support accessing
+        // the matptr correctly incase C is not contiguous.
+        // so commenting this optimization out for GEMV for now.
+        // TODO: remove this once GEMV JIT kernels support post-ops.
+        if (dlp_cpuid_is_avx512_supported() && (m != 1) && (n != 1)
+            && lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3
+            && dlp_is_trans(dlp_transa) && (dlp_is_trans(dlp_transb))) {
+            // don't induce transpose here
+            rs_a_use   = cs_a;
+            cs_a_use   = rs_a;
+            rs_b_use   = cs_b;
+            cs_b_use   = rs_b;
+            rs_c_use   = cs_c;
+            cs_c_use   = rs_c;
+            mtag_a_use = mtag_a;
+            mtag_b_use = mtag_b;
+            order_use  = 'r';
+        } else {
+            // Inputs swapped in column major, A becomes B from kernel point of
+            // view.
+            if (dlp_is_trans(dlp_transa) && (mtag_a == UNPACKED)) {
+                mtag_a = PACK;
+            }
+
+            // Inputs swapped in column major, A becomes B from kernel point of
+            // view.
+            if (dlp_is_trans(dlp_transb)) {
+                mtag_b = PACK;
+            }
+
+            m_use      = n;
+            n_use      = m;
+            a_use      = b;
+            rs_a_use   = rs_b;
+            cs_a_use   = cs_b;
+            b_use      = a;
+            rs_b_use   = rs_a;
+            cs_b_use   = cs_a;
+            rs_c_use   = rs_c;
+            cs_c_use   = cs_c;
+            mtag_a_use = mtag_b;
+            mtag_b_use = mtag_a;
+            order_use  = order;
+        }
+
+        err = lpgemm_translate_to_post_ops_list(
+            metadata, post_op_list, (void*)c_use, (void*)(&order_use), m,
+            n); // To use order_reuse in future, when we support post-ops on
+                // row-major with transpose toggled.
+
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata, err);
+            goto err_hndl;
+        }
     }
 
     // Initialize a local runtime with global settings if necessary. Note
@@ -323,6 +397,51 @@ aocl_gemm_f32f32f32of32(const char      order,
         k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
         (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
         lcntx_l.blksz.NR, lcntx_l.blksz.KC);
+
+    // if kernel_hndl is NULL and cs_c!=1, then we need to induce transpose
+    // and set mtag of both matrices to PACK.
+    if ((lcntx_l.dlp_kernel_hndl.kernel_base == NULL) && (cs_c_use != 1)) {
+        if (order == 'r') {
+            // copy the original values
+            m_use     = m;
+            n_use     = n;
+            a_use     = a;
+            b_use     = b;
+            rs_a_use  = rs_a;
+            cs_a_use  = cs_a;
+            rs_b_use  = rs_b;
+            cs_b_use  = cs_b;
+            rs_c_use  = rs_c;
+            cs_c_use  = cs_c;
+            order_use = order;
+        } else { // order == 'c'
+            // induce transpose
+            m_use     = n;
+            n_use     = m;
+            a_use     = b;
+            b_use     = a;
+            rs_a_use  = rs_b;
+            cs_a_use  = cs_b;
+            rs_b_use  = rs_a;
+            cs_b_use  = cs_a;
+            rs_c_use  = rs_c;
+            cs_c_use  = cs_c;
+            order_use = order;
+        }
+
+        // setting both the matrices to PACK
+        mtag_a_use = PACK;
+        mtag_b_use = PACK;
+
+        // re-translate the post-ops list based on the new values
+        err = lpgemm_translate_to_post_ops_list(
+            metadata, post_op_list, (void*)c_use, (void*)(&order_use), m, n);
+
+        if (err != DLP_CLSC_SUCCESS) {
+            DLP_METADATA_SET_ERROR(metadata, err);
+            goto err_hndl;
+        }
+    }
 
     if (is_single_thread(&rntm_g) == TRUE) {
         if (is_tiny_input_f32(m_use, n_use, k_use, &lcntx_l) == TRUE) {

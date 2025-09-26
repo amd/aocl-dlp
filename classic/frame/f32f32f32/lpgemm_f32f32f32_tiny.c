@@ -339,7 +339,7 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
     md_t ps_a_use;
     md_t ps_b_use;
 
-    const md_t cs_c_use = 1;
+    const md_t cs_c_use = cs_c;
 
     lpgemm_post_op_attr post_ops_attr;
     post_ops_attr.c_stor_type       = c_downscale;
@@ -412,13 +412,14 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
             dlp_execute_kernel(
                 lcntx->dlp_kernel_hndl, m, nr0, k, (float*)a_use, rs_a_use,
                 cs_a_use, ps_a_use, (float*)(b_use + (jr * ps_b_use)), rs_b_use,
-                cs_b_use, 0, 0, (c + jr), rs_c, cs_c_use, (void*)&alpha,
-                (void*)&beta, post_op_list, post_ops_attr);
+                cs_b_use, 0, 0, (c + jr * cs_c_use), rs_c, cs_c_use,
+                (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
         } else {
             ((lpgemm_rowvar_f32)lcntx->kern_fun_ptr)(
                 m, nr0, k, (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
-                (float*)(b_use + (jr * ps_b_use)), rs_b_use, cs_b_use, (c + jr),
-                rs_c, cs_c_use, alpha, beta, post_op_list, post_ops_attr);
+                (float*)(b_use + (jr * ps_b_use)), rs_b_use, cs_b_use,
+                (c + jr * cs_c_use), rs_c, cs_c_use, alpha, beta, post_op_list,
+                post_ops_attr);
         }
     }
 

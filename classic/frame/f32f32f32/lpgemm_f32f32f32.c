@@ -422,7 +422,7 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
     md_t rs_c_downscale = rs_c;
 
     // Only supporting row major with unit column strided C for now.
-    const md_t cs_c_use = 1;
+    const md_t cs_c_use = cs_c;
 
     /* Compute partitioning step values for each matrix of each loop. */
     md_t ps_a_use;
@@ -494,7 +494,7 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
 
     for (md_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
-        c_use_jc = c + jc;
+        c_use_jc = c + jc * cs_c_use;
 
         md_t jc_cur_loop     = jc;
         md_t jc_cur_loop_rem = 0;
@@ -658,15 +658,16 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
                             lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
                             (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
                             (float*)(b_use + (jr * ps_b_use)), rs_b_use,
-                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c, cs_c_use,
-                            (void*)&alpha, (void*)&beta0, post_op_list,
-                            post_ops_attr);
+                            cs_b_use, 0, 0, (c_use_ic + jr * cs_c_use), rs_c,
+                            cs_c_use, (void*)&alpha, (void*)&beta0,
+                            post_op_list, post_ops_attr);
                     } else {
                         ker_ptr(mc0, nr0, kc0, (float*)a_use, rs_a_use,
                                 cs_a_use, ps_a_use,
                                 (float*)(b_use + (jr * ps_b_use)), rs_b_use,
-                                cs_b_use, (c_use_ic + jr), rs_c, cs_c_use,
-                                alpha, beta0, post_op_list, post_ops_attr);
+                                cs_b_use, (c_use_ic + jr * cs_c_use), rs_c,
+                                cs_c_use, alpha, beta0, post_op_list,
+                                post_ops_attr);
                     }
                 }
             }

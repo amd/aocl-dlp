@@ -777,11 +777,11 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
                 || (*(char*)post_ops_list_temp->op_args2 == 'C')) {
                 scl_fctr1 = _mm256_maskload_ps(
                     (float*)post_ops_list_temp->scale_factor
-                        + post_ops_attr.post_op_c_i + (0 * 16),
+                        + post_ops_attr.post_op_c_i + (0 * 8),
                     store_mask1);
                 scl_fctr2 = _mm256_maskload_ps(
                     (float*)post_ops_list_temp->scale_factor
-                        + post_ops_attr.post_op_c_i + (1 * 16),
+                        + post_ops_attr.post_op_c_i + (1 * 8),
                     store_mask2);
             }
         }

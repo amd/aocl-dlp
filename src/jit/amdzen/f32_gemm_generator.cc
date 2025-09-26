@@ -114,12 +114,12 @@ jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
 
     if (useMask) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            kmovw(k3,
+            kmovw(fringeMask,
                   ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)]);
         } else if constexpr (KType
                              == utils::kernelInstrType::avx512_ymm_32_reg) {
             kmovb(
-                k3,
+                fringeMask,
                 ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32_8)]);
         } else if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
             lea(regTmp1,
@@ -135,7 +135,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::loadBValues()
 {
-    using RegType = typename Traits::RegType;
     for (int i = 0; i < bFullReg; i++) {
         vmovups(RegType(bRegIdx + i), ptr[regBptr + i * RegBytes]);
     }
@@ -145,7 +144,7 @@ jitGEMMF32<KType>::loadBValues()
                        ptr[regBptr + bFullReg * RegBytes]);
         } else {
             // For AVX512_zmm and _ymm, mask instruction is same.
-            vmovups(RegType(bRegIdx + bFullReg) | k3,
+            vmovups(RegType(bRegIdx + bFullReg) | fringeMask,
                     ptr[regBptr + bFullReg * RegBytes]);
         }
     }
@@ -156,7 +155,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::BroadcastAFMAwithB()
 {
-    using RegType = typename Traits::RegType;
     for (int i = 0; i < MR; i++) {
         vbroadcastss(RegType(aRegIdx), ptr[regTmpAptr]);
         add(regTmpAptr, regRsA);
@@ -185,12 +183,129 @@ jitGEMMF32<KType>::kernelUnroll(int unroll)
     }
     return dlp::jit::jitGeneratorError::success;
 }
-
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::storeResult()
 {
-    using RegType = typename Traits::RegType;
+    inLocalLabel();
+    mov(regTmpCptr, regCPtr);
+
+    // Load cs_c value and check if cs_c is 1
+    mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
+    cmp(regTmp1, 1);
+    je(".storeResultRowMajor", T_NEAR);
+    RETURN_IF_ERROR(storeResultColumnMajor());
+    jmp(".end", T_NEAR);
+    L(".storeResultRowMajor");
+    RETURN_IF_ERROR(storeResultRowMajor());
+    L(".end");
+    outLocalLabel();
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::storeResultColumnMajor()
+{
+    return dlp::jit::jitGeneratorError::notSupported;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor()
+{
+
+    std::queue<int> scratch_reg_queue;
+    for (int i = 0; i < cRegIdx; i++) {
+        scratch_reg_queue.push(i);
+    }
+
+    // take two zmm from scratch_reg_queue and load the offsets
+    int offsets1RegIdx = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+    int offsets2RegIdx = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+    int scratch3RegIdx = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+
+    // load offsets into register
+    vmovdqu32(RegType(offsets1RegIdx), ptr[rip + offsets]);
+    vmovdqu32(RegType(offsets2RegIdx), ptr[rip + offsets + RegBytes]);
+
+    // load csC value multiply by sizeof(float)
+    mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
+    lea(regTmp1, ptr[regTmp1 * sizeof(float)]);
+
+    // reuse the betaRegIdx register to broadcast the csC*sizeof(float) value
+    // and multiply with offsets.
+    vpbroadcastq(RegType(scratch3RegIdx), regTmp1);
+
+    // now multiply offsets with csC
+    vpmullq(RegType(offsets1RegIdx), RegType(offsets1RegIdx),
+            RegType(scratch3RegIdx));
+    vpmullq(RegType(offsets2RegIdx), RegType(offsets2RegIdx),
+            RegType(scratch3RegIdx));
+
+    // calculate 16*csC*sizeof(float) and store in regTmp1
+    lea(regTmp1, ptr[regTmp1 * 8]);
+    lea(regTmp1, ptr[regTmp1 * 2]);
+
+    // take two zmm from scratch_reg_queue
+    // for scatter/gather operations
+    int scratchReg1 = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+    int scratchReg2 = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+
+    for (int i = 0; i < MR; i++) {
+        mov(regTmp2, regTmpCptr);
+        for (int j = 0; j < bFullReg; j++) {
+            resetMasks(false);
+            vextractf32x8(halfRegType(scratchReg2),
+                          RegType(cRegIdx + i * bReg + j), 1);
+            vscatterqps(ptr[regTmp2 + RegType(offsets1RegIdx) * 1] | mask0,
+                        halfRegType(cRegIdx + i * bReg + j));
+            vscatterqps(ptr[regTmp2 + RegType(offsets2RegIdx) * 1] | mask1,
+                        halfRegType(scratchReg2));
+            // move to next set of cols
+            lea(regTmp2, ptr[regTmp2 + regTmp1]);
+        }
+        if (bMaskReg > 0) {
+            resetMasks(true);
+            vextractf32x8(halfRegType(scratchReg2),
+                          RegType(cRegIdx + i * bReg + bFullReg), 1);
+            vscatterqps(ptr[regTmp2 + RegType(offsets1RegIdx) * 1] | mask0,
+                        halfRegType(cRegIdx + i * bReg + bFullReg));
+            vscatterqps(ptr[regTmp2 + RegType(offsets2RegIdx) * 1] | mask1,
+                        halfRegType(scratchReg2));
+        }
+        add(regTmpCptr, sizeof(float));
+    }
+
+    // release all the scratch registers
+    scratch_reg_queue.push(scratchReg1);
+    scratch_reg_queue.push(scratchReg2);
+
+    scratch_reg_queue.push(offsets1RegIdx);
+    scratch_reg_queue.push(offsets2RegIdx);
+    scratch_reg_queue.push(scratch3RegIdx);
+
+    jmp("offsets_end", T_NEAR);
+    align(64);
+    L(offsets);
+    int64_t offsets[16] = {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    };
+    db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
+    L("offsets_end");
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::storeResultRowMajor()
+{
     mov(regTmpCptr, regCPtr);
     for (int i = 0; i < MR; i++) {
         for (int j = 0; j < bFullReg; j++) {
@@ -203,7 +318,7 @@ jitGEMMF32<KType>::storeResult()
                 vmaskmovps(ptr[regTmpCptr + bFullReg * RegBytes],
                            Ymm(maskRegIdx), Ymm(cRegIdx + i * bReg + bFullReg));
             } else {
-                vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | k3,
+                vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | fringeMask,
                         RegType(cRegIdx + i * bReg + bFullReg));
             }
         }
@@ -237,7 +352,6 @@ template<utils::kernelInstrType KType>
 void
 jitGEMMF32<KType>::regInit()
 {
-    using RegType = typename Traits::RegType;
     vxorps(RegType(cRegIdx), RegType(cRegIdx), RegType(cRegIdx));
     for (int i = 1; i < cReg; i++) {
         vmovaps(RegType(cRegIdx + i), RegType(cRegIdx));
@@ -268,7 +382,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::scaleAlpha()
 {
-    using RegType            = typename Traits::RegType;
     int          alphaRegIdx = aRegIdx;
     Xbyak::Reg64 alphaReg    = regTmp1;
     mov(alphaReg, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, alpha)]);
@@ -284,11 +397,156 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::scaleBeta()
 {
-    using RegType           = typename Traits::RegType;
+
+    // Load cs_c value and check if cs_c is 1
+    mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
+    cmp(regTmp1, 1);
+    je(".scaleBetaRowMajor", T_NEAR);
+    RETURN_IF_ERROR(scaleBetaColumnMajor());
+    jmp(".end", T_NEAR);
+    L(".scaleBetaRowMajor");
+    RETURN_IF_ERROR(scaleBetaRowMajor());
+    L(".end");
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+void
+jitGEMMF32<KType>::resetMasks(bool mask)
+{
+    if (mask) {
+        // Load lower 8 bits of maskF32
+        kmovb(mask0,
+              ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)]);
+        // Load upper 8 bits of maskF32
+        kmovb(mask1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)
+                         + sizeof(uint8_t)]);
+    } else {
+        kxnorw(mask0, mask0, mask0);
+        kxnorw(mask1, mask1, mask1);
+    }
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::scaleBetaColumnMajor()
+{
+    return dlp::jit::jitGeneratorError::notSupported;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
+{
+    // we need atleast 5 ZMM spare registers to do this.
+    // For now, assuming that we have 5 ZMM spare registers.
+    // TODO: Implement a strategy like gelu_tanh post-ops using
+    // stack incase 5 regs are not available.
+
+    if (cRegIdx < 5) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    std::queue<int> scratch_reg_queue;
+    for (int i = 0; i < cRegIdx; i++) {
+        scratch_reg_queue.push(i);
+    }
+
+    // take two zmm from scratch_reg_queue and load the offsets
+    int offsets1RegIdx = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+    int offsets2RegIdx = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+    int betaRegIdx = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+
+    // load offsets into register
+    vmovdqu32(RegType(offsets1RegIdx), ptr[rip + offsets]);
+    vmovdqu32(RegType(offsets2RegIdx), ptr[rip + offsets + RegBytes]);
+
+    // load csC value multiply by sizeof(float)
+    mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
+    lea(regTmp1, ptr[regTmp1 * sizeof(float)]);
+
+    // reuse the betaRegIdx register to broadcast the csC*sizeof(float) value
+    // and multiply with offsets.
+    int scratch3RegIdx = betaRegIdx;
+    vpbroadcastq(RegType(scratch3RegIdx), regTmp1);
+
+    // now multiply offsets with csC
+    vpmullq(RegType(offsets1RegIdx), RegType(offsets1RegIdx),
+            RegType(scratch3RegIdx));
+    vpmullq(RegType(offsets2RegIdx), RegType(offsets2RegIdx),
+            RegType(scratch3RegIdx));
+
+    // calculate 16*csC*sizeof(float) and store in regTmp1
+    lea(regTmp1, ptr[regTmp1 * 8]);
+    lea(regTmp1, ptr[regTmp1 * 2]);
+
+    // broadcast beta value
+    mov(regTmp2, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
+    vbroadcastss(RegType(betaRegIdx), ptr[regTmp2]);
+
+    // take two zmm from scratch_reg_queue
+    // for scatter/gather operations
+    int scratchReg1 = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+    int scratchReg2 = scratch_reg_queue.front();
+    scratch_reg_queue.pop();
+
+    for (int i = 0; i < MR; i++) {
+        mov(regTmp2, regTmpCptr);
+        for (int j = 0; j < bFullReg; j++) {
+            resetMasks(false);
+
+            vgatherqps(halfRegType(scratchReg1) | mask0,
+                       ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
+            vgatherqps(halfRegType(scratchReg2) | mask1,
+                       ptr[regTmp2 + RegType(offsets2RegIdx) * 1]);
+            vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
+                         halfRegType(scratchReg2), 1);
+            // fma with beta
+            vfmadd231ps(RegType(cRegIdx + i * bReg + j), RegType(scratchReg1),
+                        RegType(betaRegIdx));
+
+            // move to next set of cols
+            lea(regTmp2, ptr[regTmp2 + regTmp1]);
+        }
+        if (bMaskReg > 0) {
+            resetMasks(true);
+            vgatherqps(halfRegType(scratchReg1) | mask0,
+                       ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
+            vgatherqps(halfRegType(scratchReg2) | mask1,
+                       ptr[regTmp2 + RegType(offsets2RegIdx) * 1]);
+            vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
+                         halfRegType(scratchReg2), 1);
+            // fma with beta
+            vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg),
+                        RegType(scratchReg1), RegType(betaRegIdx));
+        }
+        add(regTmpCptr, sizeof(float));
+    }
+
+    // release all the scratch registers
+    scratch_reg_queue.push(scratchReg1);
+    scratch_reg_queue.push(scratchReg2);
+    scratch_reg_queue.push(offsets1RegIdx);
+    scratch_reg_queue.push(offsets2RegIdx);
+    scratch_reg_queue.push(betaRegIdx);
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::scaleBetaRowMajor()
+{
+    // broadcast beta value
     Xbyak::Reg64 betaReg    = regTmp1;
     int          betaRegIdx = aRegIdx;
     mov(betaReg, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
     vbroadcastss(RegType(betaRegIdx), ptr[betaReg]);
+
     for (int i = 0; i < MR; i++) {
         for (int j = 0; j < bFullReg; j++) {
             vmovups(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
@@ -304,7 +562,7 @@ jitGEMMF32<KType>::scaleBeta()
                 vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
                             Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
             } else {
-                vmovups(RegType(bRegIdx + bFullReg) | k3,
+                vmovups(RegType(bRegIdx + bFullReg) | fringeMask,
                         ptr[regTmpCptr + bFullReg * RegBytes]);
                 vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg),
                             RegType(betaRegIdx), RegType(bRegIdx + bFullReg));

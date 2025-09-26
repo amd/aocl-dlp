@@ -56,8 +56,9 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError generateKernel(utils::generatorParams& params);
 
   private:
-    using Traits  = amdzen::traits::ArchitectureTraits<KType>;
-    using RegType = typename Traits::RegType;
+    using Traits      = amdzen::traits::ArchitectureTraits<KType>;
+    using RegType     = typename Traits::RegType;
+    using halfRegType = typename Traits::halfRegType;
 
     // Configuration and state
     int numRegs  = Traits::numRegs;
@@ -79,6 +80,14 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
 
     Xbyak::Label label_store_result;
 
+    Xbyak::Label offsets;
+
+    Xbyak::Opmask fringeMask = k3;
+
+    // 4 masks to handle transpose C operations
+    Xbyak::Opmask mask0 = k4;
+    Xbyak::Opmask mask1 = k5;
+
     bool useMask =
         false; // Flag to indicate if masked instructions are generated
 
@@ -98,6 +107,9 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError storeResult();
 
+    dlp::jit::jitGeneratorError storeResultColumnMajor();
+    dlp::jit::jitGeneratorError storeResultRowMajor();
+
     // Setup and initialization
     void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
     void regInit();
@@ -105,6 +117,11 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
 
     // Scaling operations
     dlp::jit::jitGeneratorError scaleAlpha();
+
+    dlp::jit::jitGeneratorError scaleBetaColumnMajor();
+    dlp::jit::jitGeneratorError scaleBetaRowMajor();
+
+    void resetMasks(bool mask);
 
     dlp::jit::jitGeneratorError scaleBeta();
 };

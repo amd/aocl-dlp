@@ -141,7 +141,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     const Xbyak::Reg64 &regkernelOpsList, &regkernelOpsAttr;
     const Xbyak::Reg64 &regTmp1, &regTmp2, &regTmp3, &regTmp4, &regTmp5,
-        &regTmp6, &regTmp7;
+        &regTmp6, &regTmp7, &regcsC;
     const Xbyak::Reg32 &regTmp4Half, &regTmp5Half;
 
     Xbyak::CodeGenerator* jit_; // Back reference to access registers and state
@@ -204,6 +204,14 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     template<typename sfDt, typename matOpDt>
     dlp::jit::jitGeneratorError matOpScaleFactorImpl(matOpType      opType,
                                                      matOpScaleType sclType);
+
+    template<typename sfDt, typename matOpDt>
+    dlp::jit::jitGeneratorError matOpScaleFactorImplColMat(
+        matOpType opType, matOpScaleType sclType);
+
+    template<typename sfDt, typename matOpDt>
+    dlp::jit::jitGeneratorError matOpScaleFactorImplMerged(
+        matOpType opType, matOpScaleType sclType);
 
     // TODO: Math Utils, move to different class.
     void POLY_EVAL_6();
@@ -276,6 +284,10 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     Xbyak::Label  erf_end;
     Xbyak::Label  tables;
     Xbyak::Opmask maskReg = Xbyak::Opmask(3);
+    Xbyak::Opmask mask0   = Xbyak::Opmask(4);
+    Xbyak::Opmask mask1   = Xbyak::Opmask(5);
+    Xbyak::Opmask mask2   = Xbyak::Opmask(6);
+    Xbyak::Opmask mask3   = Xbyak::Opmask(7);
 
     Xbyak::Ymm ymmMask;
 
@@ -289,6 +301,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     }
 
     void loadRowF32(Xbyak::Reg64 addressReg, int regStartIdx);
+    void resetMasks(bool mask);
 };
 
 // Type aliases using kernelInstrType
