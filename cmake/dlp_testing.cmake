@@ -86,12 +86,21 @@ function(dlp_add_test)
     # Create test executable
     add_executable(${DLP_TEST_NAME} ${DLP_TEST_SOURCES})
 
+    # Choose library target based on static linking preference
+    if(DLP_TESTING_LINK_STATIC)
+        set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
+        message(STATUS "Linking test ${DLP_TEST_NAME} with static AOCL-DLP library")
+    else()
+        set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
+        message(STATUS "Linking test ${DLP_TEST_NAME} with shared AOCL-DLP library")
+    endif()
+
     # Link with Google Test and the main project library
     target_link_libraries(${DLP_TEST_NAME}
         PRIVATE
             gtest
             gtest_main
-            ${PROJECT_NAME}
+            ${DLP_LIBRARY_TARGET}
             ${DLP_TEST_DEPENDS}
     )
 
@@ -137,6 +146,7 @@ function(dlp_define_testing_options)
     # Testing infrastructure options
     option(BUILD_TESTING "Build test programs" OFF)
     option(DLP_TESTING_CTEST_DISABLED "Disable CTest integration (use traditional testing)" ON)
+    option(DLP_TESTING_LINK_STATIC "Link tests with static AOCL-DLP library for better performance" ON)
 
     # Testing-specific feature options
     option(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT "Enable high precision float (double) support for tests" OFF)
@@ -156,6 +166,7 @@ function(dlp_define_testing_options)
     # Propagate variables back to the caller
     set(BUILD_TESTING ${BUILD_TESTING} PARENT_SCOPE)
     set(DLP_TESTING_CTEST_DISABLED ${DLP_TESTING_CTEST_DISABLED} PARENT_SCOPE)
+    set(DLP_TESTING_LINK_STATIC ${DLP_TESTING_LINK_STATIC} PARENT_SCOPE)
     set(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT ${DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT} PARENT_SCOPE)
     set(DLP_TESTING_ENABLE_DETAILED_DEBUG ${DLP_TESTING_ENABLE_DETAILED_DEBUG} PARENT_SCOPE)
 

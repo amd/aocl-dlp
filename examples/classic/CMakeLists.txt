@@ -50,10 +50,19 @@ foreach(source ${EXAMPLE_SOURCES})
             ${PROJECT_SOURCE_DIR}/include
     )
 
+    # Choose library target based on static linking preference
+    if(DLP_EXAMPLES_LINK_STATIC)
+        set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
+        message(STATUS "Linking example ${example_name} with static AOCL-DLP library")
+    else()
+        set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
+        message(STATUS "Linking example ${example_name} with shared AOCL-DLP library")
+    endif()
+
     # Link with the main library
     target_link_libraries(${example_name}
         PRIVATE
-            ${PROJECT_NAME}
+            ${DLP_LIBRARY_TARGET}
     )
 
     # Link with math library on Unix/Linux only
