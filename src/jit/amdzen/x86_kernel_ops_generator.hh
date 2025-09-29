@@ -79,7 +79,8 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     dlp::jit::jitGeneratorError generateKernelOps(
         std::vector<dlp::kernel_frame::kernelOpsMetaData>& kernelOps,
-        const Xbyak::Reg64& postOpsArgWrapperPtrReg) override;
+        const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
+        dlp::jit::jitAlgoType algoType = dlp::jit::jitAlgoType::gemm) override;
     dlp::jit::jitGeneratorError bias(
         dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError relu(

@@ -46,6 +46,14 @@ enum class jitGeneratorError
     error
 };
 
+enum class jitAlgoType
+{
+    gemm = 0,
+    gemv_m1,
+    gemv_n1,
+    unsupportedAlgo
+};
+
 struct jitGeneratorContext
 {
     const kernel_frame::kernelInfo& kI;

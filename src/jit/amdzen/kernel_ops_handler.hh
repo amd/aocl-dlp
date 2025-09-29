@@ -81,11 +81,12 @@ class kernelOpsHandler
     // Main post-op interface
     dlp::jit::jitGeneratorError generateKernelOps(
         std::vector<dlp::kernel_frame::kernelOpsMetaData>& kernelOps,
-        const Xbyak::Reg64& postOpsArgWrapperPtrReg)
+        const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
+        dlp::jit::jitAlgoType algoType = dlp::jit::jitAlgoType::gemm)
     {
         if (kOpsGen) {
-            return kOpsGen->generateKernelOps(kernelOps,
-                                              postOpsArgWrapperPtrReg);
+            return kOpsGen->generateKernelOps(
+                kernelOps, postOpsArgWrapperPtrReg, algoType);
         }
         return dlp::jit::jitGeneratorError::error;
     }

@@ -66,7 +66,8 @@ template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::generateKernelOps(
     std::vector<kernelOpsMetaData>& kernelOps,
-    const Xbyak::Reg64&             postOpsArgWrapperPtrReg)
+    const Xbyak::Reg64&             postOpsArgWrapperPtrReg,
+    dlp::jit::jitAlgoType           algoType)
 {
     RETURN_IF_ERROR((setPostOpsContext()));
 
@@ -84,7 +85,7 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
     rG.saveRegister(regTmp7);
 
     // Load the post-ops node and post-ops attr pointers.
-    if (MR == 1) {
+    if (algoType == dlp::jit::jitAlgoType::gemv_m1) {
         jit_->mov(
             regkernelOpsList,
             jit_->ptr[postOpsArgWrapperPtrReg
@@ -94,7 +95,8 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                   jit_->ptr[postOpsArgWrapperPtrReg
                             + offsetof(dlp::kernels::gemvM1Params, csY)]);
 
-        // Load pointer to kernelOpsAttr struct instead of the struct itself.
+        // Load pointer to kernelOpsAttr struct instead of the struct
+        // itself.
         jit_->lea(
             regkernelOpsAttr,
             jit_->ptr[postOpsArgWrapperPtrReg
@@ -128,7 +130,7 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                 return jitGeneratorError::notSupported;
             }
         }
-    } else if (NR == 1) {
+    } else if (algoType == dlp::jit::jitAlgoType::gemv_n1) {
         jit_->mov(
             regkernelOpsList,
             jit_->ptr[postOpsArgWrapperPtrReg
@@ -138,7 +140,8 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                   jit_->ptr[postOpsArgWrapperPtrReg
                             + offsetof(dlp::kernels::gemvN1Params, csC)]);
 
-        // Load pointer to kernelOpsAttr struct instead of the struct itself.
+        // Load pointer to kernelOpsAttr struct instead of the struct
+        // itself.
         jit_->lea(
             regkernelOpsAttr,
             jit_->ptr[postOpsArgWrapperPtrReg
@@ -172,7 +175,7 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                 return jitGeneratorError::notSupported;
             }
         }
-    } else {
+    } else if (algoType == dlp::jit::jitAlgoType::gemm) {
         jit_->mov(
             regkernelOpsList,
             jit_->ptr[postOpsArgWrapperPtrReg
@@ -215,6 +218,10 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                 return jitGeneratorError::notSupported;
             }
         }
+    } else {
+        // This is an algorithm type not supported by our JIT kernels
+        // Returning error code appropriately
+        return jitGeneratorError::notSupported;
     }
 
     auto retVal = this->dispatchKernelOps<kernelOpsGeneratorX86>(kernelOps);

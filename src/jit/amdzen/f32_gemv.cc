@@ -750,7 +750,7 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 this, params.MR, 1, false, accumBaseIdx, yReg, params.kType);
 
             RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr)));
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1)));
 
             kernelOpsHandler.generateKernelOpsAttributes();
         }
@@ -848,7 +848,7 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 params.kType);
 
             RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr)));
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1)));
 
             kernelOpsHandler.generateKernelOpsAttributes();
         }
@@ -1628,7 +1628,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 this, 1, params.NR, false, accumBaseIdx, yReg, params.kType);
 
             RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr)));
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1)));
 
             kernelOpsHandler.generateKernelOpsAttributes();
         }
@@ -1789,7 +1789,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 params.kType);
 
             RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr)));
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1)));
 
             kernelOpsHandler.generateKernelOpsAttributes();
         }
