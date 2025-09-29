@@ -51,8 +51,15 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 | DLP_TESTING_CTEST_DISABLED    | ON           | Disable CTest integration (set to OFF to enable with BUILD_TESTING)|
 |                               |              |                                                                    |
 | **Testing Options**           |              |                                                                    |
+| DLP_TESTING_LINK_STATIC       | ON           | Link tests with static AOCL-DLP library for better performance    |
 | DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT | OFF | Enable high precision float (double) support for tests           |
 | DLP_TESTING_ENABLE_DETAILED_DEBUG | OFF      | Enable detailed debug information for tests                        |
+|                               |              |                                                                    |
+| **Benchmarking Options**      |              |                                                                    |
+| DLP_BENCHMARKS_LINK_STATIC    | ON           | Link benchmarks with static AOCL-DLP library for better performance |
+|                               |              |                                                                    |
+| **Build Target Options**      |              |                                                                    |
+| DLP_EXAMPLES_LINK_STATIC      | ON           | Link examples with static AOCL-DLP library for better performance |
 
 **Note:**
 - Options can be set via `-D<option>=<value>` when invoking `cmake`.
@@ -145,6 +152,35 @@ Enable high precision float (double) support for tests:
 ```bash
 cmake -DDLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT=ON ..
 ```
+
+### Static vs Dynamic Linking
+
+By default, tests, benchmarks, and examples are linked with the static AOCL-DLP library for better performance. You can control this behavior:
+
+**Enable static linking (default):**
+```bash
+cmake -DBUILD_EXAMPLES=ON -DDLP_EXAMPLES_LINK_STATIC=ON ..
+cmake -DBUILD_TESTING=ON -DDLP_TESTING_LINK_STATIC=ON ..
+cmake -DBUILD_BENCHMARKS=ON -DDLP_BENCHMARKS_LINK_STATIC=ON ..
+```
+
+**Use dynamic linking:**
+```bash
+cmake -DBUILD_EXAMPLES=ON -DDLP_EXAMPLES_LINK_STATIC=OFF ..
+cmake -DBUILD_TESTING=ON -DDLP_TESTING_LINK_STATIC=OFF ..
+cmake -DBUILD_BENCHMARKS=ON -DDLP_BENCHMARKS_LINK_STATIC=OFF ..
+```
+
+**Verify linking with ldd:**
+```bash
+# Static linking - no libaocl-dlp.so should appear
+ldd examples/classic/simple_gemm_f32
+
+# Dynamic linking - libaocl-dlp.so should appear
+ldd examples/classic/simple_gemm_f32
+```
+
+**Note:** Static linking provides better performance by eliminating dynamic library loading overhead, which is especially beneficial for benchmarks and performance testing.
 
 ### Specifying Build Type
 

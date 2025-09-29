@@ -75,11 +75,20 @@ function(dlp_add_benchmark)
     # Create test executable
     add_executable(${DLP_BENCH_NAME} ${DLP_BENCH_SOURCES})
 
-    # Link with Google Test and the main project library
+    # Choose library target based on static linking preference
+    if(DLP_BENCHMARKS_LINK_STATIC)
+        set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
+        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with static AOCL-DLP library")
+    else()
+        set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
+        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with shared AOCL-DLP library")
+    endif()
+
+    # Link with Google Benchmark and the main project library
     target_link_libraries(${DLP_BENCH_NAME}
         PRIVATE
             benchmark
-            ${PROJECT_NAME}
+            ${DLP_LIBRARY_TARGET}
             ${DLP_BENCH_DEPENDS}
     )
 
@@ -115,7 +124,9 @@ endfunction()
 function(dlp_define_benchmarking_options)
     # Benchmarking infrastructure options
     option(BUILD_BENCHMARKS "Build benchmark programs" OFF)
+    option(DLP_BENCHMARKS_LINK_STATIC "Link benchmarks with static AOCL-DLP library for better performance" ON)
 
     # Propagate variables back to the caller
     set(BUILD_BENCHMARKS ${BUILD_BENCHMARKS} PARENT_SCOPE)
+    set(DLP_BENCHMARKS_LINK_STATIC ${DLP_BENCHMARKS_LINK_STATIC} PARENT_SCOPE)
 endfunction()
