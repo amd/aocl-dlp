@@ -23,21 +23,43 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# DEPRECATED: This file is deprecated and will be removed in future releases.
-# Options have been moved to modular files:
-# - dlp_core_options.cmake: Core library options
-# - dlp_testing.cmake: Testing options
-# - dlp_benchmark.cmake: Benchmarking options
-# - dlp_build_options.cmake: Build target options
-# - dlp_documentation.cmake: Documentation options
 
-function(dlp_define_options)
-    message(DEPRECATION "dlp_define_options() is deprecated. Options are now defined in modular files. This function will be removed in future releases.")
+function(dlp_parse_threading_model DLP_THREADING_MODEL)
+    set(THREADING_MODELS ${DLP_THREADING_MODEL})
+    set(DLP_ENABLE_OPENMP OFF)
+    set(DLP_ENABLE_PTHREAD OFF)
 
-    # Call the new modular functions for backward compatibility
-    dlp_define_core_options()
-    dlp_define_testing_options()
-    dlp_define_benchmarking_options()
-    dlp_define_build_options()
-    dlp_define_documentation_options()
+    if(NOT THREADING_MODELS)
+        set(THREADING_MODELS "none")
+    endif()
+
+    foreach(THREADING_MODEL IN LISTS THREADING_MODELS)
+        if (THREADING_MODEL STREQUAL "none")
+            # Do nothing, 'none' is a valid option but doesn't enable anything
+        elseif (THREADING_MODEL STREQUAL "openmp")
+            set(DLP_ENABLE_OPENMP ON)
+        elseif (THREADING_MODEL STREQUAL "pthread")
+            set(DLP_ENABLE_PTHREAD ON)
+        else()
+            message(FATAL_ERROR "Invalid threading model: ${THREADING_MODEL}. Valid options are 'none', 'openmp', or 'pthread'.")
+        endif()
+    endforeach()
+
+    set(DLP_ENABLE_OPENMP ${DLP_ENABLE_OPENMP} PARENT_SCOPE)
+    set(DLP_ENABLE_PTHREAD ${DLP_ENABLE_PTHREAD} PARENT_SCOPE)
+endfunction()
+
+function(dlp_define_core_options)
+    # Core library options that affect runtime behavior
+    option(DLP_ENABLE_LOGGING "Enable logging for DLP APIs" OFF)
+
+    # Threading model configuration
+    option(DLP_THREADING_MODEL "Threading model to use" "none")
+    dlp_parse_threading_model(${DLP_THREADING_MODEL})
+
+    # Propagate variables back to the caller
+    set(DLP_ENABLE_LOGGING ${DLP_ENABLE_LOGGING} PARENT_SCOPE)
+    set(DLP_THREADING_MODEL ${DLP_THREADING_MODEL} PARENT_SCOPE)
+    set(DLP_ENABLE_OPENMP ${DLP_ENABLE_OPENMP} PARENT_SCOPE)
+    set(DLP_ENABLE_PTHREAD ${DLP_ENABLE_PTHREAD} PARENT_SCOPE)
 endfunction()

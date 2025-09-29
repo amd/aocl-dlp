@@ -52,6 +52,10 @@
 #define DLP_ENDIAN "@DLP_ENDIAN@"
 
 // Testing Config
+#cmakedefine01 DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT
+#cmakedefine01 DLP_TESTING_ENABLE_DETAILED_DEBUG
+
+// Legacy support (deprecated)
 #cmakedefine01 DLP_ENABLE_HIGH_PRECISION_FLOAT
 #cmakedefine01 DLP_ENABLE_DETAILED_DEBUG
 

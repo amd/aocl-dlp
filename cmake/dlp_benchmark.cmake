@@ -111,3 +111,11 @@ endfunction()
 #     INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
 #     DISABLED
 # )
+
+function(dlp_define_benchmarking_options)
+    # Benchmarking infrastructure options
+    option(BUILD_BENCHMARKS "Build benchmark programs" OFF)
+
+    # Propagate variables back to the caller
+    set(BUILD_BENCHMARKS ${BUILD_BENCHMARKS} PARENT_SCOPE)
+endfunction()

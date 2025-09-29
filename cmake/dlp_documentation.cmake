@@ -74,3 +74,13 @@ function(dlp_generate_sphinx_docs)
 
     set(SPHINX_OUTPUT_DIR ${SPHINX_OUTPUT_DIR} PARENT_SCOPE)
 endfunction()
+
+function(dlp_define_documentation_options)
+    # Documentation generation options
+    option(BUILD_DOXYGEN "Generate Doxygen documentation" OFF)
+    option(BUILD_SPHINX "Generate Sphinx documentation" OFF)
+
+    # Propagate variables back to the caller
+    set(BUILD_DOXYGEN ${BUILD_DOXYGEN} PARENT_SCOPE)
+    set(BUILD_SPHINX ${BUILD_SPHINX} PARENT_SCOPE)
+endfunction()
