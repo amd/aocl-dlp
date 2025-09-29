@@ -654,7 +654,7 @@ namespace dlp { namespace testing { namespace framework {
 
         switch (m_type) {
             case MatrixType::f32: {
-#if DLP_ENABLE_HIGH_PRECISION_FLOAT
+#if DLP_ENABLE_HIGH_PRECISION_FLOAT || DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT
                 std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
