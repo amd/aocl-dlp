@@ -36,7 +36,8 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 include(cmake/dlp_variables.cmake)
 include(cmake/dlp_install.cmake)
 include(cmake/dlp_extensions.cmake)
-include(cmake/dlp_options.cmake)
+include(cmake/dlp_core_options.cmake)
+include(cmake/dlp_build_options.cmake)
 include(cmake/dlp_dependencies.cmake)
 include(cmake/dlp_documentation.cmake)
 include(cmake/dlp_testing.cmake)
@@ -60,8 +61,12 @@ find_package(Threads REQUIRED)
 
 # Define file extensions
 dlp_define_extensions()
-# Define Project Options
-dlp_define_options()
+# Define Project Options (modular approach)
+dlp_define_core_options()
+dlp_define_testing_options()
+dlp_define_benchmarking_options()
+dlp_define_build_options()
+dlp_define_documentation_options()
 # Initialize Project dependant variables
 dlp_init_project_dep_var()
 # Add capability of openmp

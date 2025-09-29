@@ -107,7 +107,7 @@ function(dlp_add_test)
     dlp_set_global_compile_flags(${DLP_TEST_NAME})
 
     # Add test to CTest
-    if(DLP_TEST_DISABLED OR DLP_CTEST_DISABLED)
+    if(DLP_TEST_DISABLED OR DLP_TESTING_CTEST_DISABLED)
         # Traditional Testing
         add_test(NAME ${DLP_TEST_NAME} COMMAND ${DLP_TEST_NAME})
     else()
@@ -132,3 +132,35 @@ endfunction()
 #     INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
 #     DISABLED
 # )
+
+function(dlp_define_testing_options)
+    # Testing infrastructure options
+    option(BUILD_TESTING "Build test programs" OFF)
+    option(DLP_TESTING_CTEST_DISABLED "Disable CTest integration (use traditional testing)" ON)
+
+    # Testing-specific feature options
+    option(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT "Enable high precision float (double) support for tests" OFF)
+    option(DLP_TESTING_ENABLE_DETAILED_DEBUG "Enable detailed debug information for tests" OFF)
+
+    # Handle deprecated options with warnings
+    if(DEFINED DLP_CTEST_DISABLED)
+        message(DEPRECATION "DLP_CTEST_DISABLED is deprecated and will be removed in future releases. Use DLP_TESTING_CTEST_DISABLED instead.")
+        set(DLP_TESTING_CTEST_DISABLED ${DLP_CTEST_DISABLED})
+    endif()
+
+    if(DEFINED DLP_ENABLE_HIGH_PRECISION_FLOAT)
+        message(DEPRECATION "DLP_ENABLE_HIGH_PRECISION_FLOAT is deprecated and will be removed in future releases. Use DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT instead.")
+        set(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT ${DLP_ENABLE_HIGH_PRECISION_FLOAT})
+    endif()
+
+    # Propagate variables back to the caller
+    set(BUILD_TESTING ${BUILD_TESTING} PARENT_SCOPE)
+    set(DLP_TESTING_CTEST_DISABLED ${DLP_TESTING_CTEST_DISABLED} PARENT_SCOPE)
+    set(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT ${DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT} PARENT_SCOPE)
+    set(DLP_TESTING_ENABLE_DETAILED_DEBUG ${DLP_TESTING_ENABLE_DETAILED_DEBUG} PARENT_SCOPE)
+
+    # Set legacy variables for backward compatibility
+    set(DLP_CTEST_DISABLED ${DLP_TESTING_CTEST_DISABLED} PARENT_SCOPE)
+    set(DLP_ENABLE_HIGH_PRECISION_FLOAT ${DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT} PARENT_SCOPE)
+    set(DLP_ENABLE_DETAILED_DEBUG ${DLP_TESTING_ENABLE_DETAILED_DEBUG} PARENT_SCOPE)
+endfunction()

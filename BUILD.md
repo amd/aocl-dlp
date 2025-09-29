@@ -29,7 +29,7 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 | **General Build Options**     |              |                                                                    |
 | BUILD_EXAMPLES                | OFF          | Build example programs                                             |
 | BUILD_BENCHMARKS              | OFF          | Build benchmark programs                                           |
-| BUILD_TESTING                 | OFF          | Build test programs (requires DLP_CTEST_DISABLED=OFF for CTest)   |
+| BUILD_TESTING                 | OFF          | Build test programs (requires DLP_TESTING_CTEST_DISABLED=OFF for CTest) |
 | BUILD_DOXYGEN                 | OFF          | Build Doxygen documentation                                        |
 | BUILD_SPHINX                  | OFF          | Build Sphinx documentation                                         |
 | CMAKE_EXPORT_COMPILE_COMMANDS | OFF          | Generate compile_commands.json for tooling                         |
@@ -48,15 +48,16 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 | DLP_ENABLE_ASAN               | OFF          | Enable AddressSanitizer                                            |
 | DLP_ENABLE_TSAN               | OFF          | Enable ThreadSanitizer                                             |
 | DLP_ENABLE_UBSAN              | OFF          | Enable UndefinedBehaviorSanitizer                                  |
-| DLP_CTEST_DISABLED            | ON           | Disable CTest integration (set to OFF to enable with BUILD_TESTING)|
+| DLP_TESTING_CTEST_DISABLED    | ON           | Disable CTest integration (set to OFF to enable with BUILD_TESTING)|
 |                               |              |                                                                    |
-| **Advanced Options**          |              |                                                                    |
-| DLP_ENABLE_HIGH_PRECISION_FLOAT | OFF        | Enable high precision float (double) support                       |
+| **Testing Options**           |              |                                                                    |
+| DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT | OFF | Enable high precision float (double) support for tests           |
+| DLP_TESTING_ENABLE_DETAILED_DEBUG | OFF      | Enable detailed debug information for tests                        |
 
 **Note:**
 - Options can be set via `-D<option>=<value>` when invoking `cmake`.
 - Some options (like `-GNinja`) are passed as command-line arguments, not as variables.
-- For a full list of options, see `cmake/dlp_options.cmake` and `CMakeLists.txt`.
+- For a full list of options, see the modular cmake files: `cmake/dlp_core_options.cmake`, `cmake/dlp_testing.cmake`, `cmake/dlp_benchmark.cmake`, `cmake/dlp_build_options.cmake`, and `cmake/dlp_documentation.cmake`.
 
 ## Quick Start Build
 
@@ -109,10 +110,10 @@ cmake -DBUILD_BENCHMARKS=ON ..
 To enable testing with full CTest integration:
 
 ```bash
-cmake -DBUILD_TESTING=ON -DDLP_CTEST_DISABLED=OFF ..
+cmake -DBUILD_TESTING=ON -DDLP_TESTING_CTEST_DISABLED=OFF ..
 ```
 
-**Note:** Both `BUILD_TESTING=ON` and `DLP_CTEST_DISABLED=OFF` are required for full CTest integration. Using only `BUILD_TESTING=ON` builds tests but uses traditional testing instead of Google Test discovery.
+**Note:** Both `BUILD_TESTING=ON` and `DLP_TESTING_CTEST_DISABLED=OFF` are required for full CTest integration. Using only `BUILD_TESTING=ON` builds tests but uses traditional testing instead of Google Test discovery.
 
 ### Threading Model Configuration
 
@@ -139,10 +140,10 @@ cmake -DDLP_THREADING_MODEL=openmp -DDLP_OPENMP_ROOT=/path/to/openmp ..
 
 ### High Precision Float Support
 
-Enable high precision float (double) support:
+Enable high precision float (double) support for tests:
 
 ```bash
-cmake -DDLP_ENABLE_HIGH_PRECISION_FLOAT=ON ..
+cmake -DDLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT=ON ..
 ```
 
 ### Specifying Build Type
@@ -196,7 +197,11 @@ AOCL-DLP uses a modern CMake build system structured as follows:
 
 - Main `CMakeLists.txt`: Orchestrates the overall build process
 - `cmake/dlp_variables.cmake`: Sets project variables, languages and standards
-- `cmake/dlp_options.cmake`: Defines build options and threading models
+- `cmake/dlp_core_options.cmake`: Defines core library options and threading models
+- `cmake/dlp_testing.cmake`: Defines testing options and infrastructure
+- `cmake/dlp_benchmark.cmake`: Defines benchmarking options and infrastructure
+- `cmake/dlp_build_options.cmake`: Defines build target options (examples, sanitizers)
+- `cmake/dlp_documentation.cmake`: Defines documentation options and generation
 - `cmake/dlp_dependencies.cmake`: Manages OpenMP and Pthread dependencies
 - `cmake/dlp_compiler_flags_linux.cmake`: Sets compiler flags for Linux
 - `cmake/dlp_compiler_flags_windows.cmake`: Sets compiler flags for Windows

@@ -23,21 +23,21 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
-# DEPRECATED: This file is deprecated and will be removed in future releases.
-# Options have been moved to modular files:
-# - dlp_core_options.cmake: Core library options
-# - dlp_testing.cmake: Testing options
-# - dlp_benchmark.cmake: Benchmarking options
-# - dlp_build_options.cmake: Build target options
-# - dlp_documentation.cmake: Documentation options
 
-function(dlp_define_options)
-    message(DEPRECATION "dlp_define_options() is deprecated. Options are now defined in modular files. This function will be removed in future releases.")
+function(dlp_define_build_options)
+    # Build target options - additional components that can be built
+    option(BUILD_EXAMPLES "Build example programs" OFF)
+    option(DLP_EXAMPLES_LINK_STATIC "Link examples with static AOCL-DLP library for better performance" ON)
 
-    # Call the new modular functions for backward compatibility
-    dlp_define_core_options()
-    dlp_define_testing_options()
-    dlp_define_benchmarking_options()
-    dlp_define_build_options()
-    dlp_define_documentation_options()
+    # Sanitizer options for debugging and development
+    option(DLP_ENABLE_ASAN "Enable Address Sanitizer" OFF)
+    option(DLP_ENABLE_UBSAN "Enable Undefined Behavior Sanitizer" OFF)
+    option(DLP_ENABLE_TSAN "Enable Thread Sanitizer" OFF)
+
+    # Propagate variables back to the caller
+    set(BUILD_EXAMPLES ${BUILD_EXAMPLES} PARENT_SCOPE)
+    set(DLP_EXAMPLES_LINK_STATIC ${DLP_EXAMPLES_LINK_STATIC} PARENT_SCOPE)
+    set(DLP_ENABLE_ASAN ${DLP_ENABLE_ASAN} PARENT_SCOPE)
+    set(DLP_ENABLE_UBSAN ${DLP_ENABLE_UBSAN} PARENT_SCOPE)
+    set(DLP_ENABLE_TSAN ${DLP_ENABLE_TSAN} PARENT_SCOPE)
 endfunction()
