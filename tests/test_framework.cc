@@ -1207,3 +1207,112 @@ TEST_F(PostOpsTest, BasicPostOpFlowTest)
     const auto& scale_param = static_cast<const ScaleParam&>(second_param);
     EXPECT_TRUE(scale_param.hasScaleFactor());
 }
+
+// ============================================================================
+// ARGUMENT PARSER TESTS - UAL CONFIGURATION
+// ============================================================================
+
+#include "framework/utils/arg_parser.hh"
+
+using dlp::testing::utils::ArgParser;
+
+class ArgParserTest : public ::testing::Test
+{
+  protected:
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+// Test that UAL type parsing works correctly
+TEST_F(ArgParserTest, ParseUALTypeValid)
+{
+    // Test valid UAL types
+    EXPECT_EQ(ArgParser::parseUALType("DLP"), UALType::DLP);
+    EXPECT_EQ(ArgParser::parseUALType("REF"), UALType::REF);
+    EXPECT_EQ(ArgParser::parseUALType("MKL"), UALType::MKL);
+    EXPECT_EQ(ArgParser::parseUALType("ONEDNN"), UALType::ONEDNN);
+}
+
+// Test that invalid UAL types throw exceptions
+TEST_F(ArgParserTest, ParseUALTypeInvalid)
+{
+    // Test invalid UAL types
+    EXPECT_THROW(ArgParser::parseUALType("INVALID"), std::invalid_argument);
+    EXPECT_THROW(ArgParser::parseUALType("dlp"),
+                 std::invalid_argument); // case-sensitive
+    EXPECT_THROW(ArgParser::parseUALType(""), std::invalid_argument);
+    EXPECT_THROW(ArgParser::parseUALType("BLAS"), std::invalid_argument);
+}
+
+// Test argument parser UAL extraction with default values
+TEST_F(ArgParserTest, UALExtractionWithDefaults)
+{
+    // Create a parser with no UAL arguments
+    const char* argv[] = { "test_program" };
+    int         argc   = 1;
+    ArgParser   parser(argc, const_cast<char**>(argv));
+
+    // Test default values
+    EXPECT_EQ(parser.getUalTest("DLP"), "DLP");
+    EXPECT_EQ(parser.getUalRef("REF"), "REF");
+
+    // Test custom defaults
+    EXPECT_EQ(parser.getUalTest("MKL"), "MKL");
+    EXPECT_EQ(parser.getUalRef("ONEDNN"), "ONEDNN");
+}
+
+// Test argument parser with UAL arguments
+TEST_F(ArgParserTest, UALExtractionWithArguments)
+{
+    // Test --ual-test VALUE format
+    {
+        const char* argv[] = { "test_program", "--ual-test", "MKL", "--ual-ref",
+                               "ONEDNN" };
+        int         argc   = 5;
+        ArgParser   parser(argc, const_cast<char**>(argv));
+
+        EXPECT_EQ(parser.getUalTest(), "MKL");
+        EXPECT_EQ(parser.getUalRef(), "ONEDNN");
+    }
+
+    // Test --ual_test VALUE format (underscore variant)
+    {
+        const char* argv[] = { "test_program", "--ual_test", "REF", "--ual_ref",
+                               "DLP" };
+        int         argc   = 5;
+        ArgParser   parser(argc, const_cast<char**>(argv));
+
+        EXPECT_EQ(parser.getUalTest(), "REF");
+        EXPECT_EQ(parser.getUalRef(), "DLP");
+    }
+}
+
+// Test that parseTestArgs filters UAL arguments correctly
+TEST_F(ArgParserTest, ParseTestArgsFiltersUALArguments)
+{
+    // Test that UAL arguments are filtered out for GoogleTest
+    const char* original_argv[] = { "test_program",     "--ual-test", "DLP",
+                                    "--gtest_filter=*", "--ual-ref",  "REF" };
+    int         original_argc   = 6;
+
+    // Make a copy since parseTestArgs modifies argc/argv
+    std::vector<char*> argv_vec;
+    for (int i = 0; i < original_argc; ++i) {
+        argv_vec.push_back(const_cast<char*>(original_argv[i]));
+    }
+
+    int    argc = original_argc;
+    char** argv = argv_vec.data();
+
+    auto parser = ArgParser::parseTestArgs(argc, argv);
+
+    // Verify UAL values were captured
+    EXPECT_EQ(parser.getUalTest(), "DLP");
+    EXPECT_EQ(parser.getUalRef(), "REF");
+
+    // Verify argc was reduced (removed --ual-test DLP --ual-ref REF = 4 args)
+    EXPECT_EQ(argc, 2); // Should have test_program and --gtest_filter=*
+
+    // Verify program name is still there
+    EXPECT_STREQ(argv[0], "test_program");
+}
