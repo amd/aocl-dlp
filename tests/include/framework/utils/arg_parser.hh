@@ -33,6 +33,11 @@
 #include <string>
 #include <vector>
 
+// Forward declaration for UALType
+namespace dlp::testing::framework {
+enum class UALType : uint32_t;
+}
+
 namespace dlp::testing::utils {
 
 /**
@@ -180,13 +185,20 @@ class ArgParser
         std::cout << "DLPTestSuite Help\n";
         std::cout << "Usage: " << program_name << " [OPTIONS]\n\n";
         std::cout << "Options:\n";
-        std::cout << "  -f, --file <path>    Specify YAML configuration file\n";
-        std::cout << "  -h, --help           Show this help message\n";
-        std::cout << "  --verbose            Enable verbose output\n";
+        std::cout
+            << "  -f, --file <path>       Specify YAML configuration file\n";
+        std::cout << "  --ual-test <type>       UAL implementation to test "
+                     "(DLP|REF|MKL|ONEDNN)\n";
+        std::cout << "  --ual-ref <type>        UAL reference implementation "
+                     "(DLP|REF|MKL|ONEDNN)\n";
+        std::cout << "  -h, --help              Show this help message\n";
+        std::cout << "  --verbose               Enable verbose output\n";
         std::cout << "\nExample:\n";
         std::cout << "  " << program_name << " -f my_config.yaml\n";
-        std::cout << "  " << program_name
-                  << " --file /path/to/config.yaml --verbose\n";
+        std::cout << "  " << program_name << " --ual-test DLP --ual-ref REF\n";
+        std::cout
+            << "  " << program_name
+            << " --file /path/to/config.yaml --ual-test DLP --ual-ref MKL\n";
     }
 
     /**
@@ -194,6 +206,45 @@ class ArgParser
      * @return true if help flags (-h, --help) are present
      */
     bool helpRequested() const { return hasFlag("-h") || hasFlag("--help"); }
+
+    /**
+     * @brief Get UAL implementation to test
+     * @param default_val Default UAL type if not specified (default: "DLP")
+     * @return UAL type string for implementation under test
+     *
+     * Supports both --ual-test and --ual_test flags:
+     * - ./test_gemm --ual-test DLP
+     * - ./test_gemm --ual_test DLP
+     */
+    std::string getUalTest(const std::string& default_val = "DLP") const
+    {
+        return ual_test_.empty() ? default_val : ual_test_;
+    }
+
+    /**
+     * @brief Get UAL reference implementation
+     * @param default_val Default UAL type if not specified (default: "REF")
+     * @return UAL type string for reference implementation
+     *
+     * Supports both --ual-ref and --ual_ref flags:
+     * - ./test_gemm --ual-ref REF
+     * - ./test_gemm --ual_ref REF
+     */
+    std::string getUalRef(const std::string& default_val = "REF") const
+    {
+        return ual_ref_.empty() ? default_val : ual_ref_;
+    }
+
+    /**
+     * @brief Parse UAL type string to UALType enum
+     * @param type_str String representation of UAL type
+     * @return UALType enum value
+     * @throws std::invalid_argument if type_str is not recognized
+     *
+     * Supported values: "DLP", "REF", "MKL", "ONEDNN" (case-sensitive)
+     */
+    static dlp::testing::framework::UALType parseUALType(
+        const std::string& type_str);
 
     // Static helper functions
     /**
@@ -242,6 +293,18 @@ class ArgParser
                 continue;
             }
 
+            // Skip UAL test flag and value
+            if ((arg == "--ual-test" || arg == "--ual_test") && i + 1 < argc) {
+                ++i; // Skip both flag and value
+                continue;
+            }
+
+            // Skip UAL ref flag and value
+            if ((arg == "--ual-ref" || arg == "--ual_ref") && i + 1 < argc) {
+                ++i; // Skip both flag and value
+                continue;
+            }
+
             // Keep help flags for GoogleTest to handle naturally
             new_argv.push_back(argv[i]);
         }
@@ -264,6 +327,21 @@ class ArgParser
                 yaml_file_ = argv_[i + 1];
                 ++i; // Skip the next argument (the file path)
             }
+
+            // Handle UAL test specification: --ual-test VALUE or --ual_test
+            // VALUE
+            else if ((arg == "--ual-test" || arg == "--ual_test")
+                     && i + 1 < argc_) {
+                ual_test_ = argv_[i + 1];
+                ++i; // Skip the next argument (the value)
+            }
+
+            // Handle UAL ref specification: --ual-ref VALUE or --ual_ref VALUE
+            else if ((arg == "--ual-ref" || arg == "--ual_ref")
+                     && i + 1 < argc_) {
+                ual_ref_ = argv_[i + 1];
+                ++i; // Skip the next argument (the value)
+            }
         }
     }
 
@@ -271,6 +349,8 @@ class ArgParser
     int         argc_;
     char**      argv_;
     std::string yaml_file_;
+    std::string ual_test_;
+    std::string ual_ref_;
 };
 
 } // namespace dlp::testing::utils

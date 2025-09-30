@@ -55,6 +55,50 @@ using namespace dlp::testing::framework;
 using namespace dlp::testing::framework::postops;
 
 // ============================================================================
+// GLOBAL TEST CONFIGURATION
+// ============================================================================
+
+/**
+ * @brief Global test configuration for UAL backend selection
+ *
+ * This structure holds the UAL types to be used for testing throughout
+ * the entire test run. It's initialized once in main() from command-line
+ * arguments and remains constant for all tests.
+ */
+struct TestGlobalConfig
+{
+    UALType ual_test_type = UALType::DLP; ///< UAL implementation under test
+    UALType ual_ref_type  = UALType::REF; ///< UAL reference implementation
+
+    void print() const
+    {
+        std::cout << "Test Configuration:\n";
+        std::cout << "  UAL Under Test: " << toString(ual_test_type) << "\n";
+        std::cout << "  UAL Reference:  " << toString(ual_ref_type) << "\n";
+    }
+
+  private:
+    std::string toString(UALType type) const
+    {
+        switch (type) {
+            case UALType::DLP:
+                return "DLP";
+            case UALType::REF:
+                return "REF";
+            case UALType::MKL:
+                return "MKL";
+            case UALType::ONEDNN:
+                return "ONEDNN";
+            default:
+                return "UNKNOWN";
+        }
+    }
+};
+
+// Global instance (initialized in main())
+static TestGlobalConfig g_test_config;
+
+// ============================================================================
 // GLOBAL CONFIGURATION VARIABLES
 // ============================================================================
 
@@ -950,11 +994,55 @@ getTestConfigurations()
 // TEST FIXTURE CLASSES
 // ============================================================================
 
-// PARAMETERIZED TEST FIXTURE
+// PARAMETERIZED TEST FIXTURE WITH STATIC UAL INSTANCES
 class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 {
   protected:
-    void SetUp() override { config_ = GetParam(); }
+    // Static UAL instances shared across all tests in this suite
+    static std::shared_ptr<IUal> ual_test_;
+    static std::shared_ptr<IUal> ual_ref_;
+
+    // Called ONCE before first test in suite
+    static void SetUpTestSuite()
+    {
+        std::cout << "Setting up UAL instances for test suite...\n";
+
+        try {
+            ual_test_ = UalFactory::createUal(g_test_config.ual_test_type);
+            ual_ref_  = UalFactory::createUal(g_test_config.ual_ref_type);
+
+            if (!ual_test_) {
+                throw std::runtime_error("Failed to create UAL under test");
+            }
+            if (!ual_ref_) {
+                throw std::runtime_error("Failed to create UAL reference");
+            }
+
+            std::cout << "UAL instances created successfully\n";
+        } catch (const std::exception& e) {
+            std::cerr << "ERROR: Failed to create UAL instances: " << e.what()
+                      << "\n";
+            throw;
+        }
+    }
+
+    // Called ONCE after last test in suite
+    static void TearDownTestSuite()
+    {
+        std::cout << "Tearing down UAL instances...\n";
+        ual_test_.reset();
+        ual_ref_.reset();
+    }
+
+    // Per-test setup
+    void SetUp() override
+    {
+        config_ = GetParam();
+
+        // Verify UALs are available
+        ASSERT_TRUE(ual_test_ != nullptr) << "UAL under test not initialized";
+        ASSERT_TRUE(ual_ref_ != nullptr) << "UAL reference not initialized";
+    }
 
     void TearDown() override
     {
@@ -1019,8 +1107,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         // For now, alpha/beta values are stored in config but not used in
         // computation
 
-        // Perform GEMM with DLP implementation
-        std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+        // Use static UAL instances (created once for entire test suite)
+        // No need to create new instances - use ual_test_ and ual_ref_
 
         // Apply reordering if specified
         if (config_.reorderA) {
@@ -1035,9 +1123,9 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             Matrix B_reordered;
             Matrix B_ref_reordered;
 
-            dlp_reorder_status =
-                ual_dlp->reorder(B, B_reordered, config_.a_type, config_.b_type,
-                                 config_.c_type, config_.acc_type);
+            dlp_reorder_status = ual_test_->reorder(
+                B, B_reordered, config_.a_type, config_.b_type, config_.c_type,
+                config_.acc_type);
 
             // Skip test if DLP reorder is not supported
             if (dlp_reorder_status == UALError::UAL_NOT_SUPPORTED) {
@@ -1051,12 +1139,11 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             // Also apply reordering to reference matrix to ensure both have
             // same parameters
-            std::unique_ptr<IUal> ual_ref_for_reorder =
-                UalFactory::createUal(UALType::REF);
+            // Use static ual_ref_ instead of creating new instance
 
             // Check if the config is valid then reorder
             if (params_valid) {
-                ref_reorder_status = ual_ref_for_reorder->reorder(
+                ref_reorder_status = ual_ref_->reorder(
                     B_ref, B_ref_reordered, config_.a_type, config_.b_type,
                     config_.c_type, config_.acc_type);
 
@@ -1085,25 +1172,23 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             // Reference implementation: pack is no-op, B_ref remains unchanged
         }
 
-        ASSERT_TRUE(ual_dlp != nullptr) << "Failed to create DLP UAL";
+        // UAL instances are already verified in SetUp(), no need to assert
+        // again Perform GEMM with test UAL implementation
+        UALError test_status =
+            ual_test_->gemm(A, B, C, config_.acc_type, config_.postops_dlp,
+                            config_.alpha, config_.beta);
 
-        UALError dlp_status =
-            ual_dlp->gemm(A, B, C, config_.acc_type, config_.postops_dlp,
-                          config_.alpha, config_.beta);
-
-        if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
-            GTEST_SKIP() << "DLP GEMM not supported for this configuration";
+        if (test_status == UALError::UAL_NOT_SUPPORTED) {
+            GTEST_SKIP()
+                << "UAL under test GEMM not supported for this configuration";
         }
 
-        bool dlp_result = (dlp_status == UALError::UAL_SUCCESS);
+        bool test_result = (test_status == UALError::UAL_SUCCESS);
 
-        // Perform GEMM with reference implementation
-        std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
-        ASSERT_TRUE(ual_ref != nullptr) << "Failed to create REF UAL";
-
+        // Perform GEMM with reference UAL implementation
         UALError ref_status =
-            ual_ref->gemm(A_ref, B_ref, C_ref, config_.acc_type,
-                          config_.postops_ref, config_.alpha, config_.beta);
+            ual_ref_->gemm(A_ref, B_ref, C_ref, config_.acc_type,
+                           config_.postops_ref, config_.alpha, config_.beta);
 
         bool ref_result = (ref_status == UALError::UAL_SUCCESS);
 
@@ -1111,11 +1196,11 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
         if (params_valid) {
             // For valid parameters, both implementations should succeed
-            EXPECT_TRUE(dlp_result)
-                << "DLP GEMM should succeed with valid parameters:"
+            EXPECT_TRUE(test_result)
+                << "UAL under test GEMM should succeed with valid parameters:"
                 << printConfigDetails(config_);
             EXPECT_TRUE(ref_result)
-                << "Reference GEMM should succeed with valid parameters:"
+                << "UAL reference GEMM should succeed with valid parameters:"
                 << printConfigDetails(config_);
 
             // And produce the same results
@@ -1127,9 +1212,10 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             // Detailed comparison with mismatch reporting
             if (!(C == C_ref)) {
                 std::ostringstream detailed_error;
-                detailed_error << "DLP and Reference results mismatch for "
-                                  "valid parameters:\n"
-                               << printConfigDetails(config_) << "\n";
+                detailed_error
+                    << "UAL under test and Reference results mismatch for "
+                       "valid parameters:\n"
+                    << printConfigDetails(config_) << "\n";
 
 #if DLP_ENABLE_DETAILED_DEBUG || DLP_TESTING_ENABLE_DETAILED_DEBUG
                 detailed_error << compareMatricesDetailed(C, C_ref);
@@ -1139,13 +1225,14 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         } else {
             // For invalid parameters, both implementations should fail
             // gracefully
-            EXPECT_FALSE(dlp_result
+            EXPECT_FALSE(test_result
                          && (dlp_reorder_status == UALError::UAL_SUCCESS))
-                << "DLP GEMM should fail gracefully with invalid parameters:"
+                << "UAL under test GEMM should fail gracefully with invalid "
+                   "parameters:"
                 << printConfigDetails(config_);
             EXPECT_FALSE(ref_result
                          && (ref_reorder_status == UALError::UAL_SUCCESS))
-                << "Reference GEMM should fail gracefully "
+                << "UAL reference GEMM should fail gracefully "
                    "with invalid parameters:"
                 << printConfigDetails(config_);
 
@@ -1159,6 +1246,10 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
   protected:
     GemmTestConfig config_;
 };
+
+// Static member initialization
+std::shared_ptr<IUal> GemmParameterizedTest::ual_test_ = nullptr;
+std::shared_ptr<IUal> GemmParameterizedTest::ual_ref_  = nullptr;
 
 // ============================================================================
 // PARAMETERIZED TESTS
@@ -1774,6 +1865,26 @@ main(int argc, char** argv)
         std::cout << "GoogleTest Help:" << std::endl;
         std::cout << std::string(60, '=') << std::endl;
         // Don't return here - let GoogleTest handle --help naturally below
+    }
+
+    // Initialize global UAL configuration from command-line arguments
+    try {
+        std::string ual_test_str = parser.getUalTest("DLP"); // Default: DLP
+        std::string ual_ref_str  = parser.getUalRef("REF");  // Default: REF
+
+        g_test_config.ual_test_type = ArgParser::parseUALType(ual_test_str);
+        g_test_config.ual_ref_type  = ArgParser::parseUALType(ual_ref_str);
+
+        // Print configuration
+        std::cout << std::string(60, '=') << "\n";
+        g_test_config.print();
+        std::cout << std::string(60, '=') << "\n";
+
+    } catch (const std::invalid_argument& e) {
+        std::cerr << "ERROR: " << e.what() << "\n";
+        std::cerr << "Valid UAL types: DLP, REF, MKL, ONEDNN\n";
+        std::cerr << "Use --help for usage information\n";
+        return 1;
     }
 
     // Update global YAML configuration file path if specified
