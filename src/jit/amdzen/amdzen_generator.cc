@@ -29,12 +29,12 @@
 #include "amdzen_generator.hh"
 #include "arch_utils/arch_config_manager.hh"
 #include "cpu_utils/cpu_features.hh"
+#include "debug_utils/gdb_helper_utils.hh"
 #include "f32_gemm_generator.hh"
 #include "f32_gemv.hh"
 #include "jit_register/jit_register.hh"
 #include "traits.hh"
 
-// #define DLP_DUMP_JIT_CODE 1
 namespace amdzen::gen {
 
 jitAmdZenFP32::jitAmdZenFP32()
@@ -671,6 +671,8 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                         reinterpret_cast<utils::jit_kernel>(
                             kernelCodeBlocks[m_idx * numNRVariants
                                              + kernel_n_idx]);
+
+                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
                     kernel(params);
                 }
 
@@ -684,6 +686,8 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                         reinterpret_cast<utils::jit_kernel>(
                             kernelCodeBlocks[m_idx * numNRVariants
                                              + kernel_n_idx]);
+
+                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
                     kernel(params);
                 }
 
@@ -729,6 +733,8 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                         reinterpret_cast<utils::jit_kernel>(
                             kernelCodeBlocks[m_idx * numNRVariants
                                              + kernel_n_idx]);
+
+                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
                     kernel(params);
                 }
                 if (mPartialPieces) {
@@ -741,6 +747,8 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                         reinterpret_cast<utils::jit_kernel>(
                             kernelCodeBlocks[m_idx * numNRVariants
                                              + kernel_n_idx]);
+
+                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
                     kernel(params);
                 }
 

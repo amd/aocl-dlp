@@ -27,7 +27,7 @@
 function(dlp_define_build_options)
     # Build target options - additional components that can be built
     option(BUILD_EXAMPLES "Build example programs" OFF)
-    option(DLP_EXAMPLES_LINK_STATIC "Link examples with static AOCL-DLP library for better performance" ON)
+    option(DLP_EXAMPLES_LINK_STATIC "Link examples with static AOCL-DLP library for better performance" OFF)
 
     # Sanitizer options for debugging and development
     option(DLP_ENABLE_ASAN "Enable Address Sanitizer" OFF)

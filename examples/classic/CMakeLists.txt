@@ -25,6 +25,7 @@
 # Basic examples
 set(EXAMPLE_SOURCES
     simple_gemm_f32.c
+    multi_instance_gemm_f32.c
     simple_gemm_bf16.c
     simple_gemm_s8.c
     simple_gemm_with_bias.c
@@ -36,6 +37,8 @@ set(EXAMPLE_SOURCES
     eltwise_ops.c
     version.c
 )
+
+find_package(OpenMP REQUIRED COMPONENTS C CXX)
 
 # Create an executable for each example source file
 foreach(source ${EXAMPLE_SOURCES})
@@ -65,6 +68,17 @@ foreach(source ${EXAMPLE_SOURCES})
         PRIVATE
             ${DLP_LIBRARY_TARGET}
     )
+
+    # Link with OpenMP if available
+    if(OpenMP_C_FOUND)
+        target_link_libraries(${example_name} PRIVATE OpenMP::OpenMP_C)
+    endif()
+    if(OpenMP_CXX_FOUND)
+        target_link_libraries(${example_name} PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+    if(OpenMP_C_FOUND OR OpenMP_CXX_FOUND)
+        target_compile_definitions(${example_name} PRIVATE DLP_EXAMPLE_ENABLE_OPENMP)
+    endif()
 
     # Link with math library on Unix/Linux only
     target_link_libraries(${example_name}
