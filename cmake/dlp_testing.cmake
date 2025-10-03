@@ -146,7 +146,7 @@ function(dlp_define_testing_options)
     # Testing infrastructure options
     option(BUILD_TESTING "Build test programs" OFF)
     option(DLP_TESTING_CTEST_DISABLED "Disable CTest integration (use traditional testing)" ON)
-    option(DLP_TESTING_LINK_STATIC "Link tests with static AOCL-DLP library for better performance" ON)
+    option(DLP_TESTING_LINK_STATIC "Link tests with static AOCL-DLP library for better performance" OFF)
 
     # Testing-specific feature options
     option(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT "Enable high precision float (double) support for tests" OFF)
