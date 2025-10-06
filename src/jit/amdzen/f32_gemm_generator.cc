@@ -190,6 +190,13 @@ jitGEMMF32<KType>::storeResult()
     inLocalLabel();
     mov(regTmpCptr, regCPtr);
 
+    // For avx2 and avx512_256 paths, we ensure that the C matrix is row-major
+    // and then call the JIT kernel. The logic to ensure this is in
+    // aocl_gemm_f32f32f32of32.c file.
+    if (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return storeResultRowMajor();
+    }
+
     // Load cs_c value and check if cs_c is 1
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
     cmp(regTmp1, 1);
@@ -397,6 +404,13 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::scaleBeta()
 {
+    // Handling col-major C matrix is not supported for avx2 and avx512_256
+    // paths. For these cases, we ensure that the C matrix is row-major and then
+    // call the JIT kernel. The logic to ensure this is in
+    // aocl_gemm_f32f32f32of32.c file.
+    if (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return scaleBetaRowMajor();
+    }
 
     // Load cs_c value and check if cs_c is 1
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
