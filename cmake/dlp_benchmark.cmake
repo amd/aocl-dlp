@@ -78,19 +78,28 @@ function(dlp_add_benchmark)
     # Choose library target based on static linking preference
     if(DLP_BENCHMARKS_LINK_STATIC)
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with static AOCL-DLP library")
+        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with static AOCL-DLP library (whole-archive)")
+
+        # Link with Google Benchmark and the main project library using whole-archive
+        # for static builds to ensure all object files are included for plugin registration
+        target_link_libraries(${DLP_BENCH_NAME}
+            PRIVATE
+                benchmark
+                $<LINK_LIBRARY:WHOLE_ARCHIVE,${DLP_LIBRARY_TARGET}>
+                ${DLP_BENCH_DEPENDS}
+        )
     else()
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
         message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with shared AOCL-DLP library")
-    endif()
 
-    # Link with Google Benchmark and the main project library
-    target_link_libraries(${DLP_BENCH_NAME}
-        PRIVATE
-            benchmark
-            ${DLP_LIBRARY_TARGET}
-            ${DLP_BENCH_DEPENDS}
-    )
+        # Link with Google Benchmark and the main project library normally for shared builds
+        target_link_libraries(${DLP_BENCH_NAME}
+            PRIVATE
+                benchmark
+                ${DLP_LIBRARY_TARGET}
+                ${DLP_BENCH_DEPENDS}
+        )
+    endif()
 
     # Add include directories - follow modern CMake target-based approach
     target_include_directories(${DLP_BENCH_NAME}
@@ -124,7 +133,7 @@ endfunction()
 function(dlp_define_benchmarking_options)
     # Benchmarking infrastructure options
     option(BUILD_BENCHMARKS "Build benchmark programs" OFF)
-    option(DLP_BENCHMARKS_LINK_STATIC "Link benchmarks with static AOCL-DLP library for better performance" ON)
+    option(DLP_BENCHMARKS_LINK_STATIC "Link benchmarks with static AOCL-DLP library for better performance" OFF)
 
     # Propagate variables back to the caller
     set(BUILD_BENCHMARKS ${BUILD_BENCHMARKS} PARENT_SCOPE)
