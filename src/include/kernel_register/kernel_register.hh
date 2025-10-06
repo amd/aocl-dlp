@@ -36,6 +36,7 @@
 #include "kernel_register/kernel_dispatch_table.hh"
 #include "kernel_register/kernel_register_traits.hh"
 #include "kernels/kernel_base.hh"
+#include "utils/macro_utils.hh"
 #include "utils/ptr_wrappers.hh"
 #include "utils/type_utils.hh"
 
@@ -447,7 +448,8 @@ dlpKernelRegisterInstance()
                   "Requires trivially constructible classes for kernels.");    \
     static_assert(std::is_base_of_v<kernelBase, className>,                    \
                   "Requires classes derived from kernelBase.");                \
-    static auto className##__FILE__##__LINE =                                  \
+    static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_kernel_reg_var_,           \
+                                     className, __LINE__) =                    \
         dlp::kernel_frame::dlpKernelRegisterInstance().registerGemmKernel(     \
             std::move(std::make_unique<className>()),                          \
             std::string{ kernelFamily });

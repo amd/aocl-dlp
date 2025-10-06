@@ -89,20 +89,30 @@ function(dlp_add_test)
     # Choose library target based on static linking preference
     if(DLP_TESTING_LINK_STATIC)
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking test ${DLP_TEST_NAME} with static AOCL-DLP library")
+        message(STATUS "Linking test ${DLP_TEST_NAME} with static AOCL-DLP library (whole-archive)")
+
+        # Link with Google Test and the main project library using whole-archive
+        # for static builds to ensure all object files are included for plugin registration
+        target_link_libraries(${DLP_TEST_NAME}
+            PRIVATE
+                gtest
+                gtest_main
+                $<LINK_LIBRARY:WHOLE_ARCHIVE,${DLP_LIBRARY_TARGET}>
+                ${DLP_TEST_DEPENDS}
+        )
     else()
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
         message(STATUS "Linking test ${DLP_TEST_NAME} with shared AOCL-DLP library")
-    endif()
 
-    # Link with Google Test and the main project library
-    target_link_libraries(${DLP_TEST_NAME}
-        PRIVATE
-            gtest
-            gtest_main
-            ${DLP_LIBRARY_TARGET}
-            ${DLP_TEST_DEPENDS}
-    )
+        # Link with Google Test and the main project library normally for shared builds
+        target_link_libraries(${DLP_TEST_NAME}
+            PRIVATE
+                gtest
+                gtest_main
+                ${DLP_LIBRARY_TARGET}
+                ${DLP_TEST_DEPENDS}
+        )
+    endif()
 
     # Add include directories - follow modern CMake target-based approach
     target_include_directories(${DLP_TEST_NAME}
