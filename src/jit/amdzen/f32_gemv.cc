@@ -1325,8 +1325,7 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::scaleYWithBetaFringe(
                         ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
         }
         if (n_left) {
-            vmaskmovps(Xbyak::Ymm(yBaseIdx + n_iter),
-                       Xbyak::Ymm(maskBaseIdx + n_iter),
+            vmaskmovps(Xbyak::Ymm(yBaseIdx + n_iter), Xbyak::Ymm(maskBaseIdx),
                        ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
             vfmadd231ps(Xbyak::Ymm(accumBaseIdx + n_iter), Xbyak::Ymm(xBaseIdx),
                         Xbyak::Ymm(yBaseIdx + n_iter));
@@ -1337,8 +1336,7 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::scaleYWithBetaFringe(
                    ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
         }
         if (n_left) {
-            vmaskmovps(Xbyak::Ymm(yBaseIdx + n_iter),
-                       Xbyak::Ymm(maskBaseIdx + n_iter),
+            vmaskmovps(Xbyak::Ymm(yBaseIdx + n_iter), Xbyak::Ymm(maskBaseIdx),
                        ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
             vaddps(Xbyak::Ymm(accumBaseIdx + n_iter),
                    Xbyak::Ymm(accumBaseIdx + n_iter),
@@ -1417,8 +1415,7 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::storeYValuesFringe()
     }
     if (n_left) {
         vmaskmovps(ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)],
-                   Xbyak::Ymm(maskBaseIdx + n_iter),
-                   Xbyak::Ymm(accumBaseIdx + n_iter));
+                   Xbyak::Ymm(maskBaseIdx), Xbyak::Ymm(accumBaseIdx + n_iter));
     }
     return dlp::jit::jitGeneratorError::success;
 }
