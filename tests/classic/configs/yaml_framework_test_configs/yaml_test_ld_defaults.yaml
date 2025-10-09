@@ -1,0 +1,136 @@
+# Test configuration to verify correct LDA/LDB/LDC default calculation
+# This test validates the fix for leading dimension defaults based on
+# storage format, transpose flags, and matrix dimensions
+yaml_test:
+  # Test Case 1: Row-major without transpose
+  # Expected: LDA >= k, LDB >= n, LDC >= n
+  - name: "row_major_no_transpose"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: 1000
+    n: 100
+    k: 100
+    alpha: 1.0
+    beta: 0.0
+    # LDA, LDB, LDC intentionally NOT specified - should default correctly
+    mtagA: "none"
+    mtagB: "none"
+
+  # Test Case 2: Row-major with transposed A
+  # Expected: LDA >= m, LDB >= n, LDC >= n
+  - name: "row_major_transpose_a"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: true
+    transB: false
+    m: 100
+    n: 100
+    k: 1000
+    alpha: 1.0
+    beta: 0.0
+    # LDA, LDB, LDC not specified
+    mtagA: "none"
+    mtagB: "none"
+
+  # Test Case 3: Row-major with transposed B
+  # Expected: LDA >= k, LDB >= k, LDC >= n
+  - name: "row_major_transpose_b"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: true
+    m: 100
+    n: 1000
+    k: 100
+    alpha: 1.0
+    beta: 0.0
+    # LDA, LDB, LDC not specified
+    mtagA: "none"
+    mtagB: "none"
+
+  # Test Case 4: Row-major with both transposed
+  # Expected: LDA >= m, LDB >= k, LDC >= n
+  - name: "row_major_both_transpose"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: true
+    transB: true
+    m: 500
+    n: 200
+    k: 300
+    alpha: 1.0
+    beta: 0.0
+    # LDA, LDB, LDC not specified
+    mtagA: "none"
+    mtagB: "none"
+
+  # Test Case 5: Column-major without transpose
+  # Expected: LDA >= m, LDB >= k, LDC >= m
+  - name: "column_major_no_transpose"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "column-major"
+    transA: false
+    transB: false
+    m: 1000
+    n: 100
+    k: 100
+    alpha: 1.0
+    beta: 0.0
+    # LDA, LDB, LDC not specified
+    mtagA: "none"
+    mtagB: "none"
+
+  # Test Case 6: Column-major with transposed A
+  # Expected: LDA >= k, LDB >= k, LDC >= m
+  - name: "column_major_transpose_a"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "column-major"
+    transA: true
+    transB: false
+    m: 100
+    n: 100
+    k: 1000
+    alpha: 1.0
+    beta: 0.0
+    # LDA, LDB, LDC not specified
+    mtagA: "none"
+    mtagB: "none"
+
+  # Test Case 7: Mixed dimensions with Cartesian product
+  # This tests that the maximum minimum LD is computed correctly
+  - name: "cartesian_mixed_dims"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [10, 100]
+    n: [20, 200]
+    k: [30, 300]
+    alpha: 1.0
+    beta: 0.0
+    # LDA, LDB, LDC not specified - should use max of all required minimums
+    mtagA: "none"
+    mtagB: "none"
