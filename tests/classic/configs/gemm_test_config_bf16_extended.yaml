@@ -1,0 +1,272 @@
+# GEMM BF16 Weekly Test Configuration
+# Target: Comprehensive systematic sweep of dimension space
+# Runtime: ~2-3 hours
+# Focus: BF16 data type with exhaustive dimension coverage
+#
+# Architecture Parameters (ZEN4):
+#   MC=144, NC=1024, KC=4096, MR=6, NR=64 (AVX512)
+#
+# Lead's Requirements:
+#   M: 1 to 2*MC+1 (289) with step 4
+#   N: 1 to 2*NC+1 (2049) with step 32 up to 256, then step 200
+#   K: 1 to 2*KC+1 (8193) with step 100
+
+gemm_tests:
+  # ==========================================================================
+  # Test Set 1: Systematic M Sweep (Primary Sweep)
+  # M range: 1 to 289 (2*144+1), step 4
+  # Cross with representative N and K values
+  # ==========================================================================
+  - name: "bf16_extended_m_sweep"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # M: 1 to 289, step 4
+    # Generates: 1, 5, 9, 13, ..., 285, 289 (73 values)
+    m:
+      lb: 1
+      ub: 289
+      step: 4
+    # N: Representative values covering different register patterns
+    n: [64, 128, 256, 1024]
+    # K: Representative values covering KC boundaries
+    k: [64, 1024, 4096, 8192]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 73 M × 4 N × 4 K × 2 transA × 2 transB × 2 beta × 2 mtagB
+    # = 73 × 4 × 4 × 2 × 2 × 2 × 2 = 18,688 tests
+
+  # ==========================================================================
+  # Test Set 2: Systematic N Sweep - Small Range
+  # N range: 1 to 256, step 32
+  # ==========================================================================
+  - name: "bf16_extended_n_sweep_small"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # M: Representative values
+    m: [6, 12, 144, 288]
+    # N: 1 to 256, step 32
+    # Generates: 1, 33, 65, 97, 129, 161, 193, 225 (8 values)
+    n:
+      lb: 1
+      ub: 256
+      step: 32
+    # K: Representative values
+    k: [64, 1024, 4096, 8192]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 4 M × 8 N × 4 K × 2 transA × 2 transB × 2 beta × 2 mtagB
+    # = 4 × 8 × 4 × 2 × 2 × 2 × 2 = 2,048 tests
+
+  # ==========================================================================
+  # Test Set 3: Systematic N Sweep - Large Range
+  # N range: 256 to 2049 (2*1024+1), step 200
+  # ==========================================================================
+  - name: "bf16_extended_n_sweep_large"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false, true]
+    # M: Selected values
+    m: [6, 144, 288]
+    # N: 256 to 2049, step 200
+    # Generates: 256, 456, 656, 856, 1056, 1256, 1456, 1656, 1856, 2056 (10 values)
+    n:
+      lb: 256
+      ub: 2049
+      step: 200
+    # K: Reduced set for large N
+    k: [64, 1024, 4096, 8192]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 3 M × 10 N × 4 K × 1 transA × 2 transB × 2 beta × 2 mtagB
+    # = 3 × 10 × 4 × 1 × 2 × 2 × 2 = 960 tests
+
+  # ==========================================================================
+  # Test Set 4: Systematic K Sweep
+  # K range: 1 to 8193 (2*4096+1), step 100
+  # ==========================================================================
+  - name: "bf16_extended_k_sweep"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # M: Representative values
+    m: [6, 12, 144, 288]
+    # N: Representative values
+    n: [64, 128, 256, 1024]
+    # K: 1 to 8193, step 100
+    # Generates: 1, 101, 201, ..., 8101 (82 values)
+    k:
+      lb: 1
+      ub: 8193
+      step: 100
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 4 M × 4 N × 82 K × 2 transA × 2 transB × 2 beta × 2 mtagB
+    # = 4 × 4 × 82 × 2 × 2 × 2 × 2 = 20,992 tests
+
+  # ==========================================================================
+  # Test Set 5: Combined MxNxK Critical Points
+  # Testing specific combinations at blocking boundaries
+  # ==========================================================================
+  - name: "bf16_extended_combined_boundaries"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # MC boundaries: 143, 144, 145, 287, 288, 289
+    m: [1, 143, 144, 145, 287, 288, 289]
+    # NC boundaries: 1023, 1024, 1025, 2047, 2048, 2049
+    n: [1, 64, 256, 1023, 1024, 1025, 2047, 2048, 2049]
+    # KC boundaries: 4095, 4096, 4097, 8191, 8192, 8193
+    k: [1, 4095, 4096, 4097, 8191, 8192, 8193]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 7 M × 9 N × 7 K × 2 transA × 2 transB × 2 alpha × 2 beta × 2 mtagB
+    # = 7 × 9 × 7 × 2 × 2 × 2 × 2 × 2 = 25,088 tests
+
+  # ==========================================================================
+  # Test Set 6: Alpha/Beta Scaling with Full Sweep
+  # Comprehensive alpha/beta testing on selected dimensions
+  # ==========================================================================
+  - name: "bf16_extended_alpha_beta_comprehensive"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # Selected M values across range
+    m: [1, 6, 12, 72, 144, 216, 288]
+    # Selected N values including fringe cases
+    n: [1, 16, 32, 48, 64, 65, 128, 256, 1024]
+    # Selected K values
+    k: [1, 64, 1024, 4096, 8192]
+    # Comprehensive alpha/beta combinations
+    alpha: [0.0, 0.5, 1.0, 1.5, 2.0, -1.0]
+    beta: [0.0, 0.5, 1.0, 1.5, 2.0, -1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 7 M × 9 N × 5 K × 6 alpha × 6 beta
+    # = 7 × 9 × 5 × 6 × 6 = 11,340 tests
+
+  # ==========================================================================
+  # Test Set 7: Output Type Comprehensive Testing (BF16 specific)
+  # Test both F32 and BF16 output types across dimensions
+  # ==========================================================================
+  - name: "bf16_extended_output_types_comprehensive"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]  # Both output types
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # Selected M values
+    m: [1, 6, 12, 72, 144, 216, 288]
+    # Selected N values
+    n: [64, 128, 256, 1024]
+    # Selected K values covering KC boundaries
+    k: [64, 1024, 4095, 4096, 4097, 8192]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 7 M × 4 N × 6 K × 2 c_type × 2 transA × 2 transB × 2 beta × 2 mtagB
+    # = 7 × 4 × 6 × 2 × 2 × 2 × 2 × 2 = 5,376 tests
+
+# =============================================================================
+# Total Estimated Tests for BF16 Extended (Weekly):
+#   Test Set 1: ~18,688
+#   Test Set 2: ~2,048
+#   Test Set 3: ~960
+#   Test Set 4: ~20,992
+#   Test Set 5: ~25,088
+#   Test Set 6: ~11,340
+#   Test Set 7: ~5,376
+#   TOTAL: ~84,492 tests
+#
+# This is very high. Recommendations for reduction if runtime exceeds 3 hours:
+#   1. Keep Test Set 1 (primary M sweep) - CRITICAL
+#   2. Keep Test Set 4 (K sweep) - Important for KC=4096 coverage
+#   3. Reduce Test Set 5 (combined boundaries):
+#      - Remove one alpha value: 18,816 tests instead of 25,088
+#      - Reduce N to 6 values: cut by 33%
+#   4. Reduce Test Set 6 (alpha/beta comprehensive):
+#      - Reduce alpha/beta to 4 values each: 7,560 tests instead of 11,340
+#   5. Optional: Reduce Test Set 7 or merge into other sets
+#
+# With reductions, target: ~50,000-60,000 tests for 2-3 hour runtime
+# =============================================================================

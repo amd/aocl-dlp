@@ -1,0 +1,237 @@
+# GEMM FP32 Weekly Test Configuration
+# Target: Comprehensive systematic sweep of dimension space
+# Runtime: ~2-3 hours
+# Focus: FP32 data type with exhaustive dimension coverage
+#
+# Architecture Parameters (ZEN4):
+#   MC=192, NC=8064, KC=512, MR=6, NR=64 (AVX512)
+#
+# Lead's Requirements:
+#   M: 1 to 2*MC+1 (385) with step 4
+#   N: 1 to 2*NC+1 (16129) with step 32 up to 256, then step 200
+#   K: 1 to 2*KC+1 (1025) with step 100
+
+gemm_tests:
+  # ==========================================================================
+  # Test Set 1: Systematic M Sweep (Primary Sweep)
+  # M range: 1 to 385 (2*192+1), step 4
+  # Cross with representative N and K values
+  # ==========================================================================
+  - name: "fp32_extended_m_sweep"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # M: 1 to 385, step 4
+    # Generates: 1, 5, 9, 13, ..., 381, 385 (97 values)
+    m:
+      lb: 1
+      ub: 385
+      step: 4
+    # N: Representative values covering different register patterns
+    # 64 (standard), 128 (2*NR), 256 (4*NR)
+    n: [64, 128, 256]
+    # K: Representative values covering KC boundaries
+    # 64, 512 (KC), 1024 (2*KC)
+    k: [64, 512, 1024]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 97 M × 3 N × 3 K × 2 transA × 2 transB × 2 beta × 2 mtagB
+    # = 97 × 3 × 3 × 2 × 2 × 2 × 2 = 13,968 tests
+
+  # ==========================================================================
+  # Test Set 2: Systematic N Sweep - Small Range
+  # N range: 1 to 256, step 32
+  # ==========================================================================
+  - name: "fp32_extended_n_sweep_small"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # M: Representative values
+    m: [6, 12, 192, 384]
+    # N: 1 to 256, step 32
+    # Generates: 1, 33, 65, 97, 129, 161, 193, 225 (8 values)
+    n:
+      lb: 1
+      ub: 256
+      step: 32
+    # K: Representative values
+    k: [64, 512, 1024]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 4 M × 8 N × 3 K × 2 transA × 2 transB × 2 beta × 2 mtagB
+    # = 4 × 8 × 3 × 2 × 2 × 2 × 2 = 1,536 tests
+
+  # ==========================================================================
+  # Test Set 3: Systematic N Sweep - Large Range
+  # N range: 256 to 16129 (2*8064+1), step 200
+  # ==========================================================================
+  - name: "fp32_extended_n_sweep_large"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false, true]
+    # M: Selected values to keep test count manageable
+    m: [6, 192, 384]
+    # N: 256 to 16129, step 200
+    # Generates: 256, 456, 656, ..., 16056 (80 values approximately)
+    n:
+      lb: 256
+      ub: 16129
+      step: 200
+    # K: Reduced set for large N
+    k: [64, 512, 1024]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 3 M × 80 N × 3 K × 1 transA × 2 transB × 2 beta × 2 mtagB
+    # = 3 × 80 × 3 × 1 × 2 × 2 × 2 = 5,760 tests
+
+  # ==========================================================================
+  # Test Set 4: Systematic K Sweep
+  # K range: 1 to 1025 (2*512+1), step 100
+  # ==========================================================================
+  - name: "fp32_extended_k_sweep"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # M: Representative values
+    m: [6, 12, 192, 384]
+    # N: Representative values
+    n: [64, 128, 256]
+    # K: 1 to 1025, step 100
+    # Generates: 1, 101, 201, 301, 401, 501, 601, 701, 801, 901, 1001 (11 values)
+    k:
+      lb: 1
+      ub: 1025
+      step: 100
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 4 M × 3 N × 11 K × 2 transA × 2 transB × 2 beta × 2 mtagB
+    # = 4 × 3 × 11 × 2 × 2 × 2 × 2 = 2,112 tests
+
+  # ==========================================================================
+  # Test Set 5: Combined MxNxK Critical Points
+  # Testing specific combinations at blocking boundaries
+  # ==========================================================================
+  - name: "fp32_extended_combined_boundaries"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # MC boundaries: 191, 192, 193, 383, 384, 385
+    m: [1, 191, 192, 193, 383, 384, 385]
+    # NC boundaries (subset): 8063, 8064, 8065
+    n: [1, 64, 256, 8063, 8064, 8065]
+    # KC boundaries: 511, 512, 513, 1023, 1024, 1025
+    k: [1, 511, 512, 513, 1023, 1024, 1025]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 7 M × 6 N × 7 K × 2 transA × 2 transB × 2 alpha × 2 beta × 2 mtagB
+    # = 7 × 6 × 7 × 2 × 2 × 2 × 2 × 2 = 9,408 tests
+
+  # ==========================================================================
+  # Test Set 6: Alpha/Beta Scaling with Full Sweep
+  # Comprehensive alpha/beta testing on selected dimensions
+  # ==========================================================================
+  - name: "fp32_extended_alpha_beta_comprehensive"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # Selected M values across range
+    m: [1, 6, 12, 96, 192, 288, 384]
+    # Selected N values including fringe cases
+    n: [1, 16, 32, 48, 64, 65, 128, 256]
+    # Selected K values
+    k: [1, 64, 256, 512, 1024]
+    # Comprehensive alpha/beta combinations
+    alpha: [0.0, 0.5, 1.0, 1.5, 2.0, -1.0]
+    beta: [0.0, 0.5, 1.0, 1.5, 2.0, -1.0]
+    lda: [-1]
+    ldb: [-1]
+    ldc: [-1]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+    # Total: 7 M × 8 N × 5 K × 6 alpha × 6 beta
+    # = 7 × 8 × 5 × 6 × 6 = 10,080 tests
+
+# =============================================================================
+# Total Estimated Tests for FP32 Extended (Weekly):
+#   Test Set 1: ~13,968
+#   Test Set 2: ~1,536
+#   Test Set 3: ~5,760
+#   Test Set 4: ~2,112
+#   Test Set 5: ~9,408
+#   Test Set 6: ~10,080
+#   TOTAL: ~42,864 tests
+#
+# This is higher than ideal. Runtime should be monitored and sets can be
+# reduced if needed. Priority order for reduction:
+#   1. Keep Test Set 1 (primary M sweep)
+#   2. Keep Test Set 6 (alpha/beta comprehensive)
+#   3. Reduce Test Set 3 (large N sweep) - reduce step to 400
+#   4. Reduce Test Set 5 (combined boundaries) - remove some alpha values
+# =============================================================================
