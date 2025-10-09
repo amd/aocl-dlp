@@ -97,6 +97,91 @@ namespace dlp { namespace testing { namespace utils {
             return MatrixTag::NONE; // default
         }
 
+        /**
+         * @brief Compute the maximum minimum legal leading dimension
+         *
+         * When LDA/LDB/LDC are not specified in YAML, compute the minimum legal
+         * value that works for ALL possible parameter combinations.
+         *
+         * BLAS Specification for Leading Dimensions:
+         * Row-Major:    LDA >= k (no trans) or m (trans)
+         *               LDB >= n (no trans) or k (trans)
+         *               LDC >= n
+         * Column-Major: LDA >= m (no trans) or k (trans)
+         *               LDB >= k (no trans) or n (trans)
+         *               LDC >= m
+         *
+         * Simplified logic: For any matrix with mixed storage/transpose,
+         * the worst case is always max(dim1, dim2).
+         *
+         * @param dim1_iter Iterator for first dimension (m for A/C, k for B)
+         * @param dim2_iter Iterator for second dimension (k for A, n for B/C)
+         * @param storage_iter Iterator for storage format (row/column-major)
+         * @param trans_iter Iterator for transpose flag
+         * @param matrix_type Which matrix: 'A', 'B', or 'C'
+         * @return Maximum minimum legal leading dimension value
+         */
+        md_t computeMaxMinLegalLD(TypeErasedIterator& dim1_iter,
+                                  TypeErasedIterator& dim2_iter,
+                                  TypeErasedIterator& storage_iter,
+                                  TypeErasedIterator& trans_iter,
+                                  char                matrix_type)
+        {
+            // Find max value from each dimension iterator
+            md_t max_dim1 = 1;
+            md_t max_dim2 = 1;
+
+            auto dim1_copy = dim1_iter;
+            do {
+                md_t val = std::any_cast<md_t>(dim1_copy.dereference());
+                max_dim1 = std::max(max_dim1, val);
+                if (!dim1_copy.has_next())
+                    break;
+                dim1_copy.increment();
+            } while (true);
+
+            auto dim2_copy = dim2_iter;
+            do {
+                md_t val = std::any_cast<md_t>(dim2_copy.dereference());
+                max_dim2 = std::max(max_dim2, val);
+                if (!dim2_copy.has_next())
+                    break;
+                dim2_copy.increment();
+            } while (true);
+
+            // Check if we have both storage formats
+            bool has_row_major = false;
+            bool has_col_major = false;
+            auto storage_copy  = storage_iter;
+            do {
+                MatrixLayout layout =
+                    std::any_cast<MatrixLayout>(storage_copy.dereference());
+                if (layout == MatrixLayout::ROW_MAJOR)
+                    has_row_major = true;
+                if (layout == MatrixLayout::COLUMN_MAJOR)
+                    has_col_major = true;
+                if (!storage_copy.has_next())
+                    break;
+                storage_copy.increment();
+            } while (true);
+
+            // For matrices A and B, if we have any variation in storage or
+            // transpose, worst case is always max(dim1, dim2)
+            if (matrix_type == 'A' || matrix_type == 'B') {
+                return std::max(max_dim1, max_dim2);
+            }
+
+            // Matrix C (never transposed): depends only on storage format
+            // Row-major: n, Column-major: m
+            if (has_row_major && has_col_major) {
+                return std::max(max_dim1, max_dim2); // max(m, n)
+            } else if (has_row_major) {
+                return max_dim2; // n
+            } else {
+                return max_dim1; // m
+            }
+        }
+
         template<typename T>
         TypeErasedIterator get_value(
             YAML::Node node,
@@ -340,39 +425,8 @@ namespace dlp { namespace testing { namespace utils {
             // Optional fields with defaults
             bool report_inf =
                 (yield_type_for_parsing == YieldType::SIMPLE_PRODUCT);
-            if (node["lda"]) {
-                iterators.lda =
-                    get_value<md_t>(node["lda"], yield_type_for_parsing);
-            } else {
-                // Default lda to m value - use the first value from m iterator
-                auto m_val = iterators.m.dereference();
-                iterators.lda =
-                    ValueIterable<md_t>(std::any_cast<md_t>(m_val), report_inf)
-                        .begin();
-            }
 
-            if (node["ldb"]) {
-                iterators.ldb =
-                    get_value<md_t>(node["ldb"], yield_type_for_parsing);
-            } else {
-                // Default ldb to k value - use the first value from k iterator
-                auto k_val = iterators.k.dereference();
-                iterators.ldb =
-                    ValueIterable<md_t>(std::any_cast<md_t>(k_val), report_inf)
-                        .begin();
-            }
-
-            if (node["ldc"]) {
-                iterators.ldc =
-                    get_value<md_t>(node["ldc"], yield_type_for_parsing);
-            } else {
-                // Default ldc to m value - use the first value from m iterator
-                auto m_val = iterators.m.dereference();
-                iterators.ldc =
-                    ValueIterable<md_t>(std::any_cast<md_t>(m_val), report_inf)
-                        .begin();
-            }
-
+            // Initialize transpose flags first (needed for LD calculation)
             iterators.trans_a =
                 node["transA"]
                     ? get_value<bool>(node["transA"], yield_type_for_parsing)
@@ -381,6 +435,55 @@ namespace dlp { namespace testing { namespace utils {
                 node["transB"]
                     ? get_value<bool>(node["transB"], yield_type_for_parsing)
                     : ValueIterable<bool>(false, report_inf).begin();
+
+            // Now compute leading dimensions (requires transpose flags)
+            if (node["lda"]) {
+                iterators.lda =
+                    get_value<md_t>(node["lda"], yield_type_for_parsing);
+            } else {
+                // Compute minimum legal LDA based on storage format and
+                // transpose For row-major: LDA >= k (not transposed) or m
+                // (transposed) For column-major: LDA >= m (not transposed) or k
+                // (transposed)
+                md_t min_legal_lda = computeMaxMinLegalLD(
+                    iterators.m, iterators.k, iterators.storage_format,
+                    iterators.trans_a, 'A');
+                iterators.lda =
+                    ValueIterable<md_t>(min_legal_lda, report_inf).begin();
+            }
+
+            if (node["ldb"]) {
+                iterators.ldb =
+                    get_value<md_t>(node["ldb"], yield_type_for_parsing);
+            } else {
+                // Compute minimum legal LDB based on storage format and
+                // transpose For row-major: LDB >= n (not transposed) or k
+                // (transposed) For column-major: LDB >= k (not transposed) or n
+                // (transposed)
+                md_t min_legal_ldb = computeMaxMinLegalLD(
+                    iterators.k, iterators.n, iterators.storage_format,
+                    iterators.trans_b, 'B');
+                iterators.ldb =
+                    ValueIterable<md_t>(min_legal_ldb, report_inf).begin();
+            }
+
+            if (node["ldc"]) {
+                iterators.ldc =
+                    get_value<md_t>(node["ldc"], yield_type_for_parsing);
+            } else {
+                // Compute minimum legal LDC based on storage format
+                // Matrix C is never transposed
+                // For row-major: LDC >= n
+                // For column-major: LDC >= m
+                // Create a dummy transpose iterator (always false for C)
+                TypeErasedIterator trans_c_dummy =
+                    ValueIterable<bool>(false, report_inf).begin();
+                md_t min_legal_ldc = computeMaxMinLegalLD(
+                    iterators.m, iterators.n, iterators.storage_format,
+                    trans_c_dummy, 'C');
+                iterators.ldc =
+                    ValueIterable<md_t>(min_legal_ldc, report_inf).begin();
+            }
 
             // New MatrixTag-based parsing
             // Simplified design: single MatrixTag per matrix
