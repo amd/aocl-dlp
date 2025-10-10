@@ -125,7 +125,8 @@ PostOpsIterator::generateCombinations()
 
             if (subset.empty()) {
                 // Empty combination - add it once
-                m_combinations.push_back(subset);
+                // Use emplace_back to avoid GCC false positive warning
+                m_combinations.emplace_back();
             } else {
                 // Generate all permutations of this subset
                 std::sort(subset.begin(), subset.end());
