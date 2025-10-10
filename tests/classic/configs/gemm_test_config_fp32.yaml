@@ -30,9 +30,6 @@ gemm_tests:
     k: [64]
     alpha: [1.0]
     beta: [0.0]
-    lda: [-1]  # Auto-calculate
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -62,9 +59,6 @@ gemm_tests:
     k: [64]
     alpha: [1.0]
     beta: [0.0]
-    lda: [-1]
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -92,9 +86,6 @@ gemm_tests:
     k: [1, 2, 3, 4, 5, 7, 8, 9, 16, 64, 256, 511, 512, 513, 1023, 1024, 1025]
     alpha: [1.0]
     beta: [0.0]
-    lda: [-1]
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -121,9 +112,6 @@ gemm_tests:
     alpha: [0.0, 1.0, 2.0, 0.5, -1.0]
     # Beta values: 0.0 (skip beta), 1.0 (standard accum), 2.0, 0.5, -1.0
     beta: [0.0, 1.0, 2.0, 0.5, -1.0]
-    lda: [-1]
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -150,9 +138,6 @@ gemm_tests:
     k: [1, 256, 511, 512, 513, 1024]
     alpha: [1.0]
     beta: [0.0]
-    lda: [-1]
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -177,9 +162,6 @@ gemm_tests:
     k: [64, 512]
     alpha: [1.0]
     beta: [0.0]
-    lda: [-1]
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -203,9 +185,6 @@ gemm_tests:
     k: [64, 512]
     alpha: [1.0]
     beta: [0.0]
-    lda: [-1]
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
@@ -230,9 +209,6 @@ gemm_tests:
     k: [1, 7, 11, 13, 17, 19, 23, 29, 31]
     alpha: [1.0]
     beta: [0.0]
-    lda: [-1]
-    ldb: [-1]
-    ldc: [-1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
