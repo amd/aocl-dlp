@@ -126,6 +126,8 @@ PostOpsIterator::generateCombinations()
             if (subset.empty()) {
                 // Empty combination - add it once
                 // Use emplace_back to avoid GCC false positive warning
+                // See GCC bug 105329:
+                // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105329
                 m_combinations.emplace_back();
             } else {
                 // Generate all permutations of this subset
