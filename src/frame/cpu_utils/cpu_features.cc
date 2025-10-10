@@ -53,6 +53,10 @@ class referenceCpuFeatureDetector : public cpuFeatureDetectorBase
     bool isCpuVendor(cpuVendor vendor) const final { return false; }
 
     cpuVendor getCpuVendor() const final { return cpuVendor::invalid; }
+
+    int32_t getNumVectorRegisters() const final { return 0; }
+
+    int32_t getNumVectorMaskRegisters() const final { return 0; }
 };
 
 cpuFeatures::cpuFeatures()

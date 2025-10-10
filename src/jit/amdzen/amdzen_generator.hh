@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "debug_utils/gdb_helper_utils.hh"
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
 #include "kernels/kernel_base.hh"
@@ -43,29 +44,97 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     utils::kernelInstrType                         kType;
     int                                            numElemsPerReg;
 
-    void setGeneratorKernelMetaInfo(
-        dlp::kernel_frame::kernelInstrPreference kInstPref);
+    md_t MR, NR, KC;
+    md_t numMRVariants, numNRVariants;
 
-  public:
-    // jitAVX512 base;
-    md_t               MR, NR, KC;
-    md_t               numMRVariants, numNRVariants;
+    // Number of registers to be used for handling NR fringe cases.
+    // To be noted, termNRFringeRegCount = 0 mean it is for the lt (<)
+    // numElemsPerReg case. It will still required mask registers to
+    // handle the fringe.
+    int  termNRFringeRegCount;
+    bool isGenLtKrnlForAvailFullKrnl;
+
     md_t               numKernelVariants;
     md_t               K_UNROLL;
     std::vector<void*> kernelCodeBlocks;
 
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+    /* Function to retrieve the process block size of the kernel */
+    int getProcessBlockSize() const;
+
+    dlp::jit::jitGeneratorError deriveGEMMNumNRVariants(
+        const dlp::jit::jitGeneratorContext& jI);
+
+    void deriveGEMMNRAndMaskUse(int                     nr,
+                                utils::generatorParams& params,
+                                int& correspondingMainFringe);
+
+    void setMaskForGEMMLtFringe(dlp::kernels::gemmParams* params,
+                                int                       nRemainder);
+
+    // This needs to be inlined, so keeping in class declaration.
+    void executeGEMMMLoop(dlp::kernels::gemmParams* params,
+                          int                       mFullPieces,
+                          int                       mPartialPieces,
+                          int                       kernel_n_idx,
+                          int                       elementsToProcess,
+                          md_t&                     n,
+                          float**                   c_jr,
+                          md_t                      og_post_op_c_i,
+                          float*                    aPtr)
+    {
+        params->a = aPtr;
+        params->c = (*c_jr);
+        params->n = elementsToProcess;
+
+        if (params->m >= MR) {
+            params->mIter            = mFullPieces;
+            int               m_idx  = 0;
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+        }
+
+        if (mPartialPieces) {
+            (params->a) = (float*)(params->a) + mFullPieces * params->psA;
+            (params->c) = (float*)(params->c) + mFullPieces * MR * params->rsC;
+            int               m_idx  = mPartialPieces;
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+        }
+
+        params->b = (float*)(params->b) + elementsToProcess;
+        (*c_jr)   = (float*)(*c_jr) + (elementsToProcess * params->csC);
+        n -= elementsToProcess;
+        (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
+
+        // The following line is necessary to ensure a subtle bug does not
+        // occur. Unlike the classic kernels where the kernelOpsAttr is
+        // passed by value to the fringe kernels, here it is kind of passed
+        // by reference, since the params ptr is the only kernel argument
+        // (inside which is the kernelOpsAttr). Since the while(n) loop can
+        // execute multiple times, any state variable, like post_op_c_i, if
+        // modified inside kernel, it needs to be reverted.
+        (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
+    }
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+  public:
     jitAmdZenFP32();
     ~jitAmdZenFP32();
     jitAmdZenFP32(const jitAmdZenFP32&)            = delete;
     jitAmdZenFP32& operator=(const jitAmdZenFP32&) = delete;
     jitAmdZenFP32(jitAmdZenFP32&&)                 = delete;
     jitAmdZenFP32& operator=(jitAmdZenFP32&&)      = delete;
-
-    /* Function to retrieve the process block size of the kernel */
-    int getProcessBlockSize() const;
-
-    dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
 
     dlp::jit::jitGeneratorError operator()(
         const dlp::jit::jitGeneratorContext& jI) override

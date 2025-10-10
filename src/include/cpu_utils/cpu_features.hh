@@ -46,6 +46,8 @@ class cpuFeatureDetectorBase
     virtual std::vector<isaFeature> getFeatures() const                 = 0;
     virtual bool                    isCpuVendor(cpuVendor vendor) const = 0;
     virtual cpuVendor               getCpuVendor() const                = 0;
+    virtual int32_t                 getNumVectorRegisters() const       = 0;
+    virtual int32_t                 getNumVectorMaskRegisters() const   = 0;
 };
 
 class cpuFeatures
@@ -83,6 +85,16 @@ class cpuFeatures
     std::vector<isaFeature> getFeatures() { return pDetector->getFeatures(); }
 
     cpuVendor getCpuVendor() { return pDetector->getCpuVendor(); }
+
+    int32_t getNumVectorRegisters()
+    {
+        return pDetector->getNumVectorRegisters();
+    }
+
+    int32_t getNumVectorMaskRegisters()
+    {
+        return pDetector->getNumVectorMaskRegisters();
+    }
 };
 
 inline cpuFeatures&

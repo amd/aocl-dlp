@@ -29,7 +29,6 @@
 #include "amdzen_generator.hh"
 #include "arch_utils/arch_config_manager.hh"
 #include "cpu_utils/cpu_features.hh"
-#include "debug_utils/gdb_helper_utils.hh"
 #include "f32_gemm_generator.hh"
 #include "f32_gemv.hh"
 #include "jit_register/jit_register.hh"
@@ -125,6 +124,143 @@ jitAmdZenFP32::setGeneratorKernelMetaInfo(
         }
         default:
             break;
+    }
+}
+
+dlp::jit::jitGeneratorError
+jitAmdZenFP32::deriveGEMMNumNRVariants(const dlp::jit::jitGeneratorContext& jI)
+{
+    // ToDo : This variable is supposed to hold the details of number of
+    // blocks of N to be processed in each iteration. At a later stage, this
+    // can be used to update the value of pack kernel block size, if we
+    // support multiple pack kernel block sizes. Currently this is needed
+    // to make sure of using the correct block sizes for each kernels,
+    // given the restrictions in the available pack kernels.
+    int processBlockSize = getProcessBlockSize();
+
+    termNRFringeRegCount        = 1;
+    isGenLtKrnlForAvailFullKrnl = jI.kI.genLtKrnlForAvailFullKrnl;
+    if (jI.kI.term_fringe_nr <= 0) {
+        if (jI.kI.genLtKrnlForAvailFullKrnl) {
+            // Generate kernels with multiples of numElemsPerReg along
+            // with < version for each multiple. For example, lets say
+            // NR=64, then following kernels are generated:
+            // 64, lt64, 48, lt48, 32, lt32, 16, lt16.
+            numNRVariants = 2 * (processBlockSize / numElemsPerReg);
+        } else {
+            // Generate kernels with multiples of numElemsPerReg and then
+            // one kernel to handle "< numElemsPerReg" cases. For example,
+            // lets say NR=64, then following kernels are generated:
+            // 64, 48, 32, 16, lt16.
+            numNRVariants = (processBlockSize / numElemsPerReg) + 1;
+        }
+    } else {
+        if (jI.kI.term_fringe_nr > processBlockSize) {
+            return dlp::jit::jitGeneratorError::badKernelInfo;
+        } else {
+            // It is expected DE will supply term_fringe_nr which is a
+            // perfect multiple of numElemsPerReg. Additionally now a
+            // term_fringe_nr and lt_term_fringe_nr will be generated.
+            termNRFringeRegCount = jI.kI.term_fringe_nr / numElemsPerReg;
+            if (jI.kI.genLtKrnlForAvailFullKrnl) {
+                // Generate kernels with multiples of numElemsPerReg along
+                // with < version for each multiple till term_fringe_nr.
+                // For example, lets say NR=64 and term_fringe_nr=48, then
+                // following kernels are generated:
+                // 64, lt64, 48, lt48.
+                numNRVariants = 2
+                                * ((processBlockSize - jI.kI.term_fringe_nr
+                                    + numElemsPerReg)
+                                   / numElemsPerReg);
+            } else {
+                // Generate kernels with multiples of numElemsPerReg till
+                // term_fringe_nr kernel and then one kernel to handle "<
+                // term_fringe_nr" cases. For example if term_fringe_nr=48,
+                // then following kernels are generated:
+                // 64, 48, lt48.
+                numNRVariants =
+                    ((processBlockSize - jI.kI.term_fringe_nr + numElemsPerReg)
+                     / numElemsPerReg)
+                    + 1;
+            }
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+// This function is to be called inside the mr, nr loop for generating
+// kernels.
+void
+jitAmdZenFP32::deriveGEMMNRAndMaskUse(int                     nr,
+                                      utils::generatorParams& params,
+                                      int& correspondingMainFringe)
+{
+    correspondingMainFringe = 0;
+    if (isGenLtKrnlForAvailFullKrnl) {
+        // This is the case where we generate both "==" and "<" kernels for
+        // each multiple of numElemsPerReg including "0". Here index 0, 2, 4
+        // (even indices) corresponds to lt fringe (<) kernels and 1, 3, 5
+        // (odd indices) corresponds to fringe + main (==) kernels. e.g. if
+        // numElemsPerReg=16 and NR=64, then following kernels are generated
+        // (id:fringe): 0-lt16, 1-16, 2-lt32, 3-32, 4-lt48, 5-48, 6-lt64, 7-64.
+        // Additionally, there is the option of configuring the smallest
+        // fringe kernel using term_fringe_nr (from kernelInfo). e.g. if
+        // term_fringe_nr=32, then the kernels generated are: (id:fringe):
+        // 0-lt32, 1-32, 2-lt48, 3-48, 4-lt64, 5-64.
+        // Now here since lt32 is the last fringe kernel, it will cater to
+        // inputs originally meant for lt32, 16, and lt16. So for lt32, all
+        // loads needs to be masked, since they can potentially access out of
+        // bounds memory. Say n=7, and 2 ZMM registers are used for loads in
+        // lt32, then loads to both the ZMM registers needs to be masked.
+        if ((nr % 2) == 0) {
+            // This is the lt fringe case that uses mask.
+            params.useMask = true;
+            if (nr == 0) {
+                params.NR          = 0;
+                params.numMaskRegs = termNRFringeRegCount;
+            } else {
+                params.NR =
+                    ((termNRFringeRegCount - 1) + (nr / 2)) * numElemsPerReg;
+                params.numMaskRegs = 1;
+            }
+            correspondingMainFringe =
+                (termNRFringeRegCount + (nr / 2)) * numElemsPerReg;
+        } else {
+            // This is the fringe case without mask. No nr=0 or
+            // even values for nr here.
+            params.NR =
+                ((termNRFringeRegCount - 1) + ((nr + 1) / 2)) * numElemsPerReg;
+            params.useMask          = false;
+            params.numMaskRegs      = 0;
+            correspondingMainFringe = params.NR;
+        }
+    } else {
+        // This is the case where we generate "==" kernels for each multiple
+        // of numElemsPerReg including and 1 "<" kernel for the smallest
+        // configured multiple of numElemsPerReg, "0". Here index 0 corresponds
+        // to lt fringe (<) kernels and all the other odd indices corresponds
+        // to fringe + main (==) kernels. e.g. if numElemsPerReg=16 and NR=64,
+        // then following kernels are generated (id:fringe):
+        // 0-lt16, 1-16, 2-32, 3-48, 4-64.
+        // Additionally, there is the option of configuring the smallest
+        // fringe kernel using term_fringe_nr (from kernelInfo). e.g., if
+        // term_fringe_nr=32, then the kernels generated are (id:fringe):
+        // 0-lt32, 1-32, 2-48, 3-64.
+        // The usage of masks for all load registers in lt32 applies in a
+        // similar manner as mentioned in the comment in
+        // isGenLtKrnlForAvailFullKrnl case.
+        if (nr == 0) {
+            params.NR               = 0;
+            params.useMask          = true;
+            params.numMaskRegs      = termNRFringeRegCount;
+            correspondingMainFringe = termNRFringeRegCount * numElemsPerReg;
+        } else {
+            params.NR      = ((termNRFringeRegCount - 1) + nr) * numElemsPerReg;
+            params.useMask = false;
+            params.numMaskRegs      = 0;
+            correspondingMainFringe = params.NR;
+        }
     }
 }
 
@@ -359,43 +495,18 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             }
         }
     } else {
-        // ToDo : This variable is supposed to hold the details of number of
-        // blocks of N to be processed in each iteration. At a later stage, this
-        // can be used to update the value of pack kernel block size, if we
-        // support multiple pack kernel block sizes. Currently this is needed
-        // to make sure of using the correct block sizes for each kernels,
-        // given the restrictions in the available pack kernels.
-        int processBlockSize = getProcessBlockSize();
-#if 0
-        // The idea is to generate all kernels with multiple of nElemsPerReg
-        // and then use the mask to handle in-between cases.
+        err = deriveGEMMNumNRVariants(jI);
+        if (err != dlp::jit::jitGeneratorError::success) {
+            goto cleanup;
+        }
 
-        // This approach is more efficient for the cases where n < NR cases
-        //  where you can operate the entire "<NR" region in one go.
-
-        // These kernels can be used currently for the cases where reordering is not done.
-
-        // To-Do: Design pack kernels to support this approach.
-        numNRVariants      = (NR / numElemsPerReg) * 2;
-#else
-        // Here, we only generate kernels with multiples of numElemsPerReg
-        // and then one kernel to handle "< numElemsPerReg" cases.
-        // Here, the problem will be divided first by NR and the fringe will be
-        // divided further into two regions. One for "multiples of
-        // numElemsPerReg" and the other for "< numElemsPerReg" cases.
-
-        // This approach works well with the current reordering strategy but is
-        // inefficient for the cases where n < NR cases especially with "lt16"
-        // fringe being taken.
-        numNRVariants = (processBlockSize / numElemsPerReg) + 1;
-#endif
         numMRVariants     = MR;
         numKernelVariants = numMRVariants * numNRVariants;
 
         kernelCodeBlocks.resize(numKernelVariants);
 
         // Initializing with default values.
-        utils::generatorParams params(0, 0, (jI.kI).k_unroll, false, false,
+        utils::generatorParams params(0, 0, (jI.kI).k_unroll, 0, false, false,
                                       (jI.kI).alphaScalingType,
                                       (jI.kI).betaScalingType, kType);
 
@@ -409,13 +520,10 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             for (int nr = 0; nr < numNRVariants; nr++) {
                 params.MR    = mr == 0 ? MR : mr;
                 params.mLoop = mr == 0;
-#if 0 // case where fringe is handled all at once
-                params.NR        = (nr/2) * numElemsPerReg;
-                params.useMask   = (nr % 2) == 0;
-#else // current approach where fringe is handled in two parts
-                params.NR      = nr * numElemsPerReg;
-                params.useMask = (nr == 0);
-#endif
+
+                int correspondingMainFringe = 0;
+                deriveGEMMNRAndMaskUse(nr, params, correspondingMainFringe);
+
                 void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
                 // Allocate executable memory
                 codeBuffer = utils::jitHelperUtils::allocateJitMemory(
@@ -459,10 +567,14 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
-#ifdef DLP_DUMP_JIT_CODE
+
+#ifdef DLP_JIT_DEBUG
+                // params.useMask=false implies a fringe or main kernel.
                 utils::jitHelperUtils::dump_jit_code(
                     kernelCodeBlocks[mr * numNRVariants + nr],
-                    utils::JIT_KERNEL_SIZE, "jit_kernel", params.MR, params.NR);
+                    utils::JIT_KERNEL_SIZE, "jit_kernel", params.MR,
+                    correspondingMainFringe, params.useMask,
+                    mr * numNRVariants + nr);
 #endif
             }
         }
@@ -478,6 +590,33 @@ cleanup:
                                                    utils::JIT_KERNEL_SIZE);
     }
     return err;
+}
+
+void
+jitAmdZenFP32::setMaskForGEMMLtFringe(dlp::kernels::gemmParams* params,
+                                      int                       nRemainder)
+{
+    if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        // The support for creating all lt fringe kernels (lt48, lt32) is
+        // only supported for avx512 when using zmm registers.
+        int nRemainderRegCount = nRemainder / numElemsPerReg;
+        for (int ii = 0; ii < nRemainderRegCount; ++ii) {
+            params->maskF32[ii] = 0xFFFF;
+        }
+        params->maskF32[nRemainderRegCount] =
+            0xFFFF >> (numElemsPerReg
+                       - (nRemainder - (nRemainderRegCount * numElemsPerReg)));
+        for (int ii = nRemainderRegCount + 1; ii < dlp::kernels::maxNumMasks;
+             ++ii) {
+            params->maskF32[ii] = 0x0;
+        }
+    } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
+        params->maskF32_8[0] = 0xFF >> (numElemsPerReg - nRemainder);
+    } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
+        for (int i = 0; i < 8; i++) {
+            params->maskArray[i] = (i < nRemainder) ? 0xFFFFFFFF : 0;
+        }
+    }
 }
 
 dlp::kernels::kernelError
@@ -581,6 +720,8 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         kernel(params);
 
     } else {
+        // Note: It is expected the generateAllKernels is called before
+        // calling this function.
         auto params = static_cast<dlp::kernels::gemmParams*>(_params);
 
         int processBlockSize = getProcessBlockSize();
@@ -651,121 +792,49 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         //   - Processed: 24 + 7 = 31, n becomes 0, loop exits
 
         while (n > 0) {
+            // Its expected that every NR value is multiple of numElemsPerReg.
             int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
             int nFullpieces = nBlockSize / numElemsPerReg;
-            int nRemainder  = nBlockSize % numElemsPerReg;
+            int nRemainder  = ((nFullpieces - termNRFringeRegCount) >= 0)
+                                  ? (nBlockSize - (nFullpieces * numElemsPerReg))
+                                  : nBlockSize;
 
-            // Process complete registers first (if any)
-            if (nFullpieces > 0) {
-                int elementsToProcess = nFullpieces * numElemsPerReg;
-
-                params->a = aPtr;
-                params->c = c_jr;
-                params->n = elementsToProcess;
-
-                int kernel_n_idx = nFullpieces;
-                if (params->m >= MR) {
-                    params->mIter           = mFullPieces;
-                    int               m_idx = 0;
-                    utils::jit_kernel kernel =
-                        reinterpret_cast<utils::jit_kernel>(
-                            kernelCodeBlocks[m_idx * numNRVariants
-                                             + kernel_n_idx]);
-
-                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
-                    kernel(params);
+            if (isGenLtKrnlForAvailFullKrnl) {
+                // Case where we generate both "==" and "<" kernels for
+                // each multiple of numElemsPerReg including "0".
+                int idBase       = ((nFullpieces - termNRFringeRegCount) >= 0)
+                                       ? (nFullpieces - termNRFringeRegCount)
+                                       : -1;
+                int kernel_n_idx = (2 * (idBase + 1)) - 1;
+                if (nRemainder > 0) {
+                    setMaskForGEMMLtFringe(params, nRemainder);
+                    kernel_n_idx += 1;
                 }
 
-                if (mPartialPieces) {
-                    (params->a) =
-                        (float*)(params->a) + mFullPieces * params->psA;
-                    (params->c) =
-                        (float*)(params->c) + mFullPieces * MR * params->rsC;
-                    int               m_idx = mPartialPieces;
-                    utils::jit_kernel kernel =
-                        reinterpret_cast<utils::jit_kernel>(
-                            kernelCodeBlocks[m_idx * numNRVariants
-                                             + kernel_n_idx]);
-
-                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
-                    kernel(params);
+                int elementsToProcess = nBlockSize;
+                executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                 kernel_n_idx, elementsToProcess, n, &c_jr,
+                                 og_post_op_c_i, aPtr);
+            } else {
+                // Case where we generate "==" kernels for each multiple
+                // of numElemsPerReg including and 1 "<" kernel for the
+                // smallest multiple of numElemsPerReg, "0".
+                if (nFullpieces >= termNRFringeRegCount) {
+                    int kernel_n_idx = nFullpieces - termNRFringeRegCount + 1;
+                    int elementsToProcess = nFullpieces * numElemsPerReg;
+                    executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                     kernel_n_idx, elementsToProcess, n, &c_jr,
+                                     og_post_op_c_i, aPtr);
                 }
 
-                params->b = (float*)(params->b) + elementsToProcess;
-                c_jr      = (float*)(c_jr) + elementsToProcess * params->csC;
-                n -= elementsToProcess;
-                (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
-                // The following line is necessary to ensure a subtle bug
-                // does not occur. Unlike the classic kernels where the
-                // kernelOpsAttr is passed by value to the fringe kernels,
-                // here it is kind of passed by reference, since the params
-                // ptr is the only kernel argument (inside which is the
-                // kernelOpsAttr). Since the while(n) loop can execute
-                // multiple times, any state variable, like post_op_c_i, if
-                // modified inside kernel, it needs to be reverted.
-                (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
-            }
-
-            // Process remainder with mask (if any)
-            if (nRemainder > 0) {
-                params->a = aPtr;
-                params->c = c_jr;
-                params->n = nRemainder;
-
-                // Mask calculation (architecture-specific)
-                if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
-                    params->maskF32 = 0xFFFF >> (numElemsPerReg - nRemainder);
-                } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
-                    params->maskF32_8 = 0xFF >> (numElemsPerReg - nRemainder);
-                } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
-                    for (int i = 0; i < 8; i++) {
-                        params->maskArray[i] = (i < nRemainder) ? 0xFFFFFFFF
-                                                                : 0;
-                    }
+                // Process remainder with mask (if any)
+                if (nRemainder > 0) {
+                    setMaskForGEMMLtFringe(params, nRemainder);
+                    int kernel_n_idx = 0; // Use lt mask kernel for nRemainder.
+                    executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                     kernel_n_idx, nRemainder, n, &c_jr,
+                                     og_post_op_c_i, aPtr);
                 }
-
-                // INLINE: Kernel execution with mask
-                int kernel_n_idx = 0; // Always use mask kernel for nRemainder
-                if (params->m >= MR) {
-                    params->mIter           = mFullPieces;
-                    int               m_idx = 0;
-                    utils::jit_kernel kernel =
-                        reinterpret_cast<utils::jit_kernel>(
-                            kernelCodeBlocks[m_idx * numNRVariants
-                                             + kernel_n_idx]);
-
-                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
-                    kernel(params);
-                }
-                if (mPartialPieces) {
-                    (params->a) =
-                        (float*)(params->a) + mFullPieces * params->psA;
-                    (params->c) =
-                        (float*)(params->c) + mFullPieces * MR * params->rsC;
-                    int               m_idx = mPartialPieces;
-                    utils::jit_kernel kernel =
-                        reinterpret_cast<utils::jit_kernel>(
-                            kernelCodeBlocks[m_idx * numNRVariants
-                                             + kernel_n_idx]);
-
-                    DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
-                    kernel(params);
-                }
-
-                // update pointers for next iteration
-                params->b = (float*)(params->b) + nRemainder;
-                c_jr      = (float*)(c_jr) + nRemainder * params->csC;
-                n -= nRemainder;
-                (params->kernelOpsAttr).post_op_c_j += nRemainder;
-                // The following line is necessary to ensure a subtle bug
-                // does not occur. Unlike the classic kernels where the
-                // kernelOpsAttr is passed by value to the fringe kernels,
-                // here it is kind of passed by reference, since the params
-                // ptr is the only kernel argument (inside which is the
-                // kernelOpsAttr). Since the while(n) loop can execute
-                // multiple times, any state variable, like post_op_c_i, if
-                // modified inside kernel, it needs to be reverted.
-                (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
             }
         }
     }

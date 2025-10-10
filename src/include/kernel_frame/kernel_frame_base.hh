@@ -257,12 +257,14 @@ struct kernelInfo
 {
     md_t            mr;
     md_t            nr;
+    md_t            term_fringe_nr;
     md_t            k_unroll;
     md_t            kc;
     scalingType     alphaScalingType;
     scalingType     betaScalingType;
     AOCL_MEMORY_TAG mtag_a;
     AOCL_MEMORY_TAG mtag_b;
+    bool            genLtKrnlForAvailFullKrnl;
 
     // Not using std::vector for kOpsArr due to slight overhead compared
     // to raw pointers.
@@ -273,24 +275,28 @@ struct kernelInfo
 
     kernelInfo(md_t                               mr,
                md_t                               nr,
+               md_t                               _term_fringe_nr,
                md_t                               k_unroll,
                md_t                               kc,
                scalingType                        _alphaScalingType,
                scalingType                        _betaScalingType,
                AOCL_MEMORY_TAG                    mtag_a,
                AOCL_MEMORY_TAG                    mtag_b,
+               bool                               _genLtKrnlForAvailFullKrnl,
                std::unique_ptr<kernelOpsMetaData> kOpsArr,
                std::size_t                        kOpsArrSize,
                bool                               anyKOpsOrder,
                kernelInstrPreference              instPref)
         : mr(mr)
         , nr(nr)
+        , term_fringe_nr(_term_fringe_nr)
         , k_unroll(k_unroll)
         , kc(kc)
         , alphaScalingType(_alphaScalingType)
         , betaScalingType(_betaScalingType)
         , mtag_a(mtag_a)
         , mtag_b(mtag_b)
+        , genLtKrnlForAvailFullKrnl(_genLtKrnlForAvailFullKrnl)
         , kOpsArr(((kOpsArr != nullptr) && (kOpsArrSize > 0))
                       ? kOpsArr.release()
                       : nullptr)
@@ -304,12 +310,14 @@ struct kernelInfo
     kernelInfo(const kernelInfo& other)
         : mr(other.mr)
         , nr(other.nr)
+        , term_fringe_nr(other.term_fringe_nr)
         , k_unroll(other.k_unroll)
         , kc(other.kc)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , mtag_a(other.mtag_a)
         , mtag_b(other.mtag_b)
+        , genLtKrnlForAvailFullKrnl(other.genLtKrnlForAvailFullKrnl)
         , kOpsArr(nullptr)
         , kOpsArrSize(((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0))
                           ? other.kOpsArrSize
@@ -330,12 +338,14 @@ struct kernelInfo
     kernelInfo(kernelInfo* other)
         : mr(other->mr)
         , nr(other->nr)
+        , term_fringe_nr(other->term_fringe_nr)
         , k_unroll(other->k_unroll)
         , kc(other->kc)
         , alphaScalingType(other->alphaScalingType)
         , betaScalingType(other->betaScalingType)
         , mtag_a(other->mtag_a)
         , mtag_b(other->mtag_b)
+        , genLtKrnlForAvailFullKrnl(other->genLtKrnlForAvailFullKrnl)
         , kOpsArr(((other->kOpsArr != nullptr) && (other->kOpsArrSize > 0))
                       ? other->kOpsArr
                       : nullptr)
@@ -354,12 +364,14 @@ struct kernelInfo
     kernelInfo(kernelInfo&& other)
         : mr(other.mr)
         , nr(other.nr)
+        , term_fringe_nr(other.term_fringe_nr)
         , k_unroll(other.k_unroll)
         , kc(other.kc)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , mtag_a(other.mtag_a)
         , mtag_b(other.mtag_b)
+        , genLtKrnlForAvailFullKrnl(other.genLtKrnlForAvailFullKrnl)
         , kOpsArr(((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0))
                       ? other.kOpsArr
                       : nullptr)
@@ -378,14 +390,16 @@ struct kernelInfo
     kernelInfo& operator=(const kernelInfo& other)
     {
         if (this != std::addressof(other)) {
-            this->mr               = other.mr;
-            this->nr               = other.nr;
-            this->k_unroll         = other.k_unroll;
-            this->kc               = other.kc;
-            this->alphaScalingType = other.alphaScalingType;
-            this->betaScalingType  = other.betaScalingType;
-            this->mtag_a           = other.mtag_a;
-            this->mtag_b           = other.mtag_b;
+            this->mr                        = other.mr;
+            this->nr                        = other.nr;
+            this->term_fringe_nr            = other.term_fringe_nr;
+            this->k_unroll                  = other.k_unroll;
+            this->kc                        = other.kc;
+            this->alphaScalingType          = other.alphaScalingType;
+            this->betaScalingType           = other.betaScalingType;
+            this->mtag_a                    = other.mtag_a;
+            this->mtag_b                    = other.mtag_b;
+            this->genLtKrnlForAvailFullKrnl = other.genLtKrnlForAvailFullKrnl;
             if (this->kOpsArr != nullptr) {
                 delete[] this->kOpsArr;
             }
@@ -406,14 +420,16 @@ struct kernelInfo
     kernelInfo& operator=(kernelInfo&& other)
     {
         if (this != std::addressof(other)) {
-            this->mr               = other.mr;
-            this->nr               = other.nr;
-            this->k_unroll         = other.k_unroll;
-            this->kc               = other.kc;
-            this->alphaScalingType = other.alphaScalingType;
-            this->betaScalingType  = other.betaScalingType;
-            this->mtag_a           = other.mtag_a;
-            this->mtag_b           = other.mtag_b;
+            this->mr                        = other.mr;
+            this->nr                        = other.nr;
+            this->term_fringe_nr            = other.term_fringe_nr;
+            this->k_unroll                  = other.k_unroll;
+            this->kc                        = other.kc;
+            this->alphaScalingType          = other.alphaScalingType;
+            this->betaScalingType           = other.betaScalingType;
+            this->mtag_a                    = other.mtag_a;
+            this->mtag_b                    = other.mtag_b;
+            this->genLtKrnlForAvailFullKrnl = other.genLtKrnlForAvailFullKrnl;
             if (this->kOpsArr != nullptr) {
                 delete[] this->kOpsArr;
             }
@@ -443,10 +459,13 @@ struct kernelInfo
             }
         }
         return ((this->mr == rhs.mr) && (this->nr == rhs.nr)
+                && (this->term_fringe_nr == rhs.term_fringe_nr)
                 && (this->k_unroll == rhs.k_unroll) && (this->kc == rhs.kc)
                 && (this->alphaScalingType == rhs.alphaScalingType)
                 && (this->betaScalingType == rhs.betaScalingType)
                 && (this->mtag_a == rhs.mtag_a) && (this->mtag_b == rhs.mtag_b)
+                && (this->genLtKrnlForAvailFullKrnl
+                    == rhs.genLtKrnlForAvailFullKrnl)
                 && (this->kOpsArrSize == rhs.kOpsArrSize) && isKOpsArrEqual
                 && (this->anyKOpsOrder == rhs.anyKOpsOrder)
                 && (this->kInstPref == rhs.kInstPref));

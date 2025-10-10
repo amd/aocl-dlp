@@ -50,6 +50,8 @@ enum class kernelError
 struct kernelParams
 {};
 
+constexpr int maxNumMasks = 7;
+
 struct gemmParams : public kernelParams
 {
     void* a;
@@ -74,8 +76,8 @@ struct gemmParams : public kernelParams
     md_t     mIter;
     md_t     kIter;
     md_t     kLeft;
-    uint16_t maskF32;
-    uint8_t  maskF32_8;
+    uint16_t maskF32[maxNumMasks];
+    uint8_t  maskF32_8[maxNumMasks];
     alignas(64) std::array<int32_t, 8> maskArray;
 
     lpgemm_post_op*     kernelOpsList;
@@ -116,8 +118,8 @@ struct gemmParams : public kernelParams
         , mIter(0)
         , kIter(0)
         , kLeft(0)
-        , maskF32(0)
-        , maskF32_8(0)
+        , maskF32{ 0 }
+        , maskF32_8{ 0 }
         , maskArray{ 0, 0, 0, 0, 0, 0, 0, 0 }
         , kernelOpsList(kernelOpsList)
         , kernelOpsAttr(kernelOpsAttr)
@@ -143,11 +145,13 @@ struct gemmParams : public kernelParams
         , mIter(other.mIter)
         , kIter(other.kIter)
         , kLeft(other.kLeft)
-        , maskF32(other.maskF32)
-        , maskF32_8(other.maskF32_8)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
     {
+        std::copy(std::begin(other.maskF32), std::end(other.maskF32),
+                  std::begin(maskF32));
+        std::copy(std::begin(other.maskF32_8), std::end(other.maskF32_8),
+                  std::begin(maskF32_8));
         std::copy(std::begin(other.maskArray), std::end(other.maskArray),
                   std::begin(maskArray));
     }
@@ -171,36 +175,42 @@ struct gemmParams : public kernelParams
         , mIter(other.mIter)
         , kIter(other.kIter)
         , kLeft(other.kLeft)
-        , maskF32(other.maskF32)
-        , maskF32_8(other.maskF32_8)
+        , maskF32{ 0 }
+        , maskF32_8{ 0 }
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
     {
+        std::copy(std::begin(other.maskF32), std::end(other.maskF32),
+                  std::begin(maskF32));
+        std::copy(std::begin(other.maskF32_8), std::end(other.maskF32_8),
+                  std::begin(maskF32_8));
         maskArray.swap(other.maskArray);
     }
 
     gemmParams& operator=(const gemmParams& other)
     {
-        a         = other.a;
-        b         = other.b;
-        c         = other.c;
-        m         = other.m;
-        n         = other.n;
-        k         = other.k;
-        rsA       = other.rsA;
-        csA       = other.csA;
-        psA       = other.psA;
-        rsB       = other.rsB;
-        csB       = other.csB;
-        rsC       = other.rsC;
-        csC       = other.csC;
-        alpha     = other.alpha;
-        beta      = other.beta;
-        mIter     = other.mIter;
-        kIter     = other.kIter;
-        kLeft     = other.kLeft;
-        maskF32   = other.maskF32;
-        maskF32_8 = other.maskF32_8;
+        a     = other.a;
+        b     = other.b;
+        c     = other.c;
+        m     = other.m;
+        n     = other.n;
+        k     = other.k;
+        rsA   = other.rsA;
+        csA   = other.csA;
+        psA   = other.psA;
+        rsB   = other.rsB;
+        csB   = other.csB;
+        rsC   = other.rsC;
+        csC   = other.csC;
+        alpha = other.alpha;
+        beta  = other.beta;
+        mIter = other.mIter;
+        kIter = other.kIter;
+        kLeft = other.kLeft;
+        std::copy(std::begin(other.maskF32), std::end(other.maskF32),
+                  std::begin(maskF32));
+        std::copy(std::begin(other.maskF32_8), std::end(other.maskF32_8),
+                  std::begin(maskF32_8));
         std::copy(std::begin(other.maskArray), std::end(other.maskArray),
                   std::begin(maskArray));
         kernelOpsList = other.kernelOpsList;
@@ -224,8 +234,6 @@ struct gemmParams : public kernelParams
         mIter         = 0;
         kIter         = 0;
         kLeft         = 0;
-        maskF32       = 0;
-        maskF32_8     = 0;
         kernelOpsList = nullptr;
     }
 };

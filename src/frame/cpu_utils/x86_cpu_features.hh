@@ -50,6 +50,8 @@ class x86CpuFeatureDetector : public cpuFeatureDetectorBase
     std::vector<isaFeature> getFeatures() const final;
     bool                    isCpuVendor(cpuVendor vendor) const final;
     cpuVendor               getCpuVendor() const final;
+    int32_t                 getNumVectorRegisters() const final;
+    int32_t                 getNumVectorMaskRegisters() const final;
 };
 
 } // namespace dlp::cpu_utils

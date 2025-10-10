@@ -51,6 +51,7 @@ class gemmF32DEBackend : public iDEBackend
         kernel_frame::kernelDatatype          k_dtype);
     bool                                isAvx512;
     bool                                isAvx2;
+    int32_t                             numRegisters;
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
 

@@ -29,6 +29,7 @@
 #pragma once
 
 #include <stack>
+#include <string>
 
 #if DLP_OS_WINDOWS
 #include <windows.h>
@@ -56,15 +57,25 @@ class jitHelperUtils
     // Function to dump JIT code to a file for debugging purposes. This
     // function will create a file with the name <code_name>_<m>x<n>.bin".
     // The code will be dumped in binary format.
-    static void dump_jit_code(
-        const void* code, int code_size, const char* code_name, int m, int n)
+    static void dump_jit_code(const void* code,
+                              int         code_size,
+                              const char* code_name,
+                              int         m,
+                              int         n,
+                              bool        isFringe,
+                              int         index)
     {
         if (code) {
             static int counter = 0;
 #define MAX_FNAME_LEN 256
+            std::string fringeSfx{ "" };
+            if (isFringe) {
+                fringeSfx = "_lt";
+            }
             char fname[MAX_FNAME_LEN + 1];
             // TODO (Roma): support prefix for code / linux perf dumps
-            snprintf(fname, MAX_FNAME_LEN, "%s_%dx%d.bin", code_name, m, n);
+            snprintf(fname, MAX_FNAME_LEN, "idx%d_%s_%dx%s%d.bin", index,
+                     code_name, m, fringeSfx.c_str(), n);
             counter++;
             FILE* fp = fopen(fname, "wb+");
             // Failure to dump code is not fatal
@@ -127,6 +138,7 @@ struct generatorParams
     int MR; // This MR can be of either main kernel or fringe kernel
     int NR; // This NR can be of either main kernel or fringe kernel
     int K_UNROLL;
+    int numMaskRegs;
     // This will be used to generate NR + " < nElemsPerReg" kernels,
     // where NR is a multiple of nElemsPerReg including "0".
     bool useMask;
@@ -139,6 +151,7 @@ struct generatorParams
     generatorParams(md_t                           _MR,
                     md_t                           _NR,
                     int                            _K_UNROLL,
+                    int                            _numMaskRegs,
                     bool                           _useMask,
                     bool                           _mLoop,
                     dlp::kernel_frame::scalingType _alphaScalingType =
@@ -149,6 +162,7 @@ struct generatorParams
         : MR(_MR)
         , NR(_NR)
         , K_UNROLL(_K_UNROLL)
+        , numMaskRegs(_numMaskRegs)
         , useMask(_useMask)
         , mLoop(_mLoop)
         , alphaScalingType(_alphaScalingType)
@@ -161,6 +175,7 @@ struct generatorParams
         : MR(other.MR)
         , NR(other.NR)
         , K_UNROLL(other.K_UNROLL)
+        , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
         , mLoop(other.mLoop)
         , alphaScalingType(other.alphaScalingType)
@@ -176,6 +191,7 @@ struct generatorParams
             MR               = other.MR;
             NR               = other.NR;
             K_UNROLL         = other.K_UNROLL;
+            numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;
             mLoop            = other.mLoop;
             alphaScalingType = other.alphaScalingType;
@@ -190,6 +206,7 @@ struct generatorParams
         : MR(other.MR)
         , NR(other.NR)
         , K_UNROLL(other.K_UNROLL)
+        , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
         , mLoop(other.mLoop)
         , alphaScalingType(other.alphaScalingType)
@@ -205,6 +222,7 @@ struct generatorParams
             MR               = other.MR;
             NR               = other.NR;
             K_UNROLL         = other.K_UNROLL;
+            numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;
             mLoop            = other.mLoop;
             alphaScalingType = other.alphaScalingType;

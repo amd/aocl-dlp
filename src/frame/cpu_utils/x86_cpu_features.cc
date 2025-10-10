@@ -367,4 +367,30 @@ x86CpuFeatureDetector::getCpuVendor() const
     return thisVendor;
 }
 
+int32_t
+x86CpuFeatureDetector::getNumVectorRegisters() const
+{
+    // AVX-512 provides 32 vector registers, while AVX and SSE provide 16.
+    if (hasFeature(isaFeature::avx512f)) {
+        return 32;
+    } else if (hasFeature(isaFeature::avx) || hasFeature(isaFeature::sse3)) {
+        return 16;
+    } else {
+        return 0;
+    }
+}
+
+int32_t
+x86CpuFeatureDetector::getNumVectorMaskRegisters() const
+{
+    // AVX-512 provides 8 mask registers. However k0 cannot be used since it
+    // acts as a special mask that represents no masking.
+    if (hasFeature(isaFeature::avx512f)) {
+        return 7;
+    } else {
+        // AVX and SSE provides none.
+        return 0;
+    }
+}
+
 } // namespace dlp::cpu_utils

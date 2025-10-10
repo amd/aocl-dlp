@@ -54,7 +54,7 @@ jitGEMMF32<KType>::allocateReg()
     }
     int nElemsPerReg = RegBytes / sizeof(float);
     bFullReg         = ((NR) / nElemsPerReg);
-    bMaskReg         = (useMask ? 1 : 0);
+    bMaskReg         = (useMask ? numMaskRegs : 0);
     bReg             = bFullReg + bMaskReg;
     cReg             = MR * bReg;
     aReg             = numRegs - cReg - bReg;
@@ -114,13 +114,17 @@ jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
 
     if (useMask) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            kmovw(fringeMask,
-                  ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)]);
+            for (int ii = 0; ii < numMaskRegs; ++ii) {
+                kmovw(fringeMask[ii],
+                      ptr[stackPtr
+                          + offsetof(dlp::kernels::gemmParams, maskF32[0])
+                          + (ii * sizeof(uint16_t))]);
+            }
         } else if constexpr (KType
                              == utils::kernelInstrType::avx512_ymm_32_reg) {
-            kmovb(
-                fringeMask,
-                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32_8)]);
+            kmovb(fringeMask[0],
+                  ptr[stackPtr
+                      + offsetof(dlp::kernels::gemmParams, maskF32_8[0])]);
         } else if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
             lea(regTmp1,
                 ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskArray)]);
@@ -144,8 +148,10 @@ jitGEMMF32<KType>::loadBValues()
                        ptr[regBptr + bFullReg * RegBytes]);
         } else {
             // For AVX512_zmm and _ymm, mask instruction is same.
-            vmovups(RegType(bRegIdx + bFullReg) | fringeMask,
-                    ptr[regBptr + bFullReg * RegBytes]);
+            for (int ii = bFullReg; ii < bReg; ++ii) {
+                vmovups(RegType(bRegIdx + ii) | fringeMask[ii - bFullReg],
+                        ptr[regBptr + ii * RegBytes]);
+            }
         }
     }
     return dlp::jit::jitGeneratorError::success;
@@ -325,8 +331,11 @@ jitGEMMF32<KType>::storeResultRowMajor()
                 vmaskmovps(ptr[regTmpCptr + bFullReg * RegBytes],
                            Ymm(maskRegIdx), Ymm(cRegIdx + i * bReg + bFullReg));
             } else {
-                vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | fringeMask,
-                        RegType(cRegIdx + i * bReg + bFullReg));
+                for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                    vmovups(ptr[regTmpCptr + maskI * RegBytes]
+                                | fringeMask[maskI - bFullReg],
+                            RegType(cRegIdx + i * bReg + maskI));
+                }
             }
         }
         add(regTmpCptr, regRsC);
@@ -576,10 +585,13 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
                 vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
                             Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
             } else {
-                vmovups(RegType(bRegIdx + bFullReg) | fringeMask,
-                        ptr[regTmpCptr + bFullReg * RegBytes]);
-                vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg),
-                            RegType(betaRegIdx), RegType(bRegIdx + bFullReg));
+                for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                    vmovups(RegType(bRegIdx + maskI)
+                                | fringeMask[maskI - bFullReg],
+                            ptr[regTmpCptr + maskI * RegBytes]);
+                    vfmadd231ps(RegType(cRegIdx + i * bReg + maskI),
+                                RegType(betaRegIdx), RegType(bRegIdx + maskI));
+                }
             }
         }
         add(regTmpCptr, regRsC);
@@ -701,9 +713,10 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
 {
-    MR      = params.MR;
-    NR      = params.NR;
-    useMask = params.useMask;
+    MR          = params.MR;
+    NR          = params.NR;
+    useMask     = params.useMask;
+    numMaskRegs = params.numMaskRegs;
 
     RETURN_IF_ERROR(allocateReg());
 
