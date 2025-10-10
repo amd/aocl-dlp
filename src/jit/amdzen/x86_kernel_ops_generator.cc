@@ -196,6 +196,19 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                     maskReg,
                     jit_->ptr[postOpsArgWrapperPtrReg
                               + offsetof(dlp::kernels::gemmParams, maskF32)]);
+                // These two values are used in matadd and matmul post-ops
+                // in cases where csC is not 1.
+                // Load lower 8 bits of maskF32
+                jit_->kmovb(
+                    mask2,
+                    jit_->ptr[postOpsArgWrapperPtrReg
+                              + offsetof(dlp::kernels::gemmParams, maskF32)]);
+                // Load upper 8 bits of maskF32
+                jit_->kmovb(
+                    mask3,
+                    jit_->ptr[postOpsArgWrapperPtrReg
+                              + offsetof(dlp::kernels::gemmParams, maskF32)
+                              + sizeof(uint8_t)]);
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
                 jit_->kmovb(

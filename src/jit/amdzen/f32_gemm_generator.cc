@@ -187,7 +187,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::storeResult()
 {
-    inLocalLabel();
     mov(regTmpCptr, regCPtr);
 
     // For avx2 and avx512_256 paths, we ensure that the C matrix is row-major
@@ -197,6 +196,7 @@ jitGEMMF32<KType>::storeResult()
         return storeResultRowMajor();
     }
 
+    inLocalLabel();
     // Load cs_c value and check if cs_c is 1
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
     cmp(regTmp1, 1);
