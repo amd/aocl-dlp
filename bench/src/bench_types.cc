@@ -1,0 +1,157 @@
+/*
+ * Copyright © Advanced Micro Devices, Inc., or its affiliates.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES ( INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+#include "bench_types.hh"
+#include "framework/utils/yaml_parser.hh"
+#include <functional>
+#include <iostream>
+#include <sstream>
+
+namespace dlp::benchmarking {
+
+using namespace dlp::testing::utils;
+using namespace dlp::testing::framework;
+
+size_t
+GemmBenchConfig::hash() const
+{
+    size_t h = 0;
+    h ^= std::hash<md_t>{}(this->m) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<md_t>{}(this->n) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<md_t>{}(this->k) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<int>{}(static_cast<int>(this->a_type)) + 0x9e3779b9
+         + (h << 6) + (h >> 2);
+    h ^= std::hash<int>{}(static_cast<int>(this->b_type)) + 0x9e3779b9
+         + (h << 6) + (h >> 2);
+    h ^= std::hash<int>{}(static_cast<int>(this->c_type)) + 0x9e3779b9
+         + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(this->transA) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(this->transB) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(this->reorderA) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(this->reorderB) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    return h;
+}
+
+std::string
+generateBenchmarkName(const GemmBenchConfig& config)
+{
+    std::ostringstream name;
+
+    // Add data type information
+    name << config.a_type << config.b_type << config.acc_type << "o"
+         << config.c_type;
+
+    // Add dimensions
+    name << ",M:" << config.m << ",N:" << config.n << ",K:" << config.k;
+
+    // Add storage format
+    name << ",stor:"
+         << (config.storage_format == MatrixLayout::ROW_MAJOR ? "r" : "c");
+
+    // Add transposition
+    name << (config.transA ? ",trA:t" : ",trA:n");
+    name << (config.transB ? ",trB:t" : ",trB:n");
+
+    // Add reordering
+    std::string mtagA = config.reorderA ? "r" : "n";
+    std::string mtagB = config.reorderB ? "r" : "n";
+    name << ",mtagA:" << mtagA;
+    name << ",mtagB:" << mtagB;
+
+    return name.str();
+}
+
+std::vector<GemmBenchConfig>
+loadBenchmarkConfigs(const std::string& yaml_path)
+{
+    std::vector<GemmBenchConfig> configs;
+    const size_t                 MAX_CONFIGS = 50000; // Reasonable limit
+
+    try {
+        YamlParser parser(yaml_path, "gemm_tests");
+        parser.setYieldType(YieldType::CARTESIAN_PRODUCT);
+
+        size_t microTestCount = parser.getMicroTestCount();
+
+        for (size_t i = 0; i < microTestCount; ++i) {
+            MicroTest& microTest =
+                const_cast<MicroTest&>(parser.getMicroTest());
+            size_t total_combinations = microTest.getSize();
+            size_t test_count = std::min(total_combinations, MAX_CONFIGS);
+
+            std::cout << "Test set " << i << ": Using " << test_count
+                      << " out of " << total_combinations
+                      << " total combinations" << std::endl;
+
+            for (size_t j = 0; j < test_count; ++j) {
+                GemmBenchConfig config;
+                config.a_type         = microTest.getAType();
+                config.b_type         = microTest.getBType();
+                config.c_type         = microTest.getCType();
+                config.acc_type       = microTest.getAccType();
+                config.storage_format = microTest.getStorageFormat();
+                config.m              = microTest.getM();
+                config.n              = microTest.getN();
+                config.k              = microTest.getK();
+                config.lda            = microTest.getLDA();
+                config.ldb            = microTest.getLDB();
+                config.ldc            = microTest.getLDC();
+                config.alpha          = microTest.getAlpha();
+                config.beta           = microTest.getBeta();
+                config.transA         = microTest.getTransA();
+                config.transB         = microTest.getTransB();
+                config.reorderA       = microTest.getReorderA();
+                config.reorderB       = microTest.getReorderB();
+
+                // Generate name after populating config
+                config.name = generateBenchmarkName(config);
+
+                configs.push_back(config);
+
+                if (j < test_count - 1) {
+                    microTest.next();
+                }
+            }
+
+            if (i < microTestCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "Loaded " << configs.size() << " benchmark configurations"
+                  << std::endl;
+
+    } catch (const std::exception& e) {
+        std::cerr << "Error loading YAML configuration: " << e.what()
+                  << std::endl;
+    }
+
+    return configs;
+}
+
+} // namespace dlp::benchmarking
