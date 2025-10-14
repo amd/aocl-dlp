@@ -32,6 +32,7 @@ set(BENCH_INCLUDE_DIRS
     ${PROJECT_SOURCE_DIR}/tests/include
     ${PROJECT_BINARY_DIR}/tests/classic
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CLASSIC_INCLUDES}
 )
 
@@ -50,15 +51,34 @@ dlp_glob_sources_recursive(UTILS_SOURCES "${PROJECT_SOURCE_DIR}/tests/utils")
 # Collect ref source files
 dlp_glob_sources_recursive(ADAPTORS_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors")
 
+# Collect bench infrastructure source files
+set(BENCH_INFRA_SOURCES
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bench_types.cc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/bench_metrics.cc
+)
+
 # Collect benchmark source files
 dlp_glob_sources(OUTPUT BENCHMARK_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
+# Build all benchmarks
 foreach(benchmark_source ${BENCHMARK_SOURCES})
     get_filename_component(benchmark_name ${benchmark_source} NAME_WE)
+
     dlp_add_benchmark(
         NAME ${benchmark_name}
-        SOURCES ${benchmark_source} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
-        DEPENDS yaml-cpp
+        SOURCES ${benchmark_source} ${BENCH_INFRA_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
+        DEPENDS yaml-cpp dlp::openmp
     )
     dlp_set_global_compile_flags(${benchmark_name} VISIBILITY PUBLIC)
+
+    # Link NUMA library for bench_gemm (optimized implementation)
+    if(${benchmark_name} STREQUAL "bench_gemm")
+        target_link_libraries(${benchmark_name} PRIVATE numa)
+    endif()
+
+    # Disable static linking for benchmarks
+    set_target_properties(${benchmark_name} PROPERTIES
+        LINK_SEARCH_START_STATIC FALSE
+        LINK_SEARCH_END_STATIC FALSE
+    )
 endforeach()

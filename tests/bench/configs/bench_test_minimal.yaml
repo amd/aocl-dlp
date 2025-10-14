@@ -1,0 +1,43 @@
+# Minimal GEMM benchmark configuration for testing purposes
+gemm_tests:
+  # Test case 1: Basic f32 configuration
+  - name: "test_basic_f32"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [64]
+    n: [64]
+    k: [64]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    product_type: "simple"
+
+  # Test case 2: Transposed with reordering
+  - name: "test_transposed_reorder"
+    a_type: "bf16"
+    b_type: "bf16"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: true
+    transB: false
+    m: [128]
+    n: [128]
+    k: [128]
+    alpha: [2.0]
+    beta: [1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: [128]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    product_type: "simple"

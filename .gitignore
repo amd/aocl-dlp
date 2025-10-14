@@ -34,7 +34,6 @@ coverage
 # Ignore common non-source files.
 *.html
 *.png
-*.txt
 *.css
 *.info
 

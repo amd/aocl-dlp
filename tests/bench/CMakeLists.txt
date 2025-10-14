@@ -24,44 +24,40 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# Include dlp and utils headers
-set(TEST_INCLUDE_DIRS
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${CMAKE_CURRENT_BINARY_DIR}/classic
+# Create test config header with path to test YAML files
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/bench_test_config.hh.in
+    ${CMAKE_CURRENT_BINARY_DIR}/bench_test_config.hh
+    @ONLY
 )
 
-# Fetch gtest
-fetch_gtest()
+# Fetch google benchmark (needed for bench_metrics.cc compilation)
+fetch_benchmark()
 
-# Fetch yaml-cpp for test configuration
-fetch_yaml_cpp()
+# Bench infrastructure sources (reuse from bench directory)
+set(BENCH_INFRA_SOURCES
+    ${PROJECT_SOURCE_DIR}/bench/src/bench_types.cc
+    ${PROJECT_SOURCE_DIR}/bench/src/bench_metrics.cc
+)
 
-# Collect framework source files
-dlp_glob_sources_recursive(FRAMEWORK_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/framework")
-
-# Collect utils source files
-dlp_glob_sources_recursive(UTILS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/utils")
-
-# Collect ref source files
-dlp_glob_sources_recursive(ADAPTORS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/adaptors")
+# Additional include directories for bench tests
+set(BENCH_TEST_INCLUDE_DIRS
+    ${PROJECT_SOURCE_DIR}/bench/include
+    ${PROJECT_BINARY_DIR}/bench  # For generated bench_config.hh
+    ${CMAKE_CURRENT_BINARY_DIR}  # For generated bench_test_config.hh
+)
 
 # Collect test source files
-dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+dlp_glob_sources(OUTPUT BENCH_TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
-# FIXME: Move testing related tests out of this directory
 # Add each test file as a separate test
-foreach(test_source ${TEST_SOURCES})
+foreach(test_source ${BENCH_TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
     dlp_add_test(
         NAME ${test_name}
-        SOURCES ${test_source} ${ADAPTORS_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES}
-        INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
-        DEPENDS yaml-cpp
+        SOURCES ${test_source} ${BENCH_INFRA_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
+        INCLUDE_DIRS ${TEST_INCLUDE_DIRS} ${BENCH_TEST_INCLUDE_DIRS}
+        DEPENDS yaml-cpp benchmark::benchmark
     )
     dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
 endforeach()
-
-add_subdirectory(classic)
-if(BUILD_BENCHMARKS)
-    add_subdirectory(bench)
-endif()
