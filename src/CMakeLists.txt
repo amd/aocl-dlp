@@ -62,6 +62,10 @@ if(DLP_ENABLE_LOGGING)
     target_compile_definitions(aocl_dlp_plus PRIVATE AOCL_LPGEMM_LOGGER_SUPPORT=1)
 endif()
 
+if(DLP_ENABLE_JIT_DEBUGGING)
+    target_compile_definitions(aocl_dlp_plus PRIVATE DLP_JIT_DEBUG=1)
+endif()
+
 set(DLP_PLUS_TARGETS
     aocl_dlp_plus
     PARENT_SCOPE

@@ -140,7 +140,7 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
     template<typename HASH_KEY_GETTER,
              typename KEY_COMPARATOR,
              typename KEY_TYPE,
-             typename VALUE_REPLACER>
+             typename VALUE_WATCHER>
     voidFunctorPtr insert(KEY_TYPE* key, voidFunctorPtr value)
     {
         if ((!key) || (!value)) {
@@ -149,28 +149,80 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
 
         std::size_t index = hash_key(HASH_KEY_GETTER{}(key));
 
-        // Check if the key is already in the chain
-        // No need to update the value if the key is already in the chain.
+        // Check if the key is already present in the chain. Update its value
+        // if the key is present.
         for (std::size_t i = index * CHAIN_SIZE; i < (index + 1) * CHAIN_SIZE;
              ++i) {
             // This will synchronize with the release operation in the insertion
             // path.
             if (table[i].isOccupied.load(std::memory_order_acquire)) {
                 if (KEY_COMPARATOR{}(table[i].key, key)) {
-                    // If the key is already in the chain, update the value.
+                    // This is just an optimistic check meant to ensure that
+                    // table[i].value is not the same as value at this exact
+                    // moment. Reason being same value.load can return a
+                    // different result if called again in the presence of
+                    // concurrent stores (from other threads) to table[i]
+                    // .value. Lets take an example to clarify this. Say for
+                    // thread t_0 let value=val_0. And let table[i].value=
+                    // val_3. For t_0, table[i].value.load != val_0 check is
+                    // true. But after this some other thread t_1 updates
+                    // table[i].value=val_0, same as that of t_0. But even in
+                    // this case, since the first if check was true, t_0 goes
+                    // ahead and updates table[i].value to val_0. This is a
+                    // redundant store, but essential for a simplified
+                    // concurrent model. To ensure cleanup of untracked/
+                    // replaced (not in kernel table) pointers happens
+                    // properly, all stored value will be watched. In the end,
+                    // depending on whether the values are in kernel table or
+                    // not, it will be cleaned.
                     if (table[i].value.load(std::memory_order_relaxed)
                         != value) {
-                        VALUE_REPLACER{}(
-                            table[i].value.load(std::memory_order_relaxed));
+                        // The stored value is watched for cleanup instead of
+                        // the value being replaced (already present). This is
+                        // to work around a subtle issue with concurrent
+                        // updates. Consider the following example. 4 threads
+                        // t_0 to t_3 calls this insert api for the same key
+                        // k_0 with values val_0, val_1, .. to val_3. Say t_0
+                        // proceeds first and sets table[k0].value = val_0.
+                        // Now say t_1 to t_3 sees the if != value condition
+                        // at the same time. Post which t_1 to t_3 will be
+                        // adding the current table[i].value val_0 for
+                        // cleanup. Now the problem here is that, post the
+                        // adding, the final thread to store, say t_3 will set
+                        // table[i].value to val_3. The val_1 and val_2
+                        // that were stored by t_1 and t_2 will not have been
+                        // marked for cleanup and will result in memory leak.
+                        // This issue is avoided if the value to be stored is
+                        // marked for cleanup, instead of replaced value.
+                        VALUE_WATCHER{}(value);
                         table[i].value.store(value, std::memory_order_relaxed);
                     }
-                    return table[i].value.load(std::memory_order_relaxed);
+
+                    // The actual stored content in table[i].value could be
+                    // different from value due to concurrent stores. But it
+                    // is guaranteed that value pointer is stored in either
+                    // table[i].value, backup table or the VALUE_WATCHER. So
+                    // the value can be safely returned to the caller in this
+                    // instance of insert call.
+                    return value;
                 }
             }
         }
 
-        // If the key is not in the chain, add it. Double check that
-        // the key is not already in the chain
+        // We do not check the backupTable for this key. Its expected the
+        // backupTable will be used rarely, and that the number of unique
+        // (key) insert calls will be < CHAIN_SIZE. In the event a key is not
+        // found in a chain in primary table, its assumed the key needs to be
+        // added to primary table; and that its probably not already present
+        // in backupTable. Extra code can be added to get the number of used
+        // entries in the primary table, and to check for the key in
+        // backupTable based on that. But this is unnecessary overhead for
+        // the most part.
+
+        // If the key is not in the chain, add it. Double check that the
+        // key is not already added to the chain by another thread. From
+        // this point, all chain updates will be serialized since it will
+        // be inside a lock.
         std::lock_guard<std::mutex> lg{ mtx };
         for (std::size_t i = index * CHAIN_SIZE; i < (index + 1) * CHAIN_SIZE;
              ++i) {
@@ -180,15 +232,18 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                     // If the key is already in the chain, update the value.
                     if (table[i].value.load(std::memory_order_relaxed)
                         != value) {
-                        VALUE_REPLACER{}(
-                            table[i].value.load(std::memory_order_relaxed));
+                        VALUE_WATCHER{}(value);
                         table[i].value.store(value, std::memory_order_relaxed);
                     }
+                    // It is guaranteed table[i].value.load = value here.
+                    // This is because we are inside a lock and all the
+                    // stores to table[i].value are serialized.
                     return table[i].value.load(std::memory_order_relaxed);
                 }
             } else {
                 // The first non-occupied slot is found, so we need to add the
                 // key to the first non-occupied slot.
+                VALUE_WATCHER{}(value);
                 table[i] = Entry{ key, value, false };
                 // This will synchronize with the acquire operation in the query
                 // path.
@@ -197,25 +252,25 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
             }
         }
 
-        // If the chain is full, add the element to a new backup list of limited
-        // size.
+        // If the chain is full, add the element to a new backup list of
+        // limited size.
         for (std::size_t i = 0; i < TABLE_SIZE; ++i) {
             if (backupTable[i].isOccupied.load(std::memory_order_acquire)) {
                 // If the key is already in the backup table, update the value.
                 if (KEY_COMPARATOR{}(backupTable[i].key, key)) {
                     if (backupTable[i].value.load(std::memory_order_relaxed)
                         != value) {
-                        VALUE_REPLACER{}(backupTable[i].value.load(
-                            std::memory_order_relaxed));
+                        VALUE_WATCHER{}(value);
                         backupTable[i].value.store(value,
                                                    std::memory_order_relaxed);
                     }
                     return backupTable[i].value.load(std::memory_order_relaxed);
                 }
             } else {
+                VALUE_WATCHER{}(value);
                 backupTable[i] = Entry{ key, value, false };
-                // This will synchronize with the acquire operation in the query
-                // path.
+                // This will synchronize with the acquire operation in the
+                // query path.
                 backupTable[i].isOccupied.store(true,
                                                 std::memory_order_release);
                 return backupTable[i].value;

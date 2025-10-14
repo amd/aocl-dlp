@@ -62,20 +62,20 @@ class jitHelperUtils
                               const char* code_name,
                               int         m,
                               int         n,
-                              bool        isFringe,
+                              bool        isLtKernel,
                               int         index)
     {
         if (code) {
             static int counter = 0;
 #define MAX_FNAME_LEN 256
-            std::string fringeSfx{ "" };
-            if (isFringe) {
-                fringeSfx = "_lt";
+            std::string ltSfx{ "" };
+            if (isLtKernel) {
+                ltSfx = "_lt";
             }
             char fname[MAX_FNAME_LEN + 1];
             // TODO (Roma): support prefix for code / linux perf dumps
             snprintf(fname, MAX_FNAME_LEN, "idx%d_%s_%dx%s%d.bin", index,
-                     code_name, m, fringeSfx.c_str(), n);
+                     code_name, m, ltSfx.c_str(), n);
             counter++;
             FILE* fp = fopen(fname, "wb+");
             // Failure to dump code is not fatal

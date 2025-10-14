@@ -71,7 +71,28 @@ gdbJitHelperUtils::helpDebugInGDB(void* kernelAddress)
             << " = 0\n"
             << "(gdb) break *" << kernelAddress << "\n"
             << "(gdb) display/i $pc\n"
-            << "(gdb) continue\n";
+            << "(gdb) continue\n"
+            << "(gdb) si\n";
+        std::cout
+            << "\nSome helpful commands for jit debugging:\n"
+            << "\n1. To print the content of all general-purpose registers:\n"
+            << "(gdb) info registers\n"
+            << "\n2. To print the content of all registers (including\n"
+            << "vector registers):\n"
+            << "(gdb) info all-registers\n"
+            << "\n3. To print the content of a specific register (e.g. rax, "
+               "zmm0):\n"
+            << "(gdb) print $rax\n"
+            << "(gdb) p/x $rax\n"
+            << "(gdb) print $zmm0\n"
+            << "\n4. To disassemble 10 instructions starting from the\ncurrent "
+               "instruction:\n"
+            << "(gdb) x/10i $pc\n"
+            << "\n5. To examine memory at a specific address (e.g. 0xABC123):\n"
+            << "(gdb) x/20x 0xABC123\n"
+            << "\n6. To examine memory at an offset (e.g. 0x90) from an\n"
+            << "address held in a register (e.g. rdi, useful for masks) :\n"
+            << "(gdb) x/10x $rdi + 0x90\n";
     }
 
     while (aocl_jit_debug_break == 1) {

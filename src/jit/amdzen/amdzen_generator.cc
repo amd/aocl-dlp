@@ -354,12 +354,12 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
-#ifdef DLP_DUMP_JIT_CODE
+#ifdef DLP_JIT_DEBUG
             int n_left_suf = (i != 0) ? i : params.NR;
             // The file naming is as such : jit_gemv_m1_kernel.
             utils::jitHelperUtils::dump_jit_code(
                 kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
-                "jit_gemv_m1_kernel", 1, n_left_suf);
+                "jit_gemv_m1_kernel", 1, n_left_suf, false, i);
 #endif
         }
 
@@ -483,14 +483,14 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     goto cleanup;
                 }
 
-#ifdef DLP_DUMP_JIT_CODE
+#ifdef DLP_JIT_DEBUG
                 int m_left_suf = (m_left != 0) ? m_left : params.MR;
-                // The file naming is as such : jit_gemv_n1_kernels_MR_idx.
+                // The file naming is as such : id_jit_gemv_n1_kernels_MR_idx.
                 // The idx represents what configuration was used to generate
                 // the kernel.
                 utils::jitHelperUtils::dump_jit_code(
                     kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
-                    "jit_gemv_n1_kernel", m_left_suf, j);
+                    "jit_gemv_n1_kernel", m_left_suf, j, false, m_left * 4 + j);
 #endif
             }
         }
@@ -570,6 +570,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
 #ifdef DLP_JIT_DEBUG
                 // params.useMask=false implies a fringe or main kernel.
+                // params.useMask=true implies a lt fringe or lt main kernel.
                 utils::jitHelperUtils::dump_jit_code(
                     kernelCodeBlocks[mr * numNRVariants + nr],
                     utils::JIT_KERNEL_SIZE, "jit_kernel", params.MR,

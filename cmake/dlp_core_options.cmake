@@ -52,6 +52,7 @@ endfunction()
 function(dlp_define_core_options)
     # Core library options that affect runtime behavior
     option(DLP_ENABLE_LOGGING "Enable logging for DLP APIs" OFF)
+    option(DLP_ENABLE_JIT_DEBUGGING "Enable JIT debugging help for DLP APIs" OFF)
 
     # Threading model configuration
     option(DLP_THREADING_MODEL "Threading model to use" "none")
@@ -59,6 +60,7 @@ function(dlp_define_core_options)
 
     # Propagate variables back to the caller
     set(DLP_ENABLE_LOGGING ${DLP_ENABLE_LOGGING} PARENT_SCOPE)
+    set(DLP_ENABLE_JIT_DEBUGGING ${DLP_ENABLE_JIT_DEBUGGING} PARENT_SCOPE)
     set(DLP_THREADING_MODEL ${DLP_THREADING_MODEL} PARENT_SCOPE)
     set(DLP_ENABLE_OPENMP ${DLP_ENABLE_OPENMP} PARENT_SCOPE)
     set(DLP_ENABLE_PTHREAD ${DLP_ENABLE_PTHREAD} PARENT_SCOPE)

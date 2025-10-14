@@ -76,7 +76,7 @@ struct gemmKeyComparator
 // It is used to avoid double deletion of the same kernel instance.
 // It is also used to avoid the kernel instance being deleted before the
 // kernel is executed.
-class replacedKernelSink
+class storedKernelWatcher
 {
     static std::mutex         mtx;
     static std::vector<void*> valueSink;
@@ -91,11 +91,16 @@ class replacedKernelSink
 
     void operator()(void* kB) { sinkCollect(kB); }
 
-    static void cleanup()
+    static void cleanup(std::set<kernels::kernelBase*>& kernelsInTable)
     {
         std::lock_guard<std::mutex> lg{ mtx };
         for (auto& ele : valueSink) {
-            if (valueSet.count(ele) == 0) {
+            if ((valueSet.count(ele) == 0)
+                && (kernelsInTable.count(
+                        reinterpret_cast<kernels::kernelBase*>(ele))
+                    == 0)) {
+                // The ele should not already have been deleted in the
+                // kernelRegister destructor.
                 valueSet.insert(ele);
                 delete reinterpret_cast<kernels::kernelBase*>(ele);
             }
@@ -137,7 +142,7 @@ class kernelRegister
             gemmHashKeyGetter,
             gemmKeyComparator,
             kernelInfo,
-            replacedKernelSink,
+            storedKernelWatcher,
             kernels::kernelBase>(),
         "KERN_DISPATCH_TABLE must have the following methods defined: "
         "insert, query, getValues, getKeys\n");
@@ -180,7 +185,7 @@ class kernelRegister
         }
 
         // Cleanup the replaced kernel sink.
-        replacedKernelSink::cleanup();
+        storedKernelWatcher::cleanup(valueSet);
     }
 
     // Copy/move operations disabled for singleton
@@ -195,7 +200,7 @@ class kernelRegister
     template<typename HASH_KEY_GETTER,
              typename KEY_COMPARATOR,
              typename KEY_TYPE,
-             typename VALUE_REPLACER>
+             typename VALUE_WATCHER>
     [[nodiscard]] kernelFrameError registerKernel(
         std::unique_ptr<kernels::kernelBase> _kB,
         std::string&&                        kernelFamily,
@@ -224,7 +229,7 @@ class kernelRegister
             static_cast<void>(
                 vecKDTs[routineIdx][idx]
                     .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                                     VALUE_REPLACER>(kI, kB));
+                                     VALUE_WATCHER>(kI, kB));
         }
 
         return kernelFrameError::success;
@@ -233,7 +238,7 @@ class kernelRegister
     template<typename HASH_KEY_GETTER,
              typename KEY_COMPARATOR,
              typename KEY_TYPE,
-             typename VALUE_REPLACER>
+             typename VALUE_WATCHER>
     [[nodiscard]] kernelBaseRef registerAndGetKernel(
         std::unique_ptr<kernels::kernelBase> _kB,
         std::string&&                        kernelFamily,
@@ -266,7 +271,7 @@ class kernelRegister
         auto kernPtr = reinterpret_cast<kernels::kernelBase*>(
             vecKDTs[routineIdx][idx]
                 .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                                 VALUE_REPLACER>(kI, kB));
+                                 VALUE_WATCHER>(kI, kB));
 
         if (!kernPtr) {
             // TODO: Add logging here.
@@ -342,7 +347,7 @@ class kernelRegister
         std::unique_ptr<kernels::kernelBase> _kB, std::string&& kernelFamily)
     {
         return registerKernel<gemmHashKeyGetter, gemmKeyComparator, kernelInfo,
-                              replacedKernelSink>(
+                              storedKernelWatcher>(
             std::move(_kB), std::move(kernelFamily), kernelRoutineType::gemm);
     }
 
@@ -367,7 +372,7 @@ class kernelRegister
         kernelDatatype                       kDtype)
     {
         return registerAndGetKernel<gemmHashKeyGetter, gemmKeyComparator,
-                                    kernelInfo, replacedKernelSink>(
+                                    kernelInfo, storedKernelWatcher>(
             std::move(_kB), std::move(kernelFamily), kernelRoutineType::gemm,
             kDtype);
     }
