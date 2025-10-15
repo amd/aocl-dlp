@@ -99,7 +99,7 @@ AOCL-DLP uses a comprehensive testing framework based on Google Test with YAML c
 **Quick testing workflow:**
 ```bash
 # Build with tests enabled
-cmake -DBUILD_TESTING=ON -DDLP_CTEST_DISABLED=OFF ..
+cmake -DBUILD_TESTING=ON -DDLP_TESTING_CTEST_DISABLED=OFF ..
 make -j$(nproc)
 
 # Run all tests

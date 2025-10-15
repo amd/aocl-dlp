@@ -57,24 +57,18 @@ foreach(source ${EXAMPLE_SOURCES})
     # Choose library target based on static linking preference
     if(DLP_EXAMPLES_LINK_STATIC)
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking example ${example_name} with static AOCL-DLP library (whole-archive)")
-
-        # Link with the main library using whole-archive to ensure all object files
-        # are included, enabling static plugin registration to work
-        target_link_libraries(${example_name}
-            PRIVATE
-                $<LINK_LIBRARY:WHOLE_ARCHIVE,${DLP_LIBRARY_TARGET}>
-        )
+        message(STATUS "Linking example ${example_name} with static AOCL-DLP library (whole-archive automatic)")
     else()
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
         message(STATUS "Linking example ${example_name} with shared AOCL-DLP library")
-
-        # Link with the main library normally for shared builds
-        target_link_libraries(${example_name}
-            PRIVATE
-                ${DLP_LIBRARY_TARGET}
-        )
     endif()
+
+    # Link with the main library
+    # Note: For static library, whole-archive is automatically applied via INTERFACE_LINK_OPTIONS
+    target_link_libraries(${example_name}
+        PRIVATE
+            ${DLP_LIBRARY_TARGET}
+    )
 
     # Link with OpenMP if available
     if(OpenMP_C_FOUND)

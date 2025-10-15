@@ -654,7 +654,7 @@ namespace dlp { namespace testing { namespace framework {
 
         switch (m_type) {
             case MatrixType::f32: {
-#if DLP_ENABLE_HIGH_PRECISION_FLOAT || DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT
+#if DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT
                 std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
@@ -730,7 +730,8 @@ namespace dlp { namespace testing { namespace framework {
                 break;
             }
             case MatrixType::bf16: {
-#if DLP_ENABLE_HIGH_PRECISION_FLOAT // Enable this to get a proper test case.
+#if DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT // Enable this to get a proper test
+                                            // case.
                 // For BF16, fill with random uint16_t values
                 std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
                 uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);

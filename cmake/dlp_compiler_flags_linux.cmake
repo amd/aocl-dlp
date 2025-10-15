@@ -310,4 +310,14 @@ function(dlp_set_platform_options)
         #FIXME: For windows we might need to do something similar
         set_target_properties(${PROJECT_NAME}_static PROPERTIES OUTPUT_NAME ${PROJECT_NAME})
     endif()
+
+    # CRITICAL: Set INTERFACE_LINK_OPTIONS to automatically apply whole-archive for static library
+    # This ensures all static constructors (JIT registration, kernel registration) are included
+    # when any target links against aocl-dlp_static. This eliminates the need for users to
+    # manually specify whole-archive flags.
+    # Linux/macOS: Use --whole-archive
+    # This flag will be applied to the target which is being linked against aocl-dlp_static library.
+    target_link_options(${PROJECT_NAME}_static INTERFACE
+        "LINKER:--whole-archive,$<TARGET_FILE:$<TARGET_NAME:${PROJECT_NAME}_static>>,--no-whole-archive"
+    )
 endfunction()

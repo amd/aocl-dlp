@@ -778,7 +778,7 @@ createAdditionalTestConfigs()
 // HELPER FUNCTIONS - DETAILED MATRIX COMPARISON
 // ============================================================================
 
-#if DLP_ENABLE_DETAILED_DEBUG || DLP_TESTING_ENABLE_DETAILED_DEBUG
+#if DLP_TESTING_ENABLE_DETAILED_DEBUG
 
 // Helper function to compare matrices and report detailed differences
 std::string
@@ -1217,7 +1217,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                        "valid parameters:\n"
                     << printConfigDetails(config_) << "\n";
 
-#if DLP_ENABLE_DETAILED_DEBUG || DLP_TESTING_ENABLE_DETAILED_DEBUG
+#if DLP_TESTING_ENABLE_DETAILED_DEBUG
                 detailed_error << compareMatricesDetailed(C, C_ref);
 #endif
                 FAIL() << detailed_error.str();

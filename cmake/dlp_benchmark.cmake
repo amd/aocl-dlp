@@ -78,28 +78,20 @@ function(dlp_add_benchmark)
     # Choose library target based on static linking preference
     if(DLP_BENCHMARKS_LINK_STATIC)
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with static AOCL-DLP library (whole-archive)")
-
-        # Link with Google Benchmark and the main project library using whole-archive
-        # for static builds to ensure all object files are included for plugin registration
-        target_link_libraries(${DLP_BENCH_NAME}
-            PRIVATE
-                benchmark
-                $<LINK_LIBRARY:WHOLE_ARCHIVE,${DLP_LIBRARY_TARGET}>
-                ${DLP_BENCH_DEPENDS}
-        )
+        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with static AOCL-DLP library (whole-archive automatic)")
     else()
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
         message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with shared AOCL-DLP library")
-
-        # Link with Google Benchmark and the main project library normally for shared builds
-        target_link_libraries(${DLP_BENCH_NAME}
-            PRIVATE
-                benchmark
-                ${DLP_LIBRARY_TARGET}
-                ${DLP_BENCH_DEPENDS}
-        )
     endif()
+
+    # Link with Google Benchmark and the main project library
+    # Note: For static library, whole-archive is automatically applied via INTERFACE_LINK_OPTIONS
+    target_link_libraries(${DLP_BENCH_NAME}
+        PRIVATE
+            benchmark
+            ${DLP_LIBRARY_TARGET}
+            ${DLP_BENCH_DEPENDS}
+    )
 
     # Add include directories - follow modern CMake target-based approach
     target_include_directories(${DLP_BENCH_NAME}
