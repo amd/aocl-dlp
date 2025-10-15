@@ -52,19 +52,30 @@ namespace dlp::de {
  * - Pluggable backend architecture for extensible decision strategies
  * - Centralized kernel selection logic with distributed backend implementations
  *
- * @note Currently supports F32 GEMM operations only, extensible for additional
- * datatypes and routine types
+ * @note Currently supports F32 and BF16 GEMM operations, extensible for
+ * additional datatypes and routine types
  */
 class decisionEngine
 {
     void registerDecisionEngine()
     {
-        // Only support F32 decision engine for now.
+        // Registering all the GEMM decision engines for the datatypes supported
+        // Support F32 decision engine
         auto kTypeIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelRoutineType::gemm);
-        auto dtIdx = utils::getUnderlyingValueOfEnum(
+        auto f32DtIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelDatatype::f32f32f32of32);
-        backends[kTypeIdx][dtIdx] = new gemmF32DEBackend;
+        backends[kTypeIdx][f32DtIdx] = new gemmF32DEBackend;
+
+        // Support BF16OF32 decision engine
+        auto bf16of32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::bf16bf16f32of32);
+        backends[kTypeIdx][bf16of32DtIdx] = new gemmBF16DEBackend;
+
+        // Support BF16OF32 decision engine
+        auto bf16obf16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::bf16bf16f32obf16);
+        backends[kTypeIdx][bf16obf16DtIdx] = new gemmBF16DEBackend;
     }
 
     decisionEngine()

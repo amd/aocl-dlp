@@ -135,10 +135,11 @@ enum class kernelInstrType : uint16_t
 
 struct generatorParams
 {
-    int MR; // This MR can be of either main kernel or fringe kernel
-    int NR; // This NR can be of either main kernel or fringe kernel
-    int K_UNROLL;
-    int numMaskRegs;
+    int  MR; // This MR can be of either main kernel or fringe kernel
+    int  NR; // This NR can be of either main kernel or fringe kernel
+    int  K_UNROLL;
+    md_t c_downscale;
+    int  numMaskRegs;
     // This will be used to generate NR + " < nElemsPerReg" kernels,
     // where NR is a multiple of nElemsPerReg including "0".
     bool useMask;
@@ -151,6 +152,7 @@ struct generatorParams
     generatorParams(md_t                           _MR,
                     md_t                           _NR,
                     int                            _K_UNROLL,
+                    md_t                           _c_downscale,
                     int                            _numMaskRegs,
                     bool                           _useMask,
                     bool                           _mLoop,
@@ -162,6 +164,7 @@ struct generatorParams
         : MR(_MR)
         , NR(_NR)
         , K_UNROLL(_K_UNROLL)
+        , c_downscale(_c_downscale)
         , numMaskRegs(_numMaskRegs)
         , useMask(_useMask)
         , mLoop(_mLoop)
@@ -175,6 +178,7 @@ struct generatorParams
         : MR(other.MR)
         , NR(other.NR)
         , K_UNROLL(other.K_UNROLL)
+        , c_downscale(other.c_downscale)
         , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
         , mLoop(other.mLoop)
@@ -191,6 +195,7 @@ struct generatorParams
             MR               = other.MR;
             NR               = other.NR;
             K_UNROLL         = other.K_UNROLL;
+            c_downscale      = other.c_downscale;
             numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;
             mLoop            = other.mLoop;
@@ -206,6 +211,7 @@ struct generatorParams
         : MR(other.MR)
         , NR(other.NR)
         , K_UNROLL(other.K_UNROLL)
+        , c_downscale(other.c_downscale)
         , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
         , mLoop(other.mLoop)
@@ -222,6 +228,7 @@ struct generatorParams
             MR               = other.MR;
             NR               = other.NR;
             K_UNROLL         = other.K_UNROLL;
+            c_downscale      = other.c_downscale;
             numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;
             mLoop            = other.mLoop;

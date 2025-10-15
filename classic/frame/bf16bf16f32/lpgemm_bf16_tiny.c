@@ -253,10 +253,18 @@ LPGEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         post_ops_attr.rs_c_downscale = rs_c_downscale;
 
         // Reorder/Packed B, Reorder/Packed/Unpacked A call.
-        ((lpgemm_rowvar_bf16)lcntx->kern_fun_ptr)(
-            m, nr0, k, a_use, rs_a_use, cs_a_use, a_block_stride,
-            (b_use + (jr * k0_updated)), rs_b_use, cs_b_use, (c + jr), rs_c_use,
-            1, alpha, beta, post_op_list, post_ops_attr);
+        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+            dlp_execute_kernel(
+                lcntx->dlp_kernel_hndl, m, nr0, k, (int16_t*)a_use, rs_a_use,
+                cs_a_use, a_block_stride, (int16_t*)(b_use + (jr * k0_updated)),
+                rs_b_use, cs_b_use, 0, 0, (c + jr), rs_c_use, 1, (void*)&alpha,
+                (void*)&beta, post_op_list, post_ops_attr);
+        } else {
+            ((lpgemm_rowvar_bf16)lcntx->kern_fun_ptr)(
+                m, nr0, k, a_use, rs_a_use, cs_a_use, a_block_stride,
+                (b_use + (jr * k0_updated)), rs_b_use, cs_b_use, (c + jr),
+                rs_c_use, 1, alpha, beta, post_op_list, post_ops_attr);
+        }
     }
 
     // Release pack buffers.

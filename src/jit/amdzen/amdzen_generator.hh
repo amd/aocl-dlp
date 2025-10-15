@@ -56,6 +56,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
 
     md_t               numKernelVariants;
     md_t               K_UNROLL;
+    md_t               c_downscale;
     std::vector<void*> kernelCodeBlocks;
 
     void setGeneratorKernelMetaInfo(
@@ -159,6 +160,65 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     std::unique_ptr<jitGeneratorBase> clone() override
     {
         return std::make_unique<jitAmdZenFP32>();
+    }
+};
+
+class jitAmdZenBF16 : public dlp::jit::jitGeneratorBase
+{
+
+    std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
+    std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
+
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+  public:
+    // jitAVX512 base;
+    md_t               MR, NR, KC;
+    md_t               numMRVariants, numNRVariants;
+    md_t               numKernelVariants;
+    md_t               K_UNROLL;
+    md_t               c_downscale;
+    std::vector<void*> kernelCodeBlocks;
+
+    jitAmdZenBF16();
+    ~jitAmdZenBF16();
+    jitAmdZenBF16(const jitAmdZenBF16&)            = delete;
+    jitAmdZenBF16& operator=(const jitAmdZenBF16&) = delete;
+    jitAmdZenBF16(jitAmdZenBF16&&)                 = delete;
+    jitAmdZenBF16& operator=(jitAmdZenBF16&&)      = delete;
+
+    /* Function to retrieve the process block size of the kernel */
+    int getProcessBlockSize() const;
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+    dlp::jit::jitGeneratorError operator()(
+        const dlp::jit::jitGeneratorContext& jI) override
+    {
+        return generateAllKernels(jI);
+    }
+
+    std::vector<dlp::kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override
+    {
+        return mKernelDatatypes;
+    }
+
+    std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override
+    {
+        return mIsaFeaturesRequired;
+    }
+
+    dlp::kernels::kernelError executeKernel(
+        dlp::kernels::kernelParams* _params) override;
+
+    std::unique_ptr<jitGeneratorBase> clone() override
+    {
+        return std::make_unique<jitAmdZenBF16>();
     }
 };
 

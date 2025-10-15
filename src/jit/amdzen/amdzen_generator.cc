@@ -28,6 +28,7 @@
 
 #include "amdzen_generator.hh"
 #include "arch_utils/arch_config_manager.hh"
+#include "bf16_gemm_generator.hh"
 #include "cpu_utils/cpu_features.hh"
 #include "f32_gemm_generator.hh"
 #include "f32_gemv.hh"
@@ -36,6 +37,7 @@
 
 namespace amdzen::gen {
 
+// F32 JIT Generator
 jitAmdZenFP32::jitAmdZenFP32()
     : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f32f32f32of32 })
     // TODO: Hardcoded for now, need to make it dynamic
@@ -271,10 +273,11 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
-    MR       = (jI.kI).mr;
-    NR       = (jI.kI).nr;
-    KC       = (jI.kI).kc;
-    K_UNROLL = (jI.kI).k_unroll;
+    MR          = (jI.kI).mr;
+    NR          = (jI.kI).nr;
+    KC          = (jI.kI).kc;
+    K_UNROLL    = (jI.kI).k_unroll;
+    c_downscale = (jI.kI).c_downscale;
 
     // Hardcoding the FP32 kernel datatype for now
     const dlp::kernel_frame::kernelDatatype kdt =
@@ -506,8 +509,8 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelCodeBlocks.resize(numKernelVariants);
 
         // Initializing with default values.
-        utils::generatorParams params(0, 0, (jI.kI).k_unroll, 0, false, false,
-                                      (jI.kI).alphaScalingType,
+        utils::generatorParams params(0, 0, (jI.kI).k_unroll, c_downscale, 0,
+                                      false, false, (jI.kI).alphaScalingType,
                                       (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
@@ -843,6 +846,222 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
     return dlp::kernels::kernelError::success;
 }
 
+// BF16 JIT Generator
+jitAmdZenBF16::jitAmdZenBF16()
+    : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::bf16bf16f32of32,
+                         dlp::kernel_frame::kernelDatatype::bf16bf16f32obf16 })
+    , mIsaFeaturesRequired{}
+    , kType(utils::kernelInstrType::none)
+    , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
+{
+}
+
+jitAmdZenBF16::~jitAmdZenBF16()
+{
+    for (auto& codeBlock : kernelCodeBlocks) {
+        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
+                                                   utils::JIT_KERNEL_SIZE);
+    }
+}
+
+dlp::jit::jitGeneratorError
+jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+{
+
+    dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
+
+    MR          = (jI.kI).mr;
+    NR          = (jI.kI).nr;
+    KC          = (jI.kI).kc;
+    K_UNROLL    = (jI.kI).k_unroll;
+    c_downscale = (jI.kI).c_downscale;
+
+    const dlp::kernel_frame::kernelDatatype kdt =
+        dlp::kernel_frame::kernelDatatype::bf16bf16f32of32;
+
+    // Here, we only generate kernels with multiples of numElemsPerReg
+    // and then one kernel to handle "< numElemsPerReg" cases.
+    // Here, the problem will be divided first by NR and the fringe will be
+    // divided further into two regions. One for "multiples of
+    // numElemsPerReg" and the other for "< numElemsPerReg" cases.
+
+    // This approach works well with the current reordering strategy but is
+    // inefficient for the cases where n < NR cases especially with "lt16"
+    // fringe being taken.
+
+    // We set the numElemsPerReg to 16(hardcode) here since we intend to
+    // generate kernels only with the AVX512BF16 ISA. The utilities to set
+    // numElemsPerReg and the kernel meta-data is common, and this has to be
+    // abstracted out.
+    numElemsPerReg = 16;
+
+    numNRVariants     = (NR / numElemsPerReg) + 1;
+    numMRVariants     = MR;
+    numKernelVariants = numMRVariants * numNRVariants;
+
+    kernelCodeBlocks.resize(numKernelVariants);
+
+    // Initializing with default values.
+    utils::generatorParams params(0, 0, (jI.kI).k_unroll, c_downscale, 0, false,
+                                  false, (jI.kI).alphaScalingType,
+                                  (jI.kI).betaScalingType, kType);
+
+    // Generate all kernels for the given MR and NR
+    for (int mr = 0; mr < numMRVariants; mr++) {
+        for (int nr = 0; nr < numNRVariants; nr++) {
+            params.MR        = (mr == 0) ? MR : mr;
+            params.mLoop     = (mr == 0);
+            params.NR        = (nr * numElemsPerReg);
+            params.useMask   = (nr == 0);
+            void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
+            // Allocate executable memory
+            codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                utils::JIT_KERNEL_SIZE);
+            if (codeBuffer == nullptr) {
+                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                goto cleanup;
+            }
+            kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
+
+            GEMMcodeGenerator::jitGEMMBF16<
+                utils::kernelInstrType::avx512_zmm_32_reg>
+                base(codeBuffer, utils::JIT_KERNEL_SIZE);
+
+            err = base.generateKernel(params);
+            if (err != dlp::jit::jitGeneratorError::success) {
+                goto cleanup;
+            }
+#ifdef DLP_JIT_DEBUG
+            utils::jitHelperUtils::dump_jit_code(
+                kernelCodeBlocks[mr * numNRVariants + nr],
+                utils::JIT_KERNEL_SIZE, "bf16_jit_kernel", params.MR, params.NR,
+                params.useMask, mr * numNRVariants + nr);
+#endif
+        }
+    }
+    return dlp::jit::jitGeneratorError::success;
+cleanup:
+    // Free the memory allocated for the kernel code blocks if
+    // allocation fails or if the kernel generation fails
+    for (auto& codeBlock : kernelCodeBlocks) {
+        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
+                                                   utils::JIT_KERNEL_SIZE);
+    }
+    return err;
+}
+
+dlp::kernels::kernelError
+jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
+{
+    auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+
+    int processBlockSize = NR;
+    // Since JR loop is in framework, the 'n' dimension passed to this
+    // function is always <= NR.
+    int mFullPieces    = params->m / MR;
+    int mPartialPieces = params->m % MR;
+
+    // For now, we will use kIter and kLeft to represent the
+    // iteration counts in the k direction, based on packing mandate.
+
+    // Ideally, these should be used to represent the unroll factor as well
+    // in which case, we will have to update the calculation accordingly.
+    params->kIter = params->k / 2;
+    params->kLeft = params->k % 2;
+
+    int16_t* aPtr = static_cast<int16_t*>(params->a);
+    int16_t* bPtr = static_cast<int16_t*>(params->b);
+    float*   cPtr = static_cast<float*>(params->c);
+    // Initialize pointers to A and B
+    float* c_jr = cPtr;
+    float* c_ir = cPtr;
+
+    md_t n              = params->n;
+    md_t m              = params->m;
+    md_t k              = params->k;
+    int  nBlockSize     = (n < processBlockSize) ? n : processBlockSize;
+    int  nFullpieces    = nBlockSize / numElemsPerReg;
+    int  nRemainder     = nBlockSize % numElemsPerReg;
+    int  rsB            = params->rsB;
+    int  og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+
+    // Process complete registers first (if any)
+    if (nFullpieces > 0) {
+        // Updates to the strides based on the packing mandate
+        params->rsB = (rsB / (NR / numElemsPerReg)) * nFullpieces;
+
+        int elementsToProcess = nFullpieces * numElemsPerReg;
+
+        params->a = aPtr;
+        params->c = c_jr;
+        params->n = elementsToProcess;
+
+        int kernel_n_idx = nFullpieces;
+        if (params->m >= MR) {
+            params->mIter            = mFullPieces;
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+            (params->a) =
+                (int16_t*)(params->a) + MR * mFullPieces * params->psA;
+            (params->c) = (float*)(params->c) + MR * mFullPieces * params->rsC;
+            (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
+        }
+
+        if (mPartialPieces) {
+            int               m_idx  = mPartialPieces;
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+        }
+
+        params->b = bPtr + (elementsToProcess * (params->k + params->kLeft));
+        c_jr      = c_jr + elementsToProcess;
+        (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
+        (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
+        n -= elementsToProcess;
+    }
+    if (nRemainder > 0) {
+        // Updates to the strides based on the packing mandate
+        params->rsB = (rsB / (NR / numElemsPerReg));
+        params->a   = aPtr;
+        params->c   = c_jr;
+        params->n   = nRemainder;
+
+        // Unlike F32 JIT, for now, we are producing only lt16 as the mask based
+        // fringe kernel for BF16 JIT.
+        params->maskF32[0] = 0xFFFF >> (numElemsPerReg - nRemainder);
+
+        if (params->m >= MR) {
+            params->mIter = mFullPieces;
+            utils::jit_kernel kernel =
+                reinterpret_cast<utils::jit_kernel>(kernelCodeBlocks[0]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+            (params->a) =
+                (int16_t*)(params->a) + MR * mFullPieces * params->psA;
+            (params->c) = (float*)(params->c) + MR * mFullPieces * params->rsC;
+            (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
+        }
+
+        if (mPartialPieces) {
+            int               m_idx  = mPartialPieces;
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+        }
+    }
+    return dlp::kernels::kernelError::success;
+}
+
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenFP32, "dlp_amdzen_jit");
+DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenBF16, "dlp_amdzen_jit");
 
 } // namespace amdzen::gen

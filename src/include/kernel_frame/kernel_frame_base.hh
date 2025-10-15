@@ -272,6 +272,7 @@ struct kernelInfo
     std::size_t           kOpsArrSize;
     bool                  anyKOpsOrder;
     kernelInstrPreference kInstPref;
+    md_t                  c_downscale;
 
     kernelInfo(md_t                               mr,
                md_t                               nr,
@@ -286,7 +287,8 @@ struct kernelInfo
                std::unique_ptr<kernelOpsMetaData> kOpsArr,
                std::size_t                        kOpsArrSize,
                bool                               anyKOpsOrder,
-               kernelInstrPreference              instPref)
+               kernelInstrPreference              instPref,
+               md_t                               c_downscale)
         : mr(mr)
         , nr(nr)
         , term_fringe_nr(_term_fringe_nr)
@@ -304,6 +306,7 @@ struct kernelInfo
                                                                   : 0)
         , anyKOpsOrder(anyKOpsOrder)
         , kInstPref(instPref)
+        , c_downscale(c_downscale)
     {
     }
 
@@ -324,6 +327,7 @@ struct kernelInfo
                           : 0)
         , anyKOpsOrder(other.anyKOpsOrder)
         , kInstPref(other.kInstPref)
+        , c_downscale(other.c_downscale)
     {
         if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
             this->kOpsArr =
@@ -354,6 +358,7 @@ struct kernelInfo
                           : 0)
         , anyKOpsOrder(other->anyKOpsOrder)
         , kInstPref(other->kInstPref)
+        , c_downscale(other->c_downscale)
     {
         if ((other->kOpsArr != nullptr) && (other->kOpsArrSize > 0)) {
             other->kOpsArr     = nullptr;
@@ -380,6 +385,7 @@ struct kernelInfo
                           : 0)
         , anyKOpsOrder(other.anyKOpsOrder)
         , kInstPref(other.kInstPref)
+        , c_downscale(other.c_downscale)
     {
         if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
             other.kOpsArr     = nullptr;
@@ -413,6 +419,7 @@ struct kernelInfo
             }
             this->anyKOpsOrder = other.anyKOpsOrder;
             this->kInstPref    = other.kInstPref;
+            this->c_downscale  = other.c_downscale;
         }
         return *this;
     }
@@ -441,6 +448,7 @@ struct kernelInfo
             }
             this->anyKOpsOrder = other.anyKOpsOrder;
             this->kInstPref    = other.kInstPref;
+            this->c_downscale  = other.c_downscale;
         }
         return *this;
     }
@@ -468,7 +476,8 @@ struct kernelInfo
                     == rhs.genLtKrnlForAvailFullKrnl)
                 && (this->kOpsArrSize == rhs.kOpsArrSize) && isKOpsArrEqual
                 && (this->anyKOpsOrder == rhs.anyKOpsOrder)
-                && (this->kInstPref == rhs.kInstPref));
+                && (this->kInstPref == rhs.kInstPref)
+                && (this->c_downscale == rhs.c_downscale));
     }
 
     // TODO: Need to implement a subset function for kernelInfo

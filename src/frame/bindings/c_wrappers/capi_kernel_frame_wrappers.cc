@@ -60,7 +60,8 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
                              lpgemm_post_op*   metadata,
                              md_t              mr_hint,
                              md_t              nr_hint,
-                             md_t              kc_hint)
+                             md_t              kc_hint,
+                             md_t              c_downscale)
 {
     dlp_kernel_hndl_t kernel_hndl{ DLP_KERNEL_INVALID, 0, 0, nullptr };
 
@@ -68,10 +69,10 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
     if (kDType == kernelDatatype::invalid) {
         return kernel_hndl;
     }
-    dlp::de::gemmDEInput gDEIn{ kDType,  m,       n,      k,      rs_a,
-                                cs_a,    rs_b,    cs_b,   rs_c,   cs_c,
-                                alpha,   beta,    mtag_a, mtag_b, metadata,
-                                mr_hint, nr_hint, kc_hint };
+    dlp::de::gemmDEInput gDEIn{ kDType,  m,       n,       k,          rs_a,
+                                cs_a,    rs_b,    cs_b,    rs_c,       cs_c,
+                                alpha,   beta,    mtag_a,  mtag_b,     metadata,
+                                mr_hint, nr_hint, kc_hint, c_downscale };
     auto optKI = dlp::de::decisionEngineInstance().getKernelInfoForInput(
         std::addressof(gDEIn), kernelRoutineType::gemm, kDType);
     if (!optKI.has_value()) {
@@ -92,7 +93,9 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
             kernPtr = kernelBaseRef(nullptr);
         } else {
             auto retVal = dlpKernelRegisterInstance().registerGemmKernel(
-                std::move(kB), "FP32JitKernel");
+                std::move(kB),
+                "JitKernel"); // TODO : Add a utility function to get the kernel
+                              // name based on the kernel datatype
             if (retVal != kernelFrameError::success) {
                 std::cout << "Jit kernel registration failed." << std::endl;
                 std::cout << "Exiting..." << std::endl;

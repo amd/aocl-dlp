@@ -138,7 +138,8 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
                              lpgemm_post_op*   metadata,
                              md_t              mr_hint,
                              md_t              nr_hint,
-                             md_t              kc_hint);
+                             md_t              kc_hint,
+                             md_t              c_downscale);
 
 void
 dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,

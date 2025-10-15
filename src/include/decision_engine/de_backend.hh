@@ -67,4 +67,24 @@ class gemmF32DEBackend : public iDEBackend
         iDEInput* in) override;
 };
 
+class gemmBF16DEBackend : public iDEBackend
+{
+    bool                                isAvx512;
+    bool                                isAvx2;
+    bool                                isAvx512Bf16;
+    kernel_frame::kernelInstrPreference eKernelInstPref;
+    bool                                canGenerateKernelInfo;
+
+  public:
+    gemmBF16DEBackend();
+    ~gemmBF16DEBackend()                                   = default;
+    gemmBF16DEBackend(const gemmBF16DEBackend&)            = delete;
+    gemmBF16DEBackend(gemmBF16DEBackend&&)                 = delete;
+    gemmBF16DEBackend& operator=(const gemmBF16DEBackend&) = delete;
+    gemmBF16DEBackend& operator=(gemmBF16DEBackend&&)      = delete;
+
+    std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
+        iDEInput* in) override;
+};
+
 } // namespace dlp::de

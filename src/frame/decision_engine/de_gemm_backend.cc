@@ -276,6 +276,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
     md_t            cs_c         = gemmIn->cs_c;
     AOCL_MEMORY_TAG mtag_a       = gemmIn->mtag_a;
     AOCL_MEMORY_TAG mtag_b       = gemmIn->mtag_b;
+    md_t            c_downscale  = gemmIn->c_downscale;
     bool            anyKOpsOrder = false;
 
     // Set the kernel instruction preference based on the CPU features.
@@ -332,7 +333,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          nullptr,
                                          0,
                                          anyKOpsOrder,
-                                         kInstPref };
+                                         kInstPref,
+                                         c_downscale };
             return std::make_optional(kI);
         } else if (gemmIn->metadata[0].op_code == POST_OPS_DISABLE) {
             // This condition is not combined with the previous 'if'
@@ -353,7 +355,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          nullptr,
                                          0,
                                          anyKOpsOrder,
-                                         kInstPref };
+                                         kInstPref,
+                                         c_downscale };
             return std::make_optional(kI);
 
         } else {
@@ -380,7 +383,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              nullptr,
                                              0,
                                              anyKOpsOrder,
-                                             kInstPref };
+                                             kInstPref,
+                                             c_downscale };
                 return std::make_optional(kI);
             } else {
                 kernel_frame::kernelInfo kI{ mr,
@@ -396,7 +400,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              nullptr,
                                              0,
                                              anyKOpsOrder,
-                                             kInstPref };
+                                             kInstPref,
+                                             c_downscale };
                 kI.kOpsArrSize = numPostOps;
                 kI.kOpsArr = kernel_frame::kernelInfo::allocateKernelOpsArray(
                     numPostOps);
@@ -460,7 +465,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          nullptr,
                                          0,
                                          anyKOpsOrder,
-                                         kInstPref };
+                                         kInstPref,
+                                         c_downscale };
             return std::make_optional(kI);
         } else if (gemmIn->metadata[0].op_code == POST_OPS_DISABLE) {
             // This condition is not combined with the previous 'if' clause,
@@ -481,7 +487,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          nullptr,
                                          0,
                                          anyKOpsOrder,
-                                         kInstPref };
+                                         kInstPref,
+                                         c_downscale };
             return std::make_optional(kI);
         } else {
             // Iterate over the post_ops list to get the number of post-ops.
@@ -507,7 +514,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              nullptr,
                                              0,
                                              anyKOpsOrder,
-                                             kInstPref };
+                                             kInstPref,
+                                             c_downscale };
                 return std::make_optional(kI);
             } else {
                 kernel_frame::kernelInfo kI{ mr,
@@ -523,7 +531,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              nullptr,
                                              0,
                                              anyKOpsOrder,
-                                             kInstPref };
+                                             kInstPref,
+                                             c_downscale };
                 kI.kOpsArrSize = numPostOps;
                 kI.kOpsArr = kernel_frame::kernelInfo::allocateKernelOpsArray(
                     numPostOps);
@@ -575,7 +584,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          nullptr,
                                          0,
                                          anyKOpsOrder,
-                                         kInstPref };
+                                         kInstPref,
+                                         c_downscale };
             return std::make_optional(kI);
         } else {
             // Iterate over the post_ops list to get the number of post-ops.
@@ -601,7 +611,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              nullptr,
                                              0,
                                              anyKOpsOrder,
-                                             kInstPref };
+                                             kInstPref,
+                                             c_downscale };
                 return std::make_optional(kI);
             } else {
                 kernel_frame::kernelInfo kI{ mr,
@@ -617,7 +628,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              nullptr,
                                              0,
                                              anyKOpsOrder,
-                                             kInstPref };
+                                             kInstPref,
+                                             c_downscale };
                 kI.kOpsArrSize = numPostOps;
                 kI.kOpsArr = kernel_frame::kernelInfo::allocateKernelOpsArray(
                     numPostOps);
@@ -638,6 +650,84 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
         return std::nullopt;
     }
     return std::nullopt;
+}
+
+gemmBF16DEBackend::gemmBF16DEBackend()
+    : isAvx512(false)
+    , isAvx2(false)
+    , isAvx512Bf16(false)
+    , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
+    , canGenerateKernelInfo(true)
+{
+    // For now, we check for AVX512_BF16 support using the archConfigManager.
+    // If it doesn't exist, we revert to use the classic path
+    // Env variable standard :
+    // Whatever value is given for AOCL_ENABLE_INSTRUCTIONS, we should check
+    // for BF16 support in the hardware. If it exists, we deploy the BF16 JIT
+    // path, if not, we should use the F32 JIT path(F32 rerouting TBD).
+    // For now, we are using only AVX512 based BF16 kernels, and thus, have a
+    // specific boolean to represent this.
+    isAvx512Bf16 = arch_utils::archConfigManager::getInstance()
+                       .isAvx512Bf16SupportedByArch();
+
+    if (!isAvx512Bf16) {
+        canGenerateKernelInfo = false;
+    }
+}
+
+std::optional<kernel_frame::kernelInfo>
+gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
+{
+    auto gemmIn = static_cast<gemmDEInput*>(in);
+    if ((gemmIn == nullptr) || (!canGenerateKernelInfo)) {
+        return std::nullopt;
+    }
+
+    // At this point, we know that the underlying architecture supports AVX512
+    // BF16.
+    kernel_frame::scalingType alphaScalingType =
+        kernel_frame::scalingType::generic;
+    kernel_frame::scalingType betaScalingType =
+        kernel_frame::scalingType::generic;
+
+    md_t            mr           = gemmIn->mr_hint;
+    md_t            nr           = gemmIn->nr_hint;
+    md_t            k_unroll     = 1;
+    md_t            kc           = gemmIn->kc_hint;
+    AOCL_MEMORY_TAG mtag_a       = gemmIn->mtag_a;
+    AOCL_MEMORY_TAG mtag_b       = gemmIn->mtag_b;
+    md_t            c_downscale  = gemmIn->c_downscale;
+    bool            anyKOpsOrder = false;
+
+    // Set the kernel instruction preference based on the CPU features.
+    // For now, we set it to avx512_zmm_favour, given that we intend to only
+    // generate AVX512 BF16 kernels.
+    kernel_frame::kernelInstrPreference kInstPref =
+        kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+
+    // Early exit conditions.
+    // Support for JIT AVX512BF16 only when post-ops are not present.
+    if ((gemmIn->metadata != nullptr)
+        && (gemmIn->metadata[0].op_code != POST_OPS_DISABLE)) {
+        return std::nullopt;
+    }
+
+    kernel_frame::kernelInfo kI{ mr,
+                                 nr,
+                                 0,
+                                 k_unroll,
+                                 kc,
+                                 alphaScalingType,
+                                 betaScalingType,
+                                 mtag_a,
+                                 mtag_b,
+                                 false,
+                                 nullptr,
+                                 0,
+                                 anyKOpsOrder,
+                                 kInstPref,
+                                 c_downscale };
+    return std::make_optional(kI);
 }
 
 } // namespace dlp::de

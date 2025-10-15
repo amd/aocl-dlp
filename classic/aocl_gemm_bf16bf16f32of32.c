@@ -215,6 +215,17 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
+    lpgemm_cntx_t  lcntx_l;
+    // Create local copy, since each thread in a multi-instance setup
+    // modified the context object.
+    lcntx_l = *lcntx_g;
+
+    // Initialize DLP Plus kernel path.
+    lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+    lcntx_l.dlp_kernel_hndl             = dlp_init_and_get_kernel_hndl(
+        DLP_KERNEL_BF16BF16F32OF32, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
     /* While AOCL_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that supports
@@ -225,11 +236,11 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     dlp_arch_t arch_id = dlp_get_arch();
     if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5))
         && (dlp_cpuid_is_avx512bf16_supported() == TRUE)
-        && (is_tiny_input_bf16of32(m, n, k, lcntx_g) == TRUE)
+        && (is_tiny_input_bf16of32(m, n, k, &lcntx_l) == TRUE)
         && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
         lpgemm_rowvar_tiny_bf16bf16f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, lcntx_g, post_op_list, DLP_F32);
+            cs_c, alpha, beta, &lcntx_l, post_op_list, DLP_F32);
         goto err_hndl;
     }
 #endif
@@ -239,22 +250,22 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     if (is_column_major == TRUE) {
         lpgemm_bf16bf16f32of32_openmp_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
+            cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_F32);
     } else {
         lpgemm_bf16bf16f32of32_openmp_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
+            cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_F32);
     }
 #else
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
         lpgemm_bf16bf16f32of32_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
+            cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_F32);
     } else {
         lpgemm_bf16bf16f32of32_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_F32);
+            cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_F32);
     }
 #endif
 

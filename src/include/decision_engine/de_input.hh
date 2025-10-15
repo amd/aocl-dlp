@@ -61,6 +61,7 @@ class gemmDEInput : public iDEInput
     md_t                         mr_hint;
     md_t                         nr_hint;
     md_t                         kc_hint;
+    md_t                         c_downscale;
 
     gemmDEInput(kernel_frame::kernelDatatype k_dtype,
                 md_t                         m,
@@ -79,7 +80,8 @@ class gemmDEInput : public iDEInput
                 lpgemm_post_op*              metadata,
                 md_t                         mr_hint,
                 md_t                         nr_hint,
-                md_t                         kc_hint)
+                md_t                         kc_hint,
+                md_t                         c_downscale)
         : k_dtype(k_dtype)
         , m(m)
         , n(n)
@@ -98,6 +100,7 @@ class gemmDEInput : public iDEInput
         , mr_hint(mr_hint)
         , nr_hint(nr_hint)
         , kc_hint(kc_hint)
+        , c_downscale(c_downscale)
     {
     }
 
@@ -120,6 +123,7 @@ class gemmDEInput : public iDEInput
         , mr_hint(other.mr_hint)
         , nr_hint(other.nr_hint)
         , kc_hint(other.kc_hint)
+        , c_downscale(other.c_downscale)
     {
     }
 
@@ -142,29 +146,31 @@ class gemmDEInput : public iDEInput
         , mr_hint(other.mr_hint)
         , nr_hint(other.nr_hint)
         , kc_hint(other.kc_hint)
+        , c_downscale(other.c_downscale)
     {
     }
 
     gemmDEInput& operator=(const gemmDEInput& other)
     {
-        k_dtype  = other.k_dtype;
-        m        = other.m;
-        n        = other.n;
-        k        = other.k;
-        rs_a     = other.rs_a;
-        cs_a     = other.cs_a;
-        rs_b     = other.rs_b;
-        cs_b     = other.cs_b;
-        rs_c     = other.rs_c;
-        cs_c     = other.cs_c;
-        alpha    = other.alpha;
-        beta     = other.beta;
-        mtag_a   = other.mtag_a;
-        mtag_b   = other.mtag_b;
-        metadata = other.metadata;
-        mr_hint  = other.mr_hint;
-        nr_hint  = other.nr_hint;
-        kc_hint  = other.kc_hint;
+        k_dtype     = other.k_dtype;
+        m           = other.m;
+        n           = other.n;
+        k           = other.k;
+        rs_a        = other.rs_a;
+        cs_a        = other.cs_a;
+        rs_b        = other.rs_b;
+        cs_b        = other.cs_b;
+        rs_c        = other.rs_c;
+        cs_c        = other.cs_c;
+        alpha       = other.alpha;
+        beta        = other.beta;
+        mtag_a      = other.mtag_a;
+        mtag_b      = other.mtag_b;
+        metadata    = other.metadata;
+        mr_hint     = other.mr_hint;
+        nr_hint     = other.nr_hint;
+        kc_hint     = other.kc_hint;
+        c_downscale = other.c_downscale;
         return *this;
     }
 
