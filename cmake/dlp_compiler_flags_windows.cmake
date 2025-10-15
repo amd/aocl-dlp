@@ -254,4 +254,20 @@ function(dlp_set_platform_options)
             target_compile_definitions(${classic_target} PUBLIC DLP_IS_BUILDING_LIBRARY)
         endforeach()
     endif()
+
+    # CRITICAL: Set INTERFACE_LINK_OPTIONS to automatically apply whole-archive for static library
+    # This ensures all static constructors (JIT registration, kernel registration) are included
+    # when any target links against aocl-dlp_static. This eliminates the need for users to
+    # manually specify whole-archive flags.
+    if(MSVC)
+        # MSVC: Use /WHOLEARCHIVE
+        target_link_options(${PROJECT_NAME}_static INTERFACE
+            "/WHOLEARCHIVE:$<TARGET_FILE:${PROJECT_NAME}_static>"
+        )
+    else()
+        # MinGW/Clang on Windows: Use --whole-archive
+        target_link_options(${PROJECT_NAME}_static INTERFACE
+            "LINKER:--whole-archive,$<TARGET_FILE:${PROJECT_NAME}_static>,--no-whole-archive"
+        )
+    endif()
 endfunction()

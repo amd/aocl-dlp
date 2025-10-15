@@ -89,30 +89,21 @@ function(dlp_add_test)
     # Choose library target based on static linking preference
     if(DLP_TESTING_LINK_STATIC)
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking test ${DLP_TEST_NAME} with static AOCL-DLP library (whole-archive)")
-
-        # Link with Google Test and the main project library using whole-archive
-        # for static builds to ensure all object files are included for plugin registration
-        target_link_libraries(${DLP_TEST_NAME}
-            PRIVATE
-                gtest
-                gtest_main
-                $<LINK_LIBRARY:WHOLE_ARCHIVE,${DLP_LIBRARY_TARGET}>
-                ${DLP_TEST_DEPENDS}
-        )
+        message(STATUS "Linking test ${DLP_TEST_NAME} with static AOCL-DLP library (whole-archive automatic)")
     else()
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
         message(STATUS "Linking test ${DLP_TEST_NAME} with shared AOCL-DLP library")
-
-        # Link with Google Test and the main project library normally for shared builds
-        target_link_libraries(${DLP_TEST_NAME}
-            PRIVATE
-                gtest
-                gtest_main
-                ${DLP_LIBRARY_TARGET}
-                ${DLP_TEST_DEPENDS}
-        )
     endif()
+
+    # Link with Google Test and the main project library
+    # Note: For static library, whole-archive is automatically applied via INTERFACE_LINK_OPTIONS
+    target_link_libraries(${DLP_TEST_NAME}
+        PRIVATE
+            gtest
+            gtest_main
+            ${DLP_LIBRARY_TARGET}
+            ${DLP_TEST_DEPENDS}
+    )
 
     # Add include directories - follow modern CMake target-based approach
     target_include_directories(${DLP_TEST_NAME}
@@ -162,26 +153,10 @@ function(dlp_define_testing_options)
     option(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT "Enable high precision float (double) support for tests" OFF)
     option(DLP_TESTING_ENABLE_DETAILED_DEBUG "Enable detailed debug information for tests" OFF)
 
-    # Handle deprecated options with warnings
-    if(DEFINED DLP_CTEST_DISABLED)
-        message(DEPRECATION "DLP_CTEST_DISABLED is deprecated and will be removed in future releases. Use DLP_TESTING_CTEST_DISABLED instead.")
-        set(DLP_TESTING_CTEST_DISABLED ${DLP_CTEST_DISABLED})
-    endif()
-
-    if(DEFINED DLP_ENABLE_HIGH_PRECISION_FLOAT)
-        message(DEPRECATION "DLP_ENABLE_HIGH_PRECISION_FLOAT is deprecated and will be removed in future releases. Use DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT instead.")
-        set(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT ${DLP_ENABLE_HIGH_PRECISION_FLOAT})
-    endif()
-
     # Propagate variables back to the caller
     set(BUILD_TESTING ${BUILD_TESTING} PARENT_SCOPE)
     set(DLP_TESTING_CTEST_DISABLED ${DLP_TESTING_CTEST_DISABLED} PARENT_SCOPE)
     set(DLP_TESTING_LINK_STATIC ${DLP_TESTING_LINK_STATIC} PARENT_SCOPE)
     set(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT ${DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT} PARENT_SCOPE)
     set(DLP_TESTING_ENABLE_DETAILED_DEBUG ${DLP_TESTING_ENABLE_DETAILED_DEBUG} PARENT_SCOPE)
-
-    # Set legacy variables for backward compatibility
-    set(DLP_CTEST_DISABLED ${DLP_TESTING_CTEST_DISABLED} PARENT_SCOPE)
-    set(DLP_ENABLE_HIGH_PRECISION_FLOAT ${DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT} PARENT_SCOPE)
-    set(DLP_ENABLE_DETAILED_DEBUG ${DLP_TESTING_ENABLE_DETAILED_DEBUG} PARENT_SCOPE)
 endfunction()
