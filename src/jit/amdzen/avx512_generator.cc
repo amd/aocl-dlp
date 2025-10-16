@@ -280,12 +280,11 @@ jitAVX512::generateIrLoop(utils::generatorParams& params)
 
     // Create and set up kernelOphandler if there are post-ops
     if (!params.kernelOps.empty()) {
-        gen::kernelOpsHandler kernelOpsHandler(this, params.MR, params.NR,
-                                               params.useMask, cRegIdx, cReg,
-                                               params.kType);
+        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
 
-        RETURN_IF_ERROR(
-            (kernelOpsHandler.generateKernelOps(params.kernelOps, stackPtr)));
+        RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
+            params.NR, params.useMask, cRegIdx, cReg)));
 
         // The gelu constants are embedded within the generated JIT kernel.
         // Otherwise a bug was observed whereby the address of gelu constants

@@ -39,6 +39,7 @@
 #include "adaptors/ref/gemm_ref.hh"
 #include "adaptors/ref/operation_ref.hh"
 #include "framework/operation.hh"
+#include "utils/conversion_utils.hh"
 #include <algorithm>
 #include <cmath>
 #include <functional>
@@ -53,6 +54,7 @@ extern "C"
 namespace dlp::testing::classic {
 
 using dlp::testing::framework::UALError;
+using dlp::testing::utils::bf16_to_f32;
 
 // Type conversion utilities for multi-datatype support
 namespace {
@@ -104,12 +106,10 @@ namespace {
                     value |= 0xF0;
                 return static_cast<float>(static_cast<int8_t>(value));
             }
-            case MatrixType::bf16:
-                // BF16 is marked as unsupported as requested
-                std::cerr << "[ual_ref] Warning: convertToFloat called with "
-                             "unsupported MatrixType::bf16. Returning 0.0f."
-                          << std::endl;
-                return 0.0f;
+            case MatrixType::bf16: {
+                const bfloat16* data = static_cast<const bfloat16*>(src_ptr);
+                return bf16_to_f32(data[index]);
+            }
             default:
                 return 0.0f;
         }
@@ -1014,7 +1014,7 @@ void
 UalRef::applyPostOperation(Matrix&                                    matrix,
                            const dlp::testing::framework::ScaleParam& op)
 {
-    applyScale(matrix, op.getScaleFactor());
+    applyScale(matrix, op.getScaleFactor(), op.getZeroPoint());
 }
 
 /**
@@ -1345,28 +1345,43 @@ UalRef::applySigmoid(Matrix& matrix)
 }
 
 void
-UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
+UalRef::applyScale(Matrix&       matrix,
+                   const Matrix* scaleFactor,
+                   const Matrix* zeroPoint)
 {
     if (!scaleFactor) {
         return;
     }
 
-    // Handle BF16 as unsupported
-    if (matrix.getMatrixType() == MatrixType::bf16
-        || scaleFactor->getMatrixType() == MatrixType::bf16) {
+    // Handle BF16 matrix as unsupported (but allow bf16 scale factor)
+    if (matrix.getMatrixType() == MatrixType::bf16) {
+        return;
+    }
+
+    // Also check if zeroPoint has BF16 type
+    if (zeroPoint && zeroPoint->getMatrixType() == MatrixType::bf16) {
         return;
     }
 
     // Determine scale length: 1 (per-tensor) or N (per-channel)
-    bool per_channel = (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
+    bool per_channel    = (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
+    bool has_zero_point = (zeroPoint != nullptr);
+    bool per_channel_zp =
+        has_zero_point && ((zeroPoint->getRows() * zeroPoint->getCols()) > 1);
 
-    if (!per_channel) {
-        // Single scale value - convert to float
+    if (!per_channel && !per_channel_zp) {
+        // Single scale value and optionally single zero point - convert to
+        // float
         float scale = convertToFloat(scaleFactor->getData(),
                                      scaleFactor->getMatrixType(), 0);
-        applyUnifiedPostOp(matrix, [scale](float* data, size_t size) {
+        float zp    = 0.0f;
+        if (has_zero_point) {
+            zp = convertToFloat(zeroPoint->getData(),
+                                zeroPoint->getMatrixType(), 0);
+        }
+        applyUnifiedPostOp(matrix, [scale, zp](float* data, size_t size) {
             for (size_t i = 0; i < size; ++i) {
-                data[i] *= scale;
+                data[i] = data[i] * scale + zp;
             }
         });
         return;
@@ -1386,6 +1401,18 @@ UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
                                        scaleFactor->getMatrixType(), i);
     }
 
+    // Convert zero point to float array if provided
+    md_t                     zp_size = 0;
+    std::unique_ptr<float[]> zp_data;
+    if (has_zero_point) {
+        zp_size = zeroPoint->getRows() * zeroPoint->getCols();
+        zp_data.reset(new float[zp_size]);
+        for (md_t i = 0; i < zp_size; ++i) {
+            zp_data[i] = convertToFloat(zeroPoint->getData(),
+                                        zeroPoint->getMatrixType(), i);
+        }
+    }
+
     // If matrix is already f32, apply directly
     if (matrix.getMatrixType() == MatrixType::f32) {
         float* data = reinterpret_cast<float*>(matrix.getData());
@@ -1394,10 +1421,11 @@ UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
         for (md_t i = 0; i < rows; ++i) {
             for (md_t j = 0; j < cols; ++j) {
                 float  scale = scale_data[j % scale_size];
+                float  zp    = has_zero_point ? zp_data[j % zp_size] : 0.0f;
                 size_t idx   = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                                    ? (static_cast<size_t>(i) * ld + j)
                                    : (static_cast<size_t>(j) * ld + i);
-                data[idx] *= scale;
+                data[idx]    = data[idx] * scale + zp;
             }
         }
         return;
@@ -1417,9 +1445,10 @@ UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
     // Apply per-channel scaling in float
     for (md_t i = 0; i < rows; ++i) {
         for (md_t j = 0; j < cols; ++j) {
-            float  scale = scale_data[j % scale_size];
-            size_t idx   = static_cast<size_t>(i) * temp_ld + j;
-            temp_data[idx] *= scale;
+            float  scale   = scale_data[j % scale_size];
+            float  zp      = has_zero_point ? zp_data[j % zp_size] : 0.0f;
+            size_t idx     = static_cast<size_t>(i) * temp_ld + j;
+            temp_data[idx] = temp_data[idx] * scale + zp;
         }
     }
 
@@ -1430,9 +1459,8 @@ UalRef::applyScale(Matrix& matrix, const Matrix* scaleFactor)
 void
 UalRef::applyBias(Matrix& matrix, const Matrix& bias)
 {
-    // Handle BF16 as unsupported
-    if (matrix.getMatrixType() == MatrixType::bf16
-        || bias.getMatrixType() == MatrixType::bf16) {
+    // Handle BF16 matrix as unsupported (but allow bf16 bias)
+    if (matrix.getMatrixType() == MatrixType::bf16) {
         return;
     }
 

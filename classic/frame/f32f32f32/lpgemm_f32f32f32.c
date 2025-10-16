@@ -484,9 +484,14 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
 
     // Avoid packing of B in transb cases where rd kernels performs
     // better than rv + pack. rv kernel calls rd when rs_b==1.
+    // NOTE: Disabling RD kernels if JIT kernels are not generated
+    // and post-ops are enabled for the transB case, as it would
+    // give accuracy issues while multiple datatype support is enabled.
     bool invoke_rd = FALSE;
     if ((lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3) && ((n < 48) || (m < 16))
-        && (rs_b == 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)) {
+        && (rs_b == 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)
+        && (lcntx->dlp_kernel_hndl.kernel_base == NULL)
+        && (post_op_list[0].op_code == POST_OPS_DISABLE)) {
         invoke_rd     = TRUE;
         mtag_b        = UNPACKED;
         should_pack_A = FALSE;

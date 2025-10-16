@@ -501,6 +501,13 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                 DLP_TYPE tmp_stor_type =
                     get_stor_type((metadata->matrix_add + m_i)->stor_type);
 
+                /* Get scale factor storage type */
+                DLP_TYPE sf_stor_type =
+                    (metadata->matrix_add + m_i)->sf
+                        ? get_stor_type((metadata->matrix_add + m_i)
+                                            ->sf->scale_factor_type)
+                        : DLP_INVALID;
+
                 lpgemm_set_node_params(
                     (post_op_list + i), POST_OPS_MATRIX_ADD,
                     (metadata->matrix_add + m_i)->matrix, meta_arg,
@@ -511,7 +518,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                     (metadata->matrix_add + m_i)->sf
                         ? (metadata->matrix_add + m_i)->sf->scale_factor_len
                         : 0,
-                    tmp_stor_type, DLP_INVALID, DLP_INVALID);
+                    tmp_stor_type, DLP_INVALID, sf_stor_type);
 
                 m_i += 1;
             } break;
@@ -526,6 +533,13 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                 DLP_TYPE tmp_stor_type =
                     get_stor_type((metadata->matrix_mul + mul_i)->stor_type);
 
+                /* Get scale factor storage type */
+                DLP_TYPE sf_stor_type =
+                    (metadata->matrix_mul + mul_i)->sf
+                        ? get_stor_type((metadata->matrix_mul + mul_i)
+                                            ->sf->scale_factor_type)
+                        : DLP_INVALID;
+
                 lpgemm_set_node_params(
                     (post_op_list + i), POST_OPS_MATRIX_MUL,
                     (metadata->matrix_mul + mul_i)->matrix, meta_arg,
@@ -536,7 +550,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                     (metadata->matrix_mul + mul_i)->sf
                         ? (metadata->matrix_mul + mul_i)->sf->scale_factor_len
                         : 0,
-                    tmp_stor_type, DLP_INVALID, DLP_INVALID);
+                    tmp_stor_type, DLP_INVALID, sf_stor_type);
 
                 mul_i += 1;
             } break;

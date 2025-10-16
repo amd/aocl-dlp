@@ -678,6 +678,10 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                 kernelCodeBlocks[kernel_idx]);
         kernel(params);
 
+        // Update post_op_c_j by the total n processed in this kernel call
+        // (similar to GEMM pattern where post_op_c_j += elementsToProcess)
+        (params->kernelOpsAttr).post_op_c_j += params->n;
+
     } else if (NR == 1) {
         auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);
         // Setting the remaining values of gemvN1Params(that are not set as

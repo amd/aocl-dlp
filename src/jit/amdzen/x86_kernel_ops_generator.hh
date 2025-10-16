@@ -39,6 +39,14 @@ namespace amdzen::x86gen {
     switch (dt) {                                                              \
         case DataType::f32:                                                    \
             return func<float>(__VA_ARGS__);                                   \
+        case DataType::bf16:                                                   \
+            return func<bfloat16>(__VA_ARGS__);                                \
+        case DataType::s8:                                                     \
+            return func<int8_t>(__VA_ARGS__);                                  \
+        case DataType::u8:                                                     \
+            return func<uint8_t>(__VA_ARGS__);                                 \
+        case DataType::s32:                                                    \
+            return func<int32_t>(__VA_ARGS__);                                 \
         default:                                                               \
             return jitGeneratorError::notSupported;                            \
     }
@@ -49,6 +57,41 @@ namespace amdzen::x86gen {
             switch (matOpDt) {                                                 \
                 case DataType::f32:                                            \
                     return func<float, float>(__VA_ARGS__);                    \
+                default:                                                       \
+                    return jitGeneratorError::notSupported;                    \
+            }                                                                  \
+        case DataType::bf16:                                                   \
+            switch (matOpDt) {                                                 \
+                case DataType::f32:                                            \
+                    return func<bfloat16, float>(__VA_ARGS__);                 \
+                default:                                                       \
+                    return jitGeneratorError::notSupported;                    \
+            }                                                                  \
+        case DataType::s8:                                                     \
+            switch (matOpDt) {                                                 \
+                case DataType::f32:                                            \
+                    return func<int8_t, float>(__VA_ARGS__);                   \
+                default:                                                       \
+                    return jitGeneratorError::notSupported;                    \
+            }                                                                  \
+        case DataType::u8:                                                     \
+            switch (matOpDt) {                                                 \
+                case DataType::f32:                                            \
+                    return func<uint8_t, float>(__VA_ARGS__);                  \
+                default:                                                       \
+                    return jitGeneratorError::notSupported;                    \
+            }                                                                  \
+        case DataType::s32:                                                    \
+            switch (matOpDt) {                                                 \
+                case DataType::f32:                                            \
+                    return func<int32_t, float>(__VA_ARGS__);                  \
+                default:                                                       \
+                    return jitGeneratorError::notSupported;                    \
+            }                                                                  \
+        case DataType::u32:                                                    \
+            switch (matOpDt) {                                                 \
+                case DataType::f32:                                            \
+                    return func<float, uint32_t>(__VA_ARGS__);                 \
                 default:                                                       \
                     return jitGeneratorError::notSupported;                    \
             }                                                                  \
@@ -64,12 +107,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     using halfRegType = typename Traits::halfRegType;
 
   public:
-    kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit,
-                          int                   MR,
-                          int                   NR,
-                          bool                  useMask,
-                          int                   cRegStartIdx,
-                          int                   cRegCount);
+    kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit);
 
     ~kernelOpsGeneratorX86()                                       = default;
     kernelOpsGeneratorX86(const kernelOpsGeneratorX86&)            = delete;
@@ -80,7 +118,12 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     dlp::jit::jitGeneratorError generateKernelOps(
         std::vector<dlp::kernel_frame::kernelOpsMetaData>& kernelOps,
         const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
-        dlp::jit::jitAlgoType algoType = dlp::jit::jitAlgoType::gemm) override;
+        dlp::jit::jitAlgoType algoType,
+        int                   MR,
+        int                   NR,
+        bool                  useMask,
+        int                   cRegStartIdx,
+        int                   cRegCount) override;
     dlp::jit::jitGeneratorError bias(
         dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError relu(
@@ -121,6 +164,14 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     int cRegStartIdx, cRegCount;
     int scratchLoadRegIdx, scratchBcstRegIdx;
 
+    // Algorithm type for dispatching appropriate implementations
+    dlp::jit::jitAlgoType algoType_;
+
+    // Flag to track if constant tables have been embedded (to avoid
+    // duplication) - Instance variable, not static, so each handler
+    // instance tracks its own state independently
+    bool tablesEmbedded = false;
+
     // registers used for gelu_tanh
     int num_gelu_regs = 9;
     int const1;
@@ -147,14 +198,23 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     Xbyak::CodeGenerator* jit_; // Back reference to access registers and state
 
-    dlp::jit::jitGeneratorError setPostOpsContext();
+    dlp::jit::jitGeneratorError setPostOpsContext(
+        int MR, int NR, bool useMask, int cRegStartIdx, int cRegCount);
 
     // Helper implementations for different storage formats
+    // GEMM implementations
     template<typename T>
-    dlp::jit::jitGeneratorError biasRowMajorImpl();
+    dlp::jit::jitGeneratorError biasRowMajorImplGEMM();
 
     template<typename T>
-    dlp::jit::jitGeneratorError biasColMajorImpl();
+    dlp::jit::jitGeneratorError biasColMajorImplGEMM();
+
+    // GEMV n=1 implementations
+    template<typename T>
+    dlp::jit::jitGeneratorError biasRowMajorImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError biasColMajorImplGEMVN1();
 
     template<typename T>
     dlp::jit::jitGeneratorError reluScaleImpl();
@@ -186,6 +246,19 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     template<typename T>
     dlp::jit::jitGeneratorError zeroPointColMajorImpl();
 
+    // GEMV n=1 specific implementations
+    template<typename T>
+    dlp::jit::jitGeneratorError scaleFactorScalarImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError scaleFactorColMajorImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError zeroPointScalarImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError zeroPointColMajorImplGEMVN1();
+
     template<typename T>
     dlp::jit::jitGeneratorError swishImpl();
 
@@ -212,6 +285,10 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     template<typename sfDt, typename matOpDt>
     dlp::jit::jitGeneratorError matOpScaleFactorImplMerged(
+        matOpType opType, matOpScaleType sclType);
+
+    template<typename sfDt, typename matOpDt>
+    dlp::jit::jitGeneratorError matOpScaleFactorImplGEMVN1(
         matOpType opType, matOpScaleType sclType);
 
     // TODO: Math Utils, move to different class.
@@ -284,6 +361,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     Xbyak::Label  erf_end;
     Xbyak::Label  tables;
+    Xbyak::Label  table_store_end; // Instance-specific label for jump target
     Xbyak::Opmask maskReg = Xbyak::Opmask(3);
     Xbyak::Opmask mask0   = Xbyak::Opmask(4);
     Xbyak::Opmask mask1   = Xbyak::Opmask(5);
@@ -301,8 +379,59 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
         return reg;
     }
 
-    void loadRowF32(Xbyak::Reg64 addressReg, int regStartIdx);
+    // Helper functions for scratch register management
+    // Reserve destination registers from scratch pool and return saved state
+    inline std::queue<RegType> reserveDestRegisters(int destRegStart, int count)
+    {
+        std::queue<RegType> original_queue = scratch_reg_queue;
+        std::queue<RegType> temp_queue;
+
+        while (!scratch_reg_queue.empty()) {
+            RegType reg = scratch_reg_queue.front();
+            scratch_reg_queue.pop();
+
+            // Check if this register is in the destination range
+            bool isDestReg = false;
+            for (int i = 0; i < count; i++) {
+                if (reg.getIdx() == RegType(destRegStart + i).getIdx()) {
+                    isDestReg = true;
+                    break;
+                }
+            }
+
+            if (!isDestReg) {
+                temp_queue.push(reg);
+            }
+        }
+
+        scratch_reg_queue = std::move(temp_queue);
+        return original_queue;
+    }
+
+    // Restore scratch register queue to previous state
+    inline void restoreScratchQueue(const std::queue<RegType>& saved)
+    {
+        scratch_reg_queue = saved;
+    }
+
     void resetMasks(bool mask);
+
+    // Helper to get the load bytes for a given type
+    template<typename T>
+    int getLoadBytes();
+
+    // Helper to load and convert vector data to float32
+    template<typename T>
+    void loadAndConvertVector(RegType        destReg,
+                              Xbyak::Address src,
+                              bool           useMaskOp);
+
+    template<typename T>
+    void loadAndConvertRows(Xbyak::Reg64 addressReg, int regStartIdx);
+
+    // Broadcast and convert scalar helper functions for all data types
+    template<typename T>
+    void broadcastAndConvertScalar(RegType bcstReg, Xbyak::Address src);
 };
 
 // Type aliases using kernelInstrType

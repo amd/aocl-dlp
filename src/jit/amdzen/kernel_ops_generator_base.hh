@@ -44,7 +44,12 @@ class kernelOpsGeneratorInterface
     virtual dlp::jit::jitGeneratorError generateKernelOps(
         std::vector<dlp::kernel_frame::kernelOpsMetaData>& kernelOps,
         const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
-        dlp::jit::jitAlgoType algoType = dlp::jit::jitAlgoType::gemm) = 0;
+        dlp::jit::jitAlgoType algoType,
+        int                   MR,
+        int                   NR,
+        bool                  useMask,
+        int                   cRegStartIdx,
+        int                   cRegCount) = 0;
     virtual dlp::jit::jitGeneratorError bias(
         dlp::kernel_frame::kernelOpsMetaData& op) = 0;
     virtual dlp::jit::jitGeneratorError relu(

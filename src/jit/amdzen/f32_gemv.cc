@@ -661,6 +661,13 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
     loadMasks();
 
+    // Create kernel ops handler once for the entire kernel
+    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+    }
+
     // Set the for-loop sequence for m-dimension
     if (params.mloop) {
         mov(regMIter,
@@ -745,14 +752,12 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         // Working good for element-wise loads/stores for C.
         scaleYWithBeta(MR);
 
-        if (!params.kernelOps.empty()) {
-            gen::kernelOpsHandler kernelOpsHandler(
-                this, params.MR, 1, false, accumBaseIdx, yReg, params.kType);
+        if (kernelOpsHandlerPtr) {
+            RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
+                params.MR, 1, false, accumBaseIdx, yReg)));
 
-            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1)));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+            kernelOpsHandlerPtr->generateKernelOpsAttributes();
         }
 
         storeYValues(MR);
@@ -765,6 +770,20 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         mov(regTmp1, MR);
         imul(regTmp1, regRsC);
         add(regYptr, regTmp1);
+
+        // Update post_op_c_i for the next m-iteration (similar to GEMM pattern)
+        // This ensures each iteration uses the correct offset for post-ops
+        if (!params.kernelOps.empty()) {
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            add(regTmp1, MR);
+            mov(ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                regTmp1);
+        }
 
         dec(regMIter);
         jnz(label_m_loop_start, T_NEAR);
@@ -842,15 +861,13 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
         scaleYWithBeta(M_LEFT);
 
-        if (!params.kernelOps.empty()) {
-            gen::kernelOpsHandler kernelOpsHandler(
-                this, params.M_LEFT, 1, true, accumBaseIdx, M_LEFT / simdWidth,
-                params.kType);
+        if (kernelOpsHandlerPtr) {
+            RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
+                params.M_LEFT, 1, true, accumBaseIdx, M_LEFT / simdWidth)));
 
-            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1)));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+            // This call will skip embedding tables (already done in main loop)
+            kernelOpsHandlerPtr->generateKernelOpsAttributes();
         }
 
         storeYValues(M_LEFT);
@@ -1454,6 +1471,13 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
     inLocalLabel();
 
+    // Create kernel ops handler once for the entire kernel
+    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+    }
+
     mov(regYptr, ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, y)]);
     xor_(regIncN, regIncN); // regIncN is used to increment the
     // pointer for N dimension(zeroed before the nloop)
@@ -1620,14 +1644,12 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Scale the result by beta, and store it accordingly
         scaleYWithBeta(false);
 
-        if (!params.kernelOps.empty()) {
-            gen::kernelOpsHandler kernelOpsHandler(
-                this, 1, params.NR, false, accumBaseIdx, yReg, params.kType);
+        if (kernelOpsHandlerPtr) {
+            RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
+                params.NR, false, accumBaseIdx, yReg)));
 
-            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1)));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+            kernelOpsHandlerPtr->generateKernelOpsAttributes();
         }
 
         storeYValues(false);
@@ -1637,6 +1659,21 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         mov(regTmp2, NR);
         add(regIncN, regTmp2);
         lea(regYptr, ptr[regYptr + regTmp2 * sizeof(float)]);
+
+        // Update post_op_c_j for the next n-iteration (similar to GEMM pattern)
+        // This ensures each iteration uses the correct offset for post-ops
+        if (!params.kernelOps.empty()) {
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            add(regTmp1, NR);
+            mov(ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                regTmp1);
+        }
+
         dec(regNIter);
         jnz(label_n_loop_start, T_NEAR);
     }
@@ -1780,15 +1817,13 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Scale the result by beta, and store it accordingly
         scaleYWithBeta(true);
 
-        if (!params.kernelOps.empty()) {
-            gen::kernelOpsHandler kernelOpsHandler(
-                this, 1, params.N_LEFT, true, accumBaseIdx, N_LEFT / simdWidth,
-                params.kType);
+        if (kernelOpsHandlerPtr) {
+            RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
+                params.N_LEFT, true, accumBaseIdx, N_LEFT / simdWidth)));
 
-            RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1)));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+            // This call will skip embedding tables (already done in main loop)
+            kernelOpsHandlerPtr->generateKernelOpsAttributes();
         }
 
         storeYValues(true);

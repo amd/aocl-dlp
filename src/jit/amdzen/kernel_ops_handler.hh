@@ -47,28 +47,18 @@ using namespace Xbyak;
 class kernelOpsHandler
 {
   public:
-    kernelOpsHandler(Xbyak::CodeGenerator*  jit,
-                     int                    MR,
-                     int                    NR,
-                     bool                   useMask,
-                     int                    cRegStartIdx,
-                     int                    cRegCount,
-                     utils::kernelInstrType kType)
+    kernelOpsHandler(Xbyak::CodeGenerator* jit, utils::kernelInstrType kType)
         : kOpsGen{ nullptr }
     {
         if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
             kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
-                utils::kernelInstrType::avx512_zmm_32_reg>>(
-                jit, MR, NR, useMask, cRegStartIdx, cRegCount);
-            // ToDO: Enable once this path is completely up
+                utils::kernelInstrType::avx512_zmm_32_reg>>(jit);
         } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
             kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
-                utils::kernelInstrType::avx512_ymm_32_reg>>(
-                jit, MR, NR, useMask, cRegStartIdx, cRegCount);
+                utils::kernelInstrType::avx512_ymm_32_reg>>(jit);
         } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
             kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
-                utils::kernelInstrType::avx2_ymm_16_reg>>(
-                jit, MR, NR, useMask, cRegStartIdx, cRegCount);
+                utils::kernelInstrType::avx2_ymm_16_reg>>(jit);
         }
     }
 
@@ -82,11 +72,17 @@ class kernelOpsHandler
     dlp::jit::jitGeneratorError generateKernelOps(
         std::vector<dlp::kernel_frame::kernelOpsMetaData>& kernelOps,
         const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
-        dlp::jit::jitAlgoType algoType = dlp::jit::jitAlgoType::gemm)
+        dlp::jit::jitAlgoType algoType,
+        int                   MR,
+        int                   NR,
+        bool                  useMask,
+        int                   cRegStartIdx,
+        int                   cRegCount)
     {
         if (kOpsGen) {
             return kOpsGen->generateKernelOps(
-                kernelOps, postOpsArgWrapperPtrReg, algoType);
+                kernelOps, postOpsArgWrapperPtrReg, algoType, MR, NR, useMask,
+                cRegStartIdx, cRegCount);
         }
         return dlp::jit::jitGeneratorError::error;
     }

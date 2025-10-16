@@ -737,6 +737,7 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
 
     // Create and set up kernelOphandler if there are post-ops
     if (!params.kernelOps.empty()) {
+        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
 
         // post-ops are applied in the last k iteration, so we need to
         // scale beta before applying post-ops
@@ -748,12 +749,9 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
             RETURN_IF_ERROR(scaleBeta());
         }
 
-        gen::kernelOpsHandler kernelOpsHandler(this, params.MR, params.NR,
-                                               params.useMask, cRegIdx, cReg,
-                                               params.kType);
-
-        RETURN_IF_ERROR(
-            (kernelOpsHandler.generateKernelOps(params.kernelOps, stackPtr)));
+        RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
+            params.NR, params.useMask, cRegIdx, cReg)));
 
         // The gelu constants are embedded within the generated JIT kernel.
         // Otherwise a bug was observed whereby the address of gelu constants

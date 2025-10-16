@@ -36,18 +36,8 @@ using namespace dlp::jit;
 using namespace Xbyak;
 
 template<utils::kernelInstrType KType>
-kernelOpsGeneratorX86<KType>::kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit,
-                                                    int                   MR,
-                                                    int                   NR,
-                                                    bool useMask,
-                                                    int  cRegStartIdx,
-                                                    int  cRegCount)
-    : MR(MR)
-    , NR(NR)
-    , useMask(useMask)
-    , cRegStartIdx(cRegStartIdx)
-    , cRegCount(cRegCount)
-    , regkernelOpsList(jit->rdx)
+kernelOpsGeneratorX86<KType>::kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit)
+    : regkernelOpsList(jit->rdx)
     , regkernelOpsAttr(jit->r8)
     , regTmp1(jit->r9)
     , regTmp2(jit->r10)
@@ -61,15 +51,26 @@ kernelOpsGeneratorX86<KType>::kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit,
     , regTmp5Half(jit->ebx)
     , jit_(jit)
 {
+    // MR, NR, useMask, cRegStartIdx, cRegCount will be set by
+    // setPostOpsContext()
 }
 template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::generateKernelOps(
     std::vector<kernelOpsMetaData>& kernelOps,
     const Xbyak::Reg64&             postOpsArgWrapperPtrReg,
-    dlp::jit::jitAlgoType           algoType)
+    dlp::jit::jitAlgoType           algoType,
+    int                             MR,
+    int                             NR,
+    bool                            useMask,
+    int                             cRegStartIdx,
+    int                             cRegCount)
 {
-    RETURN_IF_ERROR((setPostOpsContext()));
+    // Store algorithm type for later use in post-op dispatching
+    algoType_ = algoType;
+    // Set the post-ops context with the provided parameters
+    RETURN_IF_ERROR(
+        (setPostOpsContext(MR, NR, useMask, cRegStartIdx, cRegCount)));
 
     // Save registers used by this generator.
     utils::registerGuard<Xbyak::Reg64> rG{ jit_ };
@@ -244,13 +245,29 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-kernelOpsGeneratorX86<KType>::setPostOpsContext()
+kernelOpsGeneratorX86<KType>::setPostOpsContext(int  MR_param,
+                                                int  NR_param,
+                                                bool useMask_param,
+                                                int  cRegStartIdx_param,
+                                                int  cRegCount_param)
 {
+    // Update member variables with provided parameters
+    this->MR           = MR_param;
+    this->NR           = NR_param;
+    this->useMask      = useMask_param;
+    this->cRegStartIdx = cRegStartIdx_param;
+    this->cRegCount    = cRegCount_param;
+
+    // Clear the scratch register queue before repopulating. This is essential
+    //  when setPostOpsContext() is called multiple times.
+    while (!scratch_reg_queue.empty()) {
+        scratch_reg_queue.pop();
+    }
+
     int numElemsPerReg = Traits::regBytes / sizeof(float);
     numFullRegsPerRow  = NR / numElemsPerReg;
     numMaskRegsPerRow  = useMask ? 1 : 0;
     numRegsPerRow      = numFullRegsPerRow + numMaskRegsPerRow;
-
     // Assuming that we will always use registers from last for
     // accumulators.For example, if we need 24 accumulators, we will use
     // registers from 8 to 31. and the rest will be used for scratch registers.
@@ -269,13 +286,24 @@ kernelOpsGeneratorX86<KType>::setPostOpsContext()
         if (useMask) {
             ymmMask = popAndGetScratchReg();
         }
-
         scratchBcstRegIdx = useMask ? 1 : 0;
     } else {
         // check if MR and NR values are correct
-        if ((MR * numRegsPerRow != cRegCount)
-            || (cRegCount + numRegsPerRow >= Traits::numRegs)) {
-            return jitGeneratorError::badKernelInfo;
+        if (algoType_ == dlp::jit::jitAlgoType::gemv_m1) {
+            if ((cRegCount != (NR / numElemsPerReg))
+                || (cRegCount + numRegsPerRow >= Traits::numRegs)) {
+                return jitGeneratorError::badKernelInfo;
+            }
+        } else if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+            if ((cRegCount != (MR / numElemsPerReg))
+                || (cRegCount + numRegsPerRow >= Traits::numRegs)) {
+                return jitGeneratorError::badKernelInfo;
+            }
+        } else if (algoType_ == dlp::jit::jitAlgoType::gemm) {
+            if ((MR * numRegsPerRow != cRegCount)
+                || (cRegCount + numRegsPerRow >= Traits::numRegs)) {
+                return jitGeneratorError::badKernelInfo;
+            }
         }
         scratchBcstRegIdx = 0;
     }
@@ -311,9 +339,18 @@ template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
 {
-    // The extra jump is to ensure none of the embedded gelu contants are
+    // Check if tables have already been embedded to avoid code bloat
+    // This is especially important for GEMV n=1/m=1 where this function
+    // is called multiple times (main loop + fringe sections)
+    if (tablesEmbedded) {
+        return jitGeneratorError::success;
+    }
+
+    // The extra jump is to ensure none of the embedded gelu constants are
     // executed like they are instructions.
-    jit_->jmp("TABLE_STORE_END", jit_->T_NEAR);
+    // Using instance-specific Xbyak::Label to avoid any potential conflicts
+    // with string labels in multi-threaded kernel generation scenarios
+    jit_->jmp(table_store_end, jit_->T_NEAR);
     jit_->align(64);
     jit_->L(tables);
     jit_->db(reinterpret_cast<uint8_t*>(&gelu_consts), sizeof(gelu_consts));
@@ -321,29 +358,297 @@ kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
     jit_->db(reinterpret_cast<uint8_t*>(&lpgemm_exp), sizeof(lpgemm_exp));
     jit_->db(reinterpret_cast<uint8_t*>(&erf_consts), sizeof(erf_consts));
     jit_->db(reinterpret_cast<uint8_t*>(&lpgemm_erf), sizeof(lpgemm_erf));
-    jit_->L("TABLE_STORE_END");
+    jit_->L(table_store_end);
+
+    // Mark tables as embedded
+    tablesEmbedded = true;
+
     return jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
-void
-kernelOpsGeneratorX86<KType>::loadRowF32(Xbyak::Reg64 addressReg,
-                                         int          regStartIdx)
+template<typename T>
+int
+kernelOpsGeneratorX86<KType>::getLoadBytes()
 {
-    for (int i = 0; i < numFullRegsPerRow; i++) {
-        jit_->vmovups(RegType(regStartIdx + i),
-                      jit_->ptr[addressReg + i * Traits::regBytes]);
+    if constexpr (std::is_same_v<T, bfloat16>) {
+        return Traits::regBytes / 2; // Loads 16 bytes, expands to 32
+    } else if constexpr (std::is_same_v<T, int8_t>
+                         || std::is_same_v<T, uint8_t>) {
+        return Traits::regBytes / 4; // Loads 8 bytes, expands to 32
+    } else {
+        return Traits::regBytes;
     }
+}
+
+template<utils::kernelInstrType KType>
+template<typename T>
+void
+kernelOpsGeneratorX86<KType>::loadAndConvertRows(Xbyak::Reg64 addressReg,
+                                                 int          regStartIdx)
+{
+    int loadBytes = getLoadBytes<T>();
+
+    // Load full registers using direct addressing
+    for (int i = 0; i < numFullRegsPerRow; i++) {
+        loadAndConvertVector<T>(RegType(regStartIdx + i),
+                                jit_->ptr[addressReg + i * loadBytes], false);
+    }
+
+    // Load masked register if needed
     if (useMask) {
-        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-            jit_->vmaskmovps(
-                RegType(regStartIdx + numFullRegsPerRow), ymmMask,
-                jit_->ptr[addressReg + numFullRegsPerRow * Traits::regBytes]);
+        loadAndConvertVector<T>(
+            RegType(regStartIdx + numFullRegsPerRow),
+            jit_->ptr[addressReg + numFullRegsPerRow * loadBytes], true);
+    }
+}
+
+// Helper functions for Broadcast and convertion into float
+template<utils::kernelInstrType KType>
+template<typename T>
+void
+kernelOpsGeneratorX86<KType>::broadcastAndConvertScalar(RegType        bcstReg,
+                                                        Xbyak::Address src)
+{
+    if constexpr (std::is_same_v<T, float>) {
+        jit_->vbroadcastss(bcstReg, src);
+    } else if constexpr (std::is_same_v<T, bfloat16>) {
+        RegType tmpReg = popAndGetScratchReg();
+        // Broadcast 16-bit bfloat16 value into XMM register
+        // Convert 16-bit bfloat16 to 32-bit float
+        // Shift left 16 bits to move to upper half of float32
+        jit_->vpbroadcastw(tmpReg, src);
+        jit_->vpmovsxwd(bcstReg, halfRegType(tmpReg));
+        jit_->vpslld(bcstReg, bcstReg, 16);
+        scratch_reg_queue.push(tmpReg);
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+        // Broadcast 32-bit integer value into XMM register
+        // Convert 32-bit integer to 32-bit float
+        jit_->vpbroadcastd(bcstReg, src);
+        jit_->vcvtdq2ps(bcstReg, bcstReg);
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+        RegType tmpReg = popAndGetScratchReg();
+        // Broadcast 8-bit integer value into XMM register
+        // Convert 8-bit integer to 32-bit float
+        jit_->vpbroadcastb(tmpReg, src);
+        jit_->vpmovsxbd(bcstReg, halfRegType(tmpReg));
+        jit_->vcvtdq2ps(bcstReg, bcstReg);
+        scratch_reg_queue.push(tmpReg);
+    } else if constexpr (std::is_same_v<T, uint8_t>) {
+        RegType tmpReg = popAndGetScratchReg();
+        // Broadcast 8-bit integer value into XMM register
+        // Convert 8-bit integer to 32-bit float
+        jit_->vpbroadcastb(tmpReg, src);
+        jit_->vpmovzxbd(bcstReg, halfRegType(tmpReg));
+        jit_->vcvtdq2ps(bcstReg, bcstReg);
+        scratch_reg_queue.push(tmpReg);
+    }
+}
+
+/*
+    Helper function to load and convert a vector of data from memory into a
+    register. This function handles loading the data in a given datatype, and
+    convert to float for both full and masked loads. Any new datatype conversion
+    needs to be added here.
+*/
+template<utils::kernelInstrType KType>
+template<typename T>
+void
+kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
+                                                   Xbyak::Address src,
+                                                   bool           useMaskOp)
+{
+    if constexpr (std::is_same_v<T, float>) {
+        // Float: Direct load, no conversion needed
+        if (useMaskOp) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                jit_->vmaskmovps(destReg, ymmMask, src);
+            } else {
+                jit_->vmovups(destReg | maskReg, src);
+            }
         } else {
-            jit_->vmovups(
-                RegType(regStartIdx + numFullRegsPerRow) | maskReg,
-                jit_->ptr[addressReg + numFullRegsPerRow * Traits::regBytes]);
+            jit_->vmovups(destReg, src);
         }
+
+    } else if constexpr (std::is_same_v<T, bfloat16>) {
+        // BF16: Load 16-bit values, extend to 32-bit, shift left 16 bits
+        RegType tmpReg    = popAndGetScratchReg();
+        int     tmpRegIdx = tmpReg.getIdx();
+
+        if (useMaskOp) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                // AVX2 Masked Load for BF16:
+                // Emulate masked load using per-lane scalar loads with
+                // conditional insertion. Key: Must compute full address
+                // (base+offset) into regTmp5 to preserve offset when loading
+                // from ptr[base + offset] expressions.
+
+                jit_->lea(regTmp5, src); // Compute address into GPR
+                jit_->vxorps(Xbyak::Xmm(tmpRegIdx), Xbyak::Xmm(tmpRegIdx),
+                             Xbyak::Xmm(tmpRegIdx)); // Zero destination
+
+                Xbyak::Reg32 regMaskBits = regTmp4.cvt32();
+                jit_->vmovmskps(regMaskBits, ymmMask); // Extract mask bits
+
+                // Loop through each of the 8 lanes:
+                //    - Test if the corresponding mask bit is set
+                //    - If set, load the 16-bit bfloat16 value from memory and
+                //    insert it into the correct lane position using pinsrw
+                //    - If not set, skip the lane (leaving it as zero)
+                // This approach ensures only masked lanes are loaded from
+                // memory
+                for (int lane = 0; lane < 8; lane++) {
+                    jit_->inLocalLabel();
+                    Xbyak::Label skipLane;
+                    jit_->bt(regMaskBits, lane);
+                    jit_->jnc(skipLane);
+                    jit_->pinsrw(halfRegType(tmpRegIdx),
+                                 jit_->word[regTmp5 + lane * sizeof(bfloat16)],
+                                 lane);
+                    jit_->L(skipLane);
+                    jit_->outLocalLabel();
+                }
+            } else {
+                // AVX512: Use native masked load
+                jit_->vmovdqu16(tmpReg | maskReg, src);
+            }
+        } else {
+            // Full Load: Load all elements
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                // AVX2: Load 16 bytes (8 bf16) into XMM half of register
+                jit_->vmovdqu(halfRegType(tmpRegIdx), src);
+            } else {
+                // AVX512: Use native bf16 load instruction
+                jit_->vmovdqu16(tmpReg, src);
+            }
+        }
+
+        // Convert BF16 to F32:
+        // 1. Sign-extend 16-bit to 32-bit (halfReg → fullReg)
+        // 2. Shift left 16 bits (move to upper half of float32)
+        jit_->vpmovsxwd(destReg, halfRegType(tmpRegIdx));
+        jit_->vpslld(destReg, destReg, 16);
+
+        scratch_reg_queue.push(tmpReg);
+
+    } else if constexpr (std::is_same_v<T, int8_t>) {
+        // INT8: Load 8-bit values, convert to float32
+        RegType tmpReg    = popAndGetScratchReg();
+        int     tmpRegIdx = tmpReg.getIdx();
+
+        if (useMaskOp) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                // AVX2 Masked Load for INT8 (same approach as BF16, but 8-bit
+                // loads)
+                jit_->lea(regTmp5, src);
+                jit_->vpxor(Xbyak::Xmm(tmpRegIdx), Xbyak::Xmm(tmpRegIdx),
+                            Xbyak::Xmm(tmpRegIdx));
+
+                Xbyak::Reg32 regMaskBits = regTmp4.cvt32();
+                jit_->vmovmskps(regMaskBits, ymmMask);
+
+                for (int lane = 0; lane < 8; lane++) {
+                    jit_->inLocalLabel();
+                    Xbyak::Label skipLane;
+                    jit_->bt(regMaskBits, lane);
+                    jit_->jnc(skipLane);
+                    jit_->pinsrb(Xbyak::Xmm(tmpRegIdx),
+                                 jit_->byte[regTmp5 + lane * sizeof(int8_t)],
+                                 lane);
+                    jit_->L(skipLane);
+                    jit_->outLocalLabel();
+                }
+            } else {
+                // AVX512: Use masked load into XMM (16 bytes max)
+                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx) | maskReg, src);
+            }
+        } else {
+            // Full Load: Load all elements
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                // AVX2: Load 8 bytes (8 int8) into XMM
+                jit_->vmovq(Xbyak::Xmm(tmpRegIdx), src);
+            } else {
+                // AVX512: Load 16 bytes into XMM (vpmovsxbd reads XMM source)
+                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx), src);
+            }
+        }
+
+        // Convert S8 to F32:
+        // 1. Sign-extend 8-bit to 32-bit (reads XMM, writes ZMM)
+        // 2. Convert int32 to float32
+        jit_->vpmovsxbd(destReg, Xbyak::Xmm(tmpRegIdx));
+        jit_->vcvtdq2ps(destReg, destReg);
+
+        scratch_reg_queue.push(tmpReg);
+
+    } else if constexpr (std::is_same_v<T, uint8_t>) {
+        // UINT8: Similar to INT8 but zero-extend
+        RegType tmpReg    = popAndGetScratchReg();
+        int     tmpRegIdx = tmpReg.getIdx();
+
+        if (useMaskOp) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                // AVX2 Masked Load for UINT8 (same as INT8, but zero-extended
+                // later)
+                jit_->lea(regTmp5, src);
+                jit_->vpxor(Xbyak::Xmm(tmpRegIdx), Xbyak::Xmm(tmpRegIdx),
+                            Xbyak::Xmm(tmpRegIdx));
+
+                Xbyak::Reg32 regMaskBits = regTmp4.cvt32(); // eax
+                jit_->vmovmskps(regMaskBits, ymmMask);
+
+                for (int lane = 0; lane < 8; lane++) {
+                    jit_->inLocalLabel();
+                    Xbyak::Label skipLane;
+                    jit_->bt(regMaskBits, lane);
+                    jit_->jnc(skipLane);
+                    jit_->pinsrb(Xbyak::Xmm(tmpRegIdx),
+                                 jit_->byte[regTmp5 + lane * sizeof(uint8_t)],
+                                 lane);
+                    jit_->L(skipLane);
+                    jit_->outLocalLabel();
+                }
+            } else {
+                // AVX512: Use masked load into XMM (16 bytes max)
+                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx) | maskReg, src);
+            }
+        } else {
+            // Full Load: Load all elements
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                // AVX2: Load 8 bytes (8 uint8) into XMM
+                jit_->vmovq(Xbyak::Xmm(tmpRegIdx), src);
+            } else {
+                // AVX512: Load 16 bytes into XMM (vpmovzxbd reads XMM source)
+                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx), src);
+            }
+        }
+
+        // Convert U8 to F32:
+        // 1. Zero-extend 8-bit to 32-bit (reads XMM, writes ZMM)
+        // 2. Convert int32 to float32
+        jit_->vpmovzxbd(destReg, Xbyak::Xmm(tmpRegIdx));
+        jit_->vcvtdq2ps(destReg, destReg);
+
+        scratch_reg_queue.push(tmpReg);
+
+    } else if constexpr (std::is_same_v<T, int32_t>) {
+        // INT32: Load 32-bit values, convert to float32
+        if (useMaskOp) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                jit_->vpmaskmovd(destReg, ymmMask, src);
+            } else {
+                jit_->vmovdqu32(destReg | maskReg, src);
+            }
+        } else {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                jit_->vmovdqu(destReg, src);
+            } else {
+                jit_->vmovdqu32(destReg, src);
+            }
+        }
+
+        // Convert int32 to float32
+        jit_->vcvtdq2ps(destReg, destReg);
     }
 }
 
@@ -361,20 +666,24 @@ kernelOpsGeneratorX86<KType>::relu(kernelOpsMetaData& op)
     return jitGeneratorError::success;
 }
 
+// ============================================================================
+// GEMM Bias Implementations
+// ============================================================================
+
 template<utils::kernelInstrType KType>
 template<typename T>
 jitGeneratorError
-kernelOpsGeneratorX86<KType>::biasRowMajorImpl()
+kernelOpsGeneratorX86<KType>::biasRowMajorImplGEMM()
 {
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->add(regTmp1, regTmp2);
 
-    // Load bias values into Registers
-    if constexpr (std::is_same_v<T, float>) {
-        loadRowF32(regTmp1, scratchLoadRegIdx);
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+    // Reserve destination registers to prevent them from being allocated as
+    // scratch during BF16/S8/U8 conversions in loadRowGeneric
+    auto saved_queue = reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow);
+
+    // Load bias values into registers using abstracted helper
+    loadAndConvertRows<T>(regTmp1, scratchLoadRegIdx);
 
     // Add bias to accumulators
     for (int i = 0; i < MR; i++) {
@@ -384,13 +693,16 @@ kernelOpsGeneratorX86<KType>::biasRowMajorImpl()
                          RegType(scratchLoadRegIdx + j));
         }
     }
+
+    // Restore original scratch queue
+    restoreScratchQueue(saved_queue);
     return jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 template<typename T>
 jitGeneratorError
-kernelOpsGeneratorX86<KType>::biasColMajorImpl()
+kernelOpsGeneratorX86<KType>::biasColMajorImplGEMM()
 {
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->add(regTmp1, regTmp2);
@@ -399,11 +711,8 @@ kernelOpsGeneratorX86<KType>::biasColMajorImpl()
     // maximum possible independent instructions.
     for (int i = 0; i < MR; i++) {
         RegType bcstReg = popAndGetScratchReg();
-        if constexpr (std::is_same_v<T, float>) {
-            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp1 + i * sizeof(T)]);
-        } else {
-            return jitGeneratorError::notSupported;
-        }
+        broadcastAndConvertScalar<T>(bcstReg,
+                                     jit_->ptr[regTmp1 + i * sizeof(T)]);
         for (int j = 0; j < numRegsPerRow; j++) {
             jit_->vaddps(RegType(cRegStartIdx + i * numRegsPerRow + j),
                          RegType(cRegStartIdx + i * numRegsPerRow + j),
@@ -414,32 +723,105 @@ kernelOpsGeneratorX86<KType>::biasColMajorImpl()
     return jitGeneratorError::success;
 }
 
+// ============================================================================
+// GEMV n=1 Bias Implementations
+// ============================================================================
+
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::biasRowMajorImplGEMVN1()
+{
+    // GEMV n=1 with row-major bias ('r' or 'R' in op_args2):
+    // Bias is scalar - broadcast single value to all MR outputs
+    // No offset needed - regTmp1 already points to the correct bias value
+
+    RegType biasReg = popAndGetScratchReg();
+    broadcastAndConvertScalar<T>(biasReg, jit_->ptr[regTmp1]);
+
+    // Add to single accumulator register (all MR outputs packed here)
+    jit_->vaddps(RegType(cRegStartIdx), RegType(cRegStartIdx), biasReg);
+
+    scratch_reg_queue.push(biasReg);
+    return jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::biasColMajorImplGEMVN1()
+{
+    // GEMV n=1 with column-major bias ('c' or 'C' in op_args2):
+    // Bias is vector - one value per output element (MR values)
+    // Need to offset by post_op_c_i to get to correct position
+
+    // Calculate offset: bias_ptr + post_op_c_i * sizeof(T)
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
+    jit_->add(regTmp1, regTmp2);
+
+    // Reserve a register for bias data
+    // This register will hold the loaded bias values and must not be reused
+    // by loadAndConvertVector's internal temporary registers
+    RegType biasReg = popAndGetScratchReg();
+
+    // Load MR bias values starting at bias[post_op_c_i]
+    // Use abstracted loader to handle datatype conversion (especially BF16 →
+    // F32) Note: loadAndConvertVector may pop additional temp registers
+    // internally, but biasReg is already reserved and won't be touched
+    loadAndConvertVector<T>(biasReg, jit_->ptr[regTmp1], useMask);
+
+    // Add to single accumulator register (all MR outputs packed here)
+    jit_->vaddps(RegType(cRegStartIdx), RegType(cRegStartIdx), biasReg);
+
+    // Return biasReg to pool after use
+    scratch_reg_queue.push(biasReg);
+    return jitGeneratorError::success;
+}
+
 template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::bias(kernelOpsMetaData& op)
 {
-
     // bias pointer is in op_args1 of lpgemm_post_op struct
     // load bias pointer to regTmp1
     // First load the kernelOpsList pointer, then dereference it to get op_args1
     jit_->mov(regTmp1,
               jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
 
-    if (op.cMatFormat == storageFormat::rowMajor) {
-        // regkernelOpsAttr now contains a pointer to the struct, so we can
-        // access members normally
-        jit_->mov(regTmp2,
-                  jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
-        DISPATCH_BY_DATATYPE(op.paramStorageDt, biasRowMajorImpl);
+    // Dispatch based on algorithm type
+    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+        // ============ GEMV n=1 path ============
+        // For GEMV n=1, the storage format in op_args2 determines bias shape:
+        // 'r'/'R' = row-major = scalar bias (broadcast)
+        // 'c'/'C' = column-major = vector bias (one per output element)
+
+        if (op.cMatFormat == storageFormat::rowMajor) {
+            // Scalar bias: no offset needed, already points to correct value
+            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasRowMajorImplGEMVN1);
+        } else {
+            // Vector bias: offset by post_op_c_i to get correct elements
+            jit_->mov(regTmp2,
+                      jit_->ptr[regkernelOpsAttr
+                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasColMajorImplGEMVN1);
+        }
+    } else {
+        // ============ GEMM path (default) ============
+        if (op.cMatFormat == storageFormat::rowMajor) {
+            jit_->mov(regTmp2,
+                      jit_->ptr[regkernelOpsAttr
+                                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasRowMajorImplGEMM);
+        } else {
+            // Column-major
+            jit_->mov(regTmp2,
+                      jit_->ptr[regkernelOpsAttr
+                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasColMajorImplGEMM);
+        }
     }
-    // matrix is col-major
-    else {
-        jit_->mov(regTmp2,
-                  jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-        DISPATCH_BY_DATATYPE(op.paramStorageDt, biasColMajorImpl);
-    }
+
+    return jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
@@ -547,20 +929,14 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::scaleFactorScalarImpl()
 {
     RegType sfReg = popAndGetScratchReg();
-
-    // Broadcast the scale factor.
-    if constexpr (std::is_same_v<T, float>) {
-        jit_->vbroadcastss(sfReg, jit_->ptr[regTmp1]);
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+    // Broadcast the scale factor using abstracted helper
+    broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp1]);
 
     for (int i = 0; i < MR * numRegsPerRow; i++) {
         jit_->vmulps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
                      sfReg);
     }
     scratch_reg_queue.push(sfReg);
-
     return jitGeneratorError::success;
 }
 
@@ -578,11 +954,12 @@ kernelOpsGeneratorX86<KType>::scaleFactorRowMajorImpl()
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
 
-    if constexpr (std::is_same_v<T, float>) {
-        loadRowF32(regTmp3, scratchLoadRegIdx);
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+    // Reserve destination registers to prevent them from being allocated as
+    // scratch during BF16/S8/U8 conversions in loadRowGeneric
+    auto saved_queue = reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow);
+
+    // Load scale factor values into registers using abstracted helper
+    loadAndConvertRows<T>(regTmp3, scratchLoadRegIdx);
 
     for (int i = 0; i < numRegsPerRow; i++) {
         for (int j = 0; j < MR; j++) {
@@ -591,6 +968,9 @@ kernelOpsGeneratorX86<KType>::scaleFactorRowMajorImpl()
                          RegType(scratchLoadRegIdx + i));
         }
     }
+
+    // Restore original scratch queue
+    restoreScratchQueue(saved_queue);
     return jitGeneratorError::success;
 }
 
@@ -608,11 +988,8 @@ kernelOpsGeneratorX86<KType>::scaleFactorColMajorImpl()
     jit_->add(regTmp3, regTmp2);
     for (int i = 0; i < MR; i++) {
         RegType bcstReg = popAndGetScratchReg();
-        if constexpr (std::is_same_v<T, float>) {
-            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp3 + i * sizeof(T)]);
-        } else {
-            return jitGeneratorError::notSupported;
-        }
+        broadcastAndConvertScalar<T>(bcstReg,
+                                     jit_->ptr[regTmp3 + i * sizeof(T)]);
         for (int j = 0; j < numRegsPerRow; j++) {
             jit_->vmulps(RegType(cRegStartIdx + i * numRegsPerRow + j),
                          RegType(cRegStartIdx + i * numRegsPerRow + j),
@@ -629,11 +1006,8 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::zeroPointScalarImpl()
 {
     RegType zpReg = popAndGetScratchReg();
-    if constexpr (std::is_same_v<T, float>) {
-        jit_->vbroadcastss(zpReg, jit_->ptr[regTmp1]);
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+    broadcastAndConvertScalar<T>(zpReg, jit_->ptr[regTmp1]);
+
     for (int i = 0; i < MR * numRegsPerRow; i++) {
         jit_->vaddps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
                      zpReg);
@@ -653,11 +1027,12 @@ kernelOpsGeneratorX86<KType>::zeroPointRowMajorImpl()
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
 
-    if constexpr (std::is_same_v<T, float>) {
-        loadRowF32(regTmp3, scratchLoadRegIdx);
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+    // Reserve destination registers to prevent them from being allocated as
+    // scratch during BF16/S8/U8 conversions in loadRowGeneric
+    auto saved_queue = reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow);
+
+    // Load zero point values into registers using abstracted helper
+    loadAndConvertRows<T>(regTmp3, scratchLoadRegIdx);
 
     for (int i = 0; i < numRegsPerRow; i++) {
         for (int j = 0; j < MR; j++) {
@@ -667,6 +1042,8 @@ kernelOpsGeneratorX86<KType>::zeroPointRowMajorImpl()
         }
     }
 
+    // Restore original scratch queue
+    restoreScratchQueue(saved_queue);
     return jitGeneratorError::success;
 }
 
@@ -680,13 +1057,11 @@ kernelOpsGeneratorX86<KType>::zeroPointColMajorImpl()
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
+
     for (int i = 0; i < MR; i++) {
         RegType bcstReg = popAndGetScratchReg();
-        if constexpr (std::is_same_v<T, float>) {
-            jit_->vbroadcastss(bcstReg, jit_->ptr[regTmp3 + i * sizeof(T)]);
-        } else {
-            return jitGeneratorError::notSupported;
-        }
+        broadcastAndConvertScalar<T>(bcstReg,
+                                     jit_->ptr[regTmp3 + i * sizeof(T)]);
         for (md_t j = 0; j < numRegsPerRow; j++) {
             jit_->vaddps(RegType(cRegStartIdx + i * numRegsPerRow + j),
                          RegType(cRegStartIdx + i * numRegsPerRow + j),
@@ -705,12 +1080,42 @@ kernelOpsGeneratorX86<KType>::scaleFactorImpl(kernelOpsMetaData& op)
         regTmp1,
         jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
 
-    if (op.scalarScaleFactorRequired) {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorScalarImpl);
-    } else if (op.cMatFormat == storageFormat::rowMajor) {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorRowMajorImpl);
+    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+        // ============ GEMV n=1 path ============
+        // Row-major: scale_factor_len is always 1 (scalar broadcast)
+        // Column-major: scale_factor_len can be 1 (scalar) or > 1 (vector load)
+
+        if (op.cMatFormat == storageFormat::rowMajor) {
+            // Row-major: always scalar (array is [1, n=1])
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorScalarImplGEMVN1);
+        } else {
+            // Column-major: check if scalar or vector
+            if (op.scalarScaleFactorRequired) {
+                // Scalar: broadcast single value
+                DISPATCH_BY_DATATYPE(op.scaleFactorDt,
+                                     scaleFactorScalarImplGEMVN1);
+            } else {
+                // Vector: load m scale factors with mask
+                jit_->mov(
+                    regTmp2,
+                    jit_->ptr[regkernelOpsAttr
+                              + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                DISPATCH_BY_DATATYPE(op.scaleFactorDt,
+                                     scaleFactorColMajorImplGEMVN1);
+            }
+        }
     } else {
-        DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorColMajorImpl);
+        // ============ GEMM path ============
+        if (op.scalarScaleFactorRequired) {
+            // Scalar: broadcast single scale factor
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorScalarImpl);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            // Row-major: load vector of scale factors per column
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorRowMajorImpl);
+        } else {
+            // Column-major: broadcast scale factor per row
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt, scaleFactorColMajorImpl);
+        }
     }
     return jitGeneratorError::success;
 }
@@ -721,13 +1126,136 @@ kernelOpsGeneratorX86<KType>::zeroPointImpl(kernelOpsMetaData& op)
 {
     jit_->mov(regTmp1,
               jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
-    if (op.scalarZeroPointRequired) {
-        DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointScalarImpl);
-    } else if (op.cMatFormat == storageFormat::rowMajor) {
-        DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointRowMajorImpl);
+
+    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+        // ============ GEMV n=1 path ============
+        // Row-major: zp_len is always 1 (scalar broadcast)
+        // Column-major: zp_len can be 1 (scalar) or > 1 (vector load)
+
+        if (op.cMatFormat == storageFormat::rowMajor) {
+            // Row-major: always scalar (array is [1, n=1])
+            DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointScalarImplGEMVN1);
+        } else {
+            // Column-major: check if scalar or vector
+            if (op.scalarZeroPointRequired) {
+                // Scalar: broadcast single value
+                DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointScalarImplGEMVN1);
+            } else {
+                // Vector: load m zero points with mask
+                jit_->mov(
+                    regTmp2,
+                    jit_->ptr[regkernelOpsAttr
+                              + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                DISPATCH_BY_DATATYPE(op.zeroPointDt,
+                                     zeroPointColMajorImplGEMVN1);
+            }
+        }
     } else {
-        DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointColMajorImpl);
+        // ============ GEMM path ============
+        if (op.scalarZeroPointRequired) {
+            // Scalar: broadcast single zero point
+            DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointScalarImpl);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            // Row-major: load vector of zero points per column
+            DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointRowMajorImpl);
+        } else {
+            // Column-major: broadcast zero point per row
+            DISPATCH_BY_DATATYPE(op.zeroPointDt, zeroPointColMajorImpl);
+        }
     }
+    return jitGeneratorError::success;
+}
+
+// Scale factor and zero point implementations for GEMV n=1
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::scaleFactorScalarImplGEMVN1()
+{
+    // GEMV n=1 with scalar scale factor
+    // All MR outputs are packed in a single register at cRegStartIdx
+    // Apply scale factor ONCE to this single register
+
+    RegType sfReg = popAndGetScratchReg();
+
+    // Broadcast the scalar scale factor
+    broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp1]);
+
+    // Apply to single packed accumulator register (all MR outputs)
+    jit_->vmulps(RegType(cRegStartIdx), RegType(cRegStartIdx), sfReg);
+
+    scratch_reg_queue.push(sfReg);
+    return jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::scaleFactorColMajorImplGEMVN1()
+{
+    // GEMV n=1 with column-major: vector scale factors
+    // Load MR scale factors starting at scale_factor[post_op_c_i]
+    // regTmp2 already contains post_op_c_i
+
+    // Calculate offset: scale_factor + post_op_c_i * sizeof(T)
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
+    jit_->add(regTmp1, regTmp2);
+
+    RegType sfReg = popAndGetScratchReg();
+
+    // Load MR scale factors with mask if needed
+    loadAndConvertVector<T>(sfReg, jit_->ptr[regTmp1], useMask);
+
+    // Apply scale factor to single accumulator register
+    jit_->vmulps(RegType(cRegStartIdx), RegType(cRegStartIdx), sfReg);
+
+    scratch_reg_queue.push(sfReg);
+    return jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::zeroPointScalarImplGEMVN1()
+{
+    // GEMV n=1 with scalar zero point
+    // All MR outputs are packed in a single register at cRegStartIdx
+    // Apply zero point ONCE to this single register
+
+    RegType zpReg = popAndGetScratchReg();
+
+    // Broadcast the scalar zero point
+    broadcastAndConvertScalar<T>(zpReg, jit_->ptr[regTmp1]);
+
+    // Apply to single packed accumulator register (all MR outputs)
+    jit_->vaddps(RegType(cRegStartIdx), RegType(cRegStartIdx), zpReg);
+
+    scratch_reg_queue.push(zpReg);
+    return jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::zeroPointColMajorImplGEMVN1()
+{
+    // GEMV n=1 with column-major: vector zero points
+    // Load MR zero points starting at zero_point[post_op_c_i]
+    // regTmp2 already contains post_op_c_i
+
+    // Calculate offset: zero_point + post_op_c_i * sizeof(T)
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
+    jit_->add(regTmp1, regTmp2);
+
+    RegType zpReg = popAndGetScratchReg();
+
+    // Load MR zero points with mask if needed
+    loadAndConvertVector<T>(zpReg, jit_->ptr[regTmp1], useMask);
+
+    // Apply zero point to single accumulator register
+    jit_->vaddps(RegType(cRegStartIdx), RegType(cRegStartIdx), zpReg);
+
+    scratch_reg_queue.push(zpReg);
     return jitGeneratorError::success;
 }
 
@@ -772,13 +1300,14 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
                                                          matOpScaleType sclType)
 {
+    // Reserve registers to prevent corruption during BF16/S8/U8 conversions
+    // Need to protect: sf_reg, matreg and the scratch loadRegs
+    auto saved_queue =
+        reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow + 2);
+
     md_t sf_reg = scratchLoadRegIdx;
     if (sclType == matOpScaleType::scalar) {
-        if constexpr (std::is_same_v<sfDt, float>) {
-            jit_->vbroadcastss(RegType(sf_reg), jit_->ptr[regTmp1]);
-        } else {
-            return jitGeneratorError::notSupported;
-        }
+        broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
     }
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
@@ -790,12 +1319,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
     if (sclType == matOpScaleType::rowVector) {
         jit_->lea(regTmp3, jit_->ptr[regTmp1]);
         jit_->add(regTmp3, regTmp7);
-        // load NR elements of scale factor
-        if constexpr (std::is_same_v<sfDt, float>) {
-            loadRowF32(regTmp3, sf_reg);
-        } else {
-            return jitGeneratorError::notSupported;
-        }
+        loadAndConvertRows<sfDt>(regTmp3, sf_reg);
     }
 
     // regTmp2 = matPtr
@@ -859,12 +1383,8 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
         if (sclType == matOpScaleType::columnVector) {
             // broadcast scale factor along the m dimension since the A and B
             // matrices are swapped for column major inputs.
-            if constexpr (std::is_same_v<sfDt, float>) {
-                jit_->vbroadcastss(RegType(sf_reg),
-                                   jit_->ptr[regTmp6 + i * sizeof(sfDt)]);
-            } else {
-                return jitGeneratorError::notSupported;
-            }
+            broadcastAndConvertScalar<sfDt>(
+                RegType(sf_reg), jit_->ptr[regTmp6 + i * sizeof(sfDt)]);
         }
         for (int j = 0; j < numFullRegsPerRow; j++) {
             if (sclType == matOpScaleType::rowVector) {
@@ -893,6 +1413,10 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
         // add ldm to matadd pointer
         jit_->add(regTmp2, regTmp3);
     }
+
+    // Restore original scratch queue
+    restoreScratchQueue(saved_queue);
+
     return jitGeneratorError::success;
 }
 
@@ -911,6 +1435,11 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
+    // Reserve registers from global scratch queue to prevent BF16/S8/U8
+    // conversion corruption AVX512 function uses 5 registers: matRegIdx(0),
+    // sf_reg(1), offsets1RegIdx(2), offsets2RegIdx(3), scratch3RegIdx(4)
+    auto saved_global_queue = reserveDestRegisters(0, 5);
+
     std::queue<int> scratch_reg_queue;
     for (int i = 0; i < cRegStartIdx; i++) {
         scratch_reg_queue.push(i);
@@ -927,16 +1456,16 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
                                  + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
 
     if (sclType == matOpScaleType::scalar) {
-        if constexpr (std::is_same_v<sfDt, float>) {
-            jit_->vbroadcastss(RegType(sf_reg), jit_->ptr[regTmp1]);
-        } else {
-            return jitGeneratorError::notSupported;
-        }
+        broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
     } else if (sclType == matOpScaleType::columnVector) {
         jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp6 * sizeof(sfDt)]);
     } else { // row-vector
         jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
     }
+
+    // Calculate load bytes based on sfDt template parameter for scale factor
+    // addressing
+    int sfLoadBytes = getLoadBytes<sfDt>();
 
     // load ldm into regTmp3 and multiply with sizeof(dt)
     jit_->mov(regTmp3,
@@ -961,11 +1490,11 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
         0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
     };
 
-    jit_->jmp("offset_end", jit_->T_NEAR);
+    jit_->jmp(".offset_end", jit_->T_NEAR);
     jit_->align(64);
     jit_->L(offsets_label);
     jit_->db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
-    jit_->L("offset_end");
+    jit_->L(".offset_end");
 
     // take two zmm from scratch_reg_queue and load the offsets
     int offsets1RegIdx = scratch_reg_queue.front();
@@ -1040,24 +1569,15 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
 
     for (int i = 0; i < MR; i++) {
         if (sclType == matOpScaleType::columnVector) {
-            // broadcast scale factor along the m dimension since the A and B
-            // matrices are swapped for column major inputs.
-            if constexpr (std::is_same_v<sfDt, float>) {
-                jit_->vbroadcastss(RegType(sf_reg),
-                                   jit_->ptr[regTmp1 + i * sizeof(sfDt)]);
-            } else {
-                return jitGeneratorError::notSupported;
-            }
+            broadcastAndConvertScalar<sfDt>(
+                RegType(sf_reg), jit_->ptr[regTmp1 + i * sizeof(sfDt)]);
         }
         jit_->mov(regTmp4, regTmp2);
         for (int j = 0; j < numFullRegsPerRow; j++) {
             if (sclType == matOpScaleType::rowVector) {
-                if constexpr (std::is_same_v<sfDt, float>) {
-                    jit_->vmovups(RegType(sf_reg),
-                                  jit_->ptr[regTmp1 + j * RegBytes]);
-                } else {
-                    return jitGeneratorError::notSupported;
-                }
+                loadAndConvertVector<sfDt>(RegType(sf_reg),
+                                           jit_->ptr[regTmp1 + j * sfLoadBytes],
+                                           false);
             }
 
             jitGeneratorError err =
@@ -1072,13 +1592,10 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
         }
         if (numMaskRegsPerRow > 0) {
             if (sclType == matOpScaleType::rowVector) {
-                if constexpr (std::is_same_v<sfDt, float>) {
-                    jit_->vmovups(
-                        RegType(sf_reg),
-                        jit_->ptr[regTmp1 + numFullRegsPerRow * RegBytes]);
-                } else {
-                    return jitGeneratorError::notSupported;
-                }
+                loadAndConvertVector<sfDt>(
+                    RegType(sf_reg),
+                    jit_->ptr[regTmp1 + numFullRegsPerRow * sfLoadBytes],
+                    false);
             }
 
             jitGeneratorError err = opLambdaColMat(
@@ -1100,12 +1617,7 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
     jit_->L(".rowMajorMatOp");
 
     if (sclType == matOpScaleType::rowVector) {
-        // load NR elements of scale factor
-        if constexpr (std::is_same_v<sfDt, float>) {
-            loadRowF32(regTmp1, sf_reg);
-        } else {
-            return jitGeneratorError::notSupported;
-        }
+        loadAndConvertRows<sfDt>(regTmp1, sf_reg);
     }
 
     jit_->lea(regTmp7, jit_->ptr[regTmp7 * sizeof(matOpDt)]);
@@ -1146,14 +1658,8 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
     int sclIdx = 0;
     for (int i = 0; i < MR; i++) {
         if (sclType == matOpScaleType::columnVector) {
-            // broadcast scale factor along the m dimension since the A and B
-            // matrices are swapped for column major inputs.
-            if constexpr (std::is_same_v<sfDt, float>) {
-                jit_->vbroadcastss(RegType(sf_reg),
-                                   jit_->ptr[regTmp1 + i * sizeof(sfDt)]);
-            } else {
-                return jitGeneratorError::notSupported;
-            }
+            broadcastAndConvertScalar<sfDt>(
+                RegType(sf_reg), jit_->ptr[regTmp1 + i * sizeof(sfDt)]);
         }
         for (int j = 0; j < numFullRegsPerRow; j++) {
             if (sclType == matOpScaleType::rowVector) {
@@ -1190,7 +1696,68 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
     scratch_reg_queue.push(sf_reg);
     scratch_reg_queue.push(matRegIdx);
 
+    // Restore global scratch queue
+    restoreScratchQueue(saved_global_queue);
+
     jit_->outLocalLabel();
+    return jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+template<typename sfDt, typename matOpDt>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
+                                                         matOpScaleType sclType)
+{
+    // GEMV n=1: All MR outputs packed in single register at cRegStartIdx
+    // ldm is always 1 for n=1 case (contiguous storage)
+
+    RegType sfReg  = popAndGetScratchReg();
+    RegType matReg = popAndGetScratchReg();
+
+    jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+    jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+    // Handle scale factor offset and loading
+    if (sclType == matOpScaleType::scalar) {
+        // Scalar: Broadcast single value to all lanes
+        broadcastAndConvertScalar<sfDt>(sfReg, jit_->ptr[regTmp1]);
+    } else if (sclType == matOpScaleType::columnVector) {
+        // Column vector: Load M scale factors starting at regTmp1 + post_op_c_i
+        jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp6 * sizeof(sfDt)]);
+        loadAndConvertVector<sfDt>(sfReg, jit_->ptr[regTmp1], useMask);
+    } else { // rowVector
+        // Row vector: For n=1, there's only one column (j=0), so it's
+        // effectively a scalar
+        jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
+        broadcastAndConvertScalar<sfDt>(sfReg, jit_->ptr[regTmp1]);
+    }
+
+    jit_->mov(regTmp2,
+              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+
+    // ============ GEMV n=1: Always process M elements as a vector ============
+    // For n=1, auxiliary matrix is [M, 1] with contiguous elements
+    // No need to check csC - always load M elements
+
+    jit_->lea(regTmp3, jit_->ptr[regTmp6 * sizeof(matOpDt)]);
+    jit_->add(regTmp2, regTmp3);
+
+    loadAndConvertVector<matOpDt>(matReg, jit_->ptr[regTmp2], useMask);
+
+    jit_->vmulps(matReg, matReg, sfReg);
+
+    if (opType == matOpType::matOpAdd) {
+        jit_->vaddps(RegType(cRegStartIdx), RegType(cRegStartIdx), matReg);
+    } else if (opType == matOpType::matOpMul) {
+        jit_->vmulps(RegType(cRegStartIdx), RegType(cRegStartIdx), matReg);
+    }
+
+    scratch_reg_queue.push(sfReg);
+    scratch_reg_queue.push(matReg);
+
     return jitGeneratorError::success;
 }
 
@@ -1202,18 +1769,36 @@ kernelOpsGeneratorX86<KType>::matadd(kernelOpsMetaData& op)
         regTmp1,
         jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
 
-    if (op.scalarScaleFactorRequired) {
-        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
-                                  matOpScaleFactorImplMerged,
-                                  matOpType::matOpAdd, matOpScaleType::scalar);
-    } else if (op.cMatFormat == storageFormat::rowMajor) {
-        DISPATCH_BY_DUAL_DATATYPE(
-            op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
-            matOpType::matOpAdd, matOpScaleType::rowVector);
+    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+        // ============ GEMV n=1 path ============
+        if (op.scalarScaleFactorRequired) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplGEMVN1,
+                matOpType::matOpAdd, matOpScaleType::scalar);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplGEMVN1,
+                matOpType::matOpAdd, matOpScaleType::rowVector);
+        } else {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplGEMVN1,
+                matOpType::matOpAdd, matOpScaleType::columnVector);
+        }
     } else {
-        DISPATCH_BY_DUAL_DATATYPE(
-            op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
-            matOpType::matOpAdd, matOpScaleType::columnVector);
+        // ============ GEMM path ============
+        if (op.scalarScaleFactorRequired) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
+                matOpType::matOpAdd, matOpScaleType::scalar);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
+                matOpType::matOpAdd, matOpScaleType::rowVector);
+        } else {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
+                matOpType::matOpAdd, matOpScaleType::columnVector);
+        }
     }
 
     return jitGeneratorError::success;
@@ -1227,18 +1812,36 @@ kernelOpsGeneratorX86<KType>::matmul(kernelOpsMetaData& op)
         regTmp1,
         jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
 
-    if (op.scalarScaleFactorRequired) {
-        DISPATCH_BY_DUAL_DATATYPE(op.scaleFactorDt, op.paramStorageDt,
-                                  matOpScaleFactorImplMerged,
-                                  matOpType::matOpMul, matOpScaleType::scalar);
-    } else if (op.cMatFormat == storageFormat::rowMajor) {
-        DISPATCH_BY_DUAL_DATATYPE(
-            op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
-            matOpType::matOpMul, matOpScaleType::rowVector);
+    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+        // ============ GEMV n=1 path ============
+        if (op.scalarScaleFactorRequired) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplGEMVN1,
+                matOpType::matOpMul, matOpScaleType::scalar);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplGEMVN1,
+                matOpType::matOpMul, matOpScaleType::rowVector);
+        } else {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplGEMVN1,
+                matOpType::matOpMul, matOpScaleType::columnVector);
+        }
     } else {
-        DISPATCH_BY_DUAL_DATATYPE(
-            op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
-            matOpType::matOpMul, matOpScaleType::columnVector);
+        // ============ GEMM path ============
+        if (op.scalarScaleFactorRequired) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
+                matOpType::matOpMul, matOpScaleType::scalar);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
+                matOpType::matOpMul, matOpScaleType::rowVector);
+        } else {
+            DISPATCH_BY_DUAL_DATATYPE(
+                op.scaleFactorDt, op.paramStorageDt, matOpScaleFactorImplMerged,
+                matOpType::matOpMul, matOpScaleType::columnVector);
+        }
     }
 
     return jitGeneratorError::success;
@@ -1795,7 +2398,6 @@ kernelOpsGeneratorX86<KType>::sigmoid(kernelOpsMetaData& op)
 }
 
 } // namespace amdzen::x86gen
-
 // Explicit template instantiations to resolve linker errors
 template class amdzen::x86gen::kernelOpsGeneratorX86<
     amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;

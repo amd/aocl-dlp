@@ -212,11 +212,11 @@ gemmF32DEBackend::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
                 static_cast<DLP_TYPE>(post_op->stor_type));
             char storFormatC =
                 std::tolower(*(static_cast<char*>(post_op->op_args2)));
-            metaData->cMatFormat = (storFormatC == 'c')
-                                       ? kernel_frame::storageFormat::colMajor
-                                       : kernel_frame::storageFormat::rowMajor;
-            metaData->scaleFactorDt =
-                kernel_frame::DataType::f32; // TODO: Always F32 for mat add
+            metaData->cMatFormat    = (storFormatC == 'c')
+                                          ? kernel_frame::storageFormat::colMajor
+                                          : kernel_frame::storageFormat::rowMajor;
+            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->sf_stor_type));
             metaData->scalarScaleFactorRequired =
                 (post_op->scale_factor_len == 1) ? true : false;
             metaData->vectorScaleFactorRequired =
@@ -229,11 +229,11 @@ gemmF32DEBackend::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
                 static_cast<DLP_TYPE>(post_op->stor_type));
             char storFormatC =
                 std::tolower(*(static_cast<char*>(post_op->op_args2)));
-            metaData->cMatFormat = (storFormatC == 'c')
-                                       ? kernel_frame::storageFormat::colMajor
-                                       : kernel_frame::storageFormat::rowMajor;
-            metaData->scaleFactorDt =
-                kernel_frame::DataType::f32; // TODO: Always F32 for mat mul
+            metaData->cMatFormat    = (storFormatC == 'c')
+                                          ? kernel_frame::storageFormat::colMajor
+                                          : kernel_frame::storageFormat::rowMajor;
+            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->sf_stor_type));
             metaData->scalarScaleFactorRequired =
                 (post_op->scale_factor_len == 1) ? true : false;
             metaData->vectorScaleFactorRequired =
