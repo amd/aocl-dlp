@@ -61,22 +61,23 @@ init_matrix(float* matrix, int rows, int cols, int ld, float value)
 
 typedef struct
 {
-    char    order;
-    md_t*   m;
-    md_t*   n;
-    md_t*   k;
-    md_t*   lda;
-    md_t*   ldb;
-    md_t*   ldc;
-    float** a;
-    float** b;
-    float** c;
-    float*  alpha;
-    float*  beta;
-    char*   transa;
-    char*   transb;
-    char*   mem_format_a;
-    char*   mem_format_b;
+    char             order;
+    md_t*            m;
+    md_t*            n;
+    md_t*            k;
+    md_t*            lda;
+    md_t*            ldb;
+    md_t*            ldc;
+    float**          a;
+    float**          b;
+    float**          c;
+    float*           alpha;
+    float*           beta;
+    char*            transa;
+    char*            transb;
+    char*            mem_format_a;
+    char*            mem_format_b;
+    dlp_metadata_t** mData;
 } multi_instance_gemm_f32_args_t;
 
 bool
@@ -98,22 +99,63 @@ allocate_memory(multi_instance_gemm_f32_args_t* args, int num_instances)
     args->transb       = malloc(num_instances * sizeof(char));
     args->mem_format_a = malloc(num_instances * sizeof(char));
     args->mem_format_b = malloc(num_instances * sizeof(char));
+    args->mData        = malloc(num_instances * sizeof(dlp_metadata_t*));
 
     if (!args->m || !args->n || !args->k || !args->lda || !args->ldb
         || !args->ldc || !args->a || !args->b || !args->c || !args->alpha
         || !args->beta || !args->transa || !args->transb || !args->mem_format_a
-        || !args->mem_format_b) {
+        || !args->mem_format_b || !args->mData) {
         return false;
     }
 
     // Initialize all pointers to NULL
     for (int i = 0; i < num_instances; i++) {
-        args->a[i] = NULL;
-        args->b[i] = NULL;
-        args->c[i] = NULL;
+        args->a[i]     = NULL;
+        args->b[i]     = NULL;
+        args->c[i]     = NULL;
+        args->mData[i] = NULL;
     }
 
     return true;
+}
+
+void
+cleanupBiasPostOps(dlp_metadata_t* mData)
+{
+    if (mData->bias) {
+        free((mData->bias[0]).bias);
+        if ((mData->bias[0]).sf) {
+            free(((mData->bias[0]).sf)->scale_factor);
+        }
+        free((mData->bias[0]).sf);
+        free(mData->bias);
+    }
+}
+
+void
+cleanupEltwisePostOps(dlp_metadata_t* mData)
+{
+    if (mData->eltwise) {
+        for (int i = 0; i < mData->num_eltwise; i++) {
+            // Free alpha and beta if they were allocated
+            free((mData->eltwise[i]).algo.alpha);
+            free((mData->eltwise[i]).algo.beta);
+            if ((mData->eltwise[i]).sf) {
+                free(((mData->eltwise[i]).sf)->scale_factor);
+            }
+            free((mData->eltwise[i]).sf);
+        }
+    }
+
+    free(mData->eltwise);
+}
+
+void
+cleanupPostOps(dlp_metadata_t* mData)
+{
+    cleanupBiasPostOps(mData);
+    cleanupEltwisePostOps(mData);
+    free(mData->seq_vector);
 }
 
 void
@@ -150,6 +192,114 @@ free_memory(multi_instance_gemm_f32_args_t* args, int num_instances)
     free(args->transb);
     free(args->mem_format_a);
     free(args->mem_format_b);
+    if (args->mData) {
+        for (int i = 0; i < num_instances; i++) {
+            if (args->mData[i]) {
+                cleanupPostOps(args->mData[i]);
+                free(args->mData[i]);
+            }
+        }
+    }
+    free(args->mData);
+}
+
+bool
+initSingleBiasPostOp(dlp_metadata_t* mData, md_t m, md_t n)
+{
+    mData->bias = NULL;
+    mData->bias = (dlp_post_op_bias*)malloc(sizeof(dlp_post_op_bias));
+    if (!mData->bias) {
+        return false;
+    }
+    (mData->bias[0]).bias = (float*)malloc(n * sizeof(float));
+    if (!(mData->bias[0]).bias) {
+        return false;
+    }
+    for (int i = 0; i < n; i++) {
+        ((float*)(mData->bias[0]).bias)[i] = (float)i; // Initialize bias values
+    }
+    (mData->bias[0]).stor_type = DLP_F32;
+
+    // Bias scale factor.
+    (mData->bias[0]).sf = NULL;
+    (mData->bias[0]).sf = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
+    if (!(mData->bias[0]).sf) {
+        return false;
+    }
+    ((mData->bias[0]).sf)->scale_factor = NULL;
+    ((mData->bias[0]).sf)->scale_factor = (void*)malloc(n * sizeof(float));
+    if (!((mData->bias[0]).sf)->scale_factor) {
+        return false;
+    }
+    for (int i = 0; i < n; i++) {
+        ((float*)((mData->bias[0]).sf)->scale_factor)[i] =
+            1.5f; // Initialize scale factors
+    }
+    ((mData->bias[0]).sf)->scale_factor_len  = n;
+    ((mData->bias[0]).sf)->scale_factor_type = DLP_F32;
+
+    return true;
+}
+
+bool
+initSingleGeluTanh(dlp_metadata_t* mData, md_t m, md_t n)
+{
+    mData->eltwise = NULL;
+    mData->eltwise = (dlp_post_op_eltwise*)malloc(sizeof(dlp_post_op_eltwise));
+    if (!mData->eltwise) {
+        return false;
+    }
+
+    (mData->eltwise[0]).algo.algo_type = GELU_TANH;
+    (mData->eltwise[0]).algo.alpha     = NULL;
+    (mData->eltwise[0]).algo.beta      = NULL;
+
+    // Eltwise scale factor.
+    (mData->eltwise[0]).sf = NULL;
+    (mData->eltwise[0]).sf = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
+    if (!(mData->eltwise[0]).sf) {
+        return false;
+    }
+    ((mData->eltwise[0]).sf)->scale_factor = NULL;
+    ((mData->eltwise[0]).sf)->scale_factor = (void*)malloc(n * sizeof(float));
+    if (!((mData->eltwise[0]).sf)->scale_factor) {
+        return false;
+    }
+    for (int i = 0; i < n; i++) {
+        ((float*)((mData->eltwise[0]).sf)->scale_factor)[i] =
+            1.5f; // Initialize scale factors
+    }
+    ((mData->eltwise[0]).sf)->scale_factor_len  = n;
+    ((mData->eltwise[0]).sf)->scale_factor_type = DLP_F32;
+
+    return true;
+}
+
+bool
+initSinglePostOps(dlp_metadata_t* mData, md_t m, md_t n)
+{
+    if (!initSingleBiasPostOp(mData, m, n)) {
+        return false;
+    }
+    if (!initSingleGeluTanh(mData, m, n)) {
+        return false;
+    }
+
+    mData->post_op_grp = NULL;
+    mData->pre_ops     = NULL;
+
+    mData->seq_length  = 2; // Number of post-operations
+    mData->num_eltwise = 1;
+    mData->seq_vector  = NULL;
+    mData->seq_vector =
+        (DLP_POST_OP_TYPE*)malloc(mData->seq_length * sizeof(DLP_POST_OP_TYPE));
+    if (!mData->seq_vector) {
+        return false;
+    }
+    mData->seq_vector[0] = BIAS;
+    mData->seq_vector[1] = ELTWISE;
+
+    return true;
 }
 
 bool
@@ -187,6 +337,14 @@ initialize_memory(multi_instance_gemm_f32_args_t* args, int num_instances)
         init_matrix(args->b[i], args->k[i], args->n[i], args->ldb[i], 0.5f);
         init_matrix(args->c[i], args->m[i], args->n[i], args->ldc[i],
                     0.0f); // Initialize C with zeros
+
+        args->mData[i] = (dlp_metadata_t*)malloc(sizeof(dlp_metadata_t));
+        if (!args->mData[i]) {
+            return false;
+        }
+        if (!initSinglePostOps(args->mData[i], args->m[i], args->n[i])) {
+            return false;
+        }
 
         args->alpha[i]        = (rand() % 2 == 0) ? 1.0f : 2.0f;
         args->beta[i]         = (rand() % 2 == 0) ? 1.0f : 9.0f;
@@ -281,8 +439,7 @@ main(int argc, char* argv[])
                 args.n[i], args.k[i], args.alpha[i], args.a[i], args.lda[i],
                 args.mem_format_a[i], args.b[i], args.ldb[i],
                 args.mem_format_b[i], args.beta[i], args.c[i], args.ldc[i],
-                NULL // No other operations.
-            );
+                args.mData[i]);
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP_DEBUG
 #pragma omp critical
             printf("executed instance %d, repeat %d, tid: %d\n", i, repeat,
