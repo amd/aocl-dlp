@@ -107,10 +107,12 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError kernelUnroll(int unroll);
 
-    dlp::jit::jitGeneratorError storeResult();
+    dlp::jit::jitGeneratorError storeResult(bool fuseBetaWithStore);
 
-    dlp::jit::jitGeneratorError storeResultColumnMajor();
-    dlp::jit::jitGeneratorError storeResultRowMajor();
+    // this function uses scatter approach to store the result matrix
+    // Not used currently.
+    dlp::jit::jitGeneratorError storeResultColumnMajor(bool fuseBetaWithStore);
+    dlp::jit::jitGeneratorError storeResultRowMajor(bool fuseBetaWithStore);
 
     // Setup and initialization
     void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);

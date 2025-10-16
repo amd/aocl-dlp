@@ -33,6 +33,7 @@
 
 #include "f32_gemm_generator.hh"
 #include "jit_register/jit_register.hh"
+#include "transpose_generator.hh"
 
 namespace amdzen::GEMMcodeGenerator {
 
@@ -191,7 +192,7 @@ jitGEMMF32<KType>::kernelUnroll(int unroll)
 }
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::storeResult()
+jitGEMMF32<KType>::storeResult(bool fuseBetaWithStore)
 {
     mov(regTmpCptr, regCPtr);
 
@@ -199,7 +200,7 @@ jitGEMMF32<KType>::storeResult()
     // and then call the JIT kernel. The logic to ensure this is in
     // aocl_gemm_f32f32f32of32.c file.
     if (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
-        return storeResultRowMajor();
+        return storeResultRowMajor(fuseBetaWithStore);
     }
 
     inLocalLabel();
@@ -207,25 +208,31 @@ jitGEMMF32<KType>::storeResult()
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
     cmp(regTmp1, 1);
     je(".storeResultRowMajor", T_NEAR);
-    RETURN_IF_ERROR(storeResultColumnMajor());
+    // RETURN_IF_ERROR(storeResultColumnMajor());
+    x86gen::avx512TransposeGenerator transposeGenerator(
+        this, MR, NR, useMask, cRegIdx, cReg, regTmpCptr);
+    RETURN_IF_ERROR(transposeGenerator.generateTranspose(
+        stackPtr, dlp::jit::jitAlgoType::gemm, fuseBetaWithStore));
     jmp(".end", T_NEAR);
     L(".storeResultRowMajor");
-    RETURN_IF_ERROR(storeResultRowMajor());
+    RETURN_IF_ERROR(storeResultRowMajor(fuseBetaWithStore));
     L(".end");
+
     outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::storeResultColumnMajor()
+jitGEMMF32<KType>::storeResultColumnMajor(bool fuseBetaWithStore)
 {
     return dlp::jit::jitGeneratorError::notSupported;
 }
 
 template<>
 dlp::jit::jitGeneratorError
-jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor()
+jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
+    bool fuseBetaWithStore)
 {
 
     std::queue<int> scratch_reg_queue;
@@ -303,23 +310,71 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor()
     scratch_reg_queue.push(offsets2RegIdx);
     scratch_reg_queue.push(scratch3RegIdx);
 
-    jmp("offsets_end", T_NEAR);
-    align(64);
-    L(offsets);
-    int64_t offsets[16] = {
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-    };
-    db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
-    L("offsets_end");
-
     return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::storeResultRowMajor()
+jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
 {
     mov(regTmpCptr, regCPtr);
+
+    // if fuseBetaWithStore is true, then we need to check if beta is zero
+    // during run-time. This is majorly done to avoid accessing of beta value
+    // if original beta is 0 during first k iteration.
+    if (fuseBetaWithStore) {
+        // broadcast beta value
+        int betaRegIdx    = aRegIdx;
+        int scratchRegIdx = bRegIdx;
+        mov(regTmp2, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
+        vbroadcastss(RegType(betaRegIdx), ptr[regTmp2]);
+
+        // check if beta is 0
+        vxorps(RegType(scratchRegIdx), RegType(scratchRegIdx),
+               RegType(scratchRegIdx));
+        vucomiss(Xmm(betaRegIdx), Xmm(scratchRegIdx));
+        je(".storeResultRowMajorBZ", T_NEAR);
+
+        // beta is non-zero, fuse with store
+        for (int i = 0; i < MR; i++) {
+            for (int j = 0; j < bFullReg; j++) {
+                // Regular store
+                vmovups(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
+                vfmadd231ps(RegType(cRegIdx + i * bReg + j),
+                            RegType(betaRegIdx), RegType(bRegIdx + j));
+                vmovups(ptr[regTmpCptr + j * RegBytes],
+                        RegType(cRegIdx + i * bReg + j));
+            }
+            if (bMaskReg > 0) {
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    vmaskmovps(Ymm(bRegIdx + bFullReg), Ymm(maskRegIdx),
+                               ptr[regTmpCptr + bFullReg * RegBytes]);
+                    vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
+                                Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
+                    vmaskmovps(ptr[regTmpCptr + bFullReg * RegBytes],
+                               Ymm(maskRegIdx),
+                               Ymm(cRegIdx + i * bReg + bFullReg));
+                } else {
+                    for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                        vmovups(RegType(bRegIdx + maskI)
+                                    | fringeMask[maskI - bFullReg],
+                                ptr[regTmpCptr + maskI * RegBytes]);
+                        vfmadd231ps(RegType(cRegIdx + i * bReg + maskI),
+                                    RegType(betaRegIdx),
+                                    RegType(bRegIdx + maskI));
+                        vmovups(ptr[regTmpCptr + maskI * RegBytes]
+                                    | fringeMask[maskI - bFullReg],
+                                RegType(cRegIdx + i * bReg + maskI));
+                    }
+                }
+            }
+            add(regTmpCptr, regRsC);
+        }
+        jmp(".afterStoreResultRowMajor", T_NEAR);
+    }
+
+    L(".storeResultRowMajorBZ");
     for (int i = 0; i < MR; i++) {
         for (int j = 0; j < bFullReg; j++) {
             // Regular store
@@ -340,6 +395,7 @@ jitGEMMF32<KType>::storeResultRowMajor()
         }
         add(regTmpCptr, regRsC);
     }
+    L(".afterStoreResultRowMajor");
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -349,9 +405,9 @@ jitGEMMF32<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 {
     stackPtr = stackFrame.p[0];
 
-    regTmpAptr = stackFrame.t[0];
-    regBptr    = stackFrame.t[1];
-    regTmpCptr = stackFrame.t[2];
+    regTmpCptr = stackFrame.t[0];
+    regTmpAptr = stackFrame.t[1];
+    regBptr    = stackFrame.t[2];
     regRsA     = stackFrame.t[3];
     regCsA     = stackFrame.t[4];
     regRsB     = stackFrame.t[5];
@@ -421,6 +477,21 @@ jitGEMMF32<KType>::scaleBeta()
         return scaleBetaRowMajor();
     }
 
+    // broadcast beta value
+    int betaRegIdx    = aRegIdx;
+    int scratchRegIdx = bRegIdx;
+    mov(regTmp2, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
+    vbroadcastss(RegType(betaRegIdx), ptr[regTmp2]);
+
+    // check if beta is 0
+    vxorps(RegType(scratchRegIdx), RegType(scratchRegIdx),
+           RegType(scratchRegIdx));
+    vucomiss(Xmm(betaRegIdx), Xmm(scratchRegIdx));
+    je(".end", T_NEAR);
+
+    // copy c address from regCptr
+    mov(regTmpCptr, regCPtr);
+
     // Load cs_c value and check if cs_c is 1
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
     cmp(regTmp1, 1);
@@ -430,6 +501,7 @@ jitGEMMF32<KType>::scaleBeta()
     L(".scaleBetaRowMajor");
     RETURN_IF_ERROR(scaleBetaRowMajor());
     L(".end");
+
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -557,6 +629,15 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
     scratch_reg_queue.push(offsets2RegIdx);
     scratch_reg_queue.push(betaRegIdx);
 
+    jmp("offsets_end", T_NEAR);
+    align(64);
+    L(offsets);
+    int64_t offsets[16] = {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+    };
+    db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
+    L("offsets_end");
+
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -644,14 +725,6 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
         RETURN_IF_ERROR(scaleAlpha());
     }
 
-    // To-Do: add support for beta scaling if beta is 1 using vaddps
-    if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
-        // skip beta scaling if beta is 0
-    } else {
-        // beta scaling
-        RETURN_IF_ERROR(scaleBeta());
-    }
-
     // check if is_last_k is set
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
@@ -661,6 +734,17 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
 
     // Create and set up kernelOphandler if there are post-ops
     if (!params.kernelOps.empty()) {
+
+        // post-ops are applied in the last k iteration, so we need to
+        // scale beta before applying post-ops
+        // To-Do: add support for beta scaling if beta is 1 using vaddps
+        if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
+            // skip beta scaling if beta is 0
+        } else {
+            // beta scaling
+            RETURN_IF_ERROR(scaleBeta());
+        }
+
         gen::kernelOpsHandler kernelOpsHandler(this, params.MR, params.NR,
                                                params.useMask, cRegIdx, cReg,
                                                params.kType);
@@ -672,11 +756,23 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
         // Otherwise a bug was observed whereby the address of gelu constants
         // inside the class turned out to be beyond what JIT can access.
         kernelOpsHandler.generateKernelOpsAttributes();
+
+        // store result without fusing beta with store
+        RETURN_IF_ERROR(storeResult(false));
+        jmp(".AfterStore", T_NEAR);
     }
 
     L(label_store_result);
     // store C
-    RETURN_IF_ERROR(storeResult());
+    if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
+        // skip beta scaling if beta is 0
+        RETURN_IF_ERROR(storeResult(false));
+    } else {
+        // beta scaling
+        RETURN_IF_ERROR(storeResult(true));
+    }
+
+    L(".AfterStore");
 
     if (params.mLoop) {
         // get A pointer from stack
