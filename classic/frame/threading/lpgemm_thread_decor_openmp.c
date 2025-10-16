@@ -356,10 +356,10 @@ batch_lpgemm_s32o32_get_threading(md_t                group_size,
     } else if ((*n_gemms_in_parallel) > 1) {
         // if n_threads_per_gemm <= 1 and n_gemms_in_parallel > 1
         // set ic, jc ways to 1 and n_threads to n_gemms_in_parallel
-        *n_threads           = *n_gemms_in_parallel;
-        *n_threads_per_gemm  = 1;
-        *jc_ways             = 1;
-        *ic_ways             = 1;
+        *n_threads          = *n_gemms_in_parallel;
+        *n_threads_per_gemm = 1;
+        *jc_ways            = 1;
+        *ic_ways            = 1;
     } else {
         // Setting all the values to 1 in case n_threads <= 1. This ensures
         // the threading parameters are valid.
@@ -535,10 +535,10 @@ batch_lpgemm_bf16bf16f32of32_get_threading(md_t        group_size,
     } else if ((*n_gemms_in_parallel) > 1) {
         // if n_threads_per_gemm <= 1 and n_gemms_in_parallel > 1
         // set ic, jc ways to 1 and n_threads to n_gemms_in_parallel
-        *n_threads           = *n_gemms_in_parallel;
-        *n_threads_per_gemm  = 1;
-        *jc_ways             = 1;
-        *ic_ways             = 1;
+        *n_threads          = *n_gemms_in_parallel;
+        *n_threads_per_gemm = 1;
+        *jc_ways            = 1;
+        *ic_ways            = 1;
     } else {
         // Setting all the values to 1 in case n_threads <= 1. This ensures
         // the threading parameters are valid.
@@ -696,10 +696,10 @@ batch_lpgemm_f32f32f32of32_get_threading(md_t        group_size,
     } else if ((*n_gemms_in_parallel) > 1) {
         // if n_threads_per_gemm <= 1 and n_gemms_in_parallel > 1
         // set ic, jc ways to 1 and n_threads to n_gemms_in_parallel
-        *n_threads           = *n_gemms_in_parallel;
-        *n_threads_per_gemm  = 1;
-        *jc_ways             = 1;
-        *ic_ways             = 1;
+        *n_threads          = *n_gemms_in_parallel;
+        *n_threads_per_gemm = 1;
+        *jc_ways            = 1;
+        *ic_ways            = 1;
     } else {
         // Setting all the values to 1 in case n_threads <= 1. This ensures
         // the threading parameters are valid.

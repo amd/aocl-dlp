@@ -319,6 +319,8 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
 {
     mov(regTmpCptr, regCPtr);
 
+    inLocalLabel();
+
     // if fuseBetaWithStore is true, then we need to check if beta is zero
     // during run-time. This is majorly done to avoid accessing of beta value
     // if original beta is 0 during first k iteration.
@@ -396,6 +398,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         add(regTmpCptr, regRsC);
     }
     L(".afterStoreResultRowMajor");
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
