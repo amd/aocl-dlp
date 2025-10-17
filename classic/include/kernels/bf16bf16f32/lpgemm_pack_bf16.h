@@ -151,8 +151,20 @@ unpackb_nr64_bf16_f32(const bfloat16* b,
                       const md_t      KC,
                       const md_t      NC,
                       md_t            rs_b,
-                      md_t            cs_b,
-                      bool            is_n_one);
+                      md_t            cs_b);
+
+// Optimized GEMV conversion for true K=1 matrices with contiguous output
+void
+cvt_bf16_f32_gemv_row_major(float*          cvt_buffer,
+                            const bfloat16* a,
+                            const md_t      rs_a,
+                            const md_t      MC);
+
+// Optimized GEMV unpacking for true N=1 reordered matrices (contiguous storage)
+void
+unpackb_nr64_bf16_f32_gemv(const bfloat16* b,
+                           float*          unpack_b_buffer,
+                           const md_t      KC);
 
 void
 cvt_bf16_f32(float*          cvt_buffer,
