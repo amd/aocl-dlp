@@ -41,6 +41,22 @@ using namespace dlp::jit;
 using namespace dlp::kernels;
 using namespace dlp::utils;
 
+// function to return kernel family name string using kdtype as argument
+std::string
+get_kernel_family_name(kernelDatatype kDtype)
+{
+    switch (kDtype) {
+        case kernelDatatype::f32f32f32of32:
+            return "FP32JitKernel";
+        case kernelDatatype::bf16bf16f32of32:
+            return "BF16JitKernel";
+        case kernelDatatype::bf16bf16f32obf16:
+            return "BF16JitKernel";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 dlp_kernel_hndl_t
 dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
                              char              storage_format,
@@ -93,9 +109,7 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
             kernPtr = kernelBaseRef(nullptr);
         } else {
             auto retVal = dlpKernelRegisterInstance().registerGemmKernel(
-                std::move(kB),
-                "JitKernel"); // TODO : Add a utility function to get the kernel
-                              // name based on the kernel datatype
+                std::move(kB), get_kernel_family_name(kDType));
             if (retVal != kernelFrameError::success) {
                 std::cout << "Jit kernel registration failed." << std::endl;
                 std::cout << "Exiting..." << std::endl;
@@ -163,6 +177,7 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
             A,    B,    C,    m,     k,    rs_a,          cs_a,         rs_b,
             cs_b, rs_c, cs_c, alpha, beta, post_ops_list, post_ops_attr
         };
+
         kernelBase* kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
         kB->operator()(std::addressof(gemvN1ParamsIn));
     } else {

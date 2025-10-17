@@ -712,6 +712,12 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
         return std::nullopt;
     }
 
+    if (gemmIn->n == 1) {
+        mr       = 16;
+        nr       = 1;
+        k_unroll = 1; // k-unroll is 1 for GEMV N1
+    }
+
     kernel_frame::kernelInfo kI{ mr,
                                  nr,
                                  0,

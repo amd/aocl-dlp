@@ -271,6 +271,7 @@ struct gemvN1Params : public kernelParams
     uint8_t                kmask_avx512_256;
     uint16_t               mmask_avx512;
     uint16_t               kmask_avx512;
+    uint32_t               kmask_bf16_avx512;
     lpgemm_post_op*        kernelOpsList; // List of post-ops
     lpgemm_post_op_attr    kernelOpsAttr; // Attributes for post-ops
 

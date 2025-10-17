@@ -152,10 +152,19 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
                 a_use = pack_a_buffer_bf16;
             }
             // Call lpgemv_n_one kernel
-            lpgemv_n_one_bf16bf16f32of32(mc0, k, a_use, rs_a_use, cs_a_use,
-                                         mtag_a, b_use, rs_b_use, cs_b_use,
-                                         mtag_b, c_use, rs_c, cs_c, alpha, beta,
-                                         MR, KC, post_op_list, &post_ops_attr);
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+                                   (float*)a_use, rs_a_use, cs_a_use, 1,
+                                   (float*)b_use, rs_b_use, cs_b_use, 0, 0,
+                                   c_use, rs_c, cs_c, (void*)&alpha,
+                                   (void*)&beta, post_op_list, post_ops_attr);
+
+            } else {
+                lpgemv_n_one_bf16bf16f32of32(
+                    mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
+                    post_op_list, &post_ops_attr);
+            }
         }
 
         // Release pack buffers
