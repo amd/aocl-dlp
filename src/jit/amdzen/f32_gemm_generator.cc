@@ -210,7 +210,7 @@ jitGEMMF32<KType>::storeResult(bool fuseBetaWithStore)
     je(".storeResultRowMajor", T_NEAR);
     // RETURN_IF_ERROR(storeResultColumnMajor());
     x86gen::avx512TransposeGenerator transposeGenerator(
-        this, MR, NR, useMask, cRegIdx, cReg, regTmpCptr);
+        this, MR, NR, useMask, numMaskRegs, cRegIdx, cReg, regTmpCptr);
     RETURN_IF_ERROR(transposeGenerator.generateTranspose(
         stackPtr, dlp::jit::jitAlgoType::gemm, fuseBetaWithStore));
     jmp(".end", T_NEAR);
@@ -280,7 +280,7 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
     for (int i = 0; i < MR; i++) {
         mov(regTmp2, regTmpCptr);
         for (int j = 0; j < bFullReg; j++) {
-            resetMasks(false);
+            resetMasks(false, 0);
             vextractf32x8(halfRegType(scratchReg2),
                           RegType(cRegIdx + i * bReg + j), 1);
             vscatterqps(ptr[regTmp2 + RegType(offsets1RegIdx) * 1] | mask0,
@@ -291,13 +291,17 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
             lea(regTmp2, ptr[regTmp2 + regTmp1]);
         }
         if (bMaskReg > 0) {
-            resetMasks(true);
-            vextractf32x8(halfRegType(scratchReg2),
-                          RegType(cRegIdx + i * bReg + bFullReg), 1);
-            vscatterqps(ptr[regTmp2 + RegType(offsets1RegIdx) * 1] | mask0,
-                        halfRegType(cRegIdx + i * bReg + bFullReg));
-            vscatterqps(ptr[regTmp2 + RegType(offsets2RegIdx) * 1] | mask1,
-                        halfRegType(scratchReg2));
+            for (int idx = 0; idx < numMaskRegs; idx++) {
+                resetMasks(true, idx);
+                vextractf32x8(halfRegType(scratchReg2),
+                              RegType(cRegIdx + i * bReg + bFullReg), 1);
+                vscatterqps(ptr[regTmp2 + RegType(offsets1RegIdx) * 1] | mask0,
+                            halfRegType(cRegIdx + i * bReg + bFullReg));
+                vscatterqps(ptr[regTmp2 + RegType(offsets2RegIdx) * 1] | mask1,
+                            halfRegType(scratchReg2));
+                // move to next set of cols
+                lea(regTmp2, ptr[regTmp2 + regTmp1]);
+            }
         }
         add(regTmpCptr, sizeof(float));
     }
@@ -509,16 +513,44 @@ jitGEMMF32<KType>::scaleBeta()
 }
 
 template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::allocateMaskRegisters()
+{
+    if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    // Right now, numMaskRegs is limited to 5 in DE.
+    // so, we are sure that 2 masks are available for gather/scatter operations.
+    // TODO: handle the case when numMaskRegs > 5.
+    if (dlp::kernels::maxNumMasks < numMaskRegs + 2) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    // This same logic will be copied to post-ops and transpose generator
+    // modules to ensure handshake between GEMM and post-ops/transpose
+    // generator. If this logic changes, we need to change the logic in
+    // post-ops/transpose generator module as well.
+    for (int i = 0; i < numMaskRegs; i++) {
+        fringeMask[i] = Opmask(i + 1);
+    }
+
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        mask0 = Opmask(numMaskRegs + 1);
+        mask1 = Opmask(numMaskRegs + 2);
+    }
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
 void
-jitGEMMF32<KType>::resetMasks(bool mask)
+jitGEMMF32<KType>::resetMasks(bool mask, int idx)
 {
     if (mask) {
         // Load lower 8 bits of maskF32
-        kmovb(mask0,
-              ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)]);
+        kmovb(mask0, fringeMask[idx]);
         // Load upper 8 bits of maskF32
-        kmovb(mask1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)
-                         + sizeof(uint8_t)]);
+        kshiftrw(mask1, fringeMask[idx], 8);
     } else {
         kxnorw(mask0, mask0, mask0);
         kxnorw(mask1, mask1, mask1);
@@ -595,7 +627,7 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
     for (int i = 0; i < MR; i++) {
         mov(regTmp2, regTmpCptr);
         for (int j = 0; j < bFullReg; j++) {
-            resetMasks(false);
+            resetMasks(false, 0);
 
             vgatherqps(halfRegType(scratchReg1) | mask0,
                        ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
@@ -611,16 +643,21 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
             lea(regTmp2, ptr[regTmp2 + regTmp1]);
         }
         if (bMaskReg > 0) {
-            resetMasks(true);
-            vgatherqps(halfRegType(scratchReg1) | mask0,
-                       ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
-            vgatherqps(halfRegType(scratchReg2) | mask1,
-                       ptr[regTmp2 + RegType(offsets2RegIdx) * 1]);
-            vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
-                         halfRegType(scratchReg2), 1);
-            // fma with beta
-            vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg),
-                        RegType(scratchReg1), RegType(betaRegIdx));
+            for (int idx = 0; idx < numMaskRegs; idx++) {
+                resetMasks(true, idx);
+                vgatherqps(halfRegType(scratchReg1) | mask0,
+                           ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
+                vgatherqps(halfRegType(scratchReg2) | mask1,
+                           ptr[regTmp2 + RegType(offsets2RegIdx) * 1]);
+                vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
+                             halfRegType(scratchReg2), 1);
+                // fma with beta
+                vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg + idx),
+                            RegType(scratchReg1), RegType(betaRegIdx));
+
+                // move to next set of cols
+                lea(regTmp2, ptr[regTmp2 + regTmp1]);
+            }
         }
         add(regTmpCptr, sizeof(float));
     }
@@ -751,7 +788,7 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
 
         RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
             params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
-            params.NR, params.useMask, cRegIdx, cReg)));
+            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg)));
 
         // The gelu constants are embedded within the generated JIT kernel.
         // Otherwise a bug was observed whereby the address of gelu constants
@@ -765,13 +802,9 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
 
     L(label_store_result);
     // store C
-    if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
-        // skip beta scaling if beta is 0
-        RETURN_IF_ERROR(storeResult(false));
-    } else {
-        // beta scaling
-        RETURN_IF_ERROR(storeResult(true));
-    }
+    // skip fusing beta if betaScalingType is zero
+    RETURN_IF_ERROR(storeResult(
+        !(params.betaScalingType == dlp::kernel_frame::scalingType::zero)));
 
     L(".AfterStore");
 
@@ -816,6 +849,7 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
     numMaskRegs = params.numMaskRegs;
 
     RETURN_IF_ERROR(allocateReg());
+    RETURN_IF_ERROR(allocateMaskRegisters());
 
     // There are 14 general purpose(64 bit) registers.
     // StackFrame manages these registers, since we are using

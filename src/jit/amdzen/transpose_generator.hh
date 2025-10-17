@@ -41,6 +41,7 @@ class avx512TransposeGenerator
                              int                   MR,
                              int                   NR,
                              bool                  useMask,
+                             int                   numMaskRegs,
                              int                   cRegStartIdx,
                              int                   cRegCount,
                              Xbyak::Reg64&         regCPtr);
@@ -57,8 +58,11 @@ class avx512TransposeGenerator
         utils::kernelInstrType::avx512_zmm_32_reg>;
 
     const Xbyak::Reg64 &regCPtr, regCjr, regCsC, regRsCBlock, regCsCBlock,
-        regNleft, regTmp1, regTmp2, regTmp3;
-    const Xbyak::Reg32& regTmpHalf;
+        regNleft, regTmp1, regTmp2, regTmp3, regTmp4;
+    const Xbyak::Reg32 &regTmpHalf, regNleftLocal;
+
+    Xbyak::Opmask fringeMask[dlp::kernels::maxNumMasks];
+    Xbyak::Opmask mrMask;
 
     int numScratchRegs;
 
@@ -68,10 +72,13 @@ class avx512TransposeGenerator
     int MR, NR, useMask;
     // These will be the dimensions of the block that is being transposed
     int MR_local, NR_local;
-    int cRegStartIdx, cRegCount;
-    int numRegs        = Traits::numRegs;
-    int RegBytes       = Traits::regBytes;
-    int numElemsPerReg = Traits::regBytes / sizeof(float);
+    int numMaskRegs;
+    // this bool indicates that an lt kernel is being generated
+    bool variableStores;
+    int  cRegStartIdx, cRegCount;
+    int  numRegs        = Traits::numRegs;
+    int  RegBytes       = Traits::regBytes;
+    int  numElemsPerReg = Traits::regBytes / sizeof(float);
 
     int numFullNRBlocks, numMaskNRBlocks, numNRBlocks;
     int numFullMRBlocks, numMaskMRBlocks, numMRBlocks;
@@ -114,6 +121,8 @@ class avx512TransposeGenerator
         scratch_reg_queue.pop();
         return reg;
     }
+
+    void generateNleftLocal(int j);
 
     int  calculateScratchReq();
     void setInitialIndices(int row_idx, int col_idx);

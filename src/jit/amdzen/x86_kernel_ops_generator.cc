@@ -63,6 +63,7 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
     int                             MR,
     int                             NR,
     bool                            useMask,
+    int                             numMaskRegs,
     int                             cRegStartIdx,
     int                             cRegCount)
 {
@@ -105,13 +106,13 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
 
         if (useMask) {
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-                jit_->kmovw(maskReg,
+                jit_->kmovw(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvM1Params,
                                                  nmask_avx512)]);
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
-                jit_->kmovb(maskReg,
+                jit_->kmovb(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvM1Params,
                                                  nmask_avx512_256)]);
@@ -150,13 +151,13 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
 
         if (useMask) {
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-                jit_->kmovw(maskReg,
+                jit_->kmovw(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvN1Params,
                                                  mmask_avx512)]);
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
-                jit_->kmovb(maskReg,
+                jit_->kmovb(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvN1Params,
                                                  mmask_avx512_256)]);
@@ -193,27 +194,18 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
 
         if (useMask) {
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-                jit_->kmovw(
-                    maskReg,
-                    jit_->ptr[postOpsArgWrapperPtrReg
-                              + offsetof(dlp::kernels::gemmParams, maskF32)]);
-                // These two values are used in matadd and matmul post-ops
-                // in cases where csC is not 1.
-                // Load lower 8 bits of maskF32
-                jit_->kmovb(
-                    mask2,
-                    jit_->ptr[postOpsArgWrapperPtrReg
-                              + offsetof(dlp::kernels::gemmParams, maskF32)]);
-                // Load upper 8 bits of maskF32
-                jit_->kmovb(
-                    mask3,
-                    jit_->ptr[postOpsArgWrapperPtrReg
-                              + offsetof(dlp::kernels::gemmParams, maskF32)
-                              + sizeof(uint8_t)]);
+                // Assuming that the mask registers are carried forward from the
+                // GEMM kernel If the mask allocation changes in the caller
+                // function(GEMM, GEMV, ELTWISE), we need to change the logic
+                // here.
+                for (int i = 0; i < numMaskRegs; i++) {
+                    fringeMask[i] = Opmask(i + 1);
+                }
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
+                fringeMask[0] = Opmask(1);
                 jit_->kmovb(
-                    maskReg,
+                    fringeMask[0],
                     jit_->ptr[postOpsArgWrapperPtrReg
                               + offsetof(dlp::kernels::gemmParams, maskF32_8)]);
             } else if constexpr (KType
@@ -231,6 +223,12 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                 // the support gets enabled.
                 return jitGeneratorError::notSupported;
             }
+        }
+        // set mask0 and mask1 for avx512_zmm_32_reg to be used for matadd and
+        // matmul post-ops
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            mask0 = Opmask(numMaskRegs + 1);
+            mask1 = Opmask(numMaskRegs + 2);
         }
     } else {
         // This is an algorithm type not supported by our JIT kernels
@@ -266,7 +264,7 @@ kernelOpsGeneratorX86<KType>::setPostOpsContext(int  MR_param,
 
     int numElemsPerReg = Traits::regBytes / sizeof(float);
     numFullRegsPerRow  = NR / numElemsPerReg;
-    numMaskRegsPerRow  = useMask ? 1 : 0;
+    numMaskRegsPerRow  = useMask ? numMaskRegs : 0;
     numRegsPerRow      = numFullRegsPerRow + numMaskRegsPerRow;
     // Assuming that we will always use registers from last for
     // accumulators.For example, if we need 24 accumulators, we will use
@@ -464,7 +462,7 @@ kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 jit_->vmaskmovps(destReg, ymmMask, src);
             } else {
-                jit_->vmovups(destReg | maskReg, src);
+                jit_->vmovups(destReg | fringeMask[0], src);
             }
         } else {
             jit_->vmovups(destReg, src);
@@ -510,7 +508,7 @@ kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
                 }
             } else {
                 // AVX512: Use native masked load
-                jit_->vmovdqu16(tmpReg | maskReg, src);
+                jit_->vmovdqu16(tmpReg | fringeMask[0], src);
             }
         } else {
             // Full Load: Load all elements
@@ -560,7 +558,7 @@ kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
                 }
             } else {
                 // AVX512: Use masked load into XMM (16 bytes max)
-                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx) | maskReg, src);
+                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx) | fringeMask[0], src);
             }
         } else {
             // Full Load: Load all elements
@@ -610,7 +608,7 @@ kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
                 }
             } else {
                 // AVX512: Use masked load into XMM (16 bytes max)
-                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx) | maskReg, src);
+                jit_->vmovdqu8(Xbyak::Xmm(tmpRegIdx) | fringeMask[0], src);
             }
         } else {
             // Full Load: Load all elements
@@ -637,7 +635,7 @@ kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 jit_->vpmaskmovd(destReg, ymmMask, src);
             } else {
-                jit_->vmovdqu32(destReg | maskReg, src);
+                jit_->vmovdqu32(destReg | fringeMask[0], src);
             }
         } else {
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
@@ -1283,11 +1281,13 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplColMat(matOpType      opType,
 
 template<utils::kernelInstrType KType>
 void
-kernelOpsGeneratorX86<KType>::resetMasks(bool mask)
+kernelOpsGeneratorX86<KType>::resetMasks(bool mask, int idx)
 {
     if (mask) {
-        jit_->kmovb(mask0, mask2);
-        jit_->kmovb(mask1, mask3);
+        // Load lower 8 bits of maskF32
+        jit_->kmovb(mask0, fringeMask[idx]);
+        // Load upper 8 bits of maskF32
+        jit_->kshiftrw(mask1, fringeMask[idx], 8);
     } else {
         jit_->kxnorw(mask0, mask0, mask0);
         jit_->kxnorw(mask1, mask1, mask1);
@@ -1355,7 +1355,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
                     jit_->vmaskmovps(RegType(matRegIdx), ymmMask,
                                      jit_->ptr[regTmp2 + loadIdx]);
                 } else {
-                    jit_->vmovups(RegType(matRegIdx) | maskReg,
+                    jit_->vmovups(RegType(matRegIdx) | fringeMask[0],
                                   jit_->ptr[regTmp2 + loadIdx]);
                 }
             } else {
@@ -1538,11 +1538,11 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
     int scratchReg2 = scratch_reg_queue.front();
     scratch_reg_queue.pop();
 
-    auto opLambdaColMat = [&](matOpType opType, int sfRegIdx, int accumRegIdx,
+    auto opLambdaColMat = [&](int sfRegIdx, int mask_idx, int accumRegIdx,
                               bool useMask) -> jitGeneratorError {
         // load matOp elements
         if constexpr (std::is_same_v<matOpDt, float>) {
-            resetMasks(useMask);
+            resetMasks(useMask, mask_idx);
             jit_->vgatherqps(halfRegType(matRegIdx) | mask0,
                              jit_->ptr[regTmp4 + RegType(offsets1RegIdx) * 1]);
             jit_->vgatherqps(halfRegType(scratchReg2) | mask1,
@@ -1580,9 +1580,8 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
                                            false);
             }
 
-            jitGeneratorError err =
-                opLambdaColMat(opType, sf_reg,
-                               (cRegStartIdx + (i * numRegsPerRow) + j), false);
+            jitGeneratorError err = opLambdaColMat(
+                sf_reg, 0, (cRegStartIdx + (i * numRegsPerRow) + j), false);
             if (err != jitGeneratorError::success) {
                 return err;
             }
@@ -1591,18 +1590,26 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
             jit_->add(regTmp4, regTmp3);
         }
         if (numMaskRegsPerRow > 0) {
-            if (sclType == matOpScaleType::rowVector) {
-                loadAndConvertVector<sfDt>(
-                    RegType(sf_reg),
-                    jit_->ptr[regTmp1 + numFullRegsPerRow * sfLoadBytes],
-                    false);
-            }
+            for (int k = 0; k < numMaskRegsPerRow; k++) {
 
-            jitGeneratorError err = opLambdaColMat(
-                opType, sf_reg,
-                (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow), true);
-            if (err != jitGeneratorError::success) {
-                return err;
+                if (sclType == matOpScaleType::rowVector) {
+                    loadAndConvertVector<sfDt>(
+                        RegType(sf_reg),
+                        jit_->ptr[regTmp1 + numFullRegsPerRow * sfLoadBytes],
+                        false);
+                }
+
+                jitGeneratorError err =
+                    opLambdaColMat(sf_reg, k,
+                                   (cRegStartIdx + (i * numRegsPerRow)
+                                    + numFullRegsPerRow + k),
+                                   true);
+                if (err != jitGeneratorError::success) {
+                    return err;
+                }
+
+                // move to next 16 elements.
+                jit_->add(regTmp4, regTmp3);
             }
         }
         // move matadd pointer to next row
@@ -1627,13 +1634,13 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
     jit_->add(regTmp7, regTmp6);
     jit_->add(regTmp2, regTmp7);
 
-    auto opLambdaRowMat = [&](matOpType opType, int sfRegIdx, int matRegIdx,
-                              int accumRegIdx, int sclIdx, int loadIdx,
+    auto opLambdaRowMat = [&](int sfRegIdx, int matRegIdx, int accumRegIdx,
+                              int sclIdx, int loadIdx,
                               bool useMask) -> jitGeneratorError {
         // load matOp elements
         if constexpr (std::is_same_v<matOpDt, float>) {
             if (useMask) {
-                jit_->vmovups(RegType(matRegIdx) | maskReg,
+                jit_->vmovups(RegType(matRegIdx) | fringeMask[0],
                               jit_->ptr[regTmp2 + loadIdx]);
             } else {
                 jit_->vmovups(RegType(matRegIdx), jit_->ptr[regTmp2 + loadIdx]);
@@ -1666,10 +1673,9 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
                 sclIdx = j;
             }
 
-            jitGeneratorError err =
-                opLambdaRowMat(opType, sf_reg, matRegIdx,
-                               (cRegStartIdx + (i * numRegsPerRow) + j), sclIdx,
-                               (j * RegBytes), false);
+            jitGeneratorError err = opLambdaRowMat(
+                sf_reg, matRegIdx, (cRegStartIdx + (i * numRegsPerRow) + j),
+                sclIdx, (j * RegBytes), false);
             if (err != jitGeneratorError::success) {
                 return err;
             }
@@ -1679,7 +1685,7 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
                 sclIdx = numFullRegsPerRow;
             }
             jitGeneratorError err = opLambdaRowMat(
-                opType, sf_reg, matRegIdx,
+                sf_reg, matRegIdx,
                 (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow),
                 sclIdx, (numFullRegsPerRow * RegBytes), true);
 

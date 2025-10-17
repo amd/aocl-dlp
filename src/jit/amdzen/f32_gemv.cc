@@ -755,7 +755,7 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         if (kernelOpsHandlerPtr) {
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
-                params.MR, 1, false, accumBaseIdx, yReg)));
+                params.MR, 1, false, 1, accumBaseIdx, yReg)));
 
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
         }
@@ -864,7 +864,7 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         if (kernelOpsHandlerPtr) {
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
-                params.M_LEFT, 1, true, accumBaseIdx, M_LEFT / simdWidth)));
+                params.M_LEFT, 1, true, 1, accumBaseIdx, M_LEFT / simdWidth)));
 
             // This call will skip embedding tables (already done in main loop)
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
@@ -1647,7 +1647,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         if (kernelOpsHandlerPtr) {
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
-                params.NR, false, accumBaseIdx, yReg)));
+                params.NR, false, 1, accumBaseIdx, yReg)));
 
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
         }
@@ -1820,7 +1820,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         if (kernelOpsHandlerPtr) {
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
-                params.N_LEFT, true, accumBaseIdx, N_LEFT / simdWidth)));
+                params.N_LEFT, true, 1, accumBaseIdx, N_LEFT / simdWidth)));
 
             // This call will skip embedding tables (already done in main loop)
             kernelOpsHandlerPtr->generateKernelOpsAttributes();

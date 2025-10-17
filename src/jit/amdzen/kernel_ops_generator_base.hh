@@ -48,6 +48,7 @@ class kernelOpsGeneratorInterface
         int                   MR,
         int                   NR,
         bool                  useMask,
+        int                   numMaskRegs,
         int                   cRegStartIdx,
         int                   cRegCount) = 0;
     virtual dlp::jit::jitGeneratorError bias(

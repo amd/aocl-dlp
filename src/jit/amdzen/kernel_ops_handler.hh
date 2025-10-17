@@ -76,13 +76,14 @@ class kernelOpsHandler
         int                   MR,
         int                   NR,
         bool                  useMask,
+        int                   numMaskRegs,
         int                   cRegStartIdx,
         int                   cRegCount)
     {
         if (kOpsGen) {
             return kOpsGen->generateKernelOps(
                 kernelOps, postOpsArgWrapperPtrReg, algoType, MR, NR, useMask,
-                cRegStartIdx, cRegCount);
+                numMaskRegs, cRegStartIdx, cRegCount);
         }
         return dlp::jit::jitGeneratorError::error;
     }

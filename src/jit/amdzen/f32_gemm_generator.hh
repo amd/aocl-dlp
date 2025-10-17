@@ -82,12 +82,10 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
 
     Xbyak::Label offsets;
 
-    Xbyak::Opmask fringeMask[dlp::kernels::maxNumMasks] = { k2, k3, k6, k7,
-                                                            k1, k5, k4 };
+    Xbyak::Opmask fringeMask[dlp::kernels::maxNumMasks];
 
     // 4 masks to handle transpose C operations
-    Xbyak::Opmask mask0 = k4;
-    Xbyak::Opmask mask1 = k5;
+    Xbyak::Opmask mask0, mask1;
 
     bool useMask =
         false; // Flag to indicate if masked instructions are generated
@@ -125,7 +123,8 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError scaleBetaColumnMajor();
     dlp::jit::jitGeneratorError scaleBetaRowMajor();
 
-    void resetMasks(bool mask);
+    void                        resetMasks(bool mask, int idx);
+    dlp::jit::jitGeneratorError allocateMaskRegisters();
 
     dlp::jit::jitGeneratorError scaleBeta();
 };

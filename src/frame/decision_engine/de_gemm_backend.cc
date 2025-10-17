@@ -553,13 +553,12 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
     } else {
         bool allLtFringeKernels = false;
         // For now masked lt fringes can only be enabled on avx512 machines
-        // with zmm preferred instructions and with C being a row major
-        // matrix. Additionally to begin with, only enabling masked lt fringes
-        // when no post-ops are involved.
+        // with zmm preferred instructions. Additionally to begin with,
+        //  only enabling masked lt fringes when no post-ops are involved
+        // for row-major C matrix.
         if (isAvx512
             && (kInstPref
-                == kernel_frame::kernelInstrPreference::avx512_zmm_favour)
-            && (cs_c == 1)) {
+                == kernel_frame::kernelInstrPreference::avx512_zmm_favour)) {
             md_t availableMasks =
                 cpu_utils::cpuFeaturesInstance().getNumVectorMaskRegisters();
             md_t requiredMasks = nr / 16;
@@ -624,7 +623,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              betaScalingType,
                                              mtag_a,
                                              mtag_b,
-                                             false,
+                                             cs_c == 1 ? false
+                                                       : allLtFringeKernels,
                                              nullptr,
                                              0,
                                              anyKOpsOrder,

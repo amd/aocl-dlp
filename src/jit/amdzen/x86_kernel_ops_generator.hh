@@ -122,6 +122,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
         int                   MR,
         int                   NR,
         bool                  useMask,
+        int                   numMaskRegs,
         int                   cRegStartIdx,
         int                   cRegCount) override;
     dlp::jit::jitGeneratorError bias(
@@ -156,7 +157,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     int numRegs  = Traits::numRegs;
     int RegBytes = Traits::regBytes;
 
-    int MR, NR, useMask;
+    int MR, NR, useMask, numMaskRegs;
     int numFullRegsPerRow;
     int numMaskRegsPerRow;
     int numRegsPerRow;
@@ -359,14 +360,12 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
         return get_constant_T<double>(table_off, value_off);
     }
 
-    Xbyak::Label  erf_end;
-    Xbyak::Label  tables;
-    Xbyak::Label  table_store_end; // Instance-specific label for jump target
-    Xbyak::Opmask maskReg = Xbyak::Opmask(3);
-    Xbyak::Opmask mask0   = Xbyak::Opmask(4);
-    Xbyak::Opmask mask1   = Xbyak::Opmask(5);
-    Xbyak::Opmask mask2   = Xbyak::Opmask(6);
-    Xbyak::Opmask mask3   = Xbyak::Opmask(7);
+    Xbyak::Label erf_end;
+    Xbyak::Label tables;
+    Xbyak::Label table_store_end; // Instance-specific label for jump target
+
+    Xbyak::Opmask fringeMask[dlp::kernels::maxNumMasks];
+    Xbyak::Opmask mask0, mask1;
 
     Xbyak::Ymm ymmMask;
 
@@ -379,6 +378,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
         return reg;
     }
 
+    void resetMasks(bool mask, int idx);
     // Helper functions for scratch register management
     // Reserve destination registers from scratch pool and return saved state
     inline std::queue<RegType> reserveDestRegisters(int destRegStart, int count)
@@ -413,8 +413,6 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     {
         scratch_reg_queue = saved;
     }
-
-    void resetMasks(bool mask);
 
     // Helper to get the load bytes for a given type
     template<typename T>

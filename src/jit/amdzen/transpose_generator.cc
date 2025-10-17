@@ -116,19 +116,12 @@ avx512TransposeGenerator::permutePdR1Pair(
     jit_->vmovups(Zmm(scratch), Zmm(s1));
     jit_->vpermt2pd(Zmm(scratch), Zmm(sel1), Zmm(s2));
     curr_output[d1] = scratch;
-#ifdef GEN_TIME_NR_LOCAL
-    // Right now, NR based optimizations can't be done here
-    // because we can only get the n_left value during run-time
     if (NR_local > 8) {
         jit_->vpermt2pd(Zmm(s1), Zmm(sel2), Zmm(s2));
         curr_output[d2] = s1;
     } else {
         returnScratchReg(s1);
     }
-#else
-    jit_->vpermt2pd(Zmm(s1), Zmm(sel2), Zmm(s2));
-    curr_output[d2] = s1;
-#endif
     returnScratchReg(s2);
 }
 
@@ -140,19 +133,12 @@ avx512TransposeGenerator::permutePdR1(
     jit_->vmovups(Zmm(scratch), Zmm(s1));
     jit_->vpermt2pd(Zmm(scratch), Zmm(sel1), Zmm(s1));
     curr_output[d1] = scratch;
-#ifdef GEN_TIME_NR_LOCAL
-    // Right now, NR based optimizations can't be done here
-    // because we can only get the n_left value during run-time
     if (NR_local > 8) {
         jit_->vpermt2pd(Zmm(s1), Zmm(sel2), Zmm(s1));
         curr_output[d2] = s1;
     } else {
         returnScratchReg(s1);
     }
-#else
-    jit_->vpermt2pd(Zmm(s1), Zmm(sel2), Zmm(s1));
-    curr_output[d2] = s1;
-#endif
 }
 
 void
@@ -183,6 +169,7 @@ avx512TransposeGenerator::avx512TransposeGenerator(Xbyak::CodeGenerator* jit,
                                                    int                   MR,
                                                    int                   NR,
                                                    bool          useMask,
+                                                   int           numMaskRegs,
                                                    int           cRegStartIdx,
                                                    int           cRegCount,
                                                    Xbyak::Reg64& regCPtr)
@@ -196,12 +183,15 @@ avx512TransposeGenerator::avx512TransposeGenerator(Xbyak::CodeGenerator* jit,
     , regCsCBlock(jit->r11)
     , regNleft(jit->r12)
     , regTmp1(jit->r13)
-    , regTmp2(jit->rax)
-    , regTmp3(jit->rbx)
+    , regTmp2(jit->r14)
+    , regTmp3(jit->rax)
+    , regTmp4(jit->rbx)
     , regTmpHalf(jit->eax)
+    , regNleftLocal(jit->ebx)
     , MR(MR)
     , NR(NR)
     , useMask(useMask)
+    , numMaskRegs(numMaskRegs)
     , cRegStartIdx(cRegStartIdx)
     , cRegCount(cRegCount)
 {
@@ -230,7 +220,7 @@ avx512TransposeGenerator::setContext(
     const Xbyak::Reg64& postOpsArgWrapperPtrReg, bool fuseBetaWithStore)
 {
     numFullNRBlocks = NR / numElemsPerReg;
-    numMaskNRBlocks = useMask ? 1 : 0;
+    numMaskNRBlocks = useMask ? numMaskRegs : 0;
     numNRBlocks =
         numFullNRBlocks + numMaskNRBlocks; // set the context for the transpose
 
@@ -255,7 +245,16 @@ avx512TransposeGenerator::setContext(
     // so and with numElemsPerReg - 1 will give us n%numElemsPerReg
     jit_->mov(regNleft, jit_->ptr[postOpsArgWrapperPtrReg
                                   + offsetof(dlp::kernels::gemmParams, n)]);
-    jit_->and_(regNleft, numElemsPerReg - 1);
+
+    // this logic is copied from the gemm generator to ensure handshake
+    // between GEMM and transpose generator.
+    // If this logic changes, we need to change the logic in transpose generator
+    // as well.
+    for (int i = 0; i < numMaskRegs; i++) {
+        fringeMask[i] = Opmask(i + 1);
+    }
+
+    mrMask = Opmask(numMaskRegs + 1);
 
     if (fuseBetaWithStore) {
         betaRegIdx = getScratchReg();
@@ -282,6 +281,13 @@ avx512TransposeGenerator::setInitialIndices(int row_idx, int col_idx)
     }
 }
 
+void
+avx512TransposeGenerator::generateNleftLocal(int j)
+{
+    jit_->kmovw(regTmpHalf, fringeMask[j]);
+    jit_->popcnt(regNleftLocal, regTmpHalf);
+}
+
 dlp::jit::jitGeneratorError
 avx512TransposeGenerator::generateTranspose(
     const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
@@ -298,6 +304,7 @@ avx512TransposeGenerator::generateTranspose(
     rG.saveRegister(regTmp1);
     rG.saveRegister(regTmp2);
     rG.saveRegister(regTmp3);
+    rG.saveRegister(regTmp4);
 
     setContext(postOpsArgWrapperPtrReg, fuseBetaWithStore);
 
@@ -311,8 +318,17 @@ avx512TransposeGenerator::generateTranspose(
         for (int j = 0; j < numNRBlocks; j++) {
 
             // set the dimensions of the block
-            // NR_local is 0 indicates that we are handling the masking part
-            NR_local = (j == numFullNRBlocks) ? 0 : numElemsPerReg;
+            // Always setting NR_local to numElemsPerReg to avoid optimizations
+            // based on NR dimension.
+            // TODO: set it to variable when we pass n_left value at generation
+            // time.
+            NR_local = numElemsPerReg;
+
+            // hint that lt kernel is being generated and stores are variable
+            variableStores = (j >= numFullNRBlocks);
+            if (variableStores) {
+                generateNleftLocal(j - numFullNRBlocks);
+            }
 
             // Check if we have enough scratch registers for the current block
             int minScratchReq =
@@ -364,14 +380,8 @@ avx512TransposeGenerator::calculateScratchReq()
     }
 
     // 2 for selectors
-#ifdef GEN_TIME_NR_LOCAL
-    // Right now, NR based optimizations can't be done here
-    // because we can only get the n_left value during run-time
     numRegsAfterPermuteR1 = NR_local > 8 ? make_multiple_of(MR_local, 8)
                                          : make_multiple_of(MR_local, 8) / 2;
-#else
-    numRegsAfterPermuteR1 = make_multiple_of(MR_local, 8);
-#endif
     int scratchReqForStage3 =
         std::max(0, numRegsAfterPermuteR1 - numRegsAfterUnpackpd) + 2;
     if (MR_local <= 8) {
@@ -576,7 +586,7 @@ avx512TransposeGenerator::storeColumns_variableCount(const int* reg_idx,
                                                      int        numCols,
                                                      StoreOp    storeOp)
 {
-    if (NR_local != 0) {
+    if (!variableStores) {
         // Fixed number of columns - unroll completely
         for (int i = 0; i < numCols; i++) {
             storeOp(i, reg_idx[i], half_idx[i]);
@@ -591,7 +601,7 @@ avx512TransposeGenerator::storeColumns_variableCount(const int* reg_idx,
 
     for (int i = 0; i < numCols; i++) {
         // Check if we've stored enough columns
-        jit_->cmp(regTmp2, regNleft);
+        jit_->cmp(regTmp2, regNleftLocal);
         jit_->jge(done, jit_->T_NEAR);
 
         // Perform the store operation
@@ -617,13 +627,13 @@ avx512TransposeGenerator::store_4xNR(bool applyBetaScale)
     if (applyBetaScale) {
         auto betaScaleOp = [this](int col_idx, int reg_idx, int quarter_idx) {
             int cRegIdx = getScratchReg();
-            jit_->vmovups(Xmm(cRegIdx) | jit_->k6, jit_->ptr[regTmp1]);
+            jit_->vmovups(Xmm(cRegIdx) | mrMask, jit_->ptr[regTmp1]);
 
             int scratch = getScratchReg();
             jit_->vextractf32x4(Xmm(scratch), Zmm(curr_output[reg_idx]),
                                 quarter_idx);
             jit_->vfmadd231ps(Xmm(scratch), Xmm(betaRegIdx), Xmm(cRegIdx));
-            jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6, Xmm(scratch));
+            jit_->vmovups(jit_->ptr[regTmp1] | mrMask, Xmm(scratch));
             returnScratchReg(scratch);
 
             returnScratchReg(cRegIdx);
@@ -632,13 +642,13 @@ avx512TransposeGenerator::store_4xNR(bool applyBetaScale)
     } else {
         auto betaZeroOp = [this](int col_idx, int reg_idx, int quarter_idx) {
             if (quarter_idx == 0) {
-                jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6,
+                jit_->vmovups(jit_->ptr[regTmp1] | mrMask,
                               Zmm(curr_output[reg_idx]));
             } else {
                 int scratch = getScratchReg();
                 jit_->vextractf32x4(Xmm(scratch), Zmm(curr_output[reg_idx]),
                                     quarter_idx);
-                jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6, Xmm(scratch));
+                jit_->vmovups(jit_->ptr[regTmp1] | mrMask, Xmm(scratch));
                 returnScratchReg(scratch);
             }
         };
@@ -655,13 +665,13 @@ avx512TransposeGenerator::store_8xNR(bool applyBetaScale)
     if (applyBetaScale) {
         auto betaScaleOp = [this](int col_idx, int reg_idx, int half_idx) {
             int cRegIdx = getScratchReg();
-            jit_->vmovups(Ymm(cRegIdx) | jit_->k6, jit_->ptr[regTmp1]);
+            jit_->vmovups(Ymm(cRegIdx) | mrMask, jit_->ptr[regTmp1]);
 
             int scratch = getScratchReg();
             jit_->vextractf32x8(Ymm(scratch), Zmm(curr_output[reg_idx]),
                                 half_idx);
             jit_->vfmadd231ps(Ymm(scratch), Ymm(betaRegIdx), Ymm(cRegIdx));
-            jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6, Ymm(scratch));
+            jit_->vmovups(jit_->ptr[regTmp1] | mrMask, Ymm(scratch));
 
             returnScratchReg(scratch);
             returnScratchReg(cRegIdx);
@@ -670,13 +680,13 @@ avx512TransposeGenerator::store_8xNR(bool applyBetaScale)
     } else {
         auto betaZeroOp = [this](int col_idx, int reg_idx, int half_idx) {
             if (half_idx == 0) {
-                jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6,
+                jit_->vmovups(jit_->ptr[regTmp1] | mrMask,
                               Ymm(curr_output[reg_idx]));
             } else {
                 int scratch = getScratchReg();
                 jit_->vextractf32x8(Ymm(scratch), Zmm(curr_output[reg_idx]),
                                     half_idx);
-                jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6, Ymm(scratch));
+                jit_->vmovups(jit_->ptr[regTmp1] | mrMask, Ymm(scratch));
                 returnScratchReg(scratch);
             }
         };
@@ -696,17 +706,17 @@ avx512TransposeGenerator::store_16xNR(bool applyBetaScale)
     if (applyBetaScale) {
         auto betaScaleOp = [this](int col_idx, int reg_idx, int unused) {
             int cRegIdx = getScratchReg();
-            jit_->vmovups(Zmm(cRegIdx) | jit_->k6, jit_->ptr[regTmp1]);
+            jit_->vmovups(Zmm(cRegIdx) | mrMask, jit_->ptr[regTmp1]);
             jit_->vfmadd231ps(Zmm(curr_output[reg_idx]), Zmm(betaRegIdx),
                               Zmm(cRegIdx));
-            jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6,
+            jit_->vmovups(jit_->ptr[regTmp1] | mrMask,
                           Zmm(curr_output[reg_idx]));
             returnScratchReg(cRegIdx);
         };
         storeColumns_variableCount(reg_indices, dummy_idx, 16, betaScaleOp);
     } else {
         auto betaZeroOp = [this](int col_idx, int reg_idx, int unused) {
-            jit_->vmovups(jit_->ptr[regTmp1] | jit_->k6,
+            jit_->vmovups(jit_->ptr[regTmp1] | mrMask,
                           Zmm(curr_output[reg_idx]));
         };
         storeColumns_variableCount(reg_indices, dummy_idx, 16, betaZeroOp);
@@ -718,7 +728,7 @@ avx512TransposeGenerator::store_MRxNR(bool fuseBetaWithStore)
 {
     jit_->inLocalLabel();
     jit_->mov(regTmpHalf, 0xFFFF >> (numElemsPerReg - MR_local));
-    jit_->kmovw(jit_->k6, regTmpHalf);
+    jit_->kmovw(mrMask, regTmpHalf);
 
     jit_->mov(regTmp1, regCjr);
 

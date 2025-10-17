@@ -671,7 +671,7 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         }
 
         // Deploy the associated kernel
-        int kernel_idx = params->n_left;
+        int kernel_idx = static_cast<int>(params->n_left);
 
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
