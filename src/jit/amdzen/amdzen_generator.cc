@@ -1031,7 +1031,6 @@ cleanup:
 dlp::kernels::kernelError
 jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
 {
-    printf("BF16 JIT executeKernel called\n");
     if (NR == 1) {
         auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);
 
