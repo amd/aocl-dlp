@@ -38,7 +38,6 @@ gemm_tests:
 
   # ==========================================================================
   # Test Set 2: NR Register Allocation Variants
-  # Covers: All 5 AVX512 NR variants (nr=0,1,2,3,4) with masking
   # ==========================================================================
   - name: "fp32_nr_variants_avx512"
     a_type: ["f32"]
@@ -48,13 +47,7 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false]
-    m: [6, 12]  # M%6=0 to isolate NR testing
-    # N values to hit all NR register patterns:
-    #   1,8,15: masked (N<16, nr=0)
-    #   16,24,31: 1 full ZMM (16≤N<32, nr=1)
-    #   32,40,47: 2 full ZMMs (32≤N<48, nr=2)
-    #   48,56,63: 3 full ZMMs (48≤N<64, nr=3)
-    #   64,80,128: 4 full ZMMs (N≥64, nr=4)
+    m: [6, 12]
     n: [1, 8, 15, 16, 24, 31, 32, 40, 47, 48, 56, 63, 64, 80, 128]
     k: [64]
     alpha: [1.0]
@@ -67,7 +60,6 @@ gemm_tests:
 
   # ==========================================================================
   # Test Set 3: K-loop Unroll and Remainder Handling
-  # Covers: Main K-loop, kLeft path, KC boundaries
   # ==========================================================================
   - name: "fp32_k_unroll"
     a_type: ["f32"]
@@ -79,10 +71,6 @@ gemm_tests:
     transB: [false]
     m: [6, 12]
     n: [64]
-    # K values to test unroll paths (assuming K_UNROLL=4):
-    #   Small: 1,2,3,4,5,7,8,9 (tests kLeft with different remainders)
-    #   KC boundaries: 511,512,513 (KC-1, KC, KC+1)
-    #   2*KC boundaries: 1023,1024,1025
     k: [1, 2, 3, 4, 5, 7, 8, 9, 16, 64, 256, 511, 512, 513, 1023, 1024, 1025]
     alpha: [1.0]
     beta: [0.0]
@@ -93,8 +81,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 4: Alpha/Beta Scaling Code Paths
-  # Covers: scaleAlpha() and scaleBeta() conditionals and FMA paths
+  # Test Set 4: Alpha/Beta Scaling
   # ==========================================================================
   - name: "fp32_alpha_beta_scaling"
     a_type: ["f32"]
@@ -105,12 +92,9 @@ gemm_tests:
     transA: [false]
     transB: [false]
     m: [6, 12]
-    # N=64 (aligned), N=65 (tests fringe masking in beta load)
     n: [64, 65]
     k: [64]
-    # Alpha values: 0.0 (zero result), 1.0 (skip scaling), 2.0, 0.5, -1.0
     alpha: [0.0, 1.0, 2.0, 0.5, -1.0]
-    # Beta values: 0.0 (skip beta), 1.0 (standard accum), 2.0, 0.5, -1.0
     beta: [0.0, 1.0, 2.0, 0.5, -1.0]
     mtagA: ["none"]
     mtagB: ["none"]
@@ -119,8 +103,29 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 5: Cache Blocking Boundaries (MC, NC, KC)
-  # Covers: Transitions between blocking levels
+  # Test Set 5: Alpha/Beta Edge Cases
+  # ==========================================================================
+  - name: "fp32_alpha_beta_edge_cases"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [6]
+    n: [64]
+    k: [64]
+    alpha: [2.51, 0.333, 1.7, -0.3]
+    beta: [1.618, 0.707, 3.14, -0.25]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+
+  # ==========================================================================
+  # Test Set 6: Cache Blocking Boundaries
   # ==========================================================================
   - name: "fp32_cache_boundaries"
     a_type: ["f32"]
@@ -130,11 +135,8 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false]
-    # MC boundaries (192 for ZEN4): 1,6,191,192,193,383,384,385
     m: [1, 6, 191, 192, 193, 383, 384, 385]
-    # NC boundaries (8064): subset for nightly
     n: [1, 64, 256, 4032, 8064, 8128]
-    # KC boundaries (512): 1,256,511,512,513,1024
     k: [1, 256, 511, 512, 513, 1024]
     alpha: [1.0]
     beta: [0.0]
@@ -145,8 +147,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 6: Transpose Combinations
-  # Covers: All 4 transpose combinations with selected dimensions
+  # Test Set 7: Transpose Combinations
   # ==========================================================================
   - name: "fp32_transpose"
     a_type: ["f32"]
@@ -169,8 +170,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 7: Matrix Reordering/Packing Combinations
-  # Covers: mtagB variants (none, pack, reorder)
+  # Test Set 8: Matrix Reordering/Packing Combinations
   # ==========================================================================
   - name: "fp32_mtag_combinations"
     a_type: ["f32"]
@@ -179,7 +179,7 @@ gemm_tests:
     acc_type: ["f32"]
     storage_format: ["row-major"]
     transA: [false]
-    transB: [false, true]  # Test both normal and transposed B with reordering
+    transB: [false, true]
     m: [6, 12, 192]
     n: [64, 128]
     k: [64, 512]
@@ -192,8 +192,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 8: Edge Cases - Small dimensions and primes
-  # Covers: Unusual dimensions that might trigger edge cases
+  # Test Set 9: Edge Cases - Small dimensions and primes
   # ==========================================================================
   - name: "fp32_edge_cases"
     a_type: ["f32"]
@@ -203,7 +202,6 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false]
-    # Small dimensions and primes: 1,7,11,13,17,19,23,29,31
     m: [1, 7, 11, 13, 17, 19, 23, 29, 31]
     n: [1, 7, 11, 13, 17, 19, 23, 29, 31]
     k: [1, 7, 11, 13, 17, 19, 23, 29, 31]

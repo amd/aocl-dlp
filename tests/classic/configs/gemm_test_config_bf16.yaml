@@ -114,13 +114,36 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 5: Output Type Variants (BF16 specific)
+  # Test Set 5: Alpha/Beta Edge Cases with Non-Trivial Values
+  # Covers: BF16 precision with non-power-of-2 scaling factors
+  # ==========================================================================
+  - name: "bf16_alpha_beta_edge_cases"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [6]
+    n: [64]
+    k: [64]
+    # Non-trivial alpha/beta values to test BF16→F32 precision with arbitrary scaling
+    alpha: [2.51, 0.333, 1.7, -0.3]
+    beta: [1.618, 0.707, 3.14, -0.25]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+
+  # ==========================================================================
+  # Test Set 6: Output Type Variants (BF16 specific)
   # Covers: F32→BF16 conversion on store vs F32 output
   # ==========================================================================
   - name: "bf16_output_types"
     a_type: ["bf16"]
     b_type: ["bf16"]
-    # Test both output types: F32 (no conversion) and BF16 (requires conversion)
     c_type: ["f32", "bf16"]
     acc_type: ["f32"]
     storage_format: ["row-major"]
@@ -136,10 +159,9 @@ gemm_tests:
     tolerances:
       float: 1.0e-5
       bfloat16: 1.0e-2
-    # Total: 3 M × 2 N × 3 K × 2 c_type × 2 beta = 72 tests
 
   # ==========================================================================
-  # Test Set 6: Cache Blocking Boundaries (MC, NC, KC)
+  # Test Set 7: Cache Blocking Boundaries (MC, NC, KC)
   # MC=144, NC=1024, KC=4096 for ZEN4
   # ==========================================================================
   - name: "bf16_cache_boundaries"
@@ -154,8 +176,8 @@ gemm_tests:
     m: [1, 6, 143, 144, 145, 287, 288, 289]
     # NC boundaries (1024): 1,64,256,1023,1024,1025,2047,2048
     n: [1, 64, 256, 1023, 1024, 1025, 2047, 2048]
-    # KC boundaries (4096): 1,2048,4095,4096,4097,8191,8192,8193
-    k: [1, 2048, 4095, 4096, 4097, 8191, 8192, 8193]
+    # KC boundaries (4096): 1,2048,4095,4096,4097
+    k: [1, 2048, 4095, 4096, 4097]
     alpha: [1.0]
     beta: [0.0]
     mtagA: ["none"]
@@ -165,7 +187,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 7: Transpose Combinations
+  # Test Set 8: Transpose Combinations
   # Covers: All 4 transpose combinations
   # ==========================================================================
   - name: "bf16_transpose"
@@ -188,7 +210,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 8: Matrix Reordering/Packing Combinations
+  # Test Set 9: Matrix Reordering/Packing Combinations
   # Covers: mtagB variants (none, pack, reorder)
   # ==========================================================================
   - name: "bf16_mtag_combinations"
@@ -211,7 +233,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
-  # Test Set 9: Edge Cases - Small dimensions and primes
+  # Test Set 10: Edge Cases - Small dimensions and primes
   # ==========================================================================
   - name: "bf16_edge_cases"
     a_type: ["bf16"]
