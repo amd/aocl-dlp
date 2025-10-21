@@ -40,3 +40,7 @@ coverage
 # Docker tool generated files
 scripts/tools/Dockerfile
 .buildx-cache/
+
+# Rust build artifacts
+scripts/tools/log2yaml/target/
+scripts/tools/log2yaml/Cargo.lock
