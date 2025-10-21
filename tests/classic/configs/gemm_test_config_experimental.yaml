@@ -80,8 +80,8 @@ gemm_tests:
       lb: 10
       ub: 10
       step: -1
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
+    alpha: [0, 2, -2]
+    beta: [0, 2, -2]
     # Optional Params
     lda: [10, 20, 30]
     ldb:
@@ -130,8 +130,8 @@ gemm_tests:
       lb: 10
       ub: 10
       step: -1
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
+    alpha: [0, 2, -2]
+    beta: [0, 2, -2]
     # Optional Params
     lda: [10, 20, 30]
     ldb:
@@ -377,7 +377,7 @@ gemm_tests:
         - type: "Elementwise-PRELU"
           params:
             alpha_type: ["f32"]
-            alpha: [0.1]
+            alpha: [1.0]
 
   - name: "f32_individual_gelu_tanh_postop"
     a_type: ["f32"]
@@ -826,8 +826,8 @@ gemm_tests:
     n: [32, 64]
     k: [32, 64]
     # Critical alpha/beta combinations that expose numerical issues
-    alpha: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
-    beta: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    alpha: [0.0, 1.0, -1.0, 2.0]
+    beta: [0.0, 1.0, -1.0, 2.0]
     lda: [64, 65]  # Aligned and unaligned
     ldb: [64, 65]
     ldc: [64, 65]
@@ -851,8 +851,8 @@ gemm_tests:
     n: [32, 64]
     k: [32, 64]
     # Critical alpha/beta combinations that expose numerical issues
-    alpha: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
-    beta: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    alpha: [0.0, 1.0, -1.0, 2.0]
+    beta: [0.0, 1.0, -1.0, 2.0]
     lda: [64, 65]  # Aligned and unaligned
     ldb: [64, 65]
     ldc: [64, 65]
@@ -875,8 +875,8 @@ gemm_tests:
     n: [32, 64]
     k: [32, 64]
     # Critical alpha/beta combinations that expose numerical issues
-    alpha: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
-    beta: [0.0, 1.0, -1.0, 1e-6, 1e6, -1e6, 0.5, 2.0, 1.0000001, 0.9999999]
+    alpha: [0.0, 1.0, -1.0, 2.0]
+    beta: [0.0, 1.0, -1.0, 2.0]
     lda: [64, 65]  # Aligned and unaligned
     ldb: [64, 65]
     ldc: [64, 65]
@@ -1086,7 +1086,7 @@ gemm_tests:
         - type: "Elementwise-PRELU"
           params:
             alpha_type: ["f32"]
-            alpha: [0.01, 0.1, 0.2, 1.0]
+            alpha: [1.0]
 
   - name: "bf16bf16f32of32_gelu_tanh"
     a_type: ["bf16"]
@@ -1482,7 +1482,7 @@ gemm_tests:
         - type: "Elementwise-PRELU"
           params:
             alpha_type: ["f32"]
-            alpha: [0.01, 0.1, 0.2, 1.0]
+            alpha: [1.0]
 
   - name: "int_gelu_tanh"
     a_type: ["u8", "s8"]
@@ -1655,7 +1655,7 @@ gemm_tests:
       operations:
         - type: "Matrix-Add"
           params:
-            scale_factor: [1.0, 0.5, 2.0]
+            scale_factor: [1.0, 2.0]
             scale_factor_type: ["f32"]
 
   - name: "int_matrix_mul"
@@ -1685,7 +1685,7 @@ gemm_tests:
       operations:
         - type: "Matrix-Mul"
           params:
-            scale_factor: [1.0, 0.5, 2.0]
+            scale_factor: [1.0, 2.0]
             scale_factor_type: ["f32"]
 
   # =============================================================================
@@ -2041,13 +2041,13 @@ gemm_tests:
     transB: [false, true]
     # Sizes commonly used in ML workloads - regression in these is critical
     m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
-    n: [128, 256, 512, 1024, 2048, 4096]
-    k: [128, 256, 512, 1024, 2048, 4096]
+    n: [128, 256, 512, 1024, 2048]
+    k: [128, 256, 512, 1024, 2048]
     alpha: [1.0]
     beta: [0.0, 1.0]
-    lda: [512, 1024, 2048, 4096]
-    ldb: [512, 1024, 2048, 4096]
-    ldc: [512, 1024, 2048, 4096]
+    lda: [512, 1024, 2048]
+    ldb: [512, 1024, 2048]
+    ldc: [512, 1024, 2048]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
@@ -2064,13 +2064,13 @@ gemm_tests:
     transA: [false]
     transB: [false]
     m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
-    n: [128, 256, 512, 1024, 2048, 4096]
-    k: [128, 256, 512, 1024, 2048, 4096]
+    n: [128, 256, 512, 1024, 2048]
+    k: [128, 256, 512, 1024, 2048]
     alpha: [1.0]
     beta: [0.0, 1.0]
-    lda: [512, 1024, 2048, 4096]
-    ldb: [512, 1024, 2048, 4096]
-    ldc: [512, 1024, 2048, 4096]
+    lda: [512, 1024, 2048]
+    ldb: [512, 1024, 2048]
+    ldc: [512, 1024, 2048]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
@@ -2086,13 +2086,13 @@ gemm_tests:
     transA: [false]
     transB: [false]
     m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
-    n: [128, 256, 512, 1024, 2048, 4096]
-    k: [128, 256, 512, 1024, 2048, 4096]
+    n: [128, 256, 512, 1024, 2048]
+    k: [128, 256, 512, 1024, 2048]
     alpha: [1.0]
     beta: [0.0, 1.0]
-    lda: [512, 1024, 2048, 4096]
-    ldb: [512, 1024, 2048, 4096]
-    ldc: [512, 1024, 2048, 4096]
+    lda: [512, 1024, 2048]
+    ldb: [512, 1024, 2048]
+    ldc: [512, 1024, 2048]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:

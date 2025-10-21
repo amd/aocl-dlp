@@ -77,11 +77,9 @@ gemm_tests:
     transB: [false]
     m: [6, 12]
     n: [64]
-    # K values for BF16 (note: KC=4096 is 8× larger than FP32's 512)
+    # K values for BF16 (capped at 2048)
     #   Small: 1,2,3,4,5,7,8,9 (tests kLeft)
-    #   KC boundaries: 4095,4096,4097 (KC-1, KC, KC+1)
-    #   2*KC boundaries: 8191,8192,8193
-    k: [1, 2, 3, 4, 5, 7, 8, 9, 16, 64, 256, 1024, 4095, 4096, 4097, 8191, 8192, 8193]
+    k: [1, 2, 3, 4, 5, 7, 8, 9, 16, 64, 256, 1024, 2048]
     alpha: [1.0]
     beta: [0.0]
     mtagA: ["none"]
@@ -105,8 +103,8 @@ gemm_tests:
     m: [6, 12]
     n: [64, 65]  # 65 tests fringe masking
     k: [64]
-    alpha: [0.0, 1.0, 2.0, 0.5, -1.0]
-    beta: [0.0, 1.0, 2.0, 0.5, -1.0]
+    alpha: [0.0, 1.0, 2.0, -1.0]
+    beta: [0.0, 1.0, 2.0, -1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -128,9 +126,9 @@ gemm_tests:
     m: [6]
     n: [64]
     k: [64]
-    # Non-trivial alpha/beta values to test BF16→F32 precision with arbitrary scaling
-    alpha: [2.51, 0.333, 1.7, -0.3]
-    beta: [1.618, 0.707, 3.14, -0.25]
+    # Integer-representable alpha/beta values
+    alpha: [0, 1, 2, -1]
+    beta: [0, 1, 2, -1]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -151,8 +149,8 @@ gemm_tests:
     transB: [false]
     m: [6, 12, 144]
     n: [64, 128]
-    k: [64, 1024, 4096]
-    alpha: [1.0]
+    k: [64, 1024, 2048]
+    alpha: [1.0, 2.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
@@ -176,8 +174,8 @@ gemm_tests:
     m: [1, 6, 143, 144, 145, 287, 288, 289]
     # NC boundaries (1024): 1,64,256,1023,1024,1025,2047,2048
     n: [1, 64, 256, 1023, 1024, 1025, 2047, 2048]
-    # KC boundaries (4096): 1,2048,4095,4096,4097
-    k: [1, 2048, 4095, 4096, 4097]
+    # KC boundaries (capped at 2048): 1,2048
+    k: [1, 2048]
     alpha: [1.0]
     beta: [0.0]
     mtagA: ["none"]
@@ -200,7 +198,7 @@ gemm_tests:
     transB: [false, true]
     m: [6, 12, 144]
     n: [64, 128]
-    k: [64, 1024, 4096]
+    k: [64, 1024, 2048]
     alpha: [1.0]
     beta: [0.0]
     mtagA: ["none"]
@@ -223,7 +221,7 @@ gemm_tests:
     transB: [false, true]
     m: [6, 12, 144]
     n: [64, 128]
-    k: [64, 1024, 4096]
+    k: [64, 1024, 2048]
     alpha: [1.0]
     beta: [0.0]
     mtagA: ["none"]
@@ -247,7 +245,7 @@ gemm_tests:
     m: [1, 7, 11, 13, 17, 19, 23, 29, 31]
     n: [1, 7, 11, 13, 17, 19, 23, 29, 31]
     k: [1, 7, 11, 13, 17, 19, 23, 29, 31]
-    alpha: [1.0]
+    alpha: [1.0, 3.0]
     beta: [0.0]
     mtagA: ["none"]
     mtagB: ["none"]

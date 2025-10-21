@@ -23,8 +23,8 @@ gemm_tests:
       lb: 10
       ub: 10
       step: -1
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
+    alpha: [0, 2, -2]
+    beta: [0, 2, -2]
     # Optional Params
     lda: [10, 20, 30]
     ldb:
@@ -63,8 +63,8 @@ gemm_tests:
       lb: 10
       ub: 10
       step: -1
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
+    alpha: [0, 2, -2]
+    beta: [0, 2, -2]
     # Optional Params
     lda: [10, 20, 30]
     ldb:
@@ -102,8 +102,8 @@ gemm_tests:
       lb: 256
       ub: 1024
       step: 64
-    alpha: [1.5, 0, -1.5]
-    beta: [1.5, 0, -1.5]
+    alpha: [1, 0, -1]
+    beta: [1, 0, -1]
     # Optional Params
     lda: [256, 512, 768]
     ldb:

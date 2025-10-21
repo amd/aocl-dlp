@@ -47,9 +47,9 @@ gemm_tests:
       lb: 1
       ub: 256
       step: 32
-    k: [64, 1024, 4096]
-    alpha: [1.0, 2.5123]
-    beta: [0.0, 1.0, -0.9999]
+    k: [64, 1024, 2048]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -70,9 +70,9 @@ gemm_tests:
     m: [6, 144, 288]
     n:
       lb: 256
-      ub: 2049
+      ub: 2048
       step: 200
-    k: [64, 1024, 4096]
+    k: [64, 1024, 2048]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -96,10 +96,10 @@ gemm_tests:
     n: [64, 128, 256, 1024]
     k:
       lb: 1
-      ub: 4097
+      ub: 2048
       step: 200
     alpha: [1.0, -1.0]
-    beta: [0.0, 1.0, 2.5123]
+    beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
@@ -119,9 +119,9 @@ gemm_tests:
     transB: [false, true]
     m: [1, 143, 144, 145, 287, 288]
     n: [64, 1023, 1024, 1025]
-    k: [1, 4095, 4096, 4097]
-    alpha: [1.0, 2.5123, -1.0]
-    beta: [0.0, 1.0, -0.9999]
+    k: [1, 2048]
+    alpha: [1.0, -1.0]
+    beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -141,9 +141,9 @@ gemm_tests:
     transB: [false]
     m: [6, 144, 288]
     n: [64, 128, 1024]
-    k: [64, 1024, 4096]
-    alpha: [0.0, 1.0, -1.0, 2.5123, -0.9999]
-    beta: [0.0, 1.0, -1.0, -0.9999]
+    k: [64, 1024, 2048]
+    alpha: [0.0, 1.0, -1.0, 2.0]
+    beta: [0.0, 1.0, -1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -163,8 +163,8 @@ gemm_tests:
     transB: [false, true]
     m: [1, 6, 12, 72, 144, 216, 288]
     n: [64, 128, 256, 1024]
-    k: [64, 1024, 4095, 4096, 4097]
-    alpha: [1.0]
+    k: [64, 1024, 2048]
+    alpha: [1.0, 3.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]

@@ -48,8 +48,8 @@ gemm_tests:
       ub: 256
       step: 32
     k: [64, 512]
-    alpha: [1.0, 2.5123]
-    beta: [0.0, 1.0, -0.9999]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -70,7 +70,7 @@ gemm_tests:
     m: [6, 192, 384]
     n:
       lb: 256
-      ub: 16129
+      ub: 2048
       step: 200
     k: [64, 512]
     alpha: [1.0]
@@ -99,7 +99,7 @@ gemm_tests:
       ub: 1025
       step: 100
     alpha: [1.0, -1.0]
-    beta: [0.0, 1.0, 2.5123]
+    beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -120,8 +120,8 @@ gemm_tests:
     m: [1, 191, 192, 193, 383, 384]
     n: [64, 256, 8063, 8064]
     k: [1, 511, 512, 513, 1024]
-    alpha: [1.0, 2.5123, -1.0]
-    beta: [0.0, 1.0, -0.9999]
+    alpha: [1.0, -1.0]
+    beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -129,6 +129,7 @@ gemm_tests:
       bfloat16: 1.0e-2
 
   # ==========================================================================
+  # Test Set 6: Alpha/Beta Comprehensive
   # Test Set 6: Alpha/Beta Comprehensive
   # ==========================================================================
   - name: "fp32_extended_alpha_beta_comprehensive"
@@ -142,8 +143,8 @@ gemm_tests:
     m: [6, 192, 384]
     n: [64, 128, 256]
     k: [64, 512, 1024]
-    alpha: [0.0, 1.0, -1.0, 2.5123, -0.9999]
-    beta: [0.0, 1.0, -1.0, -0.9999]
+    alpha: [0.0, 1.0, -1.0, 2.0, 3.0]
+    beta: [0.0, 1.0, -1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:

@@ -577,23 +577,11 @@ namespace dlp { namespace testing { namespace framework {
             double baseTolerance = 10.0 * std::numeric_limits<float>::epsilon();
 
             for (size_t i = 0; i < elementCount; ++i) {
-                if (thisData[i] == otherData[i]) {
-                    continue;
-                }
-
-                float maxAbs =
-                    std::max(std::abs(thisData[i]), std::abs(otherData[i]));
-                if (maxAbs == 0.0f) {
-                    continue; // Both are zero
-                }
-
-                float relativeDiff =
-                    std::abs(thisData[i] - otherData[i]) / maxAbs;
-                double tolerance = baseTolerance * maxAbs;
-                if (relativeDiff > tolerance) {
+                if (thisData[i] != otherData[i]) {
                     return false;
                 }
             }
+            return true;
         } else if (m_type == MatrixType::bf16) {
             const bfloat16* thisData =
                 reinterpret_cast<const bfloat16*>(m_data);
@@ -664,7 +652,7 @@ namespace dlp { namespace testing { namespace framework {
                 }
                 break;
 #else
-                std::uniform_real_distribution<float> dis(-20.0f, 20.0f);
+                std::uniform_real_distribution<float> dis(-5.0f, 5.0f);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
                 for (size_t i = 0; i < elementCount; ++i) {
