@@ -742,8 +742,7 @@ namespace dlp { namespace testing { namespace framework {
                 break;
 #else
                 // For BF16, fill with random uint16_t values
-                std::uniform_int_distribution<int16_t> dis(INT8_MIN >> 1,
-                                                           INT8_MAX >> 1);
+                std::uniform_int_distribution<int16_t> dis(-5, 5);
                 uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
                 size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
                 for (size_t i = 0; i < elementCount; ++i) {
