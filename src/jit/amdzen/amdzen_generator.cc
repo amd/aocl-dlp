@@ -885,6 +885,9 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         dlp::kernel_frame::kernelDatatype::bf16bf16f32of32;
 
     if (NR == 1) {
+        if (c_downscale < DLP_F32) {
+            return dlp::jit::jitGeneratorError::notSupported;
+        }
         // Logic behind kernel generation:
         // 1. We generate kernels for all m_left values from 0 to MR-1.
         // 2. For each m_left, we generate 4 kernels:
