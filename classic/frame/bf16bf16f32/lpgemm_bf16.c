@@ -154,8 +154,8 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
             // Call lpgemv_n_one kernel
             if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                 dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
-                                   (float*)a_use, rs_a_use, cs_a_use, 1,
-                                   (float*)b_use, rs_b_use, cs_b_use, 0, 0,
+                                   (bfloat16*)a_use, rs_a_use, cs_a_use, 1,
+                                   (bfloat16*)b_use, rs_b_use, cs_b_use, 0, 0,
                                    c_use, rs_c, cs_c, (void*)&alpha,
                                    (void*)&beta, post_op_list, post_ops_attr);
 

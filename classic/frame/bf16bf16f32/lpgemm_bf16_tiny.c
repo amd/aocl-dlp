@@ -118,10 +118,19 @@ LPGEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
             a_use = pack_a_buffer_bf16;
         }
         // Call lpgemv_n_one kernel
-        lpgemv_n_one_bf16bf16f32of32(m, k, a_use, rs_a_use, cs_a_use, mtag_a,
-                                     b_use, rs_b_use, cs_b_use, mtag_b, c, rs_c,
-                                     cs_c, alpha, beta, MR, k, post_op_list,
-                                     &post_ops_attr);
+        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+            dlp_execute_kernel(lcntx->dlp_kernel_hndl, m, 1, k,
+                               (bfloat16*)a_use, rs_a_use, cs_a_use, 1,
+                               (bfloat16*)b_use, rs_b_use, cs_b_use, 0, 0, c,
+                               rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                               post_op_list, post_ops_attr);
+
+        } else {
+            lpgemv_n_one_bf16bf16f32of32(m, k, a_use, rs_a_use, cs_a_use,
+                                         mtag_a, b_use, rs_b_use, cs_b_use,
+                                         mtag_b, c, rs_c, cs_c, alpha, beta, MR,
+                                         k, post_op_list, &post_ops_attr);
+        }
 
         // Release pack buffers.
         if (pack_a_buffer_bf16 != NULL) {
