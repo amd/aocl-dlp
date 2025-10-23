@@ -1,6 +1,6 @@
 # AOCL-DLP (Deep Learning Primitives)
 
-AOCL-DLP is a library designed to provide optimized deep learning primitives for AMD processors. It implements Low Precision GEMM (LPGEMM) for machine learning applications, supporting multiple data types as well as pre-operations and post-operations. The library is tailored to leverage the full potential of AMD hardware, ensuring efficient computation, scalability, and accelerated machine learning workloads.
+AOCL-DLP is a library designed to provide optimized deep learning primitives for AMD processors. It implements Low Precision GEMM (LPGEMM) and batch GEMM for deep learning applications, supporting multiple data types as well as pre-operations and post-operations. The library is tailored to leverage the full potential of AMD hardware, ensuring efficient computation, scalability, and accelerated deep learning workloads.
 
 ## Features of AOCL-DLP
 
@@ -120,6 +120,10 @@ Refer to [BUILD.md](BUILD.md) for detailed build instructions, including support
 ## Install
 
 Refer to [INSTALL.md](INSTALL.md) for installation steps, including default and custom prefix install.
+
+## Wiki
+
+Refer to [Wiki](https://github.com/amd/aocl-dlp/wiki) for more information.
 
 ## License
 
