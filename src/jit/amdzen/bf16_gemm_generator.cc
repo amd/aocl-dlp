@@ -453,7 +453,30 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
         RETURN_IF_ERROR(scaleBeta());
     }
 
+    // check if is_last_k is set
+    mov(regTmp1,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+    test(regTmp1, regTmp1);
+    je(label_store_result, T_NEAR);
+
+    // Create and set up kernelOphandler if there are post-ops
+    if (!params.kernelOps.empty()) {
+        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
+
+        // post-ops are applied in the last k iteration
+        RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
+            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg)));
+
+        // The gelu constants are embedded within the generated JIT kernel.
+        // Otherwise a bug was observed whereby the address of gelu constants
+        // inside the class turned out to be beyond what JIT can access.
+        kernelOpsHandler.generateKernelOpsAttributes();
+    }
+
     // store C
+    L(label_store_result);
     RETURN_IF_ERROR(storeResult());
 
     if (params.mLoop) {

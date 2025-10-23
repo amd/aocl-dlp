@@ -100,6 +100,22 @@ jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
     } else {
         mov(regTmpAptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
     }
+
+    if (c_downscale < DLP_F32) {
+        // Initialize F32→BF16 conversion constants on stack
+        // Stack layout: [0-15]: final result, [16-47]: constants
+
+        // Store value 16 at [rsp + 16] (safely allocated)
+        mov(dword[rsp + 16], 0x10);
+
+        // Store constant 0x00010000 at [rsp + 20] for bit 16 extraction
+        mov(regTmp1.cvt32(), 0x00010000);
+        mov(dword[rsp + 20], regTmp1.cvt32());
+
+        // Store constant 0x00007FFF at [rsp + 24] for rounding
+        mov(regTmp1.cvt32(), 0x00007FFF);
+        mov(dword[rsp + 24], regTmp1.cvt32());
+    }
     mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
     mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsA)]);
     mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csA)]);
@@ -319,6 +335,45 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+{
+    return dlp::jit::jitGeneratorError::notSupported;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitGEMMF32<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
+    int scratch1, int scratch2, int destIdx)
+{
+    vbroadcastss(Ymm(scratch1),
+                 ptr[rsp + 20]); // Load 0x00010000
+    vpand(Ymm(scratch1), Ymm(destIdx),
+          Ymm(scratch1)); // Extract bit 16
+    vpsrld(Ymm(scratch1), Ymm(scratch1),
+           16); // Shift to position 0 → tlsb
+
+    vbroadcastss(Ymm(scratch2),
+                 ptr[rsp + 24]); // Load 0x00007FFF
+    vpaddd(Ymm(scratch2), Ymm(destIdx),
+           Ymm(scratch2)); // Add rounding to original
+
+    vpaddd(Ymm(scratch2), Ymm(scratch2),
+           Ymm(scratch1)); // Add tlsb → rounded
+
+    vpsrld(Ymm(scratch2), Ymm(scratch2),
+           16); // Shift right 16 bits
+
+    // Extract upper 128 bits of YMM → XMM
+    vextracti128(Xmm(scratch1), Ymm(scratch2), 1);
+
+    // Pack 8×32-bit to 8×16-bit
+    vpackusdw(Xmm(scratch2), Xmm(scratch2), Xmm(scratch1));
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
 {
     mov(regTmpCptr, regCPtr);
@@ -381,6 +436,94 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
     }
 
     L(".storeResultRowMajorBZ");
+    if (c_downscale < DLP_F32) {
+        // Check for is_last_k
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(".storeResultF32ToBF16", T_NEAR);
+
+        // Get buf_downscale
+        mov(regTmpCptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+        // NULL check
+        cmp(regTmpCptr, 0);
+        je(".storeResultF32ToBF16", T_NEAR);
+
+        // Get post_op_c_j
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
+        add(regTmpCptr, regTmp1);
+
+        // Get rs_c_downscale
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
+        mov(regTmp3,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        imul(regTmp3, regTmp1);
+        add(regTmpCptr, regTmp3);
+
+        int scratch1 = aRegIdx;
+        int scratch2 = bRegIdx;
+
+        for (int i = 0; i < MR; i++) {
+            for (int j = 0; j < bFullReg; j++) {
+                RETURN_IF_ERROR(convertF32toBF16(scratch1, scratch2,
+                                                 cRegIdx + i * bReg + j));
+                movdqu(ptr[regTmpCptr + j * halfRegBytes], Xmm(scratch2));
+            }
+            if (bMaskReg > 0) {
+                // Convert full vector (8×F32 → 8×BF16)
+                RETURN_IF_ERROR(convertF32toBF16(
+                    scratch1, scratch2, cRegIdx + i * bReg + bFullReg));
+
+                // Now Xmm(scratch2) contains 8×BF16 values
+                // Store the BF16 result to stack for element-wise access
+                movdqu(ptr[rsp + 0], Xmm(scratch2)); // 8×16-bit to stack
+
+                // Get n_remainder: n % 8
+                mov(regTmp2,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
+                and_(regTmp2.cvt32(), 7); // n % 8
+
+                // Calculate destination base address
+                lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
+
+                // Loop: copy n_remainder elements from stack to destination
+                xor_(regTmp3.cvt32(), regTmp3.cvt32()); // elem_idx = 0
+
+                Label loop_start, loop_end;
+                L(loop_start);
+
+                // Check if elem_idx < n_remainder
+                cmp(regTmp3.cvt32(), regTmp2.cvt32());
+                jge(loop_end, T_NEAR);
+
+                // Load BF16 value from stack and store to destination
+                // Use regBptr as temporary (done with B matrix access)
+                mov(regBptr.cvt16(), word[rsp + regTmp3 * sizeof(int16_t)]);
+                mov(word[regKIter + regTmp3 * sizeof(int16_t)],
+                    regBptr.cvt16());
+
+                inc(regTmp3.cvt32()); // elem_idx++
+                jmp(loop_start, T_NEAR);
+
+                L(loop_end);
+            }
+            add(regTmpCptr, regTmp1);
+        }
+
+        jmp(".afterStoreResultRowMajor");
+        L(".storeResultF32ToBF16");
+    }
+
     for (int i = 0; i < MR; i++) {
         for (int j = 0; j < bFullReg; j++) {
             // Regular store
@@ -685,11 +828,106 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::scaleBetaRowMajor()
 {
+    inLocalLabel();
+
     // broadcast beta value
     Xbyak::Reg64 betaReg    = regTmp1;
     int          betaRegIdx = aRegIdx;
     mov(betaReg, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
     vbroadcastss(RegType(betaRegIdx), ptr[betaReg]);
+
+    if (c_downscale < DLP_F32) {
+        // Check for is_first_k
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+        test(regTmp1, regTmp1);
+        je(".betaOp", T_NEAR);
+
+        // Get buf_downscale
+        mov(regTmpCptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+        // NULL check
+        cmp(regTmpCptr, 0);
+        je(".betaOp", T_NEAR);
+
+        // Get post_op_c_j
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
+        add(regTmpCptr, regTmp1);
+
+        // Get rs_c_downscale
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
+        mov(regTmp3,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        imul(regTmp3, regTmp1);
+        add(regTmpCptr, regTmp3);
+        mov(regKIter, regTmpCptr);
+
+        vpbroadcastd(Ymm(aRegIdx + 1),
+                     ptr[rsp + 16]); // Broadcast value 16 from memory
+        for (int i = 0; i < MR; i++) {
+            for (int j = 0; j < bFullReg; j++) {
+                movdqu(Xmm(bRegIdx + j), ptr[regTmpCptr + j * halfRegBytes]);
+                vpmovsxwd(Ymm(bRegIdx + j), Xmm(bRegIdx + j));
+                vpsllvd(Ymm(bRegIdx + j), Ymm(bRegIdx + j), Ymm(aRegIdx + 1));
+                vfmadd231ps(Ymm(cRegIdx + i * bReg + j), Ymm(bRegIdx + j),
+                            Ymm(betaRegIdx));
+            }
+            if (bMaskReg > 0) {
+                // Get n_remainder: n % 8
+                mov(regTmp2,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
+                and_(regTmp2.cvt32(), 7); // n % 8
+
+                // Calculate destination base address for fringe BF16 elements
+                lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
+
+                // Loop: Load n_remainder BF16 elements from C matrix to stack
+                xor_(regTmp3.cvt32(), regTmp3.cvt32()); // elem_idx = 0
+
+                Label loop_load_start, loop_load_end;
+                L(loop_load_start);
+
+                // Check if elem_idx < n_remainder
+                cmp(regTmp3.cvt32(), regTmp2.cvt32());
+                jge(loop_load_end, T_NEAR);
+
+                // Load BF16 value from C matrix to stack
+                mov(regBptr.cvt16(),
+                    word[regKIter + regTmp3 * sizeof(int16_t)]);
+                mov(word[rsp + regTmp3 * sizeof(int16_t)], regBptr.cvt16());
+
+                inc(regTmp3.cvt32()); // elem_idx++
+                jmp(loop_load_start, T_NEAR);
+
+                L(loop_load_end);
+
+                // Load full XMM from stack (8×BF16)
+                movdqu(Xmm(bRegIdx + bFullReg), ptr[rsp]);
+
+                // Convert BF16→F32 (expand to YMM)
+                vpmovsxwd(Ymm(bRegIdx + bFullReg), Xmm(bRegIdx + bFullReg));
+                vpsllvd(Ymm(bRegIdx + bFullReg), Ymm(bRegIdx + bFullReg),
+                        Ymm(aRegIdx + 1));
+
+                // Perform beta scaling: C_acc += beta * C_bf16
+                vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
+                            Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
+            }
+            add(regTmpCptr, regTmp1);
+        }
+
+        jmp(".betaOpEnd", T_NEAR);
+        L(".betaOp");
+    }
 
     for (int i = 0; i < MR; i++) {
         for (int j = 0; j < bFullReg; j++) {
@@ -717,6 +955,9 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         }
         add(regTmpCptr, regRsC);
     }
+
+    L(".betaOpEnd");
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -801,10 +1042,20 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     }
 
     L(label_store_result);
-    // store C
-    // skip fusing beta if betaScalingType is zero
-    RETURN_IF_ERROR(storeResult(
-        !(params.betaScalingType == dlp::kernel_frame::scalingType::zero)));
+    if (c_downscale < DLP_F32) {
+        RETURN_IF_ERROR(scaleBeta());
+        RETURN_IF_ERROR(storeResult(false));
+
+    } else {
+        // store C
+        if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
+            // skip beta scaling if beta is 0
+            RETURN_IF_ERROR(storeResult(false));
+        } else {
+            // beta scaling
+            RETURN_IF_ERROR(storeResult(true));
+        }
+    }
 
     L(".AfterStore");
 
@@ -847,6 +1098,7 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
     NR          = params.NR;
     useMask     = params.useMask;
     numMaskRegs = params.numMaskRegs;
+    c_downscale = params.c_downscale;
 
     RETURN_IF_ERROR(allocateReg());
     RETURN_IF_ERROR(allocateMaskRegisters());
@@ -860,7 +1112,10 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
     // need not be used by the kernel.
     // Putting inside a scope so that some tables can be generated post
     // the ret instr. StackFrame inserts a ret instr in its destructor.
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+    // Allocate 48 bytes of local stack space:
+    // - 32 bytes for mask storage (fringe BF16 stores)
+    // - 16 bytes for F32→BF16 conversion constants
+    Xbyak::util::StackFrame stackFrame(this, 1, 13, 48);
     initializeStackFrame(stackFrame);
     initializeParameters(params.mLoop);
 

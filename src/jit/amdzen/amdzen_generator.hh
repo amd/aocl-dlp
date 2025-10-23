@@ -176,12 +176,13 @@ class jitAmdZenBF16 : public dlp::jit::jitGeneratorBase
 
   public:
     // jitAVX512 base;
-    md_t               MR, NR, KC;
-    md_t               numMRVariants, numNRVariants;
-    md_t               numKernelVariants;
-    md_t               K_UNROLL;
-    md_t               c_downscale;
-    std::vector<void*> kernelCodeBlocks;
+    md_t                           MR, NR, KC;
+    md_t                           numMRVariants, numNRVariants;
+    md_t                           numKernelVariants;
+    md_t                           K_UNROLL;
+    md_t                           c_downscale;
+    std::vector<void*>             kernelCodeBlocks;
+    std::unique_ptr<jitAmdZenFP32> f32JitGenerator;
 
     jitAmdZenBF16();
     ~jitAmdZenBF16();

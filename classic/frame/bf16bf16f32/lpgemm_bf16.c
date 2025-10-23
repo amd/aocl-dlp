@@ -1223,11 +1223,20 @@ LPGEMM_5LOOP_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
                     /*To support AVX2, the DLP_F32 kernels are called.*/
-                    ((lpgemm_rowvar_f32)lcntx_f32->kern_fun_ptr)(
-                        mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                        a_block_stride, (b_use + jr), rs_b_use, cs_b_use,
-                        (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                        post_op_list, post_ops_attr);
+                    if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                        dlp_execute_kernel(
+                            lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                            (float*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                            (float*)(b_use + jr), rs_b_use, cs_b_use, 0, 0,
+                            (c_use_ic + jr), rs_c_use, 1, (void*)&alpha,
+                            (void*)&beta0, post_op_list, post_ops_attr);
+                    } else {
+                        ((lpgemm_rowvar_f32)lcntx_f32->kern_fun_ptr)(
+                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
+                            a_block_stride, (b_use + jr), rs_b_use, cs_b_use,
+                            (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
+                            post_op_list, post_ops_attr);
+                    }
                 }
             }
         }

@@ -41,7 +41,6 @@ namespace amdzen::gen {
 // F32 JIT Generator
 jitAmdZenFP32::jitAmdZenFP32()
     : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f32f32f32of32 })
-    // TODO: Hardcoded for now, need to make it dynamic
     , mIsaFeaturesRequired{}
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
@@ -858,6 +857,7 @@ jitAmdZenBF16::jitAmdZenBF16()
     , mIsaFeaturesRequired{}
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
+    , f32JitGenerator(nullptr)
 {
 }
 
@@ -881,9 +881,16 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     K_UNROLL    = (jI.kI).k_unroll;
     c_downscale = (jI.kI).c_downscale;
 
-    const dlp::kernel_frame::kernelDatatype kdt =
-        dlp::kernel_frame::kernelDatatype::bf16bf16f32of32;
+    if ((jI.kI).kInstPref
+        == dlp::kernel_frame::kernelInstrPreference::avx2_ymm_favour) {
+        // Ideally, a try-catch block should handle a memory allocation failure
+        // here.
+        f32JitGenerator = std::make_unique<jitAmdZenFP32>();
+        return (*f32JitGenerator)(jI);
+    }
 
+    // This code-section is taken if the underlying architecture supports
+    // AVX512-BF16.
     if (NR == 1) {
         if (c_downscale < DLP_F32) {
             return dlp::jit::jitGeneratorError::notSupported;
@@ -985,14 +992,20 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                                       false, false, (jI.kI).alphaScalingType,
                                       (jI.kI).betaScalingType, kType);
 
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
         // Generate all kernels for the given MR and NR
         for (int mr = 0; mr < numMRVariants; mr++) {
             for (int nr = 0; nr < numNRVariants; nr++) {
-                params.MR        = (mr == 0) ? MR : mr;
-                params.mLoop     = (mr == 0);
-                params.NR        = (nr * numElemsPerReg);
-                params.useMask   = (nr == 0);
-                void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
+                params.MR          = (mr == 0) ? MR : mr;
+                params.mLoop       = (mr == 0);
+                params.NR          = (nr * numElemsPerReg);
+                params.useMask     = (nr == 0);
+                params.numMaskRegs = (params.useMask) ? 1 : 0;
+                void* codeBuffer   = kernelCodeBlocks[mr * numNRVariants + nr];
                 // Allocate executable memory
                 codeBuffer = utils::jitHelperUtils::allocateJitMemory(
                     utils::JIT_KERNEL_SIZE);
@@ -1034,6 +1047,12 @@ cleanup:
 dlp::kernels::kernelError
 jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
 {
+    if (f32JitGenerator != nullptr) {
+        return f32JitGenerator->executeKernel(_params);
+    }
+
+    // This code-section is taken if the underlying architecture supports
+    // AVX512-BF16.
     if (NR == 1) {
         auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);
 

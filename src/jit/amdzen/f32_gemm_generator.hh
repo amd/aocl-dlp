@@ -61,12 +61,14 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     using halfRegType = typename Traits::halfRegType;
 
     // Configuration and state
-    int numRegs  = Traits::numRegs;
-    int RegSize  = Traits::regSize;
-    int RegBytes = Traits::regBytes;
+    int numRegs      = Traits::numRegs;
+    int RegSize      = Traits::regSize;
+    int RegBytes     = Traits::regBytes;
+    int halfRegBytes = RegBytes / 2;
     int aReg, bReg, bFullReg, bMaskReg, cReg;
     int aRegIdx, bRegIdx, cRegIdx, maskRegIdx;
     int MR, NR;
+    int c_downscale;
 
     // Register allocations
     Xbyak::Reg64 regTmpAptr, regBptr, regTmpCptr, regRsA, regCsA, regRsB,
@@ -127,6 +129,10 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError allocateMaskRegisters();
 
     dlp::jit::jitGeneratorError scaleBeta();
+
+    dlp::jit::jitGeneratorError convertF32toBF16(int scratch1,
+                                                 int scratch2,
+                                                 int destIdx);
 };
 
 // Type aliases for specific instruction sets

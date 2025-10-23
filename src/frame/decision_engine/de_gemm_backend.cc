@@ -27,6 +27,7 @@
  */
 
 #include <cctype>
+#include <memory>
 
 #include "arch_utils/arch_config_manager.hh"
 #include "cpu_utils/cpu_features.hh"
@@ -658,20 +659,154 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     , isAvx512Bf16(false)
     , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
     , canGenerateKernelInfo(true)
+    , f32Backend(nullptr)
 {
-    // For now, we check for AVX512_BF16 support using the archConfigManager.
-    // If it doesn't exist, we revert to use the classic path
+    // Check for AVX512_BF16 support using the archConfigManager.
+    // If it doesn't exist, we reroute to use the F32 JIT path.
     // Env variable standard :
     // Whatever value is given for AOCL_ENABLE_INSTRUCTIONS, we should check
     // for BF16 support in the hardware. If it exists, we deploy the BF16 JIT
-    // path, if not, we should use the F32 JIT path(F32 rerouting TBD).
-    // For now, we are using only AVX512 based BF16 kernels, and thus, have a
-    // specific boolean to represent this.
+    // path, if not, we should use the F32 JIT path for compatibility with
+    // AVX2 and non-BF16 AVX512 machines.
+    // NOTE : Downscaling support on F32 JIT exists on it's AVX2 code-path
+    //        Thus, when rerouting, we have to reroute only on machines that
+    //        supports AVX2 exclusively(without any AVX512 support).
     isAvx512Bf16 = arch_utils::archConfigManager::getInstance()
                        .isAvx512Bf16SupportedByArch();
+    isAvx512 =
+        arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
+
+    isAvx2 = arch_utils::archConfigManager::getInstance()
+                 .isAvx2Fma3SupportedByArch();
+
+    eKernelInstPref =
+        dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour;
 
     if (!isAvx512Bf16) {
-        canGenerateKernelInfo = false;
+        // Future-proof: reroute to F32 path for any machine without AVX512BF16
+        // This enables BF16 JIT on AVX2 machines by using F32 computation
+        if (isAvx2 && !isAvx512) {
+            // NOTE : Given that the F32-DE tries to set the kernel instruction
+            // preference
+            //        based on the AOCL_ENABLE_INSTRUCTIONS and native hardware
+            //        support, we can safely assume that we would strictly run
+            //        the F32 AVX2 JIT.
+            f32Backend = std::make_unique<gemmF32DEBackend>();
+        } else {
+            canGenerateKernelInfo = false;
+        }
+    }
+}
+
+void
+gemmBF16DEBackend::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
+                                lpgemm_post_op*                  post_op,
+                                kernel_frame::kernelDatatype     k_dtype)
+{
+    kernel_frame::kernelOps kOpsType = kernel_frame::kernelOps::invalid;
+    switch (post_op->op_code) {
+        case POST_OPS_BIAS: {
+            metaData->type           = kernel_frame::kernelOps::bias;
+            metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->stor_type));
+            char storFormatC =
+                std::tolower(*(static_cast<char*>(post_op->op_args2)));
+            metaData->cMatFormat = (storFormatC == 'c')
+                                       ? kernel_frame::storageFormat::colMajor
+                                       : kernel_frame::storageFormat::rowMajor;
+            break;
+        }
+        case POST_OPS_RELU:
+            metaData->type = kernel_frame::kernelOps::relu;
+            break;
+        case POST_OPS_RELU_SCALE:
+            metaData->type = kernel_frame::kernelOps::reluScale;
+            metaData->paramStorageDt =
+                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
+            break;
+        case POST_OPS_GELU_TANH:
+            metaData->type = kernel_frame::kernelOps::geluTanh;
+            break;
+        case POST_OPS_GELU_ERF:
+            metaData->type = kernel_frame::kernelOps::geluErf;
+            break;
+        case POST_OPS_CLIP:
+            metaData->type = kernel_frame::kernelOps::clip;
+            metaData->paramStorageDt =
+                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
+            break;
+        case POST_OPS_SWISH:
+            metaData->type = kernel_frame::kernelOps::swish;
+            metaData->paramStorageDt =
+                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
+            break;
+        case POST_OPS_TANH:
+            metaData->type = kernel_frame::kernelOps::tanh;
+            break;
+        case POST_OPS_SIGMOID:
+            metaData->type = kernel_frame::kernelOps::sigmoid;
+            break;
+        case POST_OPS_DOWNSCALE: {
+            metaData->type = kernel_frame::kernelOps::downscale;
+            char storFormatC =
+                std::tolower(*(static_cast<char*>(post_op->op_args2)));
+            metaData->cMatFormat    = (storFormatC == 'c')
+                                          ? kernel_frame::storageFormat::colMajor
+                                          : kernel_frame::storageFormat::rowMajor;
+            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->sf_stor_type));
+            metaData->scalarScaleFactorRequired =
+                (post_op->scale_factor_len == 1) ? true : false;
+            metaData->vectorScaleFactorRequired =
+                (post_op->scale_factor_len > 1) ? true : false;
+            metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->zp_stor_type));
+            metaData->scalarZeroPointRequired =
+                (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true : false;
+            metaData->vectorZeroPointRequired =
+                (*(static_cast<md_t*>(post_op->op_args3)) > 1) ? true : false;
+            break;
+        }
+        case POST_OPS_MATRIX_ADD: {
+            metaData->type           = kernel_frame::kernelOps::matAdd;
+            metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->stor_type));
+            char storFormatC =
+                std::tolower(*(static_cast<char*>(post_op->op_args2)));
+            metaData->cMatFormat    = (storFormatC == 'c')
+                                          ? kernel_frame::storageFormat::colMajor
+                                          : kernel_frame::storageFormat::rowMajor;
+            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->sf_stor_type));
+            metaData->scalarScaleFactorRequired =
+                (post_op->scale_factor_len == 1) ? true : false;
+            metaData->vectorScaleFactorRequired =
+                (post_op->scale_factor_len > 1) ? true : false;
+            break;
+        }
+        case POST_OPS_MATRIX_MUL: {
+            metaData->type           = kernel_frame::kernelOps::matMul;
+            metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->stor_type));
+            char storFormatC =
+                std::tolower(*(static_cast<char*>(post_op->op_args2)));
+            metaData->cMatFormat    = (storFormatC == 'c')
+                                          ? kernel_frame::storageFormat::colMajor
+                                          : kernel_frame::storageFormat::rowMajor;
+            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->sf_stor_type));
+            metaData->scalarScaleFactorRequired =
+                (post_op->scale_factor_len == 1) ? true : false;
+            metaData->vectorScaleFactorRequired =
+                (post_op->scale_factor_len > 1) ? true : false;
+            break;
+        }
+        case POST_OPS_DISABLE:
+            metaData->type = kernel_frame::kernelOps::invalid;
+            break;
+        default:
+            metaData->type = kernel_frame::kernelOps::invalid;
+            break;
     }
 }
 
@@ -679,12 +814,22 @@ std::optional<kernel_frame::kernelInfo>
 gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
 {
     auto gemmIn = static_cast<gemmDEInput*>(in);
-    if ((gemmIn == nullptr) || (!canGenerateKernelInfo)) {
+    if (gemmIn == nullptr) {
         return std::nullopt;
     }
 
-    // At this point, we know that the underlying architecture supports AVX512
-    // BF16.
+    if (!canGenerateKernelInfo) {
+        return std::nullopt;
+    }
+
+    // This rerouting currently happens only on machines without AVX512BF16 and
+    // AVX512 support, that still have AVX2 support.
+    if (f32Backend != nullptr) {
+        return f32Backend->getKernelInfoForInput(in);
+    }
+
+    // At this point, we know that the underlying architecture supports
+    // AVX512-BF16.
     kernel_frame::scalingType alphaScalingType =
         kernel_frame::scalingType::generic;
     kernel_frame::scalingType betaScalingType =
@@ -700,16 +845,79 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
     bool            anyKOpsOrder = false;
 
     // Set the kernel instruction preference based on the CPU features.
-    // For now, we set it to avx512_zmm_favour, given that we intend to only
-    // generate AVX512 BF16 kernels.
-    kernel_frame::kernelInstrPreference kInstPref =
-        kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+    // The DE constructor sets it to a safe value, based on the hardware
+    // support.
+    kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
     // Early exit conditions.
     // Support for JIT AVX512BF16 only when post-ops are not present.
     if ((gemmIn->metadata != nullptr)
         && (gemmIn->metadata[0].op_code != POST_OPS_DISABLE)) {
-        return std::nullopt;
+
+        // Return early if N==1, since currently we support BF16 GEMV(N1) only
+        // without post-ops.
+        if (gemmIn->n == 1) {
+            return std::nullopt;
+        }
+
+        // Iterate over the post_ops list to get the number of post-ops.
+        md_t            numPostOps    = 0;
+        lpgemm_post_op* temp_post_ops = gemmIn->metadata;
+        while ((temp_post_ops != NULL)
+               && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
+            temp_post_ops = temp_post_ops->next;
+            numPostOps++;
+        }
+
+        if (numPostOps == 0) {
+            kernel_frame::kernelInfo kI{ mr,
+                                         nr,
+                                         0,
+                                         k_unroll,
+                                         kc,
+                                         alphaScalingType,
+                                         betaScalingType,
+                                         mtag_a,
+                                         mtag_b,
+                                         false,
+                                         nullptr,
+                                         0,
+                                         anyKOpsOrder,
+                                         kInstPref,
+                                         c_downscale };
+            return std::make_optional(kI);
+        } else {
+            kernel_frame::kernelInfo kI{ mr,
+                                         nr,
+                                         0,
+                                         k_unroll,
+                                         kc,
+                                         alphaScalingType,
+                                         betaScalingType,
+                                         mtag_a,
+                                         mtag_b,
+                                         false,
+                                         nullptr,
+                                         0,
+                                         anyKOpsOrder,
+                                         kInstPref,
+                                         c_downscale };
+            kI.kOpsArrSize = numPostOps;
+            kI.kOpsArr =
+                kernel_frame::kernelInfo::allocateKernelOpsArray(numPostOps);
+
+            md_t ii       = 0;
+            temp_post_ops = gemmIn->metadata;
+            while ((temp_post_ops != NULL)
+                   && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
+                setKernelOps(std::addressof(kI.kOpsArr[ii]), temp_post_ops,
+                             gemmIn->k_dtype);
+                temp_post_ops = temp_post_ops->next;
+                ii++;
+            }
+
+            return std::make_optional(kI);
+        }
     }
 
     if (gemmIn->n == 1) {

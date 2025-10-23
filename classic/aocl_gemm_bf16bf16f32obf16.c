@@ -218,11 +218,27 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     lcntx_l = *lcntx_g;
 
     // Initialize DLP Plus kernel path.
+    // For machines without AVX512BF16, BF16 operations use F32 JIT kernels.
+    // Use F32 block sizes (MR=6, NR=16 for AVX2) instead of BF16 block sizes
+    // (MR=6, NR=64 for AVX512BF16) to ensure correct kernel generation.
+    md_t mr_hint = lcntx_l.blksz.MR;
+    md_t nr_hint = lcntx_l.blksz.NR;
+    md_t kc_hint = lcntx_l.blksz.KC;
+
+    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
+        // No native BF16 support - will use F32 kernels
+        // Get F32 context for proper block sizes
+        lpgemm_cntx_t* lcntx_f32 = lpgemm_get_global_cntx_obj(F32F32F32OF32);
+        mr_hint                  = lcntx_f32->blksz.MR;
+        nr_hint                  = lcntx_f32->blksz.NR;
+        kc_hint                  = lcntx_f32->blksz.KC;
+    }
+
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
     lcntx_l.dlp_kernel_hndl             = dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
         rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16);
+        mr_hint, nr_hint, kc_hint, DLP_BF16);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
     /* While AOCL_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that supports

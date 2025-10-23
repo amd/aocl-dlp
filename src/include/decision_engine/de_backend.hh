@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <memory>
 #include <optional>
 
 #include "de_input.hh"
@@ -69,11 +70,18 @@ class gemmF32DEBackend : public iDEBackend
 
 class gemmBF16DEBackend : public iDEBackend
 {
+    static inline void setKernelOps(
+        dlp::kernel_frame::kernelOpsMetaData* metaData,
+        lpgemm_post_op*                       post_op,
+        kernel_frame::kernelDatatype          k_dtype);
+
     bool                                isAvx512;
     bool                                isAvx2;
     bool                                isAvx512Bf16;
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
+    std::unique_ptr<gemmF32DEBackend>
+        f32Backend; // For rerouting when AVX512BF16 is not supported
 
   public:
     gemmBF16DEBackend();
