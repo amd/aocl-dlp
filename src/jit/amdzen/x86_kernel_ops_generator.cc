@@ -70,8 +70,8 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
     // Store algorithm type for later use in post-op dispatching
     algoType_ = algoType;
     // Set the post-ops context with the provided parameters
-    RETURN_IF_ERROR(
-        (setPostOpsContext(MR, NR, useMask, cRegStartIdx, cRegCount)));
+    RETURN_IF_ERROR((setPostOpsContext(MR, NR, useMask, numMaskRegs,
+                                       cRegStartIdx, cRegCount)));
 
     // Save registers used by this generator.
     utils::registerGuard<Xbyak::Reg64> rG{ jit_ };
@@ -246,6 +246,7 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::setPostOpsContext(int  MR_param,
                                                 int  NR_param,
                                                 bool useMask_param,
+                                                int  numMaskRegs_param,
                                                 int  cRegStartIdx_param,
                                                 int  cRegCount_param)
 {
@@ -253,6 +254,7 @@ kernelOpsGeneratorX86<KType>::setPostOpsContext(int  MR_param,
     this->MR           = MR_param;
     this->NR           = NR_param;
     this->useMask      = useMask_param;
+    this->numMaskRegs  = numMaskRegs_param;
     this->cRegStartIdx = cRegStartIdx_param;
     this->cRegCount    = cRegCount_param;
 

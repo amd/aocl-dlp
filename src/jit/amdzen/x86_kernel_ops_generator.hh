@@ -199,8 +199,12 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     Xbyak::CodeGenerator* jit_; // Back reference to access registers and state
 
-    dlp::jit::jitGeneratorError setPostOpsContext(
-        int MR, int NR, bool useMask, int cRegStartIdx, int cRegCount);
+    dlp::jit::jitGeneratorError setPostOpsContext(int  MR,
+                                                  int  NR,
+                                                  bool useMask,
+                                                  int  numMaskRegs,
+                                                  int  cRegStartIdx,
+                                                  int  cRegCount);
 
     // Helper implementations for different storage formats
     // GEMM implementations
