@@ -351,8 +351,7 @@ initialize_memory(multi_instance_gemm_f32_args_t* args, int num_instances)
         args->transa[i]       = 'N'; // No transpose for A
         args->transb[i]       = 'N'; // No transpose for B
         args->mem_format_a[i] = 'N'; // A is not reordered
-        args->mem_format_b[i] =
-            (rand() % 2 == 0) ? 'N' : 'R'; // B is randomly reordered or not.
+        args->mem_format_b[i] = 'N'; // B is not reordered
     }
 
     return true;
@@ -366,7 +365,11 @@ initialize_memory(multi_instance_gemm_f32_args_t* args, int num_instances)
     };
 
 void
-parse_cmd_line_args(int argc, char* argv[], int* num_instances, int* n_repeats)
+parse_cmd_line_args(int   argc,
+                    char* argv[],
+                    int*  num_instances,
+                    int*  n_repeats,
+                    bool* randomize_thread_per_instance)
 {
     // Parse command line arguments for number of instances
     for (int i = 1; i < argc; i++) {
@@ -388,6 +391,10 @@ parse_cmd_line_args(int argc, char* argv[], int* num_instances, int* n_repeats)
                         *n_repeats);
                 *n_repeats = 1;
             }
+        } else if (strcmp(argv[i], "-r") == 0) {
+            // This option is only to enable or disable randomization
+            // of thread assignment per instance.
+            *randomize_thread_per_instance = true;
         }
     }
 }
@@ -395,10 +402,12 @@ parse_cmd_line_args(int argc, char* argv[], int* num_instances, int* n_repeats)
 int
 main(int argc, char* argv[])
 {
-    int num_instances = 64; // Number of instances.
-    int n_repeats     = 1;  // Configure number of repetitions
+    int  num_instances                 = 64; // Number of instances.
+    int  n_repeats                     = 1;  // Configure number of repetitions
+    bool randomize_thread_per_instance = false;
 
-    parse_cmd_line_args(argc, argv, &num_instances, &n_repeats);
+    parse_cmd_line_args(argc, argv, &num_instances, &n_repeats,
+                        &randomize_thread_per_instance);
 
     ZERO_INIT_AND_DEFINE_ARGS(args);
 
@@ -411,6 +420,9 @@ main(int argc, char* argv[])
         fprintf(stderr, "Memory initialization failed\n");
         goto error_handle;
     }
+
+    const int threads_per_instance_len = 4;
+    int       threads_per_instance[4]  = { 1, 3, 8, 29 };
 
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
     // Expecting the api itself to be multi-threaded based on openmp.
@@ -427,11 +439,15 @@ main(int argc, char* argv[])
 #pragma omp parallel for
 #endif
         for (int i = 0; i < num_instances; i++) {
-            // Setting library internal thread count to 1. Setting it outside
-            // the omp parallel does not work, since DLP currently only updates
-            // a thread local rntm->num_threads value, which will only be
-            // applicable to thread 0 and not others.
-            dlp_thread_set_num_threads(1);
+            // Setting library internal thread count to a predetermined value.
+            // Setting it outside the omp parallel does not work, since DLP
+            // currently only updates a thread local rntm->num_threads value,
+            // which will only be applicable to thread 0 and not others.
+            int thread_idx = 0;
+            if (randomize_thread_per_instance) {
+                thread_idx = rand() % threads_per_instance_len;
+            }
+            dlp_thread_set_num_threads(threads_per_instance[thread_idx]);
 
             // Perform matrix multiplication: C = alpha * A * B + beta * C
             aocl_gemm_f32f32f32of32(

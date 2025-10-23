@@ -85,10 +85,14 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
     if (kDType == kernelDatatype::invalid) {
         return kernel_hndl;
     }
+
+    // TODO: Performance bug for smaller sizes, this takes 4 GFlops.
     dlp::de::gemmDEInput gDEIn{ kDType,  m,       n,       k,          rs_a,
                                 cs_a,    rs_b,    cs_b,    rs_c,       cs_c,
                                 alpha,   beta,    mtag_a,  mtag_b,     metadata,
                                 mr_hint, nr_hint, kc_hint, c_downscale };
+
+    // TODO: Performance bug for smaller sizes, this takes 7 GFlops.
     auto optKI = dlp::de::decisionEngineInstance().getKernelInfoForInput(
         std::addressof(gDEIn), kernelRoutineType::gemm, kDType);
     if (!optKI.has_value()) {

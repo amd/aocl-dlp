@@ -105,7 +105,7 @@ class jitHelperUtils
         return codeBuffer;
     }
 
-    static void deallocateJitMemory(void* codeBuffer, std::size_t jitKernSize)
+    static void deallocateJitMemory(void*& codeBuffer, std::size_t jitKernSize)
     {
         if (codeBuffer != nullptr) {
 #if DLP_OS_WINDOWS
@@ -113,6 +113,7 @@ class jitHelperUtils
 #else
             munmap(codeBuffer, jitKernSize);
 #endif
+            codeBuffer = nullptr;
         }
     }
 };

@@ -255,13 +255,31 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
         dlp_rntm_init_from_global(&rntm_g);
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32F32F32OF32);
+        lpgemm_cntx_t  lcntx_l;
+        // Create local copy, since each thread in a multi-instance setup
+        // modified the context object.
+        lcntx_l = *lcntx_g;
+
+        // Initialize DLP Plus kernel path.
+        lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+        // All the g_sz inputs in a given group will have the same matrix
+        // dimensions/attributes. Therefore the DE and Jit generation in
+        // DLP Plus can proceed with any 1 input from this group.
+        if (g_sz > 0) {
+            lcntx_l.dlp_kernel_hndl = dlp_init_and_get_kernel_hndl(
+                DLP_KERNEL_F32F32F32OF32, order[gc_i], mtag_a[0], mtag_b[0],
+                m_local[0], n_local[0], k_local[0], rs_a[0], cs_a[0], rs_b[0],
+                cs_b[0], rs_c[0], cs_c[0], (void*)&alpha[gc_i],
+                (void*)&beta[gc_i], post_op_list, lcntx_l.blksz.MR,
+                lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32);
+        }
 
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_f32f32f32of32_openmp_thread_decorator(
             g_sz, m_local, n_local, k_local, (const float**)a_local, rs_a, cs_a,
             mtag_a, (const float**)b_local, rs_b, cs_b, mtag_b, &c[mat_idx],
-            rs_c, cs_c, alpha[gc_i], beta[gc_i], &rntm_g, lcntx_g, post_op_list,
-            DLP_F32);
+            rs_c, cs_c, alpha[gc_i], beta[gc_i], &rntm_g, &lcntx_l,
+            post_op_list, DLP_F32);
 
 #else
         batch_lpgemm_f32f32f32of32_thread_decorator(

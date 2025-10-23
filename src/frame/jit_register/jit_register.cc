@@ -52,10 +52,14 @@ jitGeneratorRegister::registerJitGenerator(
         return jit::jitGeneratorFrameError::failure;
     }
 
-    jitGeneratorBase* jitGenPtr = jitGen.release();
-
+    // Return if there are no kernel datatypes supported by this JIT generator.
     std::vector<kernel_frame::kernelDatatype>& kDTypes =
-        jitGenPtr->getKernelDatatypes();
+        jitGen->getKernelDatatypes();
+    if (kDTypes.empty()) {
+        return jit::jitGeneratorFrameError::failure;
+    }
+
+    jitGeneratorBase* jitGenPtr = jitGen.release();
 
     auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
     for (auto ele : kDTypes) {
@@ -69,9 +73,7 @@ jitGeneratorRegister::registerJitGenerator(
                     // Limit locking to the minimum scope.
                     std::lock_guard<std::mutex> lock(
                         replacedJitGeneratorSinkMutex);
-                    replacedJitGeneratorSink.push_back(
-                        vecJITGenerators[routineIdx][idx].jitGenerator.load(
-                            std::memory_order_relaxed));
+                    replacedJitGeneratorSink.push_back(jitGenPtr);
                 }
                 // If the key is already in the chain, update the value. In
                 // future this will need to be based on kernelFamily and
@@ -80,6 +82,14 @@ jitGeneratorRegister::registerJitGenerator(
                     jitGenPtr, std::memory_order_relaxed);
             }
         } else {
+            {
+                // All the stored values are tracked in the replaced sink for
+                // proper deletion during destruction. Refer the comments in
+                // insert api of ThreadSafeChainedDispatchTable for key
+                // already present case for a detailed explanation.
+                std::lock_guard<std::mutex> lock(replacedJitGeneratorSinkMutex);
+                replacedJitGeneratorSink.push_back(jitGenPtr);
+            }
             // If the key is not in the chain, insert the key and value.
             // In future this will need to be based on kernelFamily and
             // priority.

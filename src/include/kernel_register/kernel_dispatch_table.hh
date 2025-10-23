@@ -75,13 +75,11 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
   public:
     ThreadSafeChainedDispatchTable()
     {
-        table.reserve(TABLE_SIZE * CHAIN_SIZE);
         table.resize(TABLE_SIZE * CHAIN_SIZE);
         for (auto& entry : table) {
             entry.isOccupied = false;
         }
 
-        backupTable.reserve(TABLE_SIZE);
         backupTable.resize(TABLE_SIZE);
         for (auto& entry : backupTable) {
             entry.isOccupied = false;
