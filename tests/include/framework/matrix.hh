@@ -33,9 +33,131 @@
 #include <any>
 #include <limits>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <vector>
 
 namespace dlp { namespace testing { namespace framework {
+
+    // Forward declaration
+    class Matrix;
+
+    /**
+     * @struct MismatchInfo
+     * @brief Information about a single element mismatch between matrices
+     */
+    struct MismatchInfo
+    {
+        size_t row;          ///< Row index of the mismatch
+        size_t col;          ///< Column index of the mismatch
+        double value1;       ///< Value from first matrix (converted to double)
+        double value2;       ///< Value from second matrix (converted to double)
+        double absDiff;      ///< Absolute difference between values
+        double relativeDiff; ///< Relative difference (absDiff / max(|val1|,
+                             ///< |val2|))
+    };
+
+    /**
+     * @struct MatrixCompareOptions
+     * @brief Options controlling matrix comparison behavior
+     *
+     * This structure controls how Matrix::compare() operates:
+     * - Fast mode (verbose=false): Boolean comparison with early exit,
+     *   minimal allocations, optimized for performance
+     * - Verbose mode (verbose=true): Collects detailed diagnostics including
+     *   mismatch locations, differences, and statistics
+     */
+    struct MatrixCompareOptions
+    {
+        bool verbose = false; ///< Enable verbose mode with detailed diagnostics
+        size_t maxMismatches = 10; ///< Maximum number of mismatches to record
+                                   ///< in verbose mode
+        double absToleranceOverride =
+            -1.0; ///< Override default absolute tolerance (-1 = use default)
+        double relToleranceOverride =
+            -1.0; ///< Override default relative tolerance (-1 = use default)
+
+        /**
+         * @brief Create options for fast mode (boolean comparison only)
+         */
+        static MatrixCompareOptions Fast()
+        {
+            MatrixCompareOptions opts;
+            opts.verbose = false;
+            return opts;
+        }
+
+        /**
+         * @brief Create options for verbose mode with detailed diagnostics
+         * @param maxMismatches Maximum number of mismatches to record (default:
+         * 10)
+         */
+        static MatrixCompareOptions Verbose(size_t maxMismatches = 10)
+        {
+            MatrixCompareOptions opts;
+            opts.verbose       = true;
+            opts.maxMismatches = maxMismatches;
+            return opts;
+        }
+    };
+
+    /**
+     * @struct MatrixCompareResult
+     * @brief Result of matrix comparison with optional detailed diagnostics
+     *
+     * Contains:
+     * - Boolean equality result
+     * - Mismatch type (dimension, type, or data)
+     * - Detailed mismatch information (in verbose mode)
+     * - Statistics (max differences, counts)
+     */
+    struct MatrixCompareResult
+    {
+        bool equal = true; ///< True if matrices are equal within tolerance
+
+        // Mismatch categorization
+        bool dimensionMismatch = false; ///< True if dimensions differ
+        bool typeMismatch      = false; ///< True if types differ
+        bool layoutMismatch    = false; ///< True if layouts differ
+        bool metadataMismatch  = false; ///< True if other metadata differs
+
+        // Statistics
+        size_t mismatchCount = 0;   ///< Total number of element mismatches
+        double maxAbsDiff    = 0.0; ///< Maximum absolute difference found
+        double maxRelDiff    = 0.0; ///< Maximum relative difference found
+        size_t maxDiffRow    = 0;   ///< Row of maximum difference
+        size_t maxDiffCol    = 0;   ///< Column of maximum difference
+
+        // Tolerance information
+        double usedAbsTolerance =
+            0.0; ///< Absolute tolerance used for comparison
+        double usedRelTolerance =
+            0.0; ///< Relative tolerance used for comparison
+
+        // Detailed mismatch list (only populated in verbose mode)
+        std::vector<MismatchInfo> mismatches;
+
+        /**
+         * @brief Check if comparison was successful (matrices are equal)
+         */
+        operator bool() const { return equal; }
+    };
+
+    /**
+     * @brief Format comparison result as a human-readable string
+     *
+     * Produces detailed diagnostic output suitable for logging or test failure
+     * messages. Includes dimension/type information, tolerance values, mismatch
+     * details, and statistics.
+     *
+     * @param result The comparison result to format
+     * @param matrix1 First matrix (for context)
+     * @param matrix2 Second matrix (for context)
+     * @return Formatted string representation
+     */
+    std::string FormatCompareResult(const MatrixCompareResult& result,
+                                    const Matrix&              matrix1,
+                                    const Matrix&              matrix2);
 
     /**
      * @class Matrix
@@ -275,9 +397,53 @@ namespace dlp { namespace testing { namespace framework {
         void setK(md_t k);
 
         /**
+         * @brief Compare two matrices with configurable mode and diagnostics
+         *
+         * Unified comparison method supporting both fast mode (boolean only)
+         * and verbose mode (detailed diagnostics). This is the primary
+         * comparison interface.
+         *
+         * Fast mode (opts.verbose=false):
+         * - Optimized for performance with early exit
+         * - No allocations or detailed tracking
+         * - Uses memcmp for integer types
+         * - Returns boolean result only
+         *
+         * Verbose mode (opts.verbose=true):
+         * - Collects detailed mismatch information
+         * - Records element locations, values, and differences
+         * - Computes statistics (max diff, mismatch count)
+         * - Suitable for debugging and test diagnostics
+         *
+         * @param other The matrix to compare with
+         * @param opts Comparison options (fast vs verbose, tolerances)
+         * @return MatrixCompareResult containing equality status and optional
+         * diagnostics
+         *
+         * @example Fast mode for boolean check:
+         * @code
+         *   if (matrix1.compare(matrix2, MatrixCompareOptions::Fast())) {
+         *     // Matrices are equal
+         *   }
+         * @endcode
+         *
+         * @example Verbose mode for diagnostics:
+         * @code
+         *   auto result = matrix1.compare(matrix2,
+         * MatrixCompareOptions::Verbose(20)); if (!result) {
+         *     std::cout << FormatCompareResult(result, matrix1, matrix2);
+         *   }
+         * @endcode
+         */
+        MatrixCompareResult compare(const Matrix&               other,
+                                    const MatrixCompareOptions& opts =
+                                        MatrixCompareOptions::Fast()) const;
+
+        /**
          * @brief Compare two matrices for equality
          *
-         * Checks if two matrices have the same dimensions, type, and content
+         * Checks if two matrices have the same dimensions, type, and content.
+         * This is a convenience wrapper around compare() in fast mode.
          *
          * @param other The matrix to compare with
          * @return bool True if matrices are equal, false otherwise
@@ -555,14 +721,6 @@ namespace dlp { namespace testing { namespace framework {
         }
 
       private:
-        /**
-         * @brief Helper function for floating point data comparison
-         *
-         * @param other The matrix to compare with
-         * @return bool True if floating point data matches within tolerance
-         */
-        bool compareFloatingPointData(const Matrix& other) const;
-
         /**
          * @brief Allocate aligned memory with proper size rounding
          *

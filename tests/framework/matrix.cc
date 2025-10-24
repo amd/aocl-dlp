@@ -42,14 +42,17 @@
 #include "classic/aocl_bf16_type.h"
 #include "classic/dlp_base_types.h"
 #include "utils/conversion_utils.hh"
+#include <algorithm> // For std::max
 #include <any>
 #include <chrono> // For time-based seeding
-#include <cmath>  // For std::abs
+#include <cmath>  // For std::abs, std::isnan, std::isinf
 #include <cstdint>
 #include <cstdlib> // For std::aligned_alloc, std::free
-#include <cstring> // For std::memcpy
+#include <cstring> // For std::memcpy, std::memcmp
+#include <iomanip> // For std::setprecision, std::setw, std::setfill
 #include <limits>  // For std::numeric_limits
 #include <random>  // For random number generation
+#include <sstream>
 #include <stdexcept>
 
 using dlp::testing::utils::bf16_to_f32;
@@ -58,6 +61,30 @@ using dlp::testing::utils::f32_to_bf16;
 namespace dlp { namespace testing { namespace framework {
     using dlp::testing::utils::bf16_to_f32;
     using dlp::testing::utils::f32_to_bf16;
+
+    /**
+     * @brief Calculate the machine epsilon for bfloat16
+     *
+     * BF16 has 1 sign bit, 8 exponent bits, and 7 mantissa bits.
+     * Machine epsilon is the smallest value such that 1.0 + epsilon != 1.0
+     * For bf16, this is 2^-7 = 0.0078125
+     *
+     * @return The machine epsilon for bfloat16 as a float
+     */
+    static float bf16_machine_epsilon()
+    {
+        // BF16 format: 1 sign bit, 8 exponent bits, 7 mantissa bits
+        // Machine epsilon = 2^(-mantissa_bits) = 2^(-7) = 0.0078125
+        // We can also calculate this by finding the next representable value
+        // after 1.0
+        constexpr uint16_t one_bits  = 0x3F80u; // bf16 encoding of 1.0f
+        constexpr uint16_t next_bits = 0x3F81u; // next representable value
+
+        float one  = bf16_to_f32(static_cast<bfloat16>(one_bits));
+        float next = bf16_to_f32(static_cast<bfloat16>(next_bits));
+
+        return next - one;
+    }
 
     /**
      * @brief Default constructor implementation
@@ -464,46 +491,593 @@ namespace dlp { namespace testing { namespace framework {
     }
 
     /**
+     * @brief Compare two matrices with configurable mode and diagnostics
+     */
+    MatrixCompareResult Matrix::compare(const Matrix&               other,
+                                        const MatrixCompareOptions& opts) const
+    {
+        MatrixCompareResult result;
+
+        // Check dimensions
+        if (m_rows != other.m_rows || m_cols != other.m_cols) {
+            result.equal             = false;
+            result.dimensionMismatch = true;
+            return result;
+        }
+
+        // Check type
+        if (m_type != other.m_type) {
+            result.equal        = false;
+            result.typeMismatch = true;
+            return result;
+        }
+
+        // Check layout
+        if (m_layout != other.m_layout) {
+            result.equal          = false;
+            result.layoutMismatch = true;
+            return result;
+        }
+
+        // Check other metadata
+        if (m_leadingDim != other.m_leadingDim
+            || m_transposed != other.m_transposed
+            || m_reordered != other.m_reordered || m_packed != other.m_packed) {
+            result.equal            = false;
+            result.metadataMismatch = true;
+            return result;
+        }
+
+        // Check data size
+        if (m_dataSizeBytes != other.m_dataSizeBytes) {
+            result.equal             = false;
+            result.dimensionMismatch = true;
+            return result;
+        }
+
+        // Handle null data
+        if (m_data == nullptr && other.m_data == nullptr) {
+            result.equal = true;
+            return result;
+        }
+
+        if (m_data == nullptr || other.m_data == nullptr) {
+            result.equal = false;
+            return result;
+        }
+
+        // Determine tolerances
+        double absTol, relTol;
+        if (m_type == MatrixType::f32) {
+            // Use k dimension for tolerance scaling if available
+            // When k dimension is large (GEMM), accumulated errors increase
+            double k_factor = (m_k != std::numeric_limits<md_t>::max())
+                                  ? static_cast<double>(m_k)
+                                  : 1.0;
+            double base_tolerance =
+                50.0 * std::numeric_limits<float>::epsilon();
+
+            absTol = (opts.absToleranceOverride >= 0.0)
+                         ? opts.absToleranceOverride
+                         : base_tolerance * k_factor;
+            relTol = (opts.relToleranceOverride >= 0.0)
+                         ? opts.relToleranceOverride
+                         : base_tolerance * k_factor;
+        } else if (m_type == MatrixType::bf16) {
+            // Use k dimension for tolerance scaling if available
+            // When k dimension is large (GEMM), accumulated errors increase
+            double k_factor = (m_k != std::numeric_limits<md_t>::max())
+                                  ? static_cast<double>(m_k)
+                                  : 1.0;
+            // Calculate bf16 machine epsilon and apply same formula as f32
+            double bf16_eps       = static_cast<double>(bf16_machine_epsilon());
+            double base_tolerance = 50.0 * bf16_eps;
+
+            absTol = (opts.absToleranceOverride >= 0.0)
+                         ? opts.absToleranceOverride
+                         : base_tolerance * k_factor;
+            relTol = (opts.relToleranceOverride >= 0.0)
+                         ? opts.relToleranceOverride
+                         : base_tolerance * k_factor;
+        } else {
+            // Integer types: exact comparison
+            absTol = 0.0;
+            relTol = 0.0;
+        }
+
+        result.usedAbsTolerance = absTol;
+        result.usedRelTolerance = relTol;
+
+        // Fast mode for integer types: use memcmp
+        if (!opts.verbose
+            && (m_type != MatrixType::f32 && m_type != MatrixType::bf16)) {
+            result.equal =
+                (std::memcmp(m_data, other.m_data, m_dataSizeBytes) == 0);
+            return result;
+        }
+
+        // Element-wise comparison
+        size_t elementCount = 0;
+
+        switch (m_type) {
+            case MatrixType::f32: {
+                const float* data1 = reinterpret_cast<const float*>(m_data);
+                const float* data2 =
+                    reinterpret_cast<const float*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(float);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    float val1 = data1[i];
+                    float val2 = data2[i];
+
+                    // Check for exact equality first (handles NaN, Inf, zeros)
+                    if (val1 == val2) {
+                        continue;
+                    }
+
+                    // Check for NaN
+                    if (std::isnan(val1) || std::isnan(val2)) {
+                        result.equal = false;
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(val1)
+                                               - static_cast<double>(val2));
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(val1);
+                            info.value2       = static_cast<double>(val2);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                        continue;
+                    }
+
+                    double diff = std::abs(static_cast<double>(val1)
+                                           - static_cast<double>(val2));
+                    double maxAbs =
+                        std::max(std::abs(static_cast<double>(val1)),
+                                 std::abs(static_cast<double>(val2)));
+                    double relDiff = (maxAbs > 0.0) ? (diff / maxAbs) : 0.0;
+
+                    if (diff > absTol && relDiff > relTol) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(val1);
+                            info.value2       = static_cast<double>(val2);
+                            info.absDiff      = diff;
+                            info.relativeDiff = relDiff;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxRelDiff = relDiff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::bf16: {
+                const bfloat16* data1 =
+                    reinterpret_cast<const bfloat16*>(m_data);
+                const bfloat16* data2 =
+                    reinterpret_cast<const bfloat16*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(bfloat16);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    bfloat16 bf16_val1 = data1[i];
+                    bfloat16 bf16_val2 = data2[i];
+
+                    // Convert to float for comparison
+                    float val1 = bf16_to_f32(bf16_val1);
+                    float val2 = bf16_to_f32(bf16_val2);
+
+                    // Check for exact equality first
+                    if (val1 == val2) {
+                        continue;
+                    }
+
+                    // Check for NaN
+                    if (std::isnan(val1) || std::isnan(val2)) {
+                        result.equal = false;
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(val1)
+                                               - static_cast<double>(val2));
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(val1);
+                            info.value2       = static_cast<double>(val2);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                        continue;
+                    }
+
+                    double diff = std::abs(static_cast<double>(val1)
+                                           - static_cast<double>(val2));
+                    double maxAbs =
+                        std::max(std::abs(static_cast<double>(val1)),
+                                 std::abs(static_cast<double>(val2)));
+                    double relDiff = (maxAbs > 0.0) ? (diff / maxAbs) : 0.0;
+
+                    if (diff > absTol && relDiff > relTol) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(val1);
+                            info.value2       = static_cast<double>(val2);
+                            info.absDiff      = diff;
+                            info.relativeDiff = relDiff;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxRelDiff = relDiff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::s32: {
+                const int32_t* data1 = reinterpret_cast<const int32_t*>(m_data);
+                const int32_t* data2 =
+                    reinterpret_cast<const int32_t*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(int32_t);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    if (data1[i] != data2[i]) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(data1[i])
+                                               - static_cast<double>(data2[i]));
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(data1[i]);
+                            info.value2       = static_cast<double>(data2[i]);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::u32: {
+                const uint32_t* data1 =
+                    reinterpret_cast<const uint32_t*>(m_data);
+                const uint32_t* data2 =
+                    reinterpret_cast<const uint32_t*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(uint32_t);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    if (data1[i] != data2[i]) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(data1[i])
+                                               - static_cast<double>(data2[i]));
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(data1[i]);
+                            info.value2       = static_cast<double>(data2[i]);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::s16: {
+                const int16_t* data1 = reinterpret_cast<const int16_t*>(m_data);
+                const int16_t* data2 =
+                    reinterpret_cast<const int16_t*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(int16_t);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    if (data1[i] != data2[i]) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(data1[i])
+                                               - static_cast<double>(data2[i]));
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(data1[i]);
+                            info.value2       = static_cast<double>(data2[i]);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::u16: {
+                const uint16_t* data1 =
+                    reinterpret_cast<const uint16_t*>(m_data);
+                const uint16_t* data2 =
+                    reinterpret_cast<const uint16_t*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(uint16_t);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    if (data1[i] != data2[i]) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(data1[i])
+                                               - static_cast<double>(data2[i]));
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(data1[i]);
+                            info.value2       = static_cast<double>(data2[i]);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::s8: {
+                const int8_t* data1 = reinterpret_cast<const int8_t*>(m_data);
+                const int8_t* data2 =
+                    reinterpret_cast<const int8_t*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(int8_t);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    if (data1[i] != data2[i]) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(data1[i])
+                                               - static_cast<double>(data2[i]));
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(data1[i]);
+                            info.value2       = static_cast<double>(data2[i]);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::u8: {
+                const uint8_t* data1 = reinterpret_cast<const uint8_t*>(m_data);
+                const uint8_t* data2 =
+                    reinterpret_cast<const uint8_t*>(other.m_data);
+                elementCount = m_dataSizeBytes / sizeof(uint8_t);
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    if (data1[i] != data2[i]) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(data1[i])
+                                               - static_cast<double>(data2[i]));
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(data1[i]);
+                            info.value2       = static_cast<double>(data2[i]);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::s4:
+            case MatrixType::u4: {
+                // For packed 4-bit types, compare byte by byte
+                const uint8_t* data1 = reinterpret_cast<const uint8_t*>(m_data);
+                const uint8_t* data2 =
+                    reinterpret_cast<const uint8_t*>(other.m_data);
+                elementCount = m_dataSizeBytes;
+
+                for (size_t i = 0; i < elementCount; ++i) {
+                    if (data1[i] != data2[i]) {
+                        result.equal = false;
+
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(data1[i])
+                                               - static_cast<double>(data2[i]));
+
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = (i * 2) / m_leadingDim;
+                            size_t       c = (i * 2) % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(data1[i]);
+                            info.value2       = static_cast<double>(data2[i]);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = (i * 2) / m_leadingDim;
+                            result.maxDiffCol = (i * 2) % m_leadingDim;
+                        }
+                    }
+                }
+                break;
+            }
+
+            default:
+                throw std::runtime_error(
+                    "Unsupported matrix type for comparison");
+        }
+
+        return result;
+    }
+
+    /**
      * @brief Compare two matrices for equality
      */
     bool Matrix::operator==(const Matrix& other) const
     {
-        // Check dimensions and metadata
-        if (m_rows != other.m_rows || m_cols != other.m_cols
-            || m_type != other.m_type || m_layout != other.m_layout
-            || m_leadingDim != other.m_leadingDim
-            || m_transposed != other.m_transposed
-            || m_reordered != other.m_reordered || m_packed != other.m_packed) {
-            return false;
-        }
-
-        // Check data content
-        if (m_dataSizeBytes != other.m_dataSizeBytes) {
-            return false;
-        }
-
-        if (m_data == nullptr && other.m_data == nullptr) {
-            return true;
-        }
-
-        if (m_data == nullptr || other.m_data == nullptr) {
-            return false;
-        }
-
-        // For floating point types, use tolerance-based comparison
-        if (m_type == MatrixType::f32 || m_type == MatrixType::bf16) {
-            return compareFloatingPointData(other);
-        } else if (m_type == MatrixType::s32) {
-            for (size_t i = 0; i < m_dataSizeBytes / sizeof(int32_t); ++i) {
-                if (reinterpret_cast<const int32_t*>(m_data)[i]
-                    != reinterpret_cast<const int32_t*>(other.m_data)[i]) {
-                    return false;
-                }
-            }
-        }
-
-        // For integer types, use exact comparison
-        return std::memcmp(m_data, other.m_data, m_dataSizeBytes) == 0;
+        return compare(other, MatrixCompareOptions::Fast()).equal;
     }
 
     /**
@@ -560,77 +1134,6 @@ namespace dlp { namespace testing { namespace framework {
                 delete[] ptr;
             }
         }
-    }
-
-    /**
-     * @brief Helper function for floating point data comparison
-     */
-    bool Matrix::compareFloatingPointData(const Matrix& other) const
-    {
-        if (m_type == MatrixType::f32) {
-            const float* thisData = reinterpret_cast<const float*>(m_data);
-            const float* otherData =
-                reinterpret_cast<const float*>(other.m_data);
-            size_t elementCount = m_dataSizeBytes / sizeof(float);
-
-            // Base tolerance using machine epsilon with safety factor
-            double baseTolerance = 10.0 * std::numeric_limits<float>::epsilon();
-
-            for (size_t i = 0; i < elementCount; ++i) {
-                if (thisData[i] == otherData[i]) {
-                    continue;
-                }
-
-                float maxAbs =
-                    std::max(std::abs(thisData[i]), std::abs(otherData[i]));
-                if (maxAbs == 0.0f) {
-                    continue; // Both are zero
-                }
-
-                float relativeDiff =
-                    std::abs(thisData[i] - otherData[i]) / maxAbs;
-                double tolerance = baseTolerance * maxAbs;
-                if (relativeDiff > tolerance) {
-                    return false;
-                }
-            }
-        } else if (m_type == MatrixType::bf16) {
-            const bfloat16* thisData =
-                reinterpret_cast<const bfloat16*>(m_data);
-            const bfloat16* otherData =
-                reinterpret_cast<const bfloat16*>(other.m_data);
-            size_t elementCount = m_dataSizeBytes / sizeof(bfloat16);
-
-            // To approximate bf16's lower precision, we use a much larger
-            // multiplier for float's epsilon. 100000 * 1.2e-7 ≈ 1.2e-2
-            double baseTolerance =
-                100000.0 * std::numeric_limits<float>::epsilon();
-
-            for (size_t i = 0; i < elementCount; ++i) {
-                float thisFloat  = bf16_to_f32(thisData[i]);
-                float otherFloat = bf16_to_f32(otherData[i]);
-
-                if (thisFloat == otherFloat) {
-                    continue;
-                }
-
-                float maxAbs =
-                    std::max(std::abs(thisFloat), std::abs(otherFloat));
-                if (maxAbs == 0.0f) {
-                    continue; // Both are zero, already handled by equality
-                              // check
-                }
-
-                float  relativeDiff = std::abs(thisFloat - otherFloat) / maxAbs;
-                double tolerance    = baseTolerance * maxAbs;
-
-                if (relativeDiff > tolerance) {
-                    return false;
-                }
-            }
-        }
-
-        return true;
     }
 
     /**
@@ -826,6 +1329,116 @@ namespace dlp { namespace testing { namespace framework {
                 throw std::runtime_error(
                     "Unsupported matrix type for value fill");
         }
+    }
+
+    /**
+     * @brief Format comparison result as a human-readable string
+     */
+    std::string FormatCompareResult(const MatrixCompareResult& result,
+                                    const Matrix&              matrix1,
+                                    const Matrix&              matrix2)
+    {
+        std::ostringstream output;
+
+        // Header
+        output << "Matrix Comparison Report\n";
+        output << "========================\n\n";
+
+        // Matrix information
+        output << "Matrix 1: " << matrix1.getRows() << "x" << matrix1.getCols()
+               << ", type=" << matrix1.getMatrixType()
+               << ", layout=" << matrix1.getLayout()
+               << ", ld=" << matrix1.getLeadingDimension() << "\n";
+        output << "Matrix 2: " << matrix2.getRows() << "x" << matrix2.getCols()
+               << ", type=" << matrix2.getMatrixType()
+               << ", layout=" << matrix2.getLayout()
+               << ", ld=" << matrix2.getLeadingDimension() << "\n\n";
+
+        // Overall result
+        output << "Result: " << (result.equal ? "EQUAL" : "NOT EQUAL")
+               << "\n\n";
+
+        // Mismatch categorization
+        if (result.dimensionMismatch) {
+            output << "Cause: Dimension mismatch\n";
+            return output.str();
+        }
+
+        if (result.typeMismatch) {
+            output << "Cause: Type mismatch\n";
+            return output.str();
+        }
+
+        if (result.layoutMismatch) {
+            output << "Cause: Layout mismatch\n";
+            return output.str();
+        }
+
+        if (result.metadataMismatch) {
+            output << "Cause: Metadata mismatch (leading dimension, "
+                      "transposed, reordered, or packed flags)\n";
+            return output.str();
+        }
+
+        // Tolerance information
+        if (matrix1.getMatrixType() == MatrixType::f32
+            || matrix1.getMatrixType() == MatrixType::bf16) {
+            output << "Tolerances used:\n";
+            output << "  Absolute tolerance: " << std::scientific
+                   << std::setprecision(6) << result.usedAbsTolerance << "\n";
+            output << "  Relative tolerance: " << std::scientific
+                   << std::setprecision(6) << result.usedRelTolerance << "\n\n";
+        }
+
+        // Statistics
+        if (result.mismatchCount > 0) {
+            output << "Mismatch Statistics:\n";
+            output << "  Total mismatches: " << result.mismatchCount << "\n";
+            output << "  Maximum absolute difference: " << std::scientific
+                   << std::setprecision(8) << result.maxAbsDiff << " at ["
+                   << result.maxDiffRow << "," << result.maxDiffCol << "]\n";
+            if (result.maxRelDiff > 0.0) {
+                output << "  Maximum relative difference: " << std::scientific
+                       << std::setprecision(8) << result.maxRelDiff << "\n";
+            }
+            output << "\n";
+
+            // Detailed mismatches
+            if (!result.mismatches.empty()) {
+                output << "Detailed Mismatches (showing first "
+                       << result.mismatches.size() << "):\n";
+                output << "  Row  Col  Value1              Value2              "
+                          "AbsDiff             RelDiff\n";
+                output << "  "
+                          "---  ---  ------------------  ------------------  "
+                          "------------------  ------------------\n";
+
+                for (const auto& mismatch : result.mismatches) {
+                    output << "  " << std::setw(3) << mismatch.row << "  "
+                           << std::setw(3) << mismatch.col << "  "
+                           << std::scientific << std::setprecision(10)
+                           << std::setw(18) << mismatch.value1 << "  "
+                           << std::setw(18) << mismatch.value2 << "  "
+                           << std::setw(18) << mismatch.absDiff << "  ";
+                    if (mismatch.relativeDiff > 0.0) {
+                        output << std::setw(18) << mismatch.relativeDiff;
+                    } else {
+                        output << std::setw(18) << "N/A";
+                    }
+                    output << "\n";
+                }
+
+                if (result.mismatchCount > result.mismatches.size()) {
+                    output << "  ... ("
+                           << (result.mismatchCount - result.mismatches.size())
+                           << " more mismatches not shown)\n";
+                }
+            }
+        } else {
+            output << "No mismatches found (matrices are equal)\n";
+        }
+
+        return output.str();
     }
 
 }}} // namespace dlp::testing::framework

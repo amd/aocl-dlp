@@ -35,6 +35,7 @@
 
 // Standard Headers
 #include <gtest/gtest.h>
+#include <limits>
 #include <vector>
 
 using namespace dlp::testing::framework;
@@ -1315,4 +1316,431 @@ TEST_F(ArgParserTest, ParseTestArgsFiltersUALArguments)
 
     // Verify program name is still there
     EXPECT_STREQ(argv[0], "test_program");
+}
+
+// ============================================================================
+// MATRIX COMPARE TESTS
+// ============================================================================
+
+// Test fixture for Matrix::compare tests
+class MatrixCompareTest : public ::testing::Test
+{
+  protected:
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+// Test: Fast mode - equal matrices
+TEST_F(MatrixCompareTest, FastModeEqualMatricesF32)
+{
+    Matrix m1(2, 3, MatrixType::f32);
+    Matrix m2(2, 3, MatrixType::f32);
+
+    // Fill with same values
+    m1.fillValue(1.0f);
+    m2.fillValue(1.0f);
+
+    // Fast mode comparison
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+
+    EXPECT_TRUE(result.equal);
+    EXPECT_FALSE(result.dimensionMismatch);
+    EXPECT_FALSE(result.typeMismatch);
+    EXPECT_EQ(result.mismatchCount, 0);
+    EXPECT_EQ(result.mismatches.size(), 0); // Fast mode doesn't collect
+}
+
+// Test: Fast mode - different values
+TEST_F(MatrixCompareTest, FastModeDifferentValuesF32)
+{
+    Matrix m1(2, 3, MatrixType::f32);
+    Matrix m2(2, 3, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(2.0f);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+
+    EXPECT_FALSE(result.equal);
+}
+
+// Test: Fast mode - dimension mismatch
+TEST_F(MatrixCompareTest, FastModeDimensionMismatch)
+{
+    Matrix m1(2, 3, MatrixType::f32);
+    Matrix m2(3, 2, MatrixType::f32);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+
+    EXPECT_FALSE(result.equal);
+    EXPECT_TRUE(result.dimensionMismatch);
+}
+
+// Test: Fast mode - type mismatch
+TEST_F(MatrixCompareTest, FastModeTypeMismatch)
+{
+    Matrix m1(2, 3, MatrixType::f32);
+    Matrix m2(2, 3, MatrixType::s32);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+
+    EXPECT_FALSE(result.equal);
+    EXPECT_TRUE(result.typeMismatch);
+}
+
+// Test: Verbose mode - equal matrices
+TEST_F(MatrixCompareTest, VerboseModeEqualMatricesF32)
+{
+    Matrix m1(2, 3, MatrixType::f32);
+    Matrix m2(2, 3, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(1.0f);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+
+    EXPECT_TRUE(result.equal);
+    EXPECT_EQ(result.mismatchCount, 0);
+    EXPECT_EQ(result.mismatches.size(), 0);
+    EXPECT_EQ(result.maxAbsDiff, 0.0);
+}
+
+// Test: Verbose mode - collect mismatches
+TEST_F(MatrixCompareTest, VerboseModeCollectMismatches)
+{
+    Matrix m1(3, 3, MatrixType::f32);
+    Matrix m2(3, 3, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(2.0f);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Verbose(5));
+
+    EXPECT_FALSE(result.equal);
+    EXPECT_GT(result.mismatchCount, 0);
+    EXPECT_LE(result.mismatches.size(), 5); // Limited by maxMismatches
+    EXPECT_GT(result.maxAbsDiff, 0.0);
+
+    // Check that mismatch info is populated
+    if (!result.mismatches.empty()) {
+        const auto& first = result.mismatches[0];
+        EXPECT_EQ(first.value1, 1.0);
+        EXPECT_EQ(first.value2, 2.0);
+        EXPECT_EQ(first.absDiff, 1.0);
+    }
+}
+
+// Test: Verbose mode - max mismatches limit
+TEST_F(MatrixCompareTest, VerboseModeMaxMismatchesLimit)
+{
+    Matrix m1(10, 10, MatrixType::f32);
+    Matrix m2(10, 10, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(2.0f);
+
+    size_t maxMismatches = 10;
+    auto result = m1.compare(m2, MatrixCompareOptions::Verbose(maxMismatches));
+
+    EXPECT_FALSE(result.equal);
+    EXPECT_EQ(result.mismatchCount, 100);               // 10x10 = 100 elements
+    EXPECT_EQ(result.mismatches.size(), maxMismatches); // Limited to 10
+}
+
+// Test: Integer types - exact comparison
+TEST_F(MatrixCompareTest, IntegerTypesExactComparison)
+{
+    Matrix m1(2, 3, MatrixType::s32);
+    Matrix m2(2, 3, MatrixType::s32);
+
+    m1.fillValue(42);
+    m2.fillValue(42);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_TRUE(result.equal);
+
+    m2.fillValue(43);
+    result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_FALSE(result.equal);
+}
+
+// Test: BF16 type comparison
+TEST_F(MatrixCompareTest, BF16Comparison)
+{
+    Matrix m1(2, 3, MatrixType::bf16);
+    Matrix m2(2, 3, MatrixType::bf16);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(1.0f);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_TRUE(result.equal);
+}
+
+// Test: Tolerance override
+TEST_F(MatrixCompareTest, ToleranceOverride)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(1.001f);
+
+    // Default tolerance - should fail
+    auto result1 = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_FALSE(result1.equal);
+
+    // With high tolerance - should pass
+    MatrixCompareOptions opts = MatrixCompareOptions::Fast();
+    opts.absToleranceOverride = 0.01;
+    auto result2              = m1.compare(m2, opts);
+    EXPECT_TRUE(result2.equal);
+}
+
+// Test: Format compare result output
+TEST_F(MatrixCompareTest, FormatCompareResult)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(2.0f);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Verbose(5));
+
+    std::string formatted = FormatCompareResult(result, m1, m2);
+
+    // Check that the output contains key information
+    EXPECT_NE(formatted.find("Matrix Comparison Report"), std::string::npos);
+    EXPECT_NE(formatted.find("NOT EQUAL"), std::string::npos);
+    EXPECT_NE(formatted.find("Total mismatches"), std::string::npos);
+    EXPECT_NE(formatted.find("Maximum"), std::string::npos);
+}
+
+// Test: operator== uses fast mode
+TEST_F(MatrixCompareTest, OperatorEqualUsesFastMode)
+{
+    Matrix m1(2, 3, MatrixType::f32);
+    Matrix m2(2, 3, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(1.0f);
+
+    EXPECT_TRUE(m1 == m2);
+
+    m2.fillValue(2.0f);
+    EXPECT_FALSE(m1 == m2);
+}
+
+// Test: operator!= consistency
+TEST_F(MatrixCompareTest, OperatorNotEqual)
+{
+    Matrix m1(2, 3, MatrixType::f32);
+    Matrix m2(2, 3, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(1.0f);
+
+    EXPECT_FALSE(m1 != m2);
+
+    m2.fillValue(2.0f);
+    EXPECT_TRUE(m1 != m2);
+}
+
+// Test: All supported integer types
+TEST_F(MatrixCompareTest, AllIntegerTypes)
+{
+    // Test s8, u8, s16, u16, s32, u32
+    std::vector<MatrixType> types = { MatrixType::s8,  MatrixType::u8,
+                                      MatrixType::s16, MatrixType::u16,
+                                      MatrixType::s32, MatrixType::u32 };
+
+    for (auto type : types) {
+        Matrix m1(2, 2, type);
+        Matrix m2(2, 2, type);
+
+        m1.fillRandom(12345);
+        m2 = m1; // Copy
+
+        auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+        EXPECT_TRUE(result.equal) << "Failed for type " << type;
+    }
+}
+
+// Test: Null data handling
+TEST_F(MatrixCompareTest, NullDataHandling)
+{
+    Matrix m1; // Default constructor - null data
+    Matrix m2;
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_TRUE(result.equal); // Both null should be equal
+}
+
+// Test: Layout mismatch detection
+TEST_F(MatrixCompareTest, LayoutMismatch)
+{
+    Matrix m1(2, 3, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+    Matrix m2(2, 3, MatrixType::f32, MatrixLayout::COLUMN_MAJOR);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+
+    EXPECT_FALSE(result.equal);
+    EXPECT_TRUE(result.layoutMismatch);
+}
+
+// Test: Verbose mode statistics accuracy
+TEST_F(MatrixCompareTest, VerboseModeStatisticsAccuracy)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    // Create known values
+    std::vector<std::vector<float>> data1 = { { 1.0f, 2.0f }, { 3.0f, 4.0f } };
+    std::vector<std::vector<float>> data2 = { { 1.0f, 3.0f }, { 3.0f, 5.0f } };
+
+    m1 = Matrix::fromData(data1, MatrixType::f32);
+    m2 = Matrix::fromData(data2, MatrixType::f32);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+
+    EXPECT_FALSE(result.equal);
+    EXPECT_EQ(result.mismatchCount, 2); // Two mismatches at [0,1] and [1,1]
+    EXPECT_EQ(result.maxAbsDiff, 1.0);  // max(|2-3|, |4-5|) = 1.0
+}
+
+// Test: NaN handling - NaN should not equal NaN
+TEST_F(MatrixCompareTest, NaNHandling)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    // Create matrices with NaN
+    std::vector<std::vector<float>> data1 = {
+        { 1.0f, std::numeric_limits<float>::quiet_NaN() },
+        { 3.0f, 4.0f }
+    };
+    std::vector<std::vector<float>> data2 = {
+        { 1.0f, std::numeric_limits<float>::quiet_NaN() },
+        { 3.0f, 4.0f }
+    };
+
+    m1 = Matrix::fromData(data1, MatrixType::f32);
+    m2 = Matrix::fromData(data2, MatrixType::f32);
+
+    // NaN != NaN, so matrices should not be equal
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_FALSE(result.equal);
+
+    // Verbose mode should report the NaN mismatch
+    result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+    EXPECT_FALSE(result.equal);
+    EXPECT_GE(result.mismatchCount, 1);
+}
+
+// Test: Infinity handling
+TEST_F(MatrixCompareTest, InfinityHandling)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    // Create matrices with infinity
+    std::vector<std::vector<float>> data1 = {
+        { 1.0f, std::numeric_limits<float>::infinity() },
+        { -std::numeric_limits<float>::infinity(), 4.0f }
+    };
+    std::vector<std::vector<float>> data2 = {
+        { 1.0f, std::numeric_limits<float>::infinity() },
+        { -std::numeric_limits<float>::infinity(), 4.0f }
+    };
+
+    m1 = Matrix::fromData(data1, MatrixType::f32);
+    m2 = Matrix::fromData(data2, MatrixType::f32);
+
+    // Inf == Inf, so matrices should be equal
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_TRUE(result.equal);
+}
+
+// Test: Performance of fast mode - should be fast with early exit
+TEST_F(MatrixCompareTest, FastModePerformance)
+{
+    // Large matrix
+    Matrix m1(100, 100, MatrixType::s32);
+    Matrix m2(100, 100, MatrixType::s32);
+
+    m1.fillValue(42);
+    m2.fillValue(43); // Different at first element
+
+    // Fast mode should exit early
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_FALSE(result.equal);
+    EXPECT_EQ(result.mismatchCount, 0);     // Fast mode doesn't count
+    EXPECT_EQ(result.mismatches.size(), 0); // Fast mode doesn't collect
+}
+
+// Test: Packed 4-bit types
+TEST_F(MatrixCompareTest, Packed4BitTypes)
+{
+    Matrix m1(4, 4, MatrixType::u4);
+    Matrix m2(4, 4, MatrixType::u4);
+
+    m1.fillRandom(54321);
+    m2 = m1; // Copy
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_TRUE(result.equal);
+
+    // Now modify one and test
+    Matrix m3(4, 4, MatrixType::u4);
+    m3.fillRandom(99999);
+
+    result = m1.compare(m3, MatrixCompareOptions::Fast());
+    // Most likely different (unless extremely unlucky with RNG)
+}
+
+// Test: Tolerance with K dimension for F32
+TEST_F(MatrixCompareTest, ToleranceWithKDimensionF32)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(1.0f);
+
+    // Set k dimension to simulate GEMM accumulation
+    m1.setK(100);
+    m2.setK(100);
+
+    // Without k dimension, tolerance would be 10 * epsilon
+    // With k=100, tolerance should be 10 * epsilon * 100
+    auto result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+
+    EXPECT_TRUE(result.equal);
+    // Verify that tolerance was scaled by k
+    double expected_tolerance =
+        50.0 * std::numeric_limits<float>::epsilon() * 100.0;
+    EXPECT_NEAR(result.usedAbsTolerance, expected_tolerance, 1e-15);
+}
+
+// Test: Tolerance with K dimension for BF16
+TEST_F(MatrixCompareTest, ToleranceWithKDimensionBF16)
+{
+    Matrix m1(2, 2, MatrixType::bf16);
+    Matrix m2(2, 2, MatrixType::bf16);
+
+    m1.fillValue(1.0f);
+    m2.fillValue(1.0f);
+
+    // Set k dimension to simulate GEMM accumulation
+    m1.setK(50);
+    m2.setK(50);
+
+    auto result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+
+    EXPECT_TRUE(result.equal);
+    // Verify that tolerance was scaled by k and uses bf16 epsilon
+    // Note: We can't easily test the exact value without knowing
+    // bf16_machine_epsilon but we can verify it's non-zero and scaled
+    EXPECT_GT(result.usedAbsTolerance, 0.0);
 }
