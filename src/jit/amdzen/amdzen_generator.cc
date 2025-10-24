@@ -891,6 +891,13 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
     // This code-section is taken if the underlying architecture supports
     // AVX512-BF16.
+
+    // Setting the kernel type based on the instruction preference
+    kType = ((jI.kI).kInstPref
+             == dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour)
+                ? utils::kernelInstrType::avx512_zmm_32_reg
+                : utils::kernelInstrType::none;
+
     if (NR == 1) {
         if (c_downscale < DLP_F32) {
             return dlp::jit::jitGeneratorError::notSupported;
