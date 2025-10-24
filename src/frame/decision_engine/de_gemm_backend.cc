@@ -849,13 +849,12 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
     // support.
     kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
-    // Early exit conditions.
-    // Support for JIT AVX512BF16 only when post-ops are not present.
     if ((gemmIn->metadata != nullptr)
         && (gemmIn->metadata[0].op_code != POST_OPS_DISABLE)) {
 
         // Return early if N==1, since currently we support BF16 GEMV(N1) only
-        // without post-ops.
+        // without post-ops. The JIT backend supports it, but we are disabling
+        // it for now.
         if (gemmIn->n == 1) {
             return std::nullopt;
         }

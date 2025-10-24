@@ -68,6 +68,7 @@ jitBF16GEMVN1<KType>::initializeParameters(
     // Set dimensions from params
     MR               = params.MR; // Number of rows to process
     M_LEFT           = params.M_LEFT;
+    c_downscale      = params.c_downscale;
     yFormat          = params.yFormat;          // Storage format of C matrix
     alphaScalingType = params.alphaScalingType; // Type of alpha scaling
     betaScalingType  = params.betaScalingType;  // Type of beta scaling
@@ -84,6 +85,14 @@ jitBF16GEMVN1<KType>::initializeParameters(
     // Load pointers and strides from the stack
     // gemvn1params variable created is loaded to stack via execute kernel at
     // runtime like any other function parameter loaded on its stack
+
+    if (c_downscale < DLP_F32) {
+        // Broadcast the left shift offset onto a ZMM register
+        // Store to allocated stack space, then broadcast from memory
+        // Using rsp(instead of stackPtr in order to use the local stack space)
+        mov(dword[rsp + 0],
+            0x10); // Store value 16 to local stack (safely allocated)
+    }
 
     mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, rsA)]);
     mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, csA)]);
@@ -147,6 +156,11 @@ jitBF16GEMVN1<KType>::allocateRegisters()
     xBaseIdx = tmpReg;
 
     maskBaseIdx = xBaseIdx;
+
+    // Check if we have enough registers
+    if (maskBaseIdx >= accumBaseIdx) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -358,10 +372,165 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
         vbroadcastss(RegType(xBaseIdx), ptr[regKIter]);
     }
+
+    inLocalLabel();
+    Xbyak::Label label_betaop_row, label_betaop_row_end;
+
+    // Check for BF16 downscaling path
+    if (c_downscale < DLP_F32) {
+        // Check for is_first_k
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+        test(regTmp2, regTmp2);
+        je(label_betaop_row, T_NEAR);
+
+        mov(regTmpYptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+        // NULL check
+        cmp(regTmpYptr, 0);
+        je(label_betaop_row, T_NEAR);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+        add(regTmpYptr, regTmp2);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+        imul(regKIter, regTmp2);
+        add(regTmpYptr, regKIter);
+
+        // regTmp2 now contains BF16 stride, regTmpYptr points to downscale
+        // buffer
+        lea(regTmp3, ptr[regTmp2 + 2 * regTmp2]); // regTmp3 = stride + 2*stride
+
+        for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
+            int blockSize  = ((mSize - i * simdWidthF32) < simdWidthF32)
+                                 ? (mSize - i * simdWidthF32)
+                                 : simdWidthF32;
+            int num_blocks = blockSize / 4;
+            int rem_block  = blockSize % 4;
+            regInit(tmpBaseIdx, tmpReg);
+
+            for (int j = 0; j < num_blocks; j += 1) {
+                // Load 4 BF16 values and convert to F32 by placing in upper 16
+                // bits
+                vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                       Xbyak::Xmm(tmpBaseIdx));
+                vpinsrw(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                        ptr[regTmpYptr], 1); // position 1 = bits 16-31
+                vbroadcastss(RegType(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
+
+                vxorps(Xbyak::Xmm(tmpBaseIdx + 1), Xbyak::Xmm(tmpBaseIdx + 1),
+                       Xbyak::Xmm(tmpBaseIdx + 1));
+                vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1), Xbyak::Xmm(tmpBaseIdx + 1),
+                        ptr[regTmpYptr + regTmp2], 1);
+                vbroadcastss(RegType(tmpBaseIdx + 1),
+                             Xbyak::Xmm(tmpBaseIdx + 1));
+
+                vxorps(Xbyak::Xmm(tmpBaseIdx + 2), Xbyak::Xmm(tmpBaseIdx + 2),
+                       Xbyak::Xmm(tmpBaseIdx + 2));
+                vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2), Xbyak::Xmm(tmpBaseIdx + 2),
+                        ptr[regTmpYptr + 2 * regTmp2], 1);
+                vbroadcastss(RegType(tmpBaseIdx + 2),
+                             Xbyak::Xmm(tmpBaseIdx + 2));
+
+                vxorps(Xbyak::Xmm(tmpBaseIdx + 3), Xbyak::Xmm(tmpBaseIdx + 3),
+                       Xbyak::Xmm(tmpBaseIdx + 3));
+                vpinsrw(Xbyak::Xmm(tmpBaseIdx + 3), Xbyak::Xmm(tmpBaseIdx + 3),
+                        ptr[regTmpYptr + regTmp3], 1);
+                vbroadcastss(RegType(tmpBaseIdx + 3),
+                             Xbyak::Xmm(tmpBaseIdx + 3));
+
+                // Now continue with EXACT same logic as F32 path
+                vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                          RegType(tmpBaseIdx + 1));
+                vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                          RegType(tmpBaseIdx + 3));
+                vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                        RegType(tmpBaseIdx + 2), 0x44);
+
+                vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                             Xbyak::Xmm(tmpBaseIdx), j);
+                lea(regTmpYptr, ptr[regTmpYptr + regTmp2 * 4]);
+            }
+
+            if (rem_block) {
+                // Handle remaining elements with same pattern
+                switch (rem_block) {
+                    case 3:
+                        vxorps(Xbyak::Xmm(tmpBaseIdx + 2),
+                               Xbyak::Xmm(tmpBaseIdx + 2),
+                               Xbyak::Xmm(tmpBaseIdx + 2));
+                        vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2),
+                                Xbyak::Xmm(tmpBaseIdx + 2),
+                                ptr[regTmpYptr + regTmp2 * 2], 1);
+                        vbroadcastss(RegType(tmpBaseIdx + 2),
+                                     Xbyak::Xmm(tmpBaseIdx + 2));
+                    case 2:
+                        vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
+                               Xbyak::Xmm(tmpBaseIdx + 1),
+                               Xbyak::Xmm(tmpBaseIdx + 1));
+                        vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1),
+                                Xbyak::Xmm(tmpBaseIdx + 1),
+                                ptr[regTmpYptr + regTmp2], 1);
+                        vbroadcastss(RegType(tmpBaseIdx + 1),
+                                     Xbyak::Xmm(tmpBaseIdx + 1));
+                    case 1:
+                        vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                               Xbyak::Xmm(tmpBaseIdx));
+                        vpinsrw(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                                ptr[regTmpYptr], 1);
+                        vbroadcastss(RegType(tmpBaseIdx),
+                                     Xbyak::Xmm(tmpBaseIdx));
+                    case 0:
+                        break;
+                }
+
+                // Same unpack/shuffle logic as F32
+                vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                          RegType(tmpBaseIdx + 1));
+                vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                          RegType(tmpBaseIdx + 3));
+                vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                        RegType(tmpBaseIdx + 2), 0x44);
+
+                vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                             Xbyak::Xmm(tmpBaseIdx), num_blocks);
+            }
+
+            if (betaOne) {
+                vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx + i));
+            } else {
+                vmulps(RegType(tmpBaseIdx), RegType(xBaseIdx),
+                       RegType(yBaseIdx + i));
+                vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(tmpBaseIdx));
+            }
+        }
+
+        jmp(label_betaop_row_end, T_NEAR);
+        L(label_betaop_row);
+    }
+
+    // F32 path (original code)
     // Store offsets for Y, using it's row-stride
     lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = rsC + 2*rsC
     for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
-        int blockSize  = (mSize - i * simdWidthF32) < simdWidthF32
+        int blockSize  = ((mSize - i * simdWidthF32) < simdWidthF32)
                              ? (mSize - i * simdWidthF32)
                              : simdWidthF32;
         int num_blocks = blockSize / 4;
@@ -429,6 +598,8 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         }
     }
 
+    L(label_betaop_row_end);
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -436,12 +607,82 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
 {
+    inLocalLabel();
+    Xbyak::Label label_betaop_col, label_betaop_col_end;
     if (!betaOne) {
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
         vbroadcastss(RegType(xBaseIdx), ptr[regKIter]);
     }
     int mLeft = mSize % simdWidthF32;
+
+    if (c_downscale < DLP_F32) {
+        // Check for is_first_k
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+        test(regTmp2, regTmp2);
+        je(label_betaop_col, T_NEAR);
+
+        mov(regTmpYptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+        // NULL check
+        cmp(regTmpYptr, 0);
+        je(label_betaop_col, T_NEAR);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+        add(regTmpYptr, regTmp2);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+        imul(regKIter, regTmp2);
+        add(regTmpYptr, regKIter);
+
+        vpbroadcastd(Xbyak::Zmm(tmpBaseIdx),
+                     ptr[rsp + 0]); // Broadcast from memory
+
+        // Store complete SIMD-width chunks
+        for (int i = 0; i < mSize / simdWidthF32; i += 1) {
+            vmovdqu16(Xbyak::Ymm(tmpBaseIdx + 1), ptr[regTmpYptr]);
+            vpmovsxwd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Ymm(tmpBaseIdx + 1));
+            vpsllvd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Zmm(tmpBaseIdx + 1),
+                    Xbyak::Zmm(tmpBaseIdx));
+            vmulps(Xbyak::Zmm(tmpBaseIdx + 2), Xbyak::Zmm(xBaseIdx),
+                   Xbyak::Zmm(tmpBaseIdx + 1));
+            vaddps(Xbyak::Zmm(accumBaseIdx + i), Xbyak::Zmm(accumBaseIdx + i),
+                   Xbyak::Zmm(tmpBaseIdx + 2));
+            lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(bfloat16)]);
+        }
+        if (mLeft) {
+            vmovdqu16(Xbyak::Ymm(tmpBaseIdx + 1) | mask_regs[1],
+                      ptr[regTmpYptr]);
+            vpmovsxwd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Ymm(tmpBaseIdx + 1));
+            vpsllvd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Zmm(tmpBaseIdx + 1),
+                    Xbyak::Zmm(tmpBaseIdx));
+            vmulps(Xbyak::Zmm(tmpBaseIdx + 2), Xbyak::Zmm(xBaseIdx),
+                   Xbyak::Zmm(tmpBaseIdx + 1));
+            vaddps(Xbyak::Zmm(accumBaseIdx + (mSize / simdWidthF32)),
+                   Xbyak::Zmm(accumBaseIdx + (mSize / simdWidthF32)),
+                   Xbyak::Zmm(tmpBaseIdx + 2));
+        }
+
+        jmp(label_betaop_col_end, T_NEAR);
+        L(label_betaop_col);
+    }
+
     for (int i = 0; i < mSize / simdWidthF32; i += 1) {
         if (betaOne) {
             vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
@@ -472,6 +713,8 @@ jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
         }
     }
 
+    L(label_betaop_col_end);
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -498,6 +741,61 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
 {
     int mLeft = mSize % simdWidthF32;
+    inLocalLabel();
+    Xbyak::Label label_storeop_col, label_storeop_col_end;
+
+    if (c_downscale < DLP_F32) {
+        // Check for is_last_k
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+        test(regTmp2, regTmp2);
+        je(label_storeop_col, T_NEAR);
+
+        mov(regTmpYptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+        // NULL check
+        cmp(regTmpYptr, 0);
+        je(label_storeop_col, T_NEAR);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+        add(regTmpYptr, regTmp2);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+        imul(regKIter, regTmp2);
+        add(regTmpYptr, regKIter);
+
+        // Store complete SIMD-width chunks
+        for (int i = 0; i < mSize / simdWidthF32; i += 1) {
+            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + i),
+                          Xbyak::Zmm(accumBaseIdx + i));
+            vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(accumBaseIdx + i));
+            lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(bfloat16)]);
+        }
+        if (mLeft) {
+            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidthF32)),
+                          Xbyak::Zmm(accumBaseIdx + (mSize / simdWidthF32)));
+            vmovdqu16(ptr[regTmpYptr] | mask_regs[1],
+                      Xbyak::Ymm(accumBaseIdx + (mSize / simdWidthF32)));
+        }
+
+        jmp(label_storeop_col_end, T_NEAR);
+        L(label_storeop_col);
+    }
 
     // Store complete SIMD-width chunks
     for (int i = 0; i < mSize / simdWidthF32; i += 1) {
@@ -509,6 +807,8 @@ jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
                 RegType(accumBaseIdx + (mSize / simdWidthF32)));
     }
 
+    L(label_storeop_col_end);
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -520,8 +820,10 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
     // RegType(accumBaseIdx + 0) For MR=16, we need to store 16 float values
     // from 1 ZMM register vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + 0));
 
+    inLocalLabel();
     for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i++) {
-        int elements_in_reg =
+        Xbyak::Label label_storeop_row, label_storeop_row_end;
+        int          elements_in_reg =
             (i < mSize / simdWidthF32) ? simdWidthF32 : (mSize % simdWidthF32);
         if (elements_in_reg == 0)
             break;
@@ -535,6 +837,66 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
                 vextractf32x4(Xbyak::Xmm(tmpBaseIdx + j / 4), // ISA specific
                               RegType(accumBaseIdx + i), j / 4);
             }
+        }
+
+        if (c_downscale < DLP_F32) {
+            mov(regTmp2,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            test(regTmp2, regTmp2);
+            je(label_storeop_row, T_NEAR);
+
+            mov(regTmpYptr,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+            // NULL check
+            cmp(regTmpYptr, 0);
+            je(label_storeop_row, T_NEAR);
+
+            mov(regTmp2,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+            add(regTmpYptr, regTmp2);
+
+            mov(regTmp2,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+            lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+            mov(regKIter,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+            imul(regKIter, regTmp2);
+            add(regTmpYptr, regKIter);
+
+            for (int j = 0; j < (elements_in_reg + 3) / 4; j++) {
+                vcvtneps2bf16(Xbyak::Ymm(tmpBaseIdx + j),
+                              Xbyak::Zmm(tmpBaseIdx + j));
+            }
+
+            // Now store each extracted value to its proper row-strided location
+            for (int j = 0; j < elements_in_reg; j++) {
+                int tmp_reg    = j / 4; // Which temp register has our value
+                int pos_in_reg = j % 4; // Position within that temp register
+
+                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
+                        pos_in_reg);
+
+                // Move to next row
+                add(regTmpYptr, regTmp2);
+            }
+
+            jmp(label_storeop_row_end, T_NEAR);
+            L(label_storeop_row);
         }
 
         // Now store each extracted value to its proper row-strided location
@@ -554,7 +916,10 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
             // Move to next row
             add(regTmpYptr, regRsC);
         }
+
+        L(label_storeop_row_end);
     }
+    outLocalLabel();
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -576,9 +941,9 @@ jitBF16GEMVN1<KType>::storeYValues(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
+jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
-    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    Xbyak::util::StackFrame frame(this, 1, 13, 16);
     initializeStackFrame(frame);
     // Initializes generator params
     initializeParameters(params);
@@ -592,6 +957,13 @@ jitBF16GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
     inLocalLabel();
 
     loadMasks();
+
+    // Create kernel ops handler once for the entire kernel
+    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+    }
 
     // Set the for-loop sequence for m-dimension
     if (params.mloop) {
@@ -676,6 +1048,14 @@ jitBF16GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
         // Working good for element-wise loads/stores for C.
         scaleYWithBeta(MR);
 
+        if (kernelOpsHandlerPtr) {
+            RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
+                params.MR, 1, false, 1, accumBaseIdx, yReg)));
+
+            kernelOpsHandlerPtr->generateKernelOpsAttributes();
+        }
+
         storeYValues(MR);
 
         // if (params.mloop) {
@@ -686,6 +1066,19 @@ jitBF16GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
         mov(regTmp1, MR);
         imul(regTmp1, regRsC);
         add(regYptr, regTmp1);
+
+        if (c_downscale < DLP_F32) {
+            mov(regKIter,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            mov(regTmp2, MR);
+            add(regKIter, regTmp2);
+            mov(ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                regKIter);
+        }
 
         dec(regMIter);
         jnz(label_m_loop_start, T_NEAR);
@@ -762,6 +1155,16 @@ jitBF16GEMVN1<KType>::generateKernel(const utils::gemvN1GeneratorParams& params)
         }
 
         scaleYWithBeta(M_LEFT);
+
+        if (kernelOpsHandlerPtr) {
+            RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
+                params.M_LEFT, 1, true, 1, accumBaseIdx,
+                M_LEFT / simdWidthF32)));
+
+            // This call will skip embedding tables (already done in main loop)
+            kernelOpsHandlerPtr->generateKernelOpsAttributes();
+        }
 
         storeYValues(M_LEFT);
     }

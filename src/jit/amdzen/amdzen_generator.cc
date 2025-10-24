@@ -407,7 +407,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
         // Initializing with default values.
         utils::gemvN1GeneratorParams params(
-            0, 0, false, false, false, false,
+            0, 0, c_downscale, false, false, false, false,
             dlp::kernel_frame::storageFormat::rowMajor,
             (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
@@ -899,9 +899,6 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 : utils::kernelInstrType::none;
 
     if (NR == 1) {
-        if (c_downscale < DLP_F32) {
-            return dlp::jit::jitGeneratorError::notSupported;
-        }
         // Logic behind kernel generation:
         // 1. We generate kernels for all m_left values from 0 to MR-1.
         // 2. For each m_left, we generate 4 kernels:
@@ -918,9 +915,14 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelCodeBlocks.resize(numKernelVariants);
 
         utils::gemvN1GeneratorParams params(
-            MR, 0, false, false, false, false,
+            MR, 0, c_downscale, false, false, false, false,
             dlp::kernel_frame::storageFormat::rowMajor,
             (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
 
         params.MR      = MR;
         params.mloop   = true;

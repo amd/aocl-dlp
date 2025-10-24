@@ -55,8 +55,9 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     int                              simdWidthF32;  // SIMD width for F32
     int                              simdWidthBF16; // SIMD width for BF16
     int                              MR; // Number of rows to process at once
-    int                              M_LEFT;  // M-dimension left over elements
-    dlp::kernel_frame::storageFormat yFormat; // Storage format of C matrix
+    int                              M_LEFT; // M-dimension left over elements
+    int                              c_downscale; // Downscale factor for C
+    dlp::kernel_frame::storageFormat yFormat;     // Storage format of C matrix
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
 
@@ -163,7 +164,7 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
 
     // Main kernel generation interface
     dlp::jit::jitGeneratorError generateKernel(
-        const utils::gemvN1GeneratorParams& params);
+        utils::gemvN1GeneratorParams& params);
 
     // Get the generated kernel function pointer
     // utils::jit_gemv_n1_kernel getKernel() {
