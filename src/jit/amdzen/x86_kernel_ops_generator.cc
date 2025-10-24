@@ -54,6 +54,7 @@ kernelOpsGeneratorX86<KType>::kernelOpsGeneratorX86(Xbyak::CodeGenerator* jit)
     // MR, NR, useMask, cRegStartIdx, cRegCount will be set by
     // setPostOpsContext()
 }
+
 template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::generateKernelOps(
@@ -106,12 +107,14 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
 
         if (useMask) {
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                fringeMask[0] = Opmask(1);
                 jit_->kmovw(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvM1Params,
                                                  nmask_avx512)]);
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
+                fringeMask[0] = Opmask(1);
                 jit_->kmovb(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvM1Params,
@@ -151,12 +154,14 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
 
         if (useMask) {
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                fringeMask[0] = Opmask(1);
                 jit_->kmovw(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvN1Params,
                                                  mmask_avx512)]);
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
+                fringeMask[0] = Opmask(1);
                 jit_->kmovb(fringeMask[0],
                             jit_->ptr[postOpsArgWrapperPtrReg
                                       + offsetof(dlp::kernels::gemvN1Params,
@@ -224,18 +229,17 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                 return jitGeneratorError::notSupported;
             }
         }
-        // set mask0 and mask1 for avx512_zmm_32_reg to be used for matadd and
-        // matmul post-ops
-        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            mask0 = Opmask(numMaskRegs + 1);
-            mask1 = Opmask(numMaskRegs + 2);
-        }
     } else {
         // This is an algorithm type not supported by our JIT kernels
         // Returning error code appropriately
         return jitGeneratorError::notSupported;
     }
-
+    // set mask0 and mask1 for avx512_zmm_32_reg to be used for matadd and
+    // matmul post-ops in all algorithms
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        mask0 = Opmask(numMaskRegs + 1);
+        mask1 = Opmask(numMaskRegs + 2);
+    }
     auto retVal = this->dispatchKernelOps<kernelOpsGeneratorX86>(kernelOps);
 
     return retVal;
