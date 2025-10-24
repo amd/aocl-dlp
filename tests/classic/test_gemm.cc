@@ -98,6 +98,9 @@ struct TestGlobalConfig
 // Global instance (initialized in main())
 static TestGlobalConfig g_test_config;
 
+// Global verbose flag (initialized in main() from command-line arguments)
+static bool g_verbose_debug = false;
+
 // ============================================================================
 // GLOBAL CONFIGURATION VARIABLES
 // ============================================================================
@@ -778,178 +781,19 @@ createAdditionalTestConfigs()
 // HELPER FUNCTIONS - DETAILED MATRIX COMPARISON
 // ============================================================================
 
-#if DLP_TESTING_ENABLE_DETAILED_DEBUG
-
 // Helper function to compare matrices and report detailed differences
+// Now uses the unified Matrix::compare() API with verbose mode
 std::string
 compareMatricesDetailed(const Matrix& matrix1,
                         const Matrix& matrix2,
                         size_t        maxMismatches = 10)
 {
-    std::ostringstream result;
 
-    // Basic dimension check
-    if (matrix1.getRows() != matrix2.getRows()
-        || matrix1.getCols() != matrix2.getCols()) {
-        result << "Matrix dimension mismatch: "
-               << "Matrix1(" << matrix1.getRows() << "x" << matrix1.getCols()
-               << ") vs "
-               << "Matrix2(" << matrix2.getRows() << "x" << matrix2.getCols()
-               << ")\n";
-        return result.str();
-    }
+    auto result = matrix1.compare(matrix2);
 
-    if (matrix1.getMatrixType() != matrix2.getMatrixType()) {
-        result << "Matrix type mismatch: "
-               << "Matrix1(" << matrix1.getMatrixType() << ") vs "
-               << "Matrix2(" << matrix2.getMatrixType() << ")\n";
-        return result.str();
-    }
-
-    size_t rows       = matrix1.getRows();
-    size_t cols       = matrix1.getCols();
-    size_t mismatches = 0;
-    double maxDiff    = 0.0;
-    size_t maxDiffRow = 0, maxDiffCol = 0;
-
-    // Calculate tolerance based on k dimension (similar to
-    // Matrix::compareFloatingPointData)
-    double tolerance = 1e-10;
-
-    result << "Using maximum tolerance for debugging: " << tolerance << "\n";
-    result << "Matrix dimensions: " << rows << "x" << cols << "\n";
-
-    if (matrix1.getMatrixType() == MatrixType::f32) {
-        const float* data1 = reinterpret_cast<const float*>(matrix1.getData());
-        const float* data2 = reinterpret_cast<const float*>(matrix2.getData());
-        size_t       elementCount = matrix1.getDataSizeBytes() / sizeof(float);
-
-        for (size_t i = 0; i < elementCount; ++i) {
-            float  val1 = data1[i];
-            float  val2 = data2[i];
-            double diff = std::abs(val1 - val2);
-
-            if (diff > tolerance) {
-                if (mismatches < maxMismatches) {
-                    // Calculate row and column for reporting (based on leading
-                    // dimension)
-                    size_t r = i / matrix1.getLeadingDimension();
-                    size_t c = i % matrix1.getLeadingDimension();
-                    result << "Mismatch at [" << r << "," << c << "]: "
-                           << "DLP=" << std::scientific << std::setprecision(10)
-                           << val1 << ", REF=" << val2 << ", diff=" << diff
-                           << "\n";
-                }
-                mismatches++;
-
-                if (diff > maxDiff) {
-                    maxDiff    = diff;
-                    maxDiffRow = i / matrix1.getLeadingDimension();
-                    maxDiffCol = i % matrix1.getLeadingDimension();
-                }
-            }
-        }
-    } else if (matrix1.getMatrixType() == MatrixType::bf16) {
-        const bfloat16* data1 =
-            reinterpret_cast<const bfloat16*>(matrix1.getData());
-        const bfloat16* data2 =
-            reinterpret_cast<const bfloat16*>(matrix2.getData());
-        size_t elementCount = matrix1.getDataSizeBytes() / sizeof(bfloat16);
-
-        for (size_t i = 0; i < elementCount; ++i) {
-            bfloat16 bf16_val1 = data1[i];
-            bfloat16 bf16_val2 = data2[i];
-
-            // Convert to float for comparison
-            float  val1 = bf16_to_f32(bf16_val1);
-            float  val2 = bf16_to_f32(bf16_val2);
-            double diff = std::abs(val1 - val2);
-
-            if (diff > tolerance) {
-                if (mismatches < maxMismatches) {
-                    // Calculate row and column for reporting (based on leading
-                    // dimension)
-                    size_t r = i / matrix1.getLeadingDimension();
-                    size_t c = i % matrix1.getLeadingDimension();
-                    result << "Mismatch at [" << r << "," << c << "]: "
-                           << "DLP=0x" << std::hex << std::setw(4)
-                           << std::setfill('0')
-                           << static_cast<uint16_t>(bf16_val1) << "("
-                           << std::scientific << std::setprecision(8) << val1
-                           << "), "
-                           << "REF=0x" << std::hex << std::setw(4)
-                           << std::setfill('0')
-                           << static_cast<uint16_t>(bf16_val2) << "(" << val2
-                           << "), " << std::dec << "diff=" << diff << "\n";
-                }
-                mismatches++;
-
-                if (diff > maxDiff) {
-                    maxDiff    = diff;
-                    maxDiffRow = i / matrix1.getLeadingDimension();
-                    maxDiffCol = i % matrix1.getLeadingDimension();
-                }
-            }
-        }
-    } else if (matrix1.getMatrixType() == MatrixType::u8) {
-        const uint8_t* data1 =
-            reinterpret_cast<const uint8_t*>(matrix1.getData());
-        const uint8_t* data2 =
-            reinterpret_cast<const uint8_t*>(matrix2.getData());
-        size_t elementCount = matrix1.getDataSizeBytes() / sizeof(uint8_t);
-
-        for (size_t i = 0; i < elementCount; ++i) {
-            uint8_t u8_val1 = data1[i];
-            uint8_t u8_val2 = data2[i];
-            double  diff    = std::abs(static_cast<double>(u8_val1)
-                                       - static_cast<double>(u8_val2));
-
-            if (diff > tolerance) {
-                if (mismatches < maxMismatches) {
-                    // Calculate row and column for reporting (based on leading
-                    // dimension)
-                    size_t r = i / matrix1.getLeadingDimension();
-                    size_t c = i % matrix1.getLeadingDimension();
-                    result << "Mismatch at [" << r << "," << c << "]: "
-                           << "DLP=0x" << std::hex << std::setw(2)
-                           << std::setfill('0')
-                           << static_cast<uint16_t>(u8_val1) << "(" << std::dec
-                           << static_cast<int>(u8_val1) << "), "
-                           << "REF=0x" << std::hex << std::setw(2)
-                           << std::setfill('0')
-                           << static_cast<uint16_t>(u8_val2) << "(" << std::dec
-                           << static_cast<int>(u8_val2) << "), "
-                           << "diff=" << diff << "\n";
-                }
-                mismatches++;
-
-                if (diff > maxDiff) {
-                    maxDiff    = diff;
-                    maxDiffRow = i / matrix1.getLeadingDimension();
-                    maxDiffCol = i % matrix1.getLeadingDimension();
-                }
-            }
-        }
-    } else {
-        result << "Unsupported matrix type for detailed comparison: "
-               << matrix1.getMatrixType() << "\n";
-        return result.str();
-    }
-
-    result << "\nTotal mismatches: " << mismatches << "\n";
-    if (mismatches > maxMismatches) {
-        result << "... (showing first " << maxMismatches << " mismatches)\n";
-    }
-
-    if (maxDiff > 0.0) {
-        result << "Maximum difference: " << std::scientific
-               << std::setprecision(8) << maxDiff << " at position ["
-               << maxDiffRow << "," << maxDiffCol << "]\n";
-    }
-
-    return result.str();
+    // Format the result using the FormatCompareResult helper
+    return FormatCompareResult(result, matrix1, matrix2);
 }
-#endif
 
 // ============================================================================
 // GLOBAL INITIALIZATION
@@ -1217,9 +1061,9 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                        "valid parameters:\n"
                     << printConfigDetails(config_) << "\n";
 
-#if DLP_TESTING_ENABLE_DETAILED_DEBUG
-                detailed_error << compareMatricesDetailed(C, C_ref);
-#endif
+                if (g_verbose_debug) {
+                    detailed_error << compareMatricesDetailed(C, C_ref);
+                }
                 FAIL() << detailed_error.str();
             }
         } else {
@@ -1885,6 +1729,12 @@ main(int argc, char** argv)
         std::cerr << "Valid UAL types: DLP, REF, MKL, ONEDNN\n";
         std::cerr << "Use --help for usage information\n";
         return 1;
+    }
+
+    // Set verbose debug flag from command-line arguments
+    g_verbose_debug = parser.isVerbose();
+    if (g_verbose_debug) {
+        std::cout << "Verbose/detailed debug mode enabled" << std::endl;
     }
 
     // Update global YAML configuration file path if specified

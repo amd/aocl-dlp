@@ -192,7 +192,8 @@ class ArgParser
         std::cout << "  --ual-ref <type>        UAL reference implementation "
                      "(DLP|REF|MKL|ONEDNN)\n";
         std::cout << "  -h, --help              Show this help message\n";
-        std::cout << "  --verbose               Enable verbose output\n";
+        std::cout << "  -v, --verbose           Enable verbose/detailed debug "
+                     "output\n";
         std::cout << "\nExample:\n";
         std::cout << "  " << program_name << " -f my_config.yaml\n";
         std::cout << "  " << program_name << " --ual-test DLP --ual-ref REF\n";
@@ -206,6 +207,12 @@ class ArgParser
      * @return true if help flags (-h, --help) are present
      */
     bool helpRequested() const { return hasFlag("-h") || hasFlag("--help"); }
+
+    /**
+     * @brief Check if verbose mode was requested
+     * @return true if verbose flags (-v, --verbose) are present
+     */
+    bool isVerbose() const { return hasFlag("-v") || hasFlag("--verbose"); }
 
     /**
      * @brief Get UAL implementation to test
@@ -302,6 +309,11 @@ class ArgParser
             // Skip UAL ref flag and value
             if ((arg == "--ual-ref" || arg == "--ual_ref") && i + 1 < argc) {
                 ++i; // Skip both flag and value
+                continue;
+            }
+
+            // Skip verbose flags
+            if (arg == "-v" || arg == "--verbose") {
                 continue;
             }
 
