@@ -1233,11 +1233,19 @@ UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
     // If already f32, apply directly
     if (original_type == MatrixType::f32) {
         float* data = reinterpret_cast<float*>(matrix.getData());
-        size_t size = matrix.getDataSizeBytes() / sizeof(float);
+        md_t   rows = matrix.getRows();
+        md_t   cols = matrix.getCols();
+        md_t   ld   = matrix.getLeadingDimension();
 
-        for (size_t i = 0; i < size; ++i) {
-            if (data[i] < 0.0f) {
-                data[i] *= alpha_val;
+        // Apply PReLU element by element with proper leading dimension handling
+        for (md_t i = 0; i < rows; ++i) {
+            for (md_t j = 0; j < cols; ++j) {
+                size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                                 ? (static_cast<size_t>(i) * ld + j)
+                                 : (static_cast<size_t>(j) * ld + i);
+                if (data[idx] < 0.0f) {
+                    data[idx] *= alpha_val;
+                }
             }
         }
         return;
@@ -1477,11 +1485,14 @@ UalRef::applyBias(Matrix& matrix, const Matrix& bias)
         float* data = reinterpret_cast<float*>(matrix.getData());
         md_t   rows = matrix.getRows();
         md_t   cols = matrix.getCols();
+        md_t   ld   = matrix.getLeadingDimension();
 
         // Apply bias to each row/column depending on bias size
         for (md_t i = 0; i < rows; ++i) {
             for (md_t j = 0; j < cols; ++j) {
-                size_t idx      = i * matrix.getLeadingDimension() + j;
+                size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
+                                 ? (static_cast<size_t>(i) * ld + j)
+                                 : (static_cast<size_t>(j) * ld + i);
                 size_t bias_idx = j % bias_size; // Broadcast bias
                 data[idx] += bias_data[bias_idx];
             }

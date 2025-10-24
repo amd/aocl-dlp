@@ -788,10 +788,13 @@ compareMatricesDetailed(const Matrix& matrix1,
                         const Matrix& matrix2,
                         size_t        maxMismatches = 10)
 {
-
-    auto result = matrix1.compare(matrix2);
-
-    // Format the result using the FormatCompareResult helper
+    MatrixCompareOptions opts;
+    if (g_verbose_debug) {
+        opts = MatrixCompareOptions::Verbose(maxMismatches);
+    } else {
+        opts = MatrixCompareOptions::Fast();
+    }
+    auto result = matrix1.compare(matrix2, opts);
     return FormatCompareResult(result, matrix1, matrix2);
 }
 
