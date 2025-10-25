@@ -68,17 +68,11 @@ class jitGeneratorRegister
 {
     jitGeneratorRegister()
     {
-        vecJITGenerators.reserve(
-            static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
-                kernel_frame::kernelRoutineType::max_kernel_routines)));
         vecJITGenerators.resize(
             static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
                 kernel_frame::kernelRoutineType::max_kernel_routines)));
 
         for (auto& ele : vecJITGenerators) {
-            ele.reserve(
-                static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
-                    kernel_frame::kernelDatatype::max_kernel_datatypes)));
             ele.resize(static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
                            kernel_frame::kernelDatatype::max_kernel_datatypes)),
                        JITGeneratorEntry());
@@ -105,7 +99,7 @@ class jitGeneratorRegister
             }
         }
 
-        valueSet.clear();
+        // Only delete elements that were not tracked by vecJITGenerators.
         for (auto& ele : replacedJitGeneratorSink) {
             if (valueSet.count(ele) == 0) {
                 valueSet.insert(ele);

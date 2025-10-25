@@ -309,8 +309,6 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
 
 x86CpuFeatureDetector::x86CpuFeatureDetector()
 {
-    featureMap.reserve(static_cast<std::size_t>(
-        utils::getUnderlyingValueOfEnum(isaFeature::feature_limit)));
     featureMap.resize(static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
                           isaFeature::feature_limit)),
                       0);

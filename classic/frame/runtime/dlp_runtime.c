@@ -156,13 +156,6 @@ DLP_INLINE void
 dlp_init_threading_once()
 {
     dlp_pthread_once(&once_init, dlp_init_threading);
-}
-
-void
-dlp_rntm_init_from_global(dlp_rntm_t* rntm)
-{
-    // We must ensure that dlp_lib_rntm and dlp_tl_rntm have been initialized
-    dlp_init_threading_once();
 
     // Initialize dlp_tl_rntm as a copy of dlp_lib_rntm
     // Need to do this once per application thread
@@ -170,6 +163,13 @@ dlp_rntm_init_from_global(dlp_rntm_t* rntm)
         dlp_tl_rntm      = dlp_lib_rntm;
         dlp_init_tl_rntm = FALSE;
     }
+}
+
+void
+dlp_rntm_init_from_global(dlp_rntm_t* rntm)
+{
+    // We must ensure that dlp_lib_rntm and dlp_tl_rntm have been initialized
+    dlp_init_threading_once();
 
     // Initialize supplied rntm from dlp_tl_rntm.
     *rntm = dlp_tl_rntm;

@@ -149,16 +149,10 @@ class kernelRegister
 
     kernelRegister()
     {
-        vecKDTs.reserve(
-            static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
-                kernelRoutineType::max_kernel_routines)));
         vecKDTs.resize(static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
             kernelRoutineType::max_kernel_routines)));
 
         for (auto& ele : vecKDTs) {
-            ele.reserve(
-                static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
-                    kernelDatatype::max_kernel_datatypes)));
             ele.resize(static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
                 kernelDatatype::max_kernel_datatypes)));
         }
@@ -219,9 +213,13 @@ class kernelRegister
             return kernelFrameError::failure;
         }
 
-        kernels::kernelBase*         kB      = _kB.release();
-        kernelInfo*                  kI      = kB->getKernelInfo();
-        std::vector<kernelDatatype>& kDTypes = kB->getKernelDatatypes();
+        std::vector<kernelDatatype>& kDTypes = _kB->getKernelDatatypes();
+        if (kDTypes.empty()) {
+            return kernelFrameError::failure;
+        }
+
+        kernels::kernelBase* kB = _kB.release();
+        kernelInfo*          kI = kB->getKernelInfo();
 
         auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
         for (auto ele : kDTypes) {

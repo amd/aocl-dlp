@@ -388,6 +388,7 @@ struct kernelInfo
             this->mtag_b           = other.mtag_b;
             if (this->kOpsArr != nullptr) {
                 delete[] this->kOpsArr;
+                this->kOpsArr = nullptr;
             }
             if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
                 this->kOpsArr =
@@ -416,6 +417,7 @@ struct kernelInfo
             this->mtag_b           = other.mtag_b;
             if (this->kOpsArr != nullptr) {
                 delete[] this->kOpsArr;
+                this->kOpsArr = nullptr;
             }
             if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
                 this->kOpsArr     = other.kOpsArr;
@@ -466,6 +468,7 @@ struct kernelInfo
     {
         if (kOpsArr != nullptr) {
             delete[] kOpsArr;
+            kOpsArr = nullptr;
         }
     }
 };
