@@ -30,8 +30,8 @@
 
 namespace dlp::kernel_frame {
 
-std::mutex         replacedKernelSink::mtx;
-std::vector<void*> replacedKernelSink::valueSink;
-std::set<void*>    replacedKernelSink::valueSet;
+std::mutex         storedKernelWatcher::mtx;
+std::vector<void*> storedKernelWatcher::valueSink;
+std::set<void*>    storedKernelWatcher::valueSet;
 
 } // namespace dlp::kernel_frame
