@@ -111,7 +111,7 @@ typedef void (*jit_kernel)(dlp::kernels::gemmParams*);
 using jit_gemv_n1_kernel = void (*)(dlp::kernels::gemvN1Params*);
 using jit_gemv_m1_kernel = void (*)(dlp::kernels::gemvM1Params*);
 
-constexpr uint64_t JIT_KERNEL_SIZE = 8 * 4096;
+constexpr uint64_t JIT_KERNEL_SIZE = 16 * 4096;
 
 enum class kernelInstrType : uint16_t
 {
