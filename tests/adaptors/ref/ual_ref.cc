@@ -186,9 +186,11 @@ namespace {
                 }
                 break;
             }
-            case MatrixType::bf16:
-                // BF16 is marked as unsupported as requested
+            case MatrixType::bf16: {
+                static_cast<bfloat16*>(dst_ptr)[index] =
+                    dlp::testing::utils::f32_to_bf16(value);
                 break;
+            }
             default:
                 break;
         }
@@ -210,11 +212,6 @@ namespace {
         md_t         src_ld     = src.getLeadingDimension();
         MatrixLayout layout     = src.getLayout();
         bool         transposed = src.isTransposed();
-
-        // Handle BF16 as unsupported
-        if (src_type == MatrixType::bf16) {
-            return false;
-        }
 
         for (md_t i = 0; i < src_rows; ++i) {
             for (md_t j = 0; j < src_cols; ++j) {
@@ -257,11 +254,6 @@ namespace {
         md_t         dst_cols = dst.getCols();
         md_t         dst_ld   = dst.getLeadingDimension();
         MatrixLayout layout   = dst.getLayout();
-
-        // Handle BF16 as unsupported
-        if (dst_type == MatrixType::bf16) {
-            return false;
-        }
 
         for (md_t i = 0; i < dst_rows; ++i) {
             for (md_t j = 0; j < dst_cols; ++j) {
@@ -1149,11 +1141,6 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
 {
     MatrixType original_type = matrix.getMatrixType();
 
-    // Handle BF16 as unsupported
-    if (original_type == MatrixType::bf16) {
-        return;
-    }
-
     // If already f32, apply operation directly with proper indexing
     if (original_type == MatrixType::f32) {
         float* data = reinterpret_cast<float*>(matrix.getData());
@@ -1218,11 +1205,6 @@ void
 UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
 {
     MatrixType original_type = matrix.getMatrixType();
-
-    // Handle BF16 as unsupported
-    if (original_type == MatrixType::bf16) {
-        return;
-    }
 
     // Get alpha value
     float alpha_val = 0.01f; // Default alpha
@@ -1361,16 +1343,6 @@ UalRef::applyScale(Matrix&       matrix,
         return;
     }
 
-    // Handle BF16 matrix as unsupported (but allow bf16 scale factor)
-    if (matrix.getMatrixType() == MatrixType::bf16) {
-        return;
-    }
-
-    // Also check if zeroPoint has BF16 type
-    if (zeroPoint && zeroPoint->getMatrixType() == MatrixType::bf16) {
-        return;
-    }
-
     // Determine scale length: 1 (per-tensor) or N (per-channel)
     bool per_channel    = (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
     bool has_zero_point = (zeroPoint != nullptr);
@@ -1467,11 +1439,6 @@ UalRef::applyScale(Matrix&       matrix,
 void
 UalRef::applyBias(Matrix& matrix, const Matrix& bias)
 {
-    // Handle BF16 matrix as unsupported (but allow bf16 bias)
-    if (matrix.getMatrixType() == MatrixType::bf16) {
-        return;
-    }
-
     md_t bias_size = bias.getRows() * bias.getCols();
 
     // Convert bias to float array
@@ -1531,12 +1498,6 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
                        const Matrix& addMatrix,
                        const Matrix* scaleFactor)
 {
-    // Handle BF16 as unsupported
-    if (matrix.getMatrixType() == MatrixType::bf16
-        || addMatrix.getMatrixType() == MatrixType::bf16) {
-        return;
-    }
-
     float scale = 1.0f;
     if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
         scale = *reinterpret_cast<const float*>(scaleFactor->getData());
@@ -1603,12 +1564,6 @@ UalRef::applyMatrixMul(Matrix&       matrix,
                        const Matrix& mulMatrix,
                        const Matrix* scaleFactor)
 {
-    // Handle BF16 as unsupported
-    if (matrix.getMatrixType() == MatrixType::bf16
-        || mulMatrix.getMatrixType() == MatrixType::bf16) {
-        return;
-    }
-
     float scale = 1.0f;
     if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
         scale = *reinterpret_cast<const float*>(scaleFactor->getData());
