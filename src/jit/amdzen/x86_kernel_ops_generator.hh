@@ -51,50 +51,21 @@ namespace amdzen::x86gen {
             return jitGeneratorError::notSupported;                            \
     }
 
-#define DISPATCH_BY_DUAL_DATATYPE(sfDt, matOpDt, func, ...)                    \
-    switch (sfDt) {                                                            \
+// Dispatch by dual datatype: one as template parameter, one at runtime
+// Use this when you have one type (SfType) as a template parameter and need to
+// dispatch on another datatype
+#define DISPATCH_OP_BY_DUAL_DATATYPE(SfType, matOpDt, func, ...)               \
+    switch (matOpDt) {                                                         \
         case DataType::f32:                                                    \
-            switch (matOpDt) {                                                 \
-                case DataType::f32:                                            \
-                    return func<float, float>(__VA_ARGS__);                    \
-                default:                                                       \
-                    return jitGeneratorError::notSupported;                    \
-            }                                                                  \
+            return func<SfType, float>(__VA_ARGS__);                           \
         case DataType::bf16:                                                   \
-            switch (matOpDt) {                                                 \
-                case DataType::f32:                                            \
-                    return func<bfloat16, float>(__VA_ARGS__);                 \
-                default:                                                       \
-                    return jitGeneratorError::notSupported;                    \
-            }                                                                  \
+            return func<SfType, bfloat16>(__VA_ARGS__);                        \
         case DataType::s8:                                                     \
-            switch (matOpDt) {                                                 \
-                case DataType::f32:                                            \
-                    return func<int8_t, float>(__VA_ARGS__);                   \
-                default:                                                       \
-                    return jitGeneratorError::notSupported;                    \
-            }                                                                  \
+            return func<SfType, int8_t>(__VA_ARGS__);                          \
         case DataType::u8:                                                     \
-            switch (matOpDt) {                                                 \
-                case DataType::f32:                                            \
-                    return func<uint8_t, float>(__VA_ARGS__);                  \
-                default:                                                       \
-                    return jitGeneratorError::notSupported;                    \
-            }                                                                  \
+            return func<SfType, uint8_t>(__VA_ARGS__);                         \
         case DataType::s32:                                                    \
-            switch (matOpDt) {                                                 \
-                case DataType::f32:                                            \
-                    return func<int32_t, float>(__VA_ARGS__);                  \
-                default:                                                       \
-                    return jitGeneratorError::notSupported;                    \
-            }                                                                  \
-        case DataType::u32:                                                    \
-            switch (matOpDt) {                                                 \
-                case DataType::f32:                                            \
-                    return func<float, uint32_t>(__VA_ARGS__);                 \
-                default:                                                       \
-                    return jitGeneratorError::notSupported;                    \
-            }                                                                  \
+            return func<SfType, int32_t>(__VA_ARGS__);                         \
         default:                                                               \
             return jitGeneratorError::notSupported;                            \
     }
@@ -291,6 +262,20 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     template<typename sfDt, typename matOpDt>
     dlp::jit::jitGeneratorError matOpScaleFactorImplMerged(
         matOpType opType, matOpScaleType sclType);
+
+    // Helper to dispatch matOpScaleFactorImplMerged on matrix datatype
+    template<typename SfType>
+    dlp::jit::jitGeneratorError dispatchMatOpByMatrixType(
+        dlp::kernel_frame::DataType matOpDt,
+        matOpType                   opType,
+        matOpScaleType              sclType);
+
+    // Helper to dispatch matOpScaleFactorImplGEMVN1 on matrix datatype
+    template<typename SfType>
+    dlp::jit::jitGeneratorError dispatchMatOpByMatrixTypeGEMVN1(
+        dlp::kernel_frame::DataType matOpDt,
+        matOpType                   opType,
+        matOpScaleType              sclType);
 
     template<typename sfDt, typename matOpDt>
     dlp::jit::jitGeneratorError matOpScaleFactorImplGEMVN1(
