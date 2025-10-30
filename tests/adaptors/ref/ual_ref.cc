@@ -1208,8 +1208,8 @@ UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
 
     // Get alpha value
     float alpha_val = 0.01f; // Default alpha
-    if (alpha && alpha->getMatrixType() == MatrixType::f32) {
-        alpha_val = *reinterpret_cast<const float*>(alpha->getData());
+    if (alpha) {
+        alpha_val = convertToFloat(alpha->getData(), alpha->getMatrixType(), 0);
     }
 
     // If already f32, apply directly
@@ -1288,11 +1288,13 @@ UalRef::applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper)
     float lower_val = -6.0f; // Default lower bound
     float upper_val = 6.0f;  // Default upper bound
 
-    if (lower && lower->getMatrixType() == MatrixType::f32) {
-        lower_val = *reinterpret_cast<const float*>(lower->getData());
+    // Support any datatype for lower bound (alpha parameter)
+    if (lower) {
+        lower_val = convertToFloat(lower->getData(), lower->getMatrixType(), 0);
     }
-    if (upper && upper->getMatrixType() == MatrixType::f32) {
-        upper_val = *reinterpret_cast<const float*>(upper->getData());
+    // Support any datatype for upper bound (beta parameter)
+    if (upper) {
+        upper_val = convertToFloat(upper->getData(), upper->getMatrixType(), 0);
     }
 
     applyUnifiedPostOp(
@@ -1499,8 +1501,9 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
                        const Matrix* scaleFactor)
 {
     float scale = 1.0f;
-    if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
-        scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+    if (scaleFactor) {
+        scale = convertToFloat(scaleFactor->getData(),
+                               scaleFactor->getMatrixType(), 0);
     }
 
     // If both matrices are f32, apply directly
@@ -1565,8 +1568,9 @@ UalRef::applyMatrixMul(Matrix&       matrix,
                        const Matrix* scaleFactor)
 {
     float scale = 1.0f;
-    if (scaleFactor && scaleFactor->getMatrixType() == MatrixType::f32) {
-        scale = *reinterpret_cast<const float*>(scaleFactor->getData());
+    if (scaleFactor) {
+        scale = convertToFloat(scaleFactor->getData(),
+                               scaleFactor->getMatrixType(), 0);
     }
 
     // If both matrices are f32, apply directly
