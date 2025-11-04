@@ -200,17 +200,18 @@ aocl_gemm_f32f32f32of32(const char      order,
     if (!((m == 1) || (n == 1))) {
         // Handling row-major storage.
         if (is_row_major == TRUE) {
-            if (mtag_b != REORDERED) {
+            if ((mtag_b != REORDERED)) {
                 // If B is not reordered, and if both A and B are transposed
                 // instead of packing both the matrices to make them row-major,
                 // induce a transpose and store C in col-major format.
                 // After inducing transpose, A, B matrices are row-major, and C
-                // matrix is column-major. This optimization is currently
-                // supported only by AVX512 JIT kernel.
+                // matrix is column-major. This optimization are currently not
+                // supported in post-ops of avx2 kernels.
 
-                if (dlp_cpuid_is_avx512_supported()
-                    && lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3
-                    && dlp_is_trans(dlp_transb) && (dlp_is_trans(dlp_transa))) {
+                if (!((!dlp_cpuid_is_avx512_supported())
+                      && !((metadata == NULL) || (metadata->seq_length == 0)))
+                    && (dlp_is_trans(dlp_transb)
+                        && (dlp_is_trans(dlp_transa)))) {
                     // induce transpose here
                     m_use      = n;
                     n_use      = m;
@@ -252,12 +253,8 @@ aocl_gemm_f32f32f32of32(const char      order,
             // Instead, store C matrix in col-major format.
             // A and B matrices are row-major, and C matrix is column-major.
 
-            // Matadd and Matmul in GEMV-intrinsics code doesn't support
-            // accessing the matptr correctly incase C is not contiguous. so
-            // commenting this optimization out for GEMV for now.
-            // TODO: remove this once GEMV JIT kernels support post-ops.
-            if (dlp_cpuid_is_avx512_supported()
-                && lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3
+            if (!((!dlp_cpuid_is_avx512_supported())
+                  && !((metadata == NULL) || (metadata->seq_length == 0)))
                 && dlp_is_trans(dlp_transa) && (dlp_is_trans(dlp_transb))) {
                 // don't induce transpose here
                 rs_a_use   = cs_a;

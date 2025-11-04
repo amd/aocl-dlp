@@ -34,18 +34,28 @@
 
 namespace amdzen::x86gen {
 
-class avx512TransposeGenerator
+template<utils::kernelInstrType KType>
+class TransposeGenerator
 {
+
+    using Traits                    = amdzen::traits::ArchitectureTraits<KType>;
+    using RegType                   = typename Traits::RegType;
+    using halfRegType               = typename Traits::halfRegType;
+    int              numRegs        = Traits::numRegs;
+    int              RegBytes       = Traits::regBytes;
+    static const int numElemsPerReg = Traits::regBytes / sizeof(float);
+
   public:
-    avx512TransposeGenerator(Xbyak::CodeGenerator* jit,
-                             int                   MR,
-                             int                   NR,
-                             bool                  useMask,
-                             int                   numMaskRegs,
-                             int                   cRegStartIdx,
-                             int                   cRegCount,
-                             Xbyak::Reg64&         regCPtr);
-    ~avx512TransposeGenerator() = default;
+    TransposeGenerator(Xbyak::CodeGenerator* jit,
+                       int                   MR,
+                       int                   NR,
+                       bool                  useMask,
+                       bool                  mLoop,
+                       int                   numMaskRegs,
+                       int                   cRegStartIdx,
+                       int                   cRegCount,
+                       Xbyak::Reg64&         regCPtr);
+    ~TransposeGenerator() = default;
     dlp::jit::jitGeneratorError generateTranspose(
         const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
         dlp::jit::jitAlgoType algoType          = dlp::jit::jitAlgoType::gemm,
@@ -54,8 +64,6 @@ class avx512TransposeGenerator
   private:
     void                  printOutput(int* output);
     Xbyak::CodeGenerator* jit_; // Back reference to access registers and state
-    using Traits = amdzen::traits::ArchitectureTraits<
-        utils::kernelInstrType::avx512_zmm_32_reg>;
 
     const Xbyak::Reg64 &regCPtr, regCjr, regCsC, regRsCBlock, regCsCBlock,
         regNleft, regTmp1, regTmp2, regTmp3, regTmp4;
@@ -75,10 +83,8 @@ class avx512TransposeGenerator
     int numMaskRegs;
     // this bool indicates that an lt kernel is being generated
     bool variableStores;
-    int  cRegStartIdx, cRegCount;
-    int  numRegs        = Traits::numRegs;
-    int  RegBytes       = Traits::regBytes;
-    int  numElemsPerReg = Traits::regBytes / sizeof(float);
+    // maskRegIdx is used to load mask for avx2 code.
+    int cRegStartIdx, cRegCount, maskRegIdx;
 
     int numFullNRBlocks, numMaskNRBlocks, numNRBlocks;
     int numFullMRBlocks, numMaskMRBlocks, numMRBlocks;
@@ -89,8 +95,8 @@ class avx512TransposeGenerator
     int numRegsAfterPermuteR2;
 
     // arrays to store indices of previous and current output
-    int arr1[16];
-    int arr2[16];
+    int arr1[numElemsPerReg];
+    int arr2[numElemsPerReg];
 
     // selector values for both permutes
     int64_t selector1[8]   = { 0x0, 0x1, 0x8, 0x9, 0x2, 0x3, 0xA, 0xB };
@@ -123,8 +129,15 @@ class avx512TransposeGenerator
     }
 
     void generateNleftLocal(int j);
+    void createMaskFromConstant(int value);
 
-    int  calculateScratchReq();
+    int calculateScratchReq();
+
+    void store_reg_in_stack(int num_regs, int nextBlockI, int nextBlockJ);
+    void get_reg_from_stack(int num_regs, int nextBlockI, int nextBlockJ);
+
+    void remove_from_scratch_reg_queue(int reg);
+
     void setInitialIndices(int row_idx, int col_idx);
     void generateTransposeBlockMRxNR(bool fuseBetaWithStore);
     void unpack_ps_MRxNR();

@@ -68,6 +68,9 @@ jitGEMMF32<KType>::allocateReg()
     bRegIdx = cRegIdx - bReg;
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
         aReg = 1;
+        // maskRegIdx is hardcoded to 0 here.
+        // In future, if we need to use a different mask register, we need to
+        // change in transpose_generator.cc as well.
         if (useMask) {
             maskRegIdx = 0;
             aRegIdx    = maskRegIdx + 1;
@@ -208,16 +211,9 @@ jitGEMMF32<KType>::kernelUnroll(int unroll)
 }
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::storeResult(bool fuseBetaWithStore)
+jitGEMMF32<KType>::storeResult(bool fuseBetaWithStore, bool mLoop)
 {
     mov(regTmpCptr, regCPtr);
-
-    // For avx2 and avx512_256 paths, we ensure that the C matrix is row-major
-    // and then call the JIT kernel. The logic to ensure this is in
-    // aocl_gemm_f32f32f32of32.c file.
-    if (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
-        return storeResultRowMajor(fuseBetaWithStore);
-    }
 
     inLocalLabel();
     // Load cs_c value and check if cs_c is 1
@@ -225,8 +221,8 @@ jitGEMMF32<KType>::storeResult(bool fuseBetaWithStore)
     cmp(regTmp1, 1);
     je(".storeResultRowMajor", T_NEAR);
     // RETURN_IF_ERROR(storeResultColumnMajor());
-    x86gen::avx512TransposeGenerator transposeGenerator(
-        this, MR, NR, useMask, numMaskRegs, cRegIdx, cReg, regTmpCptr);
+    x86gen::TransposeGenerator<KType> transposeGenerator(
+        this, MR, NR, useMask, mLoop, numMaskRegs, cRegIdx, cReg, regTmpCptr);
     RETURN_IF_ERROR(transposeGenerator.generateTranspose(
         stackPtr, dlp::jit::jitAlgoType::gemm, fuseBetaWithStore));
     jmp(".end", T_NEAR);
@@ -623,7 +619,7 @@ jitGEMMF32<KType>::scaleBeta()
     // paths. For these cases, we ensure that the C matrix is row-major and then
     // call the JIT kernel. The logic to ensure this is in
     // aocl_gemm_f32f32f32of32.c file.
-    if (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+    if (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
         return scaleBetaRowMajor();
     }
 
@@ -678,10 +674,9 @@ jitGEMMF32<KType>::allocateMaskRegisters()
         fringeMask[i] = Opmask(i + 1);
     }
 
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-        mask0 = Opmask(numMaskRegs + 1);
-        mask1 = Opmask(numMaskRegs + 2);
-    }
+    mask0 = Opmask(numMaskRegs + 1);
+    mask1 = Opmask(numMaskRegs + 2);
+
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -690,10 +685,23 @@ void
 jitGEMMF32<KType>::resetMasks(bool mask, int idx)
 {
     if (mask) {
-        // Load lower 8 bits of maskF32
-        kmovb(mask0, fringeMask[idx]);
-        // Load upper 8 bits of maskF32
-        kshiftrw(mask1, fringeMask[idx], 8);
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            // For Zmm: 16-bit mask, split into 8 bits each
+            // Load lower 8 bits of maskF32 (covers elements 0-7)
+            kmovb(mask0, fringeMask[idx]);
+            // Load upper 8 bits of maskF32 (covers elements 8-15)
+            kshiftrw(mask1, fringeMask[idx], 8);
+        } else if constexpr (KType
+                             == utils::kernelInstrType::avx512_ymm_32_reg) {
+            // For Ymm: 8-bit mask, split into 4 bits each
+            // Load lower 4 bits of maskF32 (covers elements 0-3)
+            // Note: kmovb loads 8 bits, but instruction will only use lower 4
+            kmovb(mask0, fringeMask[idx]);
+            // Load upper 4 bits of maskF32 (covers elements 4-7)
+            kshiftrw(mask1, fringeMask[idx], 4);
+        } else {
+            // saved for future use
+        }
     } else {
         kxnorw(mask0, mask0, mask0);
         kxnorw(mask1, mask1, mask1);
@@ -703,13 +711,6 @@ jitGEMMF32<KType>::resetMasks(bool mask, int idx)
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::scaleBetaColumnMajor()
-{
-    return dlp::jit::jitGeneratorError::notSupported;
-}
-
-template<>
-dlp::jit::jitGeneratorError
-jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
 {
     // we need atleast 5 ZMM spare registers to do this.
     // For now, assuming that we have 5 ZMM spare registers.
@@ -754,7 +755,9 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
 
     // calculate 16*csC*sizeof(float) and store in regTmp1
     lea(regTmp1, ptr[regTmp1 * 8]);
-    lea(regTmp1, ptr[regTmp1 * 2]);
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        lea(regTmp1, ptr[regTmp1 * 2]);
+    }
 
     // broadcast beta value
     mov(regTmp2, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
@@ -776,8 +779,16 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
                        ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
             vgatherqps(halfRegType(scratchReg2) | mask1,
                        ptr[regTmp2 + RegType(offsets2RegIdx) * 1]);
-            vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
-                         halfRegType(scratchReg2), 1);
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
+                             halfRegType(scratchReg2), 1);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                vinsertf32x4(RegType(scratchReg1), RegType(scratchReg1),
+                             halfRegType(scratchReg2), 1);
+            } else {
+                // saved for future use
+            }
             // fma with beta
             vfmadd231ps(RegType(cRegIdx + i * bReg + j), RegType(scratchReg1),
                         RegType(betaRegIdx));
@@ -792,8 +803,18 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
                            ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
                 vgatherqps(halfRegType(scratchReg2) | mask1,
                            ptr[regTmp2 + RegType(offsets2RegIdx) * 1]);
-                vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
-                             halfRegType(scratchReg2), 1);
+                if constexpr (KType
+                              == utils::kernelInstrType::avx512_zmm_32_reg) {
+                    vinsertf32x8(RegType(scratchReg1), RegType(scratchReg1),
+                                 halfRegType(scratchReg2), 1);
+                } else if constexpr (KType
+                                     == utils::kernelInstrType::
+                                         avx512_ymm_32_reg) {
+                    vinsertf32x4(RegType(scratchReg1), RegType(scratchReg1),
+                                 halfRegType(scratchReg2), 1);
+                } else {
+                    // saved for future use
+                }
                 // fma with beta
                 vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg + idx),
                             RegType(scratchReg1), RegType(betaRegIdx));
@@ -822,6 +843,13 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::scaleBetaColumnMajor()
     L("offsets_end");
 
     return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitGEMMF32<utils::kernelInstrType::avx2_ymm_16_reg>::scaleBetaColumnMajor()
+{
+    return dlp::jit::jitGeneratorError::notSupported;
 }
 
 template<utils::kernelInstrType KType>
@@ -1037,23 +1065,23 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
         kernelOpsHandler.generateKernelOpsAttributes();
 
         // store result without fusing beta with store
-        RETURN_IF_ERROR(storeResult(false));
+        RETURN_IF_ERROR(storeResult(false, params.mLoop));
         jmp(".AfterStore", T_NEAR);
     }
 
     L(label_store_result);
     if (c_downscale < DLP_F32) {
         RETURN_IF_ERROR(scaleBeta());
-        RETURN_IF_ERROR(storeResult(false));
+        RETURN_IF_ERROR(storeResult(false, params.mLoop));
 
     } else {
         // store C
         if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
             // skip beta scaling if beta is 0
-            RETURN_IF_ERROR(storeResult(false));
+            RETURN_IF_ERROR(storeResult(false, params.mLoop));
         } else {
             // beta scaling
-            RETURN_IF_ERROR(storeResult(true));
+            RETURN_IF_ERROR(storeResult(true, params.mLoop));
         }
     }
 

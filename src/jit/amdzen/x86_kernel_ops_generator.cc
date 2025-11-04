@@ -236,7 +236,7 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
     }
     // set mask0 and mask1 for avx512_zmm_32_reg to be used for matadd and
     // matmul post-ops in all algorithms
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+    if constexpr (KType != utils::kernelInstrType::avx2_ymm_16_reg) {
         mask0 = Opmask(numMaskRegs + 1);
         mask1 = Opmask(numMaskRegs + 2);
     }
@@ -1307,10 +1307,23 @@ void
 kernelOpsGeneratorX86<KType>::resetMasks(bool mask, int idx)
 {
     if (mask) {
-        // Load lower 8 bits of maskF32
-        jit_->kmovb(mask0, fringeMask[idx]);
-        // Load upper 8 bits of maskF32
-        jit_->kshiftrw(mask1, fringeMask[idx], 8);
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            // For Zmm: 16-bit mask, split into 8 bits each
+            // Load lower 8 bits of maskF32 (covers elements 0-7)
+            jit_->kmovb(mask0, fringeMask[idx]);
+            // Load upper 8 bits of maskF32 (covers elements 8-15)
+            jit_->kshiftrw(mask1, fringeMask[idx], 8);
+        } else if constexpr (KType
+                             == utils::kernelInstrType::avx512_ymm_32_reg) {
+            // For Ymm: 8-bit mask, split into 4 bits each
+            // Load lower 4 bits of maskF32 (covers elements 0-3)
+            // Note: kmovb loads 8 bits, but instruction will only use lower 4
+            jit_->kmovb(mask0, fringeMask[idx]);
+            // Load upper 4 bits of maskF32 (covers elements 4-7)
+            jit_->kshiftrw(mask1, fringeMask[idx], 4);
+        } else {
+            // saved for future use
+        }
     } else {
         jit_->kxnorw(mask0, mask0, mask0);
         jit_->kxnorw(mask1, mask1, mask1);
@@ -1322,153 +1335,6 @@ template<typename sfDt, typename matOpDt>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
                                                          matOpScaleType sclType)
-{
-    // Reserve registers to prevent corruption during BF16/S8/U8 conversions
-    // Need to protect: sf_reg, matreg and the scratch loadRegs
-    auto saved_queue =
-        reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow + 2);
-
-    md_t sf_reg = scratchLoadRegIdx;
-    if (sclType == matOpScaleType::scalar) {
-        broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
-    }
-
-    jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
-    jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-
-    // Load scale factors FIRST - use sizeof(sfDt) for offset calculation
-    if (sclType == matOpScaleType::rowVector) {
-        // Calculate: scale_factor_ptr + post_op_c_j * sizeof(sfDt)
-        jit_->lea(regTmp3, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
-        loadAndConvertRows<sfDt>(regTmp3, sf_reg);
-    }
-
-    // NOW scale regTmp7 for matrix data offset - use sizeof(matOpDt)
-    jit_->lea(regTmp7, jit_->ptr[regTmp7 * sizeof(matOpDt)]);
-
-    // regTmp2 = matPtr
-    jit_->mov(regTmp2,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
-    // regTmp3 = ldm
-    jit_->mov(regTmp3,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args3)]);
-    // ldm is pointer, need to dereference again to get actual ldm value.
-    jit_->mov(regTmp3, jit_->ptr[regTmp3]);
-    jit_->lea(regTmp3, jit_->ptr[regTmp3 * sizeof(matOpDt)]);
-
-    jit_->imul(regTmp6, regTmp3);
-    jit_->add(regTmp7, regTmp6);
-    jit_->add(regTmp2, regTmp7);
-
-    if (sclType == matOpScaleType::columnVector) {
-        jit_->mov(regTmp6,
-                  jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-        jit_->lea(regTmp6, jit_->ptr[regTmp6 * sizeof(sfDt)]);
-        jit_->add(regTmp6, regTmp1);
-    }
-
-    // Calculate load bytes based on matrix datatype
-    int matLoadBytes = getLoadBytes<matOpDt>();
-
-    auto opLambda = [&](matOpType opType, int sfRegIdx, int matRegIdx,
-                        int accumRegIdx, int sclIdx, int loadIdx,
-                        bool useMask) -> jitGeneratorError {
-        // load matOp elements - supports all datatypes via loadAndConvertVector
-        loadAndConvertVector<matOpDt>(RegType(matRegIdx),
-                                      jit_->ptr[regTmp2 + loadIdx], useMask);
-
-        // multiply scale factor with matOp
-        jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
-                     RegType(sfRegIdx + sclIdx));
-        if (opType == matOpType::matOpAdd) {
-            if (useMask) {
-                if constexpr (KType
-                              == utils::kernelInstrType::avx2_ymm_16_reg) {
-                    // AVX2 doesn't support masking on arithmetic ops, zero out
-                    // garbage lanes
-                    jit_->vandps(RegType(matRegIdx), RegType(matRegIdx),
-                                 ymmMask);
-                    jit_->vaddps(RegType(accumRegIdx), RegType(accumRegIdx),
-                                 RegType(matRegIdx));
-                } else {
-                    jit_->vaddps(RegType(accumRegIdx) | fringeMask[0],
-                                 RegType(accumRegIdx), RegType(matRegIdx));
-                }
-            } else {
-                jit_->vaddps(RegType(accumRegIdx), RegType(accumRegIdx),
-                             RegType(matRegIdx));
-            }
-        } else if (opType == matOpType::matOpMul) {
-            if (useMask) {
-                if constexpr (KType
-                              == utils::kernelInstrType::avx2_ymm_16_reg) {
-                    // AVX2 doesn't support masking on arithmetic ops, use blend
-                    jit_->vmulps(RegType(matRegIdx), RegType(accumRegIdx),
-                                 RegType(matRegIdx));
-                    jit_->vblendvps(RegType(accumRegIdx), RegType(accumRegIdx),
-                                    RegType(matRegIdx), ymmMask);
-                } else {
-                    jit_->vmulps(RegType(accumRegIdx) | fringeMask[0],
-                                 RegType(accumRegIdx), RegType(matRegIdx));
-                }
-            } else {
-                jit_->vmulps(RegType(accumRegIdx), RegType(accumRegIdx),
-                             RegType(matRegIdx));
-            }
-        }
-        return jitGeneratorError::success;
-    };
-
-    int sclIdx = 0;
-    for (int i = 0; i < MR; i++) {
-        if (sclType == matOpScaleType::columnVector) {
-            // broadcast scale factor along the m dimension since the A and B
-            // matrices are swapped for column major inputs.
-            broadcastAndConvertScalar<sfDt>(
-                RegType(sf_reg), jit_->ptr[regTmp6 + i * sizeof(sfDt)]);
-        }
-        for (int j = 0; j < numFullRegsPerRow; j++) {
-            if (sclType == matOpScaleType::rowVector) {
-                sclIdx = j;
-            }
-            jitGeneratorError err =
-                opLambda(opType, sf_reg, scratchBcstRegIdx,
-                         (cRegStartIdx + (i * numRegsPerRow) + j), sclIdx,
-                         (j * matLoadBytes), false);
-            if (err != jitGeneratorError::success) {
-                return err;
-            }
-        }
-        if (numMaskRegsPerRow > 0) {
-            if (sclType == matOpScaleType::rowVector) {
-                sclIdx = numFullRegsPerRow;
-            }
-            jitGeneratorError err = opLambda(
-                opType, sf_reg, scratchBcstRegIdx,
-                (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow),
-                sclIdx, (numFullRegsPerRow * matLoadBytes), true);
-            if (err != jitGeneratorError::success) {
-                return err;
-            }
-        }
-        // add ldm to matadd pointer
-        jit_->add(regTmp2, regTmp3);
-    }
-
-    // Restore original scratch queue
-    restoreScratchQueue(saved_queue);
-
-    return jitGeneratorError::success;
-}
-
-template<>
-template<typename sfDt, typename matOpDt>
-jitGeneratorError
-kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
-    matOpScaleFactorImplMerged(matOpType opType, matOpScaleType sclType)
 {
     // Float types need 5 ZMM spare registers minimum.
     // Non-float types (int8/uint8/bf16/int32) need 7 ZMM spare registers
@@ -1582,7 +1448,9 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
 
     // calculate 16*ldm*sizeof(float) and store in regTmp3
     jit_->lea(regTmp3, jit_->ptr[regTmp3 * 8]);
-    jit_->lea(regTmp3, jit_->ptr[regTmp3 * 2]);
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        jit_->lea(regTmp3, jit_->ptr[regTmp3 * 2]);
+    }
 
     // take two zmm from scratch_reg_queue
     // for scatter/gather operations
@@ -1608,8 +1476,16 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
                              jit_->ptr[regTmp4 + RegType(offsets1RegIdx) * 1]);
             jit_->vgatherqps(halfRegType(scratchReg2) | mask1,
                              jit_->ptr[regTmp4 + RegType(offsets2RegIdx) * 1]);
-            jit_->vinsertf32x8(RegType(matRegIdx), RegType(matRegIdx),
-                               halfRegType(scratchReg2), 1);
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                jit_->vinsertf32x8(RegType(matRegIdx), RegType(matRegIdx),
+                                   halfRegType(scratchReg2), 1);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                jit_->vinsertf32x4(RegType(matRegIdx), RegType(matRegIdx),
+                                   halfRegType(scratchReg2), 1);
+            } else {
+                // saved for future use
+            }
         } else if constexpr (std::is_same_v<matOpDt, int8_t>
                              || std::is_same_v<matOpDt, uint8_t>
                              || std::is_same_v<matOpDt, bfloat16>
@@ -1633,9 +1509,18 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
                 halfRegType(scratchReg2) | mask1,
                 jit_->ptr[regTmp4 + halfRegType(dwordOffsets2) * 1]);
 
-            // Combine the two halves into one ZMM register
-            jit_->vinserti32x8(RegType(matRegIdx), RegType(matRegIdx),
-                               halfRegType(scratchReg2), 1);
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                // Combine the two halves into one ZMM register
+                jit_->vinserti32x8(RegType(matRegIdx), RegType(matRegIdx),
+                                   halfRegType(scratchReg2), 1);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                // Combine the two halves into one YMM register
+                jit_->vinserti32x4(RegType(matRegIdx), RegType(matRegIdx),
+                                   halfRegType(scratchReg2), 1);
+            } else {
+                // saved for future use
+            }
 
             // Datatype-specific conversion to float32
             if constexpr (std::is_same_v<matOpDt, int8_t>) {
@@ -1819,6 +1704,140 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::
     restoreScratchQueue(saved_global_queue);
 
     jit_->outLocalLabel();
+    return jitGeneratorError::success;
+}
+
+template<>
+template<typename sfDt, typename matOpDt>
+jitGeneratorError
+kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
+    matOpScaleFactorImplMerged(matOpType opType, matOpScaleType sclType)
+{
+    // Reserve registers to prevent corruption during BF16/S8/U8 conversions
+    // Need to protect: sf_reg, matreg and the scratch loadRegs
+    auto saved_queue =
+        reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow + 2);
+
+    md_t sf_reg = scratchLoadRegIdx;
+    if (sclType == matOpScaleType::scalar) {
+        broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
+    }
+
+    jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+    jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+    // Load scale factors FIRST - use sizeof(sfDt) for offset calculation
+    if (sclType == matOpScaleType::rowVector) {
+        // Calculate: scale_factor_ptr + post_op_c_j * sizeof(sfDt)
+        jit_->lea(regTmp3, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
+        loadAndConvertRows<sfDt>(regTmp3, sf_reg);
+    }
+
+    // NOW scale regTmp7 for matrix data offset - use sizeof(matOpDt)
+    jit_->lea(regTmp7, jit_->ptr[regTmp7 * sizeof(matOpDt)]);
+
+    // regTmp2 = matPtr
+    jit_->mov(regTmp2,
+              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+    // regTmp3 = ldm
+    jit_->mov(regTmp3,
+              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args3)]);
+    // ldm is pointer, need to dereference again to get actual ldm value.
+    jit_->mov(regTmp3, jit_->ptr[regTmp3]);
+    jit_->lea(regTmp3, jit_->ptr[regTmp3 * sizeof(matOpDt)]);
+
+    jit_->imul(regTmp6, regTmp3);
+    jit_->add(regTmp7, regTmp6);
+    jit_->add(regTmp2, regTmp7);
+
+    if (sclType == matOpScaleType::columnVector) {
+        jit_->mov(regTmp6,
+                  jit_->ptr[regkernelOpsAttr
+                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        jit_->lea(regTmp6, jit_->ptr[regTmp6 * sizeof(sfDt)]);
+        jit_->add(regTmp6, regTmp1);
+    }
+
+    // Calculate load bytes based on matrix datatype
+    int matLoadBytes = getLoadBytes<matOpDt>();
+
+    auto opLambda = [&](matOpType opType, int sfRegIdx, int matRegIdx,
+                        int accumRegIdx, int sclIdx, int loadIdx,
+                        bool useMask) -> jitGeneratorError {
+        // load matOp elements - supports all datatypes via loadAndConvertVector
+        loadAndConvertVector<matOpDt>(RegType(matRegIdx),
+                                      jit_->ptr[regTmp2 + loadIdx], useMask);
+
+        // multiply scale factor with matOp
+        jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
+                     RegType(sfRegIdx + sclIdx));
+        if (opType == matOpType::matOpAdd) {
+            if (useMask) {
+                // AVX2 doesn't support masking on arithmetic ops, zero out
+                // garbage lanes
+                jit_->vandps(RegType(matRegIdx), RegType(matRegIdx), ymmMask);
+                jit_->vaddps(RegType(accumRegIdx), RegType(accumRegIdx),
+                             RegType(matRegIdx));
+            } else {
+                jit_->vaddps(RegType(accumRegIdx), RegType(accumRegIdx),
+                             RegType(matRegIdx));
+            }
+        } else if (opType == matOpType::matOpMul) {
+            if (useMask) {
+                // AVX2 doesn't support masking on arithmetic ops, use blend
+                jit_->vmulps(RegType(matRegIdx), RegType(accumRegIdx),
+                             RegType(matRegIdx));
+                jit_->vblendvps(RegType(accumRegIdx), RegType(accumRegIdx),
+                                RegType(matRegIdx), ymmMask);
+            } else {
+                jit_->vmulps(RegType(accumRegIdx), RegType(accumRegIdx),
+                             RegType(matRegIdx));
+            }
+        }
+        return jitGeneratorError::success;
+    };
+
+    int sclIdx = 0;
+    for (int i = 0; i < MR; i++) {
+        if (sclType == matOpScaleType::columnVector) {
+            // broadcast scale factor along the m dimension since the A and B
+            // matrices are swapped for column major inputs.
+            broadcastAndConvertScalar<sfDt>(
+                RegType(sf_reg), jit_->ptr[regTmp6 + i * sizeof(sfDt)]);
+        }
+        for (int j = 0; j < numFullRegsPerRow; j++) {
+            if (sclType == matOpScaleType::rowVector) {
+                sclIdx = j;
+            }
+            jitGeneratorError err =
+                opLambda(opType, sf_reg, scratchBcstRegIdx,
+                         (cRegStartIdx + (i * numRegsPerRow) + j), sclIdx,
+                         (j * matLoadBytes), false);
+            if (err != jitGeneratorError::success) {
+                return err;
+            }
+        }
+        if (numMaskRegsPerRow > 0) {
+            if (sclType == matOpScaleType::rowVector) {
+                sclIdx = numFullRegsPerRow;
+            }
+            jitGeneratorError err = opLambda(
+                opType, sf_reg, scratchBcstRegIdx,
+                (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow),
+                sclIdx, (numFullRegsPerRow * matLoadBytes), true);
+            if (err != jitGeneratorError::success) {
+                return err;
+            }
+        }
+        // add ldm to matadd pointer
+        jit_->add(regTmp2, regTmp3);
+    }
+
+    // Restore original scratch queue
+    restoreScratchQueue(saved_queue);
+
     return jitGeneratorError::success;
 }
 
