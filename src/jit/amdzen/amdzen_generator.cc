@@ -296,7 +296,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelCodeBlocks.resize(numKernelVariants);
 
         utils::gemvM1GeneratorParams params(
-            0, 0, 0, 0, mtag_b, true, true, true, true,
+            c_downscale, 0, 0, 0, 0, mtag_b, true, true, true, true,
             dlp::kernel_frame::storageFormat::rowMajor,
             (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
@@ -898,7 +898,82 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 ? utils::kernelInstrType::avx512_zmm_32_reg
                 : utils::kernelInstrType::none;
 
-    if (NR == 1) {
+    if (MR == 1) {
+
+        // mtag_b is always packed by default, can be removed
+        AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
+
+        // Number of F32(accumulators) elements that can fit in an avx512 zmm
+        // register
+        numElemsPerReg = 16;
+
+        // We will be generating NR kernels, each having the main loop
+        // and having the specific fringe case implemented.
+        numKernelVariants = NR;
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        utils::gemvM1GeneratorParams params(
+            c_downscale, 0, 0, 0, 0, mtag_b, true, true, true, true,
+            dlp::kernel_frame::storageFormat::rowMajor,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        params.NR               = NR;
+        params.N_LEFT           = 0;
+        params.N_LEFT_16        = 0;
+        params.N_LEFT_LT16      = 0;
+        params.KC               = KC;
+        params.K_SUB_ITER       = K_UNROLL;
+        params.nloop            = true;
+        params.nfringe          = false;
+        params.kloop            = true;
+        params.nfringe_main     = false;
+        params.nfringe_left     = false;
+        params.kfringe          = true;
+        params.RS_B_N_LEFT_16   = 0;
+        params.RS_B_N_LEFT_LT16 = 0;
+
+        for (int i = 0; i < NR; i += 1) {
+
+            params.N_LEFT      = i;
+            params.N_LEFT_16   = (i / 16) * 16;
+            params.N_LEFT_LT16 = i % 16;
+
+            params.nfringe      = (i != 0);
+            params.nfringe_main = (params.N_LEFT_16 != 0);
+            params.nfringe_left = (params.N_LEFT_LT16 != 0);
+
+            params.RS_B_N_LEFT_16   = (params.N_LEFT_16) * 2;
+            params.RS_B_N_LEFT_LT16 = 32;
+
+            void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                utils::JIT_KERNEL_SIZE);
+            if (codeBuffer == nullptr) {
+                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                goto cleanup;
+            }
+            kernelCodeBlocks[i] = codeBuffer;
+
+            codegen::jitBF16GEMVM1<utils::kernelInstrType::avx512_zmm_32_reg>
+                base(codeBuffer, utils::JIT_KERNEL_SIZE);
+            err = base.generateKernel(params);
+
+            if (err != dlp::jit::jitGeneratorError::success) {
+                goto cleanup;
+            }
+#ifdef DLP_JIT_DEBUG
+            int n_left_suf = (i != 0) ? i : params.NR;
+            // The file naming is as such : jit_gemv_m1_kernel.
+            utils::jitHelperUtils::dump_jit_code(
+                kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
+                "jit_bf16_gemv_m1_kernel", 1, n_left_suf, false, i);
+#endif
+        }
+    } else if (NR == 1) {
         // Logic behind kernel generation:
         // 1. We generate kernels for all m_left values from 0 to MR-1.
         // 2. For each m_left, we generate 4 kernels:
@@ -1062,7 +1137,42 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
 
     // This code-section is taken if the underlying architecture supports
     // AVX512-BF16.
-    if (NR == 1) {
+    if (MR == 1) {
+        auto params = static_cast<dlp::kernels::gemvM1Params*>(_params);
+        // Setting the remaining values of gemvM1Params(that are not set as
+        // part of it's parameterized constructor)
+
+        params->n_iter = params->n / NR;
+        params->n_left = params->n % NR;
+        params->k_iter = params->k / KC;
+        params->k_left = params->k % KC;
+
+        params->n_left_16   = (params->n_left / 16) * 16;
+        params->n_left_lt16 = params->n_left % 16;
+
+        params->rsB      = (params->n_left / 16) * 16;
+        params->rsB      = (params->rsB != 0) ? params->rsB : 16;
+        params->is_k_odd = params->k_left & 1;
+
+        params->k_iter_sub_iter = (KC / 2) / K_UNROLL;
+        params->k_iter_sub_left = (KC / 2) % K_UNROLL;
+        params->k_left_sub_iter = ((params->k_left) / 2) / K_UNROLL;
+        params->k_left_sub_left = ((params->k_left) / 2) % K_UNROLL;
+
+        int partial_elements =
+            params->n_left % numElemsPerReg; // partial elements < simdWidth
+
+        params->nmask_avx512 = 0xFFFF >> (numElemsPerReg - partial_elements);
+
+        // Deploy the associated kernel
+        int kernel_idx = static_cast<int>(params->n_left);
+
+        utils::jit_gemv_m1_kernel kernel =
+            reinterpret_cast<utils::jit_gemv_m1_kernel>(
+                kernelCodeBlocks[kernel_idx]);
+        kernel(params);
+
+    } else if (NR == 1) {
         auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);
 
         // Setting the remaining values of gemvN1Params(that are not set as

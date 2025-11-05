@@ -258,10 +258,19 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
             post_ops_attr.post_op_c_j    = jc;
             post_ops_attr.rs_c_downscale = rs_c;
 
-            lpgemv_m_one_bf16bf16f32of32(
-                nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
-                n_sub_updated, jc_cur_loop_rem, post_op_list, &post_ops_attr);
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(
+                    lcntx->dlp_kernel_hndl, 1, nc0, k, (bfloat16*)a_use,
+                    rs_a_use, cs_a_use, 1, (bfloat16*)b_use, rs_b_use, cs_b_use,
+                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
+                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
+            } else {
+                lpgemv_m_one_bf16bf16f32of32(
+                    nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
+                    n_sub_updated, jc_cur_loop_rem, post_op_list,
+                    &post_ops_attr);
+            }
 
             if (mtag_b == REORDERED) {
                 adjust_B_panel_reordered_jc(&jc, jc_cur_loop);

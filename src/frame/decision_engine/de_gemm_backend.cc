@@ -849,15 +849,19 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
     // support.
     kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
+    if (gemmIn->n == 1) {
+        mr       = 16;
+        nr       = 1;
+        k_unroll = 1; // k-unroll is 1 for GEMV N1
+    } else if (gemmIn->m == 1) {
+        nr       = 64;
+        mr       = 1;
+        k_unroll = 4;
+        kc       = 4096;
+    }
+
     if ((gemmIn->metadata != nullptr)
         && (gemmIn->metadata[0].op_code != POST_OPS_DISABLE)) {
-
-        // Return early if N==1, since currently we support BF16 GEMV(N1) only
-        // without post-ops. The JIT backend supports it, but we are disabling
-        // it for now.
-        if (gemmIn->n == 1) {
-            return std::nullopt;
-        }
 
         // Iterate over the post_ops list to get the number of post-ops.
         md_t            numPostOps    = 0;
@@ -917,12 +921,6 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
 
             return std::make_optional(kI);
         }
-    }
-
-    if (gemmIn->n == 1) {
-        mr       = 16;
-        nr       = 1;
-        k_unroll = 1; // k-unroll is 1 for GEMV N1
     }
 
     kernel_frame::kernelInfo kI{ mr,

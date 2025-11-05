@@ -453,20 +453,23 @@ struct gemvM1Params : public kernelParams
     md_t  csB; // Column stride for B (element spacing within the row)
     md_t  psB; // Post stride for B (element spacing within the row) // REMOVE
                // THIS
-    md_t  rsY; // Row stride for y (should be 1 for scalar output)
-    md_t  csY; // Column stride for y (should be 1 for scalar output)
-    md_t  n_sub_updated;   // Number of updated n elements
-    md_t  jc_cur_loop_rem; // Remaining jc elements in the current loop
-    md_t  n_iter;          // Number of full n iterations (n/NR)
-    md_t  n_left;          // Remaining n elements
-    md_t  k_iter;          // Number of full k iterations for vectorization
-    md_t  k_left;          // Remaining k elements
-    md_t  k_iter_sub_iter; // Number of full k iterations for sub-iteration
-    md_t  k_iter_sub_left; // Remaining k elements for sub-iteration
-    md_t  k_left_sub_iter; // Remaining k elements for sub-iteration
-    md_t  k_left_sub_left; // Remaining k elements for sub-iteration
-    void* alpha;           // Scaling factor for A*x
-    void* beta;            // Scaling factor for y
+    md_t rsY;  // Row stride for y (should be 1 for scalar output)
+    md_t csY;  // Column stride for y (should be 1 for scalar output)
+    md_t n_sub_updated;   // Number of updated n elements
+    md_t jc_cur_loop_rem; // Remaining jc elements in the current loop
+    md_t n_iter;          // Number of full n iterations (n/NR)
+    md_t n_left;          // Remaining n elements
+    md_t n_left_16; // Remaining n elements in main (multiple of 16->(16,32,48))
+    md_t n_left_lt16;     // Remaining n elements in fringe (less than 16)
+    md_t k_iter;          // Number of full k iterations for vectorization
+    md_t k_left;          // Remaining k elements
+    md_t k_iter_sub_iter; // Number of full k iterations for sub-iteration
+    md_t k_iter_sub_left; // Remaining k elements for sub-iteration
+    md_t k_left_sub_iter; // Remaining k elements for sub-iteration
+    md_t k_left_sub_left; // Remaining k elements for sub-iteration
+    md_t is_k_odd;        // Flag to indicate if k is odd
+    void* alpha;          // Scaling factor for A*x
+    void* beta;           // Scaling factor for y
 
     // NOTE : The masks here are defined specific to NR being 64
     // TODO : Generalize the support for other NR values, similar to how
@@ -511,6 +514,8 @@ struct gemvM1Params : public kernelParams
         , jc_cur_loop_rem(jc_cur_loop_rem)
         , n_iter(0)
         , n_left(0)
+        , n_left_16(0)
+        , n_left_lt16(0)
         , k_iter(0)
         , k_left(0)
         , k_iter_sub_iter(0)
@@ -544,6 +549,8 @@ struct gemvM1Params : public kernelParams
         , jc_cur_loop_rem(other.jc_cur_loop_rem)
         , n_iter(other.n_iter)
         , n_left(other.n_left)
+        , n_left_16(other.n_left_16)
+        , n_left_lt16(other.n_left_lt16)
         , k_iter(other.k_iter)
         , k_left(other.k_left)
         , k_iter_sub_iter(other.k_iter_sub_iter)
@@ -577,6 +584,8 @@ struct gemvM1Params : public kernelParams
         , jc_cur_loop_rem(other.jc_cur_loop_rem)
         , n_iter(other.n_iter)
         , n_left(other.n_left)
+        , n_left_16(other.n_left_16)
+        , n_left_lt16(other.n_left_lt16)
         , k_iter(other.k_iter)
         , k_left(other.k_left)
         , k_iter_sub_iter(other.k_iter_sub_iter)
@@ -611,6 +620,8 @@ struct gemvM1Params : public kernelParams
         jc_cur_loop_rem  = other.jc_cur_loop_rem;
         n_iter           = other.n_iter;
         n_left           = other.n_left;
+        n_left_16        = other.n_left_16;
+        n_left_lt16      = other.n_left_lt16;
         k_iter           = other.k_iter;
         k_left           = other.k_left;
         k_iter_sub_iter  = other.k_iter_sub_iter;
@@ -644,6 +655,8 @@ struct gemvM1Params : public kernelParams
         beta             = nullptr;
         n_iter           = 0;
         n_left           = 0;
+        n_left_16        = 0;
+        n_left_lt16      = 0;
         k_iter           = 0;
         k_left           = 0;
         k_iter_sub_iter  = 0;

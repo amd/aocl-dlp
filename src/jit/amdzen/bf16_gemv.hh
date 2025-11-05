@@ -172,6 +172,165 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     // }
 };
 
+template<utils::kernelInstrType KType>
+class jitBF16GEMVM1 : public Xbyak::CodeGenerator
+{
+  private:
+    int                              RegBytes;  // Size of ZMM register in bytes
+    int                              numRegs;   // Number of ZMM registers
+    int                              simdWidth; // SIMD width for f32
+    int                              NR;
+    int                              N_LEFT;
+    int                              N_LEFT_16;
+    int                              N_LEFT_LT16;
+    int                              RS_B_N_LEFT_16;
+    int                              RS_B_N_LEFT_LT16;
+    int                              KC;
+    int                              K_SUB_ITER;
+    int                              c_downscale;
+    AOCL_MEMORY_TAG                  mtag_b;
+    dlp::kernel_frame::storageFormat yFormat;
+    dlp::kernel_frame::scalingType   alphaScalingType;
+    dlp::kernel_frame::scalingType   betaScalingType;
+
+    int xReg;
+    int bReg;
+    int yReg;
+    int maskReg;
+    int accumReg;
+    int tmpReg;
+    int xBaseIdx;
+    int bBaseIdx;
+    int yBaseIdx;
+    int accumBaseIdx;
+    int maskBaseIdx;
+    int tmpBaseIdx;
+
+    Xbyak::Reg64 stackPtr;
+    Xbyak::Reg64 regXptr;
+    Xbyak::Reg64 regBptr;
+    Xbyak::Reg64 regYptr, regTmpYptr;
+    Xbyak::Reg64 regNIter;
+    Xbyak::Reg64 regKIter;
+    Xbyak::Reg64 regKSubIter;
+    Xbyak::Reg64 regRsB;
+    Xbyak::Reg64 regPsB;
+    Xbyak::Reg64 regTmp1;
+    Xbyak::Reg64 regTmp2;
+    Xbyak::Reg64 regIncN;
+    Xbyak::Reg64 regIncK;
+
+    // Add mask register array (for AVX512)
+    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
+    static constexpr int MASK_START_IDX   = 1;        // Start from k1
+    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+
+    Xbyak::Label label_n_loop_start;
+    Xbyak::Label label_n_loop_end;
+    Xbyak::Label label_n_loop_k_loop_start;
+    Xbyak::Label label_n_loop_k_loop_end;
+    Xbyak::Label label_n_loop_k_fringe_start;
+    Xbyak::Label label_n_loop_k_fringe_end;
+    Xbyak::Label label_n_fringe_start;
+    Xbyak::Label label_n_fringe_end;
+    Xbyak::Label label_n_fringe_k_loop_start;
+    Xbyak::Label label_n_fringe_k_loop_end;
+    Xbyak::Label label_n_fringe_k_fringe_start;
+    Xbyak::Label label_n_fringe_k_fringe_end;
+
+    Xbyak::Label label_n_fringe_main_start;
+    Xbyak::Label label_n_fringe_main_end;
+
+    Xbyak::Label label_n_fringe_left_start;
+    Xbyak::Label label_n_fringe_left_end;
+
+    Xbyak::Label label_n_fringe_main_k_loop_start;
+    Xbyak::Label label_n_fringe_main_k_loop_end;
+    Xbyak::Label label_n_fringe_main_k_fringe_start;
+    Xbyak::Label label_n_fringe_main_k_fringe_end;
+
+    Xbyak::Label label_n_fringe_left_k_loop_start;
+    Xbyak::Label label_n_fringe_left_k_loop_end;
+    Xbyak::Label label_n_fringe_left_k_fringe_start;
+    Xbyak::Label label_n_fringe_left_k_fringe_end;
+
+    Xbyak::Label label_accumulate_result;
+    Xbyak::Label label_store_result;
+
+    // Defining the architecture specific type aliases
+    using Traits  = traits::ArchitectureTraits<KType>;
+    using RegType = typename Traits::RegType;
+
+    //------------------------------------------------
+    // ISA agnostic methods
+    // Initializing the stack frame
+    void initializeStackFrame(Xbyak::util::StackFrame&);
+
+    // Initializing the parameters
+    void initializeParameters(utils::gemvM1GeneratorParams&);
+
+    // Allocating the registers
+    dlp::jit::jitGeneratorError allocateRegisters();
+
+    //------------------------------------------------
+    // ISA specific methods
+    // Register initialization
+    void regInit(int baseIdx, int numRegs);
+
+    // Core computation functions
+
+    dlp::jit::jitGeneratorError maskLoadB(int, int);
+
+    dlp::jit::jitGeneratorError offsetBPtr(int);
+
+    dlp::jit::jitGeneratorError loadMasks();
+
+    dlp::jit::jitGeneratorError updateMask(int, int);
+
+    dlp::jit::jitGeneratorError restoreMask(int, int);
+
+    dlp::jit::jitGeneratorError computeKxnfringe();
+
+    dlp::jit::jitGeneratorError computeKxNR(bool = false);
+
+    dlp::jit::jitGeneratorError compute1xnfringe(bool = false);
+
+    dlp::jit::jitGeneratorError compute1xNR(bool = false, bool = false);
+
+    dlp::jit::jitGeneratorError loopKSubIter(bool = false, bool = false);
+
+    dlp::jit::jitGeneratorError finalAccumulate();
+
+    dlp::jit::jitGeneratorError scaleWithAlpha();
+
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe(bool = false);
+
+    dlp::jit::jitGeneratorError scaleYWithBeta(int);
+
+    dlp::jit::jitGeneratorError storeYValuesFringe();
+
+    dlp::jit::jitGeneratorError storeYValues(int n_size);
+
+    //------------------------------------------------
+
+  public:
+    jitBF16GEMVM1(void* buffer = nullptr, size_t size = 0);
+    ~jitBF16GEMVM1()                          = default;
+    jitBF16GEMVM1(jitBF16GEMVM1&)             = delete;
+    jitBF16GEMVM1(jitBF16GEMVM1&&)            = delete;
+    jitBF16GEMVM1& operator=(jitBF16GEMVM1&)  = delete;
+    jitBF16GEMVM1& operator=(jitBF16GEMVM1&&) = delete;
+
+    // Main kernel generation interface
+    dlp::jit::jitGeneratorError generateKernel(
+        utils::gemvM1GeneratorParams& params);
+
+    // Get the generated kernel function pointer
+    // utils::jit_gemv_m1_kernel getKernel() {
+    //     return getCode<utils::jit_gemv_m1_kernel>();
+    // }
+};
+
 } // namespace amdzen::codegen
 
 #endif // BF16_GEMV_HH

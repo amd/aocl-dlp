@@ -122,7 +122,13 @@ typedef void (*jit_kernel)(dlp::kernels::gemmParams*);
 using jit_gemv_n1_kernel = void (*)(dlp::kernels::gemvN1Params*);
 using jit_gemv_m1_kernel = void (*)(dlp::kernels::gemvM1Params*);
 
-constexpr uint64_t JIT_KERNEL_SIZE = 8 * 4096;
+// JIT_KERNEL_SIZE has been increased from 8 * 4096 to 16 * 4096 to accommodate
+// the larger code size required for M=1 kernels. This change ensures that
+// generated kernels do not overflow the buffer, but may cause excessive memory
+// usage for smaller kernels. Consider making this size dynamic in the future
+// to optimize memory usage.
+
+constexpr uint64_t JIT_KERNEL_SIZE = 16 * 4096;
 
 enum class kernelInstrType : uint16_t
 {
@@ -379,10 +385,15 @@ struct gemvN1GeneratorParams
 struct gemvM1GeneratorParams
 {
     // Dimensions and loop control
+    int c_downscale;
     int NR; // Vector length (number of elements to process at once) - typically
             // 64 for AVX512
-    int N_LEFT;     // N-dimension left over elements
-    int KC;         // K-dimension blocksize
+    int N_LEFT;      // N-dimension left over elements
+    int N_LEFT_16;   // N-dimension left over elements in the main (16,32,48)
+    int N_LEFT_LT16; // N-dimension left over elements in the fringe (remainder)
+    int RS_B_N_LEFT_16;   // Row stride for B matrix in the main (16,32,48)
+    int RS_B_N_LEFT_LT16; // Row stride for B matrix in the fringe (remainder)
+    int KC;               // K-dimension blocksize
     int K_SUB_ITER; // Sub-iterations size(since KC is usually large, and thus
                     // is further iterated over in blocks of K_SUB_ITER)
 
@@ -391,6 +402,8 @@ struct gemvM1GeneratorParams
     bool nloop;   // Whether to loop in n direction in steps of NR
     bool kloop;   // Whether to loop in k direction in steps of numElemsPerReg
     bool nfringe; // Whether to generate code for n-dimension fringe
+    bool nfringe_main;
+    bool nfringe_left;
     bool kfringe; // Whether to generate code for k-dimension fringe
 
     dlp::kernel_frame::storageFormat yFormat; // Storage format of the y vector
@@ -403,7 +416,8 @@ struct gemvM1GeneratorParams
         kernelOps; // List of post-ops
 
     // Constructor
-    gemvM1GeneratorParams(int                              _NR,
+    gemvM1GeneratorParams(int                              _c_downscale,
+                          int                              _NR,
                           int                              _N_LEFT,
                           int                              _KC,
                           int                              _K_SUB_ITER,
@@ -416,8 +430,13 @@ struct gemvM1GeneratorParams
                           dlp::kernel_frame::scalingType   _alphaScalingType,
                           dlp::kernel_frame::scalingType   _betaScalingType,
                           kernelInstrType                  _kType)
-        : NR(_NR)
+        : c_downscale(_c_downscale)
+        , NR(_NR)
         , N_LEFT(_N_LEFT)
+        , N_LEFT_16(0)
+        , N_LEFT_LT16(0)
+        , RS_B_N_LEFT_16(0)
+        , RS_B_N_LEFT_LT16(0)
         , KC(_KC)
         , K_SUB_ITER(_K_SUB_ITER)
         , mtag_b(_mtag_b)
@@ -434,8 +453,13 @@ struct gemvM1GeneratorParams
 
     // Copy constructor
     gemvM1GeneratorParams(const gemvM1GeneratorParams& other)
-        : NR(other.NR)
+        : c_downscale(other.c_downscale)
+        , NR(other.NR)
         , N_LEFT(other.N_LEFT)
+        , N_LEFT_16(other.N_LEFT_16)
+        , N_LEFT_LT16(other.N_LEFT_LT16)
+        , RS_B_N_LEFT_16(other.RS_B_N_LEFT_16)
+        , RS_B_N_LEFT_LT16(other.RS_B_N_LEFT_LT16)
         , KC(other.KC)
         , K_SUB_ITER(other.K_SUB_ITER)
         , mtag_b(other.mtag_b)
@@ -455,8 +479,13 @@ struct gemvM1GeneratorParams
     gemvM1GeneratorParams& operator=(const gemvM1GeneratorParams& other)
     {
         if (this != std::addressof(other)) {
+            c_downscale      = other.c_downscale;
             NR               = other.NR;
             N_LEFT           = other.N_LEFT;
+            N_LEFT_16        = other.N_LEFT_16;
+            N_LEFT_LT16      = other.N_LEFT_LT16;
+            RS_B_N_LEFT_16   = other.RS_B_N_LEFT_16;
+            RS_B_N_LEFT_LT16 = other.RS_B_N_LEFT_LT16;
             KC               = other.KC;
             K_SUB_ITER       = other.K_SUB_ITER;
             mtag_b           = other.mtag_b;
@@ -475,8 +504,13 @@ struct gemvM1GeneratorParams
 
     // Move constructor
     gemvM1GeneratorParams(gemvM1GeneratorParams&& other)
-        : NR(other.NR)
+        : c_downscale(other.c_downscale)
+        , NR(other.NR)
         , N_LEFT(other.N_LEFT)
+        , N_LEFT_16(other.N_LEFT_16)
+        , N_LEFT_LT16(other.N_LEFT_LT16)
+        , RS_B_N_LEFT_16(other.RS_B_N_LEFT_16)
+        , RS_B_N_LEFT_LT16(other.RS_B_N_LEFT_LT16)
         , KC(other.KC)
         , K_SUB_ITER(other.K_SUB_ITER)
         , mtag_b(other.mtag_b)
@@ -496,8 +530,13 @@ struct gemvM1GeneratorParams
     gemvM1GeneratorParams& operator=(gemvM1GeneratorParams&& other)
     {
         if (this != std::addressof(other)) {
+            c_downscale      = other.c_downscale;
             NR               = other.NR;
             N_LEFT           = other.N_LEFT;
+            N_LEFT_16        = other.N_LEFT_16;
+            N_LEFT_LT16      = other.N_LEFT_LT16;
+            RS_B_N_LEFT_16   = other.RS_B_N_LEFT_16;
+            RS_B_N_LEFT_LT16 = other.RS_B_N_LEFT_LT16;
             KC               = other.KC;
             K_SUB_ITER       = other.K_SUB_ITER;
             mtag_b           = other.mtag_b;
