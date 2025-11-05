@@ -615,6 +615,9 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::scaleBeta()
 {
+    // copy c address from regCptr
+    mov(regTmpCptr, regCPtr);
+
     // Handling col-major C matrix is not supported for avx2 and avx512_256
     // paths. For these cases, we ensure that the C matrix is row-major and then
     // call the JIT kernel. The logic to ensure this is in
@@ -634,9 +637,6 @@ jitGEMMF32<KType>::scaleBeta()
            RegType(scratchRegIdx));
     vucomiss(Xmm(betaRegIdx), Xmm(scratchRegIdx));
     je(".end", T_NEAR);
-
-    // copy c address from regCptr
-    mov(regTmpCptr, regCPtr);
 
     // Load cs_c value and check if cs_c is 1
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
