@@ -98,6 +98,8 @@ class DlpOperation : public dlp::testing::framework::IOperation
     DlpOperation();
     ~DlpOperation();
 
+    dlp_metadata_t* getMetadata() const { return m_postops.get(); }
+
     // IOperation interface implementation
     void addOperations(
         const dlp::testing::framework::OperationParams& params) override;

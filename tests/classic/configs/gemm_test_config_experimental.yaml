@@ -38,10 +38,6 @@ gemm_tests:
     ldc: 10
     mtagA: ["none","pack"]
     mtagB: ["reorder","pack","none"]
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: true
       operations:
@@ -92,9 +88,8 @@ gemm_tests:
     mtagA: ["none","pack"]
     mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: true
       operations:
@@ -142,9 +137,8 @@ gemm_tests:
     mtagA: ["none","pack"]
     mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: true
       operations:
@@ -176,9 +170,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-6  # Strict tolerance for regression
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
 
   # Critical regression baselines for integer types (Test Set 1)
   - name: "regression_baseline_int8"
@@ -199,10 +192,6 @@ gemm_tests:
     ldc: [5, 64, 128]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-6
-      bfloat16: 1.0e-2
-      int8: 0
 
   # Critical regression baselines for BF16 (Test Set 2)
   - name: "regression_baseline_bf16"
@@ -224,9 +213,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-3  # Strict BF16 tolerance for regression
-      int8: 0
+      absolute: 50
+      relative: 50
 
   # =============================================================================
   # SINGLE PRECISION FLOATING POINT (F32) TESTS
@@ -256,9 +244,6 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-6
-      bfloat16: 1.0e-3
-      int8: 0
 
   # Not SUPPORTED YET
   # # Batch API regression testing
@@ -307,9 +292,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual RELU post-op test
     post_operations:
       cartesian: false
@@ -336,10 +320,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
     # Individual RELU post-op test for integer types
     post_operations:
       cartesian: false
@@ -367,9 +347,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual PRELU post-op test
     post_operations:
       cartesian: false
@@ -398,9 +377,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual GELU-TANH post-op test
     post_operations:
       cartesian: false
@@ -427,9 +405,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual GELU-ERF post-op test
     post_operations:
       cartesian: false
@@ -456,9 +433,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual CLIP post-op test
     post_operations:
       cartesian: false
@@ -490,9 +466,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual SWISH post-op test
     post_operations:
       cartesian: false
@@ -521,9 +496,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual TANH post-op test
     post_operations:
       operations:
@@ -549,9 +523,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual SIGMOID post-op test
     post_operations:
       cartesian: false
@@ -578,9 +551,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual BIAS post-op test
     post_operations:
       cartesian: false
@@ -609,9 +581,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual SCALE post-op test
     post_operations:
       cartesian: false
@@ -641,9 +612,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual MATRIX-ADD post-op test
     post_operations:
       cartesian: false
@@ -672,9 +642,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     # Individual MATRIX-MUL post-op test
     post_operations:
       cartesian: false
@@ -709,9 +678,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5  # Very strict for kernel regression
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50  # Very strict for kernel regression
 
   # Kernel-specific regression tests for u8s8 6x64
   - name: "kernel_regression_u8s8_6x64"
@@ -732,10 +700,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-7
-      bfloat16: 1.0e-2
-      int8: 0
 
   # Fringe kernel regression tests - F32 types
   - name: "kernel_regression_fringe_cases_f32"
@@ -757,9 +721,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-6
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
 
   # Fringe kernel regression tests - Integer types
   - name: "kernel_regression_fringe_cases_int8"
@@ -780,10 +743,6 @@ gemm_tests:
     ldc: [32]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-6
-      bfloat16: 1.0e-2
-      int8: 0
 
   # Fringe kernel regression tests - BFloat type
   - name: "kernel_regression_fringe_cases_bfloat"
@@ -805,9 +764,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-6
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
 
   # =============================================================================
   # NUMERICAL STABILITY REGRESSION TESTS
@@ -834,9 +792,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "reorder"]
     tolerances:
-      float: 1.0e-4  # Relaxed for extreme values
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
 
   #
   - name: "numerical_regression_critical_bfloat"
@@ -859,9 +816,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "reorder"]
     tolerances:
-      float: 1.0e-4  # Relaxed for extreme values
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
 
   - name: "numerical_regression_critical_int8"
     a_type: ["u8", "s8"]
@@ -883,9 +839,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "reorder"]
     tolerances:
-      float: 1.0e-4  # Relaxed for extreme values
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
 
   # =============================================================================
   # SINGLE PRECISION FLOATING POINT (F32) TESTS
@@ -912,9 +867,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 0
+  #     relative: 0
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -975,9 +929,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-3
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
 
   # =============================================================================
   # BFLOAT16 TESTS
@@ -1004,9 +957,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-4
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1049,9 +1001,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false
       operations:
@@ -1077,9 +1028,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false
       operations:
@@ -1107,9 +1057,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false
       operations:
@@ -1135,9 +1084,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false
       operations:
@@ -1163,9 +1111,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false
       operations:
@@ -1191,9 +1138,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false
       operations:
@@ -1218,10 +1164,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1251,9 +1193,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-4
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 0
+  #     relative: 0
 
   # =============================================================================
   # INTEGER QUANTIZED TESTS (U8S8)
@@ -1280,9 +1221,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1340,9 +1280,8 @@ gemm_tests:
   #   mtagA: ["none"]  # Pack A causes issues
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1404,9 +1343,8 @@ gemm_tests:
   #   mtagA: ["none"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-4
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1444,10 +1382,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1472,10 +1406,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1502,10 +1432,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1530,10 +1456,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1558,10 +1480,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1588,10 +1506,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1616,10 +1530,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1646,10 +1556,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1676,10 +1582,6 @@ gemm_tests:
     ldc: [64]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
     post_operations:
       cartesian: false
       operations:
@@ -1714,9 +1616,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1759,9 +1660,8 @@ gemm_tests:
   #   mtagA: ["none"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1822,9 +1722,8 @@ gemm_tests:
   #   mtagA: ["none"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-4
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1868,9 +1767,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1908,9 +1806,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-4
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 50
+  #     relative: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -1946,9 +1843,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-4
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     absolute: 0
+  #     relative: 0
 
   # # Batch U8S8 comprehensive coverage
   # - name: "batch_u8s8_comprehensive_postops"
@@ -1971,9 +1867,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     relative: 50
+  #     absolute: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -2009,9 +1904,8 @@ gemm_tests:
   #   mtagA: ["none", "pack"]
   #   mtagB: ["none", "pack", "reorder"]
   #   tolerances:
-  #     float: 1.0e-5
-  #     bfloat16: 1.0e-2
-  #     int8: 0
+  #     relative: 50
+  #     absolute: 50
   #   post_operations:
   #     cartesian: true
   #     operations:
@@ -2050,10 +1944,6 @@ gemm_tests:
     ldc: [512, 1024, 2048]
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
 
   - name: "performance_regression_critical_sizes_f32"
     a_type: ["f32"]
@@ -2074,8 +1964,8 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   - name: "performance_regression_critical_sizes_bf16"
     a_type: ["bf16"]
@@ -2096,5 +1986,5 @@ gemm_tests:
     mtagA: ["none", "pack"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0

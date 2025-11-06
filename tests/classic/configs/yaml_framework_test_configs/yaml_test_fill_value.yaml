@@ -1,0 +1,70 @@
+# YAML test configuration for fill_value feature
+# Tests that the YAML parser correctly extracts fill_value configuration
+gemm_tests:
+  # Test case 1: Uniform distribution with custom range
+  - name: "fill_value_uniform"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 10
+    n: 10
+    k: 10
+    alpha: 1.0
+    beta: 0.0
+    lda: 10
+    ldb: 10
+    ldc: 10
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -2.5
+      ub: 3.5
+      dist: "uniform"
+
+  # Test case 2: Normal distribution
+  - name: "fill_value_normal"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 8
+    n: 8
+    k: 8
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -1.0
+      ub: 1.0
+      dist: "normal"
+
+  # Test case 3: No fill_value (backward compatibility)
+  - name: "no_fill_value"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 5
+    n: 5
+    k: 5
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]

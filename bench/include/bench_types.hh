@@ -33,6 +33,11 @@
 #include <string>
 #include <vector>
 
+// Forward declaration outside the benchmarking namespace
+namespace dlp { namespace testing { namespace utils {
+    struct FillValueConfig;
+}}} // namespace dlp::testing::utils
+
 namespace dlp::benchmarking {
 
 using namespace dlp::testing::framework;
@@ -50,6 +55,13 @@ struct GemmBenchConfig
     double       alpha, beta;
     bool         transA, transB;
     bool         reorderA, reorderB;
+
+    // Optional fill_value configuration
+    bool        has_fill_value         = false;
+    double      fill_lb                = -5.0;
+    double      fill_ub                = 5.0;
+    std::string fill_dist              = "uniform";
+    bool        force_int_distribution = true;
 
     // Default constructor
     GemmBenchConfig()

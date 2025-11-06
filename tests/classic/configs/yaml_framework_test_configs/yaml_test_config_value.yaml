@@ -19,9 +19,8 @@ yaml_test:
     mtagA: "none"
     mtagB: "none"
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false  # Simple for value-based config
       operations:
@@ -54,9 +53,8 @@ yaml_test:
     mtagA: "none"
     mtagB: "none"
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: false
       operations:

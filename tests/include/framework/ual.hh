@@ -30,13 +30,143 @@
 
 #include "framework/types.hh"
 #include "matrix.hh"
+#include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace dlp::testing::framework {
 
 // Forward declaration for IOperation
 class IOperation;
+
+/**
+ * @brief Enumerates matrix memory formats used inside the UAL test harness.
+ *
+ * The underlying AOCL-DLP library continues to rely on legacy character flags
+ * ('n', 'r', 'p'). The testing layer converts between this strongly typed enum
+ * and the legacy representation when calling into the library.
+ */
+enum class MatrixMemFormat : uint8_t
+{
+    Normal,    ///< Unmodified layout ('n')
+    Reordered, ///< AOCL reorder buffer ('r')
+    Packed     ///< Packed/blocked representation ('p')
+};
+
+/**
+ * @brief Convert MatrixMemFormat to the legacy AOCL-DLP character flag.
+ */
+inline char
+to_aocl_mem_format(MatrixMemFormat fmt)
+{
+    switch (fmt) {
+        case MatrixMemFormat::Normal:
+            return 'n';
+        case MatrixMemFormat::Reordered:
+            return 'r';
+        case MatrixMemFormat::Packed:
+            return 'p';
+        default:
+            return 'n';
+    }
+}
+
+/**
+ * @brief Deduce the MatrixMemFormat from the matrix metadata flags.
+ */
+inline MatrixMemFormat
+deduce_mem_format(const Matrix& matrix)
+{
+    if (matrix.isPacked()) {
+        return MatrixMemFormat::Packed;
+    }
+    if (matrix.isReordered()) {
+        return MatrixMemFormat::Reordered;
+    }
+    return MatrixMemFormat::Normal;
+}
+
+/**
+ * @brief Represents a group of matrices with uniform dimensions and metadata.
+ */
+struct BatchGroup
+{
+    std::vector<Matrix> A_matrices;
+    std::vector<Matrix> B_matrices;
+    std::vector<Matrix> C_matrices;
+
+    md_t   m     = 0;
+    md_t   n     = 0;
+    md_t   k     = 0;
+    double alpha = 1.0;
+    double beta  = 0.0;
+
+    std::shared_ptr<IOperation> postOps;
+
+    MatrixMemFormat memFormatA = MatrixMemFormat::Normal;
+    MatrixMemFormat memFormatB = MatrixMemFormat::Normal;
+
+    size_t size() const { return A_matrices.size(); }
+
+    bool validate() const
+    {
+        const size_t count = A_matrices.size();
+        if (count == 0) {
+            return false;
+        }
+
+        if (B_matrices.size() != count || C_matrices.size() != count) {
+            return false;
+        }
+
+        const MatrixType      a_type    = A_matrices.front().getMatrixType();
+        const MatrixType      b_type    = B_matrices.front().getMatrixType();
+        const MatrixType      c_type    = C_matrices.front().getMatrixType();
+        const MatrixLayout    a_layout  = A_matrices.front().getLayout();
+        const MatrixLayout    b_layout  = B_matrices.front().getLayout();
+        const MatrixLayout    c_layout  = C_matrices.front().getLayout();
+        const MatrixMemFormat expectedA = deduce_mem_format(A_matrices.front());
+        const MatrixMemFormat expectedB = deduce_mem_format(B_matrices.front());
+
+        if (memFormatA != expectedA || memFormatB != expectedB) {
+            return false;
+        }
+
+        for (size_t i = 0; i < count; ++i) {
+            const Matrix& A = A_matrices[i];
+            const Matrix& B = B_matrices[i];
+            const Matrix& C = C_matrices[i];
+
+            if (A.getMatrixType() != a_type || B.getMatrixType() != b_type
+                || C.getMatrixType() != c_type) {
+                return false;
+            }
+
+            if (A.getLayout() != a_layout || B.getLayout() != b_layout
+                || C.getLayout() != c_layout) {
+                return false;
+            }
+
+            if (A.getEffectiveRows() != m || A.getEffectiveCols() != k) {
+                return false;
+            }
+            if (B.getEffectiveRows() != k || B.getEffectiveCols() != n) {
+                return false;
+            }
+            if (C.getEffectiveRows() != m || C.getEffectiveCols() != n) {
+                return false;
+            }
+
+            if (deduce_mem_format(A) != expectedA
+                || deduce_mem_format(B) != expectedB) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+};
 
 /**
  * @enum UALType
@@ -126,6 +256,17 @@ class IUal
                           const std::shared_ptr<IOperation>& postOps,
                           double                             alpha = 1.0,
                           double                             beta  = 0.0) = 0;
+
+    /**
+     * @brief Perform batch matrix multiplication organized into groups.
+     *
+     * Each group contains matrices with identical dimensions and metadata. The
+     * operation applies the same alpha, beta, and post-operations to all
+     * matrices within a group while allowing different configurations across
+     * groups.
+     */
+    virtual UALError batch_gemm(std::vector<BatchGroup>& groups,
+                                MatrixType               accType) = 0;
 
     /**
      * @brief Perform general matrix multiplication with raw pointers for

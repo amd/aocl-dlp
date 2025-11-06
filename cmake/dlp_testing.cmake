@@ -149,12 +149,8 @@ function(dlp_define_testing_options)
     option(DLP_TESTING_CTEST_DISABLED "Disable CTest integration (use traditional testing)" ON)
     option(DLP_TESTING_LINK_STATIC "Link tests with static AOCL-DLP library for better performance" OFF)
 
-    # Testing-specific feature options
-    option(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT "Enable high precision float (double) support for tests" OFF)
-
     # Propagate variables back to the caller
     set(BUILD_TESTING ${BUILD_TESTING} PARENT_SCOPE)
     set(DLP_TESTING_CTEST_DISABLED ${DLP_TESTING_CTEST_DISABLED} PARENT_SCOPE)
     set(DLP_TESTING_LINK_STATIC ${DLP_TESTING_LINK_STATIC} PARENT_SCOPE)
-    set(DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT ${DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT} PARENT_SCOPE)
 endfunction()

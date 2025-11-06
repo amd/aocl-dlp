@@ -131,6 +131,18 @@ struct GemmTestConfig
     std::shared_ptr<IOperation> postops_ref = nullptr;
     bool                        has_postops = false;
 
+    // Optional fill_value configuration
+    bool        has_fill_value         = false;
+    double      fill_lb                = -5.0;
+    double      fill_ub                = 5.0;
+    std::string fill_dist              = "uniform";
+    bool        force_int_distribution = true;
+
+    // Optional tolerance configuration
+    bool   has_tolerances     = false;
+    double tolerance_relative = -1.0; // -1 means use default
+    double tolerance_absolute = -1.0; // -1 means use default
+
     // Default constructor (required by GoogleTest)
     GemmTestConfig() = default;
 
@@ -644,7 +656,7 @@ loadTestConfigurations(const std::string& yaml_file)
                 auto postops_ref = microTest.getPostOp(UALType::REF);
 
                 // Extract configuration from parser
-                configs.emplace_back(
+                GemmTestConfig config(
                     testName,                     // name
                     microTest.getAType(),         // a_type
                     microTest.getBType(),         // b_type
@@ -668,6 +680,28 @@ loadTestConfigurations(const std::string& yaml_file)
                     postops_dlp,                  // postops_dlp
                     postops_ref                   // postops_ref
                 );
+
+                // Extract fill_value if present
+                if (microTest.hasFillValue()) {
+                    config.has_fill_value = true;
+                    const auto& fill_val  = microTest.getFillValue();
+                    config.fill_lb        = fill_val.lb;
+                    config.fill_ub        = fill_val.ub;
+                    config.fill_dist      = fill_val.dist;
+                    config.force_int_distribution =
+                        fill_val.force_int_distribution;
+                }
+
+                // Extract tolerances if present
+                if (microTest.hasTolerances()) {
+                    config.has_tolerances     = true;
+                    const auto& tol           = microTest.getTolerances();
+                    config.tolerance_relative = tol.relative;
+                    config.tolerance_absolute = tol.absolute;
+                }
+
+                configs.push_back(config);
+
                 if (j < test_count - 1) {
                     microTest.next();
                 }
@@ -923,9 +957,18 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
 // Initialize matrices with deterministic random values
 #if 1
-        A.fillRandom(42 + config_.m); // Use configuration to vary seed
-        B.fillRandom(43 + config_.n);
-        C.fillRandom(44 + config_.k);
+        if (config_.has_fill_value) {
+            A.fillRandom(42 + config_.m, config_.fill_lb, config_.fill_ub,
+                         config_.fill_dist, config_.force_int_distribution);
+            B.fillRandom(43 + config_.n, config_.fill_lb, config_.fill_ub,
+                         config_.fill_dist, config_.force_int_distribution);
+            C.fillRandom(44 + config_.k, config_.fill_lb, config_.fill_ub,
+                         config_.fill_dist, config_.force_int_distribution);
+        } else {
+            A.fillRandom(42 + config_.m); // Use configuration to vary seed
+            B.fillRandom(43 + config_.n);
+            C.fillRandom(44 + config_.k);
+        }
         // C.fillValue(234);
         A_ref = A;
         B_ref = B;
@@ -1056,8 +1099,19 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             // comparison Since packing is an optimization hint that shouldn't
             // affect results
             C_ref.setPacked(C.isPacked());
+
+            // Set up comparison options with custom tolerance if specified
+            MatrixCompareOptions compare_opts = MatrixCompareOptions::Fast();
+            if (config_.has_tolerances) {
+                compare_opts.relToleranceMultiplier =
+                    config_.tolerance_relative;
+                compare_opts.absToleranceMultiplier =
+                    config_.tolerance_absolute;
+            }
+
             // Detailed comparison with mismatch reporting
-            if (!(C == C_ref)) {
+            auto compare_result = C.compare(C_ref, compare_opts);
+            if (!compare_result.equal) {
                 std::ostringstream detailed_error;
                 detailed_error
                     << "UAL under test and Reference results mismatch for "

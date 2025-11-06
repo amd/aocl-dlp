@@ -36,8 +36,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 2: NR Register Allocation Variants
@@ -60,8 +60,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 3: K-loop Unroll and Remainder Handling
@@ -85,8 +85,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 4: Alpha/Beta Scaling Code Paths
@@ -108,8 +108,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 5: Alpha/Beta Edge Cases with Non-Trivial Values
@@ -132,8 +132,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 6: Output Type Variants (BF16 specific)
@@ -155,8 +155,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 7: Cache Blocking Boundaries (MC, NC, KC)
@@ -181,8 +181,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 8: Transpose Combinations
@@ -204,8 +204,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 9: Matrix Reordering/Packing Combinations
@@ -227,8 +227,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none", "pack", "reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 10: Edge Cases - Small dimensions and primes
@@ -250,5 +250,5 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0

@@ -1,0 +1,96 @@
+# Test configuration for tolerance multipliers
+tolerance_test:
+  # Test 1: Default tolerance (no tolerances specified)
+  - name: "default_tolerance"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 10
+    n: 10
+    k: 10
+    alpha: [1.0]
+    beta: [1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  # Test 2: Custom tolerance multipliers
+  - name: "custom_tolerance"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 288
+    n: 129
+    k: 4099
+    alpha: [1.0]
+    beta: [1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 5
+      relative: 1
+
+  # Test 3: Zero tolerance (bitwise equality)
+  - name: "zero_tolerance"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 10
+    n: 10
+    k: 10
+    alpha: [1.0]
+    beta: [1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Test 4: Only relative tolerance specified
+  - name: "relative_only"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 100
+    n: 100
+    k: 100
+    alpha: [1.0]
+    beta: [1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      relative: 10
+
+  # Test 5: Only absolute tolerance specified
+  - name: "absolute_only"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 100
+    n: 100
+    k: 100
+    alpha: [1.0]
+    beta: [1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 10

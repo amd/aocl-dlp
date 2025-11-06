@@ -33,6 +33,7 @@
 
 namespace dlp::testing::classic {
 
+using dlp::testing::framework::BatchGroup;
 using dlp::testing::framework::IOperation;
 using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
@@ -134,6 +135,9 @@ class UalRef : public IUal
                   const std::shared_ptr<IOperation>& postOps,
                   double                             alpha = 1.0,
                   double                             beta  = 0.0) override;
+
+    UALError batch_gemm(std::vector<BatchGroup>& groups,
+                        MatrixType               accType) override;
 
     /**
      * @brief Perform general matrix multiplication: C = alpha*A*B + beta*C

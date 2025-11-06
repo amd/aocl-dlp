@@ -28,8 +28,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 2: Systematic N Sweep - Small Range
@@ -53,8 +53,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 3: Systematic N Sweep - Large Range
@@ -78,8 +78,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 4: Systematic K Sweep
@@ -103,8 +103,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 5: Combined Boundaries
@@ -125,8 +125,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0
 
   # ==========================================================================
   # Test Set 6: Alpha/Beta Comprehensive
@@ -148,5 +148,5 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      absolute: 0
+      relative: 0

@@ -26,11 +26,14 @@
  *
  */
 
+#include <cmath>
 #include <gtest/gtest.h>
 #include <iostream>
+#include <string>
 
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
+#include "utils/conversion_utils.hh"
 
 using namespace dlp::testing::utils;
 using dlp::testing::framework::MatrixLayout;
@@ -1382,6 +1385,397 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
     } catch (const std::exception& e) {
         FAIL() << "Leading dimension defaults test threw an exception: "
                << e.what();
+    }
+}
+
+// ============================================================================
+// YAML Parser Tests for fill_value Feature
+// ============================================================================
+
+using namespace dlp::testing::framework;
+
+class YamlParserFillValueTest : public ::testing::Test
+{
+  protected:
+    std::string getTestConfigPath(const std::string& filename)
+    {
+        // Use TEST_CONFIG_DIR for consistency with other tests
+        return std::string(TEST_CONFIG_DIR) + "/yaml_framework_test_configs/"
+               + filename;
+    }
+};
+
+// Test: Parse YAML with uniform distribution fill_value
+TEST_F(YamlParserFillValueTest, ParseUniformFillValue)
+{
+    std::string yaml_path = getTestConfigPath("yaml_test_fill_value.yaml");
+    YamlParser  parser(yaml_path, "gemm_tests");
+
+    const MicroTest& microTest = parser.getMicroTest();
+
+    // First test case has uniform fill_value
+    EXPECT_TRUE(microTest.hasFillValue());
+
+    const auto& fill_config = microTest.getFillValue();
+    EXPECT_DOUBLE_EQ(fill_config.lb, -2.5);
+    EXPECT_DOUBLE_EQ(fill_config.ub, 3.5);
+    EXPECT_EQ(fill_config.dist, "uniform");
+}
+
+// Test: Parse YAML with normal distribution fill_value
+TEST_F(YamlParserFillValueTest, ParseNormalFillValue)
+{
+    std::string yaml_path = getTestConfigPath("yaml_test_fill_value.yaml");
+    YamlParser  parser(yaml_path, "gemm_tests");
+
+    // Move to second test case
+    parser.next();
+    const MicroTest& microTest = parser.getMicroTest();
+
+    EXPECT_TRUE(microTest.hasFillValue());
+
+    const auto& fill_config = microTest.getFillValue();
+    EXPECT_DOUBLE_EQ(fill_config.lb, -1.0);
+    EXPECT_DOUBLE_EQ(fill_config.ub, 1.0);
+    EXPECT_EQ(fill_config.dist, "normal");
+}
+
+// Test: Parse YAML without fill_value (backward compatibility)
+TEST_F(YamlParserFillValueTest, NoFillValue)
+{
+    std::string yaml_path = getTestConfigPath("yaml_test_fill_value.yaml");
+    YamlParser  parser(yaml_path, "gemm_tests");
+
+    // Move to third test case (no fill_value)
+    parser.next();
+    parser.next();
+    const MicroTest& microTest = parser.getMicroTest();
+
+    EXPECT_FALSE(microTest.hasFillValue());
+}
+
+// Test: fillRandom with custom parameters
+TEST_F(YamlParserFillValueTest, FillRandomWithCustomParams)
+{
+    Matrix m(100, 100, MatrixType::f32);
+
+    // Fill with custom uniform distribution
+    m.fillRandom(42, -10.0, 10.0, "uniform");
+
+    // Verify values are within expected range
+    float* data     = reinterpret_cast<float*>(m.getData());
+    float  min_val  = data[0];
+    float  max_val  = data[0];
+    bool   has_data = false;
+
+    for (size_t i = 0; i < 10000; ++i) {
+        if (data[i] < min_val)
+            min_val = data[i];
+        if (data[i] > max_val)
+            max_val = data[i];
+        has_data = true;
+    }
+
+    EXPECT_TRUE(has_data);
+    EXPECT_GE(min_val, -10.0);
+    EXPECT_LE(max_val, 10.0);
+}
+
+// Test: fillRandom delegates correctly (backward compatibility)
+TEST_F(YamlParserFillValueTest, FillRandomBackwardCompatibility)
+{
+    Matrix m1(50, 50, MatrixType::f32);
+    Matrix m2(50, 50, MatrixType::f32);
+
+    // Both should produce same results with same seed
+    m1.fillRandom(123);
+    m2.fillRandom(123);
+
+    EXPECT_TRUE(m1 == m2);
+}
+
+TEST_F(YamlParserFillValueTest, ForceIntDistributionF32)
+{
+    // Test that force_int_distribution=true produces integer-only values
+    Matrix m(20, 20, MatrixType::f32);
+    m.fillRandom(42, -5.0, 5.0, "uniform", true);
+
+    const float* data = reinterpret_cast<const float*>(m.getData());
+    size_t       size = 20 * 20;
+
+    // Verify all values are integers
+    for (size_t i = 0; i < size; ++i) {
+        float val = data[i];
+        EXPECT_FLOAT_EQ(val, std::floor(val))
+            << "Expected integer value at index " << i << ", got " << val;
+        EXPECT_GE(val, -5.0);
+        EXPECT_LE(val, 5.0);
+    }
+}
+
+TEST_F(YamlParserFillValueTest, ForceIntDistributionBF16)
+{
+    // Test that force_int_distribution=true produces integer-only values for
+    // bf16
+    Matrix m(15, 15, MatrixType::bf16);
+    m.fillRandom(42, -3.0, 3.0, "uniform", true);
+
+    const uint16_t* data = reinterpret_cast<const uint16_t*>(m.getData());
+    size_t          size = 15 * 15;
+
+    // Verify all values are integers (when converted to float)
+    for (size_t i = 0; i < size; ++i) {
+        float val = dlp::testing::utils::bf16_to_f32(data[i]);
+        EXPECT_FLOAT_EQ(val, std::floor(val))
+            << "Expected integer value at index " << i << ", got " << val;
+        EXPECT_GE(val, -3.0);
+        EXPECT_LE(val, 3.0);
+    }
+}
+
+TEST_F(YamlParserFillValueTest, ForceIntDistributionFalseF32)
+{
+    // Test that force_int_distribution=false can produce fractional values
+    Matrix m(100, 100, MatrixType::f32);
+    m.fillRandom(42, -2.5, 2.5, "uniform", false);
+
+    const float* data = reinterpret_cast<const float*>(m.getData());
+    size_t       size = 100 * 100;
+
+    // With a large enough sample, we should find at least some non-integer
+    // values
+    bool found_fractional = false;
+    for (size_t i = 0; i < size; ++i) {
+        float val = data[i];
+        EXPECT_GE(val, -2.5);
+        EXPECT_LE(val, 2.5);
+        if (std::abs(val - std::floor(val)) > 1e-6) {
+            found_fractional = true;
+        }
+    }
+    // Note: With uniform_real_distribution, we expect fractional values,
+    // but we won't enforce this in the test since it's probabilistic
+}
+
+TEST_F(YamlParserFillValueTest, ParseForceIntDistribution)
+{
+    std::string yaml_path =
+        getTestConfigPath("yaml_test_force_int_distribution.yaml");
+
+    YamlParser parser(yaml_path, "gemm_tests");
+    EXPECT_GT(parser.getMicroTestCount(), 0);
+
+    // Test case 1: force_int_distribution: true
+    const MicroTest& test1 = parser.getMicroTest();
+    EXPECT_TRUE(test1.hasFillValue());
+    const auto& fill_val1 = test1.getFillValue();
+    EXPECT_EQ(fill_val1.lb, -5.0);
+    EXPECT_EQ(fill_val1.ub, 5.0);
+    EXPECT_EQ(fill_val1.dist, "uniform");
+    EXPECT_TRUE(fill_val1.force_int_distribution);
+
+    // Test case 2: force_int_distribution: false
+    parser.next();
+    const MicroTest& test2 = parser.getMicroTest();
+    EXPECT_TRUE(test2.hasFillValue());
+    const auto& fill_val2 = test2.getFillValue();
+    EXPECT_EQ(fill_val2.lb, -2.5);
+    EXPECT_EQ(fill_val2.ub, 3.5);
+    EXPECT_EQ(fill_val2.dist, "uniform");
+    EXPECT_FALSE(fill_val2.force_int_distribution);
+
+    // Test case 5: default (should be true)
+    parser.next();
+    parser.next();
+    parser.next();
+    const MicroTest& test5 = parser.getMicroTest();
+    EXPECT_TRUE(test5.hasFillValue());
+    const auto& fill_val5 = test5.getFillValue();
+    EXPECT_TRUE(fill_val5.force_int_distribution)
+        << "force_int_distribution should default to true";
+}
+
+/**
+ * @brief Test tolerance configuration parsing from YAML
+ *
+ * This test verifies that tolerance multipliers can be read from YAML
+ * configuration and that defaults are used when not specified.
+ */
+TEST(YamlParserTest, ParseToleranceConfig)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_tolerances.yaml";
+
+    try {
+        YamlParser parser(filepath, "tolerance_test");
+
+        // Test 1: Default tolerance (no tolerances specified)
+        const MicroTest& test1 = parser.getMicroTest();
+        EXPECT_FALSE(test1.hasTolerances())
+            << "Test without tolerances section should not have tolerances";
+
+        // Test 2: Custom tolerance multipliers
+        parser.next();
+        const MicroTest& test2 = parser.getMicroTest();
+        EXPECT_TRUE(test2.hasTolerances())
+            << "Test with tolerances section should have tolerances";
+        const auto& tol2 = test2.getTolerances();
+        EXPECT_DOUBLE_EQ(tol2.absolute, 5.0)
+            << "Absolute tolerance multiplier should be 5.0";
+        EXPECT_DOUBLE_EQ(tol2.relative, 1.0)
+            << "Relative tolerance multiplier should be 1.0";
+
+        // Test 3: Zero tolerance (bitwise equality)
+        parser.next();
+        const MicroTest& test3 = parser.getMicroTest();
+        EXPECT_TRUE(test3.hasTolerances());
+        const auto& tol3 = test3.getTolerances();
+        EXPECT_DOUBLE_EQ(tol3.absolute, 0.0)
+            << "Zero absolute tolerance should enforce bitwise equality";
+        EXPECT_DOUBLE_EQ(tol3.relative, 0.0)
+            << "Zero relative tolerance should enforce bitwise equality";
+
+        // Test 4: Only relative tolerance specified
+        parser.next();
+        const MicroTest& test4 = parser.getMicroTest();
+        EXPECT_TRUE(test4.hasTolerances());
+        const auto& tol4 = test4.getTolerances();
+        EXPECT_DOUBLE_EQ(tol4.relative, 10.0)
+            << "Relative tolerance multiplier should be 10.0";
+        EXPECT_DOUBLE_EQ(tol4.absolute, -1.0)
+            << "Absolute tolerance should use default when not specified";
+
+        // Test 5: Only absolute tolerance specified
+        parser.next();
+        const MicroTest& test5 = parser.getMicroTest();
+        EXPECT_TRUE(test5.hasTolerances());
+        const auto& tol5 = test5.getTolerances();
+        EXPECT_DOUBLE_EQ(tol5.absolute, 10.0)
+            << "Absolute tolerance multiplier should be 10.0";
+        EXPECT_DOUBLE_EQ(tol5.relative, -1.0)
+            << "Relative tolerance should use default when not specified";
+
+    } catch (const std::exception& e) {
+        FAIL() << "Parser threw an exception: " << e.what();
+    }
+}
+
+/**
+ * @brief Test that invalid tolerance values are rejected
+ *
+ * This test verifies that negative tolerance multipliers are properly
+ * rejected with appropriate error messages.
+ */
+TEST(YamlParserTest, InvalidToleranceConfig)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_tolerances_invalid.yaml";
+
+    try {
+        YamlParser       parser(filepath, "invalid_tolerance_test");
+        const MicroTest& test = parser.getMicroTest();
+        FAIL()
+            << "Parser should have thrown an exception for negative tolerance";
+    } catch (const std::runtime_error& e) {
+        std::string error_msg = e.what();
+        EXPECT_NE(error_msg.find("non-negative"), std::string::npos)
+            << "Error message should mention non-negative requirement. Got: "
+            << error_msg;
+    } catch (const std::exception& e) {
+        FAIL() << "Unexpected exception type: " << e.what();
+    }
+}
+
+/**
+ * @brief Test that tolerance multipliers affect matrix comparison
+ *
+ * This test creates two matrices with small differences and verifies
+ * that custom tolerance multipliers control whether they are considered
+ * equal. This is the end-to-end test that demonstrates the feature working.
+ */
+TEST(YamlParserTest, ToleranceMultipliersAffectComparison)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_tolerances.yaml";
+
+    try {
+        YamlParser parser(filepath, "tolerance_test");
+
+        // Get test with custom tolerances
+        parser.next(); // Skip to test 2: custom_tolerance
+        const MicroTest& test = parser.getMicroTest();
+        ASSERT_TRUE(test.hasTolerances());
+        const auto& tol = test.getTolerances();
+
+        // Create two small matrices
+        Matrix A(10u, 10u, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+        Matrix B(10u, 10u, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+
+        // Fill both with same values initially
+        A.fillRandom(42);
+        B = A;
+
+        // Set k dimension for tolerance calculation
+        A.setK(100);
+        B.setK(100);
+
+        // Test 1: Default tolerance (should be equal)
+        MatrixCompareOptions opts_default   = MatrixCompareOptions::Fast();
+        auto                 result_default = A.compare(B, opts_default);
+        EXPECT_TRUE(result_default.equal)
+            << "Identical matrices should be equal with default tolerance";
+
+        // Test 2: Zero tolerance with identical matrices (should be equal)
+        MatrixCompareOptions opts_zero   = MatrixCompareOptions::Fast();
+        opts_zero.relToleranceMultiplier = 0.0;
+        opts_zero.absToleranceMultiplier = 0.0;
+        auto result_zero                 = A.compare(B, opts_zero);
+        EXPECT_TRUE(result_zero.equal)
+            << "Identical matrices should be equal even with zero tolerance";
+
+        // Create matrices with slightly different random values
+        Matrix C(10u, 10u, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+        Matrix D(10u, 10u, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+        C.fillRandom(100); // Different seed creates different values
+        D.fillRandom(101); // Another different seed
+        C.setK(100);
+        D.setK(100);
+
+        // Test 3: With strict zero tolerance, different matrices should not be
+        // equal
+        auto result_zero_diff = C.compare(D, opts_zero);
+        EXPECT_FALSE(result_zero_diff.equal)
+            << "Different matrices should not be equal with zero tolerance";
+
+        // Test 4: With very large multiplier, might be equal depending on
+        // values
+        MatrixCompareOptions opts_large   = MatrixCompareOptions::Fast();
+        opts_large.relToleranceMultiplier = 100000.0;
+        opts_large.absToleranceMultiplier = 100000.0;
+        auto result_large                 = C.compare(D, opts_large);
+        // Large tolerance allows differences (test demonstrates tolerance is
+        // applied)
+
+        // Test 5: With default multiplier
+        MatrixCompareOptions opts_normal   = MatrixCompareOptions::Fast();
+        auto                 result_normal = C.compare(D, opts_normal);
+        // Default tolerance behavior
+
+        // Test 6: Verify that tolerance values are calculated correctly
+        EXPECT_GT(result_default.usedAbsTolerance, 0.0)
+            << "Default absolute tolerance should be positive";
+        EXPECT_GT(result_default.usedRelTolerance, 0.0)
+            << "Default relative tolerance should be positive";
+        EXPECT_EQ(result_zero.usedAbsTolerance, 0.0)
+            << "Zero multiplier should result in zero absolute tolerance";
+        EXPECT_EQ(result_zero.usedRelTolerance, 0.0)
+            << "Zero multiplier should result in zero relative tolerance";
+        EXPECT_GT(result_large.usedAbsTolerance,
+                  result_default.usedAbsTolerance)
+            << "Large multiplier should result in larger tolerance";
+
+    } catch (const std::exception& e) {
+        FAIL() << "Test threw an exception: " << e.what();
     }
 }
 

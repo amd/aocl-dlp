@@ -45,6 +45,77 @@ namespace dlp::testing::utils {
 using namespace dlp::testing::framework;
 
 /**
+ * @struct FillValueConfig
+ * @brief Configuration for matrix initialization from YAML fill_value field
+ *
+ * This structure holds the parameters for custom matrix initialization:
+ * - lb: Lower bound for random values
+ * - ub: Upper bound for random values
+ * - dist: Distribution type ("uniform" or "normal")
+ * - force_int_distribution: Force integer-only values for float/bf16 matrices
+ */
+struct FillValueConfig
+{
+    double      lb   = -5.0;      ///< Lower bound for random values
+    double      ub   = 5.0;       ///< Upper bound for random values
+    std::string dist = "uniform"; ///< Distribution type
+    bool        force_int_distribution =
+        true; ///< Force integer-only random values for float types
+
+    /**
+     * @brief Default constructor with default values
+     */
+    FillValueConfig() = default;
+
+    /**
+     * @brief Constructor with custom values
+     */
+    FillValueConfig(double             l,
+                    double             u,
+                    const std::string& d,
+                    bool               force_int = true)
+        : lb(l)
+        , ub(u)
+        , dist(d)
+        , force_int_distribution(force_int)
+    {
+    }
+};
+
+/**
+ * @struct ToleranceConfig
+ * @brief Configuration for tolerance multipliers used in matrix comparisons
+ *
+ * This structure holds the multipliers for relative and absolute tolerance
+ * calculations. The tolerance formula is:
+ * - Relative: rel_tolerance = epsilon(dtype) * k * relative
+ * - Absolute: abs_tolerance = epsilon(dtype) * k * absolute
+ * Setting a value to 0 enforces bitwise equality (no tolerance).
+ * Negative values indicate that default behavior should be used.
+ */
+struct ToleranceConfig
+{
+    double relative =
+        -1.0; ///< Relative tolerance multiplier (-1 = use default)
+    double absolute =
+        -1.0; ///< Absolute tolerance multiplier (-1 = use default)
+
+    /**
+     * @brief Default constructor with default values
+     */
+    ToleranceConfig() = default;
+
+    /**
+     * @brief Constructor with custom values
+     */
+    ToleranceConfig(double rel, double abs)
+        : relative(rel)
+        , absolute(abs)
+    {
+    }
+};
+
+/**
  * @enum YieldType
  * @brief Defines the strategy for generating test parameter combinations
  *
@@ -93,6 +164,14 @@ struct TestCaseIterators
     TypeErasedIterator trans_b; ///< Iterator for transpose flag of B (bool)
     TypeErasedIterator mtag_a;  ///< Iterator for matrix tag of A (MatrixTag)
     TypeErasedIterator mtag_b;  ///< Iterator for matrix tag of B (MatrixTag)
+
+    // Optional fill_value configuration
+    bool            has_fill_value = false; ///< Whether fill_value is present
+    FillValueConfig fill_value; ///< Fill value configuration if present
+
+    // Optional tolerance configuration
+    bool            has_tolerances = false; ///< Whether tolerance is present
+    ToleranceConfig tolerances; ///< Tolerance configuration if present
 
     /**
      * @brief Default constructor - creates default-constructed
@@ -586,11 +665,41 @@ class MicroTest
     size_t getIndex() const { return m_index; }
 
     /**
+     * @brief Check if fill_value configuration is present
+     * @return bool True if fill_value is configured, false otherwise
+     */
+    bool hasFillValue() const { return m_test_case_iterators.has_fill_value; }
+
+    /**
+     * @brief Get the fill_value configuration
+     * @return FillValueConfig The fill value configuration
+     */
+    const FillValueConfig& getFillValue() const
+    {
+        return m_test_case_iterators.fill_value;
+    }
+
+    /**
      * @brief Get PostOps operation for the specified UAL type
      * @param ual_type The UAL type (DLP or REF) to create operation for
      * @return Ready-to-use IOperation object, or nullptr if no PostOps
      */
     std::shared_ptr<IOperation> getPostOp(UALType ual_type) const;
+
+    /**
+     * @brief Check if tolerance configuration is present
+     * @return bool True if tolerance is configured, false otherwise
+     */
+    bool hasTolerances() const { return m_test_case_iterators.has_tolerances; }
+
+    /**
+     * @brief Get the tolerance configuration
+     * @return ToleranceConfig The tolerance configuration
+     */
+    const ToleranceConfig& getTolerances() const
+    {
+        return m_test_case_iterators.tolerances;
+    }
 
     // Navigation and control methods
 

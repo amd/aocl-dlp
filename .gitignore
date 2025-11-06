@@ -44,3 +44,4 @@ scripts/tools/Dockerfile
 # Rust build artifacts
 scripts/tools/log2yaml/target/
 scripts/tools/log2yaml/Cargo.lock
+*.bak

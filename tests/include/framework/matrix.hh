@@ -76,6 +76,10 @@ namespace dlp { namespace testing { namespace framework {
             -1.0; ///< Override default absolute tolerance (-1 = use default)
         double relToleranceOverride =
             -1.0; ///< Override default relative tolerance (-1 = use default)
+        double relToleranceMultiplier =
+            -1.0; ///< Relative tolerance multiplier (-1 = use default 50.0)
+        double absToleranceMultiplier =
+            -1.0; ///< Absolute tolerance multiplier (-1 = use default 50.0)
 
         /**
          * @brief Create options for fast mode (boolean comparison only)
@@ -471,6 +475,28 @@ namespace dlp { namespace testing { namespace framework {
          * use time-based seed)
          */
         void fillRandom(unsigned int seed = 0);
+
+        /**
+         * @brief Fill matrix with random values from a specified distribution
+         * and range
+         *
+         * Fills the matrix with random values from a specified distribution
+         * (uniform or normal) within the given lower and upper bounds.
+         *
+         * @param seed Seed for the random number generator (0 means use
+         * time-based seed)
+         * @param lb Lower bound for random values
+         * @param ub Upper bound for random values
+         * @param dist Distribution type: "uniform" or "normal" (default:
+         * "uniform")
+         * @param force_int_distribution Force integer-only values for
+         * float/bf16 types (default: true)
+         */
+        void fillRandom(unsigned int       seed,
+                        double             lb,
+                        double             ub,
+                        const std::string& dist                   = "uniform",
+                        bool               force_int_distribution = true);
 
         /**
          * @brief Fill matrix with a single value

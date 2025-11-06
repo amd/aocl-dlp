@@ -125,9 +125,18 @@ class OptimizedGemmBenchmark : public ConcreteUAL
                     alignment);
 
         // Initialize with random data
-        A_.fillRandom(42 + m_);
-        B_.fillRandom(43 + n_);
-        C_.fillRandom(44 + k_);
+        if (config.has_fill_value) {
+            A_.fillRandom(42 + m_, config.fill_lb, config.fill_ub,
+                          config.fill_dist, config.force_int_distribution);
+            B_.fillRandom(43 + n_, config.fill_lb, config.fill_ub,
+                          config.fill_dist, config.force_int_distribution);
+            C_.fillRandom(44 + k_, config.fill_lb, config.fill_ub,
+                          config.fill_dist, config.force_int_distribution);
+        } else {
+            A_.fillRandom(42 + m_);
+            B_.fillRandom(43 + n_);
+            C_.fillRandom(44 + k_);
+        }
 
         // Apply reordering if needed
         if (config.reorderA) {

@@ -53,6 +53,7 @@ extern "C"
 
 namespace dlp::testing::classic {
 
+using dlp::testing::framework::BatchGroup;
 using dlp::testing::framework::UALError;
 using dlp::testing::utils::bf16_to_f32;
 
@@ -1097,6 +1098,31 @@ UalRef::gemm(const Matrix&                      A,
             // Process the post-operation using std::visit
             std::visit([&](const auto& op) { applyPostOperation(C, op); },
                        *postOp);
+        }
+    }
+
+    return UALError::UAL_SUCCESS;
+}
+
+UALError
+UalRef::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
+{
+    if (groups.empty()) {
+        return UALError::UAL_FAILURE;
+    }
+
+    for (auto& group : groups) {
+        if (!group.validate()) {
+            return UALError::UAL_FAILURE;
+        }
+
+        for (size_t i = 0; i < group.A_matrices.size(); ++i) {
+            UALError status = gemm(group.A_matrices[i], group.B_matrices[i],
+                                   group.C_matrices[i], accType, group.postOps,
+                                   group.alpha, group.beta);
+            if (status != UALError::UAL_SUCCESS) {
+                return status;
+            }
         }
     }
 

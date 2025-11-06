@@ -22,7 +22,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      float: 1.0e-5
+      absolute: 50
+      relative: 50
     post_operations:
       cartesian: true
       operations:

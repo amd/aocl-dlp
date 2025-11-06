@@ -37,12 +37,14 @@
 
 #include "adaptors/dlp/ual_dlp.hh"
 #include "adaptors/dlp/operation_dlp.hh"
+#include "batch_post_ops.hh"
+#include "framework/batch_gemm_args.hh"
 #include <cstddef>
 #include <cstring>
-#include <iostream>
 #include <memory>
+#include <vector>
 
-#include "aocl_dlp.h"
+#include "aocl_dlp.h" // IWYU pragma: keep
 #include "classic/aocl_gemm_post_ops.h"
 #include "classic/dlp_errors.h"
 
@@ -560,6 +562,62 @@ UalDlp::gemm(const Matrix&                      A,
         return UALError::UAL_SUCCESS;
 
     return UALError::UAL_FAILURE;
+}
+
+UALError
+UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
+{
+    PreparedBatchGemmArgs prepared;
+    UALError prep_status = prepare_batch_gemm_args(groups, accType, prepared);
+    if (prep_status != UALError::UAL_SUCCESS) {
+        return prep_status;
+    }
+
+    std::vector<dlp_metadata_t*> metadata;
+    auto metadata_status = extract_dlp_metadata(groups, metadata);
+    if (metadata_status != UALError::UAL_SUCCESS) {
+        return metadata_status;
+    }
+
+    uint64_t type = encode_types(prepared.a_type, prepared.b_type,
+                                 prepared.c_type, accType);
+
+    switch (type) {
+        case encode_types<MatrixType::f32, MatrixType::f32, MatrixType::f32,
+                          MatrixType::f32>(): {
+            std::vector<float> alpha_f32(prepared.group_count);
+            std::vector<float> beta_f32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_f32[i] = static_cast<float>(prepared.alpha[i]);
+                beta_f32[i]  = static_cast<float>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const float* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const float* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_f32f32f32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_f32.data(),
+                const_cast<const float**>(a_ptrs), prepared.lda.data(),
+                const_cast<const float**>(b_ptrs), prepared.ldb.data(),
+                beta_f32.data(), const_cast<float**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        default:
+            return UALError::UAL_NOT_SUPPORTED;
+    }
+
+    return UALError::UAL_SUCCESS;
 }
 
 UALError

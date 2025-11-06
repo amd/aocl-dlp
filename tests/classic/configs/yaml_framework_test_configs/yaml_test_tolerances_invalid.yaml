@@ -1,0 +1,21 @@
+# Test configuration for invalid tolerance values
+invalid_tolerance_test:
+  # Test with negative tolerance
+  - name: "negative_tolerance"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 10
+    n: 10
+    k: 10
+    alpha: [1.0]
+    beta: [1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: -5
+      relative: 1

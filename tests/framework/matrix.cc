@@ -554,31 +554,49 @@ namespace dlp { namespace testing { namespace framework {
             double k_factor = (m_k != std::numeric_limits<md_t>::max())
                                   ? static_cast<double>(m_k)
                                   : 1.0;
-            double base_tolerance =
-                50.0 * std::numeric_limits<float>::epsilon();
 
+            // Get multipliers from options, use default 50.0 if not specified
+            double rel_multiplier = (opts.relToleranceMultiplier >= 0.0)
+                                        ? opts.relToleranceMultiplier
+                                        : 50.0;
+            double abs_multiplier = (opts.absToleranceMultiplier >= 0.0)
+                                        ? opts.absToleranceMultiplier
+                                        : 50.0;
+
+            double epsilon = std::numeric_limits<float>::epsilon();
+
+            // Calculate tolerances: tolerance = epsilon * k * multiplier
             absTol = (opts.absToleranceOverride >= 0.0)
                          ? opts.absToleranceOverride
-                         : base_tolerance * k_factor;
+                         : epsilon * k_factor * abs_multiplier;
             relTol = (opts.relToleranceOverride >= 0.0)
                          ? opts.relToleranceOverride
-                         : base_tolerance * k_factor;
+                         : epsilon * k_factor * rel_multiplier;
         } else if (m_type == MatrixType::bf16) {
             // Use k dimension for tolerance scaling if available
             // When k dimension is large (GEMM), accumulated errors increase
             double k_factor = (m_k != std::numeric_limits<md_t>::max())
                                   ? static_cast<double>(m_k)
                                   : 1.0;
-            // Calculate bf16 machine epsilon and apply same formula as f32
-            double bf16_eps       = static_cast<double>(bf16_machine_epsilon());
-            double base_tolerance = 50.0 * bf16_eps;
 
+            // Get multipliers from options, use default 50.0 if not specified
+            double rel_multiplier = (opts.relToleranceMultiplier >= 0.0)
+                                        ? opts.relToleranceMultiplier
+                                        : 50.0;
+            double abs_multiplier = (opts.absToleranceMultiplier >= 0.0)
+                                        ? opts.absToleranceMultiplier
+                                        : 50.0;
+
+            // Calculate bf16 machine epsilon
+            double epsilon = static_cast<double>(bf16_machine_epsilon());
+
+            // Calculate tolerances: tolerance = epsilon * k * multiplier
             absTol = (opts.absToleranceOverride >= 0.0)
                          ? opts.absToleranceOverride
-                         : base_tolerance * k_factor;
+                         : epsilon * k_factor * abs_multiplier;
             relTol = (opts.relToleranceOverride >= 0.0)
                          ? opts.relToleranceOverride
-                         : base_tolerance * k_factor;
+                         : epsilon * k_factor * rel_multiplier;
         } else {
             // Integer types: exact comparison
             absTol = 0.0;
@@ -1138,8 +1156,25 @@ namespace dlp { namespace testing { namespace framework {
 
     /**
      * @brief Fill matrix with random values from a uniform distribution
+     *
+     * This is a convenience overload that delegates to the parameterized
+     * version with default bounds and distribution.
      */
     void Matrix::fillRandom(unsigned int seed)
+    {
+        // Delegate to the parameterized version with default values
+        fillRandom(seed, -5.0, 5.0, "uniform");
+    }
+
+    /**
+     * @brief Fill matrix with random values from a specified distribution and
+     * range
+     */
+    void Matrix::fillRandom(unsigned int       seed,
+                            double             lb,
+                            double             ub,
+                            const std::string& dist,
+                            bool               force_int_distribution)
     {
         if (!m_data || m_dataSizeBytes == 0) {
             return;
@@ -1155,118 +1190,270 @@ namespace dlp { namespace testing { namespace framework {
 
         std::mt19937 gen(seed);
 
+        // Validate distribution type
+        bool use_normal = (dist == "normal");
+        if (!use_normal && dist != "uniform") {
+            throw std::invalid_argument(
+                "Invalid distribution type. Use 'uniform' or 'normal'");
+        }
+
         switch (m_type) {
             case MatrixType::f32: {
-#if DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT
-                std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    float value = dis(gen);
-                    data[i]     = value;
-                }
-                break;
-#else
-                std::uniform_real_distribution<float> dis(-5.0f, 5.0f);
-                float* data         = reinterpret_cast<float*>(m_data);
-                size_t elementCount = m_dataSizeBytes / sizeof(float);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    // Generate float value and truncate to remove fractional
-                    // part
-                    float value = dis(gen);
-                    data[i]     = std::trunc(value); // Truncates toward zero
-                }
-                break;
-#endif
-            }
-            case MatrixType::u8: {
-                std::uniform_int_distribution<uint8_t> dis(0, 255);
-                uint8_t*                               data = m_data;
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
-                    data[i] = dis(gen);
-                }
-                break;
-            }
-            case MatrixType::s8: {
-                std::uniform_int_distribution<int8_t> dis(-128, 127);
-                int8_t* data = reinterpret_cast<int8_t*>(m_data);
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
-                    data[i] = dis(gen);
+
+                if (use_normal) {
+                    // For normal distribution, center mean at (lb+ub)/2
+                    // Use stddev such that ~99.7% of values fall within [lb,
+                    // ub] (mean ± 3*stddev covers 99.7% in normal distribution)
+                    double                          mean   = (lb + ub) / 2.0;
+                    double                          stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<float> dis(
+                        static_cast<float>(mean), static_cast<float>(stddev));
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = dis(gen);
+                    }
+                } else if (force_int_distribution) {
+                    // Use integer distribution for integral stress testing
+                    int lb_i = static_cast<int>(std::floor(lb));
+                    int ub_i = static_cast<int>(std::floor(ub));
+                    std::uniform_int_distribution<int> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = static_cast<float>(dis(gen));
+                    }
+                } else {
+                    std::uniform_real_distribution<float> dis(
+                        static_cast<float>(lb), static_cast<float>(ub));
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = dis(gen);
+                    }
                 }
                 break;
             }
-            case MatrixType::u16: {
-                std::uniform_int_distribution<uint16_t> dis(0, 65535);
+
+            case MatrixType::bf16: {
                 uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
                 size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    data[i] = dis(gen);
+
+                if (use_normal) {
+                    double                          mean   = (lb + ub) / 2.0;
+                    double                          stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<float> dis(
+                        static_cast<float>(mean), static_cast<float>(stddev));
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = f32_to_bf16(dis(gen));
+                    }
+                } else if (force_int_distribution) {
+                    // Use integer distribution for integral stress testing
+                    int lb_i = static_cast<int>(std::floor(lb));
+                    int ub_i = static_cast<int>(std::floor(ub));
+                    std::uniform_int_distribution<int> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = f32_to_bf16(static_cast<float>(dis(gen)));
+                    }
+                } else {
+                    std::uniform_real_distribution<float> dis(
+                        static_cast<float>(lb), static_cast<float>(ub));
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = f32_to_bf16(dis(gen));
+                    }
                 }
                 break;
             }
+
+            case MatrixType::u8: {
+                uint8_t* data = m_data;
+                int      lb_i = static_cast<int>(std::max(0.0, lb));
+                int      ub_i = static_cast<int>(std::min(255.0, ub));
+
+                if (use_normal) {
+                    double                           mean   = (lb + ub) / 2.0;
+                    double                           stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<double> dis(mean, stddev);
+                    for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                        double val = dis(gen);
+                        data[i]    = static_cast<uint8_t>(
+                            std::max(0.0, std::min(255.0, val)));
+                    }
+                } else {
+                    std::uniform_int_distribution<int> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                        data[i] = static_cast<uint8_t>(dis(gen));
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::s8: {
+                int8_t* data = reinterpret_cast<int8_t*>(m_data);
+                int     lb_i = static_cast<int>(std::max(-128.0, lb));
+                int     ub_i = static_cast<int>(std::min(127.0, ub));
+
+                if (use_normal) {
+                    double                           mean   = (lb + ub) / 2.0;
+                    double                           stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<double> dis(mean, stddev);
+                    for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                        double val = dis(gen);
+                        data[i]    = static_cast<int8_t>(
+                            std::max(-128.0, std::min(127.0, val)));
+                    }
+                } else {
+                    std::uniform_int_distribution<int> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                        data[i] = static_cast<int8_t>(dis(gen));
+                    }
+                }
+                break;
+            }
+
+            case MatrixType::u16: {
+                uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
+                int       lb_i         = static_cast<int>(std::max(0.0, lb));
+                int       ub_i = static_cast<int>(std::min(65535.0, ub));
+
+                if (use_normal) {
+                    double                           mean   = (lb + ub) / 2.0;
+                    double                           stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<double> dis(mean, stddev);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        double val = dis(gen);
+                        data[i]    = static_cast<uint16_t>(
+                            std::max(0.0, std::min(65535.0, val)));
+                    }
+                } else {
+                    std::uniform_int_distribution<int> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = static_cast<uint16_t>(dis(gen));
+                    }
+                }
+                break;
+            }
+
             case MatrixType::s16: {
-                std::uniform_int_distribution<int16_t> dis(-32768, 32767);
                 int16_t* data         = reinterpret_cast<int16_t*>(m_data);
                 size_t   elementCount = m_dataSizeBytes / sizeof(int16_t);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    data[i] = dis(gen);
+                int      lb_i = static_cast<int>(std::max(-32768.0, lb));
+                int      ub_i = static_cast<int>(std::min(32767.0, ub));
+
+                if (use_normal) {
+                    double                           mean   = (lb + ub) / 2.0;
+                    double                           stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<double> dis(mean, stddev);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        double val = dis(gen);
+                        data[i]    = static_cast<int16_t>(
+                            std::max(-32768.0, std::min(32767.0, val)));
+                    }
+                } else {
+                    std::uniform_int_distribution<int> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = static_cast<int16_t>(dis(gen));
+                    }
                 }
                 break;
             }
+
             case MatrixType::u32: {
-                std::uniform_int_distribution<uint32_t> dis(0, UINT32_MAX);
                 uint32_t* data         = reinterpret_cast<uint32_t*>(m_data);
                 size_t    elementCount = m_dataSizeBytes / sizeof(uint32_t);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    data[i] = dis(gen);
+                uint32_t  lb_i = static_cast<uint32_t>(std::max(0.0, lb));
+                uint32_t  ub_i = static_cast<uint32_t>(
+                    std::min(static_cast<double>(UINT32_MAX), ub));
+
+                if (use_normal) {
+                    double                           mean   = (lb + ub) / 2.0;
+                    double                           stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<double> dis(mean, stddev);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        double val = dis(gen);
+                        data[i]    = static_cast<uint32_t>(std::max(
+                            0.0,
+                            std::min(static_cast<double>(UINT32_MAX), val)));
+                    }
+                } else {
+                    std::uniform_int_distribution<uint32_t> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = dis(gen);
+                    }
                 }
                 break;
             }
+
             case MatrixType::s32: {
-                std::uniform_int_distribution<int32_t> dis(INT32_MIN,
-                                                           INT32_MAX);
                 int32_t* data         = reinterpret_cast<int32_t*>(m_data);
                 size_t   elementCount = m_dataSizeBytes / sizeof(int32_t);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    data[i] = dis(gen);
+                int32_t  lb_i         = static_cast<int32_t>(
+                    std::max(static_cast<double>(INT32_MIN), lb));
+                int32_t ub_i = static_cast<int32_t>(
+                    std::min(static_cast<double>(INT32_MAX), ub));
+
+                if (use_normal) {
+                    double                           mean   = (lb + ub) / 2.0;
+                    double                           stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<double> dis(mean, stddev);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        double val = dis(gen);
+                        data[i]    = static_cast<int32_t>(std::max(
+                            static_cast<double>(INT32_MIN),
+                            std::min(static_cast<double>(INT32_MAX), val)));
+                    }
+                } else {
+                    std::uniform_int_distribution<int32_t> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < elementCount; ++i) {
+                        data[i] = dis(gen);
+                    }
                 }
                 break;
             }
-            case MatrixType::bf16: {
-#if DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT // Enable this to get a proper test
-                                            // case.
-                // For BF16, fill with random uint16_t values
-                std::uniform_real_distribution<float> dis(-1.0f, 1.0f);
-                uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
-                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    data[i] = f32_to_bf16(dis(gen));
-                }
-                break;
-#else
-                // For BF16, fill with random uint16_t values
-                std::uniform_int_distribution<int16_t> dis(-5, 5);
-                uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
-                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
-                for (size_t i = 0; i < elementCount; ++i) {
-                    data[i] = f32_to_bf16(static_cast<float>(dis(gen)));
-                }
-                break;
-#endif
-            }
+
             case MatrixType::u4:
             case MatrixType::s4: {
-                // For packed 4-bit types, fill with random bytes
-                std::uniform_int_distribution<uint8_t> dis(0, 255);
-                uint8_t*                               data = m_data;
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
-                    data[i] = dis(gen);
+                // For packed 4-bit types, generate values in 0-15 range or
+                // -8-7 range
+                uint8_t* data = m_data;
+                int      lb_i = (m_type == MatrixType::s4)
+                                    ? static_cast<int>(std::max(-8.0, lb))
+                                    : static_cast<int>(std::max(0.0, lb));
+                int      ub_i = (m_type == MatrixType::s4)
+                                    ? static_cast<int>(std::min(7.0, ub))
+                                    : static_cast<int>(std::min(15.0, ub));
+
+                if (use_normal) {
+                    double                           mean   = (lb + ub) / 2.0;
+                    double                           stddev = (ub - lb) / 6.0;
+                    std::normal_distribution<double> dis(mean, stddev);
+                    for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                        // Pack two 4-bit values per byte
+                        double  val1 = dis(gen);
+                        double  val2 = dis(gen);
+                        uint8_t nibble1 =
+                            static_cast<uint8_t>(std::max(
+                                static_cast<double>(lb_i),
+                                std::min(static_cast<double>(ub_i), val1)))
+                            & 0x0F;
+                        uint8_t nibble2 =
+                            static_cast<uint8_t>(std::max(
+                                static_cast<double>(lb_i),
+                                std::min(static_cast<double>(ub_i), val2)))
+                            & 0x0F;
+                        data[i] = nibble1 | (nibble2 << 4);
+                    }
+                } else {
+                    std::uniform_int_distribution<int> dis(lb_i, ub_i);
+                    for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                        uint8_t nibble1 = static_cast<uint8_t>(dis(gen)) & 0x0F;
+                        uint8_t nibble2 = static_cast<uint8_t>(dis(gen)) & 0x0F;
+                        data[i]         = nibble1 | (nibble2 << 4);
+                    }
                 }
                 break;
             }
+
             default:
-                throw std::runtime_error(
-                    "Unsupported matrix type for random fill");
+                throw std::runtime_error("Unsupported matrix type for random "
+                                         "fill with custom range");
         }
     }
 

@@ -52,7 +52,6 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 |                               |              |                                                                    |
 | **Testing Options**           |              |                                                                    |
 | DLP_TESTING_LINK_STATIC       | ON           | Link tests with static AOCL-DLP library for better performance    |
-| DLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT | OFF | Enable high precision float (double) support for tests           |
 | DLP_TESTING_ENABLE_DETAILED_DEBUG | OFF      | Enable detailed debug information for tests                        |
 |                               |              |                                                                    |
 | **Benchmarking Options**      |              |                                                                    |
@@ -143,14 +142,6 @@ For custom OpenMP installation:
 
 ```bash
 cmake -DDLP_THREADING_MODEL=openmp -DDLP_OPENMP_ROOT=/path/to/openmp ..
-```
-
-### High Precision Float Support
-
-Enable high precision float (double) support for tests:
-
-```bash
-cmake -DDLP_TESTING_ENABLE_HIGH_PRECISION_FLOAT=ON ..
 ```
 
 ### Static vs Dynamic Linking

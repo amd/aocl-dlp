@@ -32,10 +32,9 @@
 #include <iostream>
 #include <sstream>
 
-namespace dlp::benchmarking {
-
 using namespace dlp::testing::utils;
-using namespace dlp::testing::framework;
+
+namespace dlp::benchmarking {
 
 size_t
 GemmBenchConfig::hash() const
@@ -127,6 +126,17 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                 config.transB         = microTest.getTransB();
                 config.reorderA       = microTest.getReorderA();
                 config.reorderB       = microTest.getReorderB();
+
+                // Extract fill_value if present
+                if (microTest.hasFillValue()) {
+                    config.has_fill_value = true;
+                    const auto& fill_val  = microTest.getFillValue();
+                    config.fill_lb        = fill_val.lb;
+                    config.fill_ub        = fill_val.ub;
+                    config.fill_dist      = fill_val.dist;
+                    config.force_int_distribution =
+                        fill_val.force_int_distribution;
+                }
 
                 // Generate name after populating config
                 config.name = generateBenchmarkName(config);

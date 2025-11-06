@@ -1,0 +1,158 @@
+# YAML test configuration for force_int_distribution feature
+# Tests that the force_int_distribution flag controls integer vs float randomness
+gemm_tests:
+  # Test case 1: Force integer distribution (default behavior)
+  - name: "force_int_true"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 10
+    n: 10
+    k: 10
+    alpha: 1.0
+    beta: 0.0
+    lda: 10
+    ldb: 10
+    ldc: 10
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -5.0
+      ub: 5.0
+      dist: "uniform"
+      force_int_distribution: true
+
+  # Test case 2: Allow floating-point distribution
+  - name: "force_int_false"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 10
+    n: 10
+    k: 10
+    alpha: 1.0
+    beta: 0.0
+    lda: 10
+    ldb: 10
+    ldc: 10
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -2.5
+      ub: 3.5
+      dist: "uniform"
+      force_int_distribution: false
+
+  # Test case 3: BF16 with integer distribution
+  - name: "bf16_force_int_true"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 8
+    n: 8
+    k: 8
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -3.0
+      ub: 3.0
+      dist: "uniform"
+      force_int_distribution: true
+
+  # Test case 4: BF16 with floating-point distribution
+  - name: "bf16_force_int_false"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 8
+    n: 8
+    k: 8
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -1.5
+      ub: 1.5
+      dist: "uniform"
+      force_int_distribution: false
+
+  # Test case 5: Default (no explicit force_int_distribution, should be true)
+  - name: "default_force_int"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 6
+    n: 6
+    k: 6
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      # force_int_distribution not specified, should default to true
+
+  # Test case 6: Normal distribution (force_int_distribution should not apply)
+  - name: "normal_dist_ignored"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 8
+    n: 8
+    k: 8
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_value:
+      lb: -2.0
+      ub: 2.0
+      dist: "normal"
+      force_int_distribution: true  # Should be ignored for normal dist

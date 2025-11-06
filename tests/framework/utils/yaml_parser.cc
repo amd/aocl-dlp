@@ -501,6 +501,82 @@ namespace dlp { namespace testing { namespace utils {
                     : ValueIterable<MatrixTag>(MatrixTag::NONE, report_inf)
                           .begin();
 
+            // Parse fill_value if present
+            if (node["fill_value"]) {
+                iterators.has_fill_value = true;
+                auto fill_node           = node["fill_value"];
+
+                // Extract lb (lower bound)
+                if (fill_node["lb"]) {
+                    iterators.fill_value.lb = fill_node["lb"].as<double>();
+                }
+
+                // Extract ub (upper bound)
+                if (fill_node["ub"]) {
+                    iterators.fill_value.ub = fill_node["ub"].as<double>();
+                }
+
+                // Extract dist (distribution type)
+                if (fill_node["dist"]) {
+                    iterators.fill_value.dist =
+                        fill_node["dist"].as<std::string>();
+                }
+
+                // Extract force_int_distribution (default: true)
+                if (fill_node["force_int_distribution"]) {
+                    iterators.fill_value.force_int_distribution =
+                        fill_node["force_int_distribution"].as<bool>();
+                }
+            }
+
+            // Parse tolerances if present
+            if (node["tolerances"]) {
+                iterators.has_tolerances = true;
+                auto tol_node            = node["tolerances"];
+
+                // Extract relative tolerance multiplier
+                if (tol_node["relative"]) {
+                    double rel_val = tol_node["relative"].as<double>();
+                    if (rel_val < 0.0) {
+                        throw std::runtime_error(
+                            "Relative tolerance multiplier must be "
+                            "non-negative, got: "
+                            + std::to_string(rel_val));
+                    }
+                    // Reasonable upper bound check (500000 = ~10000x
+                    // default 50.0)
+                    if (rel_val > 500000.0) {
+                        throw std::runtime_error(
+                            "Relative tolerance multiplier is unreasonably "
+                            "large: "
+                            + std::to_string(rel_val)
+                            + ". Consider using a value < 500000");
+                    }
+                    iterators.tolerances.relative = rel_val;
+                }
+
+                // Extract absolute tolerance multiplier
+                if (tol_node["absolute"]) {
+                    double abs_val = tol_node["absolute"].as<double>();
+                    if (abs_val < 0.0) {
+                        throw std::runtime_error(
+                            "Absolute tolerance multiplier must be "
+                            "non-negative, got: "
+                            + std::to_string(abs_val));
+                    }
+                    // Reasonable upper bound check (500000 = ~10000x
+                    // default 50.0)
+                    if (abs_val > 500000.0) {
+                        throw std::runtime_error(
+                            "Absolute tolerance multiplier is unreasonably "
+                            "large: "
+                            + std::to_string(abs_val)
+                            + ". Consider using a value < 500000");
+                    }
+                    iterators.tolerances.absolute = abs_val;
+                }
+            }
+
             // Parse PostOps if present
             std::unique_ptr<PostOpsIterator> postops_iterator = nullptr;
             if (node["post_operations"]) {
