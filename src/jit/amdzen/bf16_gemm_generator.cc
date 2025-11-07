@@ -155,23 +155,25 @@ jitGEMMBF16<KType>::BroadcastABF16withB(bool isRemainder)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMBF16<KType>::kLoopCompute(bool isRemainder)
+jitGEMMBF16<KType>::kLoopCompute(bool isRemainder, int kUnroll)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
     // Unroll the kernel loop for BF16 VNNI
     // Save A pointer
-    mov(regTmp1, regTmpAptr);
+    for (int i = 0; i < kUnroll; i++) {
+        mov(regTmp1, regTmpAptr);
 
-    // Load B registers with BF16 data
-    RETURN_IF_ERROR(loadBValuesBF16());
-    add(regBptr, regRsB);
+        // Load B registers with BF16 data
+        RETURN_IF_ERROR(loadBValuesBF16());
+        add(regBptr, regRsB);
 
-    // Perform BF16 VNNI computation
-    RETURN_IF_ERROR(BroadcastABF16withB(isRemainder));
+        // Perform BF16 VNNI computation
+        RETURN_IF_ERROR(BroadcastABF16withB(isRemainder));
 
-    // Advance A pointer for next K iteration
-    lea(regTmpAptr, ptr[regTmp1 + regCsA]);
+        // Advance A pointer for next K iteration
+        lea(regTmpAptr, ptr[regTmp1 + regCsA]);
+    }
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -403,6 +405,22 @@ jitGEMMBF16<KType>::storeResult()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitGEMMBF16<KType>::prefetchC()
+{
+    mov(regTmpCptr, regCPtr);
+    if ((PREFETCH_C_DIST > 0)) {
+        for (int i = 0; i < MR; i++) {
+            for (int j = 0; j < bFullReg; j++) {
+                prefetcht0(ptr[regTmpCptr + j * RegBytes]);
+            }
+            add(regTmpCptr, regRsC);
+        }
+    }
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
 {
     inLocalLabel();
@@ -418,27 +436,39 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
     regInit();
 
     // Generate K-loop
-    mov(regKIter,
-        ptr[stackPtr
-            + offsetof(dlp::kernels::gemmParams, kIter)]); // This will be k/2
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
     test(regKIter, regKIter);
-    je(".BCONSIDKLEFT", T_NEAR);
+    je(".BCONSIDKITERAP", T_NEAR);
 
     // Kernel unroll loop
-    L(".BLOOPKITER");
-    RETURN_IF_ERROR(kLoopCompute(false));
+    L(".BLOOPKITERBP");
+    RETURN_IF_ERROR(kLoopCompute(false, 1));
+    // B prefetch
     dec(regKIter);
-    jne(".BLOOPKITER", T_NEAR);
+    jne(".BLOOPKITERBP", T_NEAR);
 
-    L(".BCONSIDKLEFT");
-    // Handle remaining K iterations
-    mov(regKIter,
-        ptr[stackPtr
-            + offsetof(dlp::kernels::gemmParams, kLeft)]); // This will be k%2
+    if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
+        RETURN_IF_ERROR(prefetchC());
+    }
+
+    L(".BCONSIDKITERAP");
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterAP)]);
+    test(regKIter, regKIter);
+    je(".BCONSIDKLEFTREM", T_NEAR);
+
+    L(".BLOOPKITERAP");
+    RETURN_IF_ERROR(kLoopCompute(false, 1));
+    dec(regKIter);
+    jne(".BLOOPKITERAP", T_NEAR);
+
+    L(".BCONSIDKLEFTREM");
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
     test(regKIter, regKIter);
     je(".BPOSTACCUM", T_NEAR);
 
-    RETURN_IF_ERROR(kLoopCompute(true));
+    RETURN_IF_ERROR(kLoopCompute(true, 1));
+    // No need to decrement regKIter as it could only be 1 or 0
+    // This is due to the BF16 packing factor being 2
 
     L(".BPOSTACCUM");
 
@@ -522,10 +552,12 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::generateKernel(utils::generatorParams& params)
 {
-    MR          = params.MR;
-    NR          = params.NR;
-    useMask     = params.useMask;
-    c_downscale = params.c_downscale;
+    MR              = params.MR;
+    NR              = params.NR;
+    K_UNROLL        = params.K_UNROLL;
+    PREFETCH_C_DIST = params.PREFETCH_C_DIST;
+    useMask         = params.useMask;
+    c_downscale     = params.c_downscale;
 
     RETURN_IF_ERROR(allocateReg());
 

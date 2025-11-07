@@ -145,6 +145,7 @@ struct generatorParams
     int  MR; // This MR can be of either main kernel or fringe kernel
     int  NR; // This NR can be of either main kernel or fringe kernel
     int  K_UNROLL;
+    int  PREFETCH_C_DIST;
     md_t c_downscale;
     int  numMaskRegs;
     // This will be used to generate NR + " < nElemsPerReg" kernels,
@@ -159,6 +160,7 @@ struct generatorParams
     generatorParams(md_t                           _MR,
                     md_t                           _NR,
                     int                            _K_UNROLL,
+                    int                            _PREFETCH_C_DIST,
                     md_t                           _c_downscale,
                     int                            _numMaskRegs,
                     bool                           _useMask,
@@ -171,6 +173,7 @@ struct generatorParams
         : MR(_MR)
         , NR(_NR)
         , K_UNROLL(_K_UNROLL)
+        , PREFETCH_C_DIST(_PREFETCH_C_DIST)
         , c_downscale(_c_downscale)
         , numMaskRegs(_numMaskRegs)
         , useMask(_useMask)
@@ -185,6 +188,7 @@ struct generatorParams
         : MR(other.MR)
         , NR(other.NR)
         , K_UNROLL(other.K_UNROLL)
+        , PREFETCH_C_DIST(other.PREFETCH_C_DIST)
         , c_downscale(other.c_downscale)
         , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
@@ -202,6 +206,7 @@ struct generatorParams
             MR               = other.MR;
             NR               = other.NR;
             K_UNROLL         = other.K_UNROLL;
+            PREFETCH_C_DIST  = other.PREFETCH_C_DIST;
             c_downscale      = other.c_downscale;
             numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;
@@ -218,6 +223,7 @@ struct generatorParams
         : MR(other.MR)
         , NR(other.NR)
         , K_UNROLL(other.K_UNROLL)
+        , PREFETCH_C_DIST(other.PREFETCH_C_DIST)
         , c_downscale(other.c_downscale)
         , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
@@ -235,6 +241,7 @@ struct generatorParams
             MR               = other.MR;
             NR               = other.NR;
             K_UNROLL         = other.K_UNROLL;
+            PREFETCH_C_DIST  = other.PREFETCH_C_DIST;
             c_downscale      = other.c_downscale;
             numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;

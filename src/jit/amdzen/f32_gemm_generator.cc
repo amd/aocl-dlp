@@ -1007,7 +1007,7 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     regInit();
 
     // Generate K-loop
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIter)]);
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
     test(regKIter, regKIter);
     je(".BCONSIDKLEFT", T_NEAR);
 

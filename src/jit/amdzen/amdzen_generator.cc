@@ -273,11 +273,12 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
-    MR          = (jI.kI).mr;
-    NR          = (jI.kI).nr;
-    KC          = (jI.kI).kc;
-    K_UNROLL    = (jI.kI).k_unroll;
-    c_downscale = (jI.kI).c_downscale;
+    MR              = (jI.kI).mr;
+    NR              = (jI.kI).nr;
+    KC              = (jI.kI).kc;
+    K_UNROLL        = (jI.kI).k_unroll;
+    PREFETCH_C_DIST = (jI.kI).prefetch_c_dist;
+    c_downscale     = (jI.kI).c_downscale;
 
     // Hardcoding the FP32 kernel datatype for now
     const dlp::kernel_frame::kernelDatatype kdt =
@@ -509,9 +510,9 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelCodeBlocks.resize(numKernelVariants);
 
         // Initializing with default values.
-        utils::generatorParams params(0, 0, (jI.kI).k_unroll, c_downscale, 0,
-                                      false, false, (jI.kI).alphaScalingType,
-                                      (jI.kI).betaScalingType, kType);
+        utils::generatorParams params(
+            0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
@@ -738,8 +739,8 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         int mFullPieces    = params->m / MR;
         int mPartialPieces = params->m % MR;
 
-        params->kIter = params->k / K_UNROLL;
-        params->kLeft = params->k % K_UNROLL;
+        params->kIterBP = params->k / K_UNROLL;
+        params->kLeft   = params->k % K_UNROLL;
 
         float* aPtr = static_cast<float*>(params->a);
         float* bPtr = static_cast<float*>(params->b);
@@ -875,11 +876,12 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
-    MR          = (jI.kI).mr;
-    NR          = (jI.kI).nr;
-    KC          = (jI.kI).kc;
-    K_UNROLL    = (jI.kI).k_unroll;
-    c_downscale = (jI.kI).c_downscale;
+    MR              = (jI.kI).mr;
+    NR              = (jI.kI).nr;
+    KC              = (jI.kI).kc;
+    K_UNROLL        = (jI.kI).k_unroll;
+    PREFETCH_C_DIST = (jI.kI).prefetch_c_dist;
+    c_downscale     = (jI.kI).c_downscale;
 
     if ((jI.kI).kInstPref
         == dlp::kernel_frame::kernelInstrPreference::avx2_ymm_favour) {
@@ -1072,9 +1074,9 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelCodeBlocks.resize(numKernelVariants);
 
         // Initializing with default values.
-        utils::generatorParams params(0, 0, (jI.kI).k_unroll, c_downscale, 0,
-                                      false, false, (jI.kI).alphaScalingType,
-                                      (jI.kI).betaScalingType, kType);
+        utils::generatorParams params(
+            0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
@@ -1218,8 +1220,19 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
 
         // Ideally, these should be used to represent the unroll factor as well
         // in which case, we will have to update the calculation accordingly.
-        params->kIter = params->k / 2;
-        params->kLeft = params->k % 2;
+        int bf16PackingFactor = 2;
+        int kBlocks           = params->k / bf16PackingFactor;
+        int kPadSize          = params->k % bf16PackingFactor;
+
+        // For B prefetch.
+        if (kBlocks > PREFETCH_C_DIST) {
+            params->kIterBP = kBlocks - PREFETCH_C_DIST;
+            params->kIterAP = PREFETCH_C_DIST;
+        } else {
+            params->kIterBP = kBlocks;
+            params->kIterAP = 0;
+        }
+        params->kLeft = kPadSize;
 
         int16_t* aPtr = static_cast<int16_t*>(params->a);
         int16_t* bPtr = static_cast<int16_t*>(params->b);
@@ -1272,9 +1285,8 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
                 kernel(params);
             }
 
-            params->b =
-                bPtr + (elementsToProcess * (params->k + params->kLeft));
-            c_jr                                = c_jr + elementsToProcess;
+            params->b = bPtr + (elementsToProcess * (params->k + kPadSize));
+            c_jr      = c_jr + elementsToProcess;
             (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
             (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
             n -= elementsToProcess;
@@ -1286,8 +1298,8 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
             params->c   = c_jr;
             params->n   = nRemainder;
 
-            // Unlike F32 JIT, for now, we are producing only lt16 as the mask
-            // based fringe kernel for BF16 JIT.
+            // Unlike F32 JIT, for now, we are producing only lt16 as the
+            // mask based fringe kernel for BF16 JIT.
             params->maskF32[0] = 0xFFFF >> (numElemsPerReg - nRemainder);
 
             if (params->m >= MR) {

@@ -261,6 +261,7 @@ struct kernelInfo
     md_t            term_fringe_nr;
     md_t            k_unroll;
     md_t            kc;
+    md_t            prefetch_c_dist;
     scalingType     alphaScalingType;
     scalingType     betaScalingType;
     AOCL_MEMORY_TAG mtag_a;
@@ -280,6 +281,7 @@ struct kernelInfo
                md_t                               _term_fringe_nr,
                md_t                               k_unroll,
                md_t                               kc,
+               md_t                               prefetch_c_dist,
                scalingType                        _alphaScalingType,
                scalingType                        _betaScalingType,
                AOCL_MEMORY_TAG                    mtag_a,
@@ -295,6 +297,7 @@ struct kernelInfo
         , term_fringe_nr(_term_fringe_nr)
         , k_unroll(k_unroll)
         , kc(kc)
+        , prefetch_c_dist(prefetch_c_dist)
         , alphaScalingType(_alphaScalingType)
         , betaScalingType(_betaScalingType)
         , mtag_a(mtag_a)
@@ -317,6 +320,7 @@ struct kernelInfo
         , term_fringe_nr(other.term_fringe_nr)
         , k_unroll(other.k_unroll)
         , kc(other.kc)
+        , prefetch_c_dist(other.prefetch_c_dist)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , mtag_a(other.mtag_a)
@@ -346,6 +350,7 @@ struct kernelInfo
         , term_fringe_nr(other->term_fringe_nr)
         , k_unroll(other->k_unroll)
         , kc(other->kc)
+        , prefetch_c_dist(other->prefetch_c_dist)
         , alphaScalingType(other->alphaScalingType)
         , betaScalingType(other->betaScalingType)
         , mtag_a(other->mtag_a)
@@ -373,6 +378,7 @@ struct kernelInfo
         , term_fringe_nr(other.term_fringe_nr)
         , k_unroll(other.k_unroll)
         , kc(other.kc)
+        , prefetch_c_dist(other.prefetch_c_dist)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , mtag_a(other.mtag_a)
@@ -402,6 +408,7 @@ struct kernelInfo
             this->term_fringe_nr            = other.term_fringe_nr;
             this->k_unroll                  = other.k_unroll;
             this->kc                        = other.kc;
+            this->prefetch_c_dist           = other.prefetch_c_dist;
             this->alphaScalingType          = other.alphaScalingType;
             this->betaScalingType           = other.betaScalingType;
             this->mtag_a                    = other.mtag_a;
@@ -434,6 +441,7 @@ struct kernelInfo
             this->term_fringe_nr            = other.term_fringe_nr;
             this->k_unroll                  = other.k_unroll;
             this->kc                        = other.kc;
+            this->prefetch_c_dist           = other.prefetch_c_dist;
             this->alphaScalingType          = other.alphaScalingType;
             this->betaScalingType           = other.betaScalingType;
             this->mtag_a                    = other.mtag_a;
@@ -472,6 +480,7 @@ struct kernelInfo
         return ((this->mr == rhs.mr) && (this->nr == rhs.nr)
                 && (this->term_fringe_nr == rhs.term_fringe_nr)
                 && (this->k_unroll == rhs.k_unroll) && (this->kc == rhs.kc)
+                && (this->prefetch_c_dist == rhs.prefetch_c_dist)
                 && (this->alphaScalingType == rhs.alphaScalingType)
                 && (this->betaScalingType == rhs.betaScalingType)
                 && (this->mtag_a == rhs.mtag_a) && (this->mtag_b == rhs.mtag_b)

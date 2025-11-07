@@ -69,7 +69,7 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
     int nBF16ElemsPerReg = RegBytes / sizeof(int16_t);
     int aReg, bReg, bFullReg, bMaskReg, cReg;
     int aRegIdx, bRegIdx, cRegIdx;
-    int MR, NR;
+    int MR, NR, K_UNROLL, PREFETCH_C_DIST;
     int c_downscale;
 
     // Register allocations
@@ -104,7 +104,7 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
     // (BF16) -> C (F32)
     dlp::jit::jitGeneratorError BroadcastABF16withB(bool isRemainder);
 
-    dlp::jit::jitGeneratorError kLoopCompute(bool isRemainder);
+    dlp::jit::jitGeneratorError kLoopCompute(bool isRemainder, int kUnroll);
 
     // Setup and initialization
     void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
@@ -121,6 +121,10 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeResult();
 
     dlp::jit::jitGeneratorError loadMask();
+
+    // dlp::jit::jitGeneratorError prefetchB();
+
+    dlp::jit::jitGeneratorError prefetchC();
 };
 
 } // namespace amdzen::GEMMcodeGenerator

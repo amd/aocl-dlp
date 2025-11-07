@@ -270,15 +270,16 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
         betaScalingType = kernel_frame::scalingType::zero;
     }
 
-    md_t            mr           = gemmIn->mr_hint;
-    md_t            nr           = gemmIn->nr_hint;
-    md_t            k_unroll     = 1;
-    md_t            kc           = gemmIn->kc_hint;
-    md_t            cs_c         = gemmIn->cs_c;
-    AOCL_MEMORY_TAG mtag_a       = gemmIn->mtag_a;
-    AOCL_MEMORY_TAG mtag_b       = gemmIn->mtag_b;
-    md_t            c_downscale  = gemmIn->c_downscale;
-    bool            anyKOpsOrder = false;
+    md_t            mr              = gemmIn->mr_hint;
+    md_t            nr              = gemmIn->nr_hint;
+    md_t            k_unroll        = 1;
+    md_t            kc              = gemmIn->kc_hint;
+    md_t            prefetch_c_dist = 0; // Setting this to 0, until we use it.
+    md_t            cs_c            = gemmIn->cs_c;
+    AOCL_MEMORY_TAG mtag_a          = gemmIn->mtag_a;
+    AOCL_MEMORY_TAG mtag_b          = gemmIn->mtag_b;
+    md_t            c_downscale     = gemmIn->c_downscale;
+    bool            anyKOpsOrder    = false;
 
     // Set the kernel instruction preference based on the CPU features.
     // NOTE : This could be overridden by the user in future
@@ -326,6 +327,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          0,
                                          k_unroll,
                                          kc,
+                                         prefetch_c_dist,
                                          alphaScalingType,
                                          betaScalingType,
                                          mtag_a,
@@ -348,6 +350,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          0,
                                          k_unroll,
                                          kc,
+                                         prefetch_c_dist,
                                          alphaScalingType,
                                          betaScalingType,
                                          mtag_a,
@@ -376,6 +379,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              0,
                                              k_unroll,
                                              kc,
+                                             prefetch_c_dist,
                                              alphaScalingType,
                                              betaScalingType,
                                              mtag_a,
@@ -393,6 +397,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              0,
                                              k_unroll,
                                              kc,
+                                             prefetch_c_dist,
                                              alphaScalingType,
                                              betaScalingType,
                                              mtag_a,
@@ -458,6 +463,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          0,
                                          k_unroll,
                                          kc,
+                                         prefetch_c_dist,
                                          alphaScalingType,
                                          betaScalingType,
                                          mtag_a,
@@ -480,6 +486,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          0,
                                          k_unroll,
                                          kc,
+                                         prefetch_c_dist,
                                          alphaScalingType,
                                          betaScalingType,
                                          mtag_a,
@@ -507,6 +514,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              0,
                                              k_unroll,
                                              kc,
+                                             prefetch_c_dist,
                                              alphaScalingType,
                                              betaScalingType,
                                              mtag_a,
@@ -524,6 +532,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              0,
                                              k_unroll,
                                              kc,
+                                             prefetch_c_dist,
                                              alphaScalingType,
                                              betaScalingType,
                                              mtag_a,
@@ -576,6 +585,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                          0,
                                          k_unroll,
                                          kc,
+                                         prefetch_c_dist,
                                          alphaScalingType,
                                          betaScalingType,
                                          mtag_a,
@@ -603,6 +613,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              0,
                                              k_unroll,
                                              kc,
+                                             prefetch_c_dist,
                                              alphaScalingType,
                                              betaScalingType,
                                              mtag_a,
@@ -620,6 +631,7 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
                                              0,
                                              k_unroll,
                                              kc,
+                                             prefetch_c_dist,
                                              alphaScalingType,
                                              betaScalingType,
                                              mtag_a,
@@ -832,13 +844,23 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
     // AVX512-BF16.
     kernel_frame::scalingType alphaScalingType =
         kernel_frame::scalingType::generic;
+    if (*(static_cast<float*>(gemmIn->alpha)) == 1.0f) {
+        alphaScalingType = kernel_frame::scalingType::one;
+    }
     kernel_frame::scalingType betaScalingType =
         kernel_frame::scalingType::generic;
+    if ((*(static_cast<float*>(gemmIn->beta)) == 0.0f)
+        && (gemmIn->k <= gemmIn->kc_hint)) {
+        betaScalingType = kernel_frame::scalingType::zero;
+    }
 
-    md_t            mr           = gemmIn->mr_hint;
-    md_t            nr           = gemmIn->nr_hint;
-    md_t            k_unroll     = 1;
-    md_t            kc           = gemmIn->kc_hint;
+    md_t mr       = gemmIn->mr_hint;
+    md_t nr       = gemmIn->nr_hint;
+    md_t k_unroll = 1;
+    md_t kc       = gemmIn->kc_hint;
+    md_t prefetch_c_dist =
+        40; // Setting this to 40, which works for ZEN5. Should we set this in
+            // the DE constructor, based on the underlying arch?
     AOCL_MEMORY_TAG mtag_a       = gemmIn->mtag_a;
     AOCL_MEMORY_TAG mtag_b       = gemmIn->mtag_b;
     md_t            c_downscale  = gemmIn->c_downscale;
@@ -878,6 +900,7 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
                                          0,
                                          k_unroll,
                                          kc,
+                                         prefetch_c_dist,
                                          alphaScalingType,
                                          betaScalingType,
                                          mtag_a,
@@ -895,6 +918,7 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
                                          0,
                                          k_unroll,
                                          kc,
+                                         prefetch_c_dist,
                                          alphaScalingType,
                                          betaScalingType,
                                          mtag_a,
@@ -928,6 +952,7 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
                                  0,
                                  k_unroll,
                                  kc,
+                                 prefetch_c_dist,
                                  alphaScalingType,
                                  betaScalingType,
                                  mtag_a,

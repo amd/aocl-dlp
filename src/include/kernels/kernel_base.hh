@@ -74,7 +74,8 @@ struct gemmParams : public kernelParams
     void* beta;
 
     md_t     mIter;
-    md_t     kIter;
+    md_t     kIterBP;
+    md_t     kIterAP;
     md_t     kLeft;
     uint16_t maskF32[maxNumMasks];
     uint8_t  maskF32_8[maxNumMasks];
@@ -116,7 +117,8 @@ struct gemmParams : public kernelParams
         , alpha(alpha_acc)
         , beta(beta_acc)
         , mIter(0)
-        , kIter(0)
+        , kIterBP(0)
+        , kIterAP(0)
         , kLeft(0)
         , maskF32{ 0 }
         , maskF32_8{ 0 }
@@ -143,7 +145,8 @@ struct gemmParams : public kernelParams
         , alpha(other.alpha)
         , beta(other.beta)
         , mIter(other.mIter)
-        , kIter(other.kIter)
+        , kIterBP(other.kIterBP)
+        , kIterAP(other.kIterAP)
         , kLeft(other.kLeft)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
@@ -173,7 +176,8 @@ struct gemmParams : public kernelParams
         , alpha(other.alpha)
         , beta(other.beta)
         , mIter(other.mIter)
-        , kIter(other.kIter)
+        , kIterBP(other.kIterBP)
+        , kIterAP(other.kIterAP)
         , kLeft(other.kLeft)
         , maskF32{ 0 }
         , maskF32_8{ 0 }
@@ -189,24 +193,25 @@ struct gemmParams : public kernelParams
 
     gemmParams& operator=(const gemmParams& other)
     {
-        a     = other.a;
-        b     = other.b;
-        c     = other.c;
-        m     = other.m;
-        n     = other.n;
-        k     = other.k;
-        rsA   = other.rsA;
-        csA   = other.csA;
-        psA   = other.psA;
-        rsB   = other.rsB;
-        csB   = other.csB;
-        rsC   = other.rsC;
-        csC   = other.csC;
-        alpha = other.alpha;
-        beta  = other.beta;
-        mIter = other.mIter;
-        kIter = other.kIter;
-        kLeft = other.kLeft;
+        a       = other.a;
+        b       = other.b;
+        c       = other.c;
+        m       = other.m;
+        n       = other.n;
+        k       = other.k;
+        rsA     = other.rsA;
+        csA     = other.csA;
+        psA     = other.psA;
+        rsB     = other.rsB;
+        csB     = other.csB;
+        rsC     = other.rsC;
+        csC     = other.csC;
+        alpha   = other.alpha;
+        beta    = other.beta;
+        mIter   = other.mIter;
+        kIterBP = other.kIterBP;
+        kIterAP = other.kIterAP;
+        kLeft   = other.kLeft;
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
         std::copy(std::begin(other.maskF32_8), std::end(other.maskF32_8),
@@ -232,7 +237,8 @@ struct gemmParams : public kernelParams
         alpha         = nullptr;
         beta          = nullptr;
         mIter         = 0;
-        kIter         = 0;
+        kIterBP       = 0;
+        kIterAP       = 0;
         kLeft         = 0;
         kernelOpsList = nullptr;
     }
