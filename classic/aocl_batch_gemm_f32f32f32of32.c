@@ -266,12 +266,13 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
         // dimensions/attributes. Therefore the DE and Jit generation in
         // DLP Plus can proceed with any 1 input from this group.
         if (g_sz > 0) {
-            lcntx_l.dlp_kernel_hndl = dlp_init_and_get_kernel_hndl(
+            dlp_init_and_get_kernel_hndl(
                 DLP_KERNEL_F32F32F32OF32, order[gc_i], mtag_a[0], mtag_b[0],
                 m_local[0], n_local[0], k_local[0], rs_a[0], cs_a[0], rs_b[0],
                 cs_b[0], rs_c[0], cs_c[0], (void*)&alpha[gc_i],
                 (void*)&beta[gc_i], post_op_list, lcntx_l.blksz.MR,
-                lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32);
+                lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
+                &lcntx_l.dlp_kernel_hndl);
         }
 
 #ifdef DLP_ENABLE_OPENMP

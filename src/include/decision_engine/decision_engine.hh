@@ -168,6 +168,85 @@ class decisionEngine
         }
         return std::nullopt;
     }
+
+    /**
+     * @brief Retrieves optimal GEMM/GEMV kernel configuration for given input
+     * characteristics. However this function takes individual parameters
+     * instead of an input object. Additionally the template parameter T
+     * specifies the backend type to be used for the query. These changes
+     * helps with performance uplift in fast path scenarios since it avoids
+     * unnecessary object construction and virtual function dispatch.
+     *
+     * THREAD SAFETY: Thread-safe if underlying backends are thread-safe
+     *
+     * @param m Number of rows of matrix A and C
+     * @param n Number of columns of matrix B and C
+     * @param k Number of columns of matrix A and rows of matrix B
+     * @param rs_a Row stride of matrix A
+     * @param cs_a Column stride of matrix A
+     * @param rs_b Row stride of matrix B
+     * @param cs_b Column stride of matrix B
+     * @param rs_c Row stride of matrix C
+     * @param cs_c Column stride of matrix C
+     * @param alpha Pointer to scalar multiplier for the product of A and B
+     * @param beta Pointer to scalar multiplier for matrix C
+     * @param mtag_a Memory tag for matrix A
+     * @param mtag_b Memory tag for matrix B
+     * @param metadata Pointer to linked list of post operations metadata
+     * @param mr_hint Micro-panel row size hint
+     * @param nr_hint Micro-panel column size hint
+     * @param kc_hint K dimension blocking size hint
+     * @param c_downscale Downscale store type for matrix C
+     * @param kType Kernel routine type (e.g., GEMM, GEMV)
+     * @param dt Datatype specification for kernel operation
+     * @return kernelInfo with optimal kernel configuration, or
+     * INVALID_KERNEL_INFO if no suitable backend is registered
+     */
+    template<typename T>
+    [[gnu::always_inline]]
+    inline dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+        md_t                                 m,
+        md_t                                 n,
+        md_t                                 k,
+        md_t                                 rs_a,
+        md_t                                 cs_a,
+        md_t                                 rs_b,
+        md_t                                 cs_b,
+        md_t                                 rs_c,
+        md_t                                 cs_c,
+        void*                                alpha,
+        void*                                beta,
+        AOCL_MEMORY_TAG                      mtag_a,
+        AOCL_MEMORY_TAG                      mtag_b,
+        lpgemm_post_op*                      metadata,
+        md_t                                 mr_hint,
+        md_t                                 nr_hint,
+        md_t                                 kc_hint,
+        md_t                                 c_downscale,
+        dlp::kernel_frame::kernelRoutineType kType,
+        dlp::kernel_frame::kernelDatatype    dt)
+    {
+        auto kTypeIdx = utils::getUnderlyingValueOfEnum(kType);
+        auto dtIdx    = utils::getUnderlyingValueOfEnum(dt);
+        if (backends[kTypeIdx][dtIdx] != nullptr) {
+            T* backend = static_cast<T*>(backends[kTypeIdx][dtIdx]);
+            if ((m == 1) || (n == 1)) {
+                // Explicitly scope call to bypass vtable.
+                return backend->T::getGemvKernelInfoForInputFastPath(
+                    dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
+                    beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                    c_downscale);
+            } else {
+                // Explicitly scope call to bypass vtable.
+                return backend->T::getGemmKernelInfoForInputFastPath(
+                    dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
+                    beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                    c_downscale);
+            }
+        }
+
+        return INVALID_KERNEL_INFO;
+    }
 };
 
 /**

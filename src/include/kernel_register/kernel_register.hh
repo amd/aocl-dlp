@@ -110,6 +110,59 @@ class storedKernelWatcher
     }
 };
 
+class emptyKernel : public kernels::kernelBase
+{
+    kernel_frame::kernelInfo                  kInfo;
+    std::vector<cpu_utils::isaFeature>        isaVec;
+    std::vector<kernel_frame::kernelDatatype> dTypeVec;
+
+  public:
+    emptyKernel(const kernel_frame::kernelInfo& kI)
+        : kInfo(kI)
+    {
+        isValid = false;
+    }
+
+    emptyKernel(const emptyKernel&)            = delete;
+    emptyKernel& operator=(const emptyKernel&) = delete;
+
+    emptyKernel(emptyKernel&& other)
+    {
+        this->isValid = false;
+        this->kInfo   = std::move(other.kInfo);
+    }
+
+    emptyKernel& operator=(emptyKernel&& other)
+    {
+        this->isValid = false;
+        this->kInfo   = std::move(other.kInfo);
+        return *this;
+    }
+
+    virtual std::vector<cpu_utils::isaFeature>& getIsaFeaturesForKernel()
+        override final
+    {
+        return isaVec;
+    }
+
+    virtual kernel_frame::kernelInfo* getKernelInfo() override final
+    {
+        return std::addressof(kInfo);
+    }
+
+    virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override final
+    {
+        return dTypeVec;
+    }
+
+    virtual kernels::kernelError operator()(
+        kernels::kernelParams* kP) override final
+    {
+        return kernels::kernelError::error;
+    }
+};
+
 using kernelFunctionPtr =
     std::function<kernels::kernelError(kernels::kernelParams*)>;
 using kernelBaseRef = utils::ptrWrapper<kernels::kernelBase,
@@ -394,10 +447,44 @@ class kernelRegister
         return getKernel<gemmHashKeyGetter, gemmKeyComparator, kernelInfo>(
             kI, kernelRoutineType::gemm, kDtype);
     }
+
+    /**
+     * @brief Registers an empty placeholder kernel for failed JIT generation
+     *
+     * Creates and registers an emptyKernel instance that serves as a sentinel
+     * value to indicate a kernel could not be generated (e.g., JIT compilation
+     * failure). The empty kernel returns kernelError::error when called and
+     * has isValid set to false. This allows the dispatch table to distinguish
+     * between "kernel not attempted" (nullptr) and "kernel generation failed"
+     * (emptyKernel).
+     *
+     * OWNERSHIP: Registry takes ownership of the created emptyKernel instance
+     * THREAD SAFETY: Thread-safe via underlying dispatch table synchronization
+     * MEMORY: Allocates emptyKernel on heap, cleaned up in destructor
+     *
+     * @param kI KernelInfo describing the kernel configuration that failed
+     * @param kDtype Datatype for which the kernel registration failed
+     */
+    void registerEmptyGemmKernel(const kernelInfo& kI, kernelDatatype kDtype)
+    {
+        auto eK = new emptyKernel(kI);
+        auto routineIdx =
+            utils::getUnderlyingValueOfEnum(kernelRoutineType::gemm);
+        auto idx = utils::getUnderlyingValueOfEnum(kDtype);
+
+        // Safe to cast the voidFunctorPtr to kernelBase* because it is
+        // guaranteed that kernelBase* was typecasted to voidFunctorPtr in
+        // insert operation.
+        static_cast<void>(
+            vecKDTs[routineIdx][idx]
+                .template insert<gemmHashKeyGetter, gemmKeyComparator,
+                                 kernelInfo, storedKernelWatcher>(
+                    eK->getKernelInfo(), eK));
+    }
 };
 
-constexpr inline std::size_t dlpKernelRegisterTableSize       = 200;
-constexpr inline std::size_t dlpKernelRegisterTableNumBuckets = 50;
+constexpr inline std::size_t dlpKernelRegisterTableNumBuckets = 200;
+constexpr inline std::size_t dlpKernelRegisterTableChainSize  = 50;
 
 /**
  * @brief Default kernel register type for DLP framework
@@ -409,8 +496,8 @@ constexpr inline std::size_t dlpKernelRegisterTableNumBuckets = 50;
  * PERFORMANCE: Optimized for 1000+ kernels with <5% collision rate
  */
 using dlpKernelRegister = kernelRegister<
-    ThreadSafeChainedDispatchTable<dlpKernelRegisterTableSize,
-                                   dlpKernelRegisterTableNumBuckets>>;
+    ThreadSafeChainedDispatchTable<dlpKernelRegisterTableNumBuckets,
+                                   dlpKernelRegisterTableChainSize>>;
 
 /**
  * @brief Convenience accessor for default DLP kernel register instance

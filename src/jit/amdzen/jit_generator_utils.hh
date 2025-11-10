@@ -127,7 +127,6 @@ using jit_gemv_m1_kernel = void (*)(dlp::kernels::gemvM1Params*);
 // generated kernels do not overflow the buffer, but may cause excessive memory
 // usage for smaller kernels. Consider making this size dynamic in the future
 // to optimize memory usage.
-
 constexpr uint64_t JIT_KERNEL_SIZE = 16 * 4096;
 
 enum class kernelInstrType : uint16_t

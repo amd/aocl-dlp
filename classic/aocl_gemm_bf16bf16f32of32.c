@@ -238,10 +238,10 @@ aocl_gemm_bf16bf16f32of32(const char      order,
 
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
-    lcntx_l.dlp_kernel_hndl             = dlp_init_and_get_kernel_hndl(
+    dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_BF16BF16F32OF32, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
         rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        mr_hint, nr_hint, kc_hint, DLP_F32);
+        mr_hint, nr_hint, kc_hint, DLP_F32, &lcntx_l.dlp_kernel_hndl);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
     /* While AOCL_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that supports

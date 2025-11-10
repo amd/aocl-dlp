@@ -42,7 +42,7 @@ using namespace dlp::kernels;
 using namespace dlp::utils;
 
 // function to return kernel family name string using kdtype as argument
-std::string
+static std::string
 get_kernel_family_name(kernelDatatype kDtype)
 {
     switch (kDtype) {
@@ -57,60 +57,98 @@ get_kernel_family_name(kernelDatatype kDtype)
     }
 }
 
-dlp_kernel_hndl_t
-dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
-                             char              storage_format,
-                             AOCL_MEMORY_TAG   mtag_a,
-                             AOCL_MEMORY_TAG   mtag_b,
-                             md_t              m,
-                             md_t              n,
-                             md_t              k,
-                             md_t              rs_a,
-                             md_t              cs_a,
-                             md_t              rs_b,
-                             md_t              cs_b,
-                             md_t              rs_c,
-                             md_t              cs_c,
-                             void*             alpha,
-                             void*             beta,
-                             lpgemm_post_op*   metadata,
-                             md_t              mr_hint,
-                             md_t              nr_hint,
-                             md_t              kc_hint,
-                             md_t              c_downscale)
+[[gnu::always_inline]]
+static inline dlp::kernel_frame::kernelInfo
+dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype  kDType,
+                                 md_t            m,
+                                 md_t            n,
+                                 md_t            k,
+                                 md_t            rs_a,
+                                 md_t            cs_a,
+                                 md_t            rs_b,
+                                 md_t            cs_b,
+                                 md_t            rs_c,
+                                 md_t            cs_c,
+                                 void*           alpha,
+                                 void*           beta,
+                                 AOCL_MEMORY_TAG mtag_a,
+                                 AOCL_MEMORY_TAG mtag_b,
+                                 lpgemm_post_op* metadata,
+                                 md_t            mr_hint,
+                                 md_t            nr_hint,
+                                 md_t            kc_hint,
+                                 md_t            c_downscale)
 {
-    dlp_kernel_hndl_t kernel_hndl{ DLP_KERNEL_INVALID, 0, 0, nullptr };
+    if (kDType == dlp::kernel_frame::kernelDatatype::f32f32f32of32) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmKernelInfoForInputFastPath<dlp::de::gemmF32DEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale, kernelRoutineType::gemm, kDType);
+    } else if ((kDType == dlp::kernel_frame::kernelDatatype::bf16bf16f32obf16)
+               || (kDType
+                   == dlp::kernel_frame::kernelDatatype::bf16bf16f32of32)) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmKernelInfoForInputFastPath<dlp::de::gemmBF16DEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale, kernelRoutineType::gemm, kDType);
+    } else {
+        return dlp::kernel_frame::kernelInfo();
+    }
+}
 
+[[gnu::flatten]]
+void
+dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
+                             char               storage_format,
+                             AOCL_MEMORY_TAG    mtag_a,
+                             AOCL_MEMORY_TAG    mtag_b,
+                             md_t               m,
+                             md_t               n,
+                             md_t               k,
+                             md_t               rs_a,
+                             md_t               cs_a,
+                             md_t               rs_b,
+                             md_t               cs_b,
+                             md_t               rs_c,
+                             md_t               cs_c,
+                             void*              alpha,
+                             void*              beta,
+                             lpgemm_post_op*    metadata,
+                             md_t               mr_hint,
+                             md_t               nr_hint,
+                             md_t               kc_hint,
+                             md_t               c_downscale,
+                             dlp_kernel_hndl_t* kernel_hndl)
+{
     kernelDatatype kDType = getKernelDatatype(k_dtype);
     if (kDType == kernelDatatype::invalid) {
-        return kernel_hndl;
+        kernel_hndl->kernel_base = nullptr;
+        return;
     }
 
-    // TODO: Performance bug for smaller sizes, this takes 4 GFlops.
-    dlp::de::gemmDEInput gDEIn{ kDType,  m,       n,       k,          rs_a,
-                                cs_a,    rs_b,    cs_b,    rs_c,       cs_c,
-                                alpha,   beta,    mtag_a,  mtag_b,     metadata,
-                                mr_hint, nr_hint, kc_hint, c_downscale };
+    dlp::kernel_frame::kernelInfo fastKI = dlp_get_gemm_kernelInfo_by_dtype(
+        kDType, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+        mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint, c_downscale);
 
-    // TODO: Performance bug for smaller sizes, this takes 7 GFlops.
-    auto optKI = dlp::de::decisionEngineInstance().getKernelInfoForInput(
-        std::addressof(gDEIn), kernelRoutineType::gemm, kDType);
-    if (!optKI.has_value()) {
-        return kernel_hndl;
+    if ((fastKI.mr <= 0) || (fastKI.nr <= 0)) {
+        kernel_hndl->kernel_base = nullptr;
+        return;
     }
 
-    auto kernPtr =
-        dlpKernelRegisterInstance().getGemmKernel(&optKI.value(), kDType);
+    auto kernPtr = dlpKernelRegisterInstance().getGemmKernel(&fastKI, kDType);
 
     if (!kernPtr) {
         auto jitGen =
             dlpJitGeneratorRegisterInstance().getGemmJitGenerator(kDType);
-        auto kB = std::make_unique<jitKernelAdapter>(optKI.value(),
-                                                     std::move(jitGen), true);
+        auto kB =
+            std::make_unique<jitKernelAdapter>(fastKI, std::move(jitGen), true);
 
         if (!kB->isJitGenerated()) {
-            // TODO: Fallback to the default kernel.
-            kernPtr = kernelBaseRef(nullptr);
+            // Register a dummy kernel that will be used to denote a
+            // jit kernel cannot be generated for this kernelInfo.
+            dlpKernelRegisterInstance().registerEmptyGemmKernel(fastKI, kDType);
         } else {
             auto retVal = dlpKernelRegisterInstance().registerGemmKernel(
                 std::move(kB), get_kernel_family_name(kDType));
@@ -119,16 +157,16 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
                 std::cout << "Exiting..." << std::endl;
                 std::abort();
             }
-            kernPtr = dlpKernelRegisterInstance().getGemmKernel(&optKI.value(),
-                                                                kDType);
         }
+        kernPtr = dlpKernelRegisterInstance().getGemmKernel(&fastKI, kDType);
     }
 
-    kernel_hndl.kernel_base = static_cast<void*>(kernPtr.getPtr());
-    kernel_hndl.mr          = optKI.value().mr;
-    kernel_hndl.nr          = optKI.value().nr;
-    kernel_hndl.kDtype      = k_dtype;
-    return kernel_hndl;
+    kernel_hndl->kernel_base = (kernPtr.isValid() && kernPtr.getPtr()->isValid)
+                                   ? static_cast<void*>(kernPtr.getPtr())
+                                   : nullptr;
+    kernel_hndl->mr          = fastKI.mr;
+    kernel_hndl->nr          = fastKI.nr;
+    kernel_hndl->kDtype      = k_dtype;
 }
 
 void

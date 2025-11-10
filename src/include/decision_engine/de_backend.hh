@@ -31,10 +31,28 @@
 #include <memory>
 #include <optional>
 
-#include "de_input.hh"
-#include "kernel_frame/kernel_frame_base.hh"
+#include "de_backend_utils.hh"
 
 namespace dlp::de {
+
+static const kernel_frame::kernelInfo INVALID_KERNEL_INFO{
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    kernel_frame::scalingType::generic,
+    kernel_frame::scalingType::generic,
+    AOCL_MEMORY_TAG::UNPACKED,
+    AOCL_MEMORY_TAG::UNPACKED,
+    false,
+    nullptr,
+    0,
+    false,
+    kernel_frame::kernelInstrPreference::none,
+    0
+};
 
 class iDEBackend
 {
@@ -42,17 +60,56 @@ class iDEBackend
     virtual ~iDEBackend() = default;
     virtual std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) = 0;
+
+    virtual dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) = 0;
+
+    virtual dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) = 0;
 };
 
 class gemmF32DEBackend : public iDEBackend
 {
-    static inline void setKernelOps(
-        dlp::kernel_frame::kernelOpsMetaData* metaData,
-        lpgemm_post_op*                       post_op,
-        kernel_frame::kernelDatatype          k_dtype);
     bool                                isAvx512;
     bool                                isAvx2;
     int32_t                             numRegisters;
+    int32_t                             numVectorMaskRegisters;
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
 
@@ -66,15 +123,203 @@ class gemmF32DEBackend : public iDEBackend
 
     std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) override;
+
+    [[gnu::always_inline]]
+    dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = 0; // Setting this to 0, until we use it.
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // NOTE : This could be overridden by the user in future
+        //        Ex : Wanting to run AVX2 kernels on Zen4, based on
+        //             AOCL_ENABLE_INSTRUCTIONS
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        // In case the environment variable was not set at all, resort to
+        // setting it based on the native hardware support.
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else if (isAvx2) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx2_ymm_favour;
+            } else {
+                // This is an invalid case, disable jit kernel generation.
+                return INVALID_KERNEL_INFO;
+            }
+        }
+
+        if (n == 1) {
+            if (isAvx2) {
+                mr       = (kInstPref
+                      == kernel_frame::kernelInstrPreference::avx2_ymm_favour)
+                               ? 8
+                               : 16;
+                nr       = 1;
+                k_unroll = 1; // k-unroll is 1 for GEMV N1
+            } else if (isAvx512) {
+                mr       = 16;
+                nr       = 1;
+                k_unroll = 1; // k-unroll is 1 for GEMV N1
+            } else {
+                return INVALID_KERNEL_INFO;
+            }
+        } else if (m == 1) {
+            // The booleans isAvx2 and isAvx512 represent the configured
+            // hardware Thus, on an AVX512 machine, if the env var is set to
+            // avx2, isAvx2 would be set to true by the constructor.
+            if (isAvx2) {
+                mr = 1;
+                // This setting is a follow-up of the hack we have defined in
+                // the DE constructor. With this, we force the AVX512_256 path
+                // even when the env var is set to AVX2.
+                nr       = (kInstPref
+                      == kernel_frame::kernelInstrPreference::avx2_ymm_favour)
+                               ? 16
+                               : 64;
+                k_unroll = 2;
+                kc       = 512; // This is hardcoded from ZEN4 context.
+            } else if (isAvx512) {
+                mr = 1;
+                nr = 64;
+                k_unroll =
+                    (kInstPref
+                     == kernel_frame::kernelInstrPreference::avx512_ymm_favour)
+                        ? 2
+                        : 4;
+                kc = 512;
+            } else {
+                return INVALID_KERNEL_INFO;
+            }
+        } else {
+            return INVALID_KERNEL_INFO;
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, anyKOpsOrder, kInstPref,
+            c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+
+    [[gnu::always_inline]]
+    dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = 0; // Setting this to 0, until we use it.
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // NOTE : This could be overridden by the user in future
+        //        Ex : Wanting to run AVX2 kernels on Zen4, based on
+        //             AOCL_ENABLE_INSTRUCTIONS
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        // In case the environment variable was not set at all, resort to
+        // setting it based on the native hardware support.
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else if (isAvx2) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx2_ymm_favour;
+            } else {
+                // This is an invalid case, disable jit kernel generation.
+                return INVALID_KERNEL_INFO;
+            }
+        }
+
+        bool allLtFringeKernels = false;
+        // For now masked lt fringes can only be enabled on avx512 machines
+        // with zmm preferred instructions. Additionally to begin with,
+        //  only enabling masked lt fringes when no post-ops are involved
+        // for row-major C matrix.
+        if (isAvx512
+            && (kInstPref
+                == kernel_frame::kernelInstrPreference::avx512_zmm_favour)) {
+            md_t availableMasks = numVectorMaskRegisters;
+            md_t requiredMasks  = nr / 16;
+            // If masks required are more than available masks, we can't
+            // generate all lt fringes. Also limit the mask usage to 4.
+            if ((requiredMasks <= availableMasks) && (requiredMasks < 5)) {
+                allLtFringeKernels = true;
+            }
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, allLtFringeKernels, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
 };
 
 class gemmBF16DEBackend : public iDEBackend
 {
-    static inline void setKernelOps(
-        dlp::kernel_frame::kernelOpsMetaData* metaData,
-        lpgemm_post_op*                       post_op,
-        kernel_frame::kernelDatatype          k_dtype);
-
     bool                                isAvx512;
     bool                                isAvx2;
     bool                                isAvx512Bf16;
@@ -82,6 +327,15 @@ class gemmBF16DEBackend : public iDEBackend
     bool                                canGenerateKernelInfo;
     std::unique_ptr<gemmF32DEBackend>
         f32Backend; // For rerouting when AVX512BF16 is not supported
+
+    [[gnu::always_inline]]
+    constexpr md_t getPrefetchDistance()
+    {
+        // Setting this to 40, which works for ZEN5. Should we set this in
+        // the DE constructor, based on the underlying arch?
+        constexpr md_t prefetch_c_dist = 40;
+        return prefetch_c_dist;
+    }
 
   public:
     gemmBF16DEBackend();
@@ -93,6 +347,135 @@ class gemmBF16DEBackend : public iDEBackend
 
     std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) override;
+
+    [[gnu::always_inline]]
+    dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        // This rerouting currently happens only on machines without AVX512BF16
+        // and AVX512 support, that still have AVX2 support.
+        if (f32Backend != nullptr) {
+            return f32Backend->getGemvKernelInfoForInputFastPath(
+                k_dtype, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
+                beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale);
+        }
+
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // The DE constructor sets it to a safe value, based on the hardware
+        // support.
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        if (n == 1) {
+            mr       = 16;
+            nr       = 1;
+            k_unroll = 1; // k-unroll is 1 for GEMV N1
+        } else if (m == 1) {
+            nr       = 64;
+            mr       = 1;
+            k_unroll = 4;
+            kc       = 4096;
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, anyKOpsOrder, kInstPref,
+            c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+
+    [[gnu::always_inline]]
+    dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        // This rerouting currently happens only on machines without AVX512BF16
+        // and AVX512 support, that still have AVX2 support.
+        if (f32Backend != nullptr) {
+            return f32Backend->getGemmKernelInfoForInputFastPath(
+                k_dtype, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
+                beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale);
+        }
+
+        // At this point, we know that the underlying architecture supports
+        // AVX512-BF16.
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // The DE constructor sets it to a safe value, based on the hardware
+        // support.
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, anyKOpsOrder, kInstPref,
+            c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
 };
 
 } // namespace dlp::de

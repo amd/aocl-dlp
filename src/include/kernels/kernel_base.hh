@@ -686,6 +686,10 @@ class kernelBase
     virtual kernel_frame::kernelInfo*           getKernelInfo()             = 0;
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes() = 0;
     virtual kernels::kernelError operator()(kernels::kernelParams* kP)      = 0;
+
+    // This is to handle empty kernel cases that will be generated if jit
+    // kernel cannot be generated for a kernelInfo.
+    bool isValid = true;
 };
 
 } // namespace dlp::kernels

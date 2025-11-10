@@ -276,12 +276,33 @@ struct kernelInfo
     kernelInstrPreference kInstPref;
     md_t                  c_downscale;
 
+    // Empty constructor to create dummy kernelInfo.
+    kernelInfo()
+        : mr(0)
+        , nr(0)
+        , term_fringe_nr(0)
+        , k_unroll(0)
+        , kc(0)
+        , prefetch_c_dist(0)
+        , alphaScalingType(kernel_frame::scalingType::generic)
+        , betaScalingType(kernel_frame::scalingType::generic)
+        , mtag_a(AOCL_MEMORY_TAG::UNPACKED)
+        , mtag_b(AOCL_MEMORY_TAG::UNPACKED)
+        , genLtKrnlForAvailFullKrnl(false)
+        , kOpsArr(nullptr)
+        , kOpsArrSize(0)
+        , anyKOpsOrder(false)
+        , kInstPref(kernel_frame::kernelInstrPreference::none)
+        , c_downscale(0)
+    {
+    }
+
     kernelInfo(md_t                               mr,
                md_t                               nr,
                md_t                               _term_fringe_nr,
                md_t                               k_unroll,
                md_t                               kc,
-               md_t                               prefetch_c_dist,
+               md_t                               _prefetch_c_dist,
                scalingType                        _alphaScalingType,
                scalingType                        _betaScalingType,
                AOCL_MEMORY_TAG                    mtag_a,
@@ -297,7 +318,7 @@ struct kernelInfo
         , term_fringe_nr(_term_fringe_nr)
         , k_unroll(k_unroll)
         , kc(kc)
-        , prefetch_c_dist(prefetch_c_dist)
+        , prefetch_c_dist(_prefetch_c_dist)
         , alphaScalingType(_alphaScalingType)
         , betaScalingType(_betaScalingType)
         , mtag_a(mtag_a)
@@ -470,13 +491,18 @@ struct kernelInfo
     {
         bool isKOpsArrEqual = true;
         if ((this->kOpsArr != nullptr) && (rhs.kOpsArr != nullptr)) {
-            for (std::size_t i = 0; i < this->kOpsArrSize; i++) {
-                if (this->kOpsArr[i] != rhs.kOpsArr[i]) {
-                    isKOpsArrEqual = false;
-                    break;
+            if (this->kOpsArrSize == rhs.kOpsArrSize) {
+                for (std::size_t i = 0; i < this->kOpsArrSize; i++) {
+                    if (this->kOpsArr[i] != rhs.kOpsArr[i]) {
+                        isKOpsArrEqual = false;
+                        break;
+                    }
                 }
+            } else {
+                isKOpsArrEqual = false;
             }
         }
+
         return ((this->mr == rhs.mr) && (this->nr == rhs.nr)
                 && (this->term_fringe_nr == rhs.term_fringe_nr)
                 && (this->k_unroll == rhs.k_unroll) && (this->kc == rhs.kc)

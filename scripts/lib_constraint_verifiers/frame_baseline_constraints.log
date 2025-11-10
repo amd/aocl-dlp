@@ -1,0 +1,26 @@
+# Inlining Baseline for dlp_init_and_get_kernel_hndl Call Tree
+# Generated: Fri Nov  7 12:41:34 PM UTC 2025
+# Library: ./libaocl-dlp.a
+#
+# Functions below are NOT called in dlp_init_and_get_kernel_hndl (successfully inlined)
+# Note: Symbols may exist for vtable entries, but what matters is they're not CALLED
+
+dlp::utils::getKernelDatatype
+dlp_get_gemm_kernelInfo_by_dtype
+get_kernel_family_name
+dlp::de::decisionEngineInstance
+dlp::de::decisionEngine::getGemmKernelInfoForInputFastPath
+dlp::kernel_frame::dlpKernelRegisterInstance
+dlp::kernel_frame::dlpKernelRegister::getGemmKernel
+dlp::kernel_frame::dlpKernelRegister::registerGemmKernel
+dlp::kernel_frame::dlpKernelRegister::registerEmptyGemmKernel
+dlp::jit::dlpJitGeneratorRegisterInstance
+dlp::jit::jitGeneratorRegister::getGemmJitGenerator
+dlp::de::gemmBF16DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
+dlp::de::gemmF32DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
+dlp::de::gemmBF16DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
+dlp::de::gemmF32DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
+
+# Virtual Dispatch: vtable refs: 0, indirect calls: 6
+# WARNING: Forced 64-byte stack alignment present
+# Call Instructions: 269

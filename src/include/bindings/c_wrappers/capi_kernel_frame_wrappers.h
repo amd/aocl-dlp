@@ -110,36 +110,37 @@ typedef enum
 
 typedef struct
 {
-    kernel_datatype_t kDtype;
+    void*             kernel_base;
     md_t              mr;
     md_t              nr;
-    void*             kernel_base;
+    kernel_datatype_t kDtype;
 } dlp_kernel_hndl_t;
 
 // C linkage for function declarations only
 DLP_BEGIN_EXTERN_C
 
-dlp_kernel_hndl_t
-dlp_init_and_get_kernel_hndl(kernel_datatype_t k_dtype,
-                             char              storage_format,
-                             AOCL_MEMORY_TAG   mtag_a,
-                             AOCL_MEMORY_TAG   mtag_b,
-                             md_t              m,
-                             md_t              n,
-                             md_t              k,
-                             md_t              rs_a,
-                             md_t              cs_a,
-                             md_t              rs_b,
-                             md_t              cs_b,
-                             md_t              rs_c,
-                             md_t              cs_c,
-                             void*             alpha,
-                             void*             beta,
-                             lpgemm_post_op*   metadata,
-                             md_t              mr_hint,
-                             md_t              nr_hint,
-                             md_t              kc_hint,
-                             md_t              c_downscale);
+void
+dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
+                             char               storage_format,
+                             AOCL_MEMORY_TAG    mtag_a,
+                             AOCL_MEMORY_TAG    mtag_b,
+                             md_t               m,
+                             md_t               n,
+                             md_t               k,
+                             md_t               rs_a,
+                             md_t               cs_a,
+                             md_t               rs_b,
+                             md_t               cs_b,
+                             md_t               rs_c,
+                             md_t               cs_c,
+                             void*              alpha,
+                             void*              beta,
+                             lpgemm_post_op*    metadata,
+                             md_t               mr_hint,
+                             md_t               nr_hint,
+                             md_t               kc_hint,
+                             md_t               c_downscale,
+                             dlp_kernel_hndl_t* kernel_hndl);
 
 void
 dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,

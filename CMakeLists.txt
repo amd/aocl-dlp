@@ -43,6 +43,7 @@ include(cmake/dlp_documentation.cmake)
 include(cmake/dlp_testing.cmake)
 include(cmake/dlp_benchmark.cmake)
 include(cmake/dlp_sanitizers.cmake)
+include(cmake/dlp_pgo.cmake)
 
 # OS specific CMake modules goes here
 if(UNIX)
@@ -67,10 +68,13 @@ dlp_define_testing_options()
 dlp_define_benchmarking_options()
 dlp_define_build_options()
 dlp_define_documentation_options()
+dlp_define_pgo_options()
 # Initialize Project dependant variables
 dlp_init_project_dep_var()
 # Add capability of openmp
 dlp_setup_openmp()
+# Setup Profile-Guided Optimization
+dlp_setup_pgo()
 # Run the ZnVer support detection
 dlp_check_znver_support()
 
@@ -122,6 +126,12 @@ endif()
 
 # Add all sanitizers to the target
 dlp_add_all_sanitizers(${PROJECT_NAME} ${PROJECT_NAME}_static)
+
+# Apply PGO to library targets (both final libraries and object libraries)
+dlp_apply_pgo_to_target(${PROJECT_NAME})
+dlp_apply_pgo_to_target(${PROJECT_NAME}_static)
+dlp_apply_pgo_to_target(aocl_dlp_classic)
+dlp_apply_pgo_to_target(aocl_dlp_plus)
 
 # Set include directories for the target shared library
 target_include_directories(${PROJECT_NAME}
