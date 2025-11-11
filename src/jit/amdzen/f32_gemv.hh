@@ -51,7 +51,7 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     int RegBytes;  // Size of ZMM register in bytes
     int numRegs;   // Number of ZMM registers
     int simdWidth; // SIMD width
-
+    int c_downscale;
     int MR;          // Number of rows to process at once
     int M_LEFT;      // M-dimension left over elements
     int LOAD_UNROLL; // Number of regsiters to be used explicitly for loading
@@ -66,10 +66,13 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     int xReg;     // Number of registers for vector x
     int accumReg; // Number of registers for accumulation (partial dot products)
     int tmpReg;   // Number of registers for temporary use
+    int cvtReg;   // Number of regsiters to store converted output from f32 to
+                  // bf16
     int maskReg;  // Number of registers for mask
     int yBaseIdx; // Starting index for accumulation registers (from end)
     int aBaseIdx; // Starting index for A registers (from beginning)
     int xBaseIdx; // Starting index for x registers (after A registers)
+    int cvtBaseIdx;   // Starting index for conversion registers
     int accumBaseIdx; // Starting index for accumulation registers (after A and
                       // x
     int tmpBaseIdx;   // Starting index for temporary registers (after A and x
@@ -148,6 +151,8 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError scaleYWithBeta(int);
 
+    dlp::jit::jitGeneratorError convertF32toBF16(int, int, int);
+
     dlp::jit::jitGeneratorError storeYValuesColStored(int);
 
     dlp::jit::jitGeneratorError storeYValuesRowStored(int);
@@ -192,6 +197,7 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     int                              N_LEFT;
     int                              KC;
     int                              K_SUB_ITER;
+    int                              c_downscale;
     AOCL_MEMORY_TAG                  mtag_b;
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
@@ -202,11 +208,13 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     int yReg;
     int maskReg;
     int accumReg;
+    int tmpReg;
     int xBaseIdx;
     int bBaseIdx;
     int yBaseIdx;
     int accumBaseIdx;
     int maskBaseIdx;
+    int tmpBaseIdx;
 
     Xbyak::Reg64 stackPtr;
     Xbyak::Reg64 regXptr;
@@ -291,6 +299,8 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError scaleYWithBetaFringe(bool = false);
 
     dlp::jit::jitGeneratorError scaleYWithBeta(bool = false);
+
+    dlp::jit::jitGeneratorError convertF32toBF16(int, int, int);
 
     dlp::jit::jitGeneratorError storeYValuesFringe();
 

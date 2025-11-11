@@ -797,9 +797,18 @@ LPGEMV_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
 
             a_use = cvt_a_buffer_bf16_f32;
 
-            ker_fp(mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                   cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, f32_MR, KC,
-                   post_op_list, &post_ops_attr);
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+                                   (float*)a_use, rs_a_use, cs_a_use, 1,
+                                   (float*)b_use, rs_b_use, cs_b_use, 0, 0,
+                                   c_use, rs_c, cs_c, (void*)&alpha,
+                                   (void*)&beta, post_op_list, post_ops_attr);
+
+            } else {
+                ker_fp(mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use,
+                       rs_b_use, cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha,
+                       beta, f32_MR, KC, post_op_list, &post_ops_attr);
+            }
         }
 
         if (cvt_a_buffer_bf16_f32 != NULL) {
@@ -926,10 +935,18 @@ LPGEMV_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
             post_ops_attr.rs_c_downscale = rs_c;
             post_ops_attr.is_first_k     = TRUE;
 
-            ker_fp(nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                   cs_b_use, f32_mtag_b, c_use, rs_c, cs_c, alpha, beta, f32_NR,
-                   KC, n_sub_updated, jc_cur_loop_rem, post_op_list,
-                   &post_ops_attr);
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(
+                    lcntx->dlp_kernel_hndl, 1, nc0, k, (float*)a_use, rs_a_use,
+                    cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use,
+                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
+                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
+            } else {
+                ker_fp(nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use,
+                       rs_b_use, cs_b_use, f32_mtag_b, c_use, rs_c, cs_c, alpha,
+                       beta, f32_NR, KC, n_sub_updated, jc_cur_loop_rem,
+                       post_op_list, &post_ops_attr);
+            }
         }
 
         if (b_unreorder != NULL) {

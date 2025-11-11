@@ -232,6 +232,13 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         mr_hint                  = lcntx_f32->blksz.MR;
         nr_hint                  = lcntx_f32->blksz.NR;
         kc_hint                  = lcntx_f32->blksz.KC;
+
+        // For m=1 case B matrix is unpacked inside the framework before
+        // calling f32 kernel, same should be provided for generating JIT
+        // kernels
+        if (m == 1) {
+            mtag_b = UNPACKED;
+        }
     }
 
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
