@@ -32,8 +32,10 @@
 
 #include <cmath>
 #include <iostream>
+#include <random>
 #include <stdexcept>
 
+using dlp::testing::framework::postops::createAQuant;
 using dlp::testing::framework::postops::createBias;
 using dlp::testing::framework::postops::createClip;
 using dlp::testing::framework::postops::createGeluErf;
@@ -48,6 +50,11 @@ using dlp::testing::framework::postops::createSwish;
 using dlp::testing::framework::postops::createTanh;
 
 namespace dlp::testing::utils {
+
+// Constants for reproducible random quantization parameters
+constexpr unsigned int RANDOM_SEED = 12345; // Fixed seed for reproducibility
+constexpr float MIN_VALUE = 1.0f;  // Minimum value for random quant params
+constexpr float MAX_VALUE = 20.0f; // Maximum value for random quant params
 
 // Helper functions for parameter extraction
 double
@@ -472,8 +479,88 @@ MicroTest::createOperationParam(
             .setMatrix(matrix)
             .setScaleFactor(scale_matrix)
             .build();
-    }
+    } else if (config.type == "A_Quant") {
+        // A_Quant: Parse a_quant_sf_len and a_post_quant_sf_len
+        std::string sf_len    = "1";
+        auto        sf_len_it = config.params.find("a_quant_sf_len");
+        if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
+            sf_len = std::any_cast<std::string>(sf_len_it->second[0]);
+        }
 
+        // Parse a_quant_sf_type and a_post_quant_sf_type
+        MatrixType sf_type = extractMatrixTypeParam(
+            "a_quant_sf_type", config.params, MatrixType::f32);
+
+        // Create scale factor matrix based on length specification
+        Matrix pre_quant_sf_matrix;
+        Matrix post_quant_sf_matrix;
+        // Use fixed seed for reproducible random values across DLP and REF
+        std::mt19937                          gen(RANDOM_SEED);
+        std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
+
+        if (sf_len == "m") {
+            std::vector<float> pre_quant_sf_data(getM());
+            std::vector<float> post_quant_sf_data(getM());
+            for (size_t i = 0; i < pre_quant_sf_data.size(); ++i) {
+                // Generate random scale values between 0.1 and 10
+                pre_quant_sf_data[i]  = dist(gen);
+                post_quant_sf_data[i] = 1.0f / dist(gen);
+            }
+            pre_quant_sf_matrix =
+                Matrix::fromVector(pre_quant_sf_data, sf_type);
+            post_quant_sf_matrix =
+                Matrix::fromVector(post_quant_sf_data, sf_type);
+        } else {
+            float sf_value       = dist(gen);
+            pre_quant_sf_matrix  = Matrix::fromValue(sf_value, sf_type);
+            post_quant_sf_matrix = Matrix::fromValue(1.0f / sf_value, sf_type);
+        }
+
+        // Parse optional zero_point for asymmetric quantization
+        Matrix      zp_matrix;
+        bool        has_zp = false;
+        std::string zp_len = "1";
+
+        // Parse a_quant_zp_len
+        auto zp_len_it = config.params.find("a_quant_zp_len");
+        if (zp_len_it != config.params.end() && !zp_len_it->second.empty()) {
+            zp_len = std::any_cast<std::string>(zp_len_it->second[0]);
+            has_zp = true;
+        }
+
+        // Parse a_quant_zp_type
+        MatrixType zp_type    = MatrixType::f32; // default
+        auto       zp_type_it = config.params.find("a_quant_zp_type");
+        if (zp_type_it != config.params.end() && !zp_type_it->second.empty()) {
+            auto zp_type_str =
+                std::any_cast<std::string>(zp_type_it->second[0]);
+            zp_type = stringToMatrixType(zp_type_str);
+            has_zp  = true;
+        }
+
+        // Create zero point matrix based on length specification
+        if (has_zp) {
+            if (zp_len == "m") {
+                std::vector<float> zp_data(getM());
+                for (size_t idx = 0; idx < zp_data.size(); ++idx) {
+                    // Generate random zero point values between 1 and 20
+                    zp_data[idx] = dist(gen);
+                }
+                zp_matrix = Matrix::fromVector(zp_data, zp_type);
+            } else {
+                zp_matrix = Matrix::fromValue(dist(gen), zp_type);
+            }
+        } else {
+            zp_matrix = Matrix::fromValue(0, zp_type);
+        }
+
+        return createAQuant()
+            .setA_PreOpScaleFactor(pre_quant_sf_matrix)
+            .setA_PostOpScaleFactor(post_quant_sf_matrix)
+            .setA_PreOpZeroPoint(zp_matrix)
+            .setA_PostOpZeroPoint(zp_matrix)
+            .build();
+    }
     throw std::runtime_error("Unknown PostOp type: " + config.type);
 }
 

@@ -533,6 +533,79 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
 
                 s_i += 1;
             } break;
+            case ADQUANTIZE: {
+                // ============================================================
+                // A-DEQUANTIZATION POST-OP
+                // ============================================================
+                // This post-op applies dequantization to convert S32
+                // accumulator values back to the original scale that would
+                // have been obtained with BF16 A matrix.
+                //
+                // Since A matrix was quantized (BF16 -> S8), the GEMM produces
+                // scaled results. This operation corrects the scaling using:
+                //   result = round((acc + b_col_sum * zp_A) / scale_A)
+                //
+                // NOTE: If quantization is per-tensor, the length is 1 (scalar,
+                // shared across all rows). If quantization is
+                // per-channel/per-row, the length equals m (the number of
+                // rows), i.e., each row has its own scale and/or zero-point
+                // value.
+
+                // Validate scale factor if length is specified.
+                if (((metadata->a_post_quant)->scl
+                     && (metadata->a_post_quant)->scl->scale_factor_len > 0)
+                    && ((metadata->a_post_quant)->scl->scale_factor == NULL)) {
+                    dlp_print_msg(" a_post_quant.scl is NULL. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
+                // Validate zero-point parameters for asymmetric quantization.
+                if ((metadata->a_post_quant)->zp
+                    && ((metadata->a_post_quant)->zp->zero_point != NULL)
+                    && ((metadata->a_post_quant)->zp->zero_point_len == 0)) {
+                    dlp_print_msg(
+                        " a_post_quant.zp zero point provided but length is 0."
+                        " Exiting..",
+                        __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
+
+                // Extract data type information for zero-point and scale
+                // factor.
+                DLP_TYPE tmp_zp_stor_type =
+                    (metadata->a_post_quant)->zp
+                        ? get_stor_type(
+                              (metadata->a_post_quant)->zp->zero_point_type)
+                        : DLP_INVALID;
+                DLP_TYPE tmp_sf_stor_type =
+                    (metadata->a_post_quant)->scl
+                        ? get_stor_type(
+                              (metadata->a_post_quant)->scl->scale_factor_type)
+                        : DLP_INVALID;
+
+                // Use zp_len = 0 (no buffer) for symmetric, else use actual
+                // length/buffer for asymmetric quantization.
+                static md_t zero_zp_len = 0;
+                md_t*       zero_point_len_ptr =
+                    (metadata->a_post_quant)->zp
+                              ? &((metadata->a_post_quant)->zp->zero_point_len)
+                              : &zero_zp_len;
+
+                lpgemm_set_node_params(
+                    (post_op_list + i), POST_OPS_ADQUANTIZE,
+                    (metadata->a_post_quant)->zp
+                        ? (metadata->a_post_quant)->zp->zero_point
+                        : NULL,
+                    meta_arg, zero_point_len_ptr,
+                    (metadata->a_post_quant)->scl
+                        ? (metadata->a_post_quant)->scl->scale_factor
+                        : NULL,
+                    (metadata->a_post_quant)->scl
+                        ? (metadata->a_post_quant)->scl->scale_factor_len
+                        : 0,
+                    NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type);
+
+            } break;
             case MATRIX_ADD: {
                 if (((metadata->matrix_add + m_i)->matrix == NULL)
                     || ((metadata->matrix_add + m_i)->ldm <= 0)) {

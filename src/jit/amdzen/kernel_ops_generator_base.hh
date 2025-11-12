@@ -74,6 +74,8 @@ class kernelOpsGeneratorInterface
     virtual dlp::jit::jitGeneratorError tanh(
         dlp::kernel_frame::kernelOpsMetaData& op) = 0;
     virtual dlp::jit::jitGeneratorError sigmoid(
+        dlp::kernel_frame::kernelOpsMetaData& op) = 0;
+    virtual dlp::jit::jitGeneratorError aDQuantize(
         dlp::kernel_frame::kernelOpsMetaData& op)                  = 0;
     virtual dlp::jit::jitGeneratorError embedKernelOpsAttributes() = 0;
 
@@ -130,6 +132,9 @@ class kernelOpsGeneratorInterface
                     break;
                 case dlp::kernel_frame::kernelOps::sigmoid:
                     result = impl->sigmoid(op);
+                    break;
+                case dlp::kernel_frame::kernelOps::aDQuantize:
+                    result = impl->aDQuantize(op);
                     break;
                 default:
                     return dlp::jit::jitGeneratorError::notSupported;

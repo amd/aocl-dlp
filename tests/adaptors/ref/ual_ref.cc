@@ -45,6 +45,7 @@
 #include <cstring>
 #include <functional>
 #include <iostream>
+#include <type_traits>
 #include <variant>
 
 extern "C"
@@ -1045,6 +1046,18 @@ UalRef::applyPostOperation(Matrix& matrix,
 }
 
 /**
+ * @brief Apply A_Quant post-operation to a matrix
+ * @note This is a no-op for the reference implementation as quantization
+ *       is handled inline in the aocl_gemm_bf16s8s32obf16_ref function
+ */
+template<>
+void
+UalRef::applyPostOperation(Matrix&                                     matrix,
+                           const dlp::testing::framework::AQuantParam& op)
+{
+}
+
+/**
  * @brief Perform general matrix multiplication with post-operations: C =
  * alpha*A*B + beta*C + PostOps
  *
@@ -1151,6 +1164,112 @@ UalRef::gemm(const Matrix&                      A,
         return UALError::UAL_SUCCESS;
     }
 
+    bool isBf16S8QuantGemm =
+        (aType == MatrixType::bf16 && bType == MatrixType::s8);
+
+    if (isBf16S8QuantGemm) {
+
+        bool   hasQuant = false;
+        Matrix a_pre_quant_sf;
+        Matrix a_pre_quant_zp;
+        Matrix a_post_quant_sf;
+        Matrix a_post_quant_zp;
+
+        refOp->resetIterator();
+        while (refOp->hasNextPostOp()) {
+            auto postOp = refOp->getNextPostOp();
+            if (postOp) {
+                std::visit(
+                    [&](const auto& op) {
+                        using T = std::decay_t<decltype(op)>;
+                        if constexpr (std::is_same_v<T,
+                                                     dlp::testing::framework::
+                                                         AQuantParam>) {
+                            hasQuant = true;
+                            if (op.hasA_PreOpScaleFactor()) {
+                                a_pre_quant_sf = *op.getA_PreOpScaleFactor();
+                            }
+                            if (op.hasA_PreOpZeroPoint()) {
+                                a_pre_quant_zp = *op.getA_PreOpZeroPoint();
+                            }
+                            if (op.hasA_PostOpScaleFactor()) {
+                                a_post_quant_sf = *op.getA_PostOpScaleFactor();
+                            }
+                            if (op.hasA_PostOpZeroPoint()) {
+                                a_post_quant_zp = *op.getA_PostOpZeroPoint();
+                            }
+                        }
+                    },
+                    *postOp);
+            }
+        }
+        if (hasQuant) {
+            // Get pre_quant and post_quant scale factors and zero points
+            void* a_pre_quant_sf_data  = a_pre_quant_sf.getData();
+            void* a_pre_quant_zp_data  = a_pre_quant_zp.getData();
+            void* a_post_quant_sf_data = a_post_quant_sf.getData();
+            void* a_post_quant_zp_data = a_post_quant_zp.getData();
+            if (!a_pre_quant_sf_data || !a_pre_quant_zp_data) {
+                return UALError::UAL_FAILURE;
+            }
+
+            // Get the length of the scale factor and zero point matrices
+            md_t       sf_len  = a_pre_quant_sf.getCols();
+            md_t       zp_len  = a_pre_quant_zp.getCols();
+            MatrixType sf_type = a_pre_quant_sf.getMatrixType();
+            MatrixType zp_type = a_pre_quant_zp.getMatrixType();
+
+            // Get the layout and transposition of the A matrix
+            char layout = (A.getLayout() == MatrixLayout::ROW_MAJOR) ? 'R'
+                                                                     : 'C';
+            char transA = A.isTransposed() ? 'T' : 'N';
+            char transB = B.isTransposed() ? 'T' : 'N';
+
+            // Get the alpha and beta values
+            int32_t alpha_s32 = static_cast<int32_t>(alpha);
+            int32_t beta_s32  = static_cast<int32_t>(beta);
+
+            // Call the GEMM function
+            dlp::testing::classic::ref::aocl_gemm_bf16s8s32obf16_ref(
+                layout, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
+                reinterpret_cast<const bfloat16*>(
+                    A.getMatrixData().getMatrixPtr()),
+                static_cast<int>(A.getLeadingDimension()),
+                reinterpret_cast<const int8_t*>(
+                    B.getMatrixData().getMatrixPtr()),
+                static_cast<int>(B.getLeadingDimension()), beta_s32,
+                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
+                static_cast<int>(C.getLeadingDimension()), a_pre_quant_sf_data,
+                a_pre_quant_zp_data, a_post_quant_sf_data, a_post_quant_zp_data,
+                sf_len, zp_len, sf_type, zp_type);
+
+            // Apply remaining post-ops
+            refOp->resetIterator();
+            while (refOp->hasNextPostOp()) {
+                auto postOp = refOp->getNextPostOp();
+                if (postOp) {
+                    std::visit(
+                        [&](const auto& op) {
+                            using T = std::decay_t<decltype(op)>;
+                            // Apply post-operations unless it is an AQuantParam
+                            // AQuantParam is handled inline in the GEMM
+                            // function
+                            if constexpr (!std::is_same_v<
+                                              T, dlp::testing::framework::
+                                                     AQuantParam>) {
+                                applyPostOperation(C, op);
+                            }
+                        },
+                        *postOp);
+                }
+            }
+            return UALError::UAL_SUCCESS;
+        } else {
+            return UALError::UAL_FAILURE;
+        }
+    }
+
     // Original path for cases without post-ops or unsupported GEMM types
     // First perform the GEMM operation
     bool result = checkValidGemmParams(A, B, C, true)
@@ -1169,7 +1288,6 @@ UalRef::gemm(const Matrix&                      A,
                        *postOp);
         }
     }
-
     return UALError::UAL_SUCCESS;
 }
 

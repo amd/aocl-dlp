@@ -61,6 +61,7 @@ typedef enum
     POST_OPS_TANH       = 11,
     POST_OPS_SIGMOID    = 12,
     POST_OPS_SUM        = 13,
+    POST_OPS_ADQUANTIZE = 14,
     POST_OPS_MAX
 } LPGEMM_POST_OP_CODE;
 

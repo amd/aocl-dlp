@@ -102,6 +102,27 @@ DlpOperation::~DlpOperation()
             }
         }
 
+        // Clean up manually allocated memory for A matrix quantization scale
+        // factors and zero points
+        if (m_postops->a_pre_quant) {
+            if (m_postops->a_pre_quant->scl) {
+                delete m_postops->a_pre_quant->scl;
+            }
+            if (m_postops->a_pre_quant->zp) {
+                delete m_postops->a_pre_quant->zp;
+            }
+            delete m_postops->a_pre_quant;
+        }
+        if (m_postops->a_post_quant) {
+            if (m_postops->a_post_quant->scl) {
+                delete m_postops->a_post_quant->scl;
+            }
+            if (m_postops->a_post_quant->zp) {
+                delete m_postops->a_post_quant->zp;
+            }
+            delete m_postops->a_post_quant;
+        }
+
         // Clean up all allocated arrays
         delete[] m_postops->eltwise;
         delete[] m_postops->scale;
@@ -183,6 +204,14 @@ DlpOperation::addOperation(
             m_matrix_mul_ops.push_back(std::move(mat_mul_param));
             break;
         }
+        case dlp::testing::framework::OperationType::A_Quant: {
+            auto a_quant_param =
+                std::unique_ptr<dlp::testing::framework::AQuantParam>(
+                    static_cast<dlp::testing::framework::AQuantParam*>(
+                        param.release()));
+            m_a_quant_ops.push_back(std::move(a_quant_param));
+            break;
+        }
         default:
             throw std::runtime_error("Unsupported operation type");
     }
@@ -221,6 +250,10 @@ DlpOperation::finalize()
 
     if (!m_matrix_mul_ops.empty()) {
         convertMatrixMulOperations();
+    }
+
+    if (!m_a_quant_ops.empty()) {
+        convertA_QuantOperations();
     }
 
     // Build the sequence vector based on the original order
@@ -450,6 +483,84 @@ DlpOperation::convertMatrixMulOperations()
 }
 
 void
+DlpOperation::convertA_QuantOperations()
+{
+    size_t count = m_a_quant_ops.size();
+    if (count == 0)
+        return;
+
+    // Allocate array once with exact size
+    // Ensure the quant structure is allocated and zeroed
+    if (!m_postops->a_pre_quant) {
+        m_postops->a_pre_quant = new dlp_quant_op;
+        std::memset(m_postops->a_pre_quant, 0, sizeof(dlp_quant_op));
+    }
+
+    // Support only quantization of matrix A (output)
+    if (!m_postops->a_post_quant) {
+        m_postops->a_post_quant = new dlp_quant_op;
+        std::memset(m_postops->a_post_quant, 0, sizeof(dlp_quant_op));
+    }
+
+    // Process each quant operation parameter (the last one overrides)
+    for (size_t i = 0; i < count; ++i) {
+        const auto& param = *m_a_quant_ops[i];
+
+        // Scale factor assignment
+        if (param.hasA_PreOpScaleFactor()) {
+            if (!m_postops->a_pre_quant->scl) {
+                m_postops->a_pre_quant->scl = new dlp_sf_t;
+            }
+            auto* scl = m_postops->a_pre_quant->scl;
+            scl->scale_factor =
+                convertMatrixToPtr(*param.getA_PreOpScaleFactor());
+            scl->scale_factor_len = param.getA_PreOpScaleFactor()->getCols();
+            scl->scale_factor_type =
+                getStorageType(param.getA_PreOpScaleFactor()->getMatrixType());
+        }
+
+        // Zero point assignment
+        if (param.hasA_PreOpZeroPoint()) {
+            if (!m_postops->a_pre_quant->zp) {
+                m_postops->a_pre_quant->zp = new dlp_zp_t;
+            }
+            auto* zp       = m_postops->a_pre_quant->zp;
+            zp->zero_point = convertMatrixToPtr(*param.getA_PreOpZeroPoint());
+            zp->zero_point_len = param.getA_PreOpZeroPoint()->getCols();
+            zp->zero_point_type =
+                getStorageType(param.getA_PreOpZeroPoint()->getMatrixType());
+            m_postops->a_pre_quant->symmetric = false;
+        }
+
+        // Scale factor assignment
+        if (param.hasA_PostOpScaleFactor()) {
+            if (!m_postops->a_post_quant->scl) {
+                m_postops->a_post_quant->scl = new dlp_sf_t;
+            }
+            auto* scl = m_postops->a_post_quant->scl;
+            scl->scale_factor =
+                convertMatrixToPtr(*param.getA_PostOpScaleFactor());
+            scl->scale_factor_len = param.getA_PostOpScaleFactor()->getCols();
+            scl->scale_factor_type =
+                getStorageType(param.getA_PostOpScaleFactor()->getMatrixType());
+        }
+
+        // Zero point assignment
+        if (param.hasA_PostOpZeroPoint()) {
+            if (!m_postops->a_post_quant->zp) {
+                m_postops->a_post_quant->zp = new dlp_zp_t;
+            }
+            auto* zp       = m_postops->a_post_quant->zp;
+            zp->zero_point = convertMatrixToPtr(*param.getA_PostOpZeroPoint());
+            zp->zero_point_len = param.getA_PostOpZeroPoint()->getCols();
+            zp->zero_point_type =
+                getStorageType(param.getA_PostOpZeroPoint()->getMatrixType());
+            m_postops->a_post_quant->symmetric = false;
+        }
+    }
+}
+
+void
 DlpOperation::buildSequenceVector()
 {
     // Build sequence vector based on original operation order
@@ -482,6 +593,9 @@ DlpOperation::buildSequenceVector()
             case dlp::testing::framework::OperationType::MatMul:
                 sequence.push_back(MATRIX_MUL);
                 matrix_mul_idx++;
+                break;
+            case dlp::testing::framework::OperationType::A_Quant:
+                sequence.push_back(ADQUANTIZE);
                 break;
             default:
                 throw std::runtime_error(

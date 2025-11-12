@@ -104,6 +104,7 @@ enum class kernelOps : uint16_t
     swish,
     tanh,
     sigmoid,
+    aDQuantize,
     max_kernel_ops
 };
 

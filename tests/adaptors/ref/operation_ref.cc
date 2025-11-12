@@ -102,6 +102,14 @@ RefOperation::addOperation(
             m_matrix_mul_ops.push_back(std::move(mat_mul_param));
             break;
         }
+        case dlp::testing::framework::OperationType::A_Quant: {
+            auto a_quant_param =
+                std::unique_ptr<dlp::testing::framework::AQuantParam>(
+                    static_cast<dlp::testing::framework::AQuantParam*>(
+                        param.release()));
+            m_a_quant_ops.push_back(std::move(a_quant_param));
+            break;
+        }
         default:
             throw std::runtime_error("Unsupported operation type");
     }
@@ -141,6 +149,10 @@ RefOperation::finalize()
 
     if (!m_matrix_mul_ops.empty()) {
         convertMatrixMulOperations();
+    }
+
+    if (!m_a_quant_ops.empty()) {
+        convertA_QuantOperations();
     }
 
     // Build the sequence vector based on the original order
@@ -194,6 +206,12 @@ RefOperation::getNextPostOp() const
                 static_cast<const dlp::testing::framework::MatrixMulParam&>(
                     *param);
             return PostOpVariant{ mat_mul_param };
+        }
+        case dlp::testing::framework::OperationType::A_Quant: {
+            const auto& a_quant_param =
+                static_cast<const dlp::testing::framework::AQuantParam&>(
+                    *param);
+            return PostOpVariant{ a_quant_param };
         }
         default:
             throw std::runtime_error(
@@ -249,6 +267,12 @@ RefOperation::convertMatrixMulOperations()
     // This method is kept for consistency with the DLP implementation
 }
 
+void
+RefOperation::convertA_QuantOperations()
+{
+    // For reference implementation, we don't need to convert to backend format
+    // This method is kept for consistency with the DLP implementation
+}
 void
 RefOperation::buildSequenceVector()
 {
@@ -309,6 +333,9 @@ RefOperation::buildSequenceVector()
                 break;
             case dlp::testing::framework::OperationType::MatMul:
                 opName = "MatrixMul";
+                break;
+            case dlp::testing::framework::OperationType::A_Quant:
+                opName = "A_Quant";
                 break;
             default:
                 opName = "Unknown";

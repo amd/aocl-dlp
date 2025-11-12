@@ -36,6 +36,7 @@
 
 namespace dlp::testing::classic {
 
+using dlp::testing::framework::AQuantParam;
 using dlp::testing::framework::BiasParam;
 using dlp::testing::framework::ElementWiseParam;
 using dlp::testing::framework::IOperation;
@@ -67,7 +68,8 @@ class RefOperation : public IOperation
                                        ScaleParam,
                                        BiasParam,
                                        MatrixAddParam,
-                                       MatrixMulParam>;
+                                       MatrixMulParam,
+                                       AQuantParam>;
 
   private:
     bool m_finalized = false;
@@ -84,7 +86,8 @@ class RefOperation : public IOperation
         m_matrix_add_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::MatrixMulParam>>
         m_matrix_mul_ops;
-
+    std::vector<std::unique_ptr<dlp::testing::framework::AQuantParam>>
+        m_a_quant_ops;
     // Helper methods for batch conversion (called once in finalize)
     void convertElementWiseOperations();
     void convertSumOperations();
@@ -92,6 +95,7 @@ class RefOperation : public IOperation
     void convertMatrixAddOperations();
     void convertMatrixMulOperations();
     void buildSequenceVector();
+    void convertA_QuantOperations();
 
   public:
     RefOperation();

@@ -39,6 +39,7 @@
 #include "kernels/lpgemm_utils_kernels.h"
 #include "kernels/s8s8s32/lpgemm_packa_s8.h"
 #include "kernels/s8s8s32/lpgemm_packb_s8.h"
+#include "kernels/s8s8s32/lpgemm_quanta_bf16s8.h"
 #include "kernels/u8s8s32/lpgemm_packa.h"
 #include "kernels/u8s8s32/lpgemm_packb.h"
 #include "logging/lpgemm_logger.h"

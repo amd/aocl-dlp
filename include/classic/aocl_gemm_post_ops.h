@@ -79,6 +79,7 @@ typedef enum
     SCALE      = 3, /**< Scaling operation */
     MATRIX_ADD = 4, /**< Matrix addition operation */
     MATRIX_MUL = 5, /**< Matrix multiplication operation */
+    ADQUANTIZE = 6, /**< De-quantization operation */
 } DLP_POST_OP_TYPE;
 
 /**
@@ -324,6 +325,65 @@ typedef struct
 } dlp_group_post_op;
 
 /**
+ * @brief Quantization operation parameters for a single matrix.
+ *
+ * This structure defines the quantization/dequantization parameters for a
+ * matrix involved in low-precision GEMM operations. It supports both symmetric
+ * and asymmetric quantization via scale factors and zero-points.
+ *
+ * Quantization Formula:
+ *   - Symmetric:  q = round(x * scale)
+ *   - Asymmetric: q = round(x * scale) - zero_point
+ *
+ * Dequantization Formula:
+ *   - Symmetric:  x = q / scale
+ *   - Asymmetric: x = (q + zero_point) / scale
+ *
+ * Usage Context:
+ *   - Can be applied as pre-operation (before GEMM) or post-operation (after
+ * GEMM)
+ *   - Examples: Converting BF16 to S8
+ *   - Supports per-tensor (single value) or per-channel/per-row (array of
+ * values) quantization
+ *
+ * Symmetric vs Asymmetric:
+ *   - Symmetric: Zero-point = 0, quantization range is symmetric around zero
+ *                Simpler and faster, suitable when data is centered around zero
+ *   - Asymmetric: Non-zero zero-point, can represent arbitrary ranges
+ *                 More accurate for non-centered distributions, requires
+ * additional computation
+ */
+/**
+ * @struct dlp_quant_op
+ * @brief Quantization operation parameters.
+ *
+ * Contains all parameters needed for quantizing or dequantizing a matrix,
+ * including scale factors, zero-points, and data type information.
+ */
+typedef struct
+{
+    md_t group_size; /**< Size of each group for grouped quantization operations
+                      */
+
+    DLP_TYPE src_type; /**< Source data type before quantization (e.g.,
+                          DLP_BF16, DLP_F32) */
+
+    DLP_TYPE dst_type; /**< Destination data type after quantization (e.g.,
+                          DLP_S8, DLP_U8) */
+
+    dlp_sf_t* scl; /**< Scale factor parameters for quantization/dequantization.
+                        Length: 1 for per-tensor, m for per-row/per-channel */
+
+    dlp_zp_t* zp; /**< Zero-point parameters for asymmetric quantization.
+                       Set to NULL for symmetric quantization (zero-point = 0).
+                       Length: 1 for per-tensor, m for per-row/per-channel */
+
+    bool symmetric; /**< true: Symmetric quantization (zero-point = 0), centered
+                         around zero. false: Asymmetric quantization (non-zero
+                         zero-point), supports arbitrary value ranges */
+} dlp_quant_op;
+
+/**
  * @brief Structure defining symmetric static quantization parameters.
  *
  * This structure contains parameters for symmetric static quantization,
@@ -374,10 +434,36 @@ typedef struct
                                        seq_vector[1]=ELTWISE means bias
                                        followed by element-wise operation) */
 
+    // ========== START: DEPRECATED FIELDS ==========
+    // TODO: Deprecate these fields as they will be unified in dlp_quant_op
     dlp_pre_op* pre_ops; /**< Pre-operations to be applied before GEMM */
 
     dlp_group_post_op* post_op_grp; /**< Grouped post-operations for
                                          different quantization groups */
+    // ========== END: DEPRECATED FIELDS ==========
+
+    // ========== START: QUANTIZED PARAMETERS ==========
+    dlp_quant_op* a_pre_quant; /**< Pre-quantization operations for matrix A
+                                    (applied before GEMM computation) */
+    md_t a_pre_op_seq_length;  /**< Number of pre-quantization operations for
+                                    matrix A */
+
+    dlp_quant_op* b_pre_quant; /**< Pre-quantization operations for matrix B
+                                    (applied before GEMM computation) */
+    md_t b_pre_op_seq_length;  /**< Number of pre-quantization operations for
+                                    matrix B */
+
+    dlp_quant_op* a_post_quant; /**< Post-quantization operations for matrix A
+                                     (applied after GEMM computation) */
+    md_t a_post_op_seq_length;  /**< Number of post-quantization operations for
+                                     matrix A */
+
+    dlp_quant_op* b_post_quant; /**< Post-quantization operations for matrix B
+                                     (applied after GEMM computation) */
+    md_t b_post_op_seq_length;  /**< Number of post-quantization operations for
+                                     matrix B */
+    // ========== END: QUANTIZED PARAMETERS ==========
+
     md_t num_eltwise; /**< Number of element-wise operations to track */
 
     dlp_error_hndl_t error_hndl; /**< Error handle for the routine, currently

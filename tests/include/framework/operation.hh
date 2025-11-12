@@ -50,6 +50,7 @@ enum class OperationType : uint8_t
     MatAdd      = 2,
     MatMul      = 3,
     Scale       = 4,
+    A_Quant     = 5,
 };
 
 /**
@@ -182,6 +183,72 @@ class ScaleParam : public IOperationParam
     bool          hasZeroPoint() const { return m_zeroPoint != nullptr; }
 };
 
+/**
+ * @class QuantParam
+ * @brief Parameter class for quantization operations
+ */
+class AQuantParam : public IOperationParam
+{
+  private:
+    std::unique_ptr<Matrix> m_a_pre_op_sf;
+    std::unique_ptr<Matrix> m_a_post_op_sf;
+    std::unique_ptr<Matrix> m_a_pre_op_zp;
+    std::unique_ptr<Matrix> m_a_post_op_zp;
+
+  public:
+    AQuantParam() = default;
+
+    AQuantParam(const AQuantParam& other)
+    {
+        if (other.m_a_pre_op_sf) {
+            m_a_pre_op_sf = std::make_unique<Matrix>(*other.m_a_pre_op_sf);
+        }
+        if (other.m_a_post_op_sf) {
+            m_a_post_op_sf = std::make_unique<Matrix>(*other.m_a_post_op_sf);
+        }
+        if (other.m_a_pre_op_zp) {
+            m_a_pre_op_zp = std::make_unique<Matrix>(*other.m_a_pre_op_zp);
+        }
+        if (other.m_a_post_op_zp) {
+            m_a_post_op_zp = std::make_unique<Matrix>(*other.m_a_post_op_zp);
+        }
+    }
+
+    OperationType getType() const override { return OperationType::A_Quant; }
+
+    std::unique_ptr<IOperationParam> clone() const override
+    {
+        return std::make_unique<AQuantParam>(*this);
+    }
+
+    void setA_PreOpScaleFactor(const Matrix& sf)
+    {
+        m_a_pre_op_sf = std::make_unique<Matrix>(sf);
+    }
+    void setA_PostOpScaleFactor(const Matrix& sf)
+    {
+        m_a_post_op_sf = std::make_unique<Matrix>(sf);
+    }
+    void setA_PreOpZeroPoint(const Matrix& zp)
+    {
+        m_a_pre_op_zp = std::make_unique<Matrix>(zp);
+    }
+    void setA_PostOpZeroPoint(const Matrix& zp)
+    {
+        m_a_post_op_zp = std::make_unique<Matrix>(zp);
+    }
+    const Matrix* getA_PreOpScaleFactor() const { return m_a_pre_op_sf.get(); }
+    const Matrix* getA_PostOpScaleFactor() const
+    {
+        return m_a_post_op_sf.get();
+    }
+    const Matrix* getA_PreOpZeroPoint() const { return m_a_pre_op_zp.get(); }
+    const Matrix* getA_PostOpZeroPoint() const { return m_a_post_op_zp.get(); }
+    bool hasA_PreOpScaleFactor() const { return m_a_pre_op_sf != nullptr; }
+    bool hasA_PostOpScaleFactor() const { return m_a_post_op_sf != nullptr; }
+    bool hasA_PreOpZeroPoint() const { return m_a_pre_op_zp != nullptr; }
+    bool hasA_PostOpZeroPoint() const { return m_a_post_op_zp != nullptr; }
+};
 /**
  * @class BiasParam
  * @brief Parameter class for bias operations
@@ -591,6 +658,61 @@ class ScaleBuilder
 };
 
 /**
+ * @class QuantBuilder
+ * @brief Type-safe builder for Quant operations
+ */
+class AQuantBuilder
+{
+  private:
+    std::unique_ptr<Matrix> m_a_pre_op_sf;
+    std::unique_ptr<Matrix> m_a_post_op_sf;
+    std::unique_ptr<Matrix> m_a_pre_op_zp;
+    std::unique_ptr<Matrix> m_a_post_op_zp;
+
+  public:
+    AQuantBuilder& setA_PreOpScaleFactor(const Matrix& sf)
+    {
+        m_a_pre_op_sf = std::make_unique<Matrix>(sf);
+        return *this;
+    }
+    AQuantBuilder& setA_PostOpScaleFactor(const Matrix& sf)
+    {
+        m_a_post_op_sf = std::make_unique<Matrix>(sf);
+        return *this;
+    }
+    AQuantBuilder& setA_PreOpZeroPoint(const Matrix& zp)
+    {
+        m_a_pre_op_zp = std::make_unique<Matrix>(zp);
+        return *this;
+    }
+    AQuantBuilder& setA_PostOpZeroPoint(const Matrix& zp)
+    {
+        m_a_post_op_zp = std::make_unique<Matrix>(zp);
+        return *this;
+    }
+    std::unique_ptr<IOperationParam> build()
+    {
+        if (!m_a_pre_op_sf) {
+            throw std::runtime_error(
+                "A_PreOpScaleFactor is required for Quant operation");
+        }
+        if (!m_a_post_op_sf) {
+            throw std::runtime_error(
+                "A_PostOpScaleFactor is required for Quant operation");
+        }
+        auto param = std::make_unique<AQuantParam>();
+        param->setA_PreOpScaleFactor(*m_a_pre_op_sf);
+        param->setA_PostOpScaleFactor(*m_a_post_op_sf);
+        if (m_a_pre_op_zp) {
+            param->setA_PreOpZeroPoint(*m_a_pre_op_zp);
+        }
+        if (m_a_post_op_zp) {
+            param->setA_PostOpZeroPoint(*m_a_post_op_zp);
+        }
+        return param;
+    }
+};
+/**
  * @class BiasBuilder
  * @brief Type-safe builder for Bias operations
  */
@@ -765,6 +887,10 @@ namespace postops {
     inline MatrixMulBuilder createMatrixMul()
     {
         return MatrixMulBuilder{};
+    }
+    inline AQuantBuilder createAQuant()
+    {
+        return AQuantBuilder{};
     }
 
 } // namespace postops

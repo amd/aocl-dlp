@@ -552,6 +552,23 @@ UalDlp::gemm(const Matrix&                      A,
             break;
         }
 
+        case encode_types<MatrixType::bf16, MatrixType::s8, MatrixType::bf16,
+                          MatrixType::s32>(): {
+            int32_t alpha_s32 = static_cast<int32_t>(alpha);
+            int32_t beta_s32  = static_cast<int32_t>(beta);
+
+            aocl_gemm_bf16s8s32obf16(
+                layoutA, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
+                reinterpret_cast<bfloat16*>(A.getMatrixData().getMatrixPtr()),
+                A.getLeadingDimension(), memFormatA,
+                reinterpret_cast<int8_t*>(B.getMatrixData().getMatrixPtr()),
+                B.getLeadingDimension(), memFormatB, beta_s32,
+                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
+                C.getLeadingDimension(), aocl_postops.get());
+            break;
+        }
+
         default:
             return UALError::UAL_FAILURE;
     }
@@ -1652,6 +1669,20 @@ UalDlp::gemm(md_t         m,
             aocl_gemm_s8s8s32obf16(
                 layoutA, transA, transB, m, n, k, alpha_s32,
                 reinterpret_cast<int8_t*>(matA), matA_leadingDim, memFormatA,
+                reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
+                beta_s32, reinterpret_cast<bfloat16*>(matC), matC_leadingDim,
+                err_code.get());
+
+            break;
+        }
+        case encode_types<MatrixType::bf16, MatrixType::s8, MatrixType::bf16,
+                          MatrixType::s32>(): {
+            int32_t alpha_s32 = static_cast<int32_t>(alpha);
+            int32_t beta_s32  = static_cast<int32_t>(beta);
+
+            aocl_gemm_bf16s8s32obf16(
+                layoutA, transA, transB, m, n, k, alpha_s32,
+                reinterpret_cast<bfloat16*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<bfloat16*>(matC), matC_leadingDim,
                 err_code.get());

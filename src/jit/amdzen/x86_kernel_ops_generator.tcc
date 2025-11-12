@@ -3162,4 +3162,416 @@ kernelOpsGeneratorX86<KType>::sigmoid(kernelOpsMetaData& op)
     return jitGeneratorError::success;
 }
 
+// ============================================================================
+// A-Dequantization: Scale Factor Application (Per-Tensor)
+// ============================================================================
+// Formula: acc[i][j] = round(acc[i][j] * a_post_quant_sf)
+// Used for per-tensor quantization (single scale factor for entire matrix).
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantScaleFactorScalarImpl()
+{
+    // Broadcast scalar scale factor (regTmp1 set by caller)
+    RegType sfReg = popAndGetScratchReg();
+    broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp1]);
+
+    // Apply: acc = round(acc * a_post_quant_sf) for all accumulator registers
+    for (int i = 0; i < MR * numRegsPerRow; i++) {
+        jit_->vmulps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                     sfReg);
+        jit_->vrndscaleps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                          0x00); // Round to nearest even
+    }
+    scratch_reg_queue.push(sfReg);
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// A-Dequantization: Scale Factor Application (Per-Row)
+// ============================================================================
+// Formula: acc[row][col] = round(acc[row][col] * a_post_quant_sf[row])
+// Used for per-row/per-channel quantization (different scale factor per row).
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantScaleFactorRowMajorImpl()
+{
+    // Calculate address: scale_factor_base + (post_op_c_i * sizeof(T))
+    jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
+    jit_->lea(regTmp3, jit_->ptr[regTmp1]);
+    jit_->add(regTmp3, regTmp2);
+
+    // For each row: broadcast its scale factor and apply with rounding
+    for (int i = 0; i < MR; i++) {
+        RegType sfReg = popAndGetScratchReg();
+        broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp3 + i * sizeof(T)]);
+
+        for (int j = 0; j < numRegsPerRow; j++) {
+            jit_->vmulps(RegType(cRegStartIdx + i * numRegsPerRow + j),
+                         RegType(cRegStartIdx + i * numRegsPerRow + j), sfReg);
+            jit_->vrndscaleps(RegType(cRegStartIdx + i * numRegsPerRow + j),
+                              RegType(cRegStartIdx + i * numRegsPerRow + j),
+                              0x00); // Round to nearest even
+        }
+        scratch_reg_queue.push(sfReg);
+    }
+    return jitGeneratorError::success;
+}
+
+// ============================================================
+// A-Dequantization: Scale Factor Application (per-tensor) (GEMV N=1)
+// ============================================================
+// Formula: acc[i] = round(acc[i] * a_post_quant_sf)
+// Used for GEMV N=1 with scalar scale factor.
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantScaleFactorScalarImplGEMVN1()
+{
+    // Broadcast scalar scale factor (regTmp1 set by caller)
+    RegType sfReg = popAndGetScratchReg();
+    broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp1]);
+
+    // Apply: acc = round(acc * a_post_quant_sf) for all accumulator registers
+    for (int i = 0; i < numRegsPerRow; i++) {
+        jit_->vmulps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                     sfReg);
+        jit_->vrndscaleps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                          0x00);
+    }
+    // Return scratch register to the pool
+    scratch_reg_queue.push(sfReg);
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// A-Dequantization: Scale Factor Application per-row (GEMV N=1)
+// ============================================================================
+// Formula: acc[i] = round(acc[i] * a_post_quant_sf)
+// Used for GEMV N=1 with row-major scale factor.
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantScaleFactorRowMajorImplGEMVN1()
+{
+    // Calculate address: scale_factor_base + (post_op_c_i * sizeof(T))
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
+    jit_->add(regTmp1, regTmp2);
+
+    // Reserve destination registers to prevent corruption during BF16/S8/U8
+    // conversions
+    auto saved_queue = reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow);
+
+    // Load scale factor values into registers using abstracted helper
+    loadAndConvertRows<T>(regTmp1, scratchLoadRegIdx);
+
+    // Apply: acc = round(acc * a_post_quant_sf) for all accumulator registers
+    for (int i = 0; i < numRegsPerRow; i++) {
+        jit_->vmulps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                     RegType(scratchLoadRegIdx + i));
+        jit_->vrndscaleps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                          0x00); // Round to nearest even
+    }
+    restoreScratchQueue(saved_queue);
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// A-Dequantization: Zero-Point Correction (Per-Tensor)
+// ============================================================================
+// Formula: acc[i][j] = acc[i][j] + (b_col_sum[j] * a_post_quant_zp)
+// Compensates for zero-point bias. Used for per-tensor asymmetric quantization.
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantZeroPointScalarImpl()
+{
+    // Load B column sums pointer and calculate address for current column block
+    jit_->mov(regTmp2,
+              jit_->ptr[regkernelOpsAttr
+                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+    jit_->mov(regTmp3, jit_->ptr[regkernelOpsAttr
+            + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 + regTmp3 * sizeof(int32_t)]);
+
+    // Broadcast scalar zero-point (regTmp1 set by caller)
+    RegType zpReg = popAndGetScratchReg();
+    broadcastAndConvertScalar<T>(zpReg, jit_->ptr[regTmp1]);
+
+    auto saved_queue = reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow);
+
+    // Load b_col_sum and apply: acc += b_col_sum * a_post_quant_zp
+    for (int i = 0; i < numRegsPerRow; i++) {
+        jit_->vmovdqu32(RegType(scratchLoadRegIdx + i),
+                        jit_->ptr[regTmp2 + i * RegBytes]);
+        // Right shift by 7: compensates for left shift during B packing
+        // Refer: "classic/kernels/zen4/s8s8s32/lpgemm_packb_s8_amd512vnni.c"
+        jit_->vpsrad(RegType(scratchLoadRegIdx + i),
+                     RegType(scratchLoadRegIdx + i), 7);
+        jit_->vcvtdq2ps(RegType(scratchLoadRegIdx + i),
+                        RegType(scratchLoadRegIdx + i));
+        // Use separate multiply and add instead of FMA to match reference
+        // rounding behavior (two rounding points instead of one)
+        RegType tempReg = popAndGetScratchReg();
+        jit_->vmulps(tempReg, RegType(scratchLoadRegIdx + i), zpReg);
+        for (int j = 0; j < MR; j++) {
+            jit_->vaddps(RegType(cRegStartIdx + j * numRegsPerRow + i),
+                         RegType(cRegStartIdx + j * numRegsPerRow + i),
+                         tempReg);
+        }
+        scratch_reg_queue.push(tempReg);
+    }
+
+    scratch_reg_queue.push(zpReg);
+    restoreScratchQueue(saved_queue);
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// A-Dequantization: Zero-Point Correction (Per-Row)
+// ============================================================================
+// Formula: acc[row][col] = acc[row][col] + (b_col_sum[col] * a_post_quant_zp[row])
+// Compensates for zero-point bias with per-row granularity. Used for per-row
+// asymmetric quantization.
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantZeroPointRowMajorImpl()
+{
+    // Load B column sums pointer and calculate address for current column block
+    jit_->mov(regTmp2,
+              jit_->ptr[regkernelOpsAttr
+                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+    jit_->mov(regTmp3, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 + regTmp3 * sizeof(int32_t)]);
+
+    // Calculate address for zero-points: zero_point_base + (post_op_c_i *
+    // sizeof(T))
+    jit_->mov(regTmp4, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+    jit_->lea(regTmp4, jit_->ptr[regTmp4 * sizeof(T)]);
+    jit_->lea(regTmp3, jit_->ptr[regTmp1]);
+    jit_->add(regTmp3, regTmp4);
+
+    auto saved_queue = reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow);
+
+    // Load b_col_sum once (reused for each row with different zp)
+    for (int i = 0; i < numRegsPerRow; i++) {
+        jit_->vmovdqu32(RegType(scratchLoadRegIdx + i),
+                        jit_->ptr[regTmp2 + i * RegBytes]);
+        // Right shift by 7: compensates for left shift during B packing
+        // Refer: "classic/kernels/zen4/s8s8s32/lpgemm_packb_s8_amd512vnni.c"
+        jit_->vpsrad(RegType(scratchLoadRegIdx + i),
+                     RegType(scratchLoadRegIdx + i), 7);
+        jit_->vcvtdq2ps(RegType(scratchLoadRegIdx + i),
+                        RegType(scratchLoadRegIdx + i));
+    }
+
+    // For each row: broadcast its zero-point and apply correction
+    for (int j = 0; j < MR; j++) {
+        RegType zpReg = popAndGetScratchReg();
+        broadcastAndConvertScalar<T>(zpReg, jit_->ptr[regTmp3 + j * sizeof(T)]);
+
+        for (int i = 0; i < numRegsPerRow; i++) {
+            // Use separate multiply and add instead of FMA to match reference
+            // rounding behavior (two rounding points instead of one)
+            RegType tempReg = popAndGetScratchReg();
+            jit_->vmulps(tempReg, RegType(scratchLoadRegIdx + i), zpReg);
+            jit_->vaddps(RegType(cRegStartIdx + j * numRegsPerRow + i),
+                         RegType(cRegStartIdx + j * numRegsPerRow + i),
+                         tempReg);
+            scratch_reg_queue.push(tempReg);
+        }
+        scratch_reg_queue.push(zpReg);
+    }
+
+    restoreScratchQueue(saved_queue);
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// A-Dequantization: Zero-Point Correction (Per-Tensor) (GEMV N=1)
+// ============================================================================
+// Formula: acc[i] = acc[i] + (b_col_sum * a_post_quant_zp)
+// Used for GEMV N=1 with scalar zero-point.
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantZeroPointScalarImplGEMVN1()
+{
+    // Broadcast scalar zero-point (regTmp1 set by caller)
+    RegType zpReg = popAndGetScratchReg();
+    broadcastAndConvertScalar<T>(zpReg, jit_->ptr[regTmp1]);
+
+    // Load b_col_sum pointer and calculate address for current column block
+    jit_->mov(regTmp2,
+              jit_->ptr[regkernelOpsAttr
+                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+    RegType bColSumReg = popAndGetScratchReg();
+    // Broadcast b_col_sum
+    jit_->vpbroadcastd(bColSumReg, jit_->ptr[regTmp2]);
+    // Apply right shift by 7 to b_col_sum
+    jit_->vpsrad(bColSumReg, bColSumReg, 7);
+    // Convert integer to float after shift
+    jit_->vcvtdq2ps(bColSumReg, bColSumReg);
+    // Multiply b_col_sum by zero-point
+    jit_->vmulps(bColSumReg, bColSumReg, zpReg);
+    // Apply zero-point to all accumulator registers
+    for (int i = 0; i < numRegsPerRow; i++) {
+        jit_->vaddps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                     bColSumReg);
+    }
+    scratch_reg_queue.push(zpReg);
+    scratch_reg_queue.push(bColSumReg);
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// A-Dequantization: Zero-Point Correction (Per-Row) (GEMV N=1)
+// ============================================================================
+// Formula: acc[i] = acc[i] + (b_col_sum * a_post_quant_zp[i])
+// Used for GEMV N=1 with row-major zero-point.
+template<utils::kernelInstrType KType>
+template<typename T>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantZeroPointRowMajorImplGEMVN1()
+{
+    // Calculate address: b_col_sum_base + (post_op_c_i * sizeof(T))
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
+    jit_->add(regTmp1, regTmp2);
+
+    // Reserve destination registers to prevent corruption during BF16/S8/U8
+    // conversions
+    auto saved_queue = reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow);
+
+    loadAndConvertRows<T>(regTmp1, scratchLoadRegIdx);
+
+    // b_col_sum pointer load
+    jit_->mov(regTmp3,
+              jit_->ptr[regkernelOpsAttr
+                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+    RegType bColSumReg = popAndGetScratchReg();
+    // Broadcast b_col_sum
+    jit_->vpbroadcastd(bColSumReg, jit_->ptr[regTmp3]);
+    // Apply right shift by 7 to b_col_sum
+    jit_->vpsrad(bColSumReg, bColSumReg, 7);
+    // Convert integer to float after shift
+    jit_->vcvtdq2ps(bColSumReg, bColSumReg);
+
+    for (int i = 0; i < numRegsPerRow; i++) {
+        RegType tempReg = popAndGetScratchReg();
+        // Multiply b_col_sum by accumulator register
+        jit_->vmulps(tempReg, bColSumReg, RegType(scratchLoadRegIdx + i));
+        // Add b_col_sum to accumulator register
+        jit_->vaddps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
+                     tempReg);
+        scratch_reg_queue.push(tempReg);
+    }
+
+    scratch_reg_queue.push(bColSumReg);
+    restoreScratchQueue(saved_queue);
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// A-Dequantization Dispatch Functions
+// ============================================================================
+
+// Dispatcher: selects per-tensor or per-row scale factor implementation
+template<utils::kernelInstrType KType>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantScaleFactorImpl(kernelOpsMetaData& op)
+{
+    jit_->mov(
+        regTmp1,
+        jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
+
+    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+        if (op.scalarScaleFactorRequired) {
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
+                                 aDQuantScaleFactorScalarImplGEMVN1);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            jit_->mov(regTmp2,
+                      jit_->ptr[regkernelOpsAttr
+                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
+                                 aDQuantScaleFactorRowMajorImplGEMVN1);
+        } else {
+            return jitGeneratorError::notSupported;
+        }
+    } else {
+        if (op.scalarScaleFactorRequired) {
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
+                                 aDQuantScaleFactorScalarImpl);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
+                                 aDQuantScaleFactorRowMajorImpl);
+        } else {
+            return jitGeneratorError::notSupported;
+        }
+    }
+
+    return jitGeneratorError::success;
+}
+
+// Dispatcher: selects per-tensor or per-row zero-point implementation
+// Skipped for symmetric quantization (zero-point implicitly 0)
+template<utils::kernelInstrType KType>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantZeroPointImpl(kernelOpsMetaData& op)
+{
+    if (!op.scalarZeroPointRequired && !op.vectorZeroPointRequired) {
+        return jitGeneratorError::success; // Symmetric quantization
+    }
+
+    jit_->mov(regTmp1,
+              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+
+    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
+        // ============ GEMV n=1 path ============
+        if (op.scalarZeroPointRequired) {
+            DISPATCH_BY_DATATYPE(op.zeroPointDt,
+                                 aDQuantZeroPointScalarImplGEMVN1);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            jit_->mov(regTmp2,
+                      jit_->ptr[regkernelOpsAttr
+                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            DISPATCH_BY_DATATYPE(op.zeroPointDt,
+                                 aDQuantZeroPointRowMajorImplGEMVN1);
+        } else {
+            return jitGeneratorError::notSupported;
+        }
+    } else {
+        if (op.scalarZeroPointRequired) {
+            DISPATCH_BY_DATATYPE(op.zeroPointDt, aDQuantZeroPointScalarImpl);
+        } else if (op.cMatFormat == storageFormat::rowMajor) {
+            DISPATCH_BY_DATATYPE(op.zeroPointDt, aDQuantZeroPointRowMajorImpl);
+        } else {
+            return jitGeneratorError::notSupported;
+        }
+    }
+    return jitGeneratorError::success;
+}
+
+// A-dequantization: result = round((acc + b_col_sum * a_post_quant_zp) * a_post_quant_sf)
+// Order: (1) zero-point correction, (2) scale factor application with rounding
+template<utils::kernelInstrType KType>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::aDQuantize(kernelOpsMetaData& op)
+{
+    jitGeneratorError err_dequant_zp = aDQuantZeroPointImpl(op);
+    jitGeneratorError err_dequant_sf = aDQuantScaleFactorImpl(op);
+
+    if (err_dequant_zp != jitGeneratorError::success
+        || err_dequant_sf != jitGeneratorError::success) {
+        return jitGeneratorError::notSupported;
+    }
+    return jitGeneratorError::success;
+}
+
 } // namespace amdzen::x86gen

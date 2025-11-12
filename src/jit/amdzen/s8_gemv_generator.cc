@@ -1969,16 +1969,6 @@ jitGEMVS8M1<KType>::conversionCompensation(bool isFringe)
                    RegType(xBaseIdx));
         }
 
-        // Update b_sum_offset and store to memory
-        xor_(regTmp2, regTmp2);
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
-        add(regTmp2, NR);
-        mov(ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_sum_offset)],
-            regTmp2);
-
         return dlp::jit::jitGeneratorError::success;
     }
 
@@ -2030,16 +2020,6 @@ jitGEMVS8M1<KType>::conversionCompensation(bool isFringe)
         vpsubd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                RegType(xBaseIdx));
     }
-
-    // Update b_sum_offset and store to memory
-    xor_(regTmp2, regTmp2);
-    mov(regTmp2,
-        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
-    add(regTmp2, NR);
-    mov(ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, b_sum_offset)],
-        regTmp2);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -2772,6 +2752,15 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             RETURN_IF_ERROR(storeY(false, false));
         }
 
+        // Update b_sum_offset and store to memory
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+        add(regTmp2, NR);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, b_sum_offset)],
+            regTmp2);
+
         // Update pointers
         mov(regTmp2, NR);
         add(regIncN, regTmp2);
@@ -2920,6 +2909,15 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             // Store Result
             RETURN_IF_ERROR(storeY(true, false));
         }
+
+        // Update b_sum_offset and store to memory
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+        add(regTmp2, NR);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, b_sum_offset)],
+            regTmp2);
     }
 
     L(label_n_fringe_end);

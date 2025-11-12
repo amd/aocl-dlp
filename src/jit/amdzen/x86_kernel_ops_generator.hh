@@ -120,6 +120,8 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
         [[maybe_unused]] dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError sigmoid(
         [[maybe_unused]] dlp::kernel_frame::kernelOpsMetaData& op) override;
+    dlp::jit::jitGeneratorError aDQuantize(
+        dlp::kernel_frame::kernelOpsMetaData& op) override;
     dlp::jit::jitGeneratorError embedKernelOpsAttributes() override;
 
     void advancePostOpsPtr() override;
@@ -216,6 +218,12 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     template<typename T>
     dlp::jit::jitGeneratorError scaleFactorScalarImpl();
 
+    dlp::jit::jitGeneratorError aDQuantScaleFactorImpl(
+        dlp::kernel_frame::kernelOpsMetaData& op);
+
+    dlp::jit::jitGeneratorError aDQuantZeroPointImpl(
+        dlp::kernel_frame::kernelOpsMetaData& op);
+
     template<typename T>
     dlp::jit::jitGeneratorError scaleFactorRowMajorImpl();
 
@@ -234,6 +242,30 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     // GEMV n=1 specific implementations
     template<typename T>
     dlp::jit::jitGeneratorError scaleFactorScalarImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantScaleFactorScalarImpl();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantScaleFactorRowMajorImpl();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantScaleFactorScalarImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantScaleFactorRowMajorImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantZeroPointScalarImpl();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantZeroPointRowMajorImpl();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantZeroPointScalarImplGEMVN1();
+
+    template<typename T>
+    dlp::jit::jitGeneratorError aDQuantZeroPointRowMajorImplGEMVN1();
 
     template<typename T>
     dlp::jit::jitGeneratorError scaleFactorColMajorImplGEMVN1();

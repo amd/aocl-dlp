@@ -483,6 +483,9 @@ extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
             case OperationType::Scale:
                 op_names.push_back("Scale");
                 break;
+            case OperationType::A_Quant:
+                op_names.push_back("A_Quant");
+                break;
             default:
                 op_names.push_back("UnknownOp");
                 break;

@@ -29,6 +29,7 @@
 #include "classic/aocl_bf16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
 #include "classic/dlp_base_types.h"
+#include "framework/types.hh"
 
 namespace dlp::testing::classic::ref {
 void
@@ -251,4 +252,28 @@ aocl_gemm_s8s8s32ou8_ref(const char      order,
                          uint8_t*        C,
                          int             ldc,
                          dlp_metadata_t* post_ops);
+
+void
+aocl_gemm_bf16s8s32obf16_ref(const char            order,
+                             const char            transa,
+                             const char            transb,
+                             const md_t            m,
+                             const md_t            n,
+                             const md_t            k,
+                             int32_t               alpha,
+                             const bfloat16*       A,
+                             int                   lda,
+                             const int8_t*         B,
+                             int                   ldb,
+                             int32_t               beta,
+                             bfloat16*             C,
+                             int                   ldc,
+                             void*                 a_pre_quant_sf_data,
+                             void*                 a_pre_quant_zp_data,
+                             void*                 a_post_quant_sf_data,
+                             void*                 a_post_quant_zp_data,
+                             md_t                  sf_len,
+                             md_t                  zp_len,
+                             framework::MatrixType sf_type,
+                             framework::MatrixType zp_type);
 } // namespace dlp::testing::classic::ref
