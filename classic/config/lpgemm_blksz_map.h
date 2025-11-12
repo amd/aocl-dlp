@@ -50,9 +50,20 @@
     XMACRO(U8S4S32OS32, 144, 1024, 2048, 6, 64, 4, 24, 4 * 64, 64)             \
     XMACRO(BF16S4F32OF32, 144, 1024, 2048, 6, 64, 0, 0, 2 * 64, 64 / 2)        \
     XMACRO(F32OBF16, 144, 1024, 2048, 6, 64, 0, 0, 2 * 64, 64 / 2)
-
+/*
+ * NOTE: NC must be a multiple of BOTH 16 AND 64 for F32F32F32OF32:
+ *
+ * - For Zen machines, NR=16 kernels are used for reordering. NC must be a
+ * multiple of 16.
+ * - For Zen4/5 machines, NR=64 kernels are used for reordering. NC must be a
+ * multiple of 64.
+ *
+ * NC=8064 satisfies both constraints:
+ *   - 8064 = 504 × 16 (for Zen machines)
+ *   - 8064 = 126 × 64 (for Zen4 machines)
+ */
 #define LPGEMM_BLKSZ_UPD_MAP_ZEN4_TO_ZEN                                       \
-    XMACRO(F32F32F32OF32, 144, 8160, 512, 6, 64, 1, 6, 64, 1)
+    XMACRO(F32F32F32OF32, 144, 8064, 512, 6, 64, 1, 6, 64, 1)
 
 // The STMACRO follows the format MT, NT, KT which are SUP switch thresholds.
 // ID = One of the AOCL_OPERATION_TYPE enum.
