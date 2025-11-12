@@ -5,7 +5,7 @@ Library configuration and management functions for AOCL-DLP.
 
 .. doxygenfile:: aocl_lib_interface_apis.h
    :project: aocl-dlp
-   :preprocess:
+
 Threading Configuration
 -----------------------
 .. _fn-dlp-thread-set-num-threads:
@@ -24,5 +24,5 @@ Hardware Query
 .. rubric:: See Also
 
 * :doc:`../gemm/index` - GEMM operations
-* :doc:`../post_ops/index` - Post-operations framework
+* :doc:`../gemm/post_ops` - Post-operations framework
 * :doc:`../utils/index` - Utility functions

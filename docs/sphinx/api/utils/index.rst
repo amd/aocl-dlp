@@ -5,7 +5,7 @@ Standalone utility functions for common mathematical operations.
 
 .. doxygenfile:: aocl_util_interface_apis.h
    :project: aocl-dlp
-   :preprocess:
+
 Function Reference
 ------------------
 .. _fn-aocl-gemm-gelu-tanh-f32:
@@ -21,5 +21,5 @@ Function Reference
 .. rubric:: See Also
 
 * :doc:`../eltwise/index` - Element-wise operations
-* :doc:`../post_ops/index` - Post-operations framework
+* :doc:`../gemm/post_ops` - Post-operations framework
 * :doc:`../gemm/index` - GEMM operations

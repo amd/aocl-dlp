@@ -16,10 +16,10 @@ Complete API reference for AOCL-DLP (AMD Optimizing CPU Libraries - Deep Learnin
 
    api/overview
    api/gemm/index
-   api/post_ops/index
    api/eltwise/index
    api/utils/index
    api/library/index
+   api/types/index
 
 Quick API Lookup
 ----------------
@@ -148,7 +148,7 @@ See Also
 
 * :doc:`api/overview` - API design principles and usage patterns
 * :doc:`api/gemm/index` - GEMM operations documentation
-* :doc:`api/post_ops/index` - Post-operations framework
+* :doc:`api/gemm/post_ops` - Post-operations framework
 
 Indices and Tables
 ==================

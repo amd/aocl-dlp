@@ -5,7 +5,7 @@ Post-operations framework for fusing operations with GEMM computations.
 
 .. doxygenfile:: classic/aocl_gemm_post_ops.h
    :project: aocl-dlp
-   :preprocess:
+
 Data Structures
 ---------------
 .. _struct-dlp-metadata-t:
@@ -82,4 +82,3 @@ Full Header Reference
 
 .. doxygenfile:: aocl_gemm_post_ops.h
    :project: aocl-dlp
-   :preprocess:

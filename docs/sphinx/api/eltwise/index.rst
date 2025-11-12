@@ -5,7 +5,7 @@ Element-wise operations API for applying mathematical functions to matrix elemen
 
 .. doxygenfile:: aocl_eltwise_ops_interface_apis.h
    :project: aocl-dlp
-   :preprocess:
+
 Function Reference
 ------------------
 .. _fn-aocl-gemm-eltwise-ops-bf16of32:
@@ -31,6 +31,6 @@ Function Reference
    :project: aocl-dlp
 .. rubric:: See Also
 
-* :doc:`../post_ops/index` - Post-operations framework
+* :doc:`../gemm/post_ops` - Post-operations framework
 * :doc:`../utils/index` - Utility functions
 * :doc:`../gemm/index` - GEMM operations

@@ -230,7 +230,7 @@ See Also
 --------
 
 * :doc:`../gemm/index` - GEMM operations using these types
-* :doc:`../post_ops/index` - Post-operations metadata structures
+* :doc:`../gemm/post_ops` - Post-operations metadata structures
 * :doc:`../eltwise/index` - Element-wise type conversions
 
 Full Header Reference
@@ -238,4 +238,3 @@ Full Header Reference
 
 .. doxygenfile:: classic/aocl_gemm_post_ops.h
    :project: aocl-dlp
-   :preprocess:
