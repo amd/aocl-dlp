@@ -207,10 +207,45 @@ MicroTest::createOperationParam(
         // CLIP: Parse alpha (lower bound) and beta (upper bound) parameters
         double alpha_value = extractDoubleParam("alpha", config.params, -1.0);
         double beta_value  = extractDoubleParam("beta", config.params, 6.0);
-        MatrixType alpha_type = extractMatrixTypeParam(
-            "alpha_type", config.params, MatrixType::f32);
-        MatrixType beta_type =
-            extractMatrixTypeParam("beta_type", config.params, MatrixType::f32);
+
+        // Check if alpha_type and beta_type are explicitly provided
+        auto alpha_type_it = config.params.find("alpha_type");
+        auto beta_type_it  = config.params.find("beta_type");
+
+        bool has_alpha_type = (alpha_type_it != config.params.end()
+                               && !alpha_type_it->second.empty());
+        bool has_beta_type  = (beta_type_it != config.params.end()
+                              && !beta_type_it->second.empty());
+
+        MatrixType alpha_type;
+        MatrixType beta_type;
+
+        // Smart defaulting: if only one is specified, use it for both
+        if (has_alpha_type && !has_beta_type) {
+            // Only alpha specified, use it for both
+            alpha_type = extractMatrixTypeParam("alpha_type", config.params);
+            beta_type  = alpha_type;
+        } else if (!has_alpha_type && has_beta_type) {
+            // Only beta specified, use it for both
+            beta_type  = extractMatrixTypeParam("beta_type", config.params);
+            alpha_type = beta_type;
+        } else {
+            // Both specified OR neither specified - extract both
+            alpha_type = extractMatrixTypeParam("alpha_type", config.params);
+            beta_type  = extractMatrixTypeParam("beta_type", config.params);
+
+            // Warn only if both were explicitly specified and they differ
+            if (has_alpha_type && has_beta_type && alpha_type != beta_type) {
+                std::cerr << "Warning: Different datatypes for alpha \""
+                          << matrixTypeToString(alpha_type) << "\" and beta \""
+                          << matrixTypeToString(beta_type)
+                          << "\" are not supported by dlp, translating beta "
+                             "type to alpha type \""
+                          << matrixTypeToString(alpha_type) << "\"."
+                          << std::endl;
+                beta_type = alpha_type; // Use alpha_type when both differ
+            }
+        }
 
         // Create matrices with parsed values and types (static cast to correct
         // type)
@@ -333,6 +368,35 @@ MicroTest::createOperationParam(
     }
 
     throw std::runtime_error("Unknown PostOp type: " + config.type);
+}
+
+std::string
+MicroTest::matrixTypeToString(MatrixType type) const
+{
+    switch (type) {
+        case MatrixType::f32:
+            return "f32";
+        case MatrixType::bf16:
+            return "bf16";
+        case MatrixType::s8:
+            return "s8";
+        case MatrixType::u8:
+            return "u8";
+        case MatrixType::s16:
+            return "s16";
+        case MatrixType::u16:
+            return "u16";
+        case MatrixType::s32:
+            return "s32";
+        case MatrixType::u32:
+            return "u32";
+        case MatrixType::s4:
+            return "s4";
+        case MatrixType::u4:
+            return "u4";
+        default:
+            throw std::runtime_error("Unknown matrix type enum value");
+    }
 }
 
 MatrixType

@@ -235,14 +235,30 @@ DlpOperation::convertElementWiseOperations()
         m_postops->eltwise[i].algo.algo_type =
             getElementWiseAlgoType(param.getOperation());
 
+        // Set storage type for alpha and beta parameters.
+        // For CLIP: alpha (lower bound) and beta (upper bound) must have the
+        // same type. The parser layer ensures type consistency, so we can use
+        // either parameter's type. Default to f32 if no parameters are
+        // provided.
+        m_postops->eltwise[i].algo.stor_type = DLP_F32;
+
         // Set alpha and beta if provided
         if (param.hasAlpha()) {
             m_postops->eltwise[i].algo.alpha =
                 convertMatrixToPtr(*param.getAlpha());
+            m_postops->eltwise[i].algo.stor_type =
+                getStorageType(param.getAlpha()->getMatrixType());
         }
         if (param.hasBeta()) {
             m_postops->eltwise[i].algo.beta =
                 convertMatrixToPtr(*param.getBeta());
+            // If alpha wasn't present, use beta's type for stor_type
+            // For CLIP, parser guarantees both types match if both are
+            // specified
+            if (!param.hasAlpha()) {
+                m_postops->eltwise[i].algo.stor_type =
+                    getStorageType(param.getBeta()->getMatrixType());
+            }
         }
     }
 }

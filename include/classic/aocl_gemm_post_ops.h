@@ -131,6 +131,8 @@ typedef struct
     void* beta;  /**< Beta parameter for the algorithm (e.g., upper bound for
                     CLIP) */
     DLP_ELT_ALGO_TYPE algo_type; /**< Type of element-wise algorithm to apply */
+
+    DLP_TYPE stor_type; /**< Storage type of alpha and beta values */
 } dlp_eltwise_algo_t;
 
 /**

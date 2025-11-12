@@ -952,6 +952,13 @@ class MicroTest
     MatrixType stringToMatrixType(const std::string& str) const;
 
     /**
+     * @brief Convert MatrixType enum to string
+     * @param type MatrixType enum value
+     * @return String representation of matrix type
+     */
+    std::string matrixTypeToString(MatrixType type) const;
+
+    /**
      * @brief Helper function to extract double parameter from PostOp
      * configuration
      * @param param_name Name of the parameter to extract
@@ -970,12 +977,13 @@ class MicroTest
      * @param param_name Name of the parameter to extract
      * @param params Map of parameters from PostOp configuration
      * @param default_type Default type to use if parameter is not found
+     * (defaults to f32)
      * @return Extracted MatrixType or default_type
      */
     MatrixType extractMatrixTypeParam(
         const std::string&                                  param_name,
         const std::map<std::string, std::vector<std::any>>& params,
-        MatrixType                                          default_type) const;
+        MatrixType default_type = MatrixType::f32) const;
 
     /**
      * @brief Helper function to extract boolean parameter from PostOp

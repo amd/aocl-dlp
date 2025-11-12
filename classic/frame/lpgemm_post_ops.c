@@ -349,7 +349,8 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
         // Dispatcher code
         switch (*(metadata->seq_vector + i)) {
             case ELTWISE: {
-                LPGEMM_POST_OP_CODE tmp_code = POST_OPS_DISABLE;
+                LPGEMM_POST_OP_CODE tmp_code      = POST_OPS_DISABLE;
+                DLP_TYPE            tmp_stor_type = DLP_INVALID;
                 // Eltwise algo dispatcher.
                 switch ((metadata->eltwise + e_i)->algo.algo_type) {
                     case RELU:
@@ -361,6 +362,12 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                                           __FILE__, __LINE__);
                             return DLP_CLSC_NULL_POINTER;
                         }
+                        // NOTE: For PRELU, the alpha parameter can be of any
+                        // type and this will be stored in the stor_type for now
+                        // because the static kernel relies on the stor_type and
+                        // not the scale factor type.
+                        tmp_stor_type = get_stor_type(
+                            (metadata->eltwise + e_i)->algo.stor_type);
                         tmp_code = POST_OPS_RELU_SCALE;
                         break;
                     case GELU_TANH:
@@ -377,6 +384,9 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                                           __FILE__, __LINE__);
                             return DLP_CLSC_NULL_POINTER;
                         }
+                        // Alpha and Beta should have same storage type for CLIP
+                        tmp_stor_type = get_stor_type(
+                            (metadata->eltwise + e_i)->algo.stor_type);
                         tmp_code = POST_OPS_CLIP;
                         break;
                     case SWISH:
@@ -406,7 +416,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                     (metadata->eltwise + e_i)->sf
                         ? (metadata->eltwise + e_i)->sf->scale_factor_len
                         : 0,
-                    DLP_INVALID, DLP_INVALID, DLP_INVALID);
+                    tmp_stor_type, DLP_INVALID, DLP_INVALID);
                 e_i += 1;
             } break;
             case BIAS: {

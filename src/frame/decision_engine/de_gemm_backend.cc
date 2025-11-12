@@ -281,9 +281,9 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             metaData->type = kernel_frame::kernelOps::relu;
             break;
         case POST_OPS_RELU_SCALE:
-            metaData->type = kernel_frame::kernelOps::reluScale;
-            metaData->paramStorageDt =
-                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
+            metaData->type           = kernel_frame::kernelOps::reluScale;
+            metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->stor_type));
             break;
         case POST_OPS_GELU_TANH:
             metaData->type = kernel_frame::kernelOps::geluTanh;
@@ -292,9 +292,9 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             metaData->type = kernel_frame::kernelOps::geluErf;
             break;
         case POST_OPS_CLIP:
-            metaData->type = kernel_frame::kernelOps::clip;
-            metaData->paramStorageDt =
-                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
+            metaData->type           = kernel_frame::kernelOps::clip;
+            metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->stor_type));
             break;
         case POST_OPS_SWISH:
             metaData->type = kernel_frame::kernelOps::swish;

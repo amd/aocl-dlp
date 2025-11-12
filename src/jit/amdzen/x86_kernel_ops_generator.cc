@@ -849,11 +849,7 @@ kernelOpsGeneratorX86<KType>::reluScaleImpl()
               jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args2)]);
 
     // Broadcast the scale value.
-    if constexpr (std::is_same_v<T, float>) {
-        jit_->vbroadcastss(RegType(scaleReg), jit_->ptr[regTmp1]);
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+    broadcastAndConvertScalar<T>(scaleReg, jit_->ptr[regTmp1]);
 
     // Zero out the zeroreg.
     jit_->vxorps(RegType(zeroReg), RegType(zeroReg), RegType(zeroReg));
