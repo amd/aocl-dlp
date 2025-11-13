@@ -47,6 +47,7 @@ static const kernel_frame::kernelInfo INVALID_KERNEL_INFO{
     AOCL_MEMORY_TAG::UNPACKED,
     AOCL_MEMORY_TAG::UNPACKED,
     false,
+    false,
     nullptr,
     0,
     false,
@@ -231,8 +232,8 @@ class gemmF32DEBackend : public iDEBackend
 
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
-            betaScalingType, mtag_a, mtag_b, false, anyKOpsOrder, kInstPref,
-            c_downscale, k_dtype, rs_c, cs_c, metadata);
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 
     [[gnu::always_inline]]
@@ -311,10 +312,19 @@ class gemmF32DEBackend : public iDEBackend
             }
         }
 
+        bool invokeRD = false;
+
+        if (((n < 48) || (m < 16)) && (rs_b == 1) && (mtag_b == PACK)
+            && (mtag_a == UNPACKED)) {
+            invokeRD = true;
+            k_unroll = 4; // equal to intrinsics kernel. To be tuned later.
+        }
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
-            betaScalingType, mtag_a, mtag_b, allLtFringeKernels, anyKOpsOrder,
-            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+            betaScalingType, mtag_a, mtag_b, allLtFringeKernels, invokeRD,
+            anyKOpsOrder, kInstPref, c_downscale, k_dtype, rs_c, cs_c,
+            metadata);
     }
 };
 
@@ -413,8 +423,8 @@ class gemmBF16DEBackend : public iDEBackend
 
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
-            betaScalingType, mtag_a, mtag_b, false, anyKOpsOrder, kInstPref,
-            c_downscale, k_dtype, rs_c, cs_c, metadata);
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 
     [[gnu::always_inline]]
@@ -473,8 +483,8 @@ class gemmBF16DEBackend : public iDEBackend
 
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
-            betaScalingType, mtag_a, mtag_b, false, anyKOpsOrder, kInstPref,
-            c_downscale, k_dtype, rs_c, cs_c, metadata);
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 };
 

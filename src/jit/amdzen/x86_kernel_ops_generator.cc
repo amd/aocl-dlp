@@ -198,30 +198,24 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
                       + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)]);
 
         if (useMask) {
+            // Assuming that the mask registers are carried forward from the
+            // GEMM kernel If the mask allocation changes in the caller
+            // function(GEMM, GEMV, ELTWISE), we need to change the logic
+            // here. we only set the indices of registers accordingly.
+            // No need to load the mask values again here.
+
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-                // Assuming that the mask registers are carried forward from the
-                // GEMM kernel If the mask allocation changes in the caller
-                // function(GEMM, GEMV, ELTWISE), we need to change the logic
-                // here.
                 for (int i = 0; i < numMaskRegs; i++) {
                     fringeMask[i] = Opmask(i + 1);
                 }
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
-                fringeMask[0] = Opmask(1);
-                jit_->kmovb(
-                    fringeMask[0],
-                    jit_->ptr[postOpsArgWrapperPtrReg
-                              + offsetof(dlp::kernels::gemmParams, maskF32_8)]);
+                for (int i = 0; i < numMaskRegs; i++) {
+                    fringeMask[i] = Opmask(i + 1);
+                }
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx2_ymm_16_reg) {
-                jit_->lea(
-                    regTmp1,
-                    jit_->ptr[postOpsArgWrapperPtrReg
-                              + offsetof(dlp::kernels::gemmParams, maskArray)]);
-                jit_->vmovdqu(
-                    ymmMask,
-                    jit_->ptr[regTmp1]); // Load all 8 floats (32 bytes)
+                // ymmMask index is already set in setPostOpsContext()
             } else {
                 // Currently returning not supported, will have to add
                 // the required mask parameter for each configuration as
@@ -283,6 +277,12 @@ kernelOpsGeneratorX86<KType>::setPostOpsContext(int  MR_param,
         scratch_reg_queue.push(RegType(i));
     }
 
+    // if any leftover registers are present after the accumulators,
+    // push them to the queue.
+    for (int i = cRegStartIdx + cRegCount; i < numRegs; i++) {
+        scratch_reg_queue.push(RegType(i));
+    }
+
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
         int totalRegsNeeded = cRegCount + numRegsPerRow + (useMask ? 1 : 0);
         if (totalRegsNeeded > Traits::numRegs) {
@@ -290,6 +290,10 @@ kernelOpsGeneratorX86<KType>::setPostOpsContext(int  MR_param,
         }
 
         if (useMask) {
+            // Making sure that ymm0 is unused as it contains the mask array for
+            // n dimension. since this is hardcoded in f32_gemm_generator.cc and
+            // f32_gemm_rd_generator.cc, we need to pop it from the scratch
+            // register queue.
             ymmMask = popAndGetScratchReg();
         }
         scratchBcstRegIdx = useMask ? 1 : 0;
@@ -2111,7 +2115,9 @@ void
 kernelOpsGeneratorX86<KType>::apply_post_ops_in_high_reg_pressure(
     const md_t num_post_op_regs, std::function<void(md_t)> op_fn)
 {
-    md_t num_push_regs = num_post_op_regs - cRegStartIdx;
+    // In case of avx2, one register is being used for mask. So, we need to add
+    // scratchBcstRegIdx to determine the number of registers to push to stack.
+    md_t num_push_regs = scratchBcstRegIdx + num_post_op_regs - cRegStartIdx;
 
     // If number of registers required to compute pots op is more than
     // registers available, then push some accum registers to stack

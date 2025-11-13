@@ -39,10 +39,9 @@
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
-        const md_t cs_c, const C_type alpha, const C_type beta,                \
-        lpgemm_cntx_t* lcntx, lpgemm_post_op* post_op_list,                    \
-        DLP_TYPE c_downscale)
+        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
+        const C_type alpha, const C_type beta, lpgemm_cntx_t* lcntx,           \
+        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)
 
 LPGEMM_TINY(float, float, float, f32f32f32of32);
 LPGEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32);

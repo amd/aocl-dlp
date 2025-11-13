@@ -407,6 +407,10 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
                         ? lcntx->dlp_kernel_hndl.mr
                         : lcntx->blksz.MR;
 
+    bool invokeRD = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
+                        ? lcntx->dlp_kernel_hndl.invokeRD
+                        : false;
+
     // Strides are updated based on matrix packing/reordering.
     const float* a_use    = NULL;
     md_t         rs_a_use = rs_a;
@@ -482,17 +486,7 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
     // Update the kernel pointer with right kernel
     lpgemm_rowvar_f32 ker_ptr = (lpgemm_rowvar_f32)lcntx->kern_fun_ptr;
 
-    // Avoid packing of B in transb cases where rd kernels performs
-    // better than rv + pack. rv kernel calls rd when rs_b==1.
-    // NOTE: Disabling RD kernels if JIT kernels are not generated
-    // and post-ops are enabled for the transB case, as it would
-    // give accuracy issues while multiple datatype support is enabled.
-    bool invoke_rd = FALSE;
-    if ((lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3) && ((n < 48) || (m < 16))
-        && (rs_b == 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)
-        && (lcntx->dlp_kernel_hndl.kernel_base == NULL)
-        && (post_op_list[0].op_code == POST_OPS_DISABLE)) {
-        invoke_rd     = TRUE;
+    if (invokeRD) {
         mtag_b        = UNPACKED;
         should_pack_A = FALSE;
     }
@@ -602,10 +596,7 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
                 b_use = pack_b_buffer_f32f32f32of32;
             } else {
                 b_use    = b + (pc * rs_b) + (jc * cs_b);
-                ps_b_use = 1;
-                if (invoke_rd == TRUE) {
-                    ps_b_use = cs_b_use;
-                }
+                ps_b_use = cs_b_use;
             }
 
             for (md_t ic = ic_start; ic < ic_end; ic += MC) {
@@ -655,10 +646,7 @@ LPGEMM_5LOOP(float, float, float, f32f32f32of32)
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
                     // Call the micro-kernel
-                    // TODO: Remove this once the generation of rd kernels
-                    // is supported in JIT.
-                    if ((lcntx->dlp_kernel_hndl.kernel_base != NULL)
-                        && (!invoke_rd)) {
+                    if ((lcntx->dlp_kernel_hndl.kernel_base != NULL)) {
                         dlp_execute_kernel(
                             lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
                             (float*)a_use, rs_a_use, cs_a_use, ps_a_use,

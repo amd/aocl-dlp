@@ -32,6 +32,7 @@
 #include "bf16_gemv.hh"
 #include "cpu_utils/cpu_features.hh"
 #include "f32_gemm_generator.hh"
+#include "f32_gemm_rd_generator.hh"
 #include "f32_gemv.hh"
 #include "jit_register/jit_register.hh"
 #include "traits.hh"
@@ -43,7 +44,8 @@ jitAmdZenFP32::jitAmdZenFP32()
     : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f32f32f32of32 })
     , mIsaFeaturesRequired{}
     , kType(utils::kernelInstrType::none)
-    , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
+    , numElemsPerReg(1)     // Initializing with 1 to avoid div by zero
+    , usingRDKernels(false) // Initialize to false
 {
 }
 
@@ -499,6 +501,12 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             }
         }
     } else {
+
+        // If the invokeRD flag is set, then we generate the RD kernels.
+        if (jI.kI.invokeRD) {
+            return generateAllKernelsRD(jI);
+        }
+
         err = deriveGEMMNumNRVariants(jI);
         if (err != dlp::jit::jitGeneratorError::success) {
             goto cleanup;
@@ -597,6 +605,142 @@ cleanup:
     return err;
 }
 
+dlp::jit::jitGeneratorError
+jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::jitGeneratorContext& jI)
+{
+    dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
+
+    MR = (jI.kI).mr;
+
+    // In Rd kernels, for Avx2 path, we generate kernels upto MR 3 instead of 6.
+    // so we need to set MR to 3 if the kernelInstrPreference is
+    // avx2_ymm_16_reg.
+    if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
+        MR = 3;
+    }
+
+    NR          = (jI.kI).nr;
+    KC          = (jI.kI).kc;
+    K_UNROLL    = (jI.kI).k_unroll;
+    c_downscale = (jI.kI).c_downscale;
+
+    usingRDKernels = true;
+
+    // Hardcoding the FP32 kernel datatype for now
+    const dlp::kernel_frame::kernelDatatype kdt =
+        dlp::kernel_frame::kernelDatatype::f32f32f32of32;
+
+    // Convert kernelInstrPreference to kernelType
+    setGeneratorKernelMetaInfo(jI.kI.kInstPref);
+
+    int processBlockSize = getProcessBlockSize();
+
+    numMRVariants = MR;
+    numNRVariants =
+        (processBlockSize / numElemsPerReg); // from NR to numElemsPerReg
+    md_t dummy = numElemsPerReg / 2;         // from numElemsPerReg/2 to 1
+    while (dummy > 0) {
+        numNRVariants++;
+        dummy /= 2;
+    }
+
+    numKernelVariants = numMRVariants * numNRVariants;
+    kernelCodeBlocks.resize(numKernelVariants);
+
+    // Initializing with default values.
+    utils::generatorParams params(0, 0, (jI.kI).k_unroll, 0, c_downscale, 0,
+                                  false, false, (jI.kI).alphaScalingType,
+                                  (jI.kI).betaScalingType, kType);
+
+    for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+        // Copy the kernelOps from the kernelInfo to params
+        params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+    }
+
+    int nElemsPerRegLog2 = amdzen::utils::int_log2(numElemsPerReg);
+
+    // Generate all kernels for the given MR and NR
+    for (int mr = 0; mr < numMRVariants; mr++) {
+        for (int nr = 0; nr < numNRVariants; nr++) {
+            params.MR    = mr == 0 ? MR : mr;
+            params.mLoop = mr == 0;
+
+            params.NR = nr <= nElemsPerRegLog2
+                            ? (1 << nr)
+                            : (nr - nElemsPerRegLog2 + 1) * numElemsPerReg;
+
+            // always set and use mask as the same mask will be needed in
+            // post-ops as we are processing only 4 elements(XMM) at a time.
+            params.useMask     = true;
+            params.numMaskRegs = params.useMask ? 1 : 0;
+
+            void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
+            // Allocate executable memory
+            codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                utils::JIT_KERNEL_SIZE);
+            if (codeBuffer == nullptr) {
+                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                goto cleanup;
+            }
+            kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
+
+            // Architecture specific dispatch happens here.
+            switch (kType) {
+                case utils::kernelInstrType::avx512_zmm_32_reg: {
+                    // Generate the kernel for AVX512 ZMM 32 register
+                    GEMMcodeGenerator::jitGEMMF32RD<
+                        utils::kernelInstrType::avx512_zmm_32_reg>
+                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                    err = base.generateKernel(params);
+                    break;
+                }
+                case utils::kernelInstrType::avx512_ymm_32_reg: {
+                    // Generate the kernel for AVX512 YMM 32 register
+                    GEMMcodeGenerator::jitGEMMF32RD<
+                        utils::kernelInstrType::avx512_ymm_32_reg>
+                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                    err = base.generateKernel(params);
+                    break;
+                }
+                case utils::kernelInstrType::avx2_ymm_16_reg: {
+                    // Generate the kernel for AVX2 YMM 16 register
+                    GEMMcodeGenerator::jitGEMMF32RD<
+                        utils::kernelInstrType::avx2_ymm_16_reg>
+                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                    err = base.generateKernel(params);
+                    break;
+                }
+                default:
+                    err = dlp::jit::jitGeneratorError::error;
+                    break;
+            }
+
+            if (err != dlp::jit::jitGeneratorError::success) {
+                goto cleanup;
+            }
+
+#ifdef DLP_JIT_DEBUG
+            // params.useMask=false implies a fringe or main kernel.
+            // params.useMask=true implies a lt fringe or lt main kernel.
+            utils::jitHelperUtils::dump_jit_code(
+                kernelCodeBlocks[mr * numNRVariants + nr],
+                utils::JIT_KERNEL_SIZE, "jit_kernel_rd", params.MR, params.NR,
+                false, mr * numNRVariants + nr);
+#endif
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+
+cleanup:
+    // Free the memory allocated for the kernel code blocks if
+    // allocation fails or if the kernel generation fails
+    for (auto& codeBlock : kernelCodeBlocks) {
+        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
+                                                   utils::JIT_KERNEL_SIZE);
+    }
+    return err;
+}
 void
 jitAmdZenFP32::setMaskForGEMMLtFringe(dlp::kernels::gemmParams* params,
                                       int                       nRemainder)
@@ -729,6 +873,10 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         kernel(params);
 
     } else {
+
+        if (usingRDKernels) {
+            return executeKernelRD(_params);
+        }
         // Note: It is expected the generateAllKernels is called before
         // calling this function.
         auto params = static_cast<dlp::kernels::gemmParams*>(_params);
@@ -848,6 +996,87 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         }
     }
 
+    return dlp::kernels::kernelError::success;
+}
+
+dlp::kernels::kernelError
+jitAmdZenFP32::executeKernelRD(dlp::kernels::kernelParams* _params)
+{
+    auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+
+    int processBlockSize = getProcessBlockSize();
+
+    int mFullPieces    = params->m / MR;
+    int mPartialPieces = params->m % MR;
+
+    params->kIterBP = params->k / (K_UNROLL * numElemsPerReg);
+    params->kLeft   = params->k % (K_UNROLL * numElemsPerReg);
+
+    // In RD kernels, mask is set for k-dimension.
+    setMaskForGEMMLtFringe(params, (params->kLeft % numElemsPerReg));
+
+    float* aPtr = static_cast<float*>(params->a);
+    float* bPtr = static_cast<float*>(params->b);
+    float* cPtr = static_cast<float*>(params->c);
+
+    float* c_jr = cPtr;
+    float* c_ir = cPtr;
+
+    md_t n = params->n;
+    md_t m = params->m;
+    md_t k = params->k;
+
+    md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+    md_t og_post_op_c_j = (params->kernelOpsAttr).post_op_c_j;
+
+    int kernel_n_idx = 0, kernel_m_idx = 0;
+    int elementsToProcess = 0;
+
+    // MR and psA are passed as 6 and 6*rs_a respectively from the framework.
+    // since we are using MR as 3 for Avx2 path, we recalculate and update psA
+    // here. Since mtag_a will always be unpacked, it is safe to overwrite psA
+    // to MR * rs_a here.
+    params->psA = MR * (params->rsA);
+
+    int nElemsPerRegLog2 = amdzen::utils::int_log2(numElemsPerReg);
+    int power            = nElemsPerRegLog2;
+
+    while (n > 0) {
+        int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+        int nFullpieces = nBlockSize / numElemsPerReg;
+        int nRemainder  = nBlockSize % numElemsPerReg;
+
+        // process multiples of numElemsPerReg
+        if (nFullpieces >= 1) {
+            kernel_n_idx      = nElemsPerRegLog2 + nFullpieces - 1;
+            elementsToProcess = nFullpieces * numElemsPerReg;
+            executeGEMMMLoop(params, mFullPieces, mPartialPieces, kernel_n_idx,
+                             elementsToProcess, n, &c_jr, og_post_op_c_i, aPtr);
+
+            // post_op_c_j attribute is updated inside assembly code. so reset
+            // it to the original value and increment properly.
+            og_post_op_c_j += elementsToProcess;
+            (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
+        }
+        // process remainder by dividing into powers of 2
+        // For example, if nRemainder is 15, then we will process 8, 4, 2, 1.
+        if (nRemainder > 0) {
+            int n_chunk = (1 << power); // 2^power
+            if (n >= n_chunk) {
+                kernel_n_idx      = power;
+                elementsToProcess = n_chunk;
+                executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                 kernel_n_idx, elementsToProcess, n, &c_jr,
+                                 og_post_op_c_i, aPtr);
+
+                // post_op_c_j attribute is updated inside assembly code. so
+                // reset it to the original value and increment properly.
+                og_post_op_c_j += elementsToProcess;
+                (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
+            }
+            power--;
+        }
+    }
     return dlp::kernels::kernelError::success;
 }
 

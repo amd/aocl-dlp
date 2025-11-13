@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <stack>
 #include <string>
 
@@ -562,6 +563,14 @@ struct gemvM1GeneratorParams
     // Destructor
     ~gemvM1GeneratorParams() = default;
 };
+
+inline int
+int_log2(int value)
+{
+    // For GCC/Clang
+    return 31 - __builtin_clz(value);
+    // This is much faster as it compiles to a single instruction (bsr/lzcnt)
+}
 
 template<typename REG_TYPE>
 class registerGuard

@@ -267,6 +267,7 @@ struct kernelInfo
     AOCL_MEMORY_TAG mtag_a;
     AOCL_MEMORY_TAG mtag_b;
     bool            genLtKrnlForAvailFullKrnl;
+    bool            invokeRD;
 
     // Not using std::vector for kOpsArr due to slight overhead compared
     // to raw pointers.
@@ -308,6 +309,7 @@ struct kernelInfo
                AOCL_MEMORY_TAG                    mtag_a,
                AOCL_MEMORY_TAG                    mtag_b,
                bool                               _genLtKrnlForAvailFullKrnl,
+               bool                               _invokeRD,
                std::unique_ptr<kernelOpsMetaData> kOpsArr,
                std::size_t                        kOpsArrSize,
                bool                               anyKOpsOrder,
@@ -324,6 +326,7 @@ struct kernelInfo
         , mtag_a(mtag_a)
         , mtag_b(mtag_b)
         , genLtKrnlForAvailFullKrnl(_genLtKrnlForAvailFullKrnl)
+        , invokeRD(_invokeRD)
         , kOpsArr(((kOpsArr != nullptr) && (kOpsArrSize > 0))
                       ? kOpsArr.release()
                       : nullptr)
@@ -347,6 +350,7 @@ struct kernelInfo
         , mtag_a(other.mtag_a)
         , mtag_b(other.mtag_b)
         , genLtKrnlForAvailFullKrnl(other.genLtKrnlForAvailFullKrnl)
+        , invokeRD(other.invokeRD)
         , kOpsArr(nullptr)
         , kOpsArrSize(((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0))
                           ? other.kOpsArrSize
@@ -377,6 +381,7 @@ struct kernelInfo
         , mtag_a(other->mtag_a)
         , mtag_b(other->mtag_b)
         , genLtKrnlForAvailFullKrnl(other->genLtKrnlForAvailFullKrnl)
+        , invokeRD(other->invokeRD)
         , kOpsArr(((other->kOpsArr != nullptr) && (other->kOpsArrSize > 0))
                       ? other->kOpsArr
                       : nullptr)
@@ -405,6 +410,7 @@ struct kernelInfo
         , mtag_a(other.mtag_a)
         , mtag_b(other.mtag_b)
         , genLtKrnlForAvailFullKrnl(other.genLtKrnlForAvailFullKrnl)
+        , invokeRD(other.invokeRD)
         , kOpsArr(((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0))
                       ? other.kOpsArr
                       : nullptr)
@@ -435,6 +441,7 @@ struct kernelInfo
             this->mtag_a                    = other.mtag_a;
             this->mtag_b                    = other.mtag_b;
             this->genLtKrnlForAvailFullKrnl = other.genLtKrnlForAvailFullKrnl;
+            this->invokeRD                  = other.invokeRD;
             if (this->kOpsArr != nullptr) {
                 delete[] this->kOpsArr;
                 this->kOpsArr = nullptr;
@@ -468,6 +475,7 @@ struct kernelInfo
             this->mtag_a                    = other.mtag_a;
             this->mtag_b                    = other.mtag_b;
             this->genLtKrnlForAvailFullKrnl = other.genLtKrnlForAvailFullKrnl;
+            this->invokeRD                  = other.invokeRD;
             if (this->kOpsArr != nullptr) {
                 delete[] this->kOpsArr;
                 this->kOpsArr = nullptr;
@@ -512,6 +520,7 @@ struct kernelInfo
                 && (this->mtag_a == rhs.mtag_a) && (this->mtag_b == rhs.mtag_b)
                 && (this->genLtKrnlForAvailFullKrnl
                     == rhs.genLtKrnlForAvailFullKrnl)
+                && (this->invokeRD == rhs.invokeRD)
                 && (this->kOpsArrSize == rhs.kOpsArrSize) && isKOpsArrEqual
                 && (this->anyKOpsOrder == rhs.anyKOpsOrder)
                 && (this->kInstPref == rhs.kInstPref)

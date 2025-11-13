@@ -321,6 +321,14 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
                   ? lcntx->dlp_kernel_hndl.mr
                   : lcntx->blksz.MR;
 
+    bool invokeRD = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
+                        ? lcntx->dlp_kernel_hndl.invokeRD
+                        : false;
+
+    if (invokeRD) {
+        mtag_b = UNPACKED;
+    }
+
     // Strides are updated based on matrix packing/reordering.
     const float* a_use    = NULL;
     md_t         rs_a_use = rs_a;
@@ -387,7 +395,7 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
         b_use = pack_b_buffer_f32f32f32of32;
     } else {
         b_use    = b;
-        ps_b_use = 1;
+        ps_b_use = cs_b_use;
     }
 
     if (mtag_a == REORDERED) {

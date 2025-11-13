@@ -114,6 +114,7 @@ typedef struct
     md_t              mr;
     md_t              nr;
     kernel_datatype_t kDtype;
+    bool              invokeRD;
 } dlp_kernel_hndl_t;
 
 // C linkage for function declarations only

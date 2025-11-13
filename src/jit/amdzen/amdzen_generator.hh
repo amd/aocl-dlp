@@ -54,6 +54,8 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     int  termNRFringeRegCount;
     bool isGenLtKrnlForAvailFullKrnl;
 
+    bool usingRDKernels; // Flag to track if RD kernels were generated
+
     md_t               numKernelVariants;
     md_t               K_UNROLL, PREFETCH_C_DIST;
     md_t               c_downscale;
@@ -90,6 +92,8 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
         params->c = (*c_jr);
         params->n = elementsToProcess;
 
+        md_t og_post_op_c_j = (params->kernelOpsAttr).post_op_c_j;
+
         if (params->m >= MR) {
             params->mIter            = mFullPieces;
             int               m_idx  = 0;
@@ -99,6 +103,10 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
             DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
             kernel(params);
         }
+
+        // Rd kernels overwrite the post_op_c_j value. So, we need to restore
+        // it.
+        (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
 
         if (mPartialPieces) {
             (params->a) = (float*)(params->a) + mFullPieces * params->psA;
@@ -111,7 +119,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
             kernel(params);
         }
 
-        params->b = (float*)(params->b) + elementsToProcess;
+        params->b = (float*)(params->b) + (elementsToProcess * params->csB);
         (*c_jr)   = (float*)(*c_jr) + (elementsToProcess * params->csC);
         n -= elementsToProcess;
         (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
@@ -127,6 +135,9 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     }
 
     dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+    dlp::jit::jitGeneratorError generateAllKernelsRD(
         const dlp::jit::jitGeneratorContext& jI);
 
   public:
@@ -156,6 +167,9 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
 
     dlp::kernels::kernelError executeKernel(
         dlp::kernels::kernelParams* _params) override;
+
+    dlp::kernels::kernelError executeKernelRD(
+        dlp::kernels::kernelParams* _params);
 
     std::unique_ptr<jitGeneratorBase> clone() override
     {

@@ -167,6 +167,7 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
     kernel_hndl->mr          = fastKI.mr;
     kernel_hndl->nr          = fastKI.nr;
     kernel_hndl->kDtype      = k_dtype;
+    kernel_hndl->invokeRD    = fastKI.invokeRD;
 }
 
 void
