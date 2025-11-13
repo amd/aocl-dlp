@@ -318,10 +318,14 @@ MicroTest::createOperationParam(
         auto rows = getM(); // Use current test case M dimension
         auto cols = getN(); // Use current test case N dimension
 
-        // Create test matrix with C dimensions
+        // Extract matrix_type parameters (default to f32)
+        MatrixType matrix_type = extractMatrixTypeParam(
+            "matrix_type", config.params, MatrixType::f32);
+
+        // Create test matrix with C dimensions and specified type
         std::vector<std::vector<float>> matrix_data(
             rows, std::vector<float>(cols, 0.5f));
-        auto matrix = Matrix::fromData(matrix_data);
+        auto matrix = Matrix::fromData(matrix_data, matrix_type);
 
         // Parse scale_factor parameter
         double scale_value =
@@ -344,11 +348,15 @@ MicroTest::createOperationParam(
         auto rows = getM(); // Use current test case M dimension
         auto cols = getN(); // Use current test case N dimension
 
+        // Extract matrix-type parameters (default to f32)
+        MatrixType matrix_type = extractMatrixTypeParam(
+            "matrix_type", config.params, MatrixType::f32);
+
         // Create test matrix with C dimensions (identity-like for
         // multiplication)
         std::vector<std::vector<float>> matrix_data(
             rows, std::vector<float>(cols, 1.0f));
-        auto matrix = Matrix::fromData(matrix_data);
+        auto matrix = Matrix::fromData(matrix_data, matrix_type);
 
         // Parse scale_factor parameter
         double scale_value =
