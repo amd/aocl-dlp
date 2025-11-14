@@ -207,6 +207,16 @@ kernelOpsGeneratorX86<KType>::generateKernelOps(
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 for (int i = 0; i < numMaskRegs; i++) {
                     fringeMask[i] = Opmask(i + 1);
+                    // TODO: Initialize the mask registers once and reuse them
+                    // across post-ops. However this assumes that only 4 mask
+                    // registers are required. If any more masks are required,
+                    // proper mechanism to save and restore already initialized
+                    // masks will need to be implemented.
+                    jit_->kmovw(fringeMask[i],
+                                jit_->ptr[postOpsArgWrapperPtrReg
+                                          + offsetof(dlp::kernels::gemmParams,
+                                                     maskF32[0])
+                                          + (i * sizeof(uint16_t))]);
                 }
             } else if constexpr (KType
                                  == utils::kernelInstrType::avx512_ymm_32_reg) {
@@ -406,9 +416,17 @@ kernelOpsGeneratorX86<KType>::loadAndConvertRows(Xbyak::Reg64 addressReg,
 
     // Load masked register if needed
     if (useMask) {
-        loadAndConvertVector<T>(
-            RegType(regStartIdx + numFullRegsPerRow),
-            jit_->ptr[addressReg + numFullRegsPerRow * loadBytes], true);
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            for (int i = numFullRegsPerRow; i < numRegsPerRow; i++) {
+                loadAndConvertVector<T>(RegType(regStartIdx + i),
+                                        jit_->ptr[addressReg + i * loadBytes],
+                                        true, i - numFullRegsPerRow);
+            }
+        } else {
+            loadAndConvertVector<T>(
+                RegType(regStartIdx + numFullRegsPerRow),
+                jit_->ptr[addressReg + numFullRegsPerRow * loadBytes], true);
+        }
     }
 }
 
@@ -465,7 +483,8 @@ template<typename T>
 void
 kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
                                                    Xbyak::Address src,
-                                                   bool           useMaskOp)
+                                                   bool           useMaskOp,
+                                                   int            fringeMaskId)
 {
     if constexpr (std::is_same_v<T, float>) {
         // Float: Direct load, no conversion needed
@@ -473,7 +492,8 @@ kernelOpsGeneratorX86<KType>::loadAndConvertVector(RegType        destReg,
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 jit_->vmaskmovps(destReg, ymmMask, src);
             } else {
-                jit_->vmovups(destReg | fringeMask[0] | jit_->T_z, src);
+                jit_->vmovups(destReg | fringeMask[fringeMaskId] | jit_->T_z,
+                              src);
             }
         } else {
             jit_->vmovups(destReg, src);
@@ -1631,18 +1651,19 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
     int matLoadBytes = getLoadBytes<matOpDt>();
 
     auto opLambdaRowMat = [&](int sfRegIdx, int matRegIdx, int accumRegIdx,
-                              int sclIdx, int loadIdx,
-                              bool useMask) -> jitGeneratorError {
+                              int sclIdx, int loadIdx, bool useMask,
+                              int fringeMaskId = 0) -> jitGeneratorError {
         // load matOp elements - supports all datatypes via loadAndConvertVector
         loadAndConvertVector<matOpDt>(RegType(matRegIdx),
-                                      jit_->ptr[regTmp2 + loadIdx], useMask);
+                                      jit_->ptr[regTmp2 + loadIdx], useMask,
+                                      fringeMaskId);
 
         // multiply scale factor with matOp
         jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
                      RegType(sfRegIdx + sclIdx));
         if (opType == matOpType::matOpAdd) {
             if (useMask) {
-                jit_->vaddps(RegType(accumRegIdx) | fringeMask[0],
+                jit_->vaddps(RegType(accumRegIdx) | fringeMask[fringeMaskId],
                              RegType(accumRegIdx), RegType(matRegIdx));
             } else {
                 jit_->vaddps(RegType(accumRegIdx), RegType(accumRegIdx),
@@ -1650,7 +1671,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
             }
         } else if (opType == matOpType::matOpMul) {
             if (useMask) {
-                jit_->vmulps(RegType(accumRegIdx) | fringeMask[0],
+                jit_->vmulps(RegType(accumRegIdx) | fringeMask[fringeMaskId],
                              RegType(accumRegIdx), RegType(matRegIdx));
             } else {
                 jit_->vmulps(RegType(accumRegIdx), RegType(accumRegIdx),
@@ -1679,16 +1700,33 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
             }
         }
         if (numMaskRegsPerRow > 0) {
-            if (sclType == matOpScaleType::rowVector) {
-                sclIdx = numFullRegsPerRow;
-            }
-            jitGeneratorError err = opLambdaRowMat(
-                sf_reg, matRegIdx,
-                (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow),
-                sclIdx, (numFullRegsPerRow * matLoadBytes), true);
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                for (int mIdx = numFullRegsPerRow; mIdx < numRegsPerRow;
+                     mIdx++) {
+                    if (sclType == matOpScaleType::rowVector) {
+                        sclIdx = mIdx;
+                    }
+                    jitGeneratorError err = opLambdaRowMat(
+                        sf_reg, matRegIdx,
+                        (cRegStartIdx + (i * numRegsPerRow) + mIdx), sclIdx,
+                        (mIdx * matLoadBytes), true, mIdx - numFullRegsPerRow);
 
-            if (err != jitGeneratorError::success) {
-                return err;
+                    if (err != jitGeneratorError::success) {
+                        return err;
+                    }
+                }
+            } else {
+                if (sclType == matOpScaleType::rowVector) {
+                    sclIdx = numFullRegsPerRow;
+                }
+                jitGeneratorError err = opLambdaRowMat(
+                    sf_reg, matRegIdx,
+                    (cRegStartIdx + (i * numRegsPerRow) + numFullRegsPerRow),
+                    sclIdx, (numFullRegsPerRow * matLoadBytes), true);
+
+                if (err != jitGeneratorError::success) {
+                    return err;
+                }
             }
         }
         // add ldm to matadd pointer

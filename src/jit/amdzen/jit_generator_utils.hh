@@ -30,7 +30,6 @@
 
 #include <cmath>
 #include <stack>
-#include <string>
 
 #if DLP_OS_WINDOWS
 #include <windows.h>
@@ -55,39 +54,6 @@ namespace amdzen::utils {
 class jitHelperUtils
 {
   public:
-    // Function to dump JIT code to a file for debugging purposes. This
-    // function will create a file with the name <code_name>_<m>x<n>.bin".
-    // The code will be dumped in binary format.
-    static void dump_jit_code(const void* code,
-                              int         code_size,
-                              const char* code_name,
-                              int         m,
-                              int         n,
-                              bool        isLtKernel,
-                              int         index)
-    {
-        if (code) {
-            static int counter = 0;
-#define MAX_FNAME_LEN 256
-            std::string ltSfx{ "" };
-            if (isLtKernel) {
-                ltSfx = "_lt";
-            }
-            char fname[MAX_FNAME_LEN + 1];
-            // TODO (Roma): support prefix for code / linux perf dumps
-            snprintf(fname, MAX_FNAME_LEN, "idx%d_%s_%dx%s%d.bin", index,
-                     code_name, m, ltSfx.c_str(), n);
-            counter++;
-            FILE* fp = fopen(fname, "wb+");
-            // Failure to dump code is not fatal
-            if (fp) {
-                int unused = fwrite(code, code_size, 1, fp);
-                fclose(fp);
-            }
-        }
-#undef MAX_FNAME_LEN
-    }
-
     static void* allocateJitMemory(std::size_t jitKernSize)
     {
         void* codeBuffer = nullptr;

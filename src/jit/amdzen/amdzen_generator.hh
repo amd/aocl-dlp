@@ -29,6 +29,7 @@
 #pragma once
 
 #include "debug_utils/gdb_helper_utils.hh"
+#include "debug_utils/jit_debug_utils.hh"
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
 #include "kernels/kernel_base.hh"

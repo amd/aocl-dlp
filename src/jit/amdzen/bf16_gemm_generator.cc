@@ -87,16 +87,15 @@ jitGEMMBF16<KType>::initializeParameters(bool addIrLoop)
         mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
         mov(regMiter,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
-
-        // Load post_op_c_i into regTmp2 (used for M-loop post-op updates)
-        // This is needed for both obf16 and of32 since M-loop updates
-        // post_op_c_i
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
     } else {
         mov(regTmpAptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
     }
+    // Load post_op_c_i into regTmp2 (used for M-loop post-op updates)
+    // This is needed for both obf16 and of32 since M-loop updates
+    // post_op_c_i
+    mov(regTmp2,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
 
     if (c_downscale < DLP_F32) {
         // Broadcast the left shift offset onto a ZMM register

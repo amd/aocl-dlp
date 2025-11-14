@@ -37,7 +37,7 @@ class gdbJitHelperUtils
     static void helpDebugInGDB(void* kernelAddress);
 };
 
-#ifdef DLP_JIT_DEBUG
+#ifdef DLP_JIT_GDB_DEBUG
 #define DLP_JIT_DEBUG_HELPER_BREAK(kernelAddress)                              \
     amdzen::debug::gdb::gdbJitHelperUtils::helpDebugInGDB((kernelAddress));
 #else

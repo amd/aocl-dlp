@@ -136,7 +136,7 @@ class gemmDEBackendUtils
                                          betaScalingType,
                                          mtag_a,
                                          mtag_b,
-                                         cs_c == 1 ? false : allLtFringeKernels,
+                                         allLtFringeKernels,
                                          invokeRD,
                                          nullptr,
                                          0,

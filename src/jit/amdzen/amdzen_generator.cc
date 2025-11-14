@@ -362,13 +362,12 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
-#ifdef DLP_JIT_DEBUG
+
             int n_left_suf = (i != 0) ? i : params.NR;
             // The file naming is as such : jit_gemv_m1_kernel.
-            utils::jitHelperUtils::dump_jit_code(
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                 kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
                 "jit_gemv_m1_kernel", 1, n_left_suf, false, i);
-#endif
         }
 
     } else if (NR == 1) {
@@ -491,15 +490,13 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     goto cleanup;
                 }
 
-#ifdef DLP_JIT_DEBUG
                 int m_left_suf = (m_left != 0) ? m_left : params.MR;
                 // The file naming is as such : id_jit_gemv_n1_kernels_MR_idx.
                 // The idx represents what configuration was used to generate
                 // the kernel.
-                utils::jitHelperUtils::dump_jit_code(
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
                     "jit_gemv_n1_kernel", m_left_suf, j, false, m_left * 4 + j);
-#endif
             }
         }
     } else {
@@ -582,15 +579,13 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     goto cleanup;
                 }
 
-#ifdef DLP_JIT_DEBUG
                 // params.useMask=false implies a fringe or main kernel.
                 // params.useMask=true implies a lt fringe or lt main kernel.
-                utils::jitHelperUtils::dump_jit_code(
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[mr * numNRVariants + nr],
                     utils::JIT_KERNEL_SIZE, "jit_kernel", params.MR,
                     correspondingMainFringe, params.useMask,
                     mr * numNRVariants + nr);
-#endif
             }
         }
     }
@@ -721,14 +716,12 @@ jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::jitGeneratorContext& jI)
                 goto cleanup;
             }
 
-#ifdef DLP_JIT_DEBUG
             // params.useMask=false implies a fringe or main kernel.
             // params.useMask=true implies a lt fringe or lt main kernel.
-            utils::jitHelperUtils::dump_jit_code(
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                 kernelCodeBlocks[mr * numNRVariants + nr],
                 utils::JIT_KERNEL_SIZE, "jit_kernel_rd", params.MR, params.NR,
                 false, mr * numNRVariants + nr);
-#endif
         }
     }
 
@@ -1198,13 +1191,12 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
-#ifdef DLP_JIT_DEBUG
+
             int n_left_suf = (i != 0) ? i : params.NR;
             // The file naming is as such : jit_gemv_m1_kernel.
-            utils::jitHelperUtils::dump_jit_code(
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                 kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
                 "jit_bf16_gemv_m1_kernel", 1, n_left_suf, false, i);
-#endif
         }
     } else if (NR == 1) {
         // Logic behind kernel generation:
@@ -1272,12 +1264,10 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     goto cleanup;
                 }
 
-#ifdef DLP_JIT_DEBUG
-                utils::jitHelperUtils::dump_jit_code(
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[m_left * 4 + variant],
                     utils::JIT_KERNEL_SIZE, "jit_bf16_gemv_n1_kernel", m_left,
                     variant, false, m_left * 4 + variant);
-#endif
             }
         }
 
@@ -1340,12 +1330,11 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
-#ifdef DLP_JIT_DEBUG
-                utils::jitHelperUtils::dump_jit_code(
+
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[mr * numNRVariants + nr],
                     utils::JIT_KERNEL_SIZE, "bf16_jit_kernel", params.MR,
                     params.NR, params.useMask, mr * numNRVariants + nr);
-#endif
             }
         }
     }
@@ -1734,15 +1723,13 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     goto cleanup;
                 }
 
-#ifdef DLP_DUMP_JIT_CODE
                 int m_left_suf = (m_left != 0) ? m_left : params.MR;
                 // The file naming is as such : jit_gemv_n1_kernels_MR_idx.
                 // The idx represents what configuration was used to generate
                 // the kernel.
-                utils::jitHelperUtils::dump_jit_code(
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
                     "jit_gemv_n1_kernel", m_left_suf, j, false, m_left * 4 + j);
-#endif
             }
         }
     } else if (MR > 1 && NR > 1) {
@@ -1810,15 +1797,13 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     goto cleanup;
                 }
 
-#ifdef DLP_DUMP_JIT_CODE
                 // Enhanced file naming with fringe info and index
                 bool isFringe =
                     params.useMask; // nr_var==0 kernels use masks (fringe)
-                utils::jitHelperUtils::dump_jit_code(
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[variant_idx], utils::JIT_KERNEL_SIZE,
                     "jit_u8s8s32_kernel", params.MR, params.NR, isFringe,
                     variant_idx);
-#endif
             }
         }
     } else {

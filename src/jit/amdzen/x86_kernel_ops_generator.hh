@@ -411,7 +411,8 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     template<typename T>
     void loadAndConvertVector(RegType        destReg,
                               Xbyak::Address src,
-                              bool           useMaskOp);
+                              bool           useMaskOp,
+                              int            fringeMaskId = 0);
 
     template<typename T>
     void loadAndConvertRows(Xbyak::Reg64 addressReg, int regStartIdx);
