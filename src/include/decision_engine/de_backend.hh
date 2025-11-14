@@ -81,7 +81,8 @@ class iDEBackend
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) = 0;
+        md_t                              c_downscale,
+        bool                              rerouted_from_other_backend) = 0;
 
     virtual dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
@@ -102,7 +103,8 @@ class iDEBackend
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) = 0;
+        md_t                              c_downscale,
+        bool                              rerouted_from_other_backend) = 0;
 };
 
 class gemmF32DEBackend : public iDEBackend
@@ -145,7 +147,8 @@ class gemmF32DEBackend : public iDEBackend
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
             return INVALID_KERNEL_INFO;
@@ -256,7 +259,8 @@ class gemmF32DEBackend : public iDEBackend
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        md_t                              c_downscale,
+        bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
             return INVALID_KERNEL_INFO;
@@ -314,8 +318,13 @@ class gemmF32DEBackend : public iDEBackend
 
         bool invokeRD = false;
 
-        if (((n < 48) || (m < 16)) && (rs_b == 1) && (mtag_b == PACK)
-            && (mtag_a == UNPACKED)) {
+        // The pack-conversion function from f32 to bf16 only supports
+        // packing of matrices to row-major format. Hence Rd kernels can't
+        // be used when bf16 API is rerouted to FP32.
+        // using rerouted_from_other_backend to check if the DE is rerouted from
+        // other backend.
+        if (!(rerouted_from_other_backend) && ((n < 48) || (m < 16))
+            && (rs_b == 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)) {
             invokeRD = true;
             k_unroll = 4; // equal to intrinsics kernel. To be tuned later.
         }
@@ -378,7 +387,8 @@ class gemmBF16DEBackend : public iDEBackend
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
             return INVALID_KERNEL_INFO;
@@ -390,7 +400,7 @@ class gemmBF16DEBackend : public iDEBackend
             return f32Backend->getGemvKernelInfoForInputFastPath(
                 k_dtype, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
                 beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale);
+                c_downscale, true);
         }
 
         kernel_frame::scalingType alphaScalingType;
@@ -447,7 +457,8 @@ class gemmBF16DEBackend : public iDEBackend
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
-        md_t                              c_downscale) override final
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
             return INVALID_KERNEL_INFO;
@@ -459,7 +470,7 @@ class gemmBF16DEBackend : public iDEBackend
             return f32Backend->getGemmKernelInfoForInputFastPath(
                 k_dtype, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
                 beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale);
+                c_downscale, true);
         }
 
         // At this point, we know that the underlying architecture supports

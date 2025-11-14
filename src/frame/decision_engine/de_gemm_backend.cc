@@ -160,14 +160,14 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale);
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale);
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {
@@ -242,14 +242,14 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale);
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
     } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale);
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {
