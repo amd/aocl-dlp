@@ -46,6 +46,16 @@ struct kernel_types<dlp::kernel_frame::kernelDatatype::f32f32f32of32>
     using kernelOpType = float;
 };
 
+template<>
+struct kernel_types<dlp::kernel_frame::kernelDatatype::u8s8s32os32>
+{
+    using aType        = uint8_t;
+    using bType        = int8_t;
+    using cType        = int32_t;
+    using accumType    = int32_t;
+    using kernelOpType = int32_t;
+};
+
 /**
  * ArchitectureTraits provides a set of type and constant definitions describing
  * the properties of a given instruction set architecture, as identified by

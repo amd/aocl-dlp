@@ -1,0 +1,162 @@
+# GEMM benchmarking configuration file for u8s8s32os32 JIT kernels
+# Focused on testing your JIT VNNI implementation
+
+gemm_tests:
+  # Small matrices - Edge case testing for JIT kernel selection
+  - name: "small_matrix_jit_vnni"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Small dimensions to test fringe kernels and VNNI remainder handling
+    m: [1, 6, 12, 18, 24, 30]  # MR=6 multiples and edge cases
+    n: [1, 16, 32, 48, 64, 65, 67]  # NR=64 multiples and remainders
+    k: [4, 8, 11, 12, 15, 16, 19, 20]  # VNNI group (4) multiples and remainders
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    # Tight strides to test stride calculation fixes
+    lda: [4, 8, 12, 16, 20]
+    ldb: [64, 128]
+    ldc: [64, 128]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # Medium matrices - Performance testing
+  - name: "medium_matrix_jit_vnni"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Medium sizes to stress JIT path selection
+    m: [96, 144, 192, 256, 384, 512]  # 6×16, 6×24, 6×32, etc.
+    n: [64, 128, 192, 256, 320, 512]  # 64×N multiples
+    k: [64, 128, 256, 512, 768, 1024]  # Various K sizes
+    alpha: [1.0, 2.5, 0.0]
+    beta: [0.0, 1.0, 1.5]
+    # Various stride patterns
+    lda: [128, 256, 1024]
+    ldb: [256, 512, 1024]
+    ldc: [256, 512, 1024]
+    mtagA: ["none", "pack"]
+    mtagB: ["pack", "reorder"]  # B packing is mandatory for VNNI
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # Large matrices - Throughput testing
+  - name: "large_matrix_jit_vnni"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Large dimensions to ensure JIT code path
+    m: [1024, 2048, 4096]
+    n: [1024, 2048, 4096]
+    k: [1024, 2048, 4096]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: 4096
+    ldb: 4096
+    ldc: 4096
+    mtagA: ["pack"]
+    mtagB: ["pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # VNNI-specific edge cases - Critical for your JIT implementation
+  - name: "vnni_edge_cases"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Dimensions that trigger specific VNNI remainder cases
+    m: [2, 3, 4, 5, 6, 7, 8, 11, 13]  # Edge cases around MR boundary
+    n: [15, 17, 31, 33, 47, 49, 63, 65]  # Edge cases around NR boundary
+    k: [11, 13, 15, 17, 19, 21, 23]  # Non-VNNI-aligned K values
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    # Stride patterns that caused issues in your testing
+    lda: [16, 32, 77]
+    ldb: [32, 64, 77]
+    ldc: [32, 64, 77]
+    mtagA: ["none"]
+    mtagB: ["none", "pack"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # Transpose variations - Testing transB=true cases
+  - name: "transpose_variations"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: [false, true]
+    transB: [false, true]
+    # Moderate sizes for transpose testing
+    m: [64, 128, 192]
+    n: [64, 128, 192]
+    k: [64, 128, 192]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [128, 256]
+    ldb: [128, 256]
+    ldc: [128, 256]
+    mtagA: ["none", "pack"]
+    mtagB: ["pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # Kernel selection stress test - Mixed dimensions
+  - name: "kernel_selection_stress"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Prime dimensions to stress kernel variant selection
+    m: [3, 5, 7, 11, 13, 17, 19, 23, 29, 31]  # Prime numbers
+    n: [3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47]  # Prime numbers
+    k: [3, 5, 7, 11, 13, 17, 19, 23, 29, 31]  # Prime K values (non-VNNI-aligned)
+    alpha: [1.0, -1.0]
+    beta: [0.0, 1.0, -1.0]
+    lda: [32, 64]
+    ldb: [32, 64]
+    ldc: [32, 64]
+    mtagA: ["none", "pack"]
+    mtagB: ["pack"]  # Force B packing for VNNI
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"

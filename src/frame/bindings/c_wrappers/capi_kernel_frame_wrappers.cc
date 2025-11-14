@@ -52,8 +52,21 @@ get_kernel_family_name(kernelDatatype kDtype)
             return "BF16JitKernel";
         case kernelDatatype::bf16bf16f32obf16:
             return "BF16JitKernel";
+        case kernelDatatype::u8s8s32os32:
+            return "dlp_u8s8s32os32_jit_kernel";
+        case kernelDatatype::u8s8s32of32:
+            return "dlp_u8s8s32of32_jit_kernel";
+        case kernelDatatype::u8s8s32obf16:
+            return "dlp_u8s8s32obf16_jit_kernel";
+        case kernelDatatype::u8s8s32os8:
+            return "dlp_u8s8s32os8_jit_kernel";
+        case kernelDatatype::u8s8s32ou8:
+            return "dlp_u8s8s32ou8_jit_kernel";
         default:
-            return "UNKNOWN";
+            std::cerr << "[WARNING] Unsupported kernelDatatype requested in "
+                         "get_kernel_family_name: "
+                      << static_cast<int>(kDtype) << std::endl;
+            return "dlp_unknown_jit_kernel";
     }
 }
 
@@ -90,6 +103,16 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype  kDType,
                    == dlp::kernel_frame::kernelDatatype::bf16bf16f32of32)) {
         return dlp::de::decisionEngineInstance()
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmBF16DEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale, kernelRoutineType::gemm, kDType);
+    } else if ((kDType == dlp::kernel_frame::kernelDatatype::u8s8s32os32)
+               || (kDType == dlp::kernel_frame::kernelDatatype::u8s8s32of32)
+               || (kDType == dlp::kernel_frame::kernelDatatype::u8s8s32obf16)
+               || (kDType == dlp::kernel_frame::kernelDatatype::u8s8s32os8)
+               || (kDType == dlp::kernel_frame::kernelDatatype::u8s8s32ou8)) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmKernelInfoForInputFastPath<dlp::de::gemmU8S8DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
                 c_downscale, kernelRoutineType::gemm, kDType);
@@ -150,10 +173,14 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
             // jit kernel cannot be generated for this kernelInfo.
             dlpKernelRegisterInstance().registerEmptyGemmKernel(fastKI, kDType);
         } else {
-            auto retVal = dlpKernelRegisterInstance().registerGemmKernel(
-                std::move(kB), get_kernel_family_name(kDType));
+            // Generate datatype-specific kernel name for proper registry
+            // management
+            std::string kernelName = get_kernel_family_name(kDType);
+            auto        retVal = dlpKernelRegisterInstance().registerGemmKernel(
+                std::move(kB), std::move(kernelName));
             if (retVal != kernelFrameError::success) {
-                std::cout << "Jit kernel registration failed." << std::endl;
+                std::cout << "JIT kernel registration failed for datatype: "
+                          << static_cast<int>(kDType) << std::endl;
                 std::cout << "Exiting..." << std::endl;
                 std::abort();
             }
@@ -192,7 +219,6 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                    lpgemm_post_op*     post_ops_list,
                    lpgemm_post_op_attr post_ops_attr)
 {
-    // This function is currently used only for FP32 GEMM and GEMV
     // kernels. Also dont use new/delete and malloc/free calls here, since
     // they are lock based and will result in performance degradation.
     if (kernel_hndl.mr == 1) {
@@ -224,7 +250,7 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
         kernelBase* kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
         kB->operator()(std::addressof(gemvN1ParamsIn));
     } else {
-        gemmParams  gemmParamsIn{ A,
+        gemmParams gemmParamsIn{ A,
                                  B,
                                  C,
                                  m,
@@ -241,6 +267,7 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                                  beta,
                                  post_ops_list,
                                  post_ops_attr };
+
         kernelBase* kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
         kB->operator()(std::addressof(gemmParamsIn));
     }

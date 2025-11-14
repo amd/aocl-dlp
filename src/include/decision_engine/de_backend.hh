@@ -31,7 +31,10 @@
 #include <memory>
 #include <optional>
 
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "de_backend_utils.hh"
+#include "de_input.hh"
+#include "kernel_frame/kernel_frame_base.hh"
 
 namespace dlp::de {
 
@@ -363,7 +366,6 @@ class gemmBF16DEBackend : public iDEBackend
     gemmBF16DEBackend(gemmBF16DEBackend&&)                 = delete;
     gemmBF16DEBackend& operator=(const gemmBF16DEBackend&) = delete;
     gemmBF16DEBackend& operator=(gemmBF16DEBackend&&)      = delete;
-
     std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) override;
 
@@ -492,6 +494,187 @@ class gemmBF16DEBackend : public iDEBackend
         // support.
         kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+};
+
+class gemmU8S8DEBackend : public iDEBackend
+{
+    bool                                isAvx512;
+    bool                                isAvx2;
+    bool                                isAvx512Vnni;
+    kernel_frame::kernelInstrPreference eKernelInstPref;
+    bool                                canGenerateKernelInfo;
+
+    [[gnu::always_inline]]
+    constexpr md_t getPrefetchDistance()
+    {
+        // Setting this to 0 for now, should be tuned based on arch
+        constexpr md_t prefetch_c_dist = 0;
+        return prefetch_c_dist;
+    }
+
+    [[gnu::always_inline]]
+    static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
+    getScalingTypesInt32(void* alpha, void* beta, md_t k, md_t kc_hint)
+    {
+        kernel_frame::scalingType alphaScalingType =
+            kernel_frame::scalingType::generic;
+        if (*(static_cast<int*>(alpha)) == 1) {
+            alphaScalingType = kernel_frame::scalingType::one;
+        }
+        kernel_frame::scalingType betaScalingType =
+            kernel_frame::scalingType::generic;
+        if ((*(static_cast<int*>(beta)) == 0) && (k <= kc_hint)) {
+            betaScalingType = kernel_frame::scalingType::zero;
+        }
+
+        return std::make_pair(alphaScalingType, betaScalingType);
+    }
+
+  public:
+    gemmU8S8DEBackend();
+    ~gemmU8S8DEBackend()                                   = default;
+    gemmU8S8DEBackend(const gemmU8S8DEBackend&)            = delete;
+    gemmU8S8DEBackend(gemmU8S8DEBackend&&)                 = delete;
+    gemmU8S8DEBackend& operator=(const gemmU8S8DEBackend&) = delete;
+    gemmU8S8DEBackend& operator=(gemmU8S8DEBackend&&)      = delete;
+
+    std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
+        iDEInput* in) override;
+
+    [[gnu::always_inline]]
+    dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            getScalingTypesInt32(alpha, beta, k, kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // The DE constructor sets it to a safe value, based on the hardware
+        // support.
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        // In case the environment variable was not set at all, resort to
+        // setting it based on the native hardware support.
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else {
+                // This is an invalid case, disable jit kernel generation.
+                return INVALID_KERNEL_INFO;
+            }
+        }
+
+        if (n == 1) {
+            mr       = 16;
+            nr       = 1;
+            k_unroll = 1; // k-unroll is 1 for GEMV N1
+        } else {
+            // Only GEMV N=1 is currently supported for U8S8
+            return INVALID_KERNEL_INFO;
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+
+    [[gnu::always_inline]]
+    dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            getScalingTypesInt32(alpha, beta, k, kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // The DE constructor sets it to a safe value, based on the hardware
+        // support.
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        // In case the environment variable was not set at all, resort to
+        // setting it based on the native hardware support.
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else {
+                // This is an invalid case, disable jit kernel generation.
+                return INVALID_KERNEL_INFO;
+            }
+        }
+
+        // Currently only general GEMM is supported, specific GEMM optimizations
+        // will be added later
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,

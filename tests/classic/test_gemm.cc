@@ -955,8 +955,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         Matrix C_ref(config_.m, config_.n, config_.c_type, layout, config_.ldc,
                      false);
 
-// Initialize matrices with deterministic random values
-#if 1
+        // Initialize matrices with deterministic random values
         if (config_.has_fill_value) {
             A.fillRandom(42 + config_.m, config_.fill_lb, config_.fill_ub,
                          config_.fill_dist, config_.force_int_distribution);
@@ -973,23 +972,9 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         A_ref = A;
         B_ref = B;
         C_ref = C;
-        // Reset packing state for reference matrices since reference
-        // implementation doesn't support packing optimizations
+        // Reset packing state after all matrix copies
         A_ref.setPacked(false);
         B_ref.setPacked(false);
-        C_ref.setPacked(false);
-#else
-        A.fillValue((int8_t)10);
-        B.fillValue((int8_t)-5);
-        C.fillValue((float)20);
-        A_ref.fillValue((int8_t)10);
-        B_ref.fillValue((int8_t)-5);
-        C_ref.fillValue((float)20);
-#endif
-
-        // Make a copy of C for reference computation
-        C_ref = C;
-        // Reset packing state after all matrix copies
         C_ref.setPacked(false);
 
         // TODO: The current UAL interface doesn't support alpha/beta parameters

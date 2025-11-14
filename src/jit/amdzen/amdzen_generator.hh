@@ -237,4 +237,75 @@ class jitAmdZenBF16 : public dlp::jit::jitGeneratorBase
     }
 };
 
+class jitAmdZenU8S8 : public dlp::jit::jitGeneratorBase
+{
+
+    std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
+    std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
+    int                                            numBytesPerElem;
+
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+  public:
+    // Kernel blocking parameters for u8s8s32
+    md_t               MR, NR, KC;
+    md_t               numMRVariants, numNRVariants;
+    md_t               numKernelVariants;
+    md_t               K_UNROLL;
+    md_t               c_downscale;
+    std::vector<void*> kernelCodeBlocks;
+
+    // u8s8s32-specific parameters
+    bool requiresBPacking; // B matrix packing is mandatory for VNNI
+    bool supportsPostOps;  // Post-operations support
+    int  vnniGroupSize;    // VNNI group size (typically 4 for int8)
+
+    jitAmdZenU8S8();
+    ~jitAmdZenU8S8();
+    jitAmdZenU8S8(const jitAmdZenU8S8&)            = delete;
+    jitAmdZenU8S8& operator=(const jitAmdZenU8S8&) = delete;
+    jitAmdZenU8S8(jitAmdZenU8S8&&)                 = delete;
+    jitAmdZenU8S8& operator=(jitAmdZenU8S8&&)      = delete;
+
+    /* Function to retrieve the process block size of the kernel */
+    int getProcessBlockSize() const;
+
+    /* Function to get VNNI group size for int8 operations */
+    int getVNNIGroupSize() const { return vnniGroupSize; }
+
+    /* Function to check if B matrix packing is required */
+    bool isBPackingRequired() const { return requiresBPacking; }
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+    dlp::jit::jitGeneratorError operator()(
+        const dlp::jit::jitGeneratorContext& jI) override
+    {
+        return generateAllKernels(jI);
+    }
+
+    std::vector<dlp::kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override
+    {
+        return mKernelDatatypes;
+    }
+
+    std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override
+    {
+        return mIsaFeaturesRequired;
+    }
+
+    dlp::kernels::kernelError executeKernel(
+        dlp::kernels::kernelParams* _params) override;
+
+    std::unique_ptr<jitGeneratorBase> clone() override
+    {
+        return std::make_unique<jitAmdZenU8S8>();
+    }
+};
+
 } // namespace amdzen::gen

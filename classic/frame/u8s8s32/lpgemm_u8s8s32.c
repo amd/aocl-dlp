@@ -152,11 +152,19 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
                                                   mc0, k, &rs_a_use, &cs_a_use);
                 a_use = pack_a_buffer;
             }
-            // Call lpgemv_n_one kernel
-            lpgemv_n_one_u8s8s32os32(mc0, k, a_use, rs_a_use, cs_a_use, mtag_a,
-                                     b_use, rs_b_use, cs_b_use, mtag_b, c_use,
-                                     rs_c, cs_c, alpha, beta, MR, KC,
-                                     post_op_list, &post_ops_attr);
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+                                   (uint8_t*)a_use, rs_a_use, cs_a_use, 1,
+                                   (int8_t*)(b_use), rs_b_use, cs_b_use, 0, 0,
+                                   c_use, rs_c, 1, (void*)&alpha, (void*)&beta,
+                                   post_op_list, post_ops_attr);
+            } else {
+                // Call lpgemv_n_one kernel
+                lpgemv_n_one_u8s8s32os32(mc0, k, a_use, rs_a_use, cs_a_use,
+                                         mtag_a, b_use, rs_b_use, cs_b_use,
+                                         mtag_b, c_use, rs_c, cs_c, alpha, beta,
+                                         MR, KC, post_op_list, &post_ops_attr);
+            }
         }
 
         // Release pack buffers
@@ -552,12 +560,24 @@ LPGEMM_5LOOP(uint8_t, int8_t, int32_t, u8s8s32o32)
                     post_ops_attr.post_op_c_j    = (jc + jr);
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
-                    // Reorder/Packed B, Reorder/Packed/Unpacked A call.
-                    ((lpgemm_rowvar_s32)lcntx->kern_fun_ptr)(
-                        mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                        a_block_stride, (b_use + (jr * kc0_updated)), rs_b_use,
-                        cs_b_use, (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                        post_op_list, post_ops_attr);
+                    // Call the micro-kernel - JIT if available, classic
+                    // fallback
+                    if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                        dlp_execute_kernel(
+                            lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                            (uint8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                            (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
+                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                            (void*)&alpha, (void*)&beta0, post_op_list,
+                            post_ops_attr);
+                    } else {
+                        // // Call classic kernel
+                        ((lpgemm_rowvar_s32)lcntx->kern_fun_ptr)(
+                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
+                            a_block_stride, (b_use + (jr * kc0_updated)),
+                            rs_b_use, cs_b_use, (c_use_ic + jr), rs_c_use, 1,
+                            alpha, beta0, post_op_list, post_ops_attr);
+                    }
                 }
             }
         }

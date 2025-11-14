@@ -81,6 +81,13 @@ struct gemmParams : public kernelParams
     uint8_t  maskF32_8[maxNumMasks];
     alignas(64) std::array<int32_t, 8> maskArray;
 
+    // u8s8 masking fields (int32 accumulator based)
+    uint16_t maskS32;   // AVX512 ZMM: 16 int32s
+    uint16_t kLeftmask; // AVX512 XMM: 64 int8s
+
+    // Quantization scaling fields
+    void* quantScale; // Per-tensor or per-channel scale factor
+
     lpgemm_post_op*     kernelOpsList;
     lpgemm_post_op_attr kernelOpsAttr;
 
@@ -123,6 +130,9 @@ struct gemmParams : public kernelParams
         , maskF32{ 0 }
         , maskF32_8{ 0 }
         , maskArray{ 0, 0, 0, 0, 0, 0, 0, 0 }
+        , maskS32(0)
+        , kLeftmask(0)
+        , quantScale(nullptr)
         , kernelOpsList(kernelOpsList)
         , kernelOpsAttr(kernelOpsAttr)
     {
@@ -148,6 +158,9 @@ struct gemmParams : public kernelParams
         , kIterBP(other.kIterBP)
         , kIterAP(other.kIterAP)
         , kLeft(other.kLeft)
+        , maskS32(other.maskS32)
+        , kLeftmask(other.kLeftmask)
+        , quantScale(other.quantScale)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
     {
@@ -240,6 +253,9 @@ struct gemmParams : public kernelParams
         kIterBP       = 0;
         kIterAP       = 0;
         kLeft         = 0;
+        maskS32       = 0;
+        kLeftmask     = 0;
+        quantScale    = nullptr;
         kernelOpsList = nullptr;
     }
 };
@@ -278,6 +294,7 @@ struct gemvN1Params : public kernelParams
     uint16_t               mmask_avx512;
     uint16_t               kmask_avx512;
     uint32_t               kmask_bf16_avx512;
+    uint64_t               kmask_i8_avx512;
     lpgemm_post_op*        kernelOpsList; // List of post-ops
     lpgemm_post_op_attr    kernelOpsAttr; // Attributes for post-ops
 

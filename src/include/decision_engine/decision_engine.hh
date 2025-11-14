@@ -60,7 +60,6 @@ class decisionEngine
     void registerDecisionEngine()
     {
         // Registering all the GEMM decision engines for the datatypes supported
-        // Support F32 decision engine
         auto kTypeIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelRoutineType::gemm);
         auto f32DtIdx = utils::getUnderlyingValueOfEnum(
@@ -76,6 +75,30 @@ class decisionEngine
         auto bf16obf16DtIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelDatatype::bf16bf16f32obf16);
         backends[kTypeIdx][bf16obf16DtIdx] = new gemmBF16DEBackend;
+
+        // Support U8S8OS32 decision engine
+        auto u8s8DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::u8s8s32os32);
+        backends[kTypeIdx][u8s8DtIdx] = new gemmU8S8DEBackend;
+
+        // Support U8S8OF32 decision engine
+        auto u8s8of32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::u8s8s32of32);
+        backends[kTypeIdx][u8s8of32DtIdx] = new gemmU8S8DEBackend;
+
+        // Support U8S8OBF16 decision engine
+        auto u8s8obf16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::u8s8s32obf16);
+        backends[kTypeIdx][u8s8obf16DtIdx] = new gemmU8S8DEBackend;
+
+        // Support U8S8OU8 decision engine
+        auto u8s8ou8DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::u8s8s32ou8);
+        backends[kTypeIdx][u8s8ou8DtIdx] = new gemmU8S8DEBackend;
+
+        auto u8s8os8DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::u8s8s32os8);
+        backends[kTypeIdx][u8s8os8DtIdx] = new gemmU8S8DEBackend;
     }
 
     decisionEngine()

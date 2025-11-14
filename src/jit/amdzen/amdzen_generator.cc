@@ -36,6 +36,8 @@
 #include "f32_gemv.hh"
 #include "jit_register/jit_register.hh"
 #include "traits.hh"
+#include "u8s8_gemm.hh"
+#include "u8s8_gemv.hh"
 
 namespace amdzen::gen {
 
@@ -1557,7 +1559,443 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
     return dlp::kernels::kernelError::success;
 }
 
+jitAmdZenU8S8::jitAmdZenU8S8()
+    : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::u8s8s32os32,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32of32,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32obf16,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32ou8,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32os8 })
+    , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni,
+                             dlp::cpu_utils::isaFeature::avxvnni })
+    , kType(utils::kernelInstrType::none)
+    , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
+    , numBytesPerElem(1)
+    , requiresBPacking(true) // B matrix packing is mandatory for VNNI
+    , supportsPostOps(true)  // Integer kernels support post-operations
+    , vnniGroupSize(4)       // VNNI groups 4 int8 elements
+{
+    // Set required ISA features for u8s8s32 kernels
+    mIsaFeaturesRequired.push_back(dlp::cpu_utils::isaFeature::avx512f);
+    mIsaFeaturesRequired.push_back(dlp::cpu_utils::isaFeature::avx512bw);
+}
+
+jitAmdZenU8S8::~jitAmdZenU8S8()
+{
+    for (auto& codeBlock : kernelCodeBlocks) {
+        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
+                                                   utils::JIT_KERNEL_SIZE);
+    }
+}
+
+int
+jitAmdZenU8S8::getProcessBlockSize() const
+{
+    switch (kType) {
+        case utils::kernelInstrType::avx512_zmm_32_reg:
+            return NR; // Process full NR
+
+        case utils::kernelInstrType::avx2_ymm_16_reg:
+            return NR / 4; // Process NR/4 (16)
+
+        default:
+            return 0; // Invalid/unsupported kernel type
+    }
+}
+
+void
+jitAmdZenU8S8::setGeneratorKernelMetaInfo(
+    dlp::kernel_frame::kernelInstrPreference kInstPref)
+{
+    kType = utils::kernelInstrType::none;
+    switch (kInstPref) {
+        case dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour: {
+            kType = utils::kernelInstrType::avx512_zmm_32_reg;
+            // For u8s8s32 VNNI: think in terms of int32 accumulator elements
+            // ZMM holds 16 int32 elements, each consuming 4 int8 inputs (VNNI
+            // group)
+            numElemsPerReg =
+                traits::ArchitectureTraits<
+                    utils::kernelInstrType::avx512_zmm_32_reg>::regBytes
+                / sizeof(int32_t);
+            break;
+        }
+        default: {
+            break;
+        }
+    }
+}
+
+/* Function to generate all kernels */
+dlp::jit::jitGeneratorError
+jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+{
+    dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
+
+    MR          = (jI.kI).mr;
+    NR          = (jI.kI).nr;
+    KC          = (jI.kI).kc;
+    K_UNROLL    = (jI.kI).k_unroll;
+    c_downscale = (jI.kI).c_downscale;
+
+    // Convert kernelInstrPreference to kernelType
+    setGeneratorKernelMetaInfo(jI.kI.kInstPref);
+
+    int8_t processBlockSize = getProcessBlockSize();
+
+    // Verify AVX512_VNNI support is available
+    if (kType == utils::kernelInstrType::none) {
+        err = dlp::jit::jitGeneratorError::notSupported;
+        goto cleanup;
+    }
+
+    // For u8s8s32, we focus on GEMM kernels (MR > 1 and NR > 1)
+    // GEMV M = 1 support can be added later
+    if (NR == 1) {
+        // TODO: We could extend the no-loop decomposition to handle sizes until
+        //       MR + MR - 1. Since, we would not require any looping for such
+        //       sizes.
+
+        numKernelVariants = MR * 4; // Each MR has a kernel for vector and
+                                    // element-wise loads/stores for C
+
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        // Initializing with default values.
+        utils::gemvN1GeneratorParams params(
+            0, 0, c_downscale, false, false, false, false,
+            dlp::kernel_frame::storageFormat::rowMajor,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        // CHECK IF KERNEL OPS ARE THERE IN PARAMS
+        // POSTOPS NOT SUPPORTED AS OF NOW
+        if (!params.kernelOps.empty()) {
+            return dlp::jit::jitGeneratorError::notSupported;
+        }
+
+        params.MR      = MR;
+        params.mloop   = true;
+        params.kloop   = true;
+        params.mfringe = false;
+        params.kfringe = true;
+
+        for (int m_left = 0; m_left < MR; m_left++) {
+            params.M_LEFT  = m_left;
+            params.mfringe = (m_left != 0); // The first two kernels that we
+                                            // generate are main kernels
+            for (int j = 0; j < 4; j++) {
+                // We generate 2 kernels for each M_LEFT, and index them as
+                // follows:
+                // 0: row-stored, without mloop
+                // 1: row-stored, with mloop
+                // 2: col-stored, without mloop
+                // 3: col-stored, with mloop
+
+                params.mloop = (j == 1) || (j == 3);
+                params.yFormat =
+                    ((j / 2) == 0) ? dlp::kernel_frame::storageFormat::rowMajor
+                                   : dlp::kernel_frame::storageFormat::colMajor;
+
+                void* codeBuffer = kernelCodeBlocks[m_left * 4 + j];
+                // Allocate executable memory
+
+                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                    utils::JIT_KERNEL_SIZE);
+                if (codeBuffer == nullptr) {
+                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                    goto cleanup;
+                }
+
+                kernelCodeBlocks[m_left * 4 + j] = codeBuffer;
+
+                // Handle different kernel types based on instruction
+                // preference.
+                switch (kType) {
+                    case utils::kernelInstrType::avx512_zmm_32_reg: {
+                        // Create a new instance of jitAVX512GEMVN1 with the
+                        // code buffer and size
+                        amdzen::gen::jitU8S8VNNI_GEMVN1<
+                            utils::kernelInstrType::avx512_zmm_32_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+
+                        err = base.generateKernel(params);
+                        break;
+                    }
+                    default: {
+                        err = dlp::jit::jitGeneratorError::error;
+                        break;
+                    }
+                }
+                if (err != dlp::jit::jitGeneratorError::success) {
+                    goto cleanup;
+                }
+
+#ifdef DLP_DUMP_JIT_CODE
+                int m_left_suf = (m_left != 0) ? m_left : params.MR;
+                // The file naming is as such : jit_gemv_n1_kernels_MR_idx.
+                // The idx represents what configuration was used to generate
+                // the kernel.
+                utils::jitHelperUtils::dump_jit_code(
+                    kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
+                    "jit_gemv_n1_kernel", m_left_suf, j, false, m_left * 4 + j);
+#endif
+            }
+        }
+    } else if (MR > 1 && NR > 1) {
+
+        // Initializing with default values.
+        utils::generatorParams params(0, 0, K_UNROLL, 0, c_downscale, 0, false,
+                                      false, (jI.kI).alphaScalingType,
+                                      (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        // CHECK IF KERNEL OPS ARE THERE IN PARAMS
+        // POSTOPS NOT SUPPORTED AS OF NOW
+        if (!params.kernelOps.empty()) {
+            return dlp::jit::jitGeneratorError::notSupported;
+        }
+
+        // Generate GEMM kernel variants
+        numMRVariants = MR;                                      // MR variants
+        numNRVariants = (processBlockSize / numElemsPerReg) + 1; // NR variants
+        numKernelVariants = numMRVariants * numNRVariants;
+
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        for (md_t mr_var = 0; mr_var < numMRVariants; mr_var++) {
+            for (md_t nr_var = 0; nr_var < numNRVariants; nr_var++) {
+                int variant_idx = mr_var * numNRVariants + nr_var;
+
+                void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                    utils::JIT_KERNEL_SIZE);
+                if (codeBuffer == nullptr) {
+                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                    goto cleanup;
+                }
+                kernelCodeBlocks[variant_idx] = codeBuffer;
+
+                // Set parameters for this specific kernel variant
+                params.c_downscale = c_downscale;
+                params.MR          = mr_var == 0 ? MR : mr_var;
+                params.mLoop       = mr_var == 0;
+                params.NR          = nr_var * numElemsPerReg;
+                params.useMask     = (nr_var == 0);
+
+                // Generate u8s8s32 kernel using template dispatch
+                // Architecture specific dispatch happens here.
+                switch (kType) {
+                    case utils::kernelInstrType::avx512_zmm_32_reg: {
+                        // Generate the kernel for AVX512 ZMM 32 register with
+                        // VNNI
+                        amdzen::gen::jitU8S8VNNI_GEMM<
+                            utils::kernelInstrType::avx512_zmm_32_reg>
+                            vnniGen(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = vnniGen.generateKernel(params);
+                        break;
+                    }
+
+                    default:
+                        err = dlp::jit::jitGeneratorError::error;
+                        break;
+                }
+                if (err != dlp::jit::jitGeneratorError::success) {
+                    goto cleanup;
+                }
+
+#ifdef DLP_DUMP_JIT_CODE
+                // Enhanced file naming with fringe info and index
+                bool isFringe =
+                    params.useMask; // nr_var==0 kernels use masks (fringe)
+                utils::jitHelperUtils::dump_jit_code(
+                    kernelCodeBlocks[variant_idx], utils::JIT_KERNEL_SIZE,
+                    "jit_u8s8s32_kernel", params.MR, params.NR, isFringe,
+                    variant_idx);
+#endif
+            }
+        }
+    } else {
+        // GEMV support not implemented yet for u8s8s32
+        err = dlp::jit::jitGeneratorError::notSupported;
+        goto cleanup;
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+
+cleanup:
+    // Free the memory allocated for the kernel code blocks if
+    // allocation fails or if the kernel generation fails
+    for (auto& codeBlock : kernelCodeBlocks) {
+        if (codeBlock != nullptr) {
+            utils::jitHelperUtils::deallocateJitMemory(codeBlock,
+                                                       utils::JIT_KERNEL_SIZE);
+        }
+    }
+    return err;
+}
+
+dlp::kernels::kernelError
+jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
+{
+    if (NR == 1) {
+        numElemsPerReg = 64;
+
+        auto params    = static_cast<dlp::kernels::gemvN1Params*>(_params);
+        params->m_iter = params->m / MR;
+        params->m_left = params->m % MR;
+        params->k_iter = params->k / numElemsPerReg;
+        params->k_left = params->k % numElemsPerReg;
+        // md_t og_post_ops_c_i = (params->kernelOpsAttr).post_op_c_i;
+
+        params->kmask_i8_avx512 =
+            0xFFFFFFFFFFFFFFFF >> (numElemsPerReg - params->k_left);
+        params->mmask_avx512 = 0xFFFF >> (MR - params->m_left);
+
+        bool m_loop        = params->m_iter >= 1;
+        bool is_col_stored = ((params->rsC) == 1);
+
+        int kernel_idx = 4 * params->m_left + 2 * is_col_stored + m_loop;
+
+        utils::jit_gemv_n1_kernel kernel =
+            reinterpret_cast<utils::jit_gemv_n1_kernel>(
+                kernelCodeBlocks[kernel_idx]);
+        kernel(params);
+    } else if (MR == 1) {
+        return dlp::kernels::kernelError::error;
+    } else {
+        auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+
+        int processBlockSize = getProcessBlockSize();
+        // Since JR loop is in framework, the 'n' dimension passed to this
+        // function is always <= NR.
+        int mFullPieces    = params->m / MR;
+        int mPartialPieces = params->m % MR;
+
+        params->kIterBP = params->k / vnniGroupSize;
+        params->kLeft   = params->k % vnniGroupSize;
+
+        // Handle VNNI remainder case using AVX-512 masked memory load
+        params->kLeftmask = (1 << params->kLeft) - 1;
+
+        uint8_t* aPtr           = static_cast<uint8_t*>(params->a);
+        int8_t*  bPtr           = static_cast<int8_t*>(params->b);
+        int32_t* cPtr           = static_cast<int32_t*>(params->c);
+        int32_t* c_jr           = cPtr;
+        int32_t* c_ir           = cPtr;
+        int      rsB            = params->rsB;
+        md_t     og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+
+        md_t n = params->n;
+        md_t m = params->m;
+        md_t k = params->k;
+
+        int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+        int nFullpieces = nBlockSize / numElemsPerReg;
+        int nRemainder  = nBlockSize % numElemsPerReg;
+        params->psA     = MR * params->psA;
+        // Process complete registers first (if any)
+        if (nFullpieces > 0) {
+            int elementsToProcess = nFullpieces * numElemsPerReg;
+
+            params->a = aPtr;
+            params->c = c_jr;
+            params->n = elementsToProcess;
+
+            params->rsB = (nFullpieces * rsB) / vnniGroupSize;
+
+            // Match the kernel generation pattern: nr_var corresponds to
+            // number of registers used nr_var=0: mask kernel,
+            // nr_var=1,2,3,4: 1,2,3,4 registers respectively
+            int kernel_n_idx = nFullpieces;
+
+            if (params->m >= MR) {
+                params->mIter            = mFullPieces;
+                int               m_idx  = 0;
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+                DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+                kernel(params);
+                (params->a) = (uint8_t*)(params->a) + mFullPieces * params->psA;
+                (params->c) =
+                    (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
+                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
+            }
+
+            if (mPartialPieces) {
+                int               m_idx  = mPartialPieces;
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+                DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+                kernel(params);
+            }
+
+            md_t k_updated = ((params->k + vnniGroupSize - 1) / vnniGroupSize)
+                             * vnniGroupSize;
+            params->b = (int8_t*)(params->b) + elementsToProcess * k_updated;
+
+            c_jr = (int32_t*)(c_jr) + elementsToProcess;
+            (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
+            (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
+
+            n -= elementsToProcess;
+        }
+
+        // Process remainder with mask (if any)
+        if (nRemainder) {
+            params->a = aPtr;
+            params->c = c_jr;
+            params->n = nRemainder;
+
+            params->rsB = numElemsPerReg * vnniGroupSize;
+
+            if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                // For AVX-512 ZMM: 16-bit mask for int32 elements (16 int32
+                // per ZMM)
+                params->maskS32 = 0xFFFF >> (numElemsPerReg - nRemainder);
+            }
+
+            // INLINE: Kernel execution with mask
+            // Use nr_var=0 kernel which was generated with useMask=true
+            int kernel_n_idx =
+                0; // Always use mask kernel (nr_var=0) for nRemainder
+            if (params->m >= MR) {
+                params->mIter            = mFullPieces;
+                int               m_idx  = 0;
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+                DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+                kernel(params);
+                (params->a) = (uint8_t*)(params->a) + mFullPieces * params->psA;
+                (params->c) =
+                    (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
+                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
+            }
+            if (mPartialPieces) {
+                int               m_idx  = mPartialPieces;
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+                DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+                kernel(params);
+            }
+        }
+    }
+
+    return dlp::kernels::kernelError::success;
+}
+
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenFP32, "dlp_amdzen_jit");
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenBF16, "dlp_amdzen_jit");
+DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenU8S8, "dlp_amdzen_jit");
 
 } // namespace amdzen::gen

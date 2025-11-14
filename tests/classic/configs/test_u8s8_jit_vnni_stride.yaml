@@ -1,0 +1,201 @@
+# GEMM test configuration for u8s8s32 JIT VNNI stride verification
+# GEMM test configuration file
+gemm_tests:
+  # Basic test cases
+  # 0
+  - name: "small_matrix_f32"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # MR variants: 1,2,3,4,5,6 (all possible M remainders + full MR=6)
+    m: [5]
+    # NR variants:
+    # - mask kernel: 1-15 (nRemainder cases)
+    # - 1 reg: 16 (1×16)
+    # - 2 reg: 32 (2×16)
+    # - 3 reg: 48 (3×16)
+    # - 4 reg: 64 (4×16, full processBlockSize)
+    n: [15]
+    k: [20]  # VNNI-aligned values
+    alpha: [0]
+    beta: [1]
+    lda: [128, 256]
+    ldb: [128, 256]
+    ldc: [128, 256]
+    mtagA: ["none"]
+    mtagB: ["none"]   # Matrix B reordering can improve performance
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # M-loop bug trigger - Multiple M-blocks expose pointer reset bug
+  - name: "u8s8s32_6x64_mloop"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [12, 18, 24, 30, 36]  # Multiples of MR=6
+    n: [64, 128, 256]                   # Keep N=64 constant
+    k: [4, 8, 12, 16]        # VNNI-aligned K values
+    alpha: [2.5]
+    beta: [1.5]
+    lda: [16]      # Match K values for tight layout
+    ldb: [256]           # Various B strides
+    ldc: [256]           # Various C strides
+    mtagA: ["none"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Complete 6×64 kernel validation - All combinations
+  - name: "u8s8s32_6x64_complete_validation"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [6, 12, 18, 24, 30, 36, 42, 48] # Perfect 6×N multiples
+    n: [64, 64, 64, 64, 64, 128, 192]             # Perfect 64×N multiples
+    k: [4, 8, 12, 16, 20, 24, 32, 64]  # VNNI-aligned (multiples of 4)
+    alpha: [2.0]
+    beta: [1.0]
+    lda: [100]                # Various strides
+    ldb: [200]                # Various strides
+    ldc: [200]                # Various strides
+    mtagA: ["none"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # VNNI-specific stride testing with non-aligned dimensions
+  - name: "u8s8s32_vnni_stride_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [2, 3, 4, 5, 6, 7]      # Edge cases around MR boundary
+    n: [15, 17, 19, 31]
+    k: [11, 13, 15, 17, 19]     # Edge cases around VNNI group size (4)
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [77]
+    ldb: [77]
+    ldc: [77]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Prime dimensions to stress VNNI stride handling
+  - name: "u8s8s32_vnni_prime_dims"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [true]
+    transB: [true]
+    m: [3, 5, 7, 11, 13]           # Prime numbers
+    n: [3, 5, 7, 11, 13, 17]      # Prime numbers
+    k: [3, 5, 7, 11, 13]          # Prime numbers (not multiples of 4)
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [66]
+    ldb: [66]
+    ldc: [66]
+    mtagA: ["none", "pack"]
+    mtagB: ["pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # Large dimensions to verify JIT path selection
+  - name: "u8s8s32_jit_large"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [64, 128, 192]              # Large M to ensure JIT path
+    n: [64, 128, 256]              # Large N to ensure JIT path
+    k: [64, 128, 256]              # Large K
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [300]
+    ldb: [300]
+    ldc: [300]
+    mtagA: ["none", "pack"]
+    mtagB: ["pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # GEMV cases (M=1, N=1) to verify stride handling in vector cases
+  - name: "u8s8s32_gemv_cases"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]                         # GEMV M=1 case
+    n: [16, 32, 64, 128, 256]      # Various N values
+    k: [4, 8, 16, 32, 64]         # Various K values (multiples of 4)
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [300]
+    ldb: [300]
+    ldc: [300]
+    mtagA: ["none", "pack"]
+    mtagB: ["pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  - name: "u8s8s32_gemv_n1_cases"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64, 128, 256]      # Various M values
+    n: [1]                         # GEMV N=1 case
+    k: [4, 8, 16, 32, 64]         # Various K values (multiples of 4)
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [300]
+    ldb: [300]
+    ldc: [300]
+    mtagA: ["none", "pack"]
+    mtagB: ["pack", "reorder"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0

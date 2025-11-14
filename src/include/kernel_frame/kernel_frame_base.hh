@@ -55,6 +55,9 @@ enum class kernelDatatype : uint8_t
 {
     invalid = 0,
     u8s8s32os32,
+    u8s8s32of32,
+    u8s8s32obf16,
+    u8s8s32ou8,
     u8s8s32os8,
     bf16bf16f32obf16,
     bf16bf16f32of32,

@@ -103,13 +103,23 @@ aocl_gemm_u8s8s32os32_ref(const char      order,
                 a_k += a_stride;
                 b_k += b_stride;
             }
+            // Cast to unsigned for well-defined wrapping behavior per C++
+            // standard Compute result with wrapping arithmetic These operations
+            // use modular arithmetic - overflow wraps around
+            int32_t alpha_sum = static_cast<int32_t>(
+                static_cast<uint32_t>(alpha) * static_cast<uint32_t>(sum));
+            int32_t c_old  = (order == 'R' || order == 'r') ? C[i * ldc + j]
+                                                            : C[j * ldc + i];
+            int32_t beta_c = static_cast<int32_t>(
+                static_cast<uint32_t>(beta) * static_cast<uint32_t>(c_old));
+            int32_t result =
+                static_cast<int32_t>(static_cast<uint32_t>(alpha_sum)
+                                     + static_cast<uint32_t>(beta_c));
 
             if (order == 'R' || order == 'r')
-                C[i * ldc + j] = static_cast<int32_t>(
-                    static_cast<float>((alpha)*sum + (beta)*C[i * ldc + j]));
+                C[i * ldc + j] = result;
             else
-                C[j * ldc + i] = static_cast<int32_t>(
-                    static_cast<float>((alpha)*sum + (beta)*C[j * ldc + i]));
+                C[j * ldc + i] = result;
         }
     }
 }

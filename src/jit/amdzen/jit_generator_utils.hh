@@ -262,11 +262,10 @@ struct generatorParams
 struct gemvN1GeneratorParams
 {
     // Dimensions and loop control
-    int MR;          // Vector length (number of rows to process at once)
-    int M_LEFT;      // M-dimension left over elements
-    int c_downscale; // Downscale factor for C
-
-    bool mloop;   // Whether to loop in m direction in steps of MR
+    int  MR;          // Vector length (number of rows to process at once)
+    int  M_LEFT;      // M-dimension left over elements
+    int  c_downscale; // Downscale factor for C
+    bool mloop;       // Whether to loop in m direction in steps of MR
     bool kloop;   // Whether to loop in k direction in steps of numElemsPerReg
     bool mfringe; // Whether to generate code for m-dimension fringe
     bool kfringe; // Whether to generate code for k-dimension fringe
@@ -340,6 +339,7 @@ struct gemvN1GeneratorParams
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
             kernelOps        = other.kernelOps;
+            c_downscale      = other.c_downscale;
         }
         return *this;
     }
@@ -377,6 +377,7 @@ struct gemvN1GeneratorParams
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
             kernelOps        = std::move(other.kernelOps);
+            c_downscale      = other.c_downscale;
         }
         return *this;
     }

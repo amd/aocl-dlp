@@ -37,7 +37,6 @@
 #include "kernel_ops_handler.hh"
 #include "kernels/kernel_base.hh"
 #include "traits.hh"
-#include <iostream>
 
 namespace amdzen::GEMMcodeGenerator {
 
