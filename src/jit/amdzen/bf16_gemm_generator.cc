@@ -87,15 +87,18 @@ jitGEMMBF16<KType>::initializeParameters(bool addIrLoop)
         mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
         mov(regMiter,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
+
+        // Load post_op_c_i into regTmp2 (used for M-loop post-op updates)
+        // This is needed for both obf16 and of32 since M-loop updates
+        // post_op_c_i
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
     } else {
         mov(regTmpAptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
     }
 
     if (c_downscale < DLP_F32) {
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-
         // Broadcast the left shift offset onto a ZMM register
         // Store to allocated stack space, then broadcast from memory
         // Using rsp(instead of stackPtr in order to use the local stack space)
@@ -516,11 +519,15 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
         imul(regTmp1, regTmp1, MR);
         lea(regAPtr, ptr[regAPtr + regTmp1]);
 
-        moveCPtr();
+        // Update post_op_c_i for the next m-iteration
+        add(regTmp2, MR);
+        // write back the updated post_op_c_i offset to memory since,
+        // kernel-ops module reads this offset from memory.
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+            regTmp2);
 
-        if (c_downscale < DLP_F32) {
-            add(regTmp2, MR);
-        }
+        moveCPtr();
 
         // Decrement m_iter
         dec(regMiter);

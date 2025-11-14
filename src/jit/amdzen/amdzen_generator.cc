@@ -1502,7 +1502,6 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
                     (int16_t*)(params->a) + MR * mFullPieces * params->psA;
                 (params->c) =
                     (float*)(params->c) + MR * mFullPieces * params->rsC;
-                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
             }
 
             if (mPartialPieces) {
@@ -1542,7 +1541,6 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
                     (int16_t*)(params->a) + MR * mFullPieces * params->psA;
                 (params->c) =
                     (float*)(params->c) + MR * mFullPieces * params->rsC;
-                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
             }
 
             if (mPartialPieces) {
