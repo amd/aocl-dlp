@@ -1087,12 +1087,12 @@ template<>
 dlp::jit::jitGeneratorError
 jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadMasks()
 {
-    lea(regMIter,
+    lea(regKIter,
         ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kmask_avx2)]);
-    vmovdqu(Xbyak::Ymm(maskBaseIdx), ptr[regMIter]);
-    lea(regMIter,
+    vmovdqu(Xbyak::Ymm(maskBaseIdx), ptr[regKIter]);
+    lea(regKIter,
         ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, mmask_avx2)]);
-    vmovdqu(Xbyak::Ymm(maskBaseIdx + 1), ptr[regMIter]);
+    vmovdqu(Xbyak::Ymm(maskBaseIdx + 1), ptr[regKIter]);
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -1212,6 +1212,13 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 params.MR, 1, false, 1, accumBaseIdx, yReg)));
 
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
+
+            // For avx2 config, we use YMM registers for masks
+            // these mask registers may have been used as scratch registers
+            // by the post-ops handler. Thus, we need to reload them.
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                loadMasks();
+            }
         }
 
         storeYValues(MR);
@@ -1245,6 +1252,7 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
     L(label_m_loop_end);
     if (params.mfringe) {
+
         mov(regMIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, m_left)]);
         test(regMIter, regMIter);
@@ -1322,6 +1330,13 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
             // This call will skip embedding tables (already done in main loop)
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
+
+            // For avx2 config, we use YMM registers for masks
+            // these mask registers may have been used as scratch registers
+            // by the post-ops handler. Thus, we need to reload them.
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                loadMasks();
+            }
         }
 
         storeYValues(M_LEFT);
@@ -2660,6 +2675,13 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
             // This call will skip embedding tables (already done in main loop)
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
+
+            // For avx2 config, we use YMM registers for masks
+            // these mask registers may have been used as scratch registers
+            // by the post-ops handler. Thus, we need to reload them.
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                loadMasks();
+            }
         }
 
         storeYValues(true);
