@@ -505,7 +505,7 @@ namespace dlp { namespace testing { namespace framework {
          *
          * @param value The value to fill the matrix with
          */
-        void fillValue(std::any value);
+        void fillValue(double value);
 
         /**
          * @brief Get element size in bytes for the matrix type

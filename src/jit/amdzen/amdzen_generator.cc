@@ -1637,9 +1637,63 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         goto cleanup;
     }
 
-    // For u8s8s32, we focus on GEMM kernels (MR > 1 and NR > 1)
-    // GEMV M = 1 support can be added later
-    if (NR == 1) {
+    if (MR == 1) {
+        // Handle GEMV M = 1 case
+        numKernelVariants = NR;
+        kernelCodeBlocks.resize(numKernelVariants);
+        AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
+
+        utils::gemvM1GeneratorParams params(
+            0, NR, 0, KC, K_UNROLL, mtag_b, true, true, true, true,
+            dlp::kernel_frame::storageFormat::rowMajor,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        params.c_downscale = c_downscale;
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        if (!params.kernelOps.empty())
+            return dlp::jit::jitGeneratorError::notSupported;
+
+        params.NR         = NR;
+        params.KC         = KC;
+        params.N_LEFT     = 0;
+        params.K_SUB_ITER = K_UNROLL;
+        params.nloop      = true;
+        params.kloop      = true;
+        params.nfringe    = false;
+        params.kfringe    = true;
+
+        for (int i = 0; i < NR; i++) {
+            params.N_LEFT  = i;
+            params.nfringe = (i != 0);
+
+            void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                utils::JIT_KERNEL_SIZE);
+            if (codeBuffer == nullptr) {
+                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                goto cleanup;
+            }
+            kernelCodeBlocks[i] = codeBuffer;
+
+            amdzen::gen::jitU8S8VNNI_GEMVM1<
+                utils::kernelInstrType::avx512_zmm_32_reg>
+                base(codeBuffer, utils::JIT_KERNEL_SIZE);
+
+            err = base.generateKernel(params);
+            if (err != dlp::jit::jitGeneratorError::success) {
+                goto cleanup;
+            }
+            int n_left_suf = (i != 0) ? i : params.NR;
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+                kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
+                "jit_gemv_m1_kernel", 1, n_left_suf, false, i);
+        }
+
+    } else if (NR == 1) {
         // TODO: We could extend the no-loop decomposition to handle sizes until
         //       MR + MR - 1. Since, we would not require any looping for such
         //       sizes.
@@ -1660,11 +1714,8 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
 
-        // CHECK IF KERNEL OPS ARE THERE IN PARAMS
-        // POSTOPS NOT SUPPORTED AS OF NOW
-        if (!params.kernelOps.empty()) {
+        if (!params.kernelOps.empty())
             return dlp::jit::jitGeneratorError::notSupported;
-        }
 
         params.MR      = MR;
         params.mloop   = true;
@@ -1829,7 +1880,54 @@ cleanup:
 dlp::kernels::kernelError
 jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
 {
-    if (NR == 1) {
+    auto params = static_cast<dlp::kernels::gemvM1Params*>(_params);
+
+    if (MR == 1) {
+        numElemsPerReg = 16;
+
+        int remainder     = params->k % 4;
+        params->kLeftmask = remainder ? (0xF >> (4 - remainder)) : 0xF;
+
+        params->n_iter = params->n / NR;
+        params->n_left = params->n % NR;
+
+        params->k_iter = params->k / KC;
+        params->k_left = params->k % KC; // Always multiple of 4
+
+        params->psB = (params->k_left + 3) & ~3;
+        // Within KC block, process in chunks of 16 bytes (4 VNNI groups)
+        params->k_iter_sub_iter = KC / 16;
+
+        // Remaining VNNI groups in KC (always 0, 1, 2, or 3 groups)
+        params->k_iter_sub_left = (KC % 16) / 4;
+
+        // Within k_left, same decomposition
+        params->k_left_sub_iter = params->k_left / 16;
+        params->k_left_sub_left = (params->k_left % 16) / 4;
+
+        if (params->k % 4 != 0)
+            params->k_left_sub_left++;
+
+        int partial_elements = params->n_left % numElemsPerReg;
+
+        if (params->n_left > 0) {
+            params->nmask_avx512 =
+                0xFFFF >> (numElemsPerReg - partial_elements);
+        }
+
+        int kernel_idx = static_cast<int>(params->n_left);
+
+        utils::jit_gemv_m1_kernel kernel =
+            reinterpret_cast<utils::jit_gemv_m1_kernel>(
+                kernelCodeBlocks[kernel_idx]);
+        kernel(params);
+
+        // Update post_op_c_j by the total n processed in this kernel call
+        (params->kernelOpsAttr).post_op_c_j += params->n;
+
+        return dlp::kernels::kernelError::success;
+
+    } else if (NR == 1) {
         numElemsPerReg = 64;
 
         auto params    = static_cast<dlp::kernels::gemvN1Params*>(_params);
@@ -1852,8 +1950,6 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
             reinterpret_cast<utils::jit_gemv_n1_kernel>(
                 kernelCodeBlocks[kernel_idx]);
         kernel(params);
-    } else if (MR == 1) {
-        return dlp::kernels::kernelError::error;
     } else {
         auto params = static_cast<dlp::kernels::gemmParams*>(_params);
 

@@ -358,8 +358,8 @@ struct gemvN1GeneratorParams
 // output
 struct gemvM1GeneratorParams
 {
+    md_t c_downscale; // Downscale factor for C
     // Dimensions and loop control
-    int c_downscale;
     int NR; // Vector length (number of elements to process at once) - typically
             // 64 for AVX512
     int N_LEFT;      // N-dimension left over elements

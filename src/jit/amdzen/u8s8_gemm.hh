@@ -83,7 +83,9 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     int  RegBytes = Traits::regBytes;
     int  MR, NR;
     int  c_downscale;
-    bool useMask;
+    bool useMask =
+        false; // Flag to indicate if masked instructions are generated
+
     // =================================================================
     // REGISTER ALLOCATION
     // =================================================================

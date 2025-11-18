@@ -936,6 +936,22 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         Matrix C_ref(config_.m, config_.n, config_.c_type, layout, config_.ldc,
                      false);
 
+        // =====================================================================
+        // MATRIX INITIALIZATION STRATEGY (IMPORTANT FOR
+        // DEBUGGING/REPRODUCIBILITY)
+        // =====================================================================
+        // NOTE TO DEVELOPERS:
+        //   - You MUST use ONE of the following initialization blocks.
+        //   - For PRODUCTION TESTING, use the "Random Fill" block (default
+        //   below).
+        //   - For DEBUGGING or when investigating mismatches, it is HIGHLY
+        //   RECOMMENDED
+        //     to use the "Constant Fill" block (see below) for easier
+        //     reproducibility.
+        //   - DO NOT comment out both blocks; always initialize matrices
+        //   deterministically.
+
+        /* --- RANDOM FILL (Recommended for production) --- */
         // Initialize matrices with deterministic random values
         if (config_.has_fill_value) {
             A.fillRandom(42 + config_.m, config_.fill_lb, config_.fill_ub,
@@ -949,7 +965,16 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             B.fillRandom(43 + config_.n);
             C.fillRandom(44 + config_.k);
         }
-        // C.fillValue(234);
+
+        /* --- CONSTANT FILL (Recommended for debugging) --- */
+        // To enable constant fill for easier debugging, comment out the random
+        // fill block above and uncomment the following lines: A.fillValue(10);
+        // B.fillValue(-5);
+        // C.fillValue(20);
+        // A_ref.fillValue(10);
+        // B_ref.fillValue(-5);
+        // C_ref.fillValue(20);
+
         A_ref = A;
         B_ref = B;
         C_ref = C;

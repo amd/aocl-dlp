@@ -63,9 +63,6 @@ get_kernel_family_name(kernelDatatype kDtype)
         case kernelDatatype::u8s8s32ou8:
             return "dlp_u8s8s32ou8_jit_kernel";
         default:
-            std::cerr << "[WARNING] Unsupported kernelDatatype requested in "
-                         "get_kernel_family_name: "
-                      << static_cast<int>(kDtype) << std::endl;
             return "dlp_unknown_jit_kernel";
     }
 }

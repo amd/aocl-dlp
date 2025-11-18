@@ -34,7 +34,6 @@
 #include "lpgemm_5loop_interface_apis.h"
 #include "sys_utils/lpgemm_sys.h"
 #include "threading/lpgemm_thread_utils.h"
-
 // Kernel function prototypes
 typedef void (*lpgemm_rowvar_s32)(const md_t,
                                   const md_t,
@@ -251,10 +250,19 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
             post_ops_attr.post_op_c_j    = jc;
             post_ops_attr.rs_c_downscale = rs_c;
 
-            lpgemv_m_one_u8s8s32os32(
-                nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
-                n_sub_updated, jc_cur_loop_rem, post_op_list, &post_ops_attr);
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(
+                    lcntx->dlp_kernel_hndl, 1, nc0, k, (uint8_t*)a_use,
+                    rs_a_use, cs_a_use, 1, (int8_t*)b_use, rs_b_use, cs_b_use,
+                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
+                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
+            } else {
+                lpgemv_m_one_u8s8s32os32(nc0, k, a_use, rs_a_use, cs_a_use,
+                                         mtag_a, b_use, rs_b_use, cs_b_use,
+                                         mtag_b, c_use, rs_c, cs_c, alpha, beta,
+                                         NR, KC, n_sub_updated, jc_cur_loop_rem,
+                                         post_op_list, &post_ops_attr);
+            }
 
             if (mtag_b == REORDERED) {
                 adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
@@ -571,7 +579,7 @@ LPGEMM_5LOOP(uint8_t, int8_t, int32_t, u8s8s32o32)
                             (void*)&alpha, (void*)&beta0, post_op_list,
                             post_ops_attr);
                     } else {
-                        // // Call classic kernel
+                        // Call classic kernel
                         ((lpgemm_rowvar_s32)lcntx->kern_fun_ptr)(
                             mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
                             a_block_stride, (b_use + (jr * kc0_updated)),

@@ -194,6 +194,9 @@ struct gemmParams : public kernelParams
         , kLeft(other.kLeft)
         , maskF32{ 0 }
         , maskF32_8{ 0 }
+        , maskS32(other.maskS32)
+        , kLeftmask(other.kLeftmask)
+        , quantScale(other.quantScale)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
     {
@@ -231,6 +234,9 @@ struct gemmParams : public kernelParams
                   std::begin(maskF32_8));
         std::copy(std::begin(other.maskArray), std::end(other.maskArray),
                   std::begin(maskArray));
+        maskS32       = other.maskS32;
+        kLeftmask     = other.kLeftmask;
+        quantScale    = other.quantScale;
         kernelOpsList = other.kernelOpsList;
         kernelOpsAttr = other.kernelOpsAttr;
         return *this;
@@ -337,6 +343,8 @@ struct gemvN1Params : public kernelParams
         , kmask_avx512_256{ 0 }
         , mmask_avx512{ 0 }
         , kmask_avx512{ 0 }
+        , kmask_bf16_avx512{ 0 }
+        , kmask_i8_avx512{ 0 }
         , kernelOpsList(kernelOps)
         , kernelOpsAttr(kernelOpsAttr)
     {
@@ -367,6 +375,8 @@ struct gemvN1Params : public kernelParams
         , kmask_avx512_256(other.kmask_avx512_256)
         , mmask_avx512(other.mmask_avx512)
         , kmask_avx512(other.kmask_avx512)
+        , kmask_bf16_avx512(other.kmask_bf16_avx512)
+        , kmask_i8_avx512(other.kmask_i8_avx512)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
     {
@@ -397,6 +407,8 @@ struct gemvN1Params : public kernelParams
         , kmask_avx512_256(other.kmask_avx512_256)
         , mmask_avx512(other.mmask_avx512)
         , kmask_avx512(other.kmask_avx512)
+        , kmask_bf16_avx512(other.kmask_bf16_avx512)
+        , kmask_i8_avx512(other.kmask_i8_avx512)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
     {
@@ -405,31 +417,33 @@ struct gemvN1Params : public kernelParams
     // Copy assignment operator
     gemvN1Params& operator=(const gemvN1Params& other)
     {
-        a                = other.a;
-        x                = other.x;
-        y                = other.y;
-        m                = other.m;
-        k                = other.k;
-        rsA              = other.rsA;
-        csA              = other.csA;
-        rsB              = other.rsB;
-        csB              = other.csB;
-        rsC              = other.rsC;
-        csC              = other.csC;
-        k_iter           = other.k_iter;
-        k_left           = other.k_left;
-        m_iter           = other.m_iter;
-        m_left           = other.m_left;
-        alpha            = other.alpha;
-        beta             = other.beta;
-        mmask_avx2       = other.mmask_avx2;
-        kmask_avx2       = other.kmask_avx2;
-        mmask_avx512_256 = other.mmask_avx512_256;
-        kmask_avx512_256 = other.kmask_avx512_256;
-        mmask_avx512     = other.mmask_avx512;
-        kmask_avx512     = other.kmask_avx512;
-        kernelOpsList    = other.kernelOpsList;
-        kernelOpsAttr    = other.kernelOpsAttr;
+        a                 = other.a;
+        x                 = other.x;
+        y                 = other.y;
+        m                 = other.m;
+        k                 = other.k;
+        rsA               = other.rsA;
+        csA               = other.csA;
+        rsB               = other.rsB;
+        csB               = other.csB;
+        rsC               = other.rsC;
+        csC               = other.csC;
+        k_iter            = other.k_iter;
+        k_left            = other.k_left;
+        m_iter            = other.m_iter;
+        m_left            = other.m_left;
+        alpha             = other.alpha;
+        beta              = other.beta;
+        mmask_avx2        = other.mmask_avx2;
+        kmask_avx2        = other.kmask_avx2;
+        mmask_avx512_256  = other.mmask_avx512_256;
+        kmask_avx512_256  = other.kmask_avx512_256;
+        mmask_avx512      = other.mmask_avx512;
+        kmask_avx512      = other.kmask_avx512;
+        kmask_bf16_avx512 = other.kmask_bf16_avx512;
+        kmask_i8_avx512   = other.kmask_i8_avx512;
+        kernelOpsList     = other.kernelOpsList;
+        kernelOpsAttr     = other.kernelOpsAttr;
         return *this;
     }
 
@@ -443,22 +457,24 @@ struct gemvN1Params : public kernelParams
     // Destructor
     ~gemvN1Params()
     {
-        a                = nullptr;
-        x                = nullptr;
-        y                = nullptr;
-        alpha            = nullptr;
-        beta             = nullptr;
-        k_iter           = 0;
-        k_left           = 0;
-        m_iter           = 0;
-        m_left           = 0;
-        mmask_avx2       = { 0, 0, 0, 0, 0, 0, 0, 0 };
-        kmask_avx2       = { 0, 0, 0, 0, 0, 0, 0, 0 };
-        mmask_avx512_256 = { 0 };
-        kmask_avx512_256 = { 0 };
-        mmask_avx512     = { 0 };
-        kmask_avx512     = { 0 };
-        kernelOpsList    = nullptr;
+        a                 = nullptr;
+        x                 = nullptr;
+        y                 = nullptr;
+        alpha             = nullptr;
+        beta              = nullptr;
+        k_iter            = 0;
+        k_left            = 0;
+        m_iter            = 0;
+        m_left            = 0;
+        mmask_avx2        = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        kmask_avx2        = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        mmask_avx512_256  = { 0 };
+        kmask_avx512_256  = { 0 };
+        mmask_avx512      = { 0 };
+        kmask_avx512      = { 0 };
+        kmask_bf16_avx512 = { 0 };
+        kmask_i8_avx512   = { 0 };
+        kernelOpsList     = nullptr;
     }
 };
 
@@ -474,14 +490,13 @@ struct gemvM1Params : public kernelParams
     md_t  csX; // Column stride for x (element spacing, typically 1)
     md_t  rsB; // Row stride for B (should be 1 for row-major single row)
     md_t  csB; // Column stride for B (element spacing within the row)
-    md_t  psB; // Post stride for B (element spacing within the row) // REMOVE
-               // THIS
-    md_t rsY;  // Row stride for y (should be 1 for scalar output)
-    md_t csY;  // Column stride for y (should be 1 for scalar output)
-    md_t n_sub_updated;   // Number of updated n elements
-    md_t jc_cur_loop_rem; // Remaining jc elements in the current loop
-    md_t n_iter;          // Number of full n iterations (n/NR)
-    md_t n_left;          // Remaining n elements
+    md_t  psB; // Panel stride for B
+    md_t  rsY; // Row stride for y (should be 1 for scalar output)
+    md_t  csY; // Column stride for y (should be 1 for scalar output)
+    md_t  n_sub_updated;   // Number of updated n elements
+    md_t  jc_cur_loop_rem; // Remaining jc elements in the current loop
+    md_t  n_iter;          // Number of full n iterations (n/NR)
+    md_t  n_left;          // Remaining n elements
     md_t n_left_16; // Remaining n elements in main (multiple of 16->(16,32,48))
     md_t n_left_lt16;     // Remaining n elements in fringe (less than 16)
     md_t k_iter;          // Number of full k iterations for vectorization
@@ -497,8 +512,11 @@ struct gemvM1Params : public kernelParams
     // NOTE : The masks here are defined specific to NR being 64
     // TODO : Generalize the support for other NR values, similar to how
     //        it is done for GEMV(n=1).
-    uint16_t               nmask_avx512;
-    uint8_t                nmask_avx512_256;
+    uint16_t nmask_avx512;
+    uint8_t  nmask_i8_avx512;
+    uint8_t  nmask_avx512_256;
+    uint16_t kLeftmask;
+
     std::array<int32_t, 8> nmask_avx2;
 
     lpgemm_post_op*     kernelOpsList; // List of post-ops
@@ -531,6 +549,7 @@ struct gemvM1Params : public kernelParams
         , csX(cs_x)
         , rsB(rs_b)
         , csB(cs_b)
+        , psB(0)
         , rsY(rs_y)
         , csY(cs_y)
         , n_sub_updated(n_sub_updated)
@@ -545,10 +564,13 @@ struct gemvM1Params : public kernelParams
         , k_iter_sub_left(0)
         , k_left_sub_iter(0)
         , k_left_sub_left(0)
+        , is_k_odd(0)
         , alpha(alpha_acc)
         , beta(beta_acc)
         , nmask_avx512(0)
+        , nmask_i8_avx512(0)
         , nmask_avx512_256(0)
+        , kLeftmask(0)
         , nmask_avx2{ 0, 0, 0, 0, 0, 0, 0, 0 }
         , kernelOpsList(kernelOps)
         , kernelOpsAttr(kernelOpsAttr)
@@ -566,6 +588,7 @@ struct gemvM1Params : public kernelParams
         , csX(other.csX)
         , rsB(other.rsB)
         , csB(other.csB)
+        , psB(other.psB)
         , rsY(other.rsY)
         , csY(other.csY)
         , n_sub_updated(other.n_sub_updated)
@@ -580,10 +603,13 @@ struct gemvM1Params : public kernelParams
         , k_iter_sub_left(other.k_iter_sub_left)
         , k_left_sub_iter(other.k_left_sub_iter)
         , k_left_sub_left(other.k_left_sub_left)
+        , is_k_odd(other.is_k_odd)
         , alpha(other.alpha)
         , beta(other.beta)
         , nmask_avx512(other.nmask_avx512)
+        , nmask_i8_avx512(other.nmask_i8_avx512)
         , nmask_avx512_256(other.nmask_avx512_256)
+        , kLeftmask(other.kLeftmask)
         , nmask_avx2(other.nmask_avx2)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
@@ -601,6 +627,7 @@ struct gemvM1Params : public kernelParams
         , csX(other.csX)
         , rsB(other.rsB)
         , csB(other.csB)
+        , psB(other.psB)
         , rsY(other.rsY)
         , csY(other.csY)
         , n_sub_updated(other.n_sub_updated)
@@ -615,10 +642,13 @@ struct gemvM1Params : public kernelParams
         , k_iter_sub_left(other.k_iter_sub_left)
         , k_left_sub_iter(other.k_left_sub_iter)
         , k_left_sub_left(other.k_left_sub_left)
+        , is_k_odd(other.is_k_odd)
         , alpha(other.alpha)
         , beta(other.beta)
         , nmask_avx512(other.nmask_avx512)
+        , nmask_i8_avx512(other.nmask_i8_avx512)
         , nmask_avx512_256(other.nmask_avx512_256)
+        , kLeftmask(other.kLeftmask)
         , nmask_avx2(other.nmask_avx2)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
@@ -637,6 +667,7 @@ struct gemvM1Params : public kernelParams
         csX              = other.csX;
         rsB              = other.rsB;
         csB              = other.csB;
+        psB              = other.psB;
         rsY              = other.rsY;
         csY              = other.csY;
         n_sub_updated    = other.n_sub_updated;
@@ -651,10 +682,13 @@ struct gemvM1Params : public kernelParams
         k_iter_sub_left  = other.k_iter_sub_left;
         k_left_sub_iter  = other.k_left_sub_iter;
         k_left_sub_left  = other.k_left_sub_left;
+        is_k_odd         = other.is_k_odd;
         alpha            = other.alpha;
         beta             = other.beta;
         nmask_avx512     = other.nmask_avx512;
+        nmask_i8_avx512  = other.nmask_i8_avx512;
         nmask_avx512_256 = other.nmask_avx512_256;
+        kLeftmask        = other.kLeftmask;
         nmask_avx2       = other.nmask_avx2;
         kernelOpsList    = other.kernelOpsList;
         kernelOpsAttr    = other.kernelOpsAttr;
@@ -686,8 +720,11 @@ struct gemvM1Params : public kernelParams
         k_iter_sub_left  = 0;
         k_left_sub_iter  = 0;
         k_left_sub_left  = 0;
+        is_k_odd         = 0;
         nmask_avx512     = 0;
+        nmask_i8_avx512  = 0;
         nmask_avx512_256 = 0;
+        kLeftmask        = 0;
         nmask_avx2       = { 0, 0, 0, 0, 0, 0, 0, 0 };
         kernelOpsList    = nullptr;
         kernelOpsAttr    = {};

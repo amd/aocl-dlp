@@ -1460,7 +1460,7 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Fill matrix with a single value
      */
-    void Matrix::fillValue(std::any value)
+    void Matrix::fillValue(double value)
     {
         if (!m_data || m_dataSizeBytes == 0) {
             return;
@@ -1468,7 +1468,7 @@ namespace dlp { namespace testing { namespace framework {
 
         switch (m_type) {
             case MatrixType::f32: {
-                float  fillValue    = std::any_cast<float>(value);
+                float  fillValue    = static_cast<float>(value);
                 float* data         = reinterpret_cast<float*>(m_data);
                 size_t elementCount = m_dataSizeBytes / sizeof(float);
                 for (size_t i = 0; i < elementCount; ++i) {
@@ -1477,7 +1477,7 @@ namespace dlp { namespace testing { namespace framework {
                 break;
             }
             case MatrixType::u8: {
-                uint8_t  fillValue = std::any_cast<uint8_t>(value);
+                uint8_t  fillValue = static_cast<uint8_t>(value);
                 uint8_t* data      = m_data;
                 for (size_t i = 0; i < m_dataSizeBytes; ++i) {
                     data[i] = fillValue;
@@ -1485,7 +1485,7 @@ namespace dlp { namespace testing { namespace framework {
                 break;
             }
             case MatrixType::s8: {
-                int8_t  fillValue = std::any_cast<int8_t>(value);
+                int8_t  fillValue = static_cast<int8_t>(value);
                 int8_t* data      = reinterpret_cast<int8_t*>(m_data);
                 for (size_t i = 0; i < m_dataSizeBytes; ++i) {
                     data[i] = fillValue;
@@ -1493,7 +1493,7 @@ namespace dlp { namespace testing { namespace framework {
                 break;
             }
             case MatrixType::s32: {
-                int32_t  fillValue = std::any_cast<int32_t>(value);
+                int32_t  fillValue = static_cast<int32_t>(value);
                 int32_t* data      = reinterpret_cast<int32_t*>(m_data);
                 for (size_t i = 0; i < m_dataSizeBytes / sizeof(int32_t); ++i) {
                     data[i] = fillValue;
@@ -1501,8 +1501,8 @@ namespace dlp { namespace testing { namespace framework {
                 break;
             }
             case MatrixType::bf16: {
-                // For BF16, fill with random uint16_t values
-                float     fillValue          = std::any_cast<float>(value);
+                // For BF16, convert double to float first, then to bfloat16
+                float     fillValue          = static_cast<float>(value);
                 bfloat16  fillValue_bfloat16 = f32_to_bf16(fillValue);
                 bfloat16* data         = reinterpret_cast<bfloat16*>(m_data);
                 size_t    elementCount = m_dataSizeBytes / sizeof(bfloat16);
@@ -1511,7 +1511,44 @@ namespace dlp { namespace testing { namespace framework {
                 }
                 break;
             }
-            // Add other types as needed
+            case MatrixType::u16: {
+                uint16_t  fillValue    = static_cast<uint16_t>(value);
+                uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = fillValue;
+                }
+                break;
+            }
+            case MatrixType::s16: {
+                int16_t  fillValue    = static_cast<int16_t>(value);
+                int16_t* data         = reinterpret_cast<int16_t*>(m_data);
+                size_t   elementCount = m_dataSizeBytes / sizeof(int16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = fillValue;
+                }
+                break;
+            }
+            case MatrixType::u32: {
+                uint32_t  fillValue    = static_cast<uint32_t>(value);
+                uint32_t* data         = reinterpret_cast<uint32_t*>(m_data);
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint32_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = fillValue;
+                }
+                break;
+            }
+            case MatrixType::s4:
+            case MatrixType::u4: {
+                // For packed 4-bit types, pack two values per byte
+                uint8_t* data          = m_data;
+                uint8_t  fillValue4bit = static_cast<uint8_t>(value) & 0x0F;
+                uint8_t  packedValue   = fillValue4bit | (fillValue4bit << 4);
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    data[i] = packedValue;
+                }
+                break;
+            }
             default:
                 throw std::runtime_error(
                     "Unsupported matrix type for value fill");

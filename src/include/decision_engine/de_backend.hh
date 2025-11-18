@@ -607,8 +607,9 @@ class gemmU8S8DEBackend : public iDEBackend
             nr       = 1;
             k_unroll = 1; // k-unroll is 1 for GEMV N1
         } else {
-            // Only GEMV N=1 is currently supported for U8S8
-            return INVALID_KERNEL_INFO;
+            nr       = 64;
+            mr       = 1;
+            k_unroll = 4;
         }
 
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(

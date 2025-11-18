@@ -337,4 +337,328 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
      */
     dlp::jit::jitGeneratorError loadMasks();
 };
+
+/**
+ * @brief JIT generator for u8s8s32os32 VNNI GEMV M=1 kernels using Xbyak
+ *
+ * This class generates VNNI optimized kernels for u8 * s8 -> s32 GEMV
+ * operations where M=1 (vector-matrix multiplication). Supports AVX512_VNNI
+ * instruction set. Uses 1 x NR blocking pattern with K_SUB_ITER optimization.
+ */
+template<utils::kernelInstrType KType>
+class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
+{
+  public:
+    // Constructor that takes buffer and its size for JIT code dumping
+    jitU8S8VNNI_GEMVM1(void* buffer, size_t bufferSize);
+    ~jitU8S8VNNI_GEMVM1()                               = default;
+    jitU8S8VNNI_GEMVM1(jitU8S8VNNI_GEMVM1&)             = delete;
+    jitU8S8VNNI_GEMVM1& operator=(jitU8S8VNNI_GEMVM1&)  = delete;
+    jitU8S8VNNI_GEMVM1(jitU8S8VNNI_GEMVM1&&)            = delete;
+    jitU8S8VNNI_GEMVM1& operator=(jitU8S8VNNI_GEMVM1&&) = delete;
+
+    /**
+     * @brief Generate the complete u8s8s32os32 VNNI GEMV M=1 kernel
+     */
+    dlp::jit::jitGeneratorError generateKernel(
+        utils::gemvM1GeneratorParams& params);
+
+  private:
+    // =================================================================
+    // TYPE DEFINITIONS AND ARCHITECTURE TRAITS
+    // =================================================================
+    using Traits  = amdzen::traits::ArchitectureTraits<KType>;
+    using RegType = typename Traits::RegType;
+
+    // =================================================================
+    // VNNI-SPECIFIC CONSTANTS
+    // =================================================================
+    static constexpr int VNNI_GROUP_SIZE = 4; // VNNI groups 4 int8 elements
+
+    // =================================================================
+    // KERNEL CONFIGURATION
+    // =================================================================
+    int numRegs  = Traits::numRegs;
+    int RegBytes = Traits::regBytes;
+
+    // GEMV M=1 specific dimensions
+    int nElemsPerReg; // SIMD width for int32 accumulators
+    int c_downscale;
+    int NR;
+    int N_LEFT;
+    int KC;
+    int K_SUB_ITER;
+
+    dlp::kernel_frame::storageFormat yFormat;
+    dlp::kernel_frame::scalingType   alphaScalingType;
+    dlp::kernel_frame::scalingType   betaScalingType;
+    AOCL_MEMORY_TAG                  mtag_b;
+
+    // Add mask register array (for AVX512)
+    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
+    static constexpr int MASK_START_IDX   = 1;        // Start from k1
+    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+
+    // =================================================================
+    // REGISTER ALLOCATION
+    // =================================================================
+    int xReg;     // Number of registers for vector x (K_SUB_ITER registers)
+    int bReg;     // Number of registers for matrix B (K_SUB_ITER registers)
+    int accumReg; // Number of registers for accumulation ((NR/16)*K_SUB_ITER)
+    int yReg;     // Number of registers for loading/storing Y (NR/16)
+    int maskReg;  // Number of registers for mask
+
+    // Register base indices
+    int xBaseIdx;     // Starting index for X registers
+    int bBaseIdx;     // Starting index for B registers
+    int accumBaseIdx; // Starting index for accumulation registers
+    int yBaseIdx;     // Starting index for Y registers
+    int maskBaseIdx;  // Starting index for mask registers
+
+    // Matrix/Vector pointers and strides
+    Xbyak::Reg64 stackPtr;            // Stack frame pointer
+    Xbyak::Reg64 regBptr;             // Pointer to matrix B
+    Xbyak::Reg64 regXptr;             // Pointer to vector x
+    Xbyak::Reg64 regYptr, regTmpYptr; // Pointer to vector y and its temp
+    Xbyak::Reg64 regNIter;            // N-loop iterator
+    Xbyak::Reg64 regKIter;            // K-loop iterator
+    Xbyak::Reg64 regKSubIter;         // K sub-iteration iterator
+    Xbyak::Reg64 regRsB;              // Row stride for B
+    Xbyak::Reg64 regPsB;              // Panel stride for B
+    Xbyak::Reg64 regTmp1;             // General purpose temporary register 1
+    Xbyak::Reg64 regTmp2;             // General purpose temporary register 2
+    Xbyak::Reg64 regIncN;             // N increment counter
+    Xbyak::Reg64 regIncK;             // K increment counter
+    Xbyak::Reg64 regDebugPtr;         // Debug buffer pointer register
+
+    // Labels for code sections
+    Xbyak::Label label_n_loop_start;            // Main n-dimension loop
+    Xbyak::Label label_n_loop_end;              // End of n-dimension loop
+    Xbyak::Label label_n_loop_k_loop_start;     // Main k-dimension loop
+    Xbyak::Label label_n_loop_k_loop_end;       // End of k-dimension loop
+    Xbyak::Label label_n_fringe_k_loop_start;   // Main k-dimension loop
+    Xbyak::Label label_n_fringe_k_loop_end;     // End of k-dimension loop
+    Xbyak::Label label_n_fringe_start;          // Handle n-dimension remainder
+    Xbyak::Label label_n_fringe_end;            // End of n-dimension remainder
+    Xbyak::Label label_n_loop_k_fringe_start;   // Handle k-dimension remainder
+    Xbyak::Label label_n_loop_k_fringe_end;     // End of k-dimension remainder
+    Xbyak::Label label_n_fringe_k_fringe_start; // Handle k-dimension remainder
+    Xbyak::Label label_n_fringe_k_fringe_end;   // End of k-dimension remainder
+
+    // =================================================================
+    // CORE SETUP AND INITIALIZATION
+    // =================================================================
+
+    /**
+     * @brief Allocate registers based on 1 x NR GEMV M=1 tiling
+     */
+    dlp::jit::jitGeneratorError allocateRegisters();
+
+    /**
+     * @brief Initialize stack frame registers
+     */
+    void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
+
+    /**
+     * @brief Initialize parameter pointers from stack
+     */
+    void initializeParameters(utils::gemvM1GeneratorParams& params);
+
+    /**
+     * @brief Initialize registers with zero values (utility function)
+     */
+    void regInit(int baseIdx, int numRegs);
+
+    /**
+     * @brief Calculate B pointer offset using power-of-2 decomposition
+     */
+    dlp::jit::jitGeneratorError offsetBPtr(int temp);
+
+    // =================================================================
+    // CORE COMPUTATION METHODS
+    // =================================================================
+
+    /**
+     * @brief K sub-iteration loop handler
+     */
+    dlp::jit::jitGeneratorError loopKSubIter(bool kfringe, bool nfringe);
+
+    /**
+     * @brief Compute K_SUB_ITER x NR block (main compute function)
+     */
+    dlp::jit::jitGeneratorError computeKxNR(bool nMask);
+
+    /**
+     * @brief Compute K_SUB_ITER x n_fringe block (fringe compute function)
+     */
+    dlp::jit::jitGeneratorError computeKxnfringe();
+
+    /**
+     * @brief Compute 1 x NR block (single K iteration)
+     */
+    dlp::jit::jitGeneratorError compute1xNR(bool nMask, bool isLastKGroup);
+
+    /**
+     * @brief Compute 1 x n_fringe block (single K iteration, fringe)
+     */
+    dlp::jit::jitGeneratorError compute1xnfringe(bool isLastKGroup);
+
+    /**
+     * @brief Final accumulation across K_SUB_ITER accumulators
+     */
+    dlp::jit::jitGeneratorError finalAccumulate();
+
+    // =================================================================
+    // SCALING AND POST-PROCESSING
+    // =================================================================
+
+    /**
+     * @brief Scale accumulation with alpha factor
+     */
+    dlp::jit::jitGeneratorError scaleWithAlpha();
+
+    /**
+     * @brief Scale Y with beta factor and accumulate
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta(bool nMask);
+
+    /**
+     * @brief Scale Y with beta for fringe case
+     */
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe(bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta factor for S32 data type
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta_S32(bool nMask, bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta factor for U8 data type
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta_U8(bool nMask, bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta factor for S8 data type
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta_S8(bool nMask, bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta factor for F32 data type
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta_F32(bool nMask, bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta factor for BF16 data type
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta_BF16(bool nMask, bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta for fringe case (S32)
+     */
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe_S32(bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta for fringe case (U8)
+     */
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe_U8(bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta for fringe case (S8)
+     */
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe_S8(bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta for fringe case (F32)
+     */
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe_F32(bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta for fringe case (BF16)
+     */
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe_BF16(bool isBetaOne);
+
+    /**
+     * @brief Update Y buffer pointers for downscale operations
+     */
+    void updateYBufferPointers();
+
+    // =================================================================
+    // RESULT PROCESSING AND OUTPUT
+    // =================================================================
+
+    /**
+     * @brief Store Y values
+     */
+    dlp::jit::jitGeneratorError storeYValues(bool nMask);
+
+    /**
+     * @brief Store Y values for fringe case
+     */
+    dlp::jit::jitGeneratorError storeYValuesFringe();
+
+    /**
+     * @brief Store Y values for S32 data type
+     */
+    dlp::jit::jitGeneratorError storeYValues_S32(bool nMask);
+
+    /**
+     * @brief Store Y values for U8 data type
+     */
+    dlp::jit::jitGeneratorError storeYValues_U8(bool nMask);
+
+    /**
+     * @brief Store Y values for S8 data type
+     */
+    dlp::jit::jitGeneratorError storeYValues_S8(bool nMask);
+
+    /**
+     * @brief Store Y values for F32 data type
+     */
+    dlp::jit::jitGeneratorError storeYValues_F32(bool nMask);
+
+    /**
+     * @brief Store Y values for BF16 data type
+     */
+    dlp::jit::jitGeneratorError storeYValues_BF16(bool nMask);
+
+    /**
+     * @brief Store Y values for fringe case (S32)
+     */
+    dlp::jit::jitGeneratorError storeYValuesFringe_S32();
+
+    /**
+     * @brief Store Y values for fringe case (U8)
+     */
+    dlp::jit::jitGeneratorError storeYValuesFringe_U8();
+
+    /**
+     * @brief Store Y values for fringe case (S8)
+     */
+    dlp::jit::jitGeneratorError storeYValuesFringe_S8();
+
+    /**
+     * @brief Store Y values for fringe case (F32)
+     */
+    dlp::jit::jitGeneratorError storeYValuesFringe_F32();
+
+    /**
+     * @brief Store Y values for fringe case (BF16)
+     */
+    dlp::jit::jitGeneratorError storeYValuesFringe_BF16();
+
+    // =================================================================
+    // HELPER METHODS
+    // =================================================================
+
+    /**
+     * @brief Load masks for fringe case handling (AVX512 only)
+     */
+    dlp::jit::jitGeneratorError loadMasks();
+
+    /**
+     * @brief Masked load for B matrix
+     */
+    dlp::jit::jitGeneratorError maskLoadB(int regIdx, int maskIdx);
+};
+
 } // namespace amdzen::gen
