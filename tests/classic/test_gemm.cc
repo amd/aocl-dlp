@@ -54,6 +54,8 @@ using namespace dlp::testing::utils;
 using namespace dlp::testing::framework;
 using namespace dlp::testing::framework::postops;
 
+#define MAX_MISMATCHES 10
+
 // ============================================================================
 // GLOBAL TEST CONFIGURATION
 // ============================================================================
@@ -812,27 +814,6 @@ createAdditionalTestConfigs()
 }
 
 // ============================================================================
-// HELPER FUNCTIONS - DETAILED MATRIX COMPARISON
-// ============================================================================
-
-// Helper function to compare matrices and report detailed differences
-// Now uses the unified Matrix::compare() API with verbose mode
-std::string
-compareMatricesDetailed(const Matrix& matrix1,
-                        const Matrix& matrix2,
-                        size_t        maxMismatches = 10)
-{
-    MatrixCompareOptions opts;
-    if (g_verbose_debug) {
-        opts = MatrixCompareOptions::Verbose(maxMismatches);
-    } else {
-        opts = MatrixCompareOptions::Fast();
-    }
-    auto result = matrix1.compare(matrix2, opts);
-    return FormatCompareResult(result, matrix1, matrix2);
-}
-
-// ============================================================================
 // GLOBAL INITIALIZATION
 // ============================================================================
 
@@ -1087,6 +1068,10 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             // Set up comparison options with custom tolerance if specified
             MatrixCompareOptions compare_opts = MatrixCompareOptions::Fast();
+            if (g_verbose_debug) {
+                compare_opts = MatrixCompareOptions::Verbose(MAX_MISMATCHES);
+            }
+
             if (config_.has_tolerances) {
                 compare_opts.relToleranceMultiplier =
                     config_.tolerance_relative;
@@ -1104,7 +1089,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                     << printConfigDetails(config_) << "\n";
 
                 if (g_verbose_debug) {
-                    detailed_error << compareMatricesDetailed(C, C_ref);
+                    detailed_error
+                        << FormatCompareResult(compare_result, C, C_ref);
                 }
                 FAIL() << detailed_error.str();
             }
