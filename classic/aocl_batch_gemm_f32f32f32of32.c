@@ -68,6 +68,9 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
         dlp_print_msg(" AVX2 ISA not supported by processor, "
                       "cannot perform f32f32f32 gemm.",
                       __FILE__, __LINE__);
+        for (md_t gc_i = 0; gc_i < group_count; gc_i++) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+        }
         goto err_hndl;
     }
 
