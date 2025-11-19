@@ -225,6 +225,8 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     md_t nr_hint = lcntx_l.blksz.NR;
     md_t kc_hint = lcntx_l.blksz.KC;
 
+    AOCL_MEMORY_TAG jit_mtag_b = mtag_b;
+
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         // No native BF16 support - will use F32 kernels
         // Get F32 context for proper block sizes
@@ -237,14 +239,14 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         // calling f32 kernel, same should be provided for generating JIT
         // kernels
         if (m == 1) {
-            mtag_b = UNPACKED;
+            jit_mtag_b = UNPACKED;
         }
     }
 
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
     dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
-        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+        DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a, jit_mtag_b, m, n, k, rs_a,
+        cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
         mr_hint, nr_hint, kc_hint, DLP_BF16, &lcntx_l.dlp_kernel_hndl);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))

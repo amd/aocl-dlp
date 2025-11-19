@@ -1,0 +1,494 @@
+gemm_tests:
+  # ============================================================================
+  # GEMV M=1 (Matrix-Vector: y = alpha * A * x + beta * y)
+  # Blocking parameters: NR=16, NC=8160, KC=512
+  # ============================================================================
+
+  # --- M=1: Corner cases (K dimension) ---
+  - name: "bf16_m1_k_corner_cases"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 1
+    n: [16, 32, 64, 128]
+    k: [1, 2, 4, 7, 8, 15, 16, 31, 32, 63, 64]  # Small values and powers of 2
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: K around KC boundary (KC=512) ---
+  - name: "bf16_m1_k_around_kc_boundary"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 1
+    n: [16, 32, 64]
+    k: [508, 509, 510, 511, 512, 513, 514, 515, 516]  # Around KC=512
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: K multiples of KC ---
+  - name: "bf16_m1_k_multiples_of_kc"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 1
+    n: [16, 64, 128]
+    k: [512, 1024, 1536, 2048, 2560, 3072]  # Multiples of KC=512
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: K non-multiples of KC ---
+  - name: "bf16_m1_k_non_multiples_of_kc"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 1
+    n: [16, 32]
+    k: [517, 768, 1000, 1111, 1536, 2000, 2222]  # Non-multiples of KC
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: N corner cases ---
+  - name: "bf16_m1_n_corner_cases"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 1
+    n: [1, 2, 4, 7, 8, 15, 16, 31, 32, 63, 64]  # Small N values
+    k: [64, 128, 512]
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: N around NR boundary (NR=16) ---
+  - name: "bf16_m1_n_around_nr_boundary"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 1
+    n: [12, 13, 14, 15, 16, 17, 18, 19, 20]  # Around NR=16
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: N multiples of NR ---
+  - name: "bf16_m1_n_multiples_of_nr"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 1
+    n: [16, 32, 48, 64, 80, 96, 112, 128, 256, 512]  # Multiples of NR=16
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: N non-multiples of NR ---
+  - name: "bf16_m1_n_non_multiples_of_nr"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 1
+    n: [17, 33, 50, 65, 100, 127, 255, 500]  # Non-multiples of NR=16
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: N around NC boundary (NC=8160) ---
+  - name: "bf16_m1_n_around_nc_boundary"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 1
+    n: [8156, 8157, 8158, 8159, 8160, 8161, 8162, 8163, 8164]  # Around NC=8160
+    k: [64, 512]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: Large N values (multiples and non-multiples of NC) ---
+  - name: "bf16_m1_n_large_values"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 1
+    n: [8160, 16320, 10000, 20000]  # Large N values
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- M=1: Combined stress test (large K and N) ---
+  - name: "bf16_m1_stress_test"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 1
+    n: [8160, 16320]
+    k: [2048, 4096]
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ============================================================================
+  # GEMV N=1 (Vector-Matrix: y = alpha * A^T * x + beta * y)
+  # Blocking parameters: MR=8, MC=144, KC=512
+  # ============================================================================
+
+  # --- N=1: Corner cases (K dimension) ---
+  - name: "bf16_n1_k_corner_cases"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [8, 16, 32, 64]
+    n: 1
+    k: [1, 2, 4, 7, 8, 15, 16, 31, 32, 63, 64]  # Small K values
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: K around KC boundary (KC=512) ---
+  - name: "bf16_n1_k_around_kc_boundary"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [8, 16, 32]
+    n: 1
+    k: [508, 509, 510, 511, 512, 513, 514, 515, 516]  # Around KC=512
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: K multiples of KC ---
+  - name: "bf16_n1_k_multiples_of_kc"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [8, 32, 64]
+    n: 1
+    k: [512, 1024, 1536, 2048, 2560, 3072]  # Multiples of KC=512
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: K non-multiples of KC ---
+  - name: "bf16_n1_k_non_multiples_of_kc"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [8, 16]
+    n: 1
+    k: [517, 768, 1000, 1111, 1536, 2000, 2222]  # Non-multiples of KC
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: M corner cases ---
+  - name: "bf16_n1_m_corner_cases"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 4, 7, 8, 15, 16, 31, 32, 63, 64]  # Small M values
+    n: 1
+    k: [64, 128, 512]
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: M around MR boundary (MR=8) ---
+  - name: "bf16_n1_m_around_mr_boundary"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [4, 5, 6, 7, 8, 9, 10, 11, 12]  # Around MR=8
+    n: 1
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: M multiples of MR ---
+  - name: "bf16_n1_m_multiples_of_mr"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [8, 16, 24, 32, 40, 48, 56, 64, 128, 256]  # Multiples of MR=8
+    n: 1
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: M non-multiples of MR ---
+  - name: "bf16_n1_m_non_multiples_of_mr"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [9, 17, 25, 33, 50, 65, 100, 127]  # Non-multiples of MR=8
+    n: 1
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: M around MC boundary (MC=144) ---
+  - name: "bf16_n1_m_around_mc_boundary"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [140, 141, 142, 143, 144, 145, 146, 147, 148]  # Around MC=144
+    n: 1
+    k: [64, 512]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: Large M values (multiples and non-multiples of MC) ---
+  - name: "bf16_n1_m_large_values"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [144, 288, 432, 500, 1000, 2000]  # Large M values
+    n: 1
+    k: [64, 512, 1024]
+    alpha: [0.0, 1.0, 2.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: Combined stress test (large M and K) ---
+  - name: "bf16_n1_stress_test"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1000, 2000]
+    n: 1
+    k: [2048, 4096]
+    alpha: [0.0, 1.0, 2.0, 100.0]
+    beta: [0.0, 1.0, 100.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ============================================================================
+  # Additional edge cases for both M=1 and N=1
+  # ============================================================================
+
+  # --- M=1: Alpha and Beta variations ---
+  - name: "bf16_m1_alpha_beta_variations"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 1
+    n: [16, 64, 128]
+    k: [64, 512]
+    alpha: [0.0, 0.5, 1.0, 2.0, 100.0, -1.0, -100.0]
+    beta: [0.0, 0.5, 1.0, 2.0, 100.0, -1.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # --- N=1: Alpha and Beta variations ---
+  - name: "bf16_n1_alpha_beta_variations"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32","bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [8, 32, 64]
+    n: 1
+    k: [64, 512]
+    alpha: [0.0, 0.5, 1.0, 2.0, 100.0, -1.0, -100.0]
+    beta: [0.0, 0.5, 1.0, 2.0, 100.0, -1.0, -100.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0

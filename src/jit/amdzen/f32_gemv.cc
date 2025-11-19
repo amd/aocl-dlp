@@ -148,6 +148,8 @@ jitF32GEMVN1<KType>::allocateRegisters()
     tmpBaseIdx = 0; // To make sure we index YMM greater than 16
 
     // X registers (xReg): Use remaining registers for vector x
+    // We need to only consider accumReg, tmpReg and maskReg(in case of
+    // ymm_16) for total register count.
     xReg     = 1;
     xBaseIdx = tmpReg;
 
@@ -157,8 +159,7 @@ jitF32GEMVN1<KType>::allocateRegisters()
         maskReg = 2;
     }
 
-    // We need to only consider accumReg, tmpReg, cvtReg and maskReg(in case of
-    // ymm_16) for total register count. Check if we have enough registers
+    // Check if we have enough registers
     if (maskBaseIdx + maskReg > accumBaseIdx) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
@@ -878,10 +879,6 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
 
             // Get n_remainder: n % 8
             mov(regTmp2, mLeft);
-            and_(regTmp2.cvt32(), 7); // n % 8
-
-            // Calculate destination base address
-            // lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
 
             // Loop: copy n_remainder elements from stack to destination
             xor_(regKIter.cvt32(), regKIter.cvt32()); // elem_idx = 0
@@ -1880,10 +1877,6 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::scaleYWithBetaFringe(
         }
         if (n_left) {
             mov(regTmp2, n_left);
-            // and_(regTmp2.cvt32(), 7); // n % 8
-
-            // Calculate destination base address for fringe BF16 elements
-            // lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
 
             // Loop: Load n_remainder BF16 elements from C matrix to stack
             xor_(regKIter.cvt32(), regKIter.cvt32()); // elem_idx = 0
@@ -2175,10 +2168,6 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::storeYValuesFringe()
 
             // Get n_remainder: n % 8
             mov(regTmp2, n_left);
-            and_(regTmp2.cvt32(), 7); // n % 8
-
-            // Calculate destination base address
-            // lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
 
             // Loop: copy n_remainder elements from stack to destination
             xor_(regKIter.cvt32(), regKIter.cvt32()); // elem_idx = 0

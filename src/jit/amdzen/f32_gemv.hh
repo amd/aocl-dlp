@@ -66,7 +66,7 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     int xReg;     // Number of registers for vector x
     int accumReg; // Number of registers for accumulation (partial dot products)
     int tmpReg;   // Number of registers for temporary use
-    int cvtReg;   // Number of regsiters to store converted output from f32 to
+    int cvtReg;   // Number of registers to store converted output from f32 to
                   // bf16
     int maskReg;  // Number of registers for mask
     int yBaseIdx; // Starting index for accumulation registers (from end)
