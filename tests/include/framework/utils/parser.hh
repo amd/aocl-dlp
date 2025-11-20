@@ -165,6 +165,11 @@ struct TestCaseIterators
     TypeErasedIterator mtag_a;  ///< Iterator for matrix tag of A (MatrixTag)
     TypeErasedIterator mtag_b;  ///< Iterator for matrix tag of B (MatrixTag)
 
+    // Optional batch GEMM configuration (only used for batch_gemm_tests)
+    bool has_group_size = false; ///< Whether group_size is present
+    TypeErasedIterator
+        group_size; ///< Iterator for group sizes (md_t) - batch GEMM only
+
     // Optional fill_value configuration
     bool            has_fill_value = false; ///< Whether fill_value is present
     FillValueConfig fill_value; ///< Fill value configuration if present
@@ -194,7 +199,7 @@ struct TestCaseIterators
  * The MicroTest class is responsible for generating and navigating through test
  * parameter combinations. It can operate in two modes:
  * - CARTESIAN_PRODUCT: Generates all possible combinations of parameter values
- * - ELEMENT_WISE: Generates element-wise combinations (requires equal-length
+ * - SIMPLE_PRODUCT: Generates element-wise combinations (requires equal-length
  * parameter lists)
  *
  * The class provides type-safe getter methods for all GEMM parameters and
@@ -269,9 +274,9 @@ class MicroTest
     {
         m_test_case_iterators = test_case_iterators;
 
-        // Build the iterators vector
-        m_iterators.reserve(
-            17); // Pre-allocate for efficiency (reduced from 19)
+        // Build the iterators vector (18 total: 17 base GEMM params + 1
+        // group_size for batch)
+        m_iterators.reserve(18);
         m_iterators.push_back(m_test_case_iterators.a_type);
         m_iterators.push_back(m_test_case_iterators.b_type);
         m_iterators.push_back(m_test_case_iterators.c_type);
@@ -289,6 +294,7 @@ class MicroTest
         m_iterators.push_back(m_test_case_iterators.trans_b);
         m_iterators.push_back(m_test_case_iterators.mtag_a);
         m_iterators.push_back(m_test_case_iterators.mtag_b);
+        m_iterators.push_back(m_test_case_iterators.group_size); // Index 17
 
         // Initialize the appropriate product
         if (is_cartesian_product == YieldType::CARTESIAN_PRODUCT) {
@@ -325,9 +331,9 @@ class MicroTest
     {
         m_test_case_iterators = test_case_iterators;
 
-        // Build the iterators vector
-        m_iterators.reserve(
-            17); // Pre-allocate for efficiency (reduced from 19)
+        // Build the iterators vector (18 total: 17 base GEMM params + 1
+        // group_size for batch)
+        m_iterators.reserve(18);
         m_iterators.push_back(m_test_case_iterators.a_type);
         m_iterators.push_back(m_test_case_iterators.b_type);
         m_iterators.push_back(m_test_case_iterators.c_type);
@@ -345,6 +351,7 @@ class MicroTest
         m_iterators.push_back(m_test_case_iterators.trans_b);
         m_iterators.push_back(m_test_case_iterators.mtag_a);
         m_iterators.push_back(m_test_case_iterators.mtag_b);
+        m_iterators.push_back(m_test_case_iterators.group_size); // Index 17
 
         // Initialize the appropriate product
         if (is_cartesian_product == YieldType::CARTESIAN_PRODUCT) {
@@ -659,6 +666,30 @@ class MicroTest
     }
 
     /**
+     * @brief Check if group_size parameter is present (for batch GEMM tests)
+     * @return bool True if group_size was specified in YAML, false otherwise
+     */
+    bool hasGroupSize() const { return m_test_case_iterators.has_group_size; }
+
+    /**
+     * @brief Get group_size for batch GEMM tests
+     * @return md_t Group size value (number of matrices in group)
+     * @note Returns 1 (safe default) if group_size is not present
+     */
+    md_t getGroupSize() const
+    {
+        if (!m_test_case_iterators.has_group_size) {
+            return 1; // Safe default for regular GEMM tests
+        }
+        try {
+            return std::any_cast<md_t>(m_current_mt[17]); // group_size index
+        } catch (const std::bad_any_cast& e) {
+            throw std::runtime_error("Failed to cast GroupSize: "
+                                     + std::string(e.what()));
+        }
+    }
+
+    /**
      * @brief Get the current iteration index
      * @return size_t The index of the current parameter combination (0-based)
      */
@@ -700,6 +731,12 @@ class MicroTest
     {
         return m_test_case_iterators.tolerances;
     }
+
+    /**
+     * @brief Get the yield type (product mode) for this MicroTest
+     * @return YieldType The yield type (CARTESIAN_PRODUCT or SIMPLE_PRODUCT)
+     */
+    YieldType getYieldType() const { return m_is_cartesian_product; }
 
     // Navigation and control methods
 
@@ -866,10 +903,10 @@ class MicroTest
     std::unique_ptr<CartesianProduct> m_p_cartesian_product;
 
     /**
-     * @brief Simple product generator (when using ELEMENT_WISE mode)
+     * @brief Simple product generator (when using SIMPLE_PRODUCT mode)
      *
      * Manages element-wise parameter combination generation. Only valid when
-     * m_is_cartesian_product is YieldType::ELEMENT_WISE.
+     * m_is_cartesian_product is YieldType::SIMPLE_PRODUCT.
      */
     std::unique_ptr<SimpleProduct> m_p_simple_product;
 
@@ -1084,12 +1121,17 @@ class IParser
 class IParser
 {
   public:
-    virtual const MicroTest& getMicroTest()                     = 0;
-    virtual void             next()                             = 0;
-    virtual void             reset()                            = 0;
-    virtual size_t           getMicroTestCount() const          = 0;
-    virtual void             setYieldType(YieldType yield_type) = 0;
-    virtual YieldType        getYieldType() const               = 0;
+    /**
+     * @brief Get the current MicroTest instance
+     * @return MicroTest& Mutable reference to current test (allows iteration
+     * via next())
+     */
+    virtual MicroTest& getMicroTest()                     = 0;
+    virtual void       next()                             = 0;
+    virtual void       reset()                            = 0;
+    virtual size_t     getMicroTestCount() const          = 0;
+    virtual void       setYieldType(YieldType yield_type) = 0;
+    virtual YieldType  getYieldType() const               = 0;
 };
 #endif
 

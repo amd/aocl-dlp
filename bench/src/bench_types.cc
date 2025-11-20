@@ -93,21 +93,31 @@ loadBenchmarkConfigs(const std::string& yaml_path)
 
     try {
         YamlParser parser(yaml_path, "gemm_tests");
-        parser.setYieldType(YieldType::CARTESIAN_PRODUCT);
+        // Don't override yield type - let each test's product_type control it
 
         size_t microTestCount = parser.getMicroTestCount();
 
         for (size_t i = 0; i < microTestCount; ++i) {
             MicroTest& microTest =
                 const_cast<MicroTest&>(parser.getMicroTest());
-            size_t total_combinations = microTest.getSize();
-            size_t test_count = std::min(total_combinations, MAX_CONFIGS);
+            YieldType yield_type         = microTest.getYieldType();
+            size_t    total_combinations = microTest.getSize();
+            size_t    test_count = std::min(total_combinations, MAX_CONFIGS);
 
+            const char* mode_str = (yield_type == YieldType::SIMPLE_PRODUCT)
+                                       ? "(simple product)"
+                                       : "(cartesian product)";
             std::cout << "Test set " << i << ": Using " << test_count
                       << " out of " << total_combinations
-                      << " total combinations" << std::endl;
+                      << " total combinations " << mode_str << std::endl;
 
-            for (size_t j = 0; j < test_count; ++j) {
+            // Use do-while pattern to properly iterate through MicroTest
+            size_t j = 0;
+            do {
+                if (j >= test_count) {
+                    break; // Respect the max limit
+                }
+
                 GemmBenchConfig config;
                 config.a_type         = microTest.getAType();
                 config.b_type         = microTest.getBType();
@@ -142,11 +152,15 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                 config.name = generateBenchmarkName(config);
 
                 configs.push_back(config);
+                j++;
 
-                if (j < test_count - 1) {
+                // Move to next iteration using standard pattern
+                if (microTest.hasNext()) {
                     microTest.next();
+                } else {
+                    break; // No more iterations
                 }
-            }
+            } while (true);
 
             if (i < microTestCount - 1) {
                 parser.next();

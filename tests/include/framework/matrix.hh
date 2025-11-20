@@ -396,9 +396,13 @@ namespace dlp { namespace testing { namespace framework {
         /**
          * @brief Set the k dimension for tolerance calculation
          *
+         * This is marked const because k is metadata used for tolerance
+         * calculations, not part of the matrix's mathematical value.
+         * Setting k doesn't change the observable state of the matrix.
+         *
          * @param k The k dimension for tolerance calculation
          */
-        void setK(md_t k);
+        void setK(md_t k) const;
 
         /**
          * @brief Compare two matrices with configurable mode and diagnostics
@@ -767,11 +771,13 @@ namespace dlp { namespace testing { namespace framework {
          */
         void deallocateAlignedMemory(uint8_t* ptr, size_t alignment);
 
-        md_t m_rows; ///< Number of rows in the matrix
-        md_t m_cols; ///< Number of columns in the matrix
-        md_t m_k = std::numeric_limits<md_t>::max(); ///< K Dim for tolerance
-                                                     ///< calculation
-        MatrixType m_type;                           ///< Matrix data type
+        md_t         m_rows; ///< Number of rows in the matrix
+        md_t         m_cols; ///< Number of columns in the matrix
+        mutable md_t m_k =
+            std::numeric_limits<md_t>::max(); ///< K Dim for tolerance
+                                              ///< calculation (mutable:
+                                              ///< metadata for comparison)
+        MatrixType m_type;                    ///< Matrix data type
         uint8_t*
                m_data; ///< Matrix data storage (raw pointer for aligned alloc)
         size_t m_dataSizeBytes; ///< Size of allocated memory in bytes

@@ -54,7 +54,8 @@ using namespace dlp::testing::utils;
 using namespace dlp::testing::framework;
 using namespace dlp::testing::framework::postops;
 
-#define MAX_MISMATCHES 10
+constexpr size_t MAX_CONFIGS_PER_TEST_SET = 50000;
+constexpr size_t MAX_MISMATCHES           = 10;
 
 // ============================================================================
 // GLOBAL TEST CONFIGURATION
@@ -626,8 +627,6 @@ std::vector<GemmTestConfig>
 loadTestConfigurations(const std::string& yaml_file)
 {
     std::vector<GemmTestConfig> configs;
-    const size_t                MAX_CONFIGS_PER_TEST_SET =
-        50000; // Reasonable limit to prevent millions of tests
 
     try {
         YamlParser parser(yaml_file, "gemm_tests");
@@ -636,13 +635,9 @@ loadTestConfigurations(const std::string& yaml_file)
         size_t microTestCount = parser.getMicroTestCount();
 
         for (size_t i = 0; i < microTestCount; ++i) {
-            // Get a mutable reference to the MicroTest for iteration
-            // Note: This design could be improved by making MicroTest iteration
-            // const-correct
-            MicroTest& microTest =
-                const_cast<MicroTest&>(parser.getMicroTest());
-            size_t total_combinations = microTest.getSize();
-            size_t test_count =
+            MicroTest& microTest          = parser.getMicroTest();
+            size_t     total_combinations = microTest.getSize();
+            size_t     test_count =
                 std::min(total_combinations, MAX_CONFIGS_PER_TEST_SET);
 
             std::cout << "Test set " << i << ": Using " << test_count

@@ -46,8 +46,8 @@ class SimpleProduct : private CartesianProduct
     {
     }
 
-    // Let has_next() be same as CartesianProduct.
-    using CartesianProduct::has_next;
+    // Override has_next() to check our own m_finished flag
+    bool has_next() const { return !m_finished; }
 
     std::vector<std::any> next()
     {

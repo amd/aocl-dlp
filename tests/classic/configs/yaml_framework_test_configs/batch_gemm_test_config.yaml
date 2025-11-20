@@ -1,0 +1,296 @@
+# ==============================================================================
+# Batch GEMM Test Configuration
+# ==============================================================================
+#
+# This YAML file defines test cases for batch GEMM operations with support for:
+# - Single-group batch mode (cartesian product)
+# - Multi-group batch mode (simple/element-wise product)
+#
+# Key Rules:
+# 1. Root node MUST be "batch_gemm_tests"
+# 2. For multi-group mode: group_size list length > 1 requires product_type: "simple"
+# 3. For single-group mode: group_size scalar/single value allows "cartesian" or "simple"
+# 4. All parameter lists must have length matching group_count or be scalar (broadcast)
+#
+# ==============================================================================
+
+batch_gemm_tests:
+
+  # ==========================================================================
+  # SINGLE-GROUP BATCH TESTS (Cartesian Product)
+  # ==========================================================================
+  # Each test generates multiple configurations by varying one parameter at a time
+  # while keeping others constant. All matrices in a batch have the same dimensions.
+
+  - name: "SingleGroup_SmallSquare_F32"
+    product_type: "cartesian"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [4, 8, 16]
+    n: [4, 8, 16]
+    k: [4, 8, 16]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4  # Single scalar = single-group with 4 matrices per batch
+
+  - name: "SingleGroup_AlphaBetaVariations_F32"
+    product_type: "cartesian"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: 32
+    n: 32
+    k: 32
+    alpha: [0.5, 1.0, 1.5, 2.0]
+    beta: [0.0, 0.5, 1.0]
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2  # Single group with 2 matrices
+
+  - name: "SingleGroup_TransposeVariations_F32"
+    product_type: "cartesian"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: 64
+    n: 64
+    k: 64
+    alpha: 1.0
+    beta: 0.0
+    transA: [false, true]
+    transB: [false, true]
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 3  # Single group with 3 matrices
+
+  # ==========================================================================
+  # MULTI-GROUP BATCH TESTS (Simple/Element-wise Product)
+  # ==========================================================================
+  # Each test defines multiple groups with different dimensions.
+  # product_type MUST be "simple" when group_size is a list with length > 1.
+  # All parameters are element-wise matched (or broadcast if scalar).
+
+  - name: "MultiGroup_MixedSizes_F32"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    # 3 groups with different dimensions
+    m: [8, 16, 32]
+    n: [8, 16, 32]
+    k: [8, 16, 32]
+    alpha: 1.0  # Scalar broadcast to all groups
+    beta: 0.0   # Scalar broadcast to all groups
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 3, 4]  # Group 0: 2 matrices, Group 1: 3 matrices, Group 2: 4 matrices
+
+  - name: "MultiGroup_DifferentAlphaBeta_F32"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    # 3 groups with same size but different alpha/beta
+    m: 64
+    n: 64
+    k: 64
+    alpha: [1.0, 0.5, 1.5]  # Different alpha per group
+    beta: [0.0, 0.5, 1.0]   # Different beta per group
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 2, 2]  # 3 groups, each with 2 matrices
+
+  - name: "MultiGroup_HeterogeneousDimensions_F32"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    # 4 groups with completely different dimensions
+    m: [16, 32, 64, 128]
+    n: [32, 48, 64, 96]
+    k: [24, 40, 56, 80]
+    alpha: [1.0, 0.8, 1.2, 0.9]
+    beta: [0.0, 0.5, 0.3, 0.7]
+    transA: [false, false, true, false]   # Mixed transpose modes
+    transB: [false, true, false, true]
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 3, 4]  # Varying group sizes: 1, 2, 3, 4 matrices
+
+  # ==========================================================================
+  # EDGE CASES & VALIDATION TESTS
+  # ==========================================================================
+
+  - name: "EdgeCase_VerySmallMatrices_F32"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [1, 2, 3]
+    n: [1, 2, 3]
+    k: [1, 2, 3]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 1, 1]  # 3 groups, each with 1 matrix
+
+  - name: "EdgeCase_SingleMatrixPerGroup_F32"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [8, 16]
+    n: [8, 16]
+    k: [8, 16]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 1]  # 2 groups, each with only 1 matrix
+
+  # ==========================================================================
+  # POSTOPS TESTS (Global PostOps applied to all groups)
+  # ==========================================================================
+
+  - name: "SingleGroup_WithPostOps_RELU"
+    product_type: "cartesian"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [16, 32]
+    n: [16, 32]
+    k: [16]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2  # Single group, 2 matrices
+    tolerances:
+      relative: 100.0
+      absolute: 100.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "SingleGroup_WithPostOps_Complex"
+    product_type: "cartesian"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [8, 16]
+    n: [8, 16]
+    k: [8]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 3  # Single group, 3 matrices
+    tolerances:
+      relative: 150.0
+      absolute: 150.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+
+  - name: "MultiGroup_WithPostOps_RELU"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 3, 4]  # 3 groups with different sizes
+    tolerances:
+      relative: 100.0
+      absolute: 100.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "MultiGroup_WithPostOps_BiasScale"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 2]  # 2 groups, each with 2 matrices
+    tolerances:
+      relative: 200.0
+      absolute: 200.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n"]
+            scale_factor_type: ["f32"]

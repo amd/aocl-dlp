@@ -109,8 +109,8 @@ gemm_tests:
       ub: 1024
       step: 64
     ldc: 256
-    reorderA: false  # Default false
-    reorderB: true   # Matrix B reordering can improve performance
+    mtagA: "none"
+    mtagB: "reorder"
     tolerances:
       absolute: 0
       relative: 0

@@ -573,10 +573,26 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
         return prep_status;
     }
 
-    std::vector<dlp_metadata_t*> metadata;
-    auto metadata_status = extract_dlp_metadata(groups, metadata);
-    if (metadata_status != UALError::UAL_SUCCESS) {
-        return metadata_status;
+    // Create metadata objects for all groups (needed for error reporting)
+    std::vector<std::shared_ptr<dlp_metadata_t>> metadata_storage(
+        groups.size());
+    std::vector<dlp_metadata_t*> metadata(groups.size());
+
+    for (size_t i = 0; i < groups.size(); ++i) {
+        if (groups[i].postOps
+            && groups[i].postOps->getUALType() == UALType::DLP) {
+            // Extract existing metadata from postops
+            auto* dlpOp = dynamic_cast<DlpOperation*>(groups[i].postOps.get());
+            if (!dlpOp) {
+                return UALError::UAL_CAST_ERROR;
+            }
+            metadata[i] = dlpOp->getMetadata();
+        } else {
+            // Create new metadata for error reporting
+            metadata_storage[i] = std::make_shared<dlp_metadata_t>();
+            std::memset(metadata_storage[i].get(), 0, sizeof(dlp_metadata_t));
+            metadata[i] = metadata_storage[i].get();
+        }
     }
 
     uint64_t type = encode_types(prepared.a_type, prepared.b_type,
@@ -613,8 +629,380 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
             break;
         }
 
+        case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::f32,
+                          MatrixType::f32>(): {
+            std::vector<float> alpha_f32(prepared.group_count);
+            std::vector<float> beta_f32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_f32[i] = static_cast<float>(prepared.alpha[i]);
+                beta_f32[i]  = static_cast<float>(prepared.beta[i]);
+            }
+
+            auto a_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.a_ptrs.data());
+            auto b_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_bf16bf16f32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_f32.data(),
+                const_cast<const bfloat16**>(a_ptrs), prepared.lda.data(),
+                const_cast<const bfloat16**>(b_ptrs), prepared.ldb.data(),
+                beta_f32.data(), const_cast<float**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::bf16,
+                          MatrixType::f32>(): {
+            std::vector<float> alpha_f32(prepared.group_count);
+            std::vector<float> beta_f32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_f32[i] = static_cast<float>(prepared.alpha[i]);
+                beta_f32[i]  = static_cast<float>(prepared.beta[i]);
+            }
+
+            auto a_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.a_ptrs.data());
+            auto b_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<bfloat16* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_bf16bf16f32obf16(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_f32.data(),
+                const_cast<const bfloat16**>(a_ptrs), prepared.lda.data(),
+                const_cast<const bfloat16**>(b_ptrs), prepared.ldb.data(),
+                beta_f32.data(), const_cast<bfloat16**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s32,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int32_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32os32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<int32_t**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s8,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32os8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<int8_t**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::f32,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<float**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::bf16,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<bfloat16* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32obf16(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<bfloat16**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::u8,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<uint8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32ou8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<uint8_t**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s32,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int32_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32os32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<int32_t**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s8,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32os8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<int8_t**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::f32,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<float**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::bf16,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<bfloat16* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32obf16(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<bfloat16**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::u8,
+                          MatrixType::s32>(): {
+            std::vector<int32_t> alpha_s32(prepared.group_count);
+            std::vector<int32_t> beta_s32(prepared.group_count);
+            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+                 ++i) {
+                alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
+                beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<uint8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32ou8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_s32.data(),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                beta_s32.data(), const_cast<uint8_t**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
         default:
             return UALError::UAL_NOT_SUPPORTED;
+    }
+
+    // Check metadata for errors (e.g., ISA not supported)
+    for (size_t i = 0; i < metadata.size(); ++i) {
+        if (metadata[i] != nullptr) {
+            if (metadata[i]->error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+                return UALError::UAL_NOT_SUPPORTED;
+            }
+            if (metadata[i]->error_hndl.error_code != DLP_CLSC_SUCCESS) {
+                return UALError::UAL_FAILURE;
+            }
+        }
     }
 
     return UALError::UAL_SUCCESS;

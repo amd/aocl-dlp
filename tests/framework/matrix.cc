@@ -477,7 +477,7 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Set the k dimension for tolerance calculation
      */
-    void Matrix::setK(md_t k)
+    void Matrix::setK(md_t k) const
     {
         m_k = k;
     }

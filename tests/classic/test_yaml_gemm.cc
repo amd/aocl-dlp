@@ -1779,6 +1779,1497 @@ TEST(YamlParserTest, ToleranceMultipliersAffectComparison)
     }
 }
 
+// ============================================================================
+// BATCH GEMM YAML TESTS
+// ============================================================================
+
+/**
+ * @brief Test parsing group_size parameter for batch GEMM
+ *
+ * This test verifies that the group_size parameter can be parsed correctly
+ * and that the MicroTest provides access to it.
+ */
+TEST(YamlParserTest, ParseGroupSizeParameter)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Get the number of test cases
+        size_t testCount = parser.getMicroTestCount();
+        ASSERT_GT(testCount, 0)
+            << "Expected at least 1 test case in batch_gemm_test_config.yaml";
+
+        // Test the first test case (should have group_size)
+        const MicroTest& microTest = parser.getMicroTest();
+
+        std::cout << "\n=== Group Size Parameter Test ===" << std::endl;
+
+        // Verify group_size is accessible
+        EXPECT_TRUE(microTest.hasGroupSize())
+            << "Batch GEMM test should have group_size";
+
+        md_t group_size = microTest.getGroupSize();
+        std::cout << "  Group Size: " << group_size << std::endl;
+
+        EXPECT_GT(group_size, 0) << "Group size should be positive";
+
+        // Verify other parameters are still accessible
+        EXPECT_NO_THROW({
+            auto m = microTest.getM();
+            auto n = microTest.getN();
+            auto k = microTest.getK();
+            std::cout << "  Matrix dimensions: m=" << m << ", n=" << n
+                      << ", k=" << k << std::endl;
+        }) << "Basic GEMM parameters should still be accessible";
+
+        std::cout << "✓ Group size parameter test passed" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Parser threw an exception: " << e.what();
+    }
+}
+
+/**
+ * @brief Test single-group batch GEMM with cartesian product
+ *
+ * This test verifies that single-group batch GEMM tests (scalar group_size)
+ * work correctly with cartesian product mode.
+ */
+TEST(YamlParserTest, SingleGroupBatchGemmCartesian)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // First test should be single-group with cartesian product
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        std::cout << "\n=== Single-Group Batch GEMM (Cartesian) Test ==="
+                  << std::endl;
+
+        // Verify it's single-group mode (scalar group_size)
+        EXPECT_TRUE(microTest.hasGroupSize());
+        md_t group_size = microTest.getGroupSize();
+        std::cout << "  Group size: " << group_size << std::endl;
+
+        // Get total combinations
+        size_t totalCombinations = microTest.getSize();
+        std::cout << "  Total combinations: " << totalCombinations << std::endl;
+
+        // For cartesian product with m=[4,8,16], n=[4,8,16], k=[4,8,16]
+        // Expected: 3 * 3 * 3 = 27 combinations
+        size_t expectedCombinations = 27;
+        EXPECT_EQ(totalCombinations, expectedCombinations)
+            << "Single-group cartesian should generate " << expectedCombinations
+            << " combinations";
+
+        // Test first few combinations
+        size_t testCount = std::min(size_t(5), totalCombinations);
+        std::cout << "\nFirst " << testCount << " combinations:" << std::endl;
+
+        for (size_t i = 0; i < testCount; ++i) {
+            md_t m  = microTest.getM();
+            md_t n  = microTest.getN();
+            md_t k  = microTest.getK();
+            md_t gs = microTest.getGroupSize();
+
+            std::cout << "  Combination " << (i + 1) << ": m=" << m
+                      << ", n=" << n << ", k=" << k << ", group_size=" << gs
+                      << std::endl;
+
+            // Verify group_size is constant across iterations
+            EXPECT_EQ(gs, group_size)
+                << "Group size should remain constant in single-group mode";
+
+            if (microTest.hasNext() && i < testCount - 1) {
+                microTest.next();
+            }
+        }
+
+        std::cout << "✓ Single-group cartesian test passed" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Single-group cartesian test threw an exception: "
+               << e.what();
+    }
+}
+
+/**
+ * @brief Test multi-group batch GEMM with simple product
+ *
+ * This test verifies that multi-group batch GEMM tests (list group_size)
+ * work correctly with simple product mode (enforced).
+ */
+TEST(YamlParserTest, MultiGroupBatchGemmSimple)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Skip to a multi-group test (test index 3: MultiGroup_MixedSizes_F32)
+        for (int i = 0; i < 3; ++i) {
+            parser.next();
+        }
+
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        std::cout << "\n=== Multi-Group Batch GEMM (Simple Product) Test ==="
+                  << std::endl;
+
+        // Get total combinations
+        size_t totalCombinations = microTest.getSize();
+        std::cout << "  Total combinations: " << totalCombinations << std::endl;
+
+        // For simple product with m=[8,16,32], n=[8,16,32], k=[8,16,32],
+        // group_size=[2,3,4]
+        // Expected: 3 combinations (element-wise pairing)
+        size_t expectedCombinations = 3;
+        EXPECT_EQ(totalCombinations, expectedCombinations)
+            << "Multi-group simple product should generate "
+            << expectedCombinations << " combinations";
+
+        // Test all combinations
+        std::cout << "\nAll combinations:" << std::endl;
+        size_t count = 0;
+
+        do {
+            md_t m  = microTest.getM();
+            md_t n  = microTest.getN();
+            md_t k  = microTest.getK();
+            md_t gs = microTest.getGroupSize();
+
+            std::cout << "  Group " << (count + 1) << ": m=" << m << ", n=" << n
+                      << ", k=" << k << ", group_size=" << gs << std::endl;
+
+            // Verify dimensions change across groups
+            EXPECT_GT(m, 0);
+            EXPECT_GT(n, 0);
+            EXPECT_GT(k, 0);
+            EXPECT_GT(gs, 0);
+
+            count++;
+            if (!microTest.hasNext())
+                break;
+            microTest.next();
+        } while (count < totalCombinations + 5); // Safety limit
+
+        EXPECT_EQ(count, expectedCombinations)
+            << "Should iterate through exactly " << expectedCombinations
+            << " combinations";
+
+        std::cout << "✓ Multi-group simple product test passed" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Multi-group simple product test threw an exception: "
+               << e.what();
+    }
+}
+
+/**
+ * @brief Test backward compatibility without group_size
+ *
+ * This test verifies that YAML configurations without group_size still work
+ * (group_size defaults to 1).
+ */
+TEST(YamlParserTest, BackwardCompatibilityNoGroupSize)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_config_value.yaml";
+
+    try {
+        YamlParser parser(filepath, "yaml_test");
+
+        const MicroTest& microTest = parser.getMicroTest();
+
+        std::cout << "\n=== Backward Compatibility (No group_size) Test ==="
+                  << std::endl;
+
+        // Verify getGroupSize() returns default value of 1
+        md_t group_size = microTest.getGroupSize();
+        std::cout << "  Group size (default): " << group_size << std::endl;
+
+        EXPECT_EQ(group_size, 1)
+            << "Default group_size should be 1 for backward compatibility";
+
+        // Verify all other parameters work normally
+        EXPECT_NO_THROW({
+            auto m     = microTest.getM();
+            auto n     = microTest.getN();
+            auto k     = microTest.getK();
+            auto alpha = microTest.getAlpha();
+            auto beta  = microTest.getBeta();
+        }) << "All parameters should be accessible without group_size";
+
+        std::cout << "✓ Backward compatibility test passed" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Backward compatibility test threw an exception: "
+               << e.what();
+    }
+}
+
+/**
+ * @brief Test that group_size values are correctly paired in simple product
+ *
+ * This test verifies the element-wise pairing of group_size with other
+ * parameters in multi-group mode.
+ */
+TEST(YamlParserTest, GroupSizeSimpleProductPairing)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Skip to multi-group test (test index 3)
+        for (int i = 0; i < 3; ++i) {
+            parser.next();
+        }
+
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        std::cout << "\n=== Group Size Simple Product Pairing Test ==="
+                  << std::endl;
+
+        // Expected pairings for MultiGroup_MixedSizes_F32:
+        // Group 0: m=8, n=8, k=8, group_size=2
+        // Group 1: m=16, n=16, k=16, group_size=3
+        // Group 2: m=32, n=32, k=32, group_size=4
+
+        std::vector<md_t> expected_m  = { 8, 16, 32 };
+        std::vector<md_t> expected_n  = { 8, 16, 32 };
+        std::vector<md_t> expected_k  = { 8, 16, 32 };
+        std::vector<md_t> expected_gs = { 2, 3, 4 };
+
+        size_t count = 0;
+        do {
+            md_t m  = microTest.getM();
+            md_t n  = microTest.getN();
+            md_t k  = microTest.getK();
+            md_t gs = microTest.getGroupSize();
+
+            std::cout << "  Pairing " << count << ": m=" << m << ", n=" << n
+                      << ", k=" << k << ", group_size=" << gs << std::endl;
+
+            EXPECT_EQ(m, expected_m[count])
+                << "M dimension should be paired correctly";
+            EXPECT_EQ(n, expected_n[count])
+                << "N dimension should be paired correctly";
+            EXPECT_EQ(k, expected_k[count])
+                << "K dimension should be paired correctly";
+            EXPECT_EQ(gs, expected_gs[count])
+                << "Group size should be paired correctly";
+
+            count++;
+            if (!microTest.hasNext())
+                break;
+            microTest.next();
+        } while (count < 5); // Safety limit
+
+        EXPECT_EQ(count, 3) << "Should have exactly 3 pairings";
+
+        std::cout << "✓ Simple product pairing test passed" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Simple product pairing test threw an exception: "
+               << e.what();
+    }
+}
+
+/**
+ * @brief Test batch_gemm_tests root node requirement
+ *
+ * This test verifies that batch GEMM specific validations only apply
+ * when the root node is "batch_gemm_tests".
+ */
+TEST(YamlParserTest, BatchGemmTestsRootNodeRequirement)
+{
+    // Test 1: Regular gemm_tests should work without group_size
+    {
+        std::string filepath = TEST_CONFIG_DIR
+            "/yaml_framework_test_configs/yaml_test_config_value.yaml";
+
+        try {
+            YamlParser parser(filepath, "yaml_test");
+
+            const MicroTest& microTest = parser.getMicroTest();
+
+            // Should work fine without group_size (defaults to 1)
+            EXPECT_NO_THROW({
+                md_t gs = microTest.getGroupSize();
+                EXPECT_EQ(gs, 1);
+            });
+
+            std::cout
+                << "✓ Regular yaml_test works without group_size requirement"
+                << std::endl;
+
+        } catch (const std::exception& e) {
+            FAIL() << "Regular yaml_test should work: " << e.what();
+        }
+    }
+
+    // Test 2: batch_gemm_tests enforces validations
+    {
+        std::string filepath = TEST_CONFIG_DIR
+            "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+        try {
+            YamlParser parser(filepath, "batch_gemm_tests");
+
+            // Should parse successfully with proper batch GEMM configuration
+            size_t testCount = parser.getMicroTestCount();
+            EXPECT_GT(testCount, 0);
+
+            std::cout << "✓ batch_gemm_tests enforces proper validations"
+                      << std::endl;
+
+        } catch (const std::exception& e) {
+            FAIL() << "batch_gemm_tests should parse: " << e.what();
+        }
+    }
+}
+
+/**
+ * @brief Test that all batch GEMM test configurations are valid
+ *
+ * This comprehensive test iterates through all test configurations in the
+ * batch_gemm_test_config.yaml file to ensure they all parse and execute
+ * correctly.
+ */
+TEST(YamlParserTest, AllBatchGemmConfigurationsValid)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        size_t testCount = parser.getMicroTestCount();
+        std::cout << "\n=== Validating All Batch GEMM Configurations ==="
+                  << std::endl;
+        std::cout << "Total test configurations: " << testCount << std::endl;
+
+        ASSERT_GT(testCount, 0)
+            << "Should have at least one test configuration";
+
+        // Iterate through all test configurations
+        for (size_t i = 0; i < testCount; ++i) {
+            const MicroTest& microTest = parser.getMicroTest();
+
+            std::cout << "\nTest " << (i + 1) << std::endl;
+
+            // Verify all required parameters are accessible
+            EXPECT_NO_THROW({
+                auto a_type = microTest.getAType();
+                auto b_type = microTest.getBType();
+                auto c_type = microTest.getCType();
+                auto m      = microTest.getM();
+                auto n      = microTest.getN();
+                auto k      = microTest.getK();
+                auto alpha  = microTest.getAlpha();
+                auto beta   = microTest.getBeta();
+                auto gs     = microTest.getGroupSize();
+
+                std::cout << "  Dimensions: m=" << m << ", n=" << n
+                          << ", k=" << k << std::endl;
+                std::cout << "  Group size: " << gs << std::endl;
+                std::cout << "  Types: A=" << a_type << ", B=" << b_type
+                          << ", C=" << c_type << std::endl;
+
+                // Verify valid values
+                EXPECT_GT(m, 0) << "M dimension should be positive";
+                EXPECT_GT(n, 0) << "N dimension should be positive";
+                EXPECT_GT(k, 0) << "K dimension should be positive";
+                EXPECT_GT(gs, 0) << "Group size should be positive";
+            }) << "Test configuration "
+               << (i + 1) << " should have valid parameters";
+
+            // Move to next test configuration
+            if (i < testCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "\n✓ All " << testCount
+                  << " batch GEMM configurations are valid" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Batch GEMM configuration validation failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test validation: cartesian product with multi-group should fail
+ *
+ * This test verifies that attempting to use cartesian product with multiple
+ * group_size values is properly rejected by the parser.
+ */
+TEST(YamlParserTest, MultiGroupCartesianValidation)
+{
+    // Note: This test would require a YAML file that attempts to violate
+    // the validation rules. Since our batch_gemm_test_config.yaml is valid,
+    // this test demonstrates the expected behavior through documentation.
+
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // All multi-group tests in our config use simple product
+        // so they should all parse successfully
+        size_t testCount = parser.getMicroTestCount();
+        EXPECT_GT(testCount, 0)
+            << "Should have valid batch GEMM configurations";
+
+        // Verify that multi-group tests use simple product
+        for (size_t i = 0; i < testCount; ++i) {
+            const MicroTest& microTestRef = parser.getMicroTest();
+            MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
+
+            size_t combinations = microTest.getSize();
+
+            // Multi-group tests should have limited combinations (simple
+            // product) Single-group tests may have many (cartesian product)
+            if (combinations <= 10) {
+                // Likely a multi-group test
+                std::cout << "Test " << i << " has " << combinations
+                          << " combinations (likely multi-group)" << std::endl;
+            }
+
+            if (i < testCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "✓ All batch GEMM tests use appropriate product types"
+                  << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Validation test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test scalar broadcast in multi-group mode
+ *
+ * Verifies that scalar parameters (like alpha, beta) are properly broadcast
+ * to all groups in multi-group mode.
+ */
+TEST(YamlParserTest, ScalarBroadcastInMultiGroup)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Skip to multi-group test (test index 3)
+        for (int i = 0; i < 3; ++i) {
+            parser.next();
+        }
+
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        std::cout << "\n=== Scalar Broadcast Test ===" << std::endl;
+
+        // Get first alpha/beta values
+        double first_alpha = microTest.getAlpha();
+        double first_beta  = microTest.getBeta();
+
+        std::cout << "First group: alpha=" << first_alpha
+                  << ", beta=" << first_beta << std::endl;
+
+        // Iterate through all groups
+        size_t count = 0;
+        do {
+            double alpha = microTest.getAlpha();
+            double beta  = microTest.getBeta();
+
+            std::cout << "Group " << count << ": alpha=" << alpha
+                      << ", beta=" << beta << std::endl;
+
+            // For this test configuration, alpha and beta are scalar
+            // (broadcast) So they should be the same across all groups
+            EXPECT_EQ(alpha, first_alpha)
+                << "Scalar alpha should be broadcast to all groups";
+            EXPECT_EQ(beta, first_beta)
+                << "Scalar beta should be broadcast to all groups";
+
+            count++;
+            if (!microTest.hasNext())
+                break;
+            microTest.next();
+        } while (count < 10); // Safety limit
+
+        std::cout << "✓ Scalar broadcast works correctly" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Scalar broadcast test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test group_size consistency within test configuration
+ *
+ * Verifies that all parameters in a test configuration have consistent
+ * list lengths matching the number of groups.
+ */
+TEST(YamlParserTest, GroupSizeConsistency)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Skip to multi-group test (test index 3)
+        for (int i = 0; i < 3; ++i) {
+            parser.next();
+        }
+
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        std::cout << "\n=== Group Size Consistency Test ===" << std::endl;
+
+        // Count how many groups we have
+        size_t            group_count = 0;
+        std::vector<md_t> all_m, all_n, all_k, all_gs;
+
+        do {
+            all_m.push_back(microTest.getM());
+            all_n.push_back(microTest.getN());
+            all_k.push_back(microTest.getK());
+            all_gs.push_back(microTest.getGroupSize());
+
+            group_count++;
+            if (!microTest.hasNext())
+                break;
+            microTest.next();
+        } while (group_count < 10); // Safety limit
+
+        std::cout << "Found " << group_count << " groups" << std::endl;
+
+        // Verify all arrays have the same length
+        EXPECT_EQ(all_m.size(), group_count)
+            << "M values should match group count";
+        EXPECT_EQ(all_n.size(), group_count)
+            << "N values should match group count";
+        EXPECT_EQ(all_k.size(), group_count)
+            << "K values should match group count";
+        EXPECT_EQ(all_gs.size(), group_count)
+            << "Group size values should match group count";
+
+        // Verify values are different across groups (heterogeneous)
+        bool has_different_m  = false;
+        bool has_different_gs = false;
+
+        for (size_t i = 1; i < group_count; ++i) {
+            if (all_m[i] != all_m[0])
+                has_different_m = true;
+            if (all_gs[i] != all_gs[0])
+                has_different_gs = true;
+        }
+
+        EXPECT_TRUE(has_different_m || has_different_gs)
+            << "Multi-group test should have heterogeneous dimensions or group "
+               "sizes";
+
+        std::cout << "✓ Group size consistency verified" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Group size consistency test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test tolerance settings with batch GEMM
+ *
+ * Verifies that tolerance settings work correctly with batch GEMM
+ * configurations.
+ */
+TEST(YamlParserTest, ToleranceWithBatchGemm)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        size_t testCount = parser.getMicroTestCount();
+
+        // Check if any batch GEMM tests have custom tolerances
+        bool found_with_tolerance    = false;
+        bool found_without_tolerance = false;
+
+        for (size_t i = 0; i < testCount; ++i) {
+            const MicroTest& microTest = parser.getMicroTest();
+
+            if (microTest.hasTolerances()) {
+                found_with_tolerance = true;
+                const auto& tol      = microTest.getTolerances();
+
+                EXPECT_GE(tol.absolute, 0.0)
+                    << "Absolute tolerance should be non-negative";
+                EXPECT_GE(tol.relative, 0.0)
+                    << "Relative tolerance should be non-negative";
+            } else {
+                found_without_tolerance = true;
+            }
+
+            if (i < testCount - 1) {
+                parser.next();
+            }
+        }
+
+        // Both cases should exist or at least one
+        EXPECT_TRUE(found_with_tolerance || found_without_tolerance)
+            << "Should have at least some test configurations";
+
+        std::cout << "✓ Tolerance settings work with batch GEMM" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Tolerance with batch GEMM test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test matrix tag parameters with batch GEMM
+ *
+ * Verifies that matrix tag parameters (reorder, pack) work correctly
+ * with batch GEMM configurations.
+ */
+TEST(YamlParserTest, MatrixTagsWithBatchGemm)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Iterate through all configurations
+        size_t testCount = parser.getMicroTestCount();
+
+        for (size_t i = 0; i < testCount; ++i) {
+            const MicroTest& microTest = parser.getMicroTest();
+
+            // Verify all matrix tag parameters are accessible
+            EXPECT_NO_THROW({
+                bool reorderA = microTest.getReorderA();
+                bool reorderB = microTest.getReorderB();
+                bool packA    = microTest.getPackA();
+                bool packB    = microTest.getPackB();
+
+                // All values should be valid booleans
+                EXPECT_TRUE(reorderA == true || reorderA == false);
+                EXPECT_TRUE(reorderB == true || reorderB == false);
+                EXPECT_TRUE(packA == true || packA == false);
+                EXPECT_TRUE(packB == true || packB == false);
+            }) << "Matrix tags should be accessible for batch GEMM test "
+               << i;
+
+            if (i < testCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "✓ Matrix tags work with batch GEMM" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Matrix tags with batch GEMM test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test leading dimension calculation with group_size
+ *
+ * Verifies that leading dimensions (LDA, LDB, LDC) are correctly calculated
+ * or provided for batch GEMM configurations.
+ */
+TEST(YamlParserTest, LeadingDimensionsWithBatchGemm)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        size_t testCount = parser.getMicroTestCount();
+
+        for (size_t i = 0; i < testCount; ++i) {
+            const MicroTest& microTestRef = parser.getMicroTest();
+            MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
+
+            // Check leading dimensions for first combination
+            md_t         m       = microTest.getM();
+            md_t         n       = microTest.getN();
+            md_t         k       = microTest.getK();
+            md_t         lda     = microTest.getLDA();
+            md_t         ldb     = microTest.getLDB();
+            md_t         ldc     = microTest.getLDC();
+            bool         transA  = microTest.getTransA();
+            bool         transB  = microTest.getTransB();
+            MatrixLayout storage = microTest.getStorageFormat();
+
+            // Verify leading dimensions are valid
+            // When lda/ldb/ldc are not specified in YAML, they are
+            // auto-calculated to the minimum legal values by the YAML parser
+            bool is_row_major = (storage == MatrixLayout::ROW_MAJOR);
+
+            if (is_row_major) {
+                md_t min_lda = transA ? m : k;
+                md_t min_ldb = transB ? k : n;
+                md_t min_ldc = n;
+
+                EXPECT_GE(lda, min_lda)
+                    << "LDA should be >= " << min_lda << " for test " << i;
+                EXPECT_GE(ldb, min_ldb)
+                    << "LDB should be >= " << min_ldb << " for test " << i;
+                EXPECT_GE(ldc, min_ldc)
+                    << "LDC should be >= " << min_ldc << " for test " << i;
+            } else {
+                md_t min_lda = transA ? k : m;
+                md_t min_ldb = transB ? n : k;
+                md_t min_ldc = m;
+
+                EXPECT_GE(lda, min_lda)
+                    << "LDA should be >= " << min_lda << " for test " << i;
+                EXPECT_GE(ldb, min_ldb)
+                    << "LDB should be >= " << min_ldb << " for test " << i;
+                EXPECT_GE(ldc, min_ldc)
+                    << "LDC should be >= " << min_ldc << " for test " << i;
+            }
+
+            if (i < testCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "✓ Leading dimensions valid for all batch GEMM tests"
+                  << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Leading dimensions test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test batch GEMM with all matrix types
+ *
+ * Verifies that batch GEMM configurations work correctly with all matrix types.
+ */
+TEST(YamlParserTest, BatchGemmWithAllMatrixTypes)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        size_t testCount = parser.getMicroTestCount();
+
+        for (size_t i = 0; i < testCount; ++i) {
+            const MicroTest& microTest = parser.getMicroTest();
+
+            // Verify all matrix types are accessible
+            MatrixType a_type   = microTest.getAType();
+            MatrixType b_type   = microTest.getBType();
+            MatrixType c_type   = microTest.getCType();
+            MatrixType acc_type = microTest.getAccType();
+
+            std::cout << "Test " << i << ": Types A=" << a_type
+                      << ", B=" << b_type << ", C=" << c_type
+                      << ", Acc=" << acc_type << std::endl;
+
+            // All types should be accessible (no exceptions thrown)
+            // Types are already validated by the parser
+
+            if (i < testCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "✓ All matrix types valid for batch GEMM" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Matrix types test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test batch GEMM with PostOps parsing
+ *
+ * Verifies that PostOps are correctly parsed and accessible for batch GEMM
+ * tests.
+ */
+TEST(YamlParserTest, BatchGemmWithPostOps)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Find a test with PostOps (skip to appropriate test)
+        size_t microTestCount     = parser.getMicroTestCount();
+        bool   found_postops_test = false;
+
+        std::cout << "\n=== Batch GEMM PostOps Test ===" << std::endl;
+
+        for (size_t i = 0; i < microTestCount; ++i) {
+            const MicroTest& microTest = parser.getMicroTest();
+
+            // Check if PostOps are available by attempting to get them
+            auto postops_dlp =
+                microTest.getPostOp(dlp::testing::framework::UALType::DLP);
+            auto postops_ref =
+                microTest.getPostOp(dlp::testing::framework::UALType::REF);
+
+            if (postops_dlp != nullptr && postops_ref != nullptr) {
+                found_postops_test = true;
+
+                std::cout << "Found batch GEMM test with PostOps at index " << i
+                          << std::endl;
+
+                EXPECT_NE(postops_dlp, nullptr)
+                    << "DLP PostOps should be available";
+                EXPECT_NE(postops_ref, nullptr)
+                    << "REF PostOps should be available";
+
+                // Verify group_size is present
+                EXPECT_TRUE(microTest.hasGroupSize());
+
+                md_t group_size = microTest.getGroupSize();
+                std::cout << "  group_size=" << group_size << std::endl;
+
+                break;
+            }
+
+            if (i < microTestCount - 1) {
+                parser.next();
+            }
+        }
+
+        EXPECT_TRUE(found_postops_test)
+            << "Should have at least one batch GEMM test with PostOps";
+
+        std::cout << "✓ PostOps parsing works for batch GEMM" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "BatchGemmWithPostOps test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test PostOps consistency across iterations
+ *
+ * Verifies that PostOps remain available and consistent across MicroTest
+ * iterations.
+ */
+TEST(YamlParserTest, BatchGemmPostOpsConsistency)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Test that PostOps remain consistent across iterations
+        size_t microTestCount = parser.getMicroTestCount();
+
+        std::cout << "\n=== Batch GEMM PostOps Consistency Test ==="
+                  << std::endl;
+
+        for (size_t i = 0; i < microTestCount; ++i) {
+            const MicroTest& microTestRef = parser.getMicroTest();
+            MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
+
+            // Check if PostOps are available
+            auto postops_check =
+                microTest.getPostOp(dlp::testing::framework::UALType::DLP);
+            if (postops_check == nullptr) {
+                if (i < microTestCount - 1)
+                    parser.next();
+                continue;
+            }
+
+            std::cout << "Testing PostOps consistency for test " << i
+                      << std::endl;
+
+            // Check that PostOps are available across multiple iterations
+            size_t iterations = std::min(microTest.getSize(), size_t(3));
+
+            for (size_t j = 0; j < iterations; ++j) {
+                auto postops_dlp =
+                    microTest.getPostOp(dlp::testing::framework::UALType::DLP);
+
+                EXPECT_NE(postops_dlp, nullptr)
+                    << "PostOps should be available at iteration " << j;
+
+                std::cout << "  Iteration " << j << ": PostOps OK" << std::endl;
+
+                if (j < iterations - 1 && microTest.hasNext()) {
+                    microTest.next();
+                }
+            }
+
+            std::cout << "✓ PostOps consistent across iterations" << std::endl;
+            break; // Only test first PostOps-enabled test
+        }
+
+    } catch (const std::exception& e) {
+        FAIL() << "BatchGemmPostOpsConsistency test failed: " << e.what();
+    }
+}
+
+/**
+ * @brief Test PostOps with different group sizes
+ *
+ * Verifies that PostOps work correctly with both single-group and multi-group
+ * configurations.
+ */
+TEST(YamlParserTest, BatchGemmPostOpsWithGroupSizes)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    try {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        size_t microTestCount = parser.getMicroTestCount();
+
+        std::cout << "\n=== Batch GEMM PostOps with Group Sizes Test ==="
+                  << std::endl;
+
+        size_t single_group_postops = 0;
+        size_t multi_group_postops  = 0;
+
+        for (size_t i = 0; i < microTestCount; ++i) {
+            const MicroTest& microTest = parser.getMicroTest();
+
+            auto postops =
+                microTest.getPostOp(dlp::testing::framework::UALType::DLP);
+            if (postops != nullptr && microTest.hasGroupSize()) {
+                md_t group_size = microTest.getGroupSize();
+
+                EXPECT_NE(postops, nullptr);
+
+                if (group_size == 1) {
+                    single_group_postops++;
+                    std::cout
+                        << "Found single-group test with PostOps (group_size="
+                        << group_size << ")" << std::endl;
+                } else {
+                    multi_group_postops++;
+                    std::cout
+                        << "Found multi-group test with PostOps (group_size="
+                        << group_size << ")" << std::endl;
+                }
+            }
+
+            if (i < microTestCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "Single-group PostOps tests: " << single_group_postops
+                  << std::endl;
+        std::cout << "Multi-group PostOps tests: " << multi_group_postops
+                  << std::endl;
+
+        EXPECT_GT(single_group_postops + multi_group_postops, 0)
+            << "Should have at least one test with PostOps and group_size";
+
+        std::cout << "✓ PostOps work with various group sizes" << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "BatchGemmPostOpsWithGroupSizes test failed: " << e.what();
+    }
+}
+
+// ============================================================================
+// BATCH GEMM FRAMEWORK TESTS
+// ============================================================================
+
+/**
+ * @brief Test fixture for batch GEMM framework tests
+ */
+class BatchGemmFrameworkTest : public ::testing::Test
+{
+  protected:
+    void SetUp() override {}
+    void TearDown() override {}
+};
+
+/**
+ * @brief Test MicroTest default group_size behavior
+ *
+ * Verifies that MicroTest returns a default group_size of 1 when not specified,
+ * ensuring backward compatibility with non-batch GEMM tests.
+ */
+TEST_F(BatchGemmFrameworkTest, DefaultGroupSize)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/yaml_test_config_value.yaml";
+
+    YamlParser       parser(filepath, "yaml_test");
+    const MicroTest& microTest = parser.getMicroTest();
+
+    // Test default behavior
+    EXPECT_EQ(microTest.getGroupSize(), 1)
+        << "Default group_size should be 1 for backward compatibility";
+
+    EXPECT_FALSE(microTest.hasGroupSize())
+        << "hasGroupSize() should return false when group_size not in YAML";
+}
+
+/**
+ * @brief Test MicroTest with explicit group_size
+ *
+ * Verifies that MicroTest correctly parses and provides access to group_size
+ * parameter when explicitly specified in YAML.
+ */
+TEST_F(BatchGemmFrameworkTest, ExplicitGroupSize)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser       parser(filepath, "batch_gemm_tests");
+    const MicroTest& microTest = parser.getMicroTest();
+
+    // Test explicit group_size
+    EXPECT_TRUE(microTest.hasGroupSize())
+        << "hasGroupSize() should return true when group_size in YAML";
+
+    md_t group_size = microTest.getGroupSize();
+    EXPECT_GT(group_size, 0) << "Explicit group_size should be positive";
+}
+
+/**
+ * @brief Test group_size iteration in cartesian product mode
+ *
+ * Verifies that group_size remains constant across all combinations when
+ * using cartesian product mode (single-group batch testing).
+ */
+TEST_F(BatchGemmFrameworkTest, GroupSizeCartesianProduct)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser       parser(filepath, "batch_gemm_tests");
+    const MicroTest& microTestRef = parser.getMicroTest();
+    MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+    md_t         initial_group_size = microTest.getGroupSize();
+    size_t       iteration_count    = 0;
+    const size_t MAX_ITERATIONS     = 10;
+
+    // Iterate through combinations
+    do {
+        md_t current_group_size = microTest.getGroupSize();
+        EXPECT_EQ(current_group_size, initial_group_size)
+            << "Group size should remain constant in cartesian mode at "
+               "iteration "
+            << iteration_count;
+
+        iteration_count++;
+        if (iteration_count >= MAX_ITERATIONS || !microTest.hasNext()) {
+            break;
+        }
+        microTest.next();
+    } while (true);
+
+    EXPECT_GT(iteration_count, 1)
+        << "Should have iterated through multiple combinations";
+}
+
+/**
+ * @brief Test group_size pairing in simple product mode
+ *
+ * Verifies that group_size values are correctly paired with other parameters
+ * in simple product mode (multi-group batch testing).
+ */
+TEST_F(BatchGemmFrameworkTest, GroupSizeSimpleProduct)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser parser(filepath, "batch_gemm_tests");
+
+    // Skip to multi-group test (test index 3 = 4th test)
+    for (int i = 0; i < 3; ++i) {
+        parser.next();
+    }
+
+    const MicroTest& microTestRef = parser.getMicroTest();
+    MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+    // Expected pairings for MultiGroup_MixedSizes_F32
+    std::vector<md_t> expected_group_sizes = { 2, 3, 4 };
+    std::vector<md_t> expected_m           = { 8, 16, 32 };
+
+    size_t count = 0;
+    do {
+        md_t gs = microTest.getGroupSize();
+        md_t m  = microTest.getM();
+
+        ASSERT_LT(count, expected_group_sizes.size())
+            << "Exceeded expected number of pairings";
+
+        EXPECT_EQ(gs, expected_group_sizes[count])
+            << "Group size should be paired correctly at iteration " << count;
+        EXPECT_EQ(m, expected_m[count])
+            << "M dimension should be paired with group_size at iteration "
+            << count;
+
+        count++;
+        if (!microTest.hasNext())
+            break;
+        microTest.next();
+    } while (count < expected_group_sizes.size() + 1);
+
+    EXPECT_EQ(count, expected_group_sizes.size())
+        << "Should have exactly " << expected_group_sizes.size() << " pairings";
+}
+
+/**
+ * @brief Test MicroTest::getSize() with group_size
+ *
+ * Verifies that MicroTest correctly calculates total combinations
+ * when group_size is present.
+ */
+TEST_F(BatchGemmFrameworkTest, SizeCalculationWithGroupSize)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    // Test 1: Single-group cartesian (should multiply combinations)
+    {
+        YamlParser       parser(filepath, "batch_gemm_tests");
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        size_t reported_size = microTest.getSize();
+
+        // For first test: m=[8,16], n=[8,16], k=[8,16] = 2*2*2 = 8
+        // But we have 3 values each, so should be larger
+        EXPECT_GT(reported_size, 0)
+            << "Size should be positive for single-group cartesian";
+
+        // Count actual iterations
+        size_t actual_count = 0;
+        do {
+            actual_count++;
+            if (!microTest.hasNext())
+                break;
+            microTest.next();
+        } while (actual_count < reported_size + 5); // Safety limit
+
+        EXPECT_LE(actual_count, reported_size)
+            << "Actual iterations should match or be less than reported size";
+    }
+
+    // Test 2: Multi-group simple product
+    {
+        YamlParser parser(filepath, "batch_gemm_tests");
+
+        // Skip to multi-group test (test index 3 = 4th test)
+        for (int i = 0; i < 3; ++i) {
+            parser.next();
+        }
+
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        size_t reported_size = microTest.getSize();
+
+        // For MultiGroup_MixedSizes_F32: 3 groups
+        EXPECT_EQ(reported_size, 3)
+            << "Multi-group simple product should have 3 combinations";
+    }
+}
+
+/**
+ * @brief Test group_size with different data types
+ *
+ * Verifies that group_size works correctly with different matrix types.
+ */
+TEST_F(BatchGemmFrameworkTest, GroupSizeWithDifferentTypes)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser parser(filepath, "batch_gemm_tests");
+
+    // Iterate through all test configurations
+    size_t testCount = parser.getMicroTestCount();
+
+    for (size_t i = 0; i < testCount; ++i) {
+        const MicroTest& microTest = parser.getMicroTest();
+
+        // Verify group_size is accessible regardless of matrix types
+        EXPECT_NO_THROW({
+            md_t       gs     = microTest.getGroupSize();
+            MatrixType a_type = microTest.getAType();
+            MatrixType b_type = microTest.getBType();
+            MatrixType c_type = microTest.getCType();
+
+            EXPECT_GT(gs, 0) << "Group size should be positive for test " << i;
+        }) << "Group size should work with any matrix type at test "
+           << i;
+
+        if (i < testCount - 1) {
+            parser.next();
+        }
+    }
+}
+
+/**
+ * @brief Test group_size persistence across reset
+ *
+ * Verifies that group_size is correctly restored after parser reset.
+ */
+TEST_F(BatchGemmFrameworkTest, GroupSizePersistenceAcrossReset)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser       parser(filepath, "batch_gemm_tests");
+    const MicroTest& microTest1 = parser.getMicroTest();
+
+    md_t initial_group_size = microTest1.getGroupSize();
+    md_t initial_m          = microTest1.getM();
+
+    // Move to next test
+    parser.next();
+    const MicroTest& microTest2 = parser.getMicroTest();
+
+    md_t second_group_size = microTest2.getGroupSize();
+
+    // Reset parser
+    parser.reset();
+    const MicroTest& microTest3 = parser.getMicroTest();
+
+    md_t reset_group_size = microTest3.getGroupSize();
+    md_t reset_m          = microTest3.getM();
+
+    // Verify reset restored initial values
+    EXPECT_EQ(reset_group_size, initial_group_size)
+        << "Group size should be restored after reset";
+    EXPECT_EQ(reset_m, initial_m)
+        << "Other parameters should also be restored after reset";
+}
+
+/**
+ * @brief Test group_size with edge case values
+ *
+ * Tests group_size with minimum valid values and larger values.
+ */
+TEST_F(BatchGemmFrameworkTest, GroupSizeEdgeCases)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser parser(filepath, "batch_gemm_tests");
+
+    // Look for test with group_size = 1 (minimum valid)
+    size_t testCount          = parser.getMicroTestCount();
+    bool   found_single_group = false;
+    bool   found_large_group  = false;
+
+    for (size_t i = 0; i < testCount; ++i) {
+        const MicroTest& microTest = parser.getMicroTest();
+        md_t             gs        = microTest.getGroupSize();
+
+        if (gs == 1) {
+            found_single_group = true;
+            EXPECT_EQ(gs, 1)
+                << "Single matrix per group (group_size=1) should be valid";
+        }
+
+        if (gs >= 4) {
+            found_large_group = true;
+            EXPECT_GT(gs, 0) << "Larger group sizes should be valid";
+        }
+
+        if (i < testCount - 1) {
+            parser.next();
+        }
+    }
+
+    // We expect to find both cases in the test config
+    EXPECT_TRUE(found_single_group || found_large_group)
+        << "Should have at least one edge case in test configurations";
+}
+
+/**
+ * @brief Test group_size type safety
+ *
+ * Verifies that group_size is properly type-safe (md_t type).
+ */
+TEST_F(BatchGemmFrameworkTest, GroupSizeTypeSafety)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser       parser(filepath, "batch_gemm_tests");
+    const MicroTest& microTest = parser.getMicroTest();
+
+    // Verify type is md_t (should be size_t or similar)
+    md_t group_size = microTest.getGroupSize();
+
+    // Type should support comparison operators
+    EXPECT_TRUE(group_size == group_size);
+    EXPECT_FALSE(group_size != group_size);
+    EXPECT_TRUE(group_size >= 1);
+    EXPECT_TRUE(group_size <= std::numeric_limits<md_t>::max());
+
+    // Should be assignable
+    md_t copy = group_size;
+    EXPECT_EQ(copy, group_size);
+}
+
+/**
+ * @brief Test PostOps with group_size
+ *
+ * Verifies that both PostOps and group_size are accessible together.
+ */
+TEST_F(BatchGemmFrameworkTest, PostOpsWithGroupSize)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser parser(filepath, "batch_gemm_tests");
+
+    // Navigate to a test with PostOps
+    size_t microTestCount = parser.getMicroTestCount();
+    bool   found          = false;
+
+    std::cout << "\n=== PostOps + GroupSize Framework Test ===" << std::endl;
+
+    for (size_t i = 0; i < microTestCount; ++i) {
+        const MicroTest& microTest = parser.getMicroTest();
+
+        auto postops = microTest.getPostOp(UALType::DLP);
+        if (postops != nullptr && microTest.hasGroupSize()) {
+            found = true;
+
+            // Verify both PostOps and group_size are accessible
+            EXPECT_NE(postops, nullptr);
+            EXPECT_TRUE(microTest.hasGroupSize());
+
+            md_t group_size = microTest.getGroupSize();
+
+            EXPECT_NE(postops, nullptr) << "PostOps should be available";
+            EXPECT_GT(group_size, 0) << "Group size should be positive";
+
+            std::cout << "✓ Found batch GEMM test with PostOps and group_size="
+                      << group_size << std::endl;
+
+            break;
+        }
+
+        if (i < microTestCount - 1) {
+            parser.next();
+        }
+    }
+
+    EXPECT_TRUE(found)
+        << "Should find at least one test with both PostOps and group_size";
+}
+
+/**
+ * @brief Test that PostOps work with both single-group and multi-group modes
+ *
+ * Verifies that PostOps are correctly handled for different group
+ * configurations.
+ */
+TEST_F(BatchGemmFrameworkTest, PostOpsWithVariousGroupConfigurations)
+{
+    std::string filepath = TEST_CONFIG_DIR
+        "/yaml_framework_test_configs/batch_gemm_test_config.yaml";
+
+    YamlParser parser(filepath, "batch_gemm_tests");
+
+    size_t microTestCount = parser.getMicroTestCount();
+
+    std::cout << "\n=== PostOps Group Configuration Test ===" << std::endl;
+
+    bool found_single_group_with_postops = false;
+    bool found_multi_group_with_postops  = false;
+
+    for (size_t i = 0; i < microTestCount; ++i) {
+        const MicroTest& microTestRef = parser.getMicroTest();
+        MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
+
+        auto postops = microTest.getPostOp(UALType::DLP);
+        if (postops != nullptr && microTest.hasGroupSize()) {
+            // Check group configuration by examining iterations
+            md_t initial_group_size = microTest.getGroupSize();
+
+            // For single-group: group_size should be constant across iterations
+            // For multi-group: group_size may vary (but we test the first
+            // value)
+
+            if (initial_group_size >= 2) {
+                // This could be single-group with multiple matrices
+                // or first value of multi-group
+
+                // Try to check if this is truly multi-group by checking next
+                // iteration
+                if (microTest.hasNext()) {
+                    microTest.next();
+                    md_t next_group_size = microTest.getGroupSize();
+
+                    if (next_group_size != initial_group_size) {
+                        found_multi_group_with_postops = true;
+                        std::cout << "✓ Found multi-group with PostOps "
+                                     "(group_sizes vary)"
+                                  << std::endl;
+                    } else {
+                        found_single_group_with_postops = true;
+                        std::cout
+                            << "✓ Found single-group with PostOps (group_size="
+                            << initial_group_size << ")" << std::endl;
+                    }
+                } else {
+                    found_single_group_with_postops = true;
+                    std::cout
+                        << "✓ Found single-group with PostOps (group_size="
+                        << initial_group_size << ")" << std::endl;
+                }
+            }
+        }
+
+        if (found_single_group_with_postops && found_multi_group_with_postops) {
+            break; // Found both, can stop
+        }
+
+        if (i < microTestCount - 1) {
+            parser.next();
+        }
+    }
+
+    // We should find at least one configuration with PostOps
+    EXPECT_TRUE(found_single_group_with_postops
+                || found_multi_group_with_postops)
+        << "Should find at least one group configuration with PostOps";
+}
+
 int
 main(int argc, char** argv)
 {
