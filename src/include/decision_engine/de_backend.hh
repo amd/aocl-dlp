@@ -321,17 +321,26 @@ class gemmF32DEBackend : public iDEBackend
 
         bool invokeRD = false;
 
+        // TODO: For RD inputs kMask is set from the generator and nmask is
+        // calculated on the fly within the RD GEMM. Currently, when post-ops
+        // module reloads the maskF32 values into the opMask, the kMask gets
+        // overwritten for RD kernels while post-ops expects nMask. Until a
+        // proper handshake of the mask registers is established between
+        // post-ops and GEMM the RD kenrels will be disabled with post-ops.
+        bool hasPostOps =
+            (metadata != nullptr) && (metadata->op_code != POST_OPS_DISABLE);
+
         // The pack-conversion function from f32 to bf16 only supports
         // packing of matrices to row-major format. Hence Rd kernels can't
         // be used when bf16 API is rerouted to FP32.
         // using rerouted_from_other_backend to check if the DE is rerouted from
         // other backend.
-        if (!(rerouted_from_other_backend) && ((n < 48) || (m < 16))
-            && (rs_b == 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)) {
+        if (!hasPostOps && !(rerouted_from_other_backend)
+            && ((n < 48) || (m < 16)) && (rs_b == 1) && (mtag_b == PACK)
+            && (mtag_a == UNPACKED)) {
             invokeRD = true;
             k_unroll = 4; // equal to intrinsics kernel. To be tuned later.
         }
-
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, allLtFringeKernels, invokeRD,
