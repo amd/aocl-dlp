@@ -378,6 +378,10 @@ kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
     jit_->db(reinterpret_cast<uint8_t*>(&lpgemm_exp), sizeof(lpgemm_exp));
     jit_->db(reinterpret_cast<uint8_t*>(&erf_consts), sizeof(erf_consts));
     jit_->db(reinterpret_cast<uint8_t*>(&lpgemm_erf), sizeof(lpgemm_erf));
+    jit_->db(reinterpret_cast<uint8_t*>(&erf_f32_coeffs_hex),
+             sizeof(erf_f32_coeffs_hex));
+    jit_->db(reinterpret_cast<uint8_t*>(&erf_f32_constants_hex),
+             sizeof(erf_f32_constants_hex));
     jit_->L(table_store_end);
 
     // Mark tables as embedded
@@ -2437,68 +2441,77 @@ void
 kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::ERF(int y,
                                                                       int r)
 {
-    jit_->inLocalLabel();
-    // r2  = _mm512_abs_ps(r); -- to be preserved for later
-    jit_->mov(regTmp5Half, 0x7FFFFFFF);
-    jit_->vpbroadcastd(RegType(const2), regTmp5Half);
-    jit_->vpandd(RegType(r2), RegType(r), RegType(const2));
+    // Piecewise polynomial ERF approximation using VPERMT2PS
+    // Uses coefficients that approximate erf(x/√2) for input x
+    // Input: r = input values (zmm register index)
+    // Output: y = erf(r/√2) (zmm register index)
 
-    // Convert first half of float values to double (lower 8 floats -> 4
-    // doubles)
-    jit_->vcvtps2pd(RegType(y), halfRegType(r2));
+    using RegType = Xbyak::Zmm;
 
-    // Extract upper half of float values and convert to double (upper 8 floats
-    // -> 4 doubles)
-    jit_->vextractf32x8(halfRegType(x), RegType(r2),
-                        0x01); // Extract upper 4 floats
-    jit_->vcvtps2pd(RegType(x), halfRegType(x));
+    // Register allocation:
+    // x = x_abs (absolute value, reused from input r)
+    // r2 = indices
+    // z = coefficient low
+    // dn = coefficient high
+    // q = poly accumulator
+    // const1 = sign bits
+    // const2 = temporary
 
-    POLY_EVAL_HORNER_16_0(y);
+    // Step 1: Get absolute value and save sign
+    // x_abs = abs(r) using abs_mask (0x7FFFFFFF)
+    jit_->vpbroadcastd(RegType(const2), get_erf_f32_constant(1)); // abs_mask
+    jit_->vpandd(RegType(x), RegType(r), RegType(const2));
 
-    POLY_EVAL_HORNER_16_0(x);
+    // Save sign bit: x_sign = r & sign_mask (0x80000000)
+    jit_->vpbroadcastd(RegType(const1), get_erf_f32_constant(2)); // sign_mask
+    jit_->vpandd(RegType(const1), RegType(r), RegType(const1));
+    // const1 now holds the sign bits
 
-    // Convert double values back to single precision and insert into y
-    // Convert x (doubles) back to singles and insert at position 0
-    jit_->vcvtpd2ps(halfRegType(y), RegType(y)); // Convert doubles to singles
+    // Step 2: Clamp input to upper bound (7.0) BEFORE index calculation
+    // This prevents extrapolation and ensures indices are computed from clamped
+    // values
+    jit_->vbroadcastss(RegType(const2),
+                       get_erf_f32_constant(3)); // rbound (7.0)
+    jit_->vcmpps(jit_->k5, RegType(x), RegType(const2),
+                 0x1E); // CMP_GT: k5 = (x > rbound)
+    jit_->vblendmps(RegType(x) | jit_->k5, RegType(x),
+                    RegType(const2)); // Select: rbound if k5, else x
 
-    // Convert r (doubles) back to singles and insert at position 1
-    jit_->vcvtpd2ps(halfRegType(x), RegType(x)); // Convert doubles to singles
-    jit_->vinsertf32x8(RegType(y), RegType(y), halfRegType(x),
-                       0x01); // Insert at position 1
+    // Step 3: Compute indices using bit-based calculation (from CLAMPED x)
+    // indices = (x_bits + bias) >> 21
+    jit_->vpbroadcastd(RegType(r2), get_erf_f32_constant(0)); // erf_idx_bias
+    jit_->vpaddd(RegType(r2), RegType(x), RegType(r2));       // Add bias
+    jit_->vpsrad(RegType(r2), RegType(r2), 21); // Arithmetic shift right
 
-    // __m512i sign =
-    // _mm512_and_epi32(_mm512_castps_si512(r),
-    //                  _mm512_set1_epi32((unsigned int)0x80000000));
-    jit_->mov(regTmp4Half, 0x80000000);
-    jit_->vpbroadcastd(RegType(const2), regTmp4Half);
-    jit_->vpandd(RegType(const1), RegType(r), RegType(const2));
+    // Step 4: Clamp indices to [0, 23]
+    // Note: Since input is clamped to 7.0, max index = 23, so only lower clamp
+    // needed
+    jit_->vpxord(RegType(const2), RegType(const2), RegType(const2)); // zero
+    jit_->vpmaxsd(RegType(r2), RegType(r2), RegType(const2)); // max(indices, 0)
 
-    jit_->vorps(RegType(y), RegType(const1), RegType(y));
+    // Step 5: Evaluate polynomial using VPERMT2PS and Horner's method
+    // Note: vpermt2ps modifies the index register, so we copy it each time
 
-    // ERF_UBOUND
-    jit_->mov(regTmp4Half, 0x407AD447);
+    // Start with degree 5 (highest degree) - outside the loop
+    jit_->vmovups(RegType(z), get_erf_f32_coeff_array_lo(5));  // Load c5[0:15]
+    jit_->vmovups(RegType(dn), get_erf_f32_coeff_array_hi(5)); // Load c5[16:31]
+    jit_->vmovdqa32(RegType(const2), RegType(r2));             // Copy indices
+    jit_->vpermt2ps(RegType(z), RegType(const2), RegType(dn)); // Select c5
+    jit_->vmovups(RegType(q), RegType(z));                     // poly = c5
 
-    // Assuming absr contains 16 float values
-    // Find the maximum value across all lanes
-    jit_->vreduceps(RegType(x), RegType(r2), 0x0E); // 0x0E = MAX operation
-    // Convert the result to integer representation
-    jit_->vextractps(regTmp5Half, Xmm(x), 0); // Extract the scalar result
+    // Horner's method: poly = poly * x + c[deg] for deg = 4, 3, 2, 1, 0
+    for (int deg = 4; deg >= 0; deg--) {
+        jit_->vmovups(RegType(z), get_erf_f32_coeff_array_lo(deg));
+        jit_->vmovups(RegType(dn), get_erf_f32_coeff_array_hi(deg));
+        jit_->vmovdqa32(RegType(const2), RegType(r2)); // Copy indices again
+        jit_->vpermt2ps(RegType(z), RegType(const2), RegType(dn));
+        jit_->vfmadd213ps(RegType(q), RegType(x),
+                          RegType(z)); // q = q * x + c[deg]
+    }
 
-    // Check if regTmp5Half <= regTmp4Half and jump if true
-    jit_->cmp(regTmp5Half, regTmp4Half);
-    jit_->jg(".erf_end", jit_->T_NEAR); // Jump if regTmp5Half > regTmp4Half
-
-    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 4));
-    jit_->vcmpps(jit_->k5, RegType(const2), RegType(r2), 0x11);
-
-    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 1));
-    jit_->vblendmps(RegType(y) | jit_->k5, RegType(y), RegType(const2));
-
-    jit_->vorps(RegType(y), RegType(const1), RegType(y));
-
-    jit_->L(".erf_end");
-
-    jit_->outLocalLabel();
+    // Step 6: Restore sign (XOR with sign bits)
+    // Works because poly is always positive (computed from |x|)
+    jit_->vxorps(RegType(y), RegType(q), RegType(const1));
 }
 
 template<utils::kernelInstrType KType>
@@ -2559,11 +2572,37 @@ kernelOpsGeneratorX86<KType>::ERF(int y, int r)
     jit_->vorps(RegType(y), RegType(const1), RegType(y));
 }
 
+// AVX-512 specialization: Skip 1/√2 scaling since ERF coefficients handle it
+template<>
+void
+kernelOpsGeneratorX86<
+    utils::kernelInstrType::avx512_zmm_32_reg>::GELU_ERF_F32_DEF(md_t reg)
+{
+    // For AVX-512, the ERF implementation uses coefficients that
+    // approximate erf(x/√2) directly. So we pass the input without scaling.
+    // ERF will compute erf(reg/√2) and return it.
+
+    jit_->vxorps(RegType(x_tanh), RegType(x_tanh), RegType(x_tanh));
+
+    ERF(x_tanh, reg); // Pass reg directly (no 1/√2 multiplication)
+
+    // Compute GELU: 0.5 * reg * (1 + erf_result)
+    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 1)); // 1.0
+    jit_->vaddps(RegType(r2), RegType(x_tanh), RegType(const2));
+
+    jit_->vmulps(RegType(r2), RegType(r2), RegType(reg));
+    jit_->vbroadcastss(RegType(const2), get_constant(erf_consts_off, 2)); // 0.5
+    jit_->vmulps(RegType(reg), RegType(r2), RegType(const2));
+}
+
+// Generic implementation for other architectures (AVX2, etc.)
 template<utils::kernelInstrType KType>
 void
 kernelOpsGeneratorX86<KType>::GELU_ERF_F32_DEF(md_t reg)
 {
-    jit_->vbroadcastss(RegType(const1), get_constant(erf_consts_off, 0));
+    // For non-AVX-512, ERF expects input pre-scaled by 1/√2
+    jit_->vbroadcastss(RegType(const1),
+                       get_constant(erf_consts_off, 0)); // 1/√2
     jit_->vmulps(RegType(r), RegType(reg), RegType(const1));
 
     jit_->vxorps(RegType(x_tanh), RegType(x_tanh), RegType(x_tanh));
