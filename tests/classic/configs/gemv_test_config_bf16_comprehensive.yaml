@@ -10,7 +10,7 @@ gemm_tests:
     b_type: ["bf16"]
     c_type: ["f32","bf16"]
     acc_type: ["f32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major","column-major"]
     transA: [false, true]
     transB: [false, true]
     m: 1
@@ -90,7 +90,7 @@ gemm_tests:
     b_type: ["bf16"]
     c_type: ["f32","bf16"]
     acc_type: ["f32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major","column-major"]
     transA: [false]
     transB: [false]
     m: 1
@@ -150,7 +150,7 @@ gemm_tests:
     b_type: ["bf16"]
     c_type: ["f32","bf16"]
     acc_type: ["f32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major","column-major"]
     transA: [false]
     transB: [false]
     m: 1
@@ -235,7 +235,7 @@ gemm_tests:
     b_type: ["bf16"]
     c_type: ["f32","bf16"]
     acc_type: ["f32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major","column-major"]
     transA: [false]
     transB: [false]
     m: [8, 16, 32, 64]
@@ -315,7 +315,7 @@ gemm_tests:
     b_type: ["bf16"]
     c_type: ["f32","bf16"]
     acc_type: ["f32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major","column-major"]
     transA: [false, true]
     transB: [false, true]
     m: [1, 2, 4, 7, 8, 15, 16, 31, 32, 63, 64]  # Small M values
@@ -335,7 +335,7 @@ gemm_tests:
     b_type: ["bf16"]
     c_type: ["f32","bf16"]
     acc_type: ["f32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major","column-major"]
     transA: [false]
     transB: [false]
     m: [4, 5, 6, 7, 8, 9, 10, 11, 12]  # Around MR=8
@@ -375,7 +375,7 @@ gemm_tests:
     b_type: ["bf16"]
     c_type: ["f32","bf16"]
     acc_type: ["f32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major","column-major"]
     transA: [false, true]
     transB: [false, true]
     m: [9, 17, 25, 33, 50, 65, 100, 127]  # Non-multiples of MR=8

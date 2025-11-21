@@ -206,6 +206,32 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         goto err_hndl;
     }
 
+    // Create copy variables to handle column major case
+    md_t            m_use      = m;
+    md_t            n_use      = n;
+    md_t            rs_a_use   = rs_a;
+    md_t            cs_a_use   = cs_a;
+    md_t            rs_b_use   = rs_b;
+    md_t            cs_b_use   = cs_b;
+    AOCL_MEMORY_TAG mtag_a_use = mtag_a;
+    AOCL_MEMORY_TAG mtag_b_use = mtag_b;
+    const bfloat16* a_use      = a;
+    const bfloat16* b_use      = b;
+
+    // Swapping inputs to induce row major computation for column major inputs.
+    if (is_column_major == TRUE) {
+        m_use      = n;
+        n_use      = m;
+        rs_a_use   = rs_b;
+        cs_a_use   = cs_b;
+        rs_b_use   = rs_a;
+        cs_b_use   = cs_a;
+        mtag_a_use = mtag_b;
+        mtag_b_use = mtag_a;
+        a_use      = b;
+        b_use      = a;
+    }
+
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.
     dlp_rntm_t rntm_g;
@@ -225,7 +251,10 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     md_t nr_hint = lcntx_l.blksz.NR;
     md_t kc_hint = lcntx_l.blksz.KC;
 
-    AOCL_MEMORY_TAG jit_mtag_b = mtag_b;
+    // Create copy of mtag variables to handle jit kernel generation for bf16 on
+    // avx2 arch
+    AOCL_MEMORY_TAG jit_mtag_a = mtag_a_use;
+    AOCL_MEMORY_TAG jit_mtag_b = mtag_b_use;
 
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         // No native BF16 support - will use F32 kernels
@@ -238,16 +267,19 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         // For m=1 case B matrix is unpacked inside the framework before
         // calling f32 kernel, same should be provided for generating JIT
         // kernels
-        if (m == 1) {
+        if (m_use == 1) {
             jit_mtag_b = UNPACKED;
         }
     }
 
+    // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+
     dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a, jit_mtag_b, m, n, k, rs_a,
-        cs_a, rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        mr_hint, nr_hint, kc_hint, DLP_BF16, &lcntx_l.dlp_kernel_hndl);
+        DLP_KERNEL_BF16BF16F32OBF16, order, jit_mtag_a, jit_mtag_b, m_use,
+        n_use, k, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c, cs_c,
+        (void*)&alpha, (void*)&beta, post_op_list, mr_hint, nr_hint, kc_hint,
+        DLP_BF16, &lcntx_l.dlp_kernel_hndl);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
     /* While AOCL_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that supports
@@ -258,46 +290,25 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     dlp_arch_t arch_id = dlp_get_arch();
     if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5))
         && (dlp_cpuid_is_avx512bf16_supported() == TRUE)
-        && (is_single_thread(&rntm_g) == TRUE)) {
-        if ((is_row_major == TRUE)
-            && (is_tiny_input_bf16obf16(m, n, k, &lcntx_l) == TRUE)) {
-            lpgemm_rowvar_tiny_bf16bf16f32of32(
-                m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b,
-                (float*)c, rs_c, cs_c, alpha, beta, &lcntx_l, post_op_list,
-                DLP_BF16);
-            goto err_hndl;
-        } else if ((is_column_major == TRUE)
-                   && (is_tiny_input_bf16obf16(n, m, k, &lcntx_l) == TRUE)) {
-            lpgemm_rowvar_tiny_bf16bf16f32of32(
-                n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a,
-                (float*)c, rs_c, cs_c, alpha, beta, &lcntx_l, post_op_list,
-                DLP_BF16);
-            goto err_hndl;
-        }
+        && (is_tiny_input_bf16obf16(m_use, n_use, k, &lcntx_l) == TRUE)
+        && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
+        lpgemm_rowvar_tiny_bf16bf16f32of32(
+            m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+            rs_b_use, cs_b_use, mtag_b_use, (float*)c, rs_c, cs_c, alpha, beta,
+            &lcntx_l, post_op_list, DLP_BF16);
+        goto err_hndl;
     }
 #endif
 #ifdef DLP_ENABLE_OPENMP
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        lpgemm_bf16bf16f32of32_openmp_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
-    } else {
-        lpgemm_bf16bf16f32of32_openmp_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
-    }
+    lpgemm_bf16bf16f32of32_openmp_thread_decorator(
+        m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
+        cs_b_use, mtag_b_use, (float*)c, rs_c, cs_c, alpha, beta, &rntm_g,
+        &lcntx_l, post_op_list, DLP_BF16);
 #else
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        lpgemm_bf16bf16f32of32_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
-    } else {
-        lpgemm_bf16bf16f32of32_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
-    }
+    lpgemm_bf16bf16f32of32_thread_decorator(
+        m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
+        cs_b_use, mtag_b_use, (float*)c, rs_c, cs_c, alpha, beta, &rntm_g,
+        &lcntx_l, post_op_list, DLP_BF16);
 #endif
 
 err_hndl:;
