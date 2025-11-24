@@ -359,8 +359,7 @@ class gemmBF16DEBackend : public iDEBackend
     std::unique_ptr<gemmF32DEBackend>
         f32Backend; // For rerouting when AVX512BF16 is not supported
 
-    [[gnu::always_inline]]
-    constexpr md_t getPrefetchDistance()
+    [[gnu::always_inline]] constexpr md_t getPrefetchDistance()
     {
         // Setting this to 40, which works for ZEN5. Should we set this in
         // the DE constructor, based on the underlying arch?
@@ -685,6 +684,114 @@ class gemmU8S8DEBackend : public iDEBackend
 
         // Currently only general GEMM is supported, specific GEMM optimizations
         // will be added later
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+};
+
+class gemmS8DEBackend : public iDEBackend
+{
+    bool                                isAvx512;
+    bool                                isAvx2;
+    bool                                isAvx512Bf16;
+    bool                                isAvx512Vnni;
+    kernel_frame::kernelInstrPreference eKernelInstPref;
+    bool                                canGenerateKernelInfo;
+
+    [[gnu::always_inline]] constexpr md_t getPrefetchDistance()
+    {
+        // Setting this to 40, which works for ZEN5. Should we set this in
+        // the DE constructor, based on the underlying arch?
+        constexpr md_t prefetch_c_dist = 40;
+        return prefetch_c_dist;
+    }
+
+  public:
+    gemmS8DEBackend();
+    ~gemmS8DEBackend()                                 = default;
+    gemmS8DEBackend(const gemmS8DEBackend&)            = delete;
+    gemmS8DEBackend(gemmS8DEBackend&&)                 = delete;
+    gemmS8DEBackend& operator=(const gemmS8DEBackend&) = delete;
+    gemmS8DEBackend& operator=(gemmS8DEBackend&&)      = delete;
+
+    std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
+        iDEInput* in) override;
+
+    [[gnu::always_inline]] dlp::kernel_frame::kernelInfo
+    getGemvKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
+    {
+        return INVALID_KERNEL_INFO;
+    }
+
+    [[gnu::always_inline]]
+    dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        // At this point, we know that the underlying architecture supports
+        // AVX512-VNNI.
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
+                                                         kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // The DE constructor sets it to a safe value, based on the hardware
+        // support.
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,

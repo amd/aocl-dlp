@@ -99,6 +99,31 @@ class decisionEngine
         auto u8s8os8DtIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelDatatype::u8s8s32os8);
         backends[kTypeIdx][u8s8os8DtIdx] = new gemmU8S8DEBackend;
+
+        // Register S8 decision engine.
+        auto s8s8s32os32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s8s32os32);
+        backends[kTypeIdx][s8s8s32os32DtIdx] = new gemmS8DEBackend;
+
+        // Register s8s8s32os8 decision engine.
+        auto s8s8s32os8DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s8s32os8);
+        backends[kTypeIdx][s8s8s32os8DtIdx] = new gemmS8DEBackend;
+
+        // Register s8s8s32obf16 decision engine.
+        auto s8s8s32obf16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s8s32obf16);
+        backends[kTypeIdx][s8s8s32obf16DtIdx] = new gemmS8DEBackend;
+
+        // Register s8s8s32ou8 decision engine.
+        auto s8s8s32ou8DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s8s32ou8);
+        backends[kTypeIdx][s8s8s32ou8DtIdx] = new gemmS8DEBackend;
+
+        // Register s8s8s32of32 decision engine.
+        auto s8s8s32of32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::s8s8s32of32);
+        backends[kTypeIdx][s8s8s32of32DtIdx] = new gemmS8DEBackend;
     }
 
     decisionEngine()
@@ -226,8 +251,8 @@ class decisionEngine
      * INVALID_KERNEL_INFO if no suitable backend is registered
      */
     template<typename T>
-    [[gnu::always_inline]]
-    inline dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+    [[gnu::always_inline]] inline dlp::kernel_frame::kernelInfo
+    getGemmKernelInfoForInputFastPath(
         md_t                                 m,
         md_t                                 n,
         md_t                                 k,

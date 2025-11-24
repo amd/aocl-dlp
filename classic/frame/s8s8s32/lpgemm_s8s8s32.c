@@ -614,11 +614,21 @@ LPGEMM_5LOOP(int8_t, int8_t, int32_t, s8s8s32o32)
                     // rs_b * kc0_updated ) );
 
                     // Reorder/Packed B, Reorder/Packed/Unpacked A call.
-                    ((lpgemm_rowvar_s32_s8)lcntx->kern_fun_ptr)(
-                        mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                        a_block_stride, (b_use + (jr * kc0_updated)), rs_b_use,
-                        cs_b_use, (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                        post_op_list, post_ops_attr);
+                    if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                        dlp_execute_kernel(
+                            lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                            (int8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                            (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
+                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                            (void*)&alpha, (void*)&beta0, post_op_list,
+                            post_ops_attr);
+                    } else {
+                        ((lpgemm_rowvar_s32_s8)lcntx->kern_fun_ptr)(
+                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
+                            a_block_stride, (b_use + (jr * kc0_updated)),
+                            rs_b_use, cs_b_use, (c_use_ic + jr), rs_c_use, 1,
+                            alpha, beta0, post_op_list, post_ops_attr);
+                    }
                     post_ops_attr.b_sum_offset += NR;
                 }
             }

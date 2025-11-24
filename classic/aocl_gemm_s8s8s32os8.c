@@ -195,28 +195,40 @@ aocl_gemm_s8s8s32os8(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
+    lpgemm_cntx_t  lcntx_l;
+    // Create local copy, since each thread in a multi-instance setup
+    // modifies the context object.
+    lcntx_l = *lcntx_g;
+
+    // Initialize DLP Plus kernel path.
+    lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+    dlp_init_and_get_kernel_hndl(
+        DLP_KERNEL_S8S8S32OS8, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a, rs_b,
+        cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S8,
+        &lcntx_l.dlp_kernel_hndl);
 
 #ifdef DLP_ENABLE_OPENMP
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
         lpgemm_s8s8s32o32_openmp_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_S8);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S8);
     } else {
         lpgemm_s8s8s32o32_openmp_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_S8);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S8);
     }
 #else
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
         lpgemm_s8s8s32o32_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_S8);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S8);
     } else {
         lpgemm_s8s8s32o32_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, post_op_list, DLP_S8);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S8);
     }
 #endif
 

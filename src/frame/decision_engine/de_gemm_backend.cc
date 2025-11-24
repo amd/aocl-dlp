@@ -320,6 +320,70 @@ gemmU8S8DEBackend::getKernelInfoForInput(iDEInput* in)
     }
 }
 
+gemmS8DEBackend::gemmS8DEBackend()
+    : isAvx512(false)
+    , isAvx2(false)
+    , isAvx512Bf16(false)
+    , isAvx512Vnni(false)
+    , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
+    , canGenerateKernelInfo(true)
+{
+    // Check for BF16 support, required for downscaling to BF16
+    isAvx512Bf16 = arch_utils::archConfigManager::getInstance()
+                       .isAvx512Bf16SupportedByArch();
+
+    // Check for AVX512 support
+    isAvx512 =
+        arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
+
+    // Check for VNNI support, required for all s8 kernels
+    isAvx512Vnni = cpu_utils::cpuFeaturesInstance().hasFeature(
+        cpu_utils::isaFeature::avx512vnni);
+
+    // Check for AVX2 support
+    isAvx2 = arch_utils::archConfigManager::getInstance()
+                 .isAvx2Fma3SupportedByArch();
+
+    eKernelInstPref =
+        dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+
+    // If either of AVX512, VNNI or BF16 is unsupport, kernel info
+    // cannot be generated.
+    if (!isAvx512 || !isAvx512Vnni || !isAvx512Bf16) {
+        canGenerateKernelInfo = false;
+    }
+}
+
+std::optional<kernel_frame::kernelInfo>
+gemmS8DEBackend::getKernelInfoForInput(iDEInput* in)
+{
+    auto gemmIn = static_cast<gemmDEInput*>(in);
+    if (gemmIn == nullptr) {
+        return std::nullopt;
+    }
+
+    if (!canGenerateKernelInfo) {
+        return std::nullopt;
+    }
+
+    // Only gemm supported in S8 JIT path for now.
+    kernel_frame::kernelInfo kI;
+    if (gemmIn->m > 1 && gemmIn->n > 1) {
+        kI = getGemmKernelInfoForInputFastPath(
+            gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
+            gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
+            gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
+            gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
+    }
+
+    if ((kI.mr <= 0) || (kI.nr <= 0)) {
+        return std::nullopt;
+    } else {
+        return std::make_optional(kI);
+    }
+}
+
 void
 gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
                                  lpgemm_post_op*                  post_op,

@@ -309,4 +309,64 @@ class jitAmdZenU8S8 : public dlp::jit::jitGeneratorBase
     }
 };
 
+class jitAmdZenS8 : public dlp::jit::jitGeneratorBase
+{
+
+    std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
+    std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
+
+    // VNNI_CONST defines the number of 8-bit signed integers that are packed
+    // together in VNNI format operations.
+    int VNNI_CONST = 4;
+
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+  public:
+    md_t               MR, NR, KC;
+    md_t               numMRVariants, numNRVariants;
+    md_t               numKernelVariants;
+    md_t               K_UNROLL, PREFETCH_C_DIST;
+    md_t               c_downscale;
+    std::vector<void*> kernelCodeBlocks;
+
+    jitAmdZenS8();
+    ~jitAmdZenS8();
+    jitAmdZenS8(const jitAmdZenS8&)            = delete;
+    jitAmdZenS8& operator=(const jitAmdZenS8&) = delete;
+    jitAmdZenS8(jitAmdZenS8&&)                 = delete;
+    jitAmdZenS8& operator=(jitAmdZenS8&&)      = delete;
+
+    int getProcessBlockSize() const;
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+    dlp::jit::jitGeneratorError operator()(
+        const dlp::jit::jitGeneratorContext& jI) override
+    {
+        return generateAllKernels(jI);
+    }
+
+    std::vector<dlp::kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override
+    {
+        return mKernelDatatypes;
+    }
+
+    std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override
+    {
+        return mIsaFeaturesRequired;
+    }
+
+    dlp::kernels::kernelError executeKernel(
+        dlp::kernels::kernelParams* _params) override;
+
+    std::unique_ptr<jitGeneratorBase> clone() override
+    {
+        return std::make_unique<jitAmdZenS8>();
+    }
+};
 } // namespace amdzen::gen
