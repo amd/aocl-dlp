@@ -1,3 +1,5 @@
+.. _eltwise-operations:
+
 Element-wise Operations
 =======================
 
@@ -5,6 +7,8 @@ Element-wise operations API for applying mathematical functions to matrix elemen
 
 .. doxygenfile:: aocl_eltwise_ops_interface_apis.h
    :project: aocl-dlp
+
+.. _eltwise-function-reference:
 
 Function Reference
 ------------------

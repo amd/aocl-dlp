@@ -72,6 +72,11 @@ extensions = [
     'myst_parser',
     'breathe',
     ]
+
+# Configure autosectionlabel to use document-specific prefixes
+# This prevents duplicate label warnings when multiple documents have sections with the same title
+autosectionlabel_prefix_document = True
+
 # myst_enable_extensions = ["colon_fence"]
 
 source_suffix = {
@@ -114,4 +119,4 @@ breathe_default_project = "aocl-dlp"
 breathe_default_members = ('members', 'undoc-members')
 myst_title_to_header = True
 myst_heading_anchors = 3
-suppress_warnings = ["myst.header", "myst.xref_missing"]
+suppress_warnings = ["myst.header", "myst.xref_missing", "autosectionlabel.*"]

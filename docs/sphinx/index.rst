@@ -24,6 +24,8 @@ Complete API reference for AOCL-DLP (AMD Optimizing CPU Libraries - Deep Learnin
 Quick API Lookup
 ----------------
 
+.. _index-core-gemm:
+
 Core GEMM Operations
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -41,6 +43,8 @@ Core GEMM Operations
      - Unsigned/signed 8-bit quantized GEMM
    * - ``aocl_gemm_s8s8s32os8``
      - Signed 8-bit quantized GEMM
+
+.. _index-batch-operations:
 
 Batch Operations
 ~~~~~~~~~~~~~~~~
@@ -70,6 +74,8 @@ Matrix Utilities
    * - ``aocl_unreorder_*``
      - Convert reordered matrix back to normal format
 
+.. _index-element-wise:
+
 Element-wise Operations
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -81,6 +87,8 @@ Element-wise Operations
      - Description
    * - ``aocl_gemm_eltwise_ops_*``
      - Apply element-wise operations to matrices
+
+.. _index-utility-functions:
 
 Utility Functions
 ~~~~~~~~~~~~~~~~~
@@ -95,6 +103,8 @@ Utility Functions
      - GELU activation functions
    * - ``aocl_gemm_softmax_*``
      - Softmax functions
+
+.. _index-library-management:
 
 Library Management
 ~~~~~~~~~~~~~~~~~~
@@ -130,6 +140,8 @@ Choose the Right GEMM Variant
 2. **Multiple Operations**: Batch GEMM functions
 3. **Repeated Operations**: Use matrix reordering
 
+.. _index-data-type-naming:
+
 Data Type Naming Convention
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -142,6 +154,8 @@ Function names follow the pattern: ``[input_A][input_B][accumulation]o[output]``
 - ``s32`` = int32
 
 Example: ``bf16bf16f32of32`` = bfloat16 inputs, float32 accumulation and output
+
+.. _index-see-also:
 
 See Also
 --------

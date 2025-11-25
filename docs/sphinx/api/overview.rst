@@ -62,6 +62,8 @@ AOCL-DLP supports multiple precision formats to balance accuracy and performance
 API Categories
 --------------
 
+.. _overview-core-gemm:
+
 Core GEMM Operations
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -79,6 +81,8 @@ The fundamental matrix multiplication APIs:
    aocl_gemm_u8s8s32os32(...)
    aocl_gemm_s8s8s32os8(...)
 
+.. _overview-batch-operations:
+
 Batch Operations
 ~~~~~~~~~~~~~~~~
 
@@ -90,6 +94,8 @@ For processing multiple GEMM operations efficiently:
    aocl_batch_gemm_f32f32f32of32(...)
    aocl_batch_gemm_bf16bf16f32of32(...)
 
+.. _api-overview-element-wise:
+
 Element-wise Operations
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -100,6 +106,8 @@ For applying operations without matrix multiplication:
    // Element-wise operations
    aocl_gemm_eltwise_ops_f32of32(...)
    aocl_gemm_eltwise_ops_bf16of32(...)
+
+.. _overview-utility-functions:
 
 Utility Functions
 ~~~~~~~~~~~~~~~~~
@@ -113,6 +121,8 @@ Standalone mathematical operations:
    aocl_gemm_gelu_erf_f32(...)
    aocl_gemm_softmax_f32(...)
 
+.. _api-overview-matrix-reordering:
+
 Matrix Reordering
 ~~~~~~~~~~~~~~~~~
 
@@ -125,6 +135,8 @@ For optimizing repeated operations:
 
    // Reorder matrix for optimal access
    aocl_reorder_f32f32f32of32(...)
+
+.. _api-overview-library-management:
 
 Library Management
 ~~~~~~~~~~~~~~~~~~
@@ -178,6 +190,8 @@ All APIs support multiple memory layouts:
    * - Reordered (``'R'``)
      - Optimized layout
      - Repeated operations with same matrix
+
+.. _api-design-parameter-validation:
 
 Parameter Validation
 ~~~~~~~~~~~~~~~~~~~~
@@ -283,7 +297,9 @@ Key strategies for optimal memory performance:
 2. **Alignment**: Align matrices to cache line boundaries (64 bytes)
 3. **Reordering**: Reorder frequently-used matrices
 4. **Batch Processing**: Group similar operations
-5. **Memory Bandwidth**: Consider bandwidth limitations for large matrices
+   5. **Memory Bandwidth**: Consider bandwidth limitations for large matrices
+
+.. _api-overview-threading-config:
 
 Threading Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -388,6 +404,8 @@ Error Handling
 
 AOCL-DLP uses defensive programming practices:
 
+.. _api-overview-error-param-validation:
+
 Parameter Validation
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -439,6 +457,8 @@ Best Practices
    - Measure performance with representative workloads
    - Validate numerical accuracy for your use case
 
+.. _overview-best-practices:
+
 Migration Guide
 ---------------
 
@@ -473,6 +493,8 @@ When upgrading:
 2. **Update post-operations**: New post-op framework may require changes
 3. **Validate performance**: Re-benchmark with new version
 4. **Test accuracy**: Verify numerical results remain acceptable
+
+.. _api-overview-see-also:
 
 See Also
 --------

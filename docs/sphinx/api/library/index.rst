@@ -1,3 +1,5 @@
+.. _library-management:
+
 Library Management
 ==================
 
@@ -5,6 +7,8 @@ Library configuration and management functions for AOCL-DLP.
 
 .. doxygenfile:: aocl_lib_interface_apis.h
    :project: aocl-dlp
+
+.. _library-threading-config:
 
 Threading Configuration
 -----------------------

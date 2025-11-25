@@ -79,6 +79,8 @@ Data Type Naming Convention
 
 Function names in AOCL-DLP follow a systematic naming convention that encodes the data types:
 
+.. _types-data-type-naming:
+
 Pattern: ``[input_A][input_B][accumulation]o[output]``
 
 .. list-table:: Type Abbreviations
@@ -217,6 +219,8 @@ For explicit type conversions, use appropriate utility functions or element-wise
        NULL  // No additional operations
    );
 
+.. _types-best-practices:
+
 Best Practices
 --------------
 
@@ -226,12 +230,16 @@ Best Practices
 4. **Handle type conversions**: Be explicit about precision requirements
 5. **Consider hardware support**: Some types may have better hardware acceleration
 
+.. _types-see-also:
+
 See Also
 --------
 
 * :doc:`../gemm/index` - GEMM operations using these types
 * :doc:`../gemm/post_ops` - Post-operations metadata structures
 * :doc:`../eltwise/index` - Element-wise type conversions
+
+.. _types-full-header:
 
 Full Header Reference
 ---------------------

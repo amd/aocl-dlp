@@ -126,6 +126,8 @@ Batch GEMM Operations
 .. doxygenfunction:: aocl_batch_gemm_s8s8s32ou8
    :project: aocl-dlp
 
+.. _gemm-matrix-reordering:
+
 Matrix Reordering
 -----------------
 
