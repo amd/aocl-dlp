@@ -396,19 +396,19 @@ jitGEMMS8<KType>::scaleBeta()
 
         for (int i = 0; i < MR; i++) {
             for (int j = 0; j < bFullReg; j++) {
-                vmovdqu8(RegType(bRegIdx + j),
+                vmovdqu8(Xbyak::Xmm(bRegIdx + j),
                          ptr[regTmpCptr + j * (RegBytes / 4)]);
-                vpmovzxbd(RegType(bRegIdx + j), RegType(bRegIdx + j));
+                vpmovzxbd(RegType(bRegIdx + j), Xbyak::Xmm(bRegIdx + j));
                 vpdpbusd(RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j),
                          RegType(betaRegIdx));
             }
 
             // Handle masked beta scaling
             if (bMaskReg > 0) {
-                vmovdqu8(RegType(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu8(Xbyak::Xmm(bRegIdx + bFullReg) | k3 | T_z,
                          ptr[regTmpCptr + (bFullReg * (RegBytes / 4))]);
                 vpmovzxbd(RegType(bRegIdx + bFullReg),
-                          RegType(bRegIdx + bFullReg));
+                          Xbyak::Xmm(bRegIdx + bFullReg));
                 vpdpbusd(RegType(cRegIdx + i * bReg + bFullReg),
                          RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
             }
@@ -437,6 +437,7 @@ jitGEMMS8<KType>::scaleBeta()
                 vpmovsxwd(RegType(bRegIdx + j), Xbyak::Ymm(bRegIdx + j));
                 vpsllvd(RegType(bRegIdx + j), RegType(bRegIdx + j),
                         RegType(aRegIdx + 1));
+                vcvtps2dq(RegType(bRegIdx + j), RegType(bRegIdx + j));
                 vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
                         RegType(betaRegIdx));
                 vpaddd(RegType(cRegIdx + i * bReg + j),
@@ -445,15 +446,19 @@ jitGEMMS8<KType>::scaleBeta()
 
             // Handle masked beta scaling
             if (bMaskReg > 0) {
-                vmovdqu16(Xbyak::Ymm(bRegIdx) | k3,
+                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | k3,
                           ptr[regTmpCptr + (bFullReg * (RegBytes / 2))]);
-                vpmovsxwd(RegType(bRegIdx), Xbyak::Ymm(bRegIdx));
-                vpsllvd(RegType(bRegIdx), RegType(bRegIdx),
-                        RegType(aRegIdx + 1));
-                vpmulld(RegType(bRegIdx), RegType(bRegIdx),
-                        RegType(betaRegIdx));
-                vpaddd(RegType(cRegIdx + i * bReg), RegType(cRegIdx + i * bReg),
-                       RegType(bRegIdx));
+                vpmovsxwd(RegType(bRegIdx + bFullReg),
+                          Xbyak::Ymm(bRegIdx + bFullReg));
+                vpsllvd(RegType(bRegIdx + bFullReg),
+                        RegType(bRegIdx + bFullReg), RegType(aRegIdx + 1));
+                vcvtps2dq(RegType(bRegIdx + bFullReg),
+                          RegType(bRegIdx + bFullReg));
+                vpmulld(RegType(bRegIdx + bFullReg),
+                        RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
+                vpaddd(RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(bRegIdx + bFullReg));
             }
 
             add(regTmpCptr, regTmp1);

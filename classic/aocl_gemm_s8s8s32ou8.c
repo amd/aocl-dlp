@@ -183,13 +183,6 @@ aocl_gemm_s8s8s32ou8(const char      order,
         lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_U8,
         &lcntx_l.dlp_kernel_hndl);
 
-    if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
-        dlp_print_msg("Failed to initialize kernel handle.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_FAILURE);
-        goto err_hndl;
-    }
-
 #ifdef DLP_ENABLE_OPENMP
     lpgemm_s8s8s32o32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
