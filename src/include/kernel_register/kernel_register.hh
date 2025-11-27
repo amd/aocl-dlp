@@ -274,13 +274,25 @@ class kernelRegister
         kernels::kernelBase* kB = _kB.release();
         kernelInfo*          kI = kB->getKernelInfo();
 
-        auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
+        // This boolean will be used to track if the kernel was inserted
+        // at least once, and if not to free the kernel pointer. Insertion
+        // in atleast one kernel table will ensure its cleaned up properly.
+        bool isInsertedAtleastOnce = false;
+        auto routineIdx            = utils::getUnderlyingValueOfEnum(kType);
         for (auto ele : kDTypes) {
-            auto idx = utils::getUnderlyingValueOfEnum(ele);
-            static_cast<void>(
-                vecKDTs[routineIdx][idx]
-                    .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                                     VALUE_WATCHER>(kI, kB));
+            auto idx    = utils::getUnderlyingValueOfEnum(ele);
+            auto retPtr = vecKDTs[routineIdx][idx]
+                              .template insert<HASH_KEY_GETTER, KEY_COMPARATOR,
+                                               KEY_TYPE, VALUE_WATCHER>(kI, kB);
+            if (retPtr != nullptr) {
+                isInsertedAtleastOnce = true;
+            }
+        }
+
+        if (!isInsertedAtleastOnce) {
+            // NOTE: The std::default_delete in std::unique_ptr maps to delete.
+            delete kB;
+            return kernelFrameError::failure;
         }
 
         return kernelFrameError::success;
@@ -325,7 +337,8 @@ class kernelRegister
                                  VALUE_WATCHER>(kI, kB));
 
         if (!kernPtr) {
-            // TODO: Add logging here.
+            // NOTE: The std::default_delete in std::unique_ptr maps to delete.
+            delete kB;
             return kernelBaseRef(nullptr);
         }
 
@@ -353,7 +366,6 @@ class kernelRegister
         // user and its not necessary to have the kernel inserted by the time
         // query is called.
         if (!kB) {
-            // TODO: Add logging here.
             return kernelBaseRef(nullptr);
         }
 
@@ -458,9 +470,7 @@ class kernelRegister
      * between "kernel not attempted" (nullptr) and "kernel generation failed"
      * (emptyKernel).
      *
-     * OWNERSHIP: Registry takes ownership of the created emptyKernel instance
      * THREAD SAFETY: Thread-safe via underlying dispatch table synchronization
-     * MEMORY: Allocates emptyKernel on heap, cleaned up in destructor
      *
      * @param kI KernelInfo describing the kernel configuration that failed
      * @param kDtype Datatype for which the kernel registration failed
@@ -472,14 +482,16 @@ class kernelRegister
             utils::getUnderlyingValueOfEnum(kernelRoutineType::gemm);
         auto idx = utils::getUnderlyingValueOfEnum(kDtype);
 
-        // Safe to cast the voidFunctorPtr to kernelBase* because it is
-        // guaranteed that kernelBase* was typecasted to voidFunctorPtr in
-        // insert operation.
-        static_cast<void>(
-            vecKDTs[routineIdx][idx]
-                .template insert<gemmHashKeyGetter, gemmKeyComparator,
-                                 kernelInfo, storedKernelWatcher>(
-                    eK->getKernelInfo(), eK));
+        auto retPtr = vecKDTs[routineIdx][idx]
+                          .template insert<gemmHashKeyGetter, gemmKeyComparator,
+                                           kernelInfo, storedKernelWatcher>(
+                              eK->getKernelInfo(), eK);
+
+        if (!retPtr) {
+            // Need to cleanup the pointer if insertion failed since there
+            // is no kernel table tracking the empty kernel.
+            delete eK;
+        }
     }
 };
 

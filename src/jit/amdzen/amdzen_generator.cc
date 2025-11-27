@@ -2219,13 +2219,10 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 goto cleanup;
             }
 
-// Enable this macro to dump the generated JIT code to a file.
-// #define DLP_DUMP_JIT_CODE
-#ifdef DLP_DUMP_JIT_CODE
-            utils::jitHelperUtils::dump_jit_code(
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                 kernelCodeBlocks[mr * numNRVariants + nr],
-                utils::JIT_KERNEL_SIZE, "s8_jit_kernel", params.MR, params.NR);
-#endif
+                utils::JIT_KERNEL_SIZE, "s8_jit_kernel", params.MR, params.NR,
+                params.useMask, mr * numNRVariants + nr);
         }
     }
 

@@ -138,7 +138,51 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype  kDType,
     }
 }
 
-[[gnu::flatten]]
+// This function is not in the hot path, and therefore not inlined to avoid
+// unnecessary hot path code bloat.
+[[gnu::noinline]]
+static dlp::kernel_frame::kernelBaseRef
+dlp_generate_jit_kernel(dlp::kernel_frame::kernelInfo& fastKI,
+                        kernelDatatype                 kDType)
+{
+    auto jitGen = dlpJitGeneratorRegisterInstance().getGemmJitGenerator(kDType);
+    auto kB =
+        std::make_unique<jitKernelAdapter>(fastKI, std::move(jitGen), true);
+
+    if (!kB->isJitGenerated()) {
+        // Register a dummy kernel that will be used to denote a
+        // jit kernel cannot be generated for this kernelInfo.
+        dlpKernelRegisterInstance().registerEmptyGemmKernel(fastKI, kDType);
+    } else {
+        // Generate datatype-specific kernel name for proper registry
+        // management
+        std::string kernelName = get_kernel_family_name(kDType);
+        auto        retVal     = dlpKernelRegisterInstance().registerGemmKernel(
+            std::move(kB), std::move(kernelName));
+        if (retVal != kernelFrameError::success) {
+            // TODO: Failure to register most probably means the kernel
+            // table is full. Fall back to dlp classic for now. Need to
+            // add a mechanism to ensure further kernel registration for
+            // kDType wont happen. Replacement of kernels in table can also
+            // be considered at a later point.
+            std::cerr << "JIT kernel registration failed for datatype: "
+                      << static_cast<int>(kDType) << std::endl;
+        }
+    }
+
+    return dlpKernelRegisterInstance().getGemmKernel(&fastKI, kDType);
+}
+
+// Do NOT add likely/unlikely hints or __builtin_expect to the if-conditions
+// in this function, even though the error paths are rare. [[gnu::flatten]]
+// and [[gnu::aligned(64)]] attributes create a specific code layout optimized
+// for instruction cache locality. Adding branch hints causes the compiler to
+// move "unlikely" code out-of-line, which fragments hot path across multiple
+// cache lines and degrades performance despite the branches being perfectly
+// predicted. Modern branch predictors achieve >99% accuracy on these
+// conditions after warmup, so prediction hints provide zero benefit while the
+// code layout destruction causes measurable harm.
+[[gnu::flatten]] [[gnu::aligned(64)]]
 void
 dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
                              char               storage_format,
@@ -180,29 +224,7 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
     auto kernPtr = dlpKernelRegisterInstance().getGemmKernel(&fastKI, kDType);
 
     if (!kernPtr) {
-        auto jitGen =
-            dlpJitGeneratorRegisterInstance().getGemmJitGenerator(kDType);
-        auto kB =
-            std::make_unique<jitKernelAdapter>(fastKI, std::move(jitGen), true);
-
-        if (!kB->isJitGenerated()) {
-            // Register a dummy kernel that will be used to denote a
-            // jit kernel cannot be generated for this kernelInfo.
-            dlpKernelRegisterInstance().registerEmptyGemmKernel(fastKI, kDType);
-        } else {
-            // Generate datatype-specific kernel name for proper registry
-            // management
-            std::string kernelName = get_kernel_family_name(kDType);
-            auto        retVal = dlpKernelRegisterInstance().registerGemmKernel(
-                std::move(kB), std::move(kernelName));
-            if (retVal != kernelFrameError::success) {
-                std::cout << "JIT kernel registration failed for datatype: "
-                          << static_cast<int>(kDType) << std::endl;
-                std::cout << "Exiting..." << std::endl;
-                std::abort();
-            }
-        }
-        kernPtr = dlpKernelRegisterInstance().getGemmKernel(&fastKI, kDType);
+        kernPtr = dlp_generate_jit_kernel(fastKI, kDType);
     }
 
     kernel_hndl->kernel_base = (kernPtr.isValid() && kernPtr.getPtr()->isValid)
@@ -214,6 +236,9 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
     kernel_hndl->invokeRD    = fastKI.invokeRD;
 }
 
+// Experimentally derived alignment, needs further analysis but gives
+// consistent good performance on zen5 machines.
+[[gnu::aligned(512)]]
 void
 dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                    md_t                m,
@@ -236,8 +261,8 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                    lpgemm_post_op*     post_ops_list,
                    lpgemm_post_op_attr post_ops_attr)
 {
-    // kernels. Also dont use new/delete and malloc/free calls here, since
-    // they are lock based and will result in performance degradation.
+    // Dont use new/delete and malloc/free calls here, since they are lock
+    // based and will result in performance degradation.
     if (kernel_hndl.mr == 1) {
         gemvM1Params gemvM1ParamsIn{ A,
                                      B,
