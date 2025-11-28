@@ -563,8 +563,6 @@ UalRef::checkValidGemmParams(const Matrix& A,
             case MatrixType::u8:
                 return false;
             case MatrixType::s8:
-                if (C.getMatrixType() == MatrixType::u8)
-                    return false;
                 if (hasMetadata)
                     return false;
                 break;

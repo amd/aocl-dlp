@@ -251,10 +251,7 @@ check_valid_params(const GemmTestConfig& config)
                 return false;
 
             // s8s8 api supports column major without post-ops
-            // s8s8ou8 does not support column major
             case MatrixType::s8:
-                if (config.c_type == MatrixType::u8)
-                    return false;
                 if (config.has_postops)
                     return false;
                 break;

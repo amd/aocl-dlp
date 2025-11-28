@@ -91,10 +91,15 @@ aocl_gemm_s8s8s32ou8(const char      order,
     dlp_param_map_netlib_to_dlp_trans(transa, &dlp_transa);
     dlp_param_map_netlib_to_dlp_trans(transb, &dlp_transb);
 
-    // Column major support disabled for u8s8s32 APIs as we cannot
-    // swap matrices as both A and B are of different types.
-    if ((order != 'r') && (order != 'R')) {
-        dlp_print_msg("Column major inputs not supported.", __FILE__, __LINE__);
+    bool is_row_major    = ((order == 'r') || (order == 'R'));
+    bool is_column_major = ((order == 'c') || (order == 'C'));
+
+    // Column major support disabled for int API's till micro-kernel
+    // post-ops are updated to account for column major.
+    if ((is_column_major == TRUE) && (metadata != NULL)
+        && (metadata->seq_length > 0)) {
+        dlp_print_msg("Column major inputs not supported with Post-ops.",
+                      __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
@@ -125,33 +130,53 @@ aocl_gemm_s8s8s32ou8(const char      order,
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
 
     // Reorder is not supported for A matrix
-    if (mtag_a == REORDERED) {
-        dlp_print_msg(" Reordering of A matrix is not supported "
-                      "in row major case.",
+    if ((is_row_major == TRUE) && (mtag_a == REORDERED)) {
+        dlp_print_msg(" Reordering of A matrix is not supported in "
+                      " row major case.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
-    // A matrix packing is done only if the inputs are transposed in a
-    // row major scenario. A matrix packing in row major is not supported,
-    // hence it is changed to unpacked and proceed with the GEMM.
-    if (mtag_a == PACK) {
+    // Inputs swapped in column major, A becomes B from kernel point of view.
+    // Reorder is not supported for column major matrices.
+    else if ((is_column_major == TRUE)
+             && ((mtag_b == REORDERED) || (mtag_a == REORDERED))) {
+        dlp_print_msg(" Reordering of column major matrices is "
+                      " not supported.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+    // A matrix packing is only done in column major case, or when
+    // A matrix is transposed in row major. PackA kernels for row-maj
+    // is not supported, hence we set it to unpacked and proceed with GEMM.
+    if ((is_row_major == TRUE) && (mtag_a == PACK)) {
         mtag_a = UNPACKED;
+    } else if (is_column_major == TRUE && mtag_b == PACK) {
+        mtag_b = UNPACKED;
     }
     // From 5-loop function point of view
     // B matrix needs to be packed in a certain format in order to be loaded
     // and used in bf16 instrution. As such the mtag_b always needs to be either
     // packed or reordered. B matrix as it is (unpacked) cannot be used, and
     // the mtag_b is set to packed to enable runtime packing.
-    if (mtag_b == UNPACKED) {
+    if ((is_row_major == TRUE) && (mtag_b == UNPACKED)) {
         mtag_b = PACK;
+    }
+    // Inputs swapped in column major, A becomes B from kernel point of view.
+    else if ((is_column_major == TRUE) && (mtag_a == UNPACKED)) {
+        mtag_a = PACK;
     }
 
     // From 5-loop function point of view,
     // A matrix when in column major storage needs to be packed to row-major
     // storage as kernel expects A matrix to be in row-major format.
-    if (dlp_is_trans(dlp_transa)) {
+    if ((is_row_major == TRUE) && (dlp_is_trans(dlp_transa))) {
         mtag_a = PACK;
+    }
+    // Inputs swapped in column major, A becomes B from kernel point of view.
+    else if ((is_column_major == TRUE) && (dlp_is_trans(dlp_transb))) {
+        mtag_b = PACK;
     }
 
     // Convert post op struct to post op linked list format.
@@ -177,20 +202,42 @@ aocl_gemm_s8s8s32ou8(const char      order,
 
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
-    dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_S8S8S32OU8, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a, rs_b,
-        cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_U8,
-        &lcntx_l.dlp_kernel_hndl);
+    if (is_column_major == TRUE) {
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_S8S8S32OU8, order, mtag_b, mtag_a, n, m, k, rs_b, cs_b,
+            rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+            lcntx_l.blksz.NR, lcntx_l.blksz.MR, lcntx_l.blksz.KC, DLP_U8,
+            &lcntx_l.dlp_kernel_hndl);
+    } else {
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_S8S8S32OU8, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+            rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_U8,
+            &lcntx_l.dlp_kernel_hndl);
+    }
 
 #ifdef DLP_ENABLE_OPENMP
-    lpgemm_s8s8s32o32_openmp_thread_decorator(
-        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-        rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_U8);
+    // Swapping inputs to induce row major computation for column major inputs.
+    if (is_column_major == TRUE) {
+        lpgemm_s8s8s32o32_openmp_thread_decorator(
+            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (int32_t*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_U8);
+    } else {
+        lpgemm_s8s8s32o32_openmp_thread_decorator(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_U8);
+    }
 #else
-    lpgemm_s8s8s32o32_thread_decorator(
-        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-        rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_U8);
+    // Swapping inputs to induce row major computation for column major inputs.
+    if (is_column_major == TRUE) {
+        lpgemm_s8s8s32o32_thread_decorator(
+            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (int32_t*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_U8);
+    } else {
+        lpgemm_s8s8s32o32_thread_decorator(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_U8);
+    }
 #endif
 
 err_hndl:;
