@@ -36,6 +36,7 @@
 #include "f32_gemv.hh"
 #include "jit_register/jit_register.hh"
 #include "s8_gemm_generator.hh"
+#include "s8_gemv_generator.hh"
 #include "traits.hh"
 #include "u8s8_gemm.hh"
 #include "u8s8_gemv.hh"
@@ -2160,51 +2161,54 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     setGeneratorKernelMetaInfo(jI.kI.kInstPref);
 
     int processBlockSize = getProcessBlockSize();
-    numNRVariants        = ((processBlockSize / numElemsPerReg)) + 1;
 
-    numMRVariants     = MR;
-    numKernelVariants = numMRVariants * numNRVariants;
+    if (MR == 1) { // S8 GEMV M=1 kernel generation
+        AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
+        numKernelVariants      = NR;
+        kernelCodeBlocks.resize(numKernelVariants);
 
-    kernelCodeBlocks.resize(numKernelVariants);
+        utils::gemvM1GeneratorParams params(
+            0, NR, 0, KC, K_UNROLL, mtag_b, true, true, true, true,
+            dlp::kernel_frame::storageFormat::rowMajor,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
-    // Initializing with default values.
-    utils::generatorParams params(
-        0, 0, (jI.kI).k_unroll, PREFETCH_C_DIST, c_downscale, 1, false, false,
-        (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
 
-    for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
-        // Copy the kernelOps from the kernelInfo to params
-        params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
-    }
+        params.NR          = NR;
+        params.N_LEFT      = 0;
+        params.N_LEFT_16   = 0;
+        params.N_LEFT_LT16 = 0;
+        params.KC          = KC;
+        params.K_SUB_ITER  = K_UNROLL;
+        params.nloop       = true;
+        params.kloop       = true;
+        params.nfringe     = false;
+        params.kfringe     = true;
+        params.c_downscale = c_downscale;
 
-    // Generate all kernels for the given MR and NR
-    for (int mr = 0; mr < numMRVariants; mr++) {
-        for (int nr = 0; nr < numNRVariants; nr++) {
-            params.MR    = mr == 0 ? MR : mr;
-            params.mLoop = mr == 0;
+        for (int i = 0; i < NR; ++i) {
+            params.N_LEFT      = i;
+            params.N_LEFT_16   = (i / 16) * 16;
+            params.N_LEFT_LT16 = i % 16;
+            params.nfringe     = (i != 0);
 
-            params.NR      = nr * numElemsPerReg;
-            params.useMask = (nr == 0);
-
-            // Allocate executable memory
-            void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
-            codeBuffer       = utils::jitHelperUtils::allocateJitMemory(
+            void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
                 utils::JIT_KERNEL_SIZE);
             if (codeBuffer == nullptr) {
                 err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
                 goto cleanup;
             }
+            kernelCodeBlocks[i] = codeBuffer;
 
-            kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
-
-            // Architecture specific dispatch happens here.
             switch (kType) {
                 case utils::kernelInstrType::avx512_zmm_32_reg: {
-                    // Generate the kernel for AVX512 ZMM 32 register
-                    GEMMcodeGenerator::jitGEMMS8<
+                    amdzen::gen::jitGEMVS8M1<
                         utils::kernelInstrType::avx512_zmm_32_reg>
                         base(codeBuffer, utils::JIT_KERNEL_SIZE);
                     err = base.generateKernel(params);
+
                     break;
                 }
 
@@ -2219,10 +2223,172 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 goto cleanup;
             }
 
+#ifdef DLP_JIT_DEBUG
+            int n_left_suf = (i != 0) ? i : params.NR;
             DLP_ENABLE_JIT_DUMP_AND_MONITOR(
-                kernelCodeBlocks[mr * numNRVariants + nr],
-                utils::JIT_KERNEL_SIZE, "s8_jit_kernel", params.MR, params.NR,
-                params.useMask, mr * numNRVariants + nr);
+                kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
+                "jit_s8_gemv_m1_kernel", 1, n_left_suf, false, i);
+#endif
+        }
+    } else if (NR == 1) { // S8 GEMV N=1 kernel generation
+        // 4 kernels are generated for each m (< MR):
+        // 0: row-stored, without mloop
+        // 1: row-stored, with mloop
+        // 2: col-stored, without mloop
+        // 3: col-stored, with mloop
+        // Hence, total variants = MR * 4
+        numKernelVariants = MR * 4;
+
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        // Initializing with default values.
+        utils::gemvN1GeneratorParams params(
+            0, 0, c_downscale, false, false, false, false,
+            dlp::kernel_frame::storageFormat::rowMajor,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        params.MR      = MR;
+        params.mloop   = true;
+        params.kloop   = true;
+        params.mfringe = false;
+        params.kfringe = true;
+
+        for (int m_left = 0; m_left < MR; ++m_left) {
+            params.M_LEFT  = m_left;
+            params.mfringe = (m_left != 0); // The first four kernels that we
+                                            // generate are the primary kernels.
+            for (int j = 0; j < 4; ++j) {
+                // We generate 4 kernels for each M_LEFT, and index them as
+                // follows:
+                // 0: row-stored, without mloop
+                // 1: row-stored, with mloop
+                // 2: col-stored, without mloop
+                // 3: col-stored, with mloop
+                params.mloop = ((j == 1) || (j == 3));
+                params.yFormat =
+                    ((j / 2) == 0) ? dlp::kernel_frame::storageFormat::rowMajor
+                                   : dlp::kernel_frame::storageFormat::colMajor;
+
+                void* codeBuffer = kernelCodeBlocks[m_left * 4 + j];
+                // Allocate executable memory
+                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                    utils::JIT_KERNEL_SIZE);
+                if (codeBuffer == nullptr) {
+                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                    goto cleanup;
+                }
+
+                kernelCodeBlocks[m_left * 4 + j] = codeBuffer;
+
+                // Handle different kernel types based on instruction
+                // preference.
+                switch (kType) {
+                    case utils::kernelInstrType::avx512_zmm_32_reg: {
+                        amdzen::gen::jitGEMVS8N1<
+                            utils::kernelInstrType::avx512_zmm_32_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = base.generateKernel(params);
+
+                        break;
+                    }
+
+                    // Not Supported!
+                    case utils::kernelInstrType::avx512_ymm_32_reg:
+                    case utils::kernelInstrType::avx2_ymm_16_reg:
+                    default:
+                        err = dlp::jit::jitGeneratorError::error;
+                        break;
+                }
+                if (err != dlp::jit::jitGeneratorError::success) {
+                    goto cleanup;
+                }
+
+#ifdef DLP_JIT_DEBUG
+                int m_left_suf = (m_left != 0) ? m_left : params.MR;
+                // The file naming is as such : id_jit_s8_gemv_n1_kernel_MR_idx.
+                // The idx represents what configuration was used to generate
+                // the kernel.
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+                    kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
+                    "jit_s8_gemv_n1_kernel", m_left_suf, j, false,
+                    m_left * 4 + j);
+#endif
+            }
+        }
+    } else { // S8 GEMM kernel generation
+        numNRVariants = ((processBlockSize / numElemsPerReg)) + 1;
+
+        numMRVariants     = MR;
+        numKernelVariants = numMRVariants * numNRVariants;
+
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        // Initializing with default values.
+        utils::generatorParams params(
+            0, 0, (jI.kI).k_unroll, PREFETCH_C_DIST, c_downscale, 1, false,
+            false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        // Generate all kernels for the given MR and NR
+        for (int mr = 0; mr < numMRVariants; mr++) {
+            for (int nr = 0; nr < numNRVariants; nr++) {
+                params.MR    = mr == 0 ? MR : mr;
+                params.mLoop = mr == 0;
+
+                params.NR      = nr * numElemsPerReg;
+                params.useMask = (nr == 0);
+
+                // Allocate executable memory
+                void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
+                codeBuffer       = utils::jitHelperUtils::allocateJitMemory(
+                    utils::JIT_KERNEL_SIZE);
+                if (codeBuffer == nullptr) {
+                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+                    goto cleanup;
+                }
+
+                kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
+
+                // Architecture specific dispatch happens here.
+                switch (kType) {
+                    case utils::kernelInstrType::avx512_zmm_32_reg: {
+                        // Generate the kernel for AVX512 ZMM 32 register
+                        GEMMcodeGenerator::jitGEMMS8<
+                            utils::kernelInstrType::avx512_zmm_32_reg>
+                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        err = base.generateKernel(params);
+                        break;
+                    }
+
+                    // Not Supported!
+                    case utils::kernelInstrType::avx512_ymm_32_reg:
+                    case utils::kernelInstrType::avx2_ymm_16_reg:
+                    default:
+                        err = dlp::jit::jitGeneratorError::error;
+                        break;
+                }
+                if (err != dlp::jit::jitGeneratorError::success) {
+                    goto cleanup;
+                }
+
+// Enable this macro to dump the generated JIT code to a file.
+// #define DLP_DUMP_JIT_CODE
+#ifdef DLP_DUMP_JIT_CODE
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+                    kernelCodeBlocks[mr * numNRVariants + nr],
+                    utils::JIT_KERNEL_SIZE, "jit_s8_gemm_kernel", params.MR,
+                    params.NR);
+#endif
+            }
         }
     }
 
@@ -2241,134 +2407,241 @@ cleanup:
 dlp::kernels::kernelError
 jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
 {
-    auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+    if (MR == 1) { // S8 GEMV M=1 kernel execution
+        auto params = static_cast<dlp::kernels::gemvM1Params*>(_params);
 
-    int processBlockSize = getProcessBlockSize();
+        numElemsPerReg = 16;
 
-    // Since JR loop is in framework, the 'n' dimension passed to this
-    // function is always <= NR.
-    int mFullPieces    = params->m / MR;
-    int mPartialPieces = params->m % MR;
+        params->n_iter      = params->n / NR;
+        params->n_left      = params->n % NR;
+        params->n_left_16   = (params->n_left / 16) * 16;
+        params->n_left_lt16 = params->n_left % 16;
 
-    // Divided by 4(=VNNI_CONST) for VNNI instruction handling.
-    params->kIterBP = params->k / VNNI_CONST;
-    params->kLeft   = params->k % VNNI_CONST;
+        params->k_iter = params->k / KC;
+        params->k_left = params->k % KC;
+        params->kLeftmask =
+            (params->k % VNNI_CONST == 0)
+                ? 0xF
+                : (0xF >> (VNNI_CONST - (params->k % VNNI_CONST)));
 
-    // Handle VNNI remainder case using AVX-512 masked memory load
-    params->kLeftmask = (1 << params->kLeft) - 1;
+        params->k_iter_sub_iter = KC / (4 * VNNI_CONST);
+        params->k_iter_sub_left = (KC % (4 * VNNI_CONST)) / VNNI_CONST;
+        params->k_left_sub_iter = (params->k_left) / (4 * VNNI_CONST);
+        params->k_left_sub_left =
+            ((params->k_left) % (4 * VNNI_CONST)) / VNNI_CONST;
 
-    int8_t*  aPtr = static_cast<int8_t*>(params->a);
-    int8_t*  bPtr = static_cast<int8_t*>(params->b);
-    int32_t* cPtr = static_cast<int32_t*>(params->c);
-    int32_t* c_jr = cPtr;
-    int32_t* c_ir = cPtr;
-    int      rsB  = params->rsB;
+        // Masks for loading b_col_sum_vec to compensate for the conversion of
+        // A elements from s8 to u8 for VNNI operations.
+        // Initializing masks to 0xFFFF.
+        params->k4Mask_i8_avx512 = 0xFFFF;
+        params->k3Mask_i8_avx512 = 0xFFFF;
+        params->k2Mask_i8_avx512 = 0xFFFF;
+        params->k1Mask_i8_avx512 = 0xFFFF;
 
-    md_t n = params->n;
-    md_t m = params->m;
-    md_t k = params->k;
+        if (params->n_left_16 == 48) {
+            // k4 = (0xFFFF >> (16 - (nr0 & 0x0F)));
+            params->k4Mask_i8_avx512 = 0xFFFF >> (16 - (params->n_left_lt16));
+        } else if (params->n_left_16 == 32) {
+            // k4 = 0x0
+            params->k4Mask_i8_avx512 = 0x0;
 
-    // Update panel stride of A to account for MR rows
-    params->psA = MR * params->psA;
+            // k3 = (0xFFFF >> (16 - (nr0 & 0x0F)));
+            params->k3Mask_i8_avx512 = 0xFFFF >> (16 - (params->n_left_lt16));
+        } else if (params->n_left_16 == 16) {
+            // k3 = k4 = 0x0
+            params->k4Mask_i8_avx512 = 0x0;
+            params->k3Mask_i8_avx512 = 0x0;
 
-    md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+            // k2 = (0xFFFF >> (16 - (nr0 & 0x0F)));
+            params->k2Mask_i8_avx512 = 0xFFFF >> (16 - (params->n_left_lt16));
+        } else if (params->n_left_lt16 > 0) {
+            // k2 = k3 = k4 = 0x0
+            params->k2Mask_i8_avx512 = 0x0;
+            params->k3Mask_i8_avx512 = 0x0;
+            params->k4Mask_i8_avx512 = 0x0;
 
-    int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
-    int nFullpieces = nBlockSize / numElemsPerReg;
-    int nRemainder  = nBlockSize % numElemsPerReg;
-
-    // Process complete registers first (if any)
-    if (nFullpieces > 0) {
-        int elementsToProcess = nFullpieces * numElemsPerReg;
-        params->rsB           = (nFullpieces * rsB) / VNNI_CONST;
-
-        params->a = aPtr;
-        params->c = c_jr;
-        params->n = elementsToProcess;
-
-        int kernel_n_idx = nFullpieces;
-        if (params->m >= MR) {
-            params->mIter = mFullPieces;
-            int m_idx     = 0;
-            int ker_idx   = m_idx * numNRVariants + kernel_n_idx;
-
-            utils::jit_kernel kernel =
-                reinterpret_cast<utils::jit_kernel>(kernelCodeBlocks[ker_idx]);
-            kernel(params);
+            // k1 = (0xFFFF >> (16 - (nr0 & 0x0F)));
+            params->k1Mask_i8_avx512 = 0xFFFF >> (16 - (params->n_left_lt16));
         }
 
-        if (mPartialPieces) {
-            (params->a) = (int8_t*)(params->a) + mFullPieces * params->psA;
-            (params->c) =
-                (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
-            (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
-            int m_idx   = mPartialPieces;
-            int ker_idx = m_idx * numNRVariants + kernel_n_idx;
+        if ((params->k % VNNI_CONST) != 0)
+            params->k_left_sub_left++;
 
-            utils::jit_kernel kernel =
-                reinterpret_cast<utils::jit_kernel>(kernelCodeBlocks[ker_idx]);
-            kernel(params);
+        int partial_elements =
+            params->n_left % numElemsPerReg; // Elements in partial band
+
+        if (params->n_left > 0) {
+            params->nmask_avx512 =
+                0xFFFF >> (numElemsPerReg - partial_elements);
         }
 
-        int bOffset = params->kLeft > 0 ? (VNNI_CONST - params->kLeft) : 0;
-        params->b =
-            (int8_t*)(params->b) + elementsToProcess * (params->k + bOffset);
+        params->psB = (params->k_left + 3) & ~3;
 
-        c_jr = (int32_t*)(c_jr) + elementsToProcess;
-        (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
-        (params->kernelOpsAttr).b_sum_offset += nFullpieces * 16;
+        // Deploy associated M=1 kernel
+        int ker_idx = static_cast<int>(params->n_left);
 
-        // The following line is necessary to ensure a subtle bug
-        // does not occur. Unlike the classic kernels where the
-        // kernelOpsAttr is passed by value to the fringe kernels,
-        // here it is kind of passed by reference, since the params
-        // ptr is the only kernel argument (inside which is the
-        // kernelOpsAttr). Since the while(n) loop can execute
-        // multiple times, any state variable, like post_op_c_i, if
-        // modified inside kernel, it needs to be reverted.
-        (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
+        utils::jit_gemv_m1_kernel kernel =
+            reinterpret_cast<utils::jit_gemv_m1_kernel>(
+                kernelCodeBlocks[ker_idx]);
+        kernel(params);
 
-        n -= elementsToProcess;
+        // Update post_op_c_j by the total n processed in this kernel call
+        // (similar to GEMM pattern where post_op_c_j += elementsToProcess)
+        (params->kernelOpsAttr).post_op_c_j += params->n;
+
+    } else if (NR == 1) { // S8 GEMV N=1 kernel execution
+        auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);
+
+        numElemsPerReg = (16 * VNNI_CONST); // 64 elements for AVX-512
+        params->m_iter = params->m / MR;
+        params->m_left = params->m % MR;
+        params->k_iter = params->k / numElemsPerReg;
+        params->k_left = params->k % numElemsPerReg;
+
+        params->mmask_avx512    = (0xFFFF >> (MR - params->m_left));
+        params->kmask_i8_avx512 = (0xFFFFFFFFFFFFFFFF >> (64 - params->k_left));
+
+        int is_m_loop     = (params->m_iter != 0);
+        int is_col_stored = ((params->rsC) == 1);
+
+        int ker_idx = ((params->m_left * 4) + (is_col_stored * 2) + is_m_loop);
+
+        // Deploy associated N=1 kernel
+        utils::jit_gemv_n1_kernel kernel =
+            reinterpret_cast<utils::jit_gemv_n1_kernel>(
+                kernelCodeBlocks[ker_idx]);
+
+        kernel(params);
+
+    } else { // S8 GEMM kernel execution
+        auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+
+        int processBlockSize = getProcessBlockSize();
+
+        // Since JR loop is in framework, the 'n' dimension passed to this
+        // function is always <= NR.
+        int mFullPieces    = params->m / MR;
+        int mPartialPieces = params->m % MR;
+
+        // Divided by 4(=VNNI_CONST) for VNNI instruction handling.
+        params->kIterBP = params->k / VNNI_CONST;
+        params->kLeft   = params->k % VNNI_CONST;
+
+        // Handle VNNI remainder case using AVX-512 masked memory load
+        params->kLeftmask = (1 << params->kLeft) - 1;
+
+        int8_t*  aPtr = static_cast<int8_t*>(params->a);
+        int8_t*  bPtr = static_cast<int8_t*>(params->b);
+        int32_t* cPtr = static_cast<int32_t*>(params->c);
+        int32_t* c_jr = cPtr;
+        int32_t* c_ir = cPtr;
+        int      rsB  = params->rsB;
+
+        md_t n = params->n;
+        md_t m = params->m;
+        md_t k = params->k;
+
+        // Update panel stride of A to account for MR rows
+        params->psA = MR * params->psA;
+
+        md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+
+        int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+        int nFullpieces = nBlockSize / numElemsPerReg;
+        int nRemainder  = nBlockSize % numElemsPerReg;
+
+        // Process complete registers first (if any)
+        if (nFullpieces > 0) {
+            int elementsToProcess = nFullpieces * numElemsPerReg;
+            params->rsB           = (nFullpieces * rsB) / VNNI_CONST;
+
+            params->a = aPtr;
+            params->c = c_jr;
+            params->n = elementsToProcess;
+
+            int kernel_n_idx = nFullpieces;
+            if (params->m >= MR) {
+                params->mIter = mFullPieces;
+                int m_idx     = 0;
+                int ker_idx   = m_idx * numNRVariants + kernel_n_idx;
+
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[ker_idx]);
+                kernel(params);
+            }
+
+            if (mPartialPieces) {
+                (params->a) = (int8_t*)(params->a) + mFullPieces * params->psA;
+                (params->c) =
+                    (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
+                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
+                int m_idx   = mPartialPieces;
+                int ker_idx = m_idx * numNRVariants + kernel_n_idx;
+
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[ker_idx]);
+                kernel(params);
+            }
+
+            int bOffset = params->kLeft > 0 ? (VNNI_CONST - params->kLeft) : 0;
+            params->b   = (int8_t*)(params->b)
+                        + elementsToProcess * (params->k + bOffset);
+
+            c_jr = (int32_t*)(c_jr) + elementsToProcess;
+            (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
+            (params->kernelOpsAttr).b_sum_offset += nFullpieces * 16;
+
+            // The following line is necessary to ensure a subtle bug
+            // does not occur. Unlike the classic kernels where the
+            // kernelOpsAttr is passed by value to the fringe kernels,
+            // here it is kind of passed by reference, since the params
+            // ptr is the only kernel argument (inside which is the
+            // kernelOpsAttr). Since the while(n) loop can execute
+            // multiple times, any state variable, like post_op_c_i, if
+            // modified inside kernel, it needs to be reverted.
+            (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
+
+            n -= elementsToProcess;
+        }
+
+        // Process remainder with mask (if any)
+        if (nRemainder > 0) {
+            params->a = aPtr;
+            params->c = c_jr;
+            params->n = nRemainder;
+
+            params->rsB = numElemsPerReg * VNNI_CONST;
+
+            // Mask calculation (architecture-specific)
+            if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                params->maskS32 = 0xFFFF >> (numElemsPerReg - nRemainder);
+            }
+
+            // INLINE: Kernel execution with mask
+            int kernel_n_idx = 0; // Always use mask kernel for nRemainder
+            if (params->m >= MR) {
+                params->mIter = mFullPieces;
+                int m_idx     = 0;
+                int ker_idx   = m_idx * numNRVariants + kernel_n_idx;
+
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[ker_idx]);
+                kernel(params);
+            }
+            if (mPartialPieces) {
+                (params->a) = (int8_t*)(params->a) + mFullPieces * params->psA;
+                (params->c) =
+                    (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
+                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
+                int m_idx   = mPartialPieces;
+                int ker_idx = m_idx * numNRVariants + kernel_n_idx;
+
+                utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                    kernelCodeBlocks[ker_idx]);
+                kernel(params);
+            }
+        }
     }
-
-    // Process remainder with mask (if any)
-    if (nRemainder > 0) {
-        params->a = aPtr;
-        params->c = c_jr;
-        params->n = nRemainder;
-
-        params->rsB = numElemsPerReg * VNNI_CONST;
-
-        // Mask calculation (architecture-specific)
-        if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            params->maskS32 = 0xFFFF >> (numElemsPerReg - nRemainder);
-        }
-
-        // INLINE: Kernel execution with mask
-        int kernel_n_idx = 0; // Always use mask kernel for nRemainder
-        if (params->m >= MR) {
-            params->mIter = mFullPieces;
-            int m_idx     = 0;
-            int ker_idx   = m_idx * numNRVariants + kernel_n_idx;
-
-            utils::jit_kernel kernel =
-                reinterpret_cast<utils::jit_kernel>(kernelCodeBlocks[ker_idx]);
-            kernel(params);
-        }
-        if (mPartialPieces) {
-            (params->a) = (int8_t*)(params->a) + mFullPieces * params->psA;
-            (params->c) =
-                (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
-            (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
-            int m_idx   = mPartialPieces;
-            int ker_idx = m_idx * numNRVariants + kernel_n_idx;
-
-            utils::jit_kernel kernel =
-                reinterpret_cast<utils::jit_kernel>(kernelCodeBlocks[ker_idx]);
-            kernel(params);
-        }
-    }
-
     return dlp::kernels::kernelError::success;
 }
 

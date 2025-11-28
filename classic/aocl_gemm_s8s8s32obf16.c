@@ -216,11 +216,19 @@ aocl_gemm_s8s8s32obf16(const char      order,
 
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
-    dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_S8S8S32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
-        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
-        &lcntx_l.dlp_kernel_hndl);
+    if (is_column_major == TRUE) {
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_S8S8S32OBF16, order, mtag_b, mtag_a, n, m, k, rs_b, cs_b,
+            rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+            lcntx_l.blksz.NR, lcntx_l.blksz.MR, lcntx_l.blksz.KC, DLP_BF16,
+            &lcntx_l.dlp_kernel_hndl);
+    } else {
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_S8S8S32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+            rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
+            &lcntx_l.dlp_kernel_hndl);
+    }
 
 #ifdef DLP_ENABLE_OPENMP
     // Swapping inputs to induce row major computation for column major inputs.

@@ -742,7 +742,56 @@ class gemmS8DEBackend : public iDEBackend
         md_t                              c_downscale,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
-        return INVALID_KERNEL_INFO;
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        // At this point, we know that the underlying architecture supports
+        // AVX512-VNNI.
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
+                                                         kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        // Set the kernel instruction preference based on the CPU features.
+        // The DE constructor sets it to a safe value, based on the hardware
+        // support.
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        // In case the environment variable was not set at all, resort to
+        // setting it based on the native hardware support.
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else {
+                // This is an invalid case, disable jit kernel generation.
+                return INVALID_KERNEL_INFO;
+            }
+        }
+
+        if (n == 1) { // S8 GEMV N=1
+            mr       = 16;
+            nr       = 1;
+            k_unroll = 1;
+        } else { // S8 GEMV M=1
+            nr       = 64;
+            mr       = 1;
+            k_unroll = 4;
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 
     [[gnu::always_inline]]

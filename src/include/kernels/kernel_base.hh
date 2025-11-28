@@ -516,6 +516,8 @@ struct gemvM1Params : public kernelParams
     uint8_t  nmask_i8_avx512;
     uint8_t  nmask_avx512_256;
     uint16_t kLeftmask;
+    uint16_t k1Mask_i8_avx512, k2Mask_i8_avx512, k3Mask_i8_avx512,
+        k4Mask_i8_avx512; // Masks for handling b_sum_col_vec in s8 kernels
 
     std::array<int32_t, 8> nmask_avx2;
 
