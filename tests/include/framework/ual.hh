@@ -112,8 +112,10 @@ struct BatchGroup
     bool validate() const
     {
         const size_t count = A_matrices.size();
+
+        // Empty groups are valid (group_size=0 case)
         if (count == 0) {
-            return false;
+            return true;
         }
 
         if (B_matrices.size() != count || C_matrices.size() != count) {

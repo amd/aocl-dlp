@@ -137,31 +137,49 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
             return UALError::UAL_FAILURE;
         }
 
-        if (group.A_matrices.empty()) {
-            return UALError::UAL_FAILURE;
-        }
-
         if (group.A_matrices.size()
             > static_cast<size_t>(std::numeric_limits<md_t>::max())) {
             return UALError::UAL_NOT_SUPPORTED;
         }
 
-        const Matrix& A = group.A_matrices.front();
-        const Matrix& B = group.B_matrices.front();
-        const Matrix& C = group.C_matrices.front();
+        // For empty groups (group_size=0), we still need to populate arrays
+        // with default values For non-empty groups, validate type consistency
+        // and extract matrix properties
+        if (!group.A_matrices.empty()) {
+            const Matrix& A = group.A_matrices.front();
+            const Matrix& B = group.B_matrices.front();
+            const Matrix& C = group.C_matrices.front();
 
-        if (!validate_type_consistency(A, B, C, first_group, first_a_type,
-                                       first_b_type, first_c_type)) {
-            return UALError::UAL_NOT_SUPPORTED;
+            if (!validate_type_consistency(A, B, C, first_group, first_a_type,
+                                           first_b_type, first_c_type)) {
+                return UALError::UAL_NOT_SUPPORTED;
+            }
+
+            out.order.push_back(A.getLayout() == MatrixLayout::ROW_MAJOR ? 'r'
+                                                                         : 'c');
+            out.transa.push_back(A.isTransposed() ? 't' : 'n');
+
+            char transb_char = B.isReordered() ? 'n'
+                                               : (B.isTransposed() ? 't' : 'n');
+            out.transb.push_back(transb_char);
+
+            out.mem_format_a.push_back(to_aocl_mem_format(group.memFormatA));
+            out.mem_format_b.push_back(to_aocl_mem_format(group.memFormatB));
+
+            out.lda.push_back(A.getLeadingDimension());
+            out.ldb.push_back(B.getLeadingDimension());
+            out.ldc.push_back(C.getLeadingDimension());
+        } else {
+            // Empty group: use default values
+            out.order.push_back('r');        // Default row-major
+            out.transa.push_back('n');       // Default no transpose
+            out.transb.push_back('n');       // Default no transpose
+            out.mem_format_a.push_back('n'); // Default unpacked
+            out.mem_format_b.push_back('n'); // Default unpacked
+            out.lda.push_back(group.k);      // Use group dims for defaults
+            out.ldb.push_back(group.n);
+            out.ldc.push_back(group.n);
         }
-
-        out.order.push_back(A.getLayout() == MatrixLayout::ROW_MAJOR ? 'r'
-                                                                     : 'c');
-        out.transa.push_back(A.isTransposed() ? 't' : 'n');
-
-        char transb_char = B.isReordered() ? 'n'
-                                           : (B.isTransposed() ? 't' : 'n');
-        out.transb.push_back(transb_char);
 
         out.m.push_back(group.m);
         out.n.push_back(group.n);
@@ -169,13 +187,6 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
 
         out.alpha.push_back(group.alpha);
         out.beta.push_back(group.beta);
-
-        out.mem_format_a.push_back(to_aocl_mem_format(group.memFormatA));
-        out.mem_format_b.push_back(to_aocl_mem_format(group.memFormatB));
-
-        out.lda.push_back(A.getLeadingDimension());
-        out.ldb.push_back(B.getLeadingDimension());
-        out.ldc.push_back(C.getLeadingDimension());
 
         md_t group_sz = static_cast<md_t>(group.A_matrices.size());
         out.group_size.push_back(group_sz);

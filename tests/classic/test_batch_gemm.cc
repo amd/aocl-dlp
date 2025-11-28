@@ -427,6 +427,9 @@ configToGroups(const BatchGemmTestConfig&  config,
 
         // Create matrices for this group
         md_t group_size = config.group_size_values[g];
+
+        // Support group_size=0 for empty groups (valid test case)
+        // Only create matrices if group_size > 0
         for (md_t mat_idx = 0; mat_idx < group_size; ++mat_idx) {
             // Calculate matrix dimensions based on transpose flags
             md_t a_rows = transA ? group.k : group.m;
@@ -434,6 +437,8 @@ configToGroups(const BatchGemmTestConfig&  config,
             md_t b_rows = transB ? group.n : group.k;
             md_t b_cols = transB ? group.k : group.n;
 
+            // Matrix constructor now handles zero/negative dimensions
+            // gracefully (stores actual dims, allocates safe memory)
             Matrix A(a_rows, a_cols, config.a_type, config.storage_format,
                      config.lda_values[g], transA);
             Matrix B(b_rows, b_cols, config.b_type, config.storage_format,
@@ -478,9 +483,11 @@ configToGroups(const BatchGemmTestConfig&  config,
             group.C_matrices.emplace_back(std::move(C));
         }
 
-        // Deduce memory formats
-        group.memFormatA = deduce_mem_format(group.A_matrices.front());
-        group.memFormatB = deduce_mem_format(group.B_matrices.front());
+        // Deduce memory formats (only if matrices were created)
+        if (!group.A_matrices.empty() && !group.B_matrices.empty()) {
+            group.memFormatA = deduce_mem_format(group.A_matrices.front());
+            group.memFormatB = deduce_mem_format(group.B_matrices.front());
+        }
 
         // Assign PostOps (global - same for all groups)
         group.postOps = postops;
@@ -489,6 +496,122 @@ configToGroups(const BatchGemmTestConfig&  config,
     }
 
     return groups;
+}
+
+// ============================================================================
+// HELPER FUNCTIONS - VALIDATION
+// ============================================================================
+
+bool
+check_valid_batch_params(const BatchGemmTestConfig& config)
+{
+    // Validate each group's parameters following AOCL_BATCH_GEMM_CHECK macro
+    // logic
+    for (size_t g = 0; g < config.getGroupCount(); ++g) {
+        md_t m          = config.m_values[g];
+        md_t n          = config.n_values[g];
+        md_t k          = config.k_values[g];
+        md_t lda        = config.lda_values[g];
+        md_t ldb        = config.ldb_values[g];
+        md_t ldc        = config.ldc_values[g];
+        md_t group_size = config.group_size_values[g];
+        bool transA     = config.transA_values[g];
+        bool transB     = config.transB_values[g];
+        bool reorderA   = config.reorderA_values[g];
+        bool reorderB   = config.reorderB_values[g];
+
+        bool col_stored = (config.storage_format == MatrixLayout::COLUMN_MAJOR);
+        bool row_stored = (config.storage_format == MatrixLayout::ROW_MAJOR);
+
+        // Check basic dimensions - must be positive
+        if (m <= 0 || n <= 0 || k <= 0) {
+            return false;
+        }
+
+        // Check group_size - must be positive (0 is invalid, causes FPE in
+        // thread decorator)
+        if (group_size <= 0) {
+            return false;
+        }
+
+        // Column Major API support checks
+        if (col_stored) {
+            switch (config.a_type) {
+                // u8 api does not support column major
+                case MatrixType::u8:
+                    return false;
+
+                // s8s8 api supports column major without post-ops
+                // s8s8ou8 does not support column major
+                case MatrixType::s8:
+                    if (config.c_type == MatrixType::u8)
+                        return false;
+                    if (config.has_postops)
+                        return false;
+                    break;
+
+                case MatrixType::f32:
+                case MatrixType::bf16:
+                    break;
+
+                default:
+                    break;
+            }
+        }
+
+        // Leading dimension checks for matrix A
+        // Skip for reordered matrices as they have custom layouts
+        if (!reorderA) {
+            if (row_stored
+                && ((!transA && (lda < k)) || (transA && (lda < m)))) {
+                return false;
+            }
+            if (col_stored
+                && ((!transA && (lda < m)) || (transA && (lda < k)))) {
+                return false;
+            }
+        } else {
+            // Reordering of A matrix not supported in row major case
+            if (row_stored) {
+                return false;
+            }
+        }
+
+        // Leading dimension checks for matrix B
+        // Skip for reordered matrices as they have custom layouts
+        if (!reorderB) {
+            if (row_stored
+                && ((!transB && (ldb < n)) || (transB && (ldb < k)))) {
+                return false;
+            }
+            if (col_stored
+                && ((!transB && (ldb < k)) || (transB && (ldb < n)))) {
+                return false;
+            }
+        } else {
+            if (row_stored) {
+                if (!transB && (ldb < n)) {
+                    return false;
+                }
+                if (transB && (ldb < k)) {
+                    return false;
+                }
+            } else {
+                // Reordering column major matrices not supported
+                return false;
+            }
+        }
+
+        // Leading dimension checks for matrix C (never reordered)
+        if (row_stored && (ldc < n)) {
+            return false;
+        }
+        if (col_stored && (ldc < m)) {
+            return false;
+        }
+    }
+
+    return true;
 }
 
 } // namespace
@@ -760,6 +883,9 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
      */
     void executeBatchGemmTest(const BatchGemmTestConfig& config)
     {
+        // Check if parameters are valid
+        bool params_valid = check_valid_batch_params(config);
+
         // Convert config to groups (with PostOps if present)
         auto dlp_groups = configToGroups(config, config.dlp_postops);
         auto ref_groups = configToGroups(
@@ -783,55 +909,86 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
                 << "DLP batch_gemm not supported for this configuration "
                 << "(ISA not available on this hardware)";
         }
-        ASSERT_EQ(status_dlp, UALError::UAL_SUCCESS)
-            << "DLP batch_gemm failed for test: " << config.name;
 
         // Execute reference implementation
         auto status_ref = ual_ref->batch_gemm(ref_groups, config.acc_type);
-        ASSERT_EQ(status_ref, UALError::UAL_SUCCESS)
-            << "REF batch_gemm failed for test: " << config.name;
 
-        // Compare results
-        ASSERT_EQ(dlp_groups.size(), ref_groups.size())
-            << "Group count mismatch for test: " << config.name;
+        if (params_valid) {
+            // For valid parameters, both implementations should succeed
+            EXPECT_EQ(status_dlp, UALError::UAL_SUCCESS)
+                << "DLP batch_gemm should succeed with valid parameters for "
+                   "test: "
+                << config.name;
+            EXPECT_EQ(status_ref, UALError::UAL_SUCCESS)
+                << "REF batch_gemm should succeed with valid parameters for "
+                   "test: "
+                << config.name;
 
-        for (size_t g = 0; g < dlp_groups.size(); ++g) {
-            const auto& dlp_group = dlp_groups[g];
-            const auto& ref_group = ref_groups[g];
+            // Compare results only if both succeeded
+            if (status_dlp == UALError::UAL_SUCCESS
+                && status_ref == UALError::UAL_SUCCESS) {
+                ASSERT_EQ(dlp_groups.size(), ref_groups.size())
+                    << "Group count mismatch for test: " << config.name;
 
-            ASSERT_EQ(dlp_group.C_matrices.size(), ref_group.C_matrices.size())
-                << "Matrix count mismatch in group " << g
-                << " for test: " << config.name;
+                for (size_t g = 0; g < dlp_groups.size(); ++g) {
+                    const auto& dlp_group = dlp_groups[g];
+                    const auto& ref_group = ref_groups[g];
 
-            for (size_t i = 0; i < dlp_group.C_matrices.size(); ++i) {
-                // Set k dimension for comparison (needed for certain matrix
-                // formats)
-                dlp_group.C_matrices[i].setK(dlp_group.k);
-                ref_group.C_matrices[i].setK(ref_group.k);
+                    ASSERT_EQ(dlp_group.C_matrices.size(),
+                              ref_group.C_matrices.size())
+                        << "Matrix count mismatch in group " << g
+                        << " for test: " << config.name;
 
-                // Prepare comparison options
-                MatrixCompareOptions compare_opts =
-                    MatrixCompareOptions::Fast();
-                if (config.has_tolerances) {
-                    compare_opts.relToleranceOverride =
-                        config.tolerance_relative;
-                    compare_opts.absToleranceOverride =
-                        config.tolerance_absolute;
+                    for (size_t i = 0; i < dlp_group.C_matrices.size(); ++i) {
+                        // Set k dimension for comparison (needed for certain
+                        // matrix formats)
+                        dlp_group.C_matrices[i].setK(dlp_group.k);
+                        ref_group.C_matrices[i].setK(ref_group.k);
+
+                        // Prepare comparison options
+                        MatrixCompareOptions compare_opts =
+                            MatrixCompareOptions::Fast();
+                        if (config.has_tolerances) {
+                            compare_opts.relToleranceOverride =
+                                config.tolerance_relative;
+                            compare_opts.absToleranceOverride =
+                                config.tolerance_absolute;
+                        }
+
+                        // Compare matrices
+                        auto result = dlp_group.C_matrices[i].compare(
+                            ref_group.C_matrices[i], compare_opts);
+
+                        EXPECT_TRUE(result.equal)
+                            << "Matrix comparison failed for test: "
+                            << config.name << "\n  Group: " << g
+                            << ", Matrix: " << i
+                            << "\n  Dimensions: m=" << config.m_values[g]
+                            << ", n=" << config.n_values[g]
+                            << ", k=" << config.k_values[g] << "\n"
+                            << FormatCompareResult(result,
+                                                   dlp_group.C_matrices[i],
+                                                   ref_group.C_matrices[i]);
+                    }
                 }
-
-                // Compare matrices
-                auto result = dlp_group.C_matrices[i].compare(
-                    ref_group.C_matrices[i], compare_opts);
-
-                EXPECT_TRUE(result.equal)
-                    << "Matrix comparison failed for test: " << config.name
-                    << "\n  Group: " << g << ", Matrix: " << i
-                    << "\n  Dimensions: m=" << config.m_values[g]
-                    << ", n=" << config.n_values[g]
-                    << ", k=" << config.k_values[g] << "\n"
-                    << FormatCompareResult(result, dlp_group.C_matrices[i],
-                                           ref_group.C_matrices[i]);
             }
+        } else {
+            // For invalid parameters, both implementations should fail
+            // gracefully
+            EXPECT_NE(status_dlp, UALError::UAL_SUCCESS)
+                << "DLP batch_gemm should fail gracefully with invalid "
+                   "parameters for test: "
+                << config.name;
+            EXPECT_NE(status_ref, UALError::UAL_SUCCESS)
+                << "REF batch_gemm should fail gracefully with invalid "
+                   "parameters for test: "
+                << config.name;
+
+            // No need to compare results when both operations should have
+            // failed
+            std::cout << "Test passed: Both implementations correctly rejected "
+                         "invalid parameters for test: "
+                      << config.name << std::endl;
         }
     }
 };

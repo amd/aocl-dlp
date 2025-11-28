@@ -1116,6 +1116,11 @@ UalRef::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
             return UALError::UAL_FAILURE;
         }
 
+        // Validate group_size - must be positive (0 is invalid)
+        if (group.size() <= 0) {
+            return UALError::UAL_FAILURE;
+        }
+
         for (size_t i = 0; i < group.A_matrices.size(); ++i) {
             UALError status = gemm(group.A_matrices[i], group.B_matrices[i],
                                    group.C_matrices[i], accType, group.postOps,

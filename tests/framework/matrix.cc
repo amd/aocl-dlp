@@ -180,16 +180,22 @@ namespace dlp { namespace testing { namespace framework {
         , m_reordered(reordered)
         , m_packed(false)
     {
+        // For negative test cases: store actual dimensions (even if <= 0)
+        // but use safe dimensions for memory allocation
+        md_t alloc_rows = (rows <= 0) ? 1 : rows;
+        md_t alloc_cols = (cols <= 0) ? 1 : cols;
+
         // Calculate leading dimension if not specified
         if (leadingDim == 0) {
-            m_leadingDim = (layout == MatrixLayout::ROW_MAJOR) ? cols : rows;
+            m_leadingDim = (layout == MatrixLayout::ROW_MAJOR) ? alloc_cols
+                                                               : alloc_rows;
         } else {
             m_leadingDim = leadingDim;
         }
 
-        // Calculate required memory size
+        // Calculate required memory size using safe dimensions
         m_dataSizeBytes = MatrixMemory::calculateRequiredBytes(
-            type, rows, cols, layout, m_leadingDim);
+            type, alloc_rows, alloc_cols, layout, m_leadingDim);
 
         // Allocate memory using helper method
         m_data = allocateAlignedMemory(m_dataSizeBytes, alignment);
