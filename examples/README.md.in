@@ -1,0 +1,87 @@
+# AOCL-DLP Examples
+
+This directory contains example programs demonstrating how to use the AOCL-DLP (AMD Optimized Computing Library for Deep Learning Primitives) library.
+
+## Directory Structure
+
+```
+examples/
+├── CMakeLists.txt       # Top-level build configuration
+└── classic/             # Classic API examples
+    ├── CMakeLists.txt   # Classic examples build configuration
+    ├── README.md        # Detailed classic examples documentation
+    ├── src/             # Source files for all classic examples
+    └── [executables]    # Pre-built example binaries
+```
+
+## Pre-built Examples
+
+Pre-built example executables are available in the subdirectories and can be run directly. See the README.md files in each subdirectory for details.
+
+## Building All Examples
+
+To rebuild all examples from this top-level directory:
+
+```bash
+# Create a build directory
+mkdir build && cd build
+
+# Configure using the shared library (default)
+cmake -DCMAKE_PREFIX_PATH=/path/to/aocl-dlp/install ..
+make
+
+# OR configure using the static library
+cmake -DCMAKE_PREFIX_PATH=/path/to/aocl-dlp/install -DUSE_STATIC_LIBRARY=ON ..
+make
+
+# Build specific examples
+make simple_gemm_f32 version
+```
+
+## Building Individual Example Categories
+
+You can also build examples from their respective subdirectories:
+
+```bash
+# Build classic examples
+cd classic
+mkdir build && cd build
+cmake -DCMAKE_PREFIX_PATH=/path/to/aocl-dlp/install ..
+make
+```
+
+## Configuration Options
+
+- **USE_STATIC_LIBRARY** (default: OFF): Link examples with the static AOCL-DLP library
+  - Set to ON for static linking: `-DUSE_STATIC_LIBRARY=ON`
+  - Set to OFF for shared library linking (default)
+
+- **CMAKE_PREFIX_PATH**: Path to the AOCL-DLP installation directory
+  - Required if AOCL-DLP is installed in a non-standard location
+
+## Requirements
+
+- AOCL-DLP library version @PROJECT_VERSION@ or compatible
+- C compiler with C11 support
+- CMake @CMAKE_MINIMUM_REQUIRED_VERSION@ or later
+- OpenMP support (typically provided by the compiler)
+
+## Example Categories
+
+### Classic API Examples (`classic/`)
+
+Examples using the classic AOCL-DLP API for low-precision GEMM operations:
+- Basic GEMM operations (FP32, BF16, INT8)
+- Matrix reordering and packing
+- Batch GEMM operations
+- Post-operations (bias, ReLU, quantization)
+- Eltwise operations
+
+For detailed information about each example, see `classic/README.md`.
+
+## Support
+
+For issues, questions, or additional resources:
+- [AOCL-DLP Documentation](https://developer.amd.com/aocl/dlp/)
+- [API Reference](https://developer.amd.com/aocl/dlp/api/)
+- [Mathematical Foundations](https://developer.amd.com/aocl/dlp/math-primer/)

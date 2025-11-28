@@ -24,16 +24,19 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-cmake_minimum_required(VERSION 3.26)
+# Set CMake module path (must be done before including dlp_variables.cmake)
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+# Include dlp_variables.cmake first to get CMAKE_MINIMUM_REQUIRED_VERSION
+include(cmake/dlp_variables.cmake)
+
+# Now use the variable for cmake_minimum_required
+cmake_minimum_required(VERSION ${CMAKE_MINIMUM_REQUIRED_VERSION})
 
 # Set CMake policy
 cmake_policy(SET CMP0010 NEW)
 
-# Set CMake module path
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-
-# Include CMake modules
-include(cmake/dlp_variables.cmake)
+# Include remaining CMake modules
 include(cmake/dlp_install.cmake)
 include(cmake/dlp_extensions.cmake)
 include(cmake/dlp_core_options.cmake)

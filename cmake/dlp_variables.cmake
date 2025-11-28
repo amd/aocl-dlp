@@ -34,6 +34,9 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+# CMake version requirement
+set(CMAKE_MINIMUM_REQUIRED_VERSION "3.26")
+
 # Project
 set(PROJECT_NAME "aocl-dlp")
 set(PROJECT_VERSION "5.1.1")

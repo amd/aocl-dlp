@@ -24,25 +24,21 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# Create test config
-create_test_config(${CMAKE_CURRENT_SOURCE_DIR}/configs ${CMAKE_CURRENT_SOURCE_DIR}/../include/test_config.hh.in ${CMAKE_CURRENT_BINARY_DIR}/test_config.hh)
+# Top-level CMakeLists.txt for AOCL-DLP Examples
+# This file allows building all example subdirectories
 
-# Collect test source files
-dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+cmake_minimum_required(VERSION @CMAKE_MINIMUM_REQUIRED_VERSION@)
 
-#
-# Add each test executable
-# Reuse parent test framework and adaptor object libraries to eliminate duplication
-# Each test only compiles its own source file, then links with pre-compiled objects
-#
-foreach(test_source ${TEST_SOURCES})
-    get_filename_component(test_name ${test_source} NAME_WE)
-    dlp_add_test(
-        NAME ${test_name}
-        SOURCES ${test_source}
-        OBJECT_LIBS test_framework_obj test_adaptors_obj
-        INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
-        DEPENDS yaml-cpp
-    )
-    dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
-endforeach()
+project(AOCL_DLP_Examples VERSION @PROJECT_VERSION@ LANGUAGES C CXX)
+
+# Option to choose between static and shared library (propagated to subdirectories)
+option(USE_STATIC_LIBRARY "Link with static AOCL-DLP library" OFF)
+
+# Find the installed AOCL-DLP package (required by all subdirectories)
+find_package(AoclDlp REQUIRED)
+
+# Find OpenMP (required by examples)
+find_package(OpenMP REQUIRED COMPONENTS C CXX)
+
+# Add subdirectories
+add_subdirectory(classic)

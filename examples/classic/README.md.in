@@ -2,30 +2,54 @@
 
 This directory contains example programs demonstrating how to use the AOCL-DLP (AMD Optimized Computing Library for Deep Learning Primitives) library.
 
-## Building the Examples
+## Pre-built Examples
 
-The examples can be built using CMake:
+Pre-built example executables are available in this directory and can be run directly:
 
 ```bash
-# Create a build directory
+./simple_gemm_f32
+./simple_gemm_bf16
+./simple_gemm_s8
+# etc.
+```
+
+## Building the Examples from Source
+
+The examples can be rebuilt using CMake with the installed AOCL-DLP library:
+
+```bash
+# From the examples/classic directory, create a build directory
 mkdir build && cd build
 
-# Configure and build with the examples enabled
-cmake -DBUILD_EXAMPLES=ON ..
+# Configure using the shared library (default)
+cmake ..
 make
 
-# Alternatively, just build the examples
-make simple_gemm_f32 simple_gemm_bf16 simple_gemm_s8 # etc.
+# OR configure using the static library
+cmake -DUSE_STATIC_LIBRARY=ON ..
+make
+
+# Build a specific example
+make simple_gemm_f32
+```
+
+**Note:** This requires that AOCL-DLP is properly installed and findable by CMake. If AOCL-DLP is installed in a non-standard location, you may need to set `CMAKE_PREFIX_PATH`:
+
+```bash
+cmake -DCMAKE_PREFIX_PATH=/path/to/aocl-dlp/install ..
 ```
 
 ## Running the Examples
 
-The examples can be run directly from the build directory:
+Run the examples directly:
 
 ```bash
-./examples/classic/simple_gemm_f32
-./examples/classic/simple_gemm_bf16
-# etc.
+# From the examples/classic directory (pre-built)
+./simple_gemm_f32
+
+# From the build directory (if rebuilt)
+cd build
+./simple_gemm_f32
 ```
 
 ## Example Descriptions

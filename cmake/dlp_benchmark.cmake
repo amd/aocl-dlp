@@ -26,20 +26,33 @@
 
 include(FetchContent)
 
+#
+# Fetch Google Benchmark dependency
+#
+# Creates benchmark and benchmark_main targets
+# FetchContent automatically handles caching - only fetches once
+# Requires gtest to be fetched first (benchmark dependency)
+#
 function(fetch_benchmark)
-    if(NOT benchmark_FETCHED)
-        MESSAGE(WARNING "By enabling Google Benchmark, you agree to its license terms: https://github.com/google/benchmark/blob/main/LICENSE")
-    endif()
+    MESSAGE(WARNING "By enabling Google Benchmark, you agree to its license terms: https://github.com/google/benchmark/blob/main/LICENSE")
 
-        fetch_gtest()
+    # Ensure gtest is available first (benchmark has gtest dependency)
+    fetch_gtest()
 
-        FetchContent_Declare(
-            benchmark
-            GIT_REPOSITORY https://github.com/google/benchmark.git
-            GIT_TAG        v1.9.4
-        )
-        FetchContent_MakeAvailable(benchmark)
-        set(benchmark_FETCHED TRUE CACHE INTERNAL "benchmark already fetched")
+    FetchContent_Declare(
+        benchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG        v1.9.4
+    )
+
+    # Disable unnecessary benchmark components to speed up build
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_GTEST_TESTS OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_DOWNLOAD_DEPENDENCIES OFF CACHE BOOL "" FORCE)
+
+    # FetchContent_MakeAvailable handles fetching and caching automatically
+    FetchContent_MakeAvailable(benchmark)
 endfunction()
 
 function(create_bench_config)
@@ -55,11 +68,33 @@ function(create_bench_config)
     configure_file(${config_input_header} ${config_output_header})
 endfunction()
 
+#
+# Add a benchmark executable with optional object library reuse
+#
+# This function creates a benchmark executable, linking it with necessary dependencies
+# and optionally reusing pre-compiled object libraries to avoid redundant compilation.
+#
+# Parameters:
+#   NAME            - Name of the benchmark executable
+#   SOURCES         - Benchmark-specific source files
+#   OBJECT_LIBS     - Pre-compiled object libraries to link (optional)
+#   INCLUDE_DIRS    - Additional include directories
+#   DEPENDS         - Additional dependencies
+#   DISABLED        - If present, marks benchmark as disabled
+#
+# Example:
+#   dlp_add_benchmark(
+#       NAME bench_gemm
+#       SOURCES bench_gemm.cc
+#       OBJECT_LIBS bench_framework_obj test_adaptors_obj
+#       DEPENDS yaml-cpp numa
+#   )
+#
 function(dlp_add_benchmark)
-    # Parse arguments for the test function
+    # Parse arguments for the benchmark function
     set(options DISABLED)
     set(oneValueArgs NAME)
-    set(multiValueArgs SOURCES DEPENDS INCLUDE_DIRS)
+    set(multiValueArgs SOURCES OBJECT_LIBS DEPENDS INCLUDE_DIRS)
 
     cmake_parse_arguments(DLP_BENCH "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -69,19 +104,28 @@ function(dlp_add_benchmark)
     endif()
 
     if(NOT DLP_BENCH_SOURCES)
-        message(FATAL_ERROR "dlp_add_test: SOURCES argument is required")
+        message(FATAL_ERROR "dlp_add_benchmark: SOURCES argument is required")
     endif()
 
-    # Create test executable
-    add_executable(${DLP_BENCH_NAME} ${DLP_BENCH_SOURCES})
+    # Create benchmark executable with sources and object libraries
+    if(DLP_BENCH_OBJECT_LIBS)
+        # Build list of object library contents using generator expressions
+        set(OBJECT_LIB_CONTENTS "")
+        foreach(obj_lib ${DLP_BENCH_OBJECT_LIBS})
+            list(APPEND OBJECT_LIB_CONTENTS $<TARGET_OBJECTS:${obj_lib}>)
+        endforeach()
+
+        add_executable(${DLP_BENCH_NAME} ${DLP_BENCH_SOURCES} ${OBJECT_LIB_CONTENTS})
+    else()
+        # Fallback to old behavior if no object libraries specified
+        add_executable(${DLP_BENCH_NAME} ${DLP_BENCH_SOURCES})
+    endif()
 
     # Choose library target based on static linking preference
     if(DLP_BENCHMARKS_LINK_STATIC)
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with static AOCL-DLP library (whole-archive automatic)")
     else()
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
-        message(STATUS "Linking benchmark ${DLP_BENCH_NAME} with shared AOCL-DLP library")
     endif()
 
     # Link with Google Benchmark and the main project library

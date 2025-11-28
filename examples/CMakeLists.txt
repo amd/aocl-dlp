@@ -24,4 +24,28 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
+# Note: CMAKE_MINIMUM_REQUIRED_VERSION is defined in cmake/dlp_variables.cmake
+
+# Configure and install the top-level standalone CMakeLists.txt for examples
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt.in
+    ${CMAKE_CURRENT_BINARY_DIR}/CMakeLists.txt
+    @ONLY
+)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeLists.txt
+    DESTINATION examples
+)
+
+# Install a readme file with building instructions
+configure_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/README.md.in
+    ${CMAKE_CURRENT_BINARY_DIR}/README.md
+    @ONLY
+)
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/README.md
+    DESTINATION examples
+)
+
 add_subdirectory(classic)

@@ -48,13 +48,37 @@ dlp_glob_sources_recursive(ADAPTORS_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/adaptor
 # Collect test source files
 dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
-# FIXME: Move testing related tests out of this directory
-# Add each test file as a separate test
+#
+# Create reusable OBJECT libraries for shared test infrastructure
+# This eliminates redundant compilation - each source file is compiled once
+# and the resulting object files are linked into multiple test executables
+#
+
+# Test framework object library (ual, operation, matrix, etc.)
+dlp_create_test_object_library(
+    NAME test_framework_obj
+    SOURCES ${FRAMEWORK_SOURCES} ${UTILS_SOURCES}
+    INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
+    DEPENDS yaml-cpp
+)
+
+# Test adaptors object library (reference implementations for validation)
+dlp_create_test_object_library(
+    NAME test_adaptors_obj
+    SOURCES ${ADAPTORS_SOURCES}
+    INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
+)
+
+#
+# Add each test executable
+# Tests now link with pre-compiled object libraries instead of recompiling shared code
+#
 foreach(test_source ${TEST_SOURCES})
     get_filename_component(test_name ${test_source} NAME_WE)
     dlp_add_test(
         NAME ${test_name}
-        SOURCES ${test_source} ${ADAPTORS_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES}
+        SOURCES ${test_source}
+        OBJECT_LIBS test_framework_obj test_adaptors_obj
         INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
         DEPENDS yaml-cpp
     )

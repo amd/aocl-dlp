@@ -42,13 +42,13 @@ fetch_benchmark()
 # Fetch yaml-cpp for test configuration
 fetch_yaml_cpp()
 
-# Collect framework source files
+# Collect framework source files from tests directory
 dlp_glob_sources_recursive(FRAMEWORK_SOURCES "${PROJECT_SOURCE_DIR}/tests/framework")
 
-# Collect utils source files
+# Collect utils source files from tests directory
 dlp_glob_sources_recursive(UTILS_SOURCES "${PROJECT_SOURCE_DIR}/tests/utils")
 
-# Collect ref source files
+# Collect ref source files from tests directory
 dlp_glob_sources_recursive(ADAPTORS_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors")
 
 # Collect bench infrastructure source files
@@ -60,13 +60,28 @@ set(BENCH_INFRA_SOURCES
 # Collect benchmark source files
 dlp_glob_sources(OUTPUT BENCHMARK_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
+#
+# Create reusable OBJECT library for benchmark infrastructure
+# Eliminates redundant compilation when multiple benchmarks are built
+#
+dlp_create_test_object_library(
+    NAME bench_infrastructure_obj
+    SOURCES ${BENCH_INFRA_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
+    INCLUDE_DIRS ${BENCH_INCLUDE_DIRS}
+    DEPENDS yaml-cpp benchmark
+)
+
+#
 # Build all benchmarks
+# Each benchmark only compiles its own source file, reuses infrastructure objects
+#
 foreach(benchmark_source ${BENCHMARK_SOURCES})
     get_filename_component(benchmark_name ${benchmark_source} NAME_WE)
 
     dlp_add_benchmark(
         NAME ${benchmark_name}
-        SOURCES ${benchmark_source} ${BENCH_INFRA_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
+        SOURCES ${benchmark_source}
+        OBJECT_LIBS bench_infrastructure_obj
         DEPENDS yaml-cpp dlp::openmp
     )
     dlp_set_global_compile_flags(${benchmark_name} VISIBILITY PUBLIC)

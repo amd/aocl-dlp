@@ -1,3 +1,4 @@
+#
 # Copyright © Advanced Micro Devices, Inc., or its affiliates.
 #
 # Redistribution and use in source and binary forms, with or without modification,
@@ -21,8 +22,31 @@
 # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+#
 
-# Basic examples
+# Standalone CMakeLists.txt for AOCL-DLP Classic Examples
+# This file is designed to work with an installed AOCL-DLP library
+# Can be used standalone or as a subdirectory
+
+# Only set project and find dependencies if this is the top-level project
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+    cmake_minimum_required(VERSION @CMAKE_MINIMUM_REQUIRED_VERSION@)
+    project(AOCL_DLP_Classic_Examples VERSION @PROJECT_VERSION@ LANGUAGES C CXX)
+
+    # Option to choose between static and shared library
+    option(USE_STATIC_LIBRARY "Link with static AOCL-DLP library" OFF)
+
+    # Find the installed AOCL-DLP package
+    find_package(AoclDlp REQUIRED)
+
+    # Find OpenMP (required by examples)
+    find_package(OpenMP REQUIRED COMPONENTS C CXX)
+endif()
+
+# Set source directory
+set(EXAMPLE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/src")
+
+# List of example source files
 set(EXAMPLE_SOURCES
     simple_gemm_f32.c
     multi_instance_gemm_f32.c
@@ -39,39 +63,30 @@ set(EXAMPLE_SOURCES
     version.c
 )
 
-find_package(OpenMP REQUIRED COMPONENTS C CXX)
+# Choose library target based on user preference
+if(USE_STATIC_LIBRARY)
+    set(AOCL_DLP_TARGET AoclDlp::aocl-dlp_static)
+    message(STATUS "Using static AOCL-DLP library")
+else()
+    set(AOCL_DLP_TARGET AoclDlp::aocl-dlp)
+    message(STATUS "Using shared AOCL-DLP library")
+endif()
 
 # Create an executable for each example source file
 foreach(source ${EXAMPLE_SOURCES})
     # Extract the filename without extension
     get_filename_component(example_name ${source} NAME_WE)
 
-    # Add executable
-    add_executable(${example_name} ${source})
+    # Add executable with source from src directory
+    add_executable(${example_name} ${EXAMPLE_SOURCE_DIR}/${source})
 
-    # Add include directories
-    target_include_directories(${example_name}
-        PRIVATE
-            ${PROJECT_SOURCE_DIR}/include
-    )
-
-    # Choose library target based on static linking preference
-    if(DLP_EXAMPLES_LINK_STATIC)
-        set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
-        message(STATUS "Linking example ${example_name} with static AOCL-DLP library (whole-archive automatic)")
-    else()
-        set(DLP_LIBRARY_TARGET ${PROJECT_NAME})
-        message(STATUS "Linking example ${example_name} with shared AOCL-DLP library")
-    endif()
-
-    # Link with the main library
-    # Note: For static library, whole-archive is automatically applied via INTERFACE_LINK_OPTIONS
+    # Link with AOCL-DLP library (includes all necessary include directories)
     target_link_libraries(${example_name}
         PRIVATE
-            ${DLP_LIBRARY_TARGET}
+            ${AOCL_DLP_TARGET}
     )
 
-    # Link with OpenMP if available
+    # Link with OpenMP
     if(OpenMP_C_FOUND)
         target_link_libraries(${example_name} PRIVATE OpenMP::OpenMP_C)
     endif()
@@ -82,45 +97,23 @@ foreach(source ${EXAMPLE_SOURCES})
         target_compile_definitions(${example_name} PRIVATE DLP_EXAMPLE_ENABLE_OPENMP)
     endif()
 
-    # Link with math library on Unix/Linux only
-    target_link_libraries(${example_name}
-        PRIVATE
-            $<$<BOOL:${UNIX}>:m>
-    )
+    # Link with math library on Unix/Linux
+    if(UNIX)
+        target_link_libraries(${example_name} PRIVATE m)
+    endif()
 
-    # Apply centralized compiler flags
-    dlp_set_global_compile_flags(${example_name})
-
-    # Install the example
-    install(TARGETS ${example_name}
-        RUNTIME DESTINATION examples/classic
-    )
+    message(STATUS "Added example: ${example_name}")
 endforeach()
 
-# Copy example source files to the installation directory
-install(FILES ${EXAMPLE_SOURCES}
-    DESTINATION examples/classic/src
-)
-
-# Configure and install the standalone CMakeLists.txt for building examples after installation
-# Note: CMAKE_MINIMUM_REQUIRED_VERSION is defined in cmake/dlp_variables.cmake
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/CMakeLists.txt.in
-    ${CMAKE_CURRENT_BINARY_DIR}/CMakeLists.txt
-    @ONLY
-)
-
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/CMakeLists.txt
-    DESTINATION examples/classic
-)
-
-# Install a readme file with building instructions
-configure_file(
-    ${CMAKE_CURRENT_SOURCE_DIR}/README.md.in
-    ${CMAKE_CURRENT_BINARY_DIR}/README.md
-    @ONLY
-)
-
-install(FILES ${CMAKE_CURRENT_BINARY_DIR}/README.md
-    DESTINATION examples/classic
-)
+# Print build information
+message(STATUS "")
+message(STATUS "==========================================")
+message(STATUS "AOCL-DLP Examples Configuration Summary")
+message(STATUS "==========================================")
+message(STATUS "AOCL-DLP Version: ${AoclDlp_VERSION}")
+message(STATUS "Library Type: ${AOCL_DLP_TARGET}")
+message(STATUS "Build Type: ${CMAKE_BUILD_TYPE}")
+message(STATUS "C Compiler: ${CMAKE_C_COMPILER}")
+message(STATUS "CXX Compiler: ${CMAKE_CXX_COMPILER}")
+message(STATUS "==========================================")
+message(STATUS "")
