@@ -38,8 +38,8 @@
 #include "s8_gemm_generator.hh"
 #include "s8_gemv_generator.hh"
 #include "traits.hh"
-#include "u8s8_gemm.hh"
-#include "u8s8_gemv.hh"
+#include "u8s8_gemm_generator.hh"
+#include "u8s8_gemv_generator.hh"
 
 namespace amdzen::gen {
 
@@ -1556,8 +1556,7 @@ jitAmdZenU8S8::jitAmdZenU8S8()
                          dlp::kernel_frame::kernelDatatype::u8s8s32obf16,
                          dlp::kernel_frame::kernelDatatype::u8s8s32ou8,
                          dlp::kernel_frame::kernelDatatype::u8s8s32os8 })
-    , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni,
-                             dlp::cpu_utils::isaFeature::avxvnni })
+    , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni })
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
     , numBytesPerElem(1)
@@ -2083,8 +2082,7 @@ jitAmdZenS8::jitAmdZenS8()
                          dlp::kernel_frame::kernelDatatype::s8s8s32obf16,
                          dlp::kernel_frame::kernelDatatype::s8s8s32of32,
                          dlp::kernel_frame::kernelDatatype::s8s8s32os32 })
-    , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni,
-                             dlp::cpu_utils::isaFeature::avxvnni })
+    , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni })
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
 {

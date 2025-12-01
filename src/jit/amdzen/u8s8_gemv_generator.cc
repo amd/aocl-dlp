@@ -26,7 +26,7 @@
  *
  */
 
-#include "u8s8_gemv.hh"
+#include "u8s8_gemv_generator.hh"
 
 namespace amdzen::gen {
 
