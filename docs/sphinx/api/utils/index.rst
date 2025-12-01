@@ -5,9 +5,6 @@ Utility Functions
 
 Standalone utility functions for common mathematical operations.
 
-.. doxygenfile:: aocl_util_interface_apis.h
-   :project: aocl-dlp
-
 .. _utils-function-reference:
 
 Function Reference

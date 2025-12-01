@@ -5,9 +5,6 @@ Post-Operations
 
 Post-operations framework for fusing operations with GEMM computations.
 
-.. doxygenfile:: classic/aocl_gemm_post_ops.h
-   :project: aocl-dlp
-
 Data Structures
 ---------------
 .. _struct-dlp-metadata-t:
@@ -73,14 +70,9 @@ Enums
 
 .. doxygenenum:: DLP_TYPE
    :project: aocl-dlp
+
 .. rubric:: See Also
 
 * :doc:`../gemm/index` - GEMM operations
 * :doc:`../eltwise/index` - Element-wise operations
 * :doc:`../utils/index` - Utility functions
-
-Full Header Reference
----------------------
-
-.. doxygenfile:: aocl_gemm_post_ops.h
-   :project: aocl-dlp

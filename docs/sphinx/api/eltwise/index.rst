@@ -5,9 +5,6 @@ Element-wise Operations
 
 Element-wise operations API for applying mathematical functions to matrix elements.
 
-.. doxygenfile:: aocl_eltwise_ops_interface_apis.h
-   :project: aocl-dlp
-
 .. _eltwise-function-reference:
 
 Function Reference
@@ -33,6 +30,7 @@ Function Reference
 
 .. doxygenfunction:: aocl_gemm_eltwise_ops_f32ou8
    :project: aocl-dlp
+
 .. rubric:: See Also
 
 * :doc:`../gemm/post_ops` - Post-operations framework

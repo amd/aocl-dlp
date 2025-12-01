@@ -23,22 +23,6 @@ BFloat16 Support
 .. doxygentypedef:: bfloat16
    :project: aocl-dlp
 
-Post-Operations Structures
---------------------------
-.. _struct-dlp-metadata-t-types:
-.. doxygenstruct:: dlp_metadata_t
-   :project: aocl-dlp
-   :members:
-
-Post-Operation Types
-~~~~~~~~~~~~~~~~~~~~
-
-.. doxygenenum:: DLP_POST_OP_TYPE
-   :project: aocl-dlp
-
-.. doxygenenum:: DLP_ELT_ALGO_TYPE
-   :project: aocl-dlp
-
 Constants and Enumerations
 ---------------------------
 
@@ -238,11 +222,3 @@ See Also
 * :doc:`../gemm/index` - GEMM operations using these types
 * :doc:`../gemm/post_ops` - Post-operations metadata structures
 * :doc:`../eltwise/index` - Element-wise type conversions
-
-.. _types-full-header:
-
-Full Header Reference
----------------------
-
-.. doxygenfile:: classic/aocl_gemm_post_ops.h
-   :project: aocl-dlp

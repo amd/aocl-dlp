@@ -204,13 +204,8 @@ Unreordering Functions
    :project: aocl-dlp
 
 
-.. include:: post_ops.rst
-
 .. rubric:: See Also
 
 * :doc:`post_ops` - Post-operations framework
 * :doc:`../eltwise/index` - Element-wise operations
 * :doc:`../library/index` - Library configuration
-
-.. doxygenfile:: aocl_gemm_interface_apis.h
-   :project: aocl-dlp
