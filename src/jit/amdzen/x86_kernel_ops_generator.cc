@@ -2650,11 +2650,8 @@ kernelOpsGeneratorX86<KType>::swishImpl()
 {
     jit_->mov(regTmp1,
               jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args2)]);
-    if constexpr (std::is_same_v<T, float>) {
-        jit_->vbroadcastss(RegType(x_tanh), jit_->ptr[regTmp1]);
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+
+    broadcastAndConvertScalar<T>(RegType(x_tanh), jit_->ptr[regTmp1]);
 
     apply_post_ops_in_high_reg_pressure(
         num_gelu_regs, std::bind(&kernelOpsGeneratorX86<KType>::SWISH_F32_DEF,

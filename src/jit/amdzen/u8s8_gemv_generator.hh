@@ -336,6 +336,21 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
      * @brief Load masks for fringe case handling (AVX512 only)
      */
     dlp::jit::jitGeneratorError loadMasks();
+
+    /**
+     * @brief Generate constant data for BF16 conversion (Skylake compatibility)
+     */
+    void generateConstantData();
+
+    // Labels for BF16 constant data (for Skylake compatibility)
+    Xbyak::Label label_bf16_round_bias;
+    Xbyak::Label label_bf16_lsb_mask;
+
+    // Kernel operations handler for post-ops
+    std::unique_ptr<gen::kernelOpsHandler>            kernelOpsHandlerPtr;
+    std::vector<dlp::kernel_frame::kernelOpsMetaData> kernelOpsVector;
+    bool                                              accumulatorsAreF32 =
+        false; // Track if accumulators were converted to F32 for post-ops
 };
 
 /**
@@ -659,6 +674,21 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
      * @brief Masked load for B matrix
      */
     dlp::jit::jitGeneratorError maskLoadB(int regIdx, int maskIdx);
+
+    /**
+     * @brief Generate constant data for BF16 conversion (Skylake compatibility)
+     */
+    void generateConstantData();
+
+    // Labels for BF16 constant data (for Skylake compatibility)
+    Xbyak::Label label_bf16_round_bias;
+    Xbyak::Label label_bf16_lsb_mask;
+
+    // Kernel operations handler for post-ops
+    std::unique_ptr<gen::kernelOpsHandler>            kernelOpsHandlerPtr;
+    std::vector<dlp::kernel_frame::kernelOpsMetaData> kernelOpsVector;
+    bool                                              accumulatorsAreF32 =
+        false; // Track if accumulators were converted to F32 for post-ops
 };
 
 } // namespace amdzen::gen

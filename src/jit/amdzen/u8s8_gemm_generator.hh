@@ -30,8 +30,9 @@
 
 #include "jit/jit_generator_base.hh"
 #include "jit/xbyak/xbyak.h"
-#include "jit/xbyak/xbyak_util.h"
 #include "jit_generator_utils.hh"
+#include "kernel_ops_handler.hh"
+#include "kernels/kernel_base.hh"
 #include "traits.hh"
 
 namespace amdzen::gen {
@@ -85,6 +86,8 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     int  c_downscale;
     bool useMask =
         false; // Flag to indicate if masked instructions are generated
+    bool accumulatorsAreF32 =
+        false; // Track if accumulators were converted to F32 for post-ops
 
     // =================================================================
     // REGISTER ALLOCATION
@@ -108,6 +111,8 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     // =================================================================
     Xbyak::Label label_store_result;
     Xbyak::Label label_end_store;
+    Xbyak::Label label_bf16_round_bias; // Constant data for BF16 conversion
+    Xbyak::Label label_bf16_lsb_mask;   // Constant data for BF16 conversion
 
     // =================================================================
     // CORE SETUP AND INITIALIZATION
@@ -233,6 +238,16 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
      * Handle bias, scaling, activation functions, output conversion
      */
     dlp::jit::jitGeneratorError generatePostOps(utils::generatorParams& params);
+
+    // =================================================================
+    // CONSTANT DATA GENERATION
+    // =================================================================
+    /**
+     * @brief Generate constant data tables used by the kernel
+     * These are placed after the return instruction and accessed via
+     * RIP-relative addressing
+     */
+    void generateConstantData();
 
     // =================================================================
     // NOTE: VNNI BUFFER HANDLING

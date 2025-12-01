@@ -1,7 +1,7 @@
-# GEMM benchmarking configuration file
+# GEMM benchmarking configuration file - Generative AI Workloads
 gemm_tests:
-  # Basic test cases u8s8s32os32
-  - name: "medium_matrix"
+  # 1. Prompt Phase - Large batch sizes with input token sequences
+  - name: "prompt_phase_large_batches"
     a_type: "u8"
     b_type: "s8"
     c_type: "s32"
@@ -9,254 +9,182 @@ gemm_tests:
     storage_format: "row-major"
     transA: false
     transB: false
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    # M = BS * Beam Size * Input Tokens
+    # BS: 16, 32 | Beam: 1, 2, 4 | Tokens: 256, 512, 1024
+    m: [4096, 8192, 16384, 32768, 65536, 131072]  # Large prompt batches
+    n: [4096, 5120, 3584, 2560, 2048]  # Common model hidden dimensions
+    k: [4096, 5120, 3584, 2560, 2048]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [4096, 5120, 3584]
+    ldb: [4096, 5120, 3584]
+    ldc: [4096, 5120, 3584]
+    mtagA: ["pack"]
+    mtagB: ["reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
       int8: 0
-    product_type: "simple"
-  # Basic test cases u8s8s32os8
-  - name: "medium_matrix"
+    product_type: "cartesian"
+
+  # 2. Decode Phase - Priority Beam Size 4 with various batch sizes
+  - name: "decode_phase_beam4"
     a_type: "u8"
-    b_type: "s8"
-    c_type: "s8"
-    acc_type: "s32"
-    storage_format: "row-major"
-    transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
-    product_type: "simple"
-  # Basic test cases u8s8s32ou8
-  - name: "medium_matrix"
-    a_type: "u8"
-    b_type: "s8"
-    c_type: "u8"
-    acc_type: "s32"
-    storage_format: "row-major"
-    transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
-    product_type: "simple"
-  # Basic test cases u8s8s32of32
-  - name: "medium_matrix"
-    a_type: "u8"
-    b_type: "s8"
-    c_type: "f32"
-    acc_type: "s32"
-    storage_format: "row-major"
-    transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
-    product_type: "simple"
-  # Basic test cases u8s8s32obf16
-  - name: "medium_matrix"
-    a_type: "u8"
-    b_type: "s8"
-    c_type: "bf16"
-    acc_type: "s32"
-    storage_format: "row-major"
-    transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
-    product_type: "simple"
-  # Basic test cases s8s8s32os32
-  - name: "medium_matrix"
-    a_type: "s8"
     b_type: "s8"
     c_type: "s32"
     acc_type: "s32"
     storage_format: "row-major"
     transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    transB: false
+    # M = BS * Beam Size (4) - Priority case
+    m: [4, 8, 16, 32, 64, 128]  # BS: 1,2,4,8,16,32 * Beam:4
+    n: [4096, 5120, 3584, 2560, 2048, 8192]  # Key model dimensions
+    k: [4096, 5120, 3584, 2560, 2048, 8192]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [8192]
+    ldb: [8192]
+    ldc: [8192]
+    mtagA: ["pack"]
+    mtagB: ["reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
       int8: 0
     product_type: "simple"
-  # Basic test cases s8s8s32os8
-  - name: "medium_matrix"
-    a_type: "s8"
+
+  # 3. Llama Models (v2-7b, v2-13b, 3.1-8B)
+  - name: "llama_models"
+    a_type: "u8"
     b_type: "s8"
-    c_type: "s8"
+    c_type: "s32"
     acc_type: "s32"
     storage_format: "row-major"
     transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    transB: false
+    m: [1, 4, 8, 16, 32, 64, 128]  # Various batch sizes
+    n: [12288, 4096, 11008, 32000, 15360, 5120, 13824, 14336, 6144, 128256]  # Llama dimensions
+    k: [4096, 5120, 11008, 13824, 14336]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [14336, 11008, 13824]
+    ldb: [128256, 32000, 15360]
+    ldc: [128256, 32000, 15360]
+    mtagA: ["pack"]
+    mtagB: ["reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
       int8: 0
     product_type: "simple"
-  # Basic test cases s8s8s32ou8
-  - name: "medium_matrix"
-    a_type: "s8"
+
+  # 4. Microsoft Phi Models (Phi 2, Phi 3 Mini, Phi 3 Medium, Phi 3 Vision)
+  - name: "microsoft_phi_models"
+    a_type: "u8"
     b_type: "s8"
-    c_type: "u8"
+    c_type: "s32"
     acc_type: "s32"
     storage_format: "row-major"
     transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    transB: false
+    m: [1, 4, 8, 16, 32]
+    n: [2560, 10240, 51200, 7680, 9216, 3072, 8192, 32064, 17920]  # Phi dimensions
+    k: [2560, 3072, 5120, 8192, 10240]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [8192, 5120, 3072]
+    ldb: [51200, 32064, 17920]
+    ldc: [51200, 32064, 17920]
+    mtagA: ["pack"]
+    mtagB: ["reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
       int8: 0
     product_type: "simple"
-  # Basic test cases s8s8s32of32
-  - name: "medium_matrix"
-    a_type: "s8"
+
+  # 5. Large Vocabulary Models (GPT-J, ChatGLM, Qwen)
+  - name: "large_vocab_models"
+    a_type: "u8"
     b_type: "s8"
-    c_type: "f32"
+    c_type: "s32"
     acc_type: "s32"
     storage_format: "row-major"
     transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    transB: false
+    m: [1, 4, 8, 16]  # Smaller batches for large vocab
+    n: [50400, 65024, 152964, 151936, 50272, 128256, 256000, 152064]  # Large vocab sizes
+    k: [4096, 3584, 2048]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [4096, 3584]
+    ldb: [256000, 152964]  # Large vocab leading dims
+    ldc: [256000, 152964]
+    mtagA: ["pack"]
+    mtagB: ["reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
       int8: 0
     product_type: "simple"
-  # Basic test cases s8s8s32obf16
-  - name: "medium_matrix"
-    a_type: "s8"
+
+  # 6. Mixed Model Dimensions - Gemma2, Mistral, OPT
+  - name: "mixed_model_dimensions"
+    a_type: "u8"
     b_type: "s8"
-    c_type: "bf16"
+    c_type: "s32"
     acc_type: "s32"
     storage_format: "row-major"
     transA: false
-    transB: true
-    # Non optional
-    m: [160, 256, 512]
-    n: [160, 256, 512]
-    k: [160, 256, 512]
-    alpha: [2.5, 0, -2.5]
-    beta: [2.5, 0, -2.5]
-    # Optional Params
-    lda: [160, 512, 16000]
-    ldb: [160, 512, 16000]
-    ldc: [160, 512, 16000]
-    mtagA: ["none","pack","pack"]
-    mtagB: ["none","pack","none"]   # Matrix B reordering can improve performance
+    transB: false
+    m: [1, 8, 16, 32]
+    n: [2048, 4096, 3584, 14336, 6144, 16384, 18944, 13696]  # Mixed dimensions
+    k: [2048, 3584, 4096, 16384, 18944, 13696]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [16384, 18944]
+    ldb: [16384, 18944]
+    ldc: [16384, 18944]
+    mtagA: ["pack"]
+    mtagB: ["reorder"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # 7. Small Batch Decode - Single and small batch inference
+  - name: "small_batch_decode"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # M = BS * Beam (1-4) for small batches
+    m: [1, 2, 4, 8]  # BS:1-2 * Beam:1-4
+    n: [4096, 5120, 3584, 2560, 2048, 3072]  # All key model dimensions
+    k: [4096, 5120, 3584, 2560, 2048, 3072, 8192]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [8192]
+    ldb: [8192]
+    ldc: [8192]
+    mtagA: ["none", "pack"]
+    mtagB: ["reorder"]
+    tolerances:
+      int8: 0
+    product_type: "simple"
+
+  # 8. Input Token Scaling - Prompt phase token length scaling
+  - name: "input_token_scaling"
+    a_type: "u8"
+    b_type: "s8"
+    c_type: "s32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Fixed BS=4, Beam=1, varying input tokens: 16,32,64,128,256,512,1024
+    m: [64, 128, 256, 512, 1024, 2048, 4096]  # 4 * 1 * tokens
+    n: [4096, 3584, 2560]  # Representative model dimensions
+    k: [4096, 3584, 2560]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: [4096]
+    mtagA: ["pack"]
+    mtagB: ["reorder"]
+    tolerances:
       int8: 0
     product_type: "simple"

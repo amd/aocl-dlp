@@ -525,24 +525,6 @@ class gemmU8S8DEBackend : public iDEBackend
         return prefetch_c_dist;
     }
 
-    [[gnu::always_inline]]
-    static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
-    getScalingTypesInt32(void* alpha, void* beta, md_t k, md_t kc_hint)
-    {
-        kernel_frame::scalingType alphaScalingType =
-            kernel_frame::scalingType::generic;
-        if (*(static_cast<int*>(alpha)) == 1) {
-            alphaScalingType = kernel_frame::scalingType::one;
-        }
-        kernel_frame::scalingType betaScalingType =
-            kernel_frame::scalingType::generic;
-        if ((*(static_cast<int*>(beta)) == 0) && (k <= kc_hint)) {
-            betaScalingType = kernel_frame::scalingType::zero;
-        }
-
-        return std::make_pair(alphaScalingType, betaScalingType);
-    }
-
   public:
     gemmU8S8DEBackend();
     ~gemmU8S8DEBackend()                                   = default;
@@ -584,7 +566,8 @@ class gemmU8S8DEBackend : public iDEBackend
         kernel_frame::scalingType alphaScalingType;
         kernel_frame::scalingType betaScalingType;
         std::tie(alphaScalingType, betaScalingType) =
-            getScalingTypesInt32(alpha, beta, k, kc_hint);
+            gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
+                                                         kc_hint);
 
         md_t mr              = mr_hint;
         md_t nr              = nr_hint;
@@ -608,6 +591,11 @@ class gemmU8S8DEBackend : public iDEBackend
                 // This is an invalid case, disable jit kernel generation.
                 return INVALID_KERNEL_INFO;
             }
+        } else if (kInstPref
+                   != kernel_frame::kernelInstrPreference::avx512_zmm_favour) {
+            kInstPref = kernel_frame::kernelInstrPreference::
+                avx512_zmm_favour; // At this point we know that it is an AVX512
+                                   // machine
         }
 
         if (n == 1) {
@@ -656,7 +644,8 @@ class gemmU8S8DEBackend : public iDEBackend
         kernel_frame::scalingType alphaScalingType;
         kernel_frame::scalingType betaScalingType;
         std::tie(alphaScalingType, betaScalingType) =
-            getScalingTypesInt32(alpha, beta, k, kc_hint);
+            gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
+                                                         kc_hint);
 
         md_t mr              = mr_hint;
         md_t nr              = nr_hint;
@@ -680,6 +669,9 @@ class gemmU8S8DEBackend : public iDEBackend
                 // This is an invalid case, disable jit kernel generation.
                 return INVALID_KERNEL_INFO;
             }
+        } else if (kInstPref
+                   != kernel_frame::kernelInstrPreference::avx512_zmm_favour) {
+            kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
         }
 
         // Currently only general GEMM is supported, specific GEMM optimizations

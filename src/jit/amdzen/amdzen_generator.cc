@@ -1584,9 +1584,6 @@ jitAmdZenU8S8::getProcessBlockSize() const
         case utils::kernelInstrType::avx512_zmm_32_reg:
             return NR; // Process full NR
 
-        case utils::kernelInstrType::avx2_ymm_16_reg:
-            return NR / 4; // Process NR/4 (16)
-
         default:
             return 0; // Invalid/unsupported kernel type
     }
@@ -1656,9 +1653,6 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
 
-        if (!params.kernelOps.empty())
-            return dlp::jit::jitGeneratorError::notSupported;
-
         params.NR         = NR;
         params.KC         = KC;
         params.N_LEFT     = 0;
@@ -1714,9 +1708,6 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             // Copy the kernelOps from the kernelInfo to params
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
-
-        if (!params.kernelOps.empty())
-            return dlp::jit::jitGeneratorError::notSupported;
 
         params.MR      = MR;
         params.mloop   = true;
@@ -1796,12 +1787,6 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
 
-        // CHECK IF KERNEL OPS ARE THERE IN PARAMS
-        // POSTOPS NOT SUPPORTED AS OF NOW
-        if (!params.kernelOps.empty()) {
-            return dlp::jit::jitGeneratorError::notSupported;
-        }
-
         // Generate GEMM kernel variants
         numMRVariants = MR;                                      // MR variants
         numNRVariants = (processBlockSize / numElemsPerReg) + 1; // NR variants
@@ -1827,6 +1812,7 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 params.mLoop       = mr_var == 0;
                 params.NR          = nr_var * numElemsPerReg;
                 params.useMask     = (nr_var == 0);
+                params.numMaskRegs = (params.useMask) ? 1 : 0;
 
                 // Generate u8s8s32 kernel using template dispatch
                 // Architecture specific dispatch happens here.
@@ -1858,10 +1844,6 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     variant_idx);
             }
         }
-    } else {
-        // GEMV support not implemented yet for u8s8s32
-        err = dlp::jit::jitGeneratorError::notSupported;
-        goto cleanup;
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -2008,7 +1990,6 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
                 (params->a) = (uint8_t*)(params->a) + mFullPieces * params->psA;
                 (params->c) =
                     (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
-                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
             }
 
             if (mPartialPieces) {
@@ -2060,7 +2041,6 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
                 (params->a) = (uint8_t*)(params->a) + mFullPieces * params->psA;
                 (params->c) =
                     (int32_t*)(params->c) + mFullPieces * MR * params->rsC;
-                (params->kernelOpsAttr).post_op_c_i += MR * mFullPieces;
             }
             if (mPartialPieces) {
                 int               m_idx  = mPartialPieces;

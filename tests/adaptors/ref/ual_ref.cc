@@ -154,9 +154,11 @@ namespace {
                                             std::round(value))));
                 break;
             case MatrixType::s32:
+                // Match vcvtps2dq behavior: round-to-nearest-even (IEEE 754
+                // default)
                 static_cast<int32_t*>(dst_ptr)[index] = static_cast<int32_t>(
                     std::max(-2147483648.0f,
-                             std::min(2147483647.0f, std::round(value))));
+                             std::min(2147483647.0f, std::rint(value))));
                 break;
             case MatrixType::u4: {
                 uint8_t* data       = static_cast<uint8_t*>(dst_ptr);
