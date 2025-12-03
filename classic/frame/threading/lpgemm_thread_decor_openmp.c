@@ -51,6 +51,14 @@ calculate_n_threads_per_gemm(md_t        group_size,
                              md_t*       n_threads_per_gemm,
                              dlp_rntm_t* rntm_g)
 {
+    // Guard against group_size <= 0 to prevent divide-by-zero
+    if (group_size <= 0) {
+        *n_threads           = 1;
+        *n_gemms_in_parallel = 1;
+        *n_threads_per_gemm  = 1;
+        return;
+    }
+
     *n_threads           = rntm_g->num_threads;
     *n_gemms_in_parallel = -1;
     if (*n_threads == 1) {
