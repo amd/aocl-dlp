@@ -111,7 +111,7 @@ class jitGEMMS8 : public Xbyak::CodeGenerator
     // Memory operations
     dlp::jit::jitGeneratorError updateCBufferPointers();
 
-    dlp::jit::jitGeneratorError storeResult();
+    dlp::jit::jitGeneratorError storeResult(bool hasPostOps = false);
 
     void moveCPtr();
 

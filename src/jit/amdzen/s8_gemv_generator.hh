@@ -150,11 +150,11 @@ class jitGEMVS8N1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError scaleYByBeta(int mSize);
 
-    dlp::jit::jitGeneratorError storeYColStored(int);
+    dlp::jit::jitGeneratorError storeYColStored(int, bool = false);
 
-    dlp::jit::jitGeneratorError storeYRowStored(int);
+    dlp::jit::jitGeneratorError storeYRowStored(int, bool = false);
 
-    dlp::jit::jitGeneratorError storeY(int);
+    dlp::jit::jitGeneratorError storeY(int, bool = false);
 };
 
 template<utils::kernelInstrType KType>
@@ -266,7 +266,7 @@ class jitGEMVS8M1 : public Xbyak::CodeGenerator
 
     void updateYBufferPointers();
 
-    dlp::jit::jitGeneratorError storeY(bool nMask);
+    dlp::jit::jitGeneratorError storeY(bool nMask, bool hasPostOps = false);
 
     // Scaling operations
     dlp::jit::jitGeneratorError scaleWithAlpha();
