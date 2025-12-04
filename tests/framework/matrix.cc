@@ -47,11 +47,12 @@
 #include <chrono> // For time-based seeding
 #include <cmath>  // For std::abs, std::isnan, std::isinf
 #include <cstdint>
-#include <cstdlib> // For std::aligned_alloc, std::free
-#include <cstring> // For std::memcpy, std::memcmp
-#include <iomanip> // For std::setprecision, std::setw, std::setfill
-#include <limits>  // For std::numeric_limits
-#include <random>  // For random number generation
+#include <cstdlib>  // For std::aligned_alloc, std::free
+#include <cstring>  // For std::memcpy, std::memcmp
+#include <iomanip>  // For std::setprecision, std::setw, std::setfill
+#include <iostream> // For std::cout
+#include <limits>   // For std::numeric_limits
+#include <random>   // For random number generation
 #include <sstream>
 #include <stdexcept>
 
@@ -1558,6 +1559,335 @@ namespace dlp { namespace testing { namespace framework {
             default:
                 throw std::runtime_error(
                     "Unsupported matrix type for value fill");
+        }
+    }
+
+    /**
+     * @brief Convert matrix to string representation
+     */
+    std::string Matrix::matrixToString(int verbosity_level) const
+    {
+        std::ostringstream oss;
+        printToStream(oss, verbosity_level);
+        return oss.str();
+    }
+
+    /**
+     * @brief Core matrix printing implementation using std::ostream
+     */
+    void Matrix::printToStream(std::ostream& os, int verbosity_level) const
+    {
+        if (verbosity_level < 2) {
+            return; // No output at low verbosity
+        }
+
+        // Print metadata
+        os << "Matrix(" << m_rows << "x" << m_cols << ", type=" << m_type
+           << ", layout=" << m_layout << ", ld=" << m_leadingDim;
+
+        if (m_transposed)
+            os << ", transposed";
+        if (m_reordered)
+            os << ", reordered";
+        if (m_packed)
+            os << ", packed";
+        os << ")\n";
+
+        // Format matrix data based on type
+        formatMatrixData(os, verbosity_level);
+        os << "\n";
+    }
+
+    /**
+     * @brief Print matrix contents based on verbosity level
+     */
+    void Matrix::printMatrix(const std::string& name, int verbosity_level) const
+    {
+        if (!name.empty()) {
+            std::cout << "\n=== " << name << " ===\n";
+        }
+        printToStream(std::cout, verbosity_level);
+    }
+    /**
+     * @brief Format matrix data based on type
+     */
+    void Matrix::formatMatrixData(std::ostream& os, int verbosity_level) const
+    {
+        switch (m_type) {
+            case MatrixType::f32:
+                formatNumericMatrix<float>(os, verbosity_level);
+                break;
+            case MatrixType::bf16:
+                formatMatrixBF16(os, verbosity_level);
+                break;
+            case MatrixType::s32:
+                formatNumericMatrix<int32_t>(os, verbosity_level);
+                break;
+            case MatrixType::u32:
+                formatNumericMatrix<uint32_t>(os, verbosity_level);
+                break;
+            case MatrixType::s16:
+                formatNumericMatrix<int16_t>(os, verbosity_level);
+                break;
+            case MatrixType::u16:
+                formatNumericMatrix<uint16_t>(os, verbosity_level);
+                break;
+            case MatrixType::s8:
+                formatNumericMatrix<int8_t>(os, verbosity_level);
+                break;
+            case MatrixType::u8:
+                formatNumericMatrix<uint8_t>(os, verbosity_level);
+                break;
+            case MatrixType::s4:
+            case MatrixType::u4:
+                formatMatrix4Bit(os, verbosity_level);
+                break;
+            default:
+                os << "[Matrix type not supported for printing]\n";
+        }
+    }
+
+    /**
+     * @brief Template formatter for numeric matrix types
+     */
+    template<typename T>
+    void Matrix::formatNumericMatrix(std::ostream& os,
+                                     int           verbosity_level) const
+    {
+        md_t max_rows = (verbosity_level >= 3) ? 20 : 5;
+        md_t max_cols = (verbosity_level >= 3) ? 20 : 5;
+
+        md_t rows_to_print = std::min(m_rows, max_rows);
+        md_t cols_to_print = std::min(m_cols, max_cols);
+
+        const T* data = reinterpret_cast<const T*>(m_data);
+
+        for (md_t i = 0; i < rows_to_print; ++i) {
+            for (md_t j = 0; j < cols_to_print; ++j) {
+                size_t idx = i * m_leadingDim + j;
+
+                if constexpr (std::is_floating_point_v<T>) {
+                    os << std::setw(10) << std::fixed << std::setprecision(4)
+                       << data[idx];
+                } else if constexpr (sizeof(T) == 1) {
+                    // Byte types - show as integers to avoid char
+                    // interpretation
+                    os << std::setw(6) << static_cast<int>(data[idx]);
+                } else {
+                    os << std::setw(8) << data[idx];
+                }
+            }
+            os << "\n";
+        }
+
+        if (m_rows > max_rows || m_cols > max_cols) {
+            os << "[Showing " << rows_to_print << "x" << cols_to_print << " of "
+               << m_rows << "x" << m_cols << " total";
+            if (verbosity_level < 3) {
+                os << " - use -vvv for full matrix";
+            }
+            os << "]\n";
+        }
+    }
+
+    /**
+     * @brief Specialized formatter for BF16 matrices
+     */
+    void Matrix::formatMatrixBF16(std::ostream& os, int verbosity_level) const
+    {
+        md_t max_rows = (verbosity_level >= 3) ? 20 : 5;
+        md_t max_cols = (verbosity_level >= 3) ? 20 : 5;
+
+        md_t rows_to_print = std::min(m_rows, max_rows);
+        md_t cols_to_print = std::min(m_cols, max_cols);
+
+        const bfloat16* data = reinterpret_cast<const bfloat16*>(m_data);
+
+        for (md_t i = 0; i < rows_to_print; ++i) {
+            for (md_t j = 0; j < cols_to_print; ++j) {
+                size_t idx = i * m_leadingDim + j;
+                float  f32_val =
+                    bf16_to_f32(data[idx]); // Reuse existing conversion
+                os << std::setw(10) << std::fixed << std::setprecision(4)
+                   << f32_val;
+            }
+            os << "\n";
+        }
+
+        if (m_rows > max_rows || m_cols > max_cols) {
+            os << "[Showing " << rows_to_print << "x" << cols_to_print << " of "
+               << m_rows << "x" << m_cols << " total]\n";
+        }
+    }
+
+    /**
+     * @brief Specialized formatter for 4-bit packed matrices
+     */
+    void Matrix::formatMatrix4Bit(std::ostream& os, int verbosity_level) const
+    {
+        md_t max_rows = (verbosity_level >= 3) ? 20 : 5;
+        md_t max_cols = (verbosity_level >= 3) ? 20 : 5;
+
+        md_t rows_to_print = std::min(m_rows, max_rows);
+        md_t cols_to_print = std::min(m_cols, max_cols);
+
+        const uint8_t* data = m_data;
+
+        for (md_t i = 0; i < rows_to_print; ++i) {
+            for (md_t j = 0; j < cols_to_print; ++j) {
+                // Unpack 4-bit value
+                size_t elem_idx   = i * m_leadingDim + j;
+                size_t byte_idx   = elem_idx / 2;
+                size_t bit_offset = (elem_idx % 2) * 4;
+
+                uint8_t nibble = (data[byte_idx] >> bit_offset) & 0x0F;
+
+                // Convert to signed if s4
+                if (m_type == MatrixType::s4 && (nibble & 0x08)) {
+                    int8_t signed_val = nibble | 0xF0; // Sign extend
+                    os << std::setw(5) << static_cast<int>(signed_val);
+                } else {
+                    os << std::setw(5) << static_cast<int>(nibble);
+                }
+            }
+            os << "\n";
+        }
+
+        if (m_rows > max_rows || m_cols > max_cols) {
+            os << "[4-bit packed - showing " << rows_to_print << "x"
+               << cols_to_print << " of " << m_rows << "x" << m_cols
+               << " total]\n";
+        }
+    }
+
+    /**
+     * @brief Fill matrix with a repeating pattern
+     */
+    void Matrix::fillPattern(const std::vector<double>& pattern)
+    {
+        if (pattern.empty()) {
+            throw std::invalid_argument("Pattern cannot be empty");
+        }
+        if (!m_data || m_dataSizeBytes == 0) {
+            return;
+        }
+
+        size_t pattern_size = pattern.size();
+
+        switch (m_type) {
+            case MatrixType::f32: {
+                float* data         = reinterpret_cast<float*>(m_data);
+                size_t elementCount = m_dataSizeBytes / sizeof(float);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    data[i] = static_cast<float>(pattern[i % pattern_size]);
+                }
+                break;
+            }
+            case MatrixType::bf16: {
+                uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    float f32_val =
+                        static_cast<float>(pattern[i % pattern_size]);
+                    data[i] = f32_to_bf16(f32_val);
+                }
+                break;
+            }
+            case MatrixType::u8: {
+                uint8_t* data = m_data;
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    double val = pattern[i % pattern_size];
+                    data[i]    = static_cast<uint8_t>(
+                        std::max(0.0, std::min(255.0, std::round(val))));
+                }
+                break;
+            }
+            case MatrixType::s8: {
+                int8_t* data = reinterpret_cast<int8_t*>(m_data);
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    double val = pattern[i % pattern_size];
+                    data[i]    = static_cast<int8_t>(
+                        std::max(-128.0, std::min(127.0, std::round(val))));
+                }
+                break;
+            }
+            case MatrixType::u16: {
+                uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    double val = pattern[i % pattern_size];
+                    data[i]    = static_cast<uint16_t>(
+                        std::max(0.0, std::min(65535.0, std::round(val))));
+                }
+                break;
+            }
+            case MatrixType::s16: {
+                int16_t* data         = reinterpret_cast<int16_t*>(m_data);
+                size_t   elementCount = m_dataSizeBytes / sizeof(int16_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    double val = pattern[i % pattern_size];
+                    data[i]    = static_cast<int16_t>(
+                        std::max(-32768.0, std::min(32767.0, std::round(val))));
+                }
+                break;
+            }
+            case MatrixType::u32: {
+                uint32_t* data         = reinterpret_cast<uint32_t*>(m_data);
+                size_t    elementCount = m_dataSizeBytes / sizeof(uint32_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    double val = pattern[i % pattern_size];
+                    data[i]    = static_cast<uint32_t>(
+                        std::max(0.0, std::min(static_cast<double>(UINT32_MAX),
+                                                  std::round(val))));
+                }
+                break;
+            }
+            case MatrixType::s32: {
+                int32_t* data         = reinterpret_cast<int32_t*>(m_data);
+                size_t   elementCount = m_dataSizeBytes / sizeof(int32_t);
+                for (size_t i = 0; i < elementCount; ++i) {
+                    double val = pattern[i % pattern_size];
+                    data[i]    = static_cast<int32_t>(
+                        std::max(static_cast<double>(INT32_MIN),
+                                    std::min(static_cast<double>(INT32_MAX),
+                                             std::round(val))));
+                }
+                break;
+            }
+            case MatrixType::s4:
+            case MatrixType::u4: {
+                // For packed 4-bit types, pack two values per byte
+                uint8_t* data = m_data;
+                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                    // Get two pattern values for this byte
+                    double val1 = pattern[(i * 2) % pattern_size];
+                    double val2 = pattern[(i * 2 + 1) % pattern_size];
+
+                    uint8_t nibble1, nibble2;
+                    if (m_type == MatrixType::s4) {
+                        // Signed 4-bit: range [-8, 7]
+                        nibble1 = static_cast<int8_t>(std::max(
+                                      -8.0, std::min(7.0, std::round(val1))))
+                                  & 0x0F;
+                        nibble2 = static_cast<int8_t>(std::max(
+                                      -8.0, std::min(7.0, std::round(val2))))
+                                  & 0x0F;
+                    } else {
+                        // Unsigned 4-bit: range [0, 15]
+                        nibble1 = static_cast<uint8_t>(std::max(
+                                      0.0, std::min(15.0, std::round(val1))))
+                                  & 0x0F;
+                        nibble2 = static_cast<uint8_t>(std::max(
+                                      0.0, std::min(15.0, std::round(val2))))
+                                  & 0x0F;
+                    }
+                    data[i] = nibble1 | (nibble2 << 4);
+                }
+                break;
+            }
+            default:
+                throw std::runtime_error(
+                    "Unsupported matrix type for pattern fill");
         }
     }
 

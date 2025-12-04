@@ -194,6 +194,15 @@ class ArgParser
         std::cout << "  -h, --help              Show this help message\n";
         std::cout << "  -v, --verbose           Enable verbose/detailed debug "
                      "output\n";
+        std::cout << "  -vv                     Print partial matrices (5x5 "
+                     "elements)\n";
+        std::cout
+            << "  -vvv                    Print full matrices (up to 20x20)\n";
+        std::cout << "\nVerbosity Levels:\n";
+        std::cout << "  Level 0 (default):     No extra output\n";
+        std::cout << "  Level 1 (-v):          Verbose comparison results\n";
+        std::cout << "  Level 2 (-vv):         + Print partial matrices\n";
+        std::cout << "  Level 3 (-vvv):        + Print full matrices\n";
         std::cout << "\nExample:\n";
         std::cout << "  " << program_name << " -f my_config.yaml\n";
         std::cout << "  " << program_name << " --ual-test DLP --ual-ref REF\n";
@@ -212,7 +221,48 @@ class ArgParser
      * @brief Check if verbose mode was requested
      * @return true if verbose flags (-v, --verbose) are present
      */
-    bool isVerbose() const { return hasFlag("-v") || hasFlag("--verbose"); }
+    bool isVerbose() const { return getVerbosityLevel() > 0; }
+
+    /**
+     * @brief Get verbosity level based on command line flags
+     * @return Verbosity level (0=none, 1=-v, 2=-vv, 3=-vvv, etc.)
+     *
+     * Supports multiple verbosity levels:
+     * - Level 0: No verbosity (default)
+     * - Level 1: -v or --verbose → Verbose comparison results
+     * - Level 2: -vv → Print partial matrices (5x5 elements)
+     * - Level 3: -vvv → Print full matrices (up to 20x20)
+     *
+     * Examples:
+     * - ./test_gemm -v     → Level 1
+     * - ./test_gemm -vv    → Level 2
+     * - ./test_gemm -vvv   → Level 3
+     * - ./test_gemm --verbose → Level 1
+     */
+    int getVerbosityLevel() const
+    {
+        int level = 0;
+
+        for (int i = 1; i < argc_; ++i) {
+            std::string arg = argv_[i];
+
+            // Count consecutive v's in -vv, -vvv, etc.
+            if (arg.length() >= 2 && arg[0] == '-' && arg[1] == 'v') {
+                // Count v's after the first one
+                size_t v_count = 0;
+                for (size_t j = 1; j < arg.length() && arg[j] == 'v'; ++j) {
+                    v_count++;
+                }
+                level = std::max(level, static_cast<int>(v_count));
+            }
+            // Handle --verbose as level 1
+            else if (arg == "--verbose") {
+                level = std::max(level, 1);
+            }
+        }
+
+        return level;
+    }
 
     /**
      * @brief Get UAL implementation to test
@@ -312,8 +362,11 @@ class ArgParser
                 continue;
             }
 
-            // Skip verbose flags
-            if (arg == "-v" || arg == "--verbose") {
+            // Skip verbose flags (-v, -vv, -vvv, --verbose)
+            if (arg == "--verbose"
+                || (arg.length() >= 2 && arg[0] == '-'
+                    && arg.substr(1).find_first_not_of('v')
+                           == std::string::npos)) {
                 continue;
             }
 

@@ -580,6 +580,97 @@ namespace dlp { namespace testing { namespace utils {
                 }
             }
 
+            // Parse fill_pattern if present
+            if (node["fill_pattern"]) {
+                iterators.has_fill_pattern = true;
+                auto pattern_node          = node["fill_pattern"];
+
+                // Determine pattern type (default to "static")
+                std::string type_str = "static";
+                if (pattern_node["type"]) {
+                    type_str = pattern_node["type"].as<std::string>();
+                }
+
+                // Parse based on type
+                if (type_str == "static") {
+                    iterators.fill_pattern.type = PatternType::Static;
+                    if (!pattern_node["values"]) {
+                        throw std::runtime_error(
+                            "Static pattern requires 'values' field");
+                    }
+                    for (const auto& val : pattern_node["values"]) {
+                        iterators.fill_pattern.values.push_back(
+                            val.as<double>());
+                    }
+                } else if (type_str == "modulo") {
+                    iterators.fill_pattern.type = PatternType::Modulo;
+                    if (!pattern_node["lb"] || !pattern_node["ub"]) {
+                        throw std::runtime_error(
+                            "Modulo pattern requires 'lb' and 'ub' fields");
+                    }
+                    iterators.fill_pattern.lb = pattern_node["lb"].as<double>();
+                    iterators.fill_pattern.ub = pattern_node["ub"].as<double>();
+                    if (pattern_node["step"]) {
+                        iterators.fill_pattern.step =
+                            pattern_node["step"].as<double>();
+                    }
+                    if (pattern_node["offset"]) {
+                        iterators.fill_pattern.offset =
+                            pattern_node["offset"].as<double>();
+                    }
+                } else if (type_str == "linear") {
+                    iterators.fill_pattern.type = PatternType::Linear;
+                    if (!pattern_node["lb"] || !pattern_node["ub"]) {
+                        throw std::runtime_error(
+                            "Linear pattern requires 'lb' and 'ub' fields");
+                    }
+                    iterators.fill_pattern.lb = pattern_node["lb"].as<double>();
+                    iterators.fill_pattern.ub = pattern_node["ub"].as<double>();
+                    if (pattern_node["step"]) {
+                        iterators.fill_pattern.step =
+                            pattern_node["step"].as<double>();
+                    }
+                    if (pattern_node["multiplier"]) {
+                        iterators.fill_pattern.multiplier =
+                            pattern_node["multiplier"].as<double>();
+                    }
+                    if (pattern_node["offset"]) {
+                        iterators.fill_pattern.offset =
+                            pattern_node["offset"].as<double>();
+                    }
+                } else if (type_str == "sequence") {
+                    iterators.fill_pattern.type = PatternType::Sequence;
+                    if (!pattern_node["lb"]) {
+                        throw std::runtime_error(
+                            "Sequence pattern requires 'lb' field");
+                    }
+                    iterators.fill_pattern.lb = pattern_node["lb"].as<double>();
+                    if (pattern_node["ub"]) {
+                        iterators.fill_pattern.ub =
+                            pattern_node["ub"].as<double>();
+                    } else {
+                        iterators.fill_pattern.ub =
+                            1000.0; // Default large value
+                    }
+                    if (pattern_node["step"]) {
+                        iterators.fill_pattern.step =
+                            pattern_node["step"].as<double>();
+                    }
+                } else {
+                    throw std::runtime_error("Unknown fill_pattern type: "
+                                             + type_str
+                                             + ". Allowed: static, modulo, "
+                                               "linear, sequence");
+                }
+
+                // Validate configuration
+                std::string error_msg;
+                if (!iterators.fill_pattern.validate(error_msg)) {
+                    throw std::runtime_error("Invalid fill_pattern config: "
+                                             + error_msg);
+                }
+            }
+
             // Parse tolerances if present
             if (node["tolerances"]) {
                 iterators.has_tolerances = true;

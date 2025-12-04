@@ -512,6 +512,62 @@ namespace dlp { namespace testing { namespace framework {
         void fillValue(double value);
 
         /**
+         * @brief Fill matrix with a repeating pattern
+         *
+         * Fills the entire allocated matrix memory with values from the
+         * pattern, cycling through pattern values using modulo indexing.
+         * Properly converts pattern values to the matrix's data type with
+         * bounds checking.
+         *
+         * @param pattern Vector of values to repeat (must not be empty)
+         * @throws std::invalid_argument if pattern is empty
+         */
+        void fillPattern(const std::vector<double>& pattern);
+
+        /**
+         * @brief Convert matrix to string representation
+         *
+         * Converts the matrix to a formatted string with support for all matrix
+         * types. The amount of output depends on the verbosity level:
+         * - Level 0-1: Empty string (no matrix printing)
+         * - Level 2: Print partial matrices (5x5 elements)
+         * - Level 3+: Print full matrices (up to 20x20)
+         *
+         * @param verbosity_level Verbosity level (0=none, 2=partial, 3=full)
+         * @return String containing formatted matrix representation
+         */
+        std::string matrixToString(int verbosity_level = 2) const;
+
+        /**
+         * @brief Core matrix printing implementation using std::ostream
+         *
+         * This is the unified implementation that all printing methods delegate
+         * to. Works with any std::ostream (cout, ostringstream, file streams,
+         * etc.) Supports all matrix types with appropriate formatting.
+         *
+         * @param os Output stream to write to
+         * @param verbosity_level Verbosity level controlling output detail
+         */
+        void printToStream(std::ostream& os, int verbosity_level) const;
+
+        /**
+         * @brief Print matrix contents based on verbosity level
+         *
+         * Prints the matrix values in a formatted grid. Supports all matrix
+         * types with appropriate formatting. The amount of output depends on
+         * the verbosity level:
+         * - Level 0-1: No matrix printing
+         * - Level 2: Print partial matrices (5x5 elements)
+         * - Level 3+: Print full matrices (up to 20x20)
+         *
+         * @param name Optional name/label to display above the matrix
+         * @param verbosity_level Verbosity level (0=none, 1=basic, 2=partial,
+         * 3=full)
+         */
+        void printMatrix(const std::string& name            = "",
+                         int                verbosity_level = 2) const;
+
+        /**
          * @brief Get element size in bytes for the matrix type
          *
          * @return size_t Size of a single element in bytes (0 for packed types)
@@ -751,6 +807,48 @@ namespace dlp { namespace testing { namespace framework {
         }
 
       private:
+        /**
+         * @brief Format matrix data based on type
+         *
+         * Dispatches to appropriate type-specific formatter based on m_type.
+         *
+         * @param os Output stream to write to
+         * @param verbosity_level Verbosity level controlling output detail
+         */
+        void formatMatrixData(std::ostream& os, int verbosity_level) const;
+
+        /**
+         * @brief Template formatter for numeric matrix types
+         *
+         * Handles f32, s32, u32, s16, u16, s8, u8 with appropriate formatting.
+         *
+         * @tparam T Numeric type (float, int32_t, uint8_t, etc.)
+         * @param os Output stream to write to
+         * @param verbosity_level Verbosity level controlling output detail
+         */
+        template<typename T>
+        void formatNumericMatrix(std::ostream& os, int verbosity_level) const;
+
+        /**
+         * @brief Specialized formatter for BF16 matrices
+         *
+         * Converts BF16 values to float for readable display.
+         *
+         * @param os Output stream to write to
+         * @param verbosity_level Verbosity level controlling output detail
+         */
+        void formatMatrixBF16(std::ostream& os, int verbosity_level) const;
+
+        /**
+         * @brief Specialized formatter for 4-bit packed matrices
+         *
+         * Unpacks and displays s4/u4 values as integers.
+         *
+         * @param os Output stream to write to
+         * @param verbosity_level Verbosity level controlling output detail
+         */
+        void formatMatrix4Bit(std::ostream& os, int verbosity_level) const;
+
         /**
          * @brief Allocate aligned memory with proper size rounding
          *

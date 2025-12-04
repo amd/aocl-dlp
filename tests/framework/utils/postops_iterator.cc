@@ -45,7 +45,7 @@ PostOpsIterator::PostOpsIterator(const std::vector<PostOpConfig>& operations,
 bool
 PostOpsIterator::hasNext() const
 {
-    return m_current_index < m_combinations.size();
+    return (m_current_index + 1) < m_combinations.size();
 }
 
 void

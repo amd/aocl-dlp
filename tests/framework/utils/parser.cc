@@ -30,6 +30,8 @@
 #include "framework/matrix.hh"
 #include "framework/operation.hh"
 
+#include <cmath>
+#include <iostream>
 #include <stdexcept>
 
 using dlp::testing::framework::postops::createBias;
@@ -432,6 +434,160 @@ MicroTest::stringToMatrixType(const std::string& str) const
         return MatrixType::u4;
 
     throw std::runtime_error("Unknown matrix type: " + str);
+}
+
+// ============================================================================
+// FILL PATTERN IMPLEMENTATION
+// ============================================================================
+
+/**
+ * @brief Generate pattern values based on configuration
+ */
+std::vector<double>
+FillPatternConfig::generatePattern() const
+{
+    std::vector<double> result;
+
+    switch (type) {
+        case PatternType::Static:
+            return values; // Return as-is
+
+        case PatternType::Modulo: {
+            double range = ub - lb;
+            if (range <= 0) {
+                range = 1.0; // Safety fallback
+            }
+
+            // Use integer-based loop to avoid floating-point accumulation
+            // errors
+            size_t num_steps = static_cast<size_t>(std::ceil(range / step)) + 1;
+            num_steps        = std::min(num_steps, MAX_PATTERN_SIZE);
+
+            for (size_t i = 0; i < num_steps; ++i) {
+                double x   = i * step;
+                double val = std::fmod(x + offset, range) + lb;
+                if (i == num_steps - 1) {
+                    val = ub;
+                }
+                result.push_back(val);
+            }
+            break;
+        }
+
+        case PatternType::Linear: {
+            // Use integer-based loop to avoid floating-point accumulation
+            // errors
+            size_t num_steps = static_cast<size_t>(std::ceil((ub - lb) / step));
+            num_steps        = std::min(num_steps, MAX_PATTERN_SIZE);
+
+            for (size_t i = 0; i < num_steps; ++i) {
+                double x = lb + i * step;
+                result.push_back(x * multiplier + offset);
+            }
+            break;
+        }
+
+        case PatternType::Sequence: {
+            // Use integer-based loop to avoid floating-point accumulation
+            // errors
+            size_t num_steps = static_cast<size_t>(std::ceil((ub - lb) / step));
+            num_steps        = std::min(num_steps, MAX_PATTERN_SIZE);
+
+            for (size_t i = 0; i < num_steps; ++i) {
+                result.push_back(lb + i * step);
+            }
+            break;
+        }
+
+        default:
+            break;
+    }
+
+    // Safety: ensure non-empty pattern
+    if (result.empty()) {
+        result.push_back(0.0);
+    }
+
+    return result;
+}
+
+/**
+ * @brief Validate pattern configuration
+ */
+bool
+FillPatternConfig::validate(std::string& error_msg) const
+{
+    if (type == PatternType::Static) {
+        if (values.empty()) {
+            error_msg = "Static pattern requires non-empty values";
+            return false;
+        }
+        return true;
+    }
+
+    // For expression types
+    if (step <= 0.0) {
+        error_msg = "Step must be positive";
+        return false;
+    }
+
+    if (lb >= ub) {
+        error_msg = "Lower bound must be less than upper bound";
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * @brief Output stream support for PatternType (for debugging)
+ */
+std::ostream&
+operator<<(std::ostream& os, PatternType type)
+{
+    switch (type) {
+        case PatternType::Static:
+            return os << "Static";
+        case PatternType::Modulo:
+            return os << "Modulo";
+        case PatternType::Linear:
+            return os << "Linear";
+        case PatternType::Sequence:
+            return os << "Sequence";
+        default:
+            return os << "Unknown";
+    }
+}
+
+/**
+ * @brief Output stream support for FillPatternConfig (for debugging)
+ */
+std::ostream&
+operator<<(std::ostream& os, const FillPatternConfig& cfg)
+{
+    os << "FillPatternConfig{type=" << cfg.type;
+
+    if (cfg.type == PatternType::Static) {
+        os << ", values=[";
+        for (size_t i = 0; i < cfg.values.size(); ++i) {
+            if (i > 0)
+                os << ", ";
+            os << cfg.values[i];
+        }
+        os << "]";
+    } else {
+        os << ", lb=" << cfg.lb << ", ub=" << cfg.ub << ", step=" << cfg.step;
+        if (cfg.type == PatternType::Linear) {
+            os << ", multiplier=" << cfg.multiplier;
+        }
+        if (cfg.type == PatternType::Modulo
+            || cfg.type == PatternType::Linear) {
+            os << ", offset=" << cfg.offset;
+        }
+    }
+
+    os << "}";
+    return os;
 }
 
 } // namespace dlp::testing::utils

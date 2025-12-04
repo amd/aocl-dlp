@@ -101,8 +101,8 @@ struct TestGlobalConfig
 // Global instance (initialized in main())
 static TestGlobalConfig g_test_config;
 
-// Global verbose flag (initialized in main() from command-line arguments)
-static bool g_verbose_debug = false;
+// Global verbosity level (initialized in main() from command-line arguments)
+static int g_verbosity_level = 0;
 
 // ============================================================================
 // GLOBAL CONFIGURATION VARIABLES
@@ -140,6 +140,10 @@ struct GemmTestConfig
     double      fill_ub                = 5.0;
     std::string fill_dist              = "uniform";
     bool        force_int_distribution = true;
+
+    // Optional fill_pattern configuration
+    bool                has_fill_pattern = false;
+    std::vector<double> fill_pattern;
 
     // Optional tolerance configuration
     bool   has_tolerances     = false;
@@ -401,43 +405,14 @@ PrintTo(const GemmTestConfig& config, std::ostream* os)
     *os << ")";
 }
 
-// Custom Google Test printer for Matrix class to show actual values instead of
-// memory dumps
+// Custom Google Test printer for Matrix class - delegates to
+// Matrix::printToStream
 void
 PrintTo(const Matrix& matrix, std::ostream* os)
 {
-    *os << "Matrix(" << matrix.getRows() << "x" << matrix.getCols()
-        << ", type=" << matrix.getMatrixType()
-        << ", layout=" << matrix.getLayout()
-        << ", ld=" << matrix.getLeadingDimension();
-
-    if (matrix.isTransposed())
-        *os << ", transposed";
-    if (matrix.isReordered())
-        *os << ", reordered";
-    if (matrix.isPacked())
-        *os << ", packed";
-
-    *os << ")";
-
-    // Show actual matrix values if it's f32 and not too large
-    if (matrix.getMatrixType() == MatrixType::f32 && matrix.getRows() <= 10
-        && matrix.getCols() <= 10) {
-
-        const float* data = reinterpret_cast<const float*>(matrix.getData());
-        *os << "\nValues:\n";
-
-        for (md_t i = 0; i < matrix.getRows(); ++i) {
-            for (md_t j = 0; j < matrix.getCols(); ++j) {
-                size_t index = i * matrix.getLeadingDimension() + j;
-                *os << std::fixed << std::setprecision(6) << data[index]
-                    << "\t";
-            }
-            *os << "\n";
-        }
-    } else {
-        *os << " [values not shown - too large or not f32]";
-    }
+    // Delegate to the unified Matrix printing implementation
+    // Use verbosity level 1 for GoogleTest (shows metadata + small matrices)
+    matrix.printToStream(*os, 1);
 }
 
 // ============================================================================
@@ -684,6 +659,13 @@ loadTestConfigurations(const std::string& yaml_file)
                     config.fill_dist      = fill_val.dist;
                     config.force_int_distribution =
                         fill_val.force_int_distribution;
+                }
+
+                // Extract fill_pattern if present
+                if (microTest.hasFillPattern()) {
+                    config.has_fill_pattern = true;
+                    const auto& pattern_cfg = microTest.getFillPattern();
+                    config.fill_pattern     = pattern_cfg.generatePattern();
                 }
 
                 // Extract tolerances if present
@@ -943,9 +925,32 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         //   - DO NOT comment out both blocks; always initialize matrices
         //   deterministically.
 
+        /* --- PATTERN FILL (Highest priority) --- */
+        // Initialize matrices with pattern if specified
+        if (config_.has_fill_pattern) {
+            // Warn if both fill_pattern and fill_value are specified
+            if (config_.has_fill_value) {
+                std::cerr << "WARNING: Both fill_pattern and fill_value "
+                             "specified in configuration";
+                if (!config_.name.empty()) {
+                    std::cerr << " '" << config_.name << "'";
+                }
+                std::cerr << "WARNING: Both fill_pattern and fill_value "
+                             "specified in configuration";
+                if (!config_.name.empty()) {
+                    std::cerr << " '" << config_.name << "'";
+                }
+                std::cerr
+                    << ". Using fill_pattern (fill_value will be ignored)."
+                    << std::endl;
+            }
+            A.fillPattern(config_.fill_pattern);
+            B.fillPattern(config_.fill_pattern);
+            C.fillPattern(config_.fill_pattern);
+        }
         /* --- RANDOM FILL (Recommended for production) --- */
         // Initialize matrices with deterministic random values
-        if (config_.has_fill_value) {
+        else if (config_.has_fill_value) {
             A.fillRandom(42 + config_.m, config_.fill_lb, config_.fill_ub,
                          config_.fill_dist, config_.force_int_distribution);
             B.fillRandom(43 + config_.n, config_.fill_lb, config_.fill_ub,
@@ -974,6 +979,13 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         A_ref.setPacked(false);
         B_ref.setPacked(false);
         C_ref.setPacked(false);
+
+        // Print matrices if verbosity level is 2 or higher
+        if (g_verbosity_level >= 2) {
+            A.printMatrix("Matrix A ", g_verbosity_level);
+            B.printMatrix("Matrix B ", g_verbosity_level);
+            C.printMatrix("Matrix C ", g_verbosity_level);
+        }
 
         // TODO: The current UAL interface doesn't support alpha/beta parameters
         // Future enhancement: Add alpha/beta support to the GEMM interface
@@ -1085,7 +1097,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             // Set up comparison options with custom tolerance if specified
             MatrixCompareOptions compare_opts = MatrixCompareOptions::Fast();
-            if (g_verbose_debug) {
+            if (g_verbosity_level >= 1) {
                 compare_opts = MatrixCompareOptions::Verbose(MAX_MISMATCHES);
             }
 
@@ -1105,7 +1117,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                        "valid parameters:\n"
                     << printConfigDetails(config_) << "\n";
 
-                if (g_verbose_debug) {
+                if (g_verbosity_level >= 1) {
                     detailed_error
                         << FormatCompareResult(compare_result, C, C_ref);
                 }
@@ -1776,10 +1788,10 @@ main(int argc, char** argv)
         return 1;
     }
 
-    // Set verbose debug flag from command-line arguments
-    g_verbose_debug = parser.isVerbose();
-    if (g_verbose_debug) {
-        std::cout << "Verbose/detailed debug mode enabled" << std::endl;
+    // Set verbosity level from command-line arguments
+    g_verbosity_level = parser.getVerbosityLevel();
+    if (g_verbosity_level > 0) {
+        std::cout << "Verbosity level: " << g_verbosity_level << std::endl;
     }
 
     // Update global YAML configuration file path if specified

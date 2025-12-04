@@ -1,0 +1,230 @@
+# YAML test configuration for fill_pattern feature
+# Tests that the YAML parser correctly extracts fill_pattern configuration
+# and that Matrix.fillPattern() works with all pattern types
+
+gemm_tests:
+  # Test case 1: Static pattern with explicit values
+  - name: "fill_pattern_static"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 8
+    n: 8
+    k: 8
+    alpha: 1.0
+    beta: 0.0
+    lda: 8
+    ldb: 8
+    ldc: 8
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_pattern:
+      type: "static"
+      values: [1.0, 2.0, 3.0, 4.0, 5.0]
+
+  # Test case 2: Modulo pattern (repeating 1-5)
+  - name: "fill_pattern_modulo"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 10
+    n: 10
+    k: 10
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_pattern:
+      type: "modulo"
+      lb: 1
+      ub: 6
+      step: 1
+      offset: 0
+      # Generates: 1, 2, 3, 4, 5, 1, 2, 3, 4, 5, ...
+
+  # Test case 3: Linear pattern (arithmetic progression)
+  - name: "fill_pattern_linear"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 6
+    n: 6
+    k: 6
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_pattern:
+      type: "linear"
+      lb: 0
+      ub: 10
+      step: 1
+      multiplier: 2
+      offset: 1
+      # Generates: x*2+1 for x in [0,1,2,3,4,5,6,7,8,9] = [1,3,5,7,9,11,13,15,17,19]
+
+  # Test case 4: Sequence pattern (simple counting)
+  - name: "fill_pattern_sequence"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 5
+    n: 5
+    k: 5
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+    fill_pattern:
+      type: "sequence"
+      lb: 10
+      ub: 20
+      step: 2
+      # Generates: 10, 12, 14, 16, 18
+
+  # Test case 5: Mixed data types with static pattern
+  - name: "fill_pattern_mixed_types"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_pattern:
+      type: "static"
+      values: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+  # Test case 6: Column-major layout with pattern
+  - name: "fill_pattern_column_major"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: 6
+    n: 6
+    k: 6
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_pattern:
+      type: "modulo"
+      lb: 0
+      ub: 10
+      step: 1
+
+  # Test case 7: Pattern with transposed matrices
+  - name: "fill_pattern_transposed"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [true]
+    transB: [false]
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_pattern:
+      type: "sequence"
+      lb: 1
+      ub: 10
+      step: 1
+
+  # Test case 8: No fill_pattern (backward compatibility test)
+  - name: "no_fill_pattern"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 4
+    k: 4
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    # No fill_pattern specified - should use default fillRandom
+
+  # Test case 9: Large pattern for stress testing
+  - name: "fill_pattern_large"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 50
+    n: 50
+    k: 50
+    alpha: 1.0
+    beta: 0.0
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_pattern:
+      type: "modulo"
+      lb: 1
+      ub: 100
+      step: 1
+
+  # Test case 10: Small pattern with large matrix
+  - name: "fill_pattern_small_pattern_large_matrix"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 20
+    n: 20
+    k: 20
+    alpha: 1.0
+    beta: 0.0

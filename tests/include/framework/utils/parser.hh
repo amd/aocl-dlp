@@ -12,7 +12,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
@@ -25,6 +25,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
+
+#pragma once
 
 #include "classic/dlp_base_types.h"
 #include "framework/cartesian_product.hh"
@@ -81,6 +83,70 @@ struct FillValueConfig
     {
     }
 };
+
+/**
+ * @enum PatternType
+ * @brief Types of fill patterns supported
+ */
+enum class PatternType : uint8_t
+{
+    Static,  ///< Explicit list of values
+    Modulo,  ///< Modulo pattern: (x % range) + offset
+    Linear,  ///< Linear pattern: x * multiplier + offset
+    Sequence ///< Simple sequence: x with step
+};
+
+/**
+ * @struct FillPatternConfig
+ * @brief Configuration for pattern-based matrix initialization
+ */
+struct FillPatternConfig
+{
+    PatternType type = PatternType::Static;
+
+    // Static pattern
+    std::vector<double> values;
+
+    // Expression-based patterns
+    double lb         = 0.0;  ///< Lower bound / start value
+    double ub         = 10.0; ///< Upper bound / end value
+    double step       = 1.0;  ///< Increment step
+    double multiplier = 1.0;  ///< Multiplier for Linear type
+    double offset     = 0.0;  ///< Offset for Modulo/Linear type
+
+    static constexpr size_t MAX_PATTERN_SIZE = 10000;
+
+    /**
+     * @brief Default constructor with default values
+     */
+    FillPatternConfig() = default;
+
+    /**
+     * @brief Generate pattern values based on configuration
+     * @return Vector of pattern values
+     * @throws std::runtime_error if configuration is invalid
+     */
+    std::vector<double> generatePattern() const;
+
+    /**
+     * @brief Validate pattern configuration
+     * @param error_msg Output parameter for error message
+     * @return true if valid, false otherwise
+     */
+    bool validate(std::string& error_msg) const;
+};
+
+/**
+ * @brief Output stream support for PatternType (for debugging)
+ */
+std::ostream&
+operator<<(std::ostream& os, PatternType type);
+
+/**
+ * @brief Output stream support for FillPatternConfig (for debugging)
+ */
+std::ostream&
+operator<<(std::ostream& os, const FillPatternConfig& cfg);
 
 /**
  * @struct ToleranceConfig
@@ -173,6 +239,10 @@ struct TestCaseIterators
     // Optional fill_value configuration
     bool            has_fill_value = false; ///< Whether fill_value is present
     FillValueConfig fill_value; ///< Fill value configuration if present
+
+    // Optional fill_pattern configuration
+    bool has_fill_pattern = false;  ///< Whether fill_pattern is present
+    FillPatternConfig fill_pattern; ///< Fill pattern configuration if present
 
     // Optional tolerance configuration
     bool            has_tolerances = false; ///< Whether tolerance is present
@@ -708,6 +778,24 @@ class MicroTest
     const FillValueConfig& getFillValue() const
     {
         return m_test_case_iterators.fill_value;
+    }
+
+    /**
+     * @brief Check if fill_pattern configuration is present
+     * @return bool True if fill_pattern is configured, false otherwise
+     */
+    bool hasFillPattern() const
+    {
+        return m_test_case_iterators.has_fill_pattern;
+    }
+
+    /**
+     * @brief Get the fill_pattern configuration
+     * @return FillPatternConfig The fill pattern configuration
+     */
+    const FillPatternConfig& getFillPattern() const
+    {
+        return m_test_case_iterators.fill_pattern;
     }
 
     /**
