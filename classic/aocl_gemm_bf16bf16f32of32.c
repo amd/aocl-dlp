@@ -258,7 +258,13 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     AOCL_MEMORY_TAG jit_mtag_a = mtag_a_use;
     AOCL_MEMORY_TAG jit_mtag_b = mtag_b_use;
 
-    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
+    // Get the configured architecture from the context.
+    // This would be set based on the AOCL_ENABLE_INSTRUCTIONS environment
+    // variable and/or the underlying architecture.
+    dlp_arch_t arch_id = dlp_get_arch();
+
+    if ((arch_id == DLP_ARCH_ZEN3) || (arch_id == DLP_ARCH_ZEN2)
+        || (arch_id == DLP_ARCH_ZEN)) {
         // No native BF16 support - will use F32 kernels
         // Get F32 context for proper block sizes
         lpgemm_cntx_t* lcntx_f32 = lpgemm_get_global_cntx_obj(F32F32F32OF32);
@@ -289,7 +295,6 @@ aocl_gemm_bf16bf16f32of32(const char      order,
      * and result in seg fault as the tiny path for DLP_BF16->FP32 is not
      * available. Hence the arch_id also has to be verified here.
      */
-    dlp_arch_t arch_id = dlp_get_arch();
     if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5))
         && (dlp_cpuid_is_avx512bf16_supported() == TRUE)
         && (is_tiny_input_bf16of32(m_use, n_use, k, &lcntx_l) == TRUE)

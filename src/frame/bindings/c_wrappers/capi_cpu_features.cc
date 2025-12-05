@@ -119,24 +119,21 @@ dlp_get_arch(void)
     return arch_id;
 }
 
-static bool
-dlp_get_aocl_enable_instr(void)
-{
-    auto arch_id = dlp_env_get_var_arch_type("AOCL_ENABLE_INSTRUCTIONS");
-
-    bool aocl_e_i = false;
-    if (arch_id != DLP_ARCH_ERROR) {
-        aocl_e_i = true;
-    }
-
-    return aocl_e_i;
-}
-
 bool
 dlp_aocl_enable_instruction_query(void)
 {
     // Check whether the AOCL_ENABLE_INSTRUCTIONS environment variable
     // is set or not.
-    static const bool aocl_e_i = dlp_get_aocl_enable_instr();
+    static const bool aocl_e_i = []() -> bool {
+        auto arch_id = dlp_env_get_var_arch_type("AOCL_ENABLE_INSTRUCTIONS");
+
+        bool aocl_e_i = false;
+        if (arch_id != DLP_ARCH_ERROR) {
+            aocl_e_i = true;
+        }
+
+        return aocl_e_i;
+    }();
+
     return aocl_e_i;
 }

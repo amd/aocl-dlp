@@ -466,57 +466,78 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         imul(regTmp3, regTmp1);
         add(regTmpCptr, regTmp3);
 
-        int scratch1 = aRegIdx;
-        int scratch2 = bRegIdx;
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            int scratch1 = aRegIdx;
+            int scratch2 = bRegIdx;
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
-                RETURN_IF_ERROR(convertF32toBF16(scratch1, scratch2,
-                                                 cRegIdx + i * bReg + j));
-                movdqu(ptr[regTmpCptr + j * halfRegBytes], Xmm(scratch2));
+            for (int i = 0; i < MR; i++) {
+                for (int j = 0; j < bFullReg; j++) {
+                    RETURN_IF_ERROR(convertF32toBF16(scratch1, scratch2,
+                                                     cRegIdx + i * bReg + j));
+                    movdqu(ptr[regTmpCptr + j * halfRegBytes], Xmm(scratch2));
+                }
+                if (bMaskReg > 0) {
+                    // Convert full vector (8×F32 → 8×BF16)
+                    RETURN_IF_ERROR(convertF32toBF16(
+                        scratch1, scratch2, cRegIdx + i * bReg + bFullReg));
+
+                    // Now Xmm(scratch2) contains 8×BF16 values
+                    // Store the BF16 result to stack for element-wise access
+                    movdqu(ptr[rsp + 0], Xmm(scratch2)); // 8×16-bit to stack
+
+                    // Get n_remainder: n % 8
+                    mov(regTmp2,
+                        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
+                    and_(regTmp2.cvt32(), 7); // n % 8
+
+                    // Calculate destination base address
+                    lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
+
+                    // Loop: copy n_remainder elements from stack to destination
+                    xor_(regTmp3.cvt32(), regTmp3.cvt32()); // elem_idx = 0
+
+                    Label loop_start, loop_end;
+                    L(loop_start);
+
+                    // Check if elem_idx < n_remainder
+                    cmp(regTmp3.cvt32(), regTmp2.cvt32());
+                    jge(loop_end, T_NEAR);
+
+                    // Load BF16 value from stack and store to destination
+                    // Use regBptr as temporary (done with B matrix access)
+                    mov(regBptr.cvt16(), word[rsp + regTmp3 * sizeof(int16_t)]);
+                    mov(word[regKIter + regTmp3 * sizeof(int16_t)],
+                        regBptr.cvt16());
+
+                    inc(regTmp3.cvt32()); // elem_idx++
+                    jmp(loop_start, T_NEAR);
+
+                    L(loop_end);
+                }
+                add(regTmpCptr, regTmp1);
             }
-            if (bMaskReg > 0) {
-                // Convert full vector (8×F32 → 8×BF16)
-                RETURN_IF_ERROR(convertF32toBF16(
-                    scratch1, scratch2, cRegIdx + i * bReg + bFullReg));
-
-                // Now Xmm(scratch2) contains 8×BF16 values
-                // Store the BF16 result to stack for element-wise access
-                movdqu(ptr[rsp + 0], Xmm(scratch2)); // 8×16-bit to stack
-
-                // Get n_remainder: n % 8
-                mov(regTmp2,
-                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
-                and_(regTmp2.cvt32(), 7); // n % 8
-
-                // Calculate destination base address
-                lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
-
-                // Loop: copy n_remainder elements from stack to destination
-                xor_(regTmp3.cvt32(), regTmp3.cvt32()); // elem_idx = 0
-
-                Label loop_start, loop_end;
-                L(loop_start);
-
-                // Check if elem_idx < n_remainder
-                cmp(regTmp3.cvt32(), regTmp2.cvt32());
-                jge(loop_end, T_NEAR);
-
-                // Load BF16 value from stack and store to destination
-                // Use regBptr as temporary (done with B matrix access)
-                mov(regBptr.cvt16(), word[rsp + regTmp3 * sizeof(int16_t)]);
-                mov(word[regKIter + regTmp3 * sizeof(int16_t)],
-                    regBptr.cvt16());
-
-                inc(regTmp3.cvt32()); // elem_idx++
-                jmp(loop_start, T_NEAR);
-
-                L(loop_end);
+        } else {
+            for (int i = 0; i < MR; i++) {
+                for (int j = 0; j < bFullReg; j++) {
+                    vcvtneps2bf16(halfRegType(bRegIdx + j),
+                                  RegType(cRegIdx + i * bReg + j));
+                    vmovdqu16(ptr[regTmpCptr + j * halfRegBytes],
+                              halfRegType(bRegIdx + j));
+                }
+                if (bMaskReg > 0) {
+                    for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                        vcvtneps2bf16(halfRegType(bRegIdx + maskI),
+                                      RegType(cRegIdx + i * bReg + maskI));
+                        vmovdqu16(ptr[regTmpCptr + maskI * halfRegBytes]
+                                      | fringeMask[maskI - bFullReg],
+                                  halfRegType(bRegIdx + maskI));
+                    }
+                }
+                add(regTmpCptr, regTmp1);
             }
-            add(regTmpCptr, regTmp1);
         }
 
-        jmp(".afterStoreResultRowMajor");
+        jmp(".afterStoreResultRowMajor", T_NEAR);
         L(".storeResultF32ToBF16");
     }
 
@@ -899,58 +920,92 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         add(regTmpCptr, regTmp3);
         mov(regKIter, regTmpCptr);
 
-        vpbroadcastd(Ymm(aRegIdx + 1),
+        vpbroadcastd(RegType(aRegIdx + 1),
                      ptr[rsp + 16]); // Broadcast value 16 from memory
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
-                movdqu(Xmm(bRegIdx + j), ptr[regTmpCptr + j * halfRegBytes]);
-                vpmovsxwd(Ymm(bRegIdx + j), Xmm(bRegIdx + j));
-                vpsllvd(Ymm(bRegIdx + j), Ymm(bRegIdx + j), Ymm(aRegIdx + 1));
-                vfmadd231ps(Ymm(cRegIdx + i * bReg + j), Ymm(bRegIdx + j),
-                            Ymm(betaRegIdx));
+
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            for (int i = 0; i < MR; i++) {
+                for (int j = 0; j < bFullReg; j++) {
+                    movdqu(Xmm(bRegIdx + j),
+                           ptr[regTmpCptr + j * halfRegBytes]);
+                    vpmovsxwd(Ymm(bRegIdx + j), Xmm(bRegIdx + j));
+                    vpsllvd(Ymm(bRegIdx + j), Ymm(bRegIdx + j),
+                            Ymm(aRegIdx + 1));
+                    vfmadd231ps(Ymm(cRegIdx + i * bReg + j), Ymm(bRegIdx + j),
+                                Ymm(betaRegIdx));
+                }
+                if (bMaskReg > 0) {
+                    // Get n_remainder: n % 8
+                    mov(regTmp2,
+                        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
+                    and_(regTmp2.cvt32(), 7); // n % 8
+
+                    // Calculate destination base address for fringe BF16
+                    // elements
+                    lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
+
+                    // Loop: Load n_remainder BF16 elements from C matrix to
+                    // stack
+                    xor_(regTmp3.cvt32(), regTmp3.cvt32()); // elem_idx = 0
+
+                    Label loop_load_start, loop_load_end;
+                    L(loop_load_start);
+
+                    // Check if elem_idx < n_remainder
+                    cmp(regTmp3.cvt32(), regTmp2.cvt32());
+                    jge(loop_load_end, T_NEAR);
+
+                    // Load BF16 value from C matrix to stack
+                    mov(regBptr.cvt16(),
+                        word[regKIter + regTmp3 * sizeof(int16_t)]);
+                    mov(word[rsp + regTmp3 * sizeof(int16_t)], regBptr.cvt16());
+
+                    inc(regTmp3.cvt32()); // elem_idx++
+                    jmp(loop_load_start, T_NEAR);
+
+                    L(loop_load_end);
+
+                    // Load full XMM from stack (8×BF16)
+                    movdqu(Xmm(bRegIdx + bFullReg), ptr[rsp]);
+
+                    // Convert BF16→F32 (expand to YMM)
+                    vpmovsxwd(Ymm(bRegIdx + bFullReg), Xmm(bRegIdx + bFullReg));
+                    vpsllvd(Ymm(bRegIdx + bFullReg), Ymm(bRegIdx + bFullReg),
+                            Ymm(aRegIdx + 1));
+
+                    // Perform beta scaling: C_acc += beta * C_bf16
+                    vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
+                                Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
+                }
+                add(regTmpCptr, regTmp1);
             }
-            if (bMaskReg > 0) {
-                // Get n_remainder: n % 8
-                mov(regTmp2,
-                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
-                and_(regTmp2.cvt32(), 7); // n % 8
-
-                // Calculate destination base address for fringe BF16 elements
-                lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
-
-                // Loop: Load n_remainder BF16 elements from C matrix to stack
-                xor_(regTmp3.cvt32(), regTmp3.cvt32()); // elem_idx = 0
-
-                Label loop_load_start, loop_load_end;
-                L(loop_load_start);
-
-                // Check if elem_idx < n_remainder
-                cmp(regTmp3.cvt32(), regTmp2.cvt32());
-                jge(loop_load_end, T_NEAR);
-
-                // Load BF16 value from C matrix to stack
-                mov(regBptr.cvt16(),
-                    word[regKIter + regTmp3 * sizeof(int16_t)]);
-                mov(word[rsp + regTmp3 * sizeof(int16_t)], regBptr.cvt16());
-
-                inc(regTmp3.cvt32()); // elem_idx++
-                jmp(loop_load_start, T_NEAR);
-
-                L(loop_load_end);
-
-                // Load full XMM from stack (8×BF16)
-                movdqu(Xmm(bRegIdx + bFullReg), ptr[rsp]);
-
-                // Convert BF16→F32 (expand to YMM)
-                vpmovsxwd(Ymm(bRegIdx + bFullReg), Xmm(bRegIdx + bFullReg));
-                vpsllvd(Ymm(bRegIdx + bFullReg), Ymm(bRegIdx + bFullReg),
-                        Ymm(aRegIdx + 1));
-
-                // Perform beta scaling: C_acc += beta * C_bf16
-                vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
-                            Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
+        } else {
+            for (int i = 0; i < MR; i++) {
+                for (int j = 0; j < bFullReg; j++) {
+                    vmovdqu16(halfRegType(bRegIdx + j),
+                              ptr[regTmpCptr + j * halfRegBytes]);
+                    vpmovsxwd(RegType(bRegIdx + j), halfRegType(bRegIdx + j));
+                    vpsllvd(RegType(bRegIdx + j), RegType(bRegIdx + j),
+                            RegType(aRegIdx + 1));
+                    vfmadd231ps(RegType(cRegIdx + i * bReg + j),
+                                RegType(betaRegIdx), RegType(bRegIdx + j));
+                }
+                if (bMaskReg > 0) {
+                    for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                        vmovdqu16(halfRegType(bRegIdx + maskI)
+                                      | fringeMask[maskI - bFullReg],
+                                  ptr[regTmpCptr + maskI * halfRegBytes]);
+                        vpmovsxwd(RegType(bRegIdx + maskI),
+                                  halfRegType(bRegIdx + maskI));
+                        vpsllvd(RegType(bRegIdx + maskI),
+                                RegType(bRegIdx + maskI), RegType(aRegIdx + 1));
+                        vfmadd231ps(RegType(cRegIdx + i * bReg + maskI),
+                                    RegType(betaRegIdx),
+                                    RegType(bRegIdx + maskI));
+                    }
+                }
+                add(regTmpCptr, regTmp1);
             }
-            add(regTmpCptr, regTmp1);
         }
 
         jmp(".betaOpEnd", T_NEAR);

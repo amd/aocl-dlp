@@ -33,6 +33,7 @@
 #include "threading/lpgemm_thread_utils.h"
 
 #include "bindings/c_wrappers/capi_cpu_features.h"
+#include "bindings/c_wrappers/capi_env_config.h"
 #include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 
 typedef enum

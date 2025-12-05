@@ -56,7 +56,8 @@ static lpgemm_eltwise_ops_cntx_t
     global_eltwise_ops_cntx_t_list[AOCL_ELTWISE_OPS_OPERATION_TYPE_LEN]
     __attribute__((aligned(64))); // Post-ops only utils without gemm.
 
-static dlp_arch_t global_lpgemm_enable_arch = DLP_ARCH_ERROR;
+static dlp_arch_t       global_lpgemm_enable_arch       = DLP_ARCH_ERROR;
+static dlp_instr_pref_t global_lpgemm_enable_instr_pref = DLP_INSTR_PREF_NONE;
 
 #ifdef LPGEMM_BF16_JIT
 // This bool indicates whether JIT kernel generation has been successful.
@@ -118,6 +119,19 @@ _lpgemm_init_enable_arch()
         && ((arch_id == DLP_ARCH_ZEN3) || (arch_id == DLP_ARCH_ZEN2)
             || (arch_id == DLP_ARCH_ZEN))) {
         global_lpgemm_enable_arch = DLP_ARCH_ZEN3;
+    } else {
+        global_lpgemm_enable_arch = arch_id;
+    }
+}
+
+static void
+_lpgemm_init_enable_instr_pref()
+{
+    bool enbl_instr = dlp_aocl_enable_instruction_query();
+
+    if (enbl_instr == TRUE) {
+        global_lpgemm_enable_instr_pref =
+            dlp_env_get_kernel_instr_pref("AOCL_ENABLE_INSTRUCTIONS");
     }
 }
 
@@ -172,6 +186,22 @@ _lpgemm_eltwise_ops_cntx_init_func_map()
 
 #undef POMACRO
 }
+
+// Using #define instead of function since the underlying macros the LPGEMM_*
+// expands into is defined inside _lpgemm_cntx_init_func_map.
+#define _LPGEMM_CNTX_UPD_FUNC_MAP_FOR_CONFIGURED_ARCH()                        \
+    if (global_lpgemm_enable_arch == DLP_ARCH_ZEN3) {                          \
+        LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;                     \
+        LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;                    \
+        LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;                    \
+    } else if (((global_lpgemm_enable_arch == DLP_ARCH_ZEN5)                   \
+                || (global_lpgemm_enable_arch == DLP_ARCH_ZEN4))               \
+               && (global_lpgemm_enable_instr_pref                             \
+                   == DLP_INSTR_PREF_AVX512_YMM_FAVOUR)) {                     \
+        LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256;                    \
+        LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256;                   \
+        LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256;                   \
+    }
 
 static void
 _lpgemm_cntx_init_func_map()
@@ -241,11 +271,7 @@ _lpgemm_cntx_init_func_map()
 #endif
 
         // If arch is updated at runtime, it is expeceted to be honoured.
-        if (global_lpgemm_enable_arch == DLP_ARCH_ZEN3) {
-            LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;
-            LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;
-            LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;
-        }
+        _LPGEMM_CNTX_UPD_FUNC_MAP_FOR_CONFIGURED_ARCH()
 #endif
     } else if (dlp_cpuid_is_avx512vnni_supported() == TRUE) {
 #ifdef DLP_KERNELS_ZEN4
@@ -254,11 +280,7 @@ _lpgemm_cntx_init_func_map()
         LPGEMM_PACKB_FUNC_MAP_AVX512_VNNI
         LPGEMM_PACKBMXP_FUNC_MAP_AVX512_VNNI
 
-        if (global_lpgemm_enable_arch == DLP_ARCH_ZEN3) {
-            LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2
-            LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2;
-            LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2;
-        }
+        _LPGEMM_CNTX_UPD_FUNC_MAP_FOR_CONFIGURED_ARCH()
 #endif
     } else if (dlp_cpuid_is_avx2fma3_supported() == TRUE) {
 #ifdef DLP_KERNELS_ZEN3
@@ -419,6 +441,7 @@ static void
 lpgemm_cntx_init_map()
 {
     _lpgemm_init_enable_arch();
+    _lpgemm_init_enable_instr_pref();
     _lpgemm_cntx_init_func_map();
     _lpgemm_cntx_init_blksz_map();
     _lpgemm_cntx_init_sup_thres_map();

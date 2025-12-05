@@ -65,17 +65,6 @@ gemmF32DEBackend::gemmF32DEBackend()
     numVectorMaskRegisters =
         cpu_utils::cpuFeaturesInstance().getNumVectorMaskRegisters();
 
-    // A hack to carry forward the inconsistency in the classic framework.
-    // With this, we force the AVX512_256 path even when the env var is set to
-    // AVX2. This hack should be removed in future, once we change the "classic"
-    // framework.
-    if (isAvx512
-        && (eKernelInstPref
-            == kernel_frame::kernelInstrPreference::avx2_ymm_favour)) {
-        eKernelInstPref =
-            kernel_frame::kernelInstrPreference::avx512_ymm_favour;
-    }
-
     // Check if the DE can be enabled depending on the underlying ISA
     // and the configured arch.
     auto thisArch = arch_utils::archConfigManager::getInstance().getArch();
@@ -188,13 +177,17 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     // Check for AVX512_BF16 support using the archConfigManager.
     // If it doesn't exist, we reroute to use the F32 JIT path.
     // Env variable standard :
-    // Whatever value is given for AOCL_ENABLE_INSTRUCTIONS, we should check
-    // for BF16 support in the hardware. If it exists, we deploy the BF16 JIT
-    // path, if not, we should use the F32 JIT path for compatibility with
-    // AVX2 and non-BF16 AVX512 machines.
-    // NOTE : Downscaling support on F32 JIT exists on it's AVX2 code-path
+    // On machines that support AVX512BF16, we use the BF16 path only
+    // when the environment variable('AOCL_ENABLE_INSTRUCTIONS') is NOT
+    // set to AVX2(or it's alternative, like ZEN3, ZEN2 or ZEN). This is the
+    // standard that the legacy code enforces. NOTE : Downscaling support on F32
+    // JIT exists on it's AVX2 code-path
     //        Thus, when rerouting, we have to reroute only on machines that
     //        supports AVX2 exclusively(without any AVX512 support).
+    eKernelInstPref =
+        dlp::env_utils::EnvironmentVariableManager::getInstance()
+            .getKernelInstructionPreferenceFromEnv("AOCL_ENABLE_INSTRUCTIONS");
+
     isAvx512Bf16 = arch_utils::archConfigManager::getInstance()
                        .isAvx512Bf16SupportedByArch();
     isAvx512 =
@@ -203,22 +196,30 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     isAvx2 = arch_utils::archConfigManager::getInstance()
                  .isAvx2Fma3SupportedByArch();
 
-    eKernelInstPref =
-        dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour;
-
     if (!isAvx512Bf16) {
         // Future-proof: reroute to F32 path for any machine without AVX512BF16
         // This enables BF16 JIT on AVX2 machines by using F32 computation
         if (isAvx2 && !isAvx512) {
             // NOTE : Given that the F32-DE tries to set the kernel instruction
-            // preference
-            //        based on the AOCL_ENABLE_INSTRUCTIONS and native hardware
-            //        support, we can safely assume that we would strictly run
-            //        the F32 AVX2 JIT.
+            // preference based on the AOCL_ENABLE_INSTRUCTIONS and native
+            // hardware support, we can safely assume that we would strictly run
+            // the F32 AVX2 JIT.
             f32Backend = std::make_unique<gemmF32DEBackend>();
         } else {
             canGenerateKernelInfo = false;
         }
+    } else if (eKernelInstPref
+               == kernel_frame::kernelInstrPreference::avx2_ymm_favour) {
+        // This would be the scenario where the machine supports AVX512BF16, but
+        // we choose to run the F32(AVX2) code-path.
+        f32Backend = std::make_unique<gemmF32DEBackend>();
+    } else {
+        // In scenarios where the AOCL_ENABLE_INSTRUCTIONS is set to AVX512 or
+        // AVX512_256, or not set at all, we generate the AVX512BF16 JIT
+        // kernels. Once the hybrid version is implemented, we will avoid this
+        // hardcoding.
+        eKernelInstPref =
+            kernel_frame::kernelInstrPreference::avx512_zmm_favour;
     }
 }
 

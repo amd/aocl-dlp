@@ -65,6 +65,38 @@ dlp_env_get_var_arch_type(const char* env_var_name)
     }
 }
 
+dlp_instr_pref_t
+dlp_env_get_kernel_instr_pref(const char* env_var_name)
+{
+    if (env_var_name == nullptr) {
+        return DLP_INSTR_PREF_NONE;
+    }
+
+    try {
+        auto& manager =
+            dlp::env_utils::EnvironmentVariableManager::getInstance();
+        auto instr_type =
+            manager.getKernelInstructionPreferenceFromEnv(env_var_name);
+        switch (instr_type) {
+            case dlp::kernel_frame::kernelInstrPreference::avx2_xmm_favour:
+                return DLP_INSTR_PREF_AVX2_XMM_FAVOUR;
+            case dlp::kernel_frame::kernelInstrPreference::avx2_ymm_favour:
+                return DLP_INSTR_PREF_AVX2_YMM_FAVOUR;
+            case dlp::kernel_frame::kernelInstrPreference::avx512_xmm_favour:
+                return DLP_INSTR_PREF_AVX512_XMM_FAVOUR;
+            case dlp::kernel_frame::kernelInstrPreference::avx512_ymm_favour:
+                return DLP_INSTR_PREF_AVX512_YMM_FAVOUR;
+            case dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour:
+                return DLP_INSTR_PREF_AVX512_ZMM_FAVOUR;
+            default:
+                return DLP_INSTR_PREF_NONE;
+        }
+    } catch (...) {
+        // Ensure no exceptions escape to C code
+        return DLP_INSTR_PREF_NONE;
+    }
+}
+
 md_t
 dlp_env_get_int(const char* env_var_name, int default_value)
 {

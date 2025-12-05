@@ -39,13 +39,17 @@ DLP_BEGIN_EXTERN_C
  * @brief C API wrapper for environment variable architecture parsing
  * @param env_var_name Name of the environment variable to parse
  * @return dlp_arch_t enum value, compatible with existing C code
- *
- * This function provides a drop-in replacement for
- * dlp_env_get_var_arch_type() but uses the new C++ environment
- * configuration manager internally.
  */
 dlp_arch_t
 dlp_env_get_var_arch_type(const char* env_var_name);
+
+/**
+ * @brief C API wrapper for kernel instruction preference parsing
+ * @param env_var_name Name of the environment variable to parse
+ * @return dlp_instr_pref_t enum value, compatible with existing C code
+ */
+dlp_instr_pref_t
+dlp_env_get_kernel_instr_pref(const char* env_var_name);
 
 /**
  * @brief C API wrapper for integer environment variable access

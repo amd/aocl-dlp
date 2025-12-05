@@ -1109,8 +1109,8 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     PREFETCH_C_DIST = (jI.kI).prefetch_c_dist;
     c_downscale     = (jI.kI).c_downscale;
 
-    if ((jI.kI).kInstPref
-        == dlp::kernel_frame::kernelInstrPreference::avx2_ymm_favour) {
+    if (((jI.kI).kInstPref
+         == dlp::kernel_frame::kernelInstrPreference::avx2_ymm_favour)) {
         // Ideally, a try-catch block should handle a memory allocation failure
         // here.
         f32JitGenerator = std::make_unique<jitAmdZenFP32>();

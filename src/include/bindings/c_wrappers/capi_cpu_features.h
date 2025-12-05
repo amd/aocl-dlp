@@ -59,6 +59,20 @@ typedef enum
     DLP_NUM_ARCHS
 } dlp_arch_t;
 
+typedef enum
+{
+    DLP_INSTR_PREF_NONE = 0,
+
+    // x86_64 specific hints.
+    DLP_INSTR_PREF_AVX2_XMM_FAVOUR,
+    DLP_INSTR_PREF_AVX2_YMM_FAVOUR,
+    DLP_INSTR_PREF_AVX512_XMM_FAVOUR,
+    DLP_INSTR_PREF_AVX512_YMM_FAVOUR,
+    DLP_INSTR_PREF_AVX512_ZMM_FAVOUR,
+
+    MAX_KERNEL_INSTR_PREFERENCES
+} dlp_instr_pref_t;
+
 // API to check if AVX2 and FMA3 are supported or not on the current platform.
 bool
 dlp_cpuid_is_avx2fma3_supported(void);

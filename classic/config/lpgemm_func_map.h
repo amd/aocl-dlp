@@ -46,8 +46,11 @@
     KMACRO(BF16S4F32OF32, lpgemm_rowvar_bf16bf16f32of32_6x64)                  \
     KMACRO(S8S8S32OS32, lpgemm_rowvar_s8s8s32os32_6x64)
 
+#define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX512_256                \
+    KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_avx512_256_6x64m)
+
 #define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2                      \
-    KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_avx512_256_6x64m)        \
+    KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_6x16m)                   \
     KMACRO(BF16BF16F32OF32, NULL)                                              \
     KMACRO(BF16S4F32OF32, NULL)
 
@@ -57,6 +60,9 @@
     PAMACRO(BF16BF16F32OF32, packa_mr16_bf16bf16f32of32)                       \
     PAMACRO(BF16S4F32OF32, packa_mr16_bf16bf16f32of32)                         \
     PAMACRO(S8S8S32OS32, packa_u8s8s32os32)
+
+#define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX512_256               \
+    PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)
 
 #define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2                     \
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx2)
@@ -69,8 +75,11 @@
     PBMACRO(U8S4S32OS32, packb_nr64_u8s4s32o32)                                \
     PBMACRO(BF16S4F32OF32, packb_nr64_bf16s4f32of32)
 
-#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2                     \
+#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX512_256               \
     PBMACRO(F32F32F32OF32, packb_nr64_f32f32f32of32)
+
+#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2                     \
+    PBMACRO(F32F32F32OF32, packb_nr16_f32f32f32of32)
 
 #define LPGEMM_PACKBMXP_FUNC_MAP_AVX512_VNNI_BF16                              \
     PBMXPMACRO(F32OBF16, packb_mxp_nr64_f32obf16)
@@ -102,8 +111,11 @@
     KMACRO(BF16S4F32OF32, NULL)                                                \
     KMACRO(S8S8S32OS32, lpgemm_rowvar_s8s8s32os32_6x64)
 
-#define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2                           \
+#define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256                     \
     KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_avx512_256_6x64m)
+
+#define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2                           \
+    KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_6x16m)
 
 #define LPGEMM_PACKA_FUNC_MAP_AVX512_VNNI                                      \
     PAMACRO(U8S8S32OS32, packa_u8s8s32os32)                                    \
@@ -111,6 +123,9 @@
     PAMACRO(BF16BF16F32OF32, packa_mr16_bf16bf16f32of32)                       \
     PAMACRO(BF16S4F32OF32, packa_mr16_bf16bf16f32of32)                         \
     PAMACRO(S8S8S32OS32, packa_u8s8s32os32)
+
+#define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256                    \
+    PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)
 
 #define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2                          \
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx2)
@@ -126,8 +141,11 @@
     PBMACRO(U8S4S32OS32, packb_nr64_u8s4s32o32)                                \
     PBSMACRO(BF16S4F32OF32, packb_nr64_bf16s4f32of32)
 
-#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2                          \
+#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256                    \
     PBMACRO(F32F32F32OF32, packb_nr64_f32f32f32of32)
+
+#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX2                          \
+    PBMACRO(F32F32F32OF32, packb_nr16_f32f32f32of32)
 
 #define LPGEMM_UTIL_KERN_FUNC_MAP_AVX512_VNNI                                  \
     UMACRO(F32_GELU_TANH, lpgemm_util_f32_gelu_tanh_avx512_kernel)             \
@@ -142,8 +160,11 @@
     KMACRO(BF16S4F32OF32, NULL)                                                \
     KMACRO(S8S8S32OS32, lpgemm_rowvar_s8s8s32os32_6x64)
 
-#define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_TO_AVX2                                \
+#define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_TO_AVX512_256                          \
     KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_avx512_256_6x64m)
+
+#define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_TO_AVX2                                \
+    KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_6x16m)
 
 #define LPGEMM_PACKA_FUNC_MAP_AVX512                                           \
     PAMACRO(U8S8S32OS32, packa_u8s8s32os32)                                    \
@@ -151,6 +172,9 @@
     PAMACRO(BF16BF16F32OF32, packa_mr16_bf16bf16f32of32)                       \
     PAMACRO(BF16S4F32OF32, packa_mr16_bf16bf16f32of32)                         \
     PAMACRO(S8S8S32OS32, packa_u8s8s32os32)
+
+#define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_TO_AVX512_256                         \
+    PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)
 
 #define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_TO_AVX2                               \
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx2)
@@ -164,8 +188,11 @@
     PBMACRO(BF16S4F32OF32, NULL)                                               \
     PBSMACRO(BF16S4F32OF32, NULL)
 
-#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_TO_AVX2                               \
+#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_TO_AVX512_256                         \
     PBMACRO(F32F32F32OF32, packb_nr64_f32f32f32of32)
+
+#define LPGEMM_PACKB_FUNC_UPD_MAP_AVX512_TO_AVX2                               \
+    PBMACRO(F32F32F32OF32, packb_nr16_f32f32f32of32)
 
 #define LPGEMM_PACKBMXP_FUNC_MAP_AVX512                                        \
     PBMXPMACRO(F32OBF16, packb_mxp_nr64_f32obf16)
