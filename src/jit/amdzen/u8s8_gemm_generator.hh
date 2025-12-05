@@ -109,8 +109,6 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     // =================================================================
     // LABELS
     // =================================================================
-    Xbyak::Label label_store_result;
-    Xbyak::Label label_end_store;
     Xbyak::Label label_bf16_round_bias; // Constant data for BF16 conversion
     Xbyak::Label label_bf16_lsb_mask;   // Constant data for BF16 conversion
 

@@ -42,6 +42,7 @@
 #include "utils/conversion_utils.hh"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <functional>
 #include <iostream>
 #include <variant>
@@ -134,24 +135,24 @@ namespace {
                 break;
             case MatrixType::u8:
                 static_cast<uint8_t*>(dst_ptr)[index] = static_cast<uint8_t>(
-                    std::max(0.0f, std::min(255.0f, std::round(value))));
+                    std::max(0.0f, std::min(255.0f, std::rint(value))));
                 break;
             case MatrixType::s8:
                 static_cast<int8_t*>(dst_ptr)[index] = static_cast<int8_t>(
-                    std::max(-128.0f, std::min(127.0f, std::round(value))));
+                    std::max(-128.0f, std::min(127.0f, std::rint(value))));
                 break;
             case MatrixType::u16:
                 static_cast<uint16_t*>(dst_ptr)[index] = static_cast<uint16_t>(
-                    std::max(0.0f, std::min(65535.0f, std::round(value))));
+                    std::max(0.0f, std::min(65535.0f, std::rint(value))));
                 break;
             case MatrixType::s16:
                 static_cast<int16_t*>(dst_ptr)[index] = static_cast<int16_t>(
-                    std::max(-32768.0f, std::min(32767.0f, std::round(value))));
+                    std::max(-32768.0f, std::min(32767.0f, std::rint(value))));
                 break;
             case MatrixType::u32:
                 static_cast<uint32_t*>(dst_ptr)[index] = static_cast<uint32_t>(
                     std::max(0.0f, std::min(static_cast<float>(UINT32_MAX),
-                                            std::round(value))));
+                                            std::rint(value))));
                 break;
             case MatrixType::s32:
                 // Match vcvtps2dq behavior: round-to-nearest-even (IEEE 754
@@ -166,7 +167,7 @@ namespace {
                 size_t   bit_offset = (index % 2) * 4;
                 uint8_t  value4bit =
                     static_cast<uint8_t>(
-                        std::max(0.0f, std::min(15.0f, std::round(value))))
+                        std::max(0.0f, std::min(15.0f, std::rint(value))))
                     & 0x0F;
                 if (bit_offset == 0) {
                     data[byte_idx] = (data[byte_idx] & 0xF0) | value4bit;
@@ -180,7 +181,7 @@ namespace {
                 size_t   byte_idx   = index / 2;
                 size_t   bit_offset = (index % 2) * 4;
                 int8_t   value_s4   = static_cast<int8_t>(
-                    std::max(-8.0f, std::min(7.0f, std::round(value))));
+                    std::max(-8.0f, std::min(7.0f, std::rint(value))));
                 uint8_t value4bit = static_cast<uint8_t>(value_s4) & 0x0F;
                 if (bit_offset == 0) {
                     data[byte_idx] = (data[byte_idx] & 0xF0) | value4bit;
@@ -1083,6 +1084,71 @@ UalRef::gemm(const Matrix&                      A,
         return UALError::UAL_CAST_ERROR;
     }
 
+    // Detect GEMM input types
+    MatrixType outputType = C.getMatrixType();
+    MatrixType aType      = A.getMatrixType();
+    MatrixType bType      = B.getMatrixType();
+
+    // Determine if we need f32 intermediate for post-ops precision
+    // This applies to all GEMM types when post-ops are present:
+    // - u8*s8, s8*s8: integer GEMM needs f32 for transcendental post-ops
+    // - bf16*bf16: needs f32 for precision
+    // - f32*f32: already f32, but use intermediate for consistency
+    bool isIntegerGemm =
+        ((aType == MatrixType::u8 && bType == MatrixType::s8)
+         || (aType == MatrixType::s8 && bType == MatrixType::s8));
+    bool isBf16Gemm = (aType == MatrixType::bf16 && bType == MatrixType::bf16);
+    bool isF32Gemm  = (aType == MatrixType::f32 && bType == MatrixType::f32);
+
+    bool needsF32Intermediate = (isIntegerGemm || isBf16Gemm || isF32Gemm)
+                                && refOp->getPostOpCount() > 0;
+
+    // CRITICAL: Validate parameters BEFORE taking f32 intermediate path
+    // If parameters are invalid (e.g., ldc too small), fall through to
+    // original path which will fail gracefully
+    if (needsF32Intermediate && !checkValidGemmParams(A, B, C, true)) {
+        needsF32Intermediate = false;
+    }
+
+    if (needsF32Intermediate) {
+        // Get effective output dimensions
+        md_t M = C.getEffectiveRows();
+        md_t N = C.getEffectiveCols();
+
+        // Create f32 intermediate matrix for post-ops
+        // This ensures precision for transcendental functions (swish, gelu,
+        // etc.)
+        Matrix tempC_f32(M, N, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+
+        // Initialize tempC_f32 with original C values when beta != 0
+        if (beta != 0.0) {
+            copyAndConvertToF32(C, tempC_f32);
+        }
+
+        // GEMM into f32 intermediate
+        bool result = gemm(A, B, tempC_f32, accType, alpha, beta);
+        if (!result) {
+            return UALError::UAL_FAILURE;
+        }
+
+        // Apply post-ops on f32 values (full precision, no rounding)
+        refOp->resetIterator();
+        while (refOp->hasNextPostOp()) {
+            auto postOp = refOp->getNextPostOp();
+            if (postOp) {
+                std::visit(
+                    [&](const auto& op) { applyPostOperation(tempC_f32, op); },
+                    *postOp);
+            }
+        }
+
+        // Convert f32 → target output type with proper rounding/saturation
+        convertF32MatrixToTarget(tempC_f32, C, outputType);
+
+        return UALError::UAL_SUCCESS;
+    }
+
+    // Original path for cases without post-ops or unsupported GEMM types
     // First perform the GEMM operation
     bool result = checkValidGemmParams(A, B, C, true)
                   && gemm(A, B, C, accType, alpha, beta);
@@ -1163,6 +1229,163 @@ UalRef::gemm(md_t         m,
     // indicating the operation is not supported in the reference implementation
     // TODO: Implement reference GEMM logic if needed for benchmarking
     return UALError::UAL_FAILURE;
+}
+
+// Helper function to copy and convert source matrix to s32 matrix
+// src can have any layout/transposition, dst_s32 is always simple row-major
+void
+UalRef::copyAndConvertToS32(const Matrix& src, Matrix& dst_s32)
+{
+    md_t rows   = src.getEffectiveRows();
+    md_t cols   = src.getEffectiveCols();
+    md_t src_ld = src.getLeadingDimension();
+    md_t dst_ld = dst_s32.getLeadingDimension();
+
+    int32_t*     dst_data       = reinterpret_cast<int32_t*>(dst_s32.getData());
+    MatrixLayout src_layout     = src.getLayout();
+    bool         src_transposed = src.isTransposed();
+
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            // Calculate source index accounting for layout and transposition
+            size_t src_idx;
+            if (src_transposed) {
+                src_idx = (src_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(j) * src_ld + i)
+                              : (static_cast<size_t>(i) * src_ld + j);
+            } else {
+                src_idx = (src_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(i) * src_ld + j)
+                              : (static_cast<size_t>(j) * src_ld + i);
+            }
+
+            // Destination: simple row-major
+            size_t dst_idx = static_cast<size_t>(i) * dst_ld + j;
+
+            float src_value =
+                convertToFloat(src.getData(), src.getMatrixType(), src_idx);
+            dst_data[dst_idx] = static_cast<int32_t>(src_value);
+        }
+    }
+}
+
+// Helper function to convert s32 matrix to target integer type with saturation
+// src_s32 is always simple row-major, dst can have any layout/transposition
+void
+UalRef::convertS32MatrixToTarget(const Matrix& src_s32,
+                                 Matrix&       dst,
+                                 MatrixType    targetType)
+{
+    md_t rows   = dst.getEffectiveRows();
+    md_t cols   = dst.getEffectiveCols();
+    md_t src_ld = src_s32.getLeadingDimension();
+    md_t dst_ld = dst.getLeadingDimension();
+
+    const int32_t* src_data =
+        reinterpret_cast<const int32_t*>(src_s32.getData());
+    MatrixLayout dst_layout     = dst.getLayout();
+    bool         dst_transposed = dst.isTransposed();
+
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            // Source: simple row-major
+            size_t src_idx = static_cast<size_t>(i) * src_ld + j;
+
+            // Calculate destination index accounting for layout and
+            // transposition
+            size_t dst_idx;
+            if (dst_transposed) {
+                dst_idx = (dst_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(j) * dst_ld + i)
+                              : (static_cast<size_t>(i) * dst_ld + j);
+            } else {
+                dst_idx = (dst_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(i) * dst_ld + j)
+                              : (static_cast<size_t>(j) * dst_ld + i);
+            }
+
+            float value = static_cast<float>(src_data[src_idx]);
+            convertFromFloat(dst.getData(), targetType, dst_idx, value);
+        }
+    }
+}
+
+// Helper function to copy and convert source matrix to f32 matrix
+// src can have any layout/transposition, dst_f32 is always simple row-major
+void
+UalRef::copyAndConvertToF32(const Matrix& src, Matrix& dst_f32)
+{
+    md_t rows   = src.getEffectiveRows();
+    md_t cols   = src.getEffectiveCols();
+    md_t src_ld = src.getLeadingDimension();
+    md_t dst_ld = dst_f32.getLeadingDimension();
+
+    float*       dst_data       = reinterpret_cast<float*>(dst_f32.getData());
+    MatrixLayout src_layout     = src.getLayout();
+    bool         src_transposed = src.isTransposed();
+
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            // Calculate source index accounting for layout and transposition
+            size_t src_idx;
+            if (src_transposed) {
+                src_idx = (src_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(j) * src_ld + i)
+                              : (static_cast<size_t>(i) * src_ld + j);
+            } else {
+                src_idx = (src_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(i) * src_ld + j)
+                              : (static_cast<size_t>(j) * src_ld + i);
+            }
+
+            // Destination: simple row-major
+            size_t dst_idx = static_cast<size_t>(i) * dst_ld + j;
+
+            dst_data[dst_idx] =
+                convertToFloat(src.getData(), src.getMatrixType(), src_idx);
+        }
+    }
+}
+
+// Helper function to convert f32 matrix to target type with proper
+// rounding/saturation. src_f32 is always simple row-major, dst can have any
+// layout/transposition
+void
+UalRef::convertF32MatrixToTarget(const Matrix& src_f32,
+                                 Matrix&       dst,
+                                 MatrixType    targetType)
+{
+    md_t rows   = dst.getEffectiveRows();
+    md_t cols   = dst.getEffectiveCols();
+    md_t src_ld = src_f32.getLeadingDimension();
+    md_t dst_ld = dst.getLeadingDimension();
+
+    const float* src_data   = reinterpret_cast<const float*>(src_f32.getData());
+    MatrixLayout dst_layout = dst.getLayout();
+    bool         dst_transposed = dst.isTransposed();
+
+    for (md_t i = 0; i < rows; ++i) {
+        for (md_t j = 0; j < cols; ++j) {
+            // Source: simple row-major
+            size_t src_idx = static_cast<size_t>(i) * src_ld + j;
+
+            // Calculate destination index accounting for layout and
+            // transposition
+            size_t dst_idx;
+            if (dst_transposed) {
+                dst_idx = (dst_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(j) * dst_ld + i)
+                              : (static_cast<size_t>(i) * dst_ld + j);
+            } else {
+                dst_idx = (dst_layout == MatrixLayout::ROW_MAJOR)
+                              ? (static_cast<size_t>(i) * dst_ld + j)
+                              : (static_cast<size_t>(j) * dst_ld + i);
+            }
+
+            convertFromFloat(dst.getData(), targetType, dst_idx,
+                             src_data[src_idx]);
+        }
+    }
 }
 
 // Unified postop helper that handles type conversion

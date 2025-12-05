@@ -1654,8 +1654,8 @@ namespace dlp { namespace testing { namespace framework {
     void Matrix::formatNumericMatrix(std::ostream& os,
                                      int           verbosity_level) const
     {
-        md_t max_rows = (verbosity_level >= 3) ? 20 : 5;
-        md_t max_cols = (verbosity_level >= 3) ? 20 : 5;
+        md_t max_rows = (verbosity_level >= 3) ? 50 : 5;
+        md_t max_cols = (verbosity_level >= 3) ? 50 : 5;
 
         md_t rows_to_print = std::min(m_rows, max_rows);
         md_t cols_to_print = std::min(m_cols, max_cols);

@@ -257,6 +257,25 @@ class UalRef : public IUal
     template<typename T>
     void applyPostOperation(Matrix& matrix, const T& op);
 
+    // Helper function to copy and convert source matrix to s32 matrix
+    void copyAndConvertToS32(const Matrix& src, Matrix& dst_s32);
+
+    // Helper function to convert s32 matrix to target integer type with
+    // saturation
+    void convertS32MatrixToTarget(const Matrix& src_s32,
+                                  Matrix&       dst,
+                                  MatrixType    targetType);
+
+    // Helper function to copy and convert source matrix to f32 matrix
+    // (for floating-point post-ops that need precision)
+    void copyAndConvertToF32(const Matrix& src, Matrix& dst_f32);
+
+    // Helper function to convert f32 matrix to target type with proper
+    // rounding/saturation
+    void convertF32MatrixToTarget(const Matrix& src_f32,
+                                  Matrix&       dst,
+                                  MatrixType    targetType);
+
     // Unified postop helper that handles type conversion
     void applyUnifiedPostOp(Matrix&                             matrix,
                             std::function<void(float*, size_t)> operation);

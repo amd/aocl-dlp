@@ -193,8 +193,10 @@ jitU8S8VNNI_GEMM<KType>::loadBValues()
         }
 
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            // AVX-512: Use vmovdqu32 with mask for int8 data
-            vmovdqu8(RegType(maskRegIndex), ptr[regBptr]);
+            // AVX-512: Load B values for masked register
+            // Note: Use correct offset when there are full registers before
+            // the masked register
+            vmovdqu8(RegType(maskRegIndex), ptr[regBptr + bFullReg * RegBytes]);
         }
     }
     return dlp::jit::jitGeneratorError::success;
@@ -209,32 +211,39 @@ jitU8S8VNNI_GEMM<KType>::storeResult()
     if (c_downscale == DLP_S32) {
         return storeResultS32();
     } else {
+        // Use local labels to avoid redefinition when storeResult is called
+        // multiple times (e.g., once for F32 path and once for S32 path)
+        inLocalLabel();
+
         // Check is_last_k and call the downscale
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(lpgemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
-        je("STORE_S32", T_NEAR);
+        je(".STORE_S32", T_NEAR);
 
         if (c_downscale == DLP_S8) {
             storeResultS8();
-            jmp("END_STORE", T_NEAR);
+            jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_U8) {
             storeResultU8();
-            jmp("END_STORE", T_NEAR);
+            jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_F32) {
             storeResultF32();
-            jmp("END_STORE", T_NEAR);
+            jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_BF16) {
             storeResultBF16();
-            jmp("END_STORE", T_NEAR);
+            jmp(".END_STORE", T_NEAR);
         } else {
+            outLocalLabel();
             return dlp::jit::jitGeneratorError::badKernelInfo;
         }
 
-        L("STORE_S32");
+        L(".STORE_S32");
         storeResultS32();
-        L("END_STORE");
+        L(".END_STORE");
+
+        outLocalLabel();
     }
     return dlp::jit::jitGeneratorError::success;
 }
@@ -721,6 +730,11 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::generatePostOps(utils::generatorParams& params)
 {
+    // Use local Xbyak::Label objects to avoid redefinition across kernel
+    // variants
+    Xbyak::Label local_store_result;
+    Xbyak::Label local_end_store;
+
     // Handle alpha scaling
     if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
         RETURN_IF_ERROR(scaleAlpha());
@@ -736,7 +750,7 @@ jitU8S8VNNI_GEMM<KType>::generatePostOps(utils::generatorParams& params)
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
             + offsetof(lpgemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
-    je(label_store_result, T_NEAR);
+    je(local_store_result, T_NEAR);
 
     if (!params.kernelOps.empty()) {
         // Convert S32 accumulators to F32 for post-ops compatibility
@@ -755,12 +769,18 @@ jitU8S8VNNI_GEMM<KType>::generatePostOps(utils::generatorParams& params)
             params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg));
 
         kernelOpsHandler.generateKernelOpsAttributes();
+
+        // Store results with F32 accumulators (post-ops path)
+        RETURN_IF_ERROR(storeResult());
+        jmp(local_end_store, T_NEAR);
     }
 
-    // Store results
-    L(label_store_result);
+    // Store results with S32 accumulators (no post-ops or is_last_k == false)
+    L(local_store_result);
+    accumulatorsAreF32 = false; // Accumulators are still S32 in this path
     RETURN_IF_ERROR(storeResult());
 
+    L(local_end_store);
     return dlp::jit::jitGeneratorError::success;
 }
 

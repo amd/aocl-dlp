@@ -2024,6 +2024,9 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
                 // For AVX-512 ZMM: 16-bit mask for int32 elements (16 int32
                 // per ZMM)
                 params->maskS32 = 0xFFFF >> (numElemsPerReg - nRemainder);
+                // Post-ops module uses maskF32 for its mask registers, so we
+                // need to set it as well for u8s8 kernels with post-ops
+                params->maskF32[0] = params->maskS32;
             }
 
             // INLINE: Kernel execution with mask
@@ -2586,6 +2589,9 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
             // Mask calculation (architecture-specific)
             if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 params->maskS32 = 0xFFFF >> (numElemsPerReg - nRemainder);
+                // Post-ops module uses maskF32 for its mask registers, so we
+                // need to set it as well for s8 kernels with post-ops
+                params->maskF32[0] = params->maskS32;
             }
 
             // INLINE: Kernel execution with mask

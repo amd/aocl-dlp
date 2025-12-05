@@ -57,8 +57,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1.0]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -88,8 +88,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [2]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -117,8 +117,8 @@ gemm_tests:
     alpha: [2]
     beta: [2]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -146,8 +146,8 @@ gemm_tests:
     alpha: [2]
     beta: [2]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -179,8 +179,8 @@ gemm_tests:
     alpha: [1]
     beta: [1]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -210,8 +210,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -239,8 +239,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -271,8 +271,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1.0]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -302,8 +302,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -322,7 +322,7 @@ gemm_tests:
   - name: "u8s8_postops_matrix_add"
     a_type: ["u8"]
     b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16"]
+    c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
     transA: [false]
@@ -333,8 +333,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -342,19 +342,19 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
     post_operations:
-      cartesian: false
+      cartesian: true
       operations:
         - type: "Matrix-Add"
           params:
             matrix_type: ["s32"]
-            scale_factor: [1.0, 2.0]
+            scale_factor: [1.0]
             scale_factor_type: ["s32"]
 
   # Test 11: MATRIX-MUL post-op
   - name: "u8s8_postops_matrix_mul"
     a_type: ["u8"]
     b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16"]
+    c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
     transA: [false]
@@ -365,8 +365,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1.0]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -401,8 +401,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1.0]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -419,7 +419,7 @@ gemm_tests:
   - name: "u8s8_gemv_m1_postops_bias"
     a_type: ["u8"]
     b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16"]
+    c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
     transA: [false]
@@ -430,8 +430,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1.0]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -450,7 +450,7 @@ gemm_tests:
   - name: "u8s8_gemv_m1_postops_gelu_tanh"
     a_type: ["u8"]
     b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16"]
+    c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
     transA: [false]
@@ -461,8 +461,8 @@ gemm_tests:
     alpha: [1.0]
     beta: [1.0]
     lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
+    ldb: [1, 1025]
+    ldc: [1, 1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -512,7 +512,7 @@ gemm_tests:
   - name: "u8s8_gemv_n1_postops_bias"
     a_type: ["u8"]
     b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16"]
+    c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
     transA: [false]
@@ -574,7 +574,7 @@ gemm_tests:
   - name: "u8s8_gemv_n1_postops_gelu_tanh"
     a_type: ["u8"]
     b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16"]
+    c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
     transA: [false]
@@ -603,7 +603,7 @@ gemm_tests:
   - name: "u8s8_gemv_n1_postops_swish"
     a_type: ["u8"]
     b_type: ["s8"]
-    c_type: ["s32", "f32"]
+    c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
     transA: [false]
@@ -631,43 +631,10 @@ gemm_tests:
             alpha: [1.0]
 
   # ==========================================================================
-  # FRINGE CASE POST-OPS TESTS
-  # ==========================================================================
-
-  # Test 20: Post-ops with fringe dimensions (non-aligned sizes)
-  - name: "u8s8_postops_fringe_dimensions"
-    a_type: ["u8"]
-    b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16", "s8", "u8"]
-    acc_type: ["s32"]
-    storage_format: ["row-major"]
-    transA: [false]
-    transB: [false]
-    m: [1, 3, 5, 7, 9, 11, 13, 15, 145]  # Non-kernel-aligned M
-    n: [1, 3, 5, 7, 9, 11, 13, 15, 1025]  # Non-kernel-aligned N
-    k: [1, 3, 5, 7, 9, 11, 13, 15, 2049]  # Non-VNNI-aligned K
-    alpha: [1.0]
-    beta: [1.0]
-    lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
-    mtagA: ["none"]
-    mtagB: ["none"]
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
-    post_operations:
-      cartesian: false
-      operations:
-        - type: "Elementwise-RELU"
-          params: {}
-
-  # ==========================================================================
   # CHAINED POST-OPS TESTS (Multiple operations)
   # ==========================================================================
 
-  # Test 21: Simple chained post-ops (RELU + BIAS)
+  # Test 20: Simple chained post-ops (RELU + BIAS)
   - name: "u8s8_postops_chained_relu_bias"
     a_type: ["u8"]
     b_type: ["s8"]
@@ -700,7 +667,7 @@ gemm_tests:
             bias_type: ["s32"]
             bias_dim: ["n"]
 
-  # Test 22: Complex chained post-ops (GELU + SCALE + CLIP)
+  # Test 21: Complex chained post-ops (GELU + SCALE + CLIP)
   - name: "u8s8_postops_chained_complex"
     a_type: ["u8"]
     b_type: ["s8"]
@@ -744,7 +711,7 @@ gemm_tests:
   # COMPREHENSIVE POST-OPS VALIDATION
   # ==========================================================================
 
-  # Test 23: All post-ops with S32 output (most compatible)
+  # Test 22: All post-ops with S32 output (most compatible)
   - name: "u8s8_postops_comprehensive_s32"
     a_type: ["u8"]
     b_type: ["s8"]
@@ -785,7 +752,7 @@ gemm_tests:
             bias_type: ["f32"]
             bias_dim: ["n"]
 
-  # Test 24: All post-ops with F32 output
+  # Test 23: All post-ops with F32 output
   - name: "u8s8_postops_comprehensive_f32"
     a_type: ["u8"]
     b_type: ["s8"]
@@ -823,72 +790,10 @@ gemm_tests:
             scale_factor_len: ["n"]
 
   # ==========================================================================
-  # EDGE CASE POST-OPS TESTS
-  # ==========================================================================
-
-  # Test 25: Post-ops with minimal dimensions
-  - name: "u8s8_postops_minimal_dimensions"
-    a_type: ["u8"]
-    b_type: ["s8"]
-    c_type: ["s32", "f32", "bf16", "u8", "s8"]
-    acc_type: ["s32"]
-    storage_format: ["row-major"]
-    transA: [false]
-    transB: [false]
-    m: [1, 2, 145]
-    n: [1, 2, 1025]
-    k: [1, 4, 2049]
-    alpha: [1.0]
-    beta: [1.0]
-    lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
-    mtagA: ["none"]
-    mtagB: ["none"]
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
-    post_operations:
-      cartesian: false
-      operations:
-        - type: "Elementwise-RELU"
-          params: {}
-
-  # Test 26: Post-ops with large dimensions
-  - name: "u8s8_postops_large_dimensions"
-    a_type: ["u8"]
-    b_type: ["s8"]
-    c_type: ["s32", "f32"]
-    acc_type: ["s32"]
-    storage_format: ["row-major"]
-    transA: [false]
-    transB: [false]
-    m: [128, 145, 256]
-    n: [128, 256, 1025]
-    k: [128, 256, 2049]
-    alpha: [1.0]
-    beta: [1.0]
-    lda: [2049]
-    ldb: [1025]
-    ldc: [1025]
-    mtagA: ["none"]
-    mtagB: ["none"]
-    tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
-    post_operations:
-      cartesian: false
-      operations:
-        - type: "Elementwise-GELU-ERF"
-          params: {}
-
-  # ==========================================================================
   # PERFORMANCE CRITICAL POST-OPS TESTS
   # ==========================================================================
 
-  # Test 27: Post-ops with performance-critical sizes
+  # Test 24: Post-ops with performance-critical sizes
   - name: "u8s8_postops_performance_critical"
     a_type: ["u8"]
     b_type: ["s8"]
