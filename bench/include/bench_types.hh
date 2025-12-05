@@ -93,12 +93,61 @@ struct GemmBenchConfig
 };
 
 /**
+ * @brief Configuration for a batch GEMM benchmark
+ */
+struct BatchGemmBenchConfig
+{
+    std::string  name;
+    MatrixType   a_type, b_type, c_type, acc_type;
+    MatrixLayout storage_format;
+
+    // Single-group parameters (scalars)
+    md_t   m, n, k;
+    double alpha, beta;
+    bool   transA, transB;
+    size_t group_size; // Number of matrices in single-group mode
+
+    // Multi-group parameters (vectors for per-group configuration)
+    std::vector<md_t>   ms, ns, ks;
+    std::vector<double> alphas, betas;
+    std::vector<bool>   transAs, transBs;
+    std::vector<size_t> group_sizes; // Number of matrices per group
+
+    // Default constructor
+    BatchGemmBenchConfig()
+        : name("default")
+        , a_type(MatrixType::f32)
+        , b_type(MatrixType::f32)
+        , c_type(MatrixType::f32)
+        , acc_type(MatrixType::f32)
+        , storage_format(MatrixLayout::ROW_MAJOR)
+        , m(1)
+        , n(1)
+        , k(1)
+        , alpha(1.0)
+        , beta(0.0)
+        , transA(false)
+        , transB(false)
+        , group_size(1)
+    {
+    }
+};
+
+/**
  * @brief Load benchmark configurations from YAML file
  * @param yaml_path Path to YAML configuration file
  * @return Vector of benchmark configurations
  */
 std::vector<GemmBenchConfig>
 loadBenchmarkConfigs(const std::string& yaml_path);
+
+/**
+ * @brief Load batch GEMM benchmark configurations from YAML file
+ * @param yaml_path Path to YAML configuration file
+ * @return Vector of batch GEMM benchmark configurations
+ */
+std::vector<BatchGemmBenchConfig>
+loadBatchGemmBenchmarkConfigs(const std::string& yaml_path);
 
 /**
  * @brief Generate meaningful benchmark name from config

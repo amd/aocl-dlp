@@ -1662,6 +1662,379 @@ TEST_F(MatrixCompareTest, InfinityHandling)
     EXPECT_TRUE(result.equal);
 }
 
+// ============================================================================
+// PREPARED BATCH GEMM ARGS TESTS - UAL OPTIMIZATION
+// ============================================================================
+
+#include "adaptors/dlp/ual_dlp.hh"
+#include "framework/batch_gemm_args.hh"
+
+class PreparedBatchGemmTest : public ::testing::Test
+{
+  protected:
+    void SetUp() override { ual_dlp = std::make_unique<UalDlp>(); }
+
+    std::unique_ptr<UalDlp> ual_dlp;
+};
+
+// Test 1: batch_prepare_metadata with f32 matrices
+TEST_F(PreparedBatchGemmTest, PrepareMetadataF32SingleGroup)
+{
+    // Create single group with 2 matrices
+    std::vector<BatchGroup> groups(1);
+    groups[0].m     = 64;
+    groups[0].n     = 64;
+    groups[0].k     = 64;
+    groups[0].alpha = 1.0;
+    groups[0].beta  = 0.0;
+
+    for (int i = 0; i < 2; ++i) {
+        Matrix A(64, 64, MatrixType::f32, MatrixLayout::ROW_MAJOR, 64, false);
+        Matrix B(64, 64, MatrixType::f32, MatrixLayout::ROW_MAJOR, 64, false);
+        Matrix C(64, 64, MatrixType::f32, MatrixLayout::ROW_MAJOR, 64, false);
+        A.fillRandom(42 + i);
+        B.fillRandom(43 + i);
+        C.fillRandom(44 + i);
+        groups[0].A_matrices.push_back(std::move(A));
+        groups[0].B_matrices.push_back(std::move(B));
+        groups[0].C_matrices.push_back(std::move(C));
+    }
+
+    // Prepare args
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+    ASSERT_EQ(status, UALError::UAL_SUCCESS);
+
+    // Call batch_prepare_metadata
+    ual_dlp->batch_prepare_metadata(prepared);
+
+    // Verify metadata prepared
+    EXPECT_EQ(prepared.backend_metadata.size(), 1);
+    EXPECT_NE(prepared.backend_metadata[0], nullptr);
+
+    // Verify alpha/beta precomputed for f32
+    ASSERT_EQ(prepared.alpha_f32.size(), 1);
+    ASSERT_EQ(prepared.beta_f32.size(), 1);
+    EXPECT_FLOAT_EQ(prepared.alpha_f32[0], 1.0f);
+    EXPECT_FLOAT_EQ(prepared.beta_f32[0], 0.0f);
+
+    // Verify s32 vectors NOT populated for f32
+    EXPECT_TRUE(prepared.alpha_s32.empty());
+    EXPECT_TRUE(prepared.beta_s32.empty());
+}
+
+// Test 2: batch_prepare_metadata with int8 matrices
+TEST_F(PreparedBatchGemmTest, PrepareMetadataS8SingleGroup)
+{
+    // Create single group with 2 matrices
+    std::vector<BatchGroup> groups(1);
+    groups[0].m     = 64;
+    groups[0].n     = 64;
+    groups[0].k     = 64;
+    groups[0].alpha = 2.0;
+    groups[0].beta  = 1.0;
+
+    for (int i = 0; i < 2; ++i) {
+        Matrix A(64, 64, MatrixType::s8, MatrixLayout::ROW_MAJOR, 64, false);
+        Matrix B(64, 64, MatrixType::s8, MatrixLayout::ROW_MAJOR, 64, false);
+        Matrix C(64, 64, MatrixType::s32, MatrixLayout::ROW_MAJOR, 64, false);
+        A.fillRandom(42 + i);
+        B.fillRandom(43 + i);
+        C.fillRandom(44 + i);
+        groups[0].A_matrices.push_back(std::move(A));
+        groups[0].B_matrices.push_back(std::move(B));
+        groups[0].C_matrices.push_back(std::move(C));
+    }
+
+    // Prepare args
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::s32, prepared);
+    ASSERT_EQ(status, UALError::UAL_SUCCESS);
+
+    // Call batch_prepare_metadata
+    ual_dlp->batch_prepare_metadata(prepared);
+
+    // Verify metadata prepared
+    EXPECT_EQ(prepared.backend_metadata.size(), 1);
+    EXPECT_NE(prepared.backend_metadata[0], nullptr);
+
+    // Verify alpha/beta precomputed for s32
+    ASSERT_EQ(prepared.alpha_s32.size(), 1);
+    ASSERT_EQ(prepared.beta_s32.size(), 1);
+    EXPECT_EQ(prepared.alpha_s32[0], 2);
+    EXPECT_EQ(prepared.beta_s32[0], 1);
+
+    // Verify f32 vectors NOT populated for int8
+    EXPECT_TRUE(prepared.alpha_f32.empty());
+    EXPECT_TRUE(prepared.beta_f32.empty());
+}
+
+// Test 3: Optimized batch_gemm uses precomputed values
+TEST_F(PreparedBatchGemmTest, OptimizedBatchGemmF32)
+{
+    // Create single group
+    std::vector<BatchGroup> groups(1);
+    groups[0].m     = 32;
+    groups[0].n     = 32;
+    groups[0].k     = 32;
+    groups[0].alpha = 1.5;
+    groups[0].beta  = 0.5;
+
+    for (int i = 0; i < 2; ++i) {
+        Matrix A(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+        Matrix B(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+        Matrix C(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+        A.fillRandom(42 + i);
+        B.fillRandom(43 + i);
+        C.fillRandom(44 + i);
+        groups[0].A_matrices.push_back(std::move(A));
+        groups[0].B_matrices.push_back(std::move(B));
+        groups[0].C_matrices.push_back(std::move(C));
+    }
+
+    // Prepare args
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+    ASSERT_EQ(status, UALError::UAL_SUCCESS);
+
+    // Prepare metadata (including alpha/beta)
+    ual_dlp->batch_prepare_metadata(prepared);
+
+    // Call optimized batch_gemm
+    status = ual_dlp->batch_gemm(prepared);
+    EXPECT_EQ(status, UALError::UAL_SUCCESS);
+
+    // Verify alpha/beta were used (check they're still there)
+    EXPECT_FLOAT_EQ(prepared.alpha_f32[0], 1.5f);
+    EXPECT_FLOAT_EQ(prepared.beta_f32[0], 0.5f);
+}
+
+// Test 4: Multi-group with different alpha/beta
+TEST_F(PreparedBatchGemmTest, PrepareMetadataMultiGroup)
+{
+    // Create 3 groups with different alpha/beta
+    std::vector<BatchGroup> groups(3);
+
+    for (size_t g = 0; g < 3; ++g) {
+        groups[g].m     = 16;
+        groups[g].n     = 16;
+        groups[g].k     = 16;
+        groups[g].alpha = 1.0 + g; // Different per group
+        groups[g].beta  = 0.5 * g; // Different per group
+
+        Matrix A(16, 16, MatrixType::f32, MatrixLayout::ROW_MAJOR, 16, false);
+        Matrix B(16, 16, MatrixType::f32, MatrixLayout::ROW_MAJOR, 16, false);
+        Matrix C(16, 16, MatrixType::f32, MatrixLayout::ROW_MAJOR, 16, false);
+        A.fillRandom(42 + g);
+        B.fillRandom(43 + g);
+        C.fillRandom(44 + g);
+        groups[g].A_matrices.push_back(std::move(A));
+        groups[g].B_matrices.push_back(std::move(B));
+        groups[g].C_matrices.push_back(std::move(C));
+    }
+
+    // Prepare args
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+    ASSERT_EQ(status, UALError::UAL_SUCCESS);
+
+    // Prepare metadata
+    ual_dlp->batch_prepare_metadata(prepared);
+
+    // Verify all alpha/beta precomputed correctly
+    ASSERT_EQ(prepared.alpha_f32.size(), 3);
+    ASSERT_EQ(prepared.beta_f32.size(), 3);
+
+    for (size_t g = 0; g < 3; ++g) {
+        EXPECT_FLOAT_EQ(prepared.alpha_f32[g], static_cast<float>(1.0 + g));
+        EXPECT_FLOAT_EQ(prepared.beta_f32[g], static_cast<float>(0.5 * g));
+    }
+
+    // Verify metadata populated for all groups
+    EXPECT_EQ(prepared.backend_metadata.size(), 3);
+    for (size_t g = 0; g < 3; ++g) {
+        EXPECT_NE(prepared.backend_metadata[g], nullptr);
+    }
+}
+
+// Test 5: Clear function resets everything
+TEST_F(PreparedBatchGemmTest, ClearResetsAllFields)
+{
+    PreparedBatchGemmArgs prepared;
+
+    // Populate some fields
+    prepared.group_count = 5;
+    prepared.backend_metadata.resize(5);
+    prepared.alpha_f32.resize(5);
+    prepared.beta_f32.resize(5);
+    prepared.alpha_s32.resize(5);
+    prepared.beta_s32.resize(5);
+    prepared.post_ops.resize(5);
+
+    // Call clear
+    prepared.clear();
+
+    // Verify everything reset
+    EXPECT_EQ(prepared.group_count, 0);
+    EXPECT_TRUE(prepared.backend_metadata.empty());
+    EXPECT_TRUE(prepared.alpha_f32.empty());
+    EXPECT_TRUE(prepared.beta_f32.empty());
+    EXPECT_TRUE(prepared.alpha_s32.empty());
+    EXPECT_TRUE(prepared.beta_s32.empty());
+    EXPECT_TRUE(prepared.post_ops.empty());
+}
+
+// ============================================================================
+// ERROR HANDLING TESTS FOR prepare_batch_gemm_args
+// ============================================================================
+
+// Test 7: Empty groups should return UAL_FAILURE
+TEST_F(PreparedBatchGemmTest, PrepareArgsEmptyGroups)
+{
+    std::vector<BatchGroup> groups; // Empty
+    PreparedBatchGemmArgs   prepared;
+
+    UALError status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+
+    EXPECT_EQ(status, UALError::UAL_FAILURE);
+    EXPECT_EQ(prepared.group_count, 0);
+}
+
+// Test 8: Mismatched matrix counts (A.size != B.size) should fail validation
+TEST_F(PreparedBatchGemmTest, PrepareArgsMismatchedMatrixCounts)
+{
+    std::vector<BatchGroup> groups(1);
+    groups[0].m     = 32;
+    groups[0].n     = 32;
+    groups[0].k     = 32;
+    groups[0].alpha = 1.0;
+    groups[0].beta  = 0.0;
+
+    // Add 2 A matrices but only 1 B and C matrix
+    for (int i = 0; i < 2; ++i) {
+        Matrix A(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+        A.fillRandom(42 + i);
+        groups[0].A_matrices.push_back(std::move(A));
+    }
+
+    // Only 1 B and C matrix - mismatch!
+    Matrix B(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    Matrix C(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    B.fillRandom(43);
+    C.fillRandom(44);
+    groups[0].B_matrices.push_back(std::move(B));
+    groups[0].C_matrices.push_back(std::move(C));
+
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+
+    // validate() should fail due to count mismatch
+    EXPECT_EQ(status, UALError::UAL_FAILURE);
+}
+
+// Test 9: Matrix dimension mismatch (A dims don't match group m/k)
+TEST_F(PreparedBatchGemmTest, PrepareArgsDimensionMismatch)
+{
+    std::vector<BatchGroup> groups(1);
+    groups[0].m     = 64; // Group says 64x64
+    groups[0].n     = 64;
+    groups[0].k     = 64;
+    groups[0].alpha = 1.0;
+    groups[0].beta  = 0.0;
+
+    // But matrices are 32x32 - mismatch!
+    Matrix A(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    Matrix B(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    Matrix C(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    A.fillRandom(42);
+    B.fillRandom(43);
+    C.fillRandom(44);
+    groups[0].A_matrices.push_back(std::move(A));
+    groups[0].B_matrices.push_back(std::move(B));
+    groups[0].C_matrices.push_back(std::move(C));
+
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+
+    // validate() should fail due to dimension mismatch
+    EXPECT_EQ(status, UALError::UAL_FAILURE);
+}
+
+// Test 10: Type inconsistency across groups should return UAL_NOT_SUPPORTED
+TEST_F(PreparedBatchGemmTest, PrepareArgsTypeInconsistentGroups)
+{
+    std::vector<BatchGroup> groups(2);
+
+    // Group 0: f32 matrices
+    groups[0].m     = 32;
+    groups[0].n     = 32;
+    groups[0].k     = 32;
+    groups[0].alpha = 1.0;
+    groups[0].beta  = 0.0;
+
+    Matrix A0(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    Matrix B0(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    Matrix C0(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
+    A0.fillRandom(42);
+    B0.fillRandom(43);
+    C0.fillRandom(44);
+    groups[0].A_matrices.push_back(std::move(A0));
+    groups[0].B_matrices.push_back(std::move(B0));
+    groups[0].C_matrices.push_back(std::move(C0));
+
+    // Group 1: s8 matrices - TYPE MISMATCH!
+    groups[1].m     = 32;
+    groups[1].n     = 32;
+    groups[1].k     = 32;
+    groups[1].alpha = 1.0;
+    groups[1].beta  = 0.0;
+
+    Matrix A1(32, 32, MatrixType::s8, MatrixLayout::ROW_MAJOR, 32, false);
+    Matrix B1(32, 32, MatrixType::s8, MatrixLayout::ROW_MAJOR, 32, false);
+    Matrix C1(32, 32, MatrixType::s32, MatrixLayout::ROW_MAJOR, 32, false);
+    A1.fillRandom(45);
+    B1.fillRandom(46);
+    C1.fillRandom(47);
+    groups[1].A_matrices.push_back(std::move(A1));
+    groups[1].B_matrices.push_back(std::move(B1));
+    groups[1].C_matrices.push_back(std::move(C1));
+
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+
+    // Should fail due to type inconsistency across groups
+    EXPECT_EQ(status, UALError::UAL_NOT_SUPPORTED);
+}
+
+// Test 11: Valid empty group (group_size=0) should succeed
+TEST_F(PreparedBatchGemmTest, PrepareArgsEmptyGroupInBatch)
+{
+    std::vector<BatchGroup> groups(1);
+    groups[0].m     = 32;
+    groups[0].n     = 32;
+    groups[0].k     = 32;
+    groups[0].alpha = 1.0;
+    groups[0].beta  = 0.0;
+    // No matrices added - empty group with group_size=0
+
+    PreparedBatchGemmArgs prepared;
+    UALError              status =
+        prepare_batch_gemm_args(groups, MatrixType::f32, prepared);
+
+    // Empty groups are valid (for cases where some groups have 0 matrices)
+    EXPECT_EQ(status, UALError::UAL_SUCCESS);
+    EXPECT_EQ(prepared.group_count, 1);
+    EXPECT_EQ(prepared.group_size[0], 0);
+}
+
 // Test: Performance of fast mode - should be fast with early exit
 TEST_F(MatrixCompareTest, FastModePerformance)
 {

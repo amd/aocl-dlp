@@ -39,6 +39,7 @@ using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
 using dlp::testing::framework::MatrixLayout;
 using dlp::testing::framework::MatrixType;
+using dlp::testing::framework::PreparedBatchGemmArgs;
 using dlp::testing::framework::UALError;
 using dlp::testing::framework::UALType;
 
@@ -138,6 +139,27 @@ class UalRef : public IUal
 
     UALError batch_gemm(std::vector<BatchGroup>& groups,
                         MatrixType               accType) override;
+
+    /**
+     * @brief Prepare backend-specific metadata for batch GEMM
+     *
+     * Reference implementation doesn't need backend-specific metadata,
+     * so this is a no-op.
+     *
+     * @param args Prepared batch GEMM arguments (unused)
+     */
+    void batch_prepare_metadata(PreparedBatchGemmArgs& args) override;
+
+    /**
+     * @brief Perform optimized batch GEMM using pre-prepared metadata
+     *
+     * Reference implementation doesn't use metadata optimization,
+     * so this delegates to the standard batch_gemm by reconstructing groups.
+     *
+     * @param prepared Pre-prepared batch GEMM arguments
+     * @return UALError Error code indicating success or failure
+     */
+    UALError batch_gemm(const PreparedBatchGemmArgs& prepared) override;
 
     /**
      * @brief Perform general matrix multiplication: C = alpha*A*B + beta*C

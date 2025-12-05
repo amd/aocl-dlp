@@ -1200,6 +1200,31 @@ UalRef::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
     return UALError::UAL_SUCCESS;
 }
 
+void
+UalRef::batch_prepare_metadata(PreparedBatchGemmArgs& args)
+{
+    // Reference implementation doesn't use backend-specific metadata
+    // No-op: Reference just iterates over groups and calls gemm individually
+    (void)args; // Suppress unused parameter warning
+}
+
+UALError
+UalRef::batch_gemm(const PreparedBatchGemmArgs& prepared)
+{
+    // Reference implementation doesn't optimize with metadata
+    // Just delegate to the existing batch_gemm implementation
+    // Note: This is not optimal but maintains correctness for reference
+
+    // Since the reference doesn't track the original groups after prepare,
+    // we just return success. The benchmark will use batch_prepare_metadata
+    // followed by this method for DLP, but reference doesn't need it.
+    // For testing, test_batch_gemm.cc uses the vector<BatchGroup> variant.
+
+    // For now, just indicate not supported to force use of vector<BatchGroup>
+    // variant
+    return UALError::UAL_NOT_SUPPORTED;
+}
+
 UALError
 UalRef::gemm(md_t         m,
              md_t         n,

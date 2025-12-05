@@ -39,6 +39,7 @@
 #include "adaptors/dlp/operation_dlp.hh"
 #include "batch_post_ops.hh"
 #include "framework/batch_gemm_args.hh"
+#include <algorithm>
 #include <cstddef>
 #include <cstring>
 #include <memory>
@@ -1005,6 +1006,424 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
         }
     }
 
+    return UALError::UAL_SUCCESS;
+}
+
+void
+UalDlp::batch_prepare_metadata(PreparedBatchGemmArgs& args)
+{
+    args.backend_metadata.resize(args.group_count);
+    args.backend_metadata_storage.reserve(args.group_count);
+
+    for (size_t i = 0; i < static_cast<size_t>(args.group_count); ++i) {
+        std::shared_ptr<IOperation> postOp = nullptr;
+        if (i < args.post_ops.size()) {
+            postOp = args.post_ops[i];
+        }
+
+        if (postOp && postOp->getUALType() == UALType::DLP) {
+            auto* dlpOp = dynamic_cast<DlpOperation*>(postOp.get());
+            if (dlpOp) {
+                args.backend_metadata[i] = dlpOp->getMetadata();
+            } else {
+                auto meta = std::make_shared<dlp_metadata_t>();
+                std::memset(meta.get(), 0, sizeof(dlp_metadata_t));
+                args.backend_metadata[i] = meta.get();
+                args.backend_metadata_storage.push_back(
+                    std::static_pointer_cast<void>(meta));
+            }
+        } else {
+            auto meta = std::make_shared<dlp_metadata_t>();
+            std::memset(meta.get(), 0, sizeof(dlp_metadata_t));
+            args.backend_metadata[i] = meta.get();
+            args.backend_metadata_storage.push_back(
+                std::static_pointer_cast<void>(meta));
+        }
+    }
+
+    // Precompute alpha/beta in correct types based on matrix types
+    // This eliminates per-iteration allocation in the hot loop
+    uint64_t type =
+        encode_types(args.a_type, args.b_type, args.c_type, args.acc_type);
+
+    // Check if we need float or int32 alpha/beta
+    bool needs_f32 =
+        (args.a_type == MatrixType::f32 || args.a_type == MatrixType::bf16);
+    bool needs_s32 =
+        (args.a_type == MatrixType::u8 || args.a_type == MatrixType::s8);
+
+    if (needs_f32) {
+        args.alpha_f32.resize(args.group_count);
+        args.beta_f32.resize(args.group_count);
+        for (size_t i = 0; i < static_cast<size_t>(args.group_count); ++i) {
+            args.alpha_f32[i] = static_cast<float>(args.alpha[i]);
+            args.beta_f32[i]  = static_cast<float>(args.beta[i]);
+        }
+    }
+
+    if (needs_s32) {
+        args.alpha_s32.resize(args.group_count);
+        args.beta_s32.resize(args.group_count);
+        for (size_t i = 0; i < static_cast<size_t>(args.group_count); ++i) {
+            args.alpha_s32[i] = static_cast<int32_t>(args.alpha[i]);
+            args.beta_s32[i]  = static_cast<int32_t>(args.beta[i]);
+        }
+    }
+}
+
+UALError
+UalDlp::batch_gemm(const PreparedBatchGemmArgs& prepared)
+{
+    // NOTE: No validation - assumes batch_prepare_metadata() was called
+    // successfully. This is intentional for performance: validation should
+    // happen once at setup, not on every hot-path call.
+
+    // Pre-computed metadata and alpha/beta - ZERO allocations in this function!
+    dlp_metadata_t** metadata = reinterpret_cast<dlp_metadata_t**>(
+        const_cast<void**>(prepared.backend_metadata.data()));
+
+    uint64_t type = encode_types(prepared.a_type, prepared.b_type,
+                                 prepared.c_type, prepared.acc_type);
+
+    switch (type) {
+        case encode_types<MatrixType::f32, MatrixType::f32, MatrixType::f32,
+                          MatrixType::f32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const float* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const float* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_f32f32f32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<float*>(prepared.alpha_f32.data()),
+                const_cast<const float**>(a_ptrs), prepared.lda.data(),
+                const_cast<const float**>(b_ptrs), prepared.ldb.data(),
+                const_cast<float*>(prepared.beta_f32.data()),
+                const_cast<float**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::f32,
+                          MatrixType::f32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.a_ptrs.data());
+            auto b_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_bf16bf16f32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<float*>(prepared.alpha_f32.data()),
+                const_cast<const bfloat16**>(a_ptrs), prepared.lda.data(),
+                const_cast<const bfloat16**>(b_ptrs), prepared.ldb.data(),
+                const_cast<float*>(prepared.beta_f32.data()),
+                const_cast<float**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::bf16, MatrixType::bf16, MatrixType::bf16,
+                          MatrixType::f32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.a_ptrs.data());
+            auto b_ptrs = reinterpret_cast<const bfloat16* const*>(
+                prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<bfloat16* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_bf16bf16f32obf16(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<float*>(prepared.alpha_f32.data()),
+                const_cast<const bfloat16**>(a_ptrs), prepared.lda.data(),
+                const_cast<const bfloat16**>(b_ptrs), prepared.ldb.data(),
+                const_cast<float*>(prepared.beta_f32.data()),
+                const_cast<bfloat16**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s32,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int32_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32os32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<int32_t**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s8,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32os8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<int8_t**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::f32,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<float**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::bf16,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<bfloat16* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32obf16(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<bfloat16**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::u8,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const uint8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<uint8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_u8s8s32ou8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const uint8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<uint8_t**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s32,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int32_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32os32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<int32_t**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::s8,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<int8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32os8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<int8_t**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::f32,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<float**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::bf16,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<bfloat16* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32obf16(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<bfloat16**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::s8, MatrixType::s8, MatrixType::u8,
+                          MatrixType::s32>(): {
+            // Use precomputed alpha/beta - NO allocation!
+            auto a_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const int8_t* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<uint8_t* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_s8s8s32ou8(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(),
+                const_cast<int32_t*>(prepared.alpha_s32.data()),
+                const_cast<const int8_t**>(a_ptrs), prepared.lda.data(),
+                const_cast<const int8_t**>(b_ptrs), prepared.ldb.data(),
+                const_cast<int32_t*>(prepared.beta_s32.data()),
+                const_cast<uint8_t**>(c_ptrs), prepared.ldc.data(),
+                prepared.group_count, prepared.group_size.data(),
+                prepared.mem_format_a.data(), prepared.mem_format_b.data(),
+                metadata);
+            break;
+        }
+
+        default:
+            return UALError::UAL_NOT_SUPPORTED;
+    }
+
+    // Error checking
+    for (size_t i = 0; i < static_cast<size_t>(prepared.group_count); ++i) {
+        if (metadata[i]->error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+            return UALError::UAL_NOT_SUPPORTED;
+        }
+        if (metadata[i]->error_hndl.error_code != DLP_CLSC_SUCCESS) {
+            return UALError::UAL_FAILURE;
+        }
+    }
     return UALError::UAL_SUCCESS;
 }
 

@@ -1,0 +1,90 @@
+# ==============================================================================
+# Batch GEMM Benchmark Configuration
+# ==============================================================================
+# NOTE: YamlParser requires arrays for all parameters when using simple product
+
+batch_gemm_tests:
+
+  - name: "BERT_Large_Seq128"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [128]
+    n: [1024]
+    k: [1024]
+    alpha: [1.0]
+    beta: [0.0]
+    transA: [false]
+    transB: [false]
+    lda: [1024]
+    ldb: [1024]
+    ldc: [1024]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    group_size: [16]
+
+  - name: "BERT_Large_Seq256"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [256]
+    n: [1024]
+    k: [1024]
+    alpha: [1.0]
+    beta: [0.0]
+    transA: [false]
+    transB: [false]
+    lda: [1024]
+    ldb: [1024]
+    ldc: [1024]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    group_size: [16]
+
+  - name: "BERT_Large_Seq384"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [384]
+    n: [1024]
+    k: [1024]
+    alpha: [1.0]
+    beta: [0.0]
+    transA: [false]
+    transB: [false]
+    lda: [1024]
+    ldb: [1024]
+    ldc: [1024]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    group_size: [16]
+
+  - name: "SmallBatch_32"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [0.0]
+    transA: [false]
+    transB: [false]
+    lda: [32]
+    ldb: [32]
+    ldc: [32]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    group_size: [16]

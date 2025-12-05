@@ -85,6 +85,35 @@ generateBenchmarkName(const GemmBenchConfig& config)
     return name.str();
 }
 
+std::string
+generateBatchBenchmarkName(const BatchGemmBenchConfig& config)
+{
+    std::ostringstream name;
+
+    // Add data type information (same format as GEMM)
+    name << config.a_type << config.b_type << config.acc_type << "o"
+         << config.c_type;
+
+    // Add dimensions
+    name << ",M:" << config.m << ",N:" << config.n << ",K:" << config.k;
+
+    // Add storage format
+    name << ",stor:"
+         << (config.storage_format == MatrixLayout::ROW_MAJOR ? "r" : "c");
+
+    // Add transposition
+    name << (config.transA ? ",trA:t" : ",trA:n");
+    name << (config.transB ? ",trB:t" : ",trB:n");
+
+    // Add batch info (this is what makes it different from GEMM)
+    name << ",batch:" << config.group_size;
+
+    // Note: batch_gemm doesn't currently support reordering in benchmark
+    // but we could add mtagA/mtagB here if needed in future
+
+    return name.str();
+}
+
 std::vector<GemmBenchConfig>
 loadBenchmarkConfigs(const std::string& yaml_path)
 {
@@ -173,6 +202,59 @@ loadBenchmarkConfigs(const std::string& yaml_path)
     } catch (const std::exception& e) {
         std::cerr << "Error loading YAML configuration: " << e.what()
                   << std::endl;
+    }
+
+    return configs;
+}
+
+std::vector<BatchGemmBenchConfig>
+loadBatchGemmBenchmarkConfigs(const std::string& yaml_path)
+{
+    std::vector<BatchGemmBenchConfig> configs;
+
+    try {
+        YamlParser parser(yaml_path, "batch_gemm_tests");
+
+        size_t microTestCount = parser.getMicroTestCount();
+
+        for (size_t i = 0; i < microTestCount; ++i) {
+            MicroTest& microTest =
+                const_cast<MicroTest&>(parser.getMicroTest());
+
+            // For batch_gemm benchmarks, each YAML entry is ONE benchmark
+            // We just take the first iteration's values
+            BatchGemmBenchConfig config;
+            config.a_type         = microTest.getAType();
+            config.b_type         = microTest.getBType();
+            config.c_type         = microTest.getCType();
+            config.acc_type       = microTest.getAccType();
+            config.storage_format = microTest.getStorageFormat();
+            config.m              = microTest.getM();
+            config.n              = microTest.getN();
+            config.k              = microTest.getK();
+            config.alpha          = microTest.getAlpha();
+            config.beta           = microTest.getBeta();
+            config.transA         = microTest.getTransA();
+            config.transB         = microTest.getTransB();
+            config.group_size     = microTest.getGroupSize();
+
+            // Generate name using same convention as bench_gemm
+            config.name = generateBatchBenchmarkName(config);
+
+            configs.push_back(config);
+
+            if (i < microTestCount - 1) {
+                parser.next();
+            }
+        }
+
+        std::cout << "Loaded " << configs.size()
+                  << " batch GEMM benchmark configurations from YAML"
+                  << std::endl;
+        return configs;
+
+    } catch (const std::exception& e) {
+        std::cerr << "ERROR loading batch GEMM YAML: " << e.what() << std::endl;
     }
 
     return configs;

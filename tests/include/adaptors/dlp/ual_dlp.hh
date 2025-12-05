@@ -38,6 +38,7 @@ using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
 using dlp::testing::framework::MatrixLayout;
 using dlp::testing::framework::MatrixType;
+using dlp::testing::framework::PreparedBatchGemmArgs;
 using dlp::testing::framework::UALError;
 using dlp::testing::framework::UALType;
 
@@ -137,6 +138,32 @@ class UalDlp : public IUal
 
     UALError batch_gemm(std::vector<BatchGroup>& groups,
                         MatrixType               accType) override;
+
+    /**
+     * @brief Prepare backend-specific metadata for batch GEMM
+     *
+     * Extracts or creates dlp_metadata_t objects for each group and stores
+     * them in the prepared arguments structure. This separates metadata
+     * preparation overhead from the hot execution path.
+     *
+     * @param args Prepared batch GEMM arguments to populate with DLP metadata
+     */
+    void batch_prepare_metadata(PreparedBatchGemmArgs& args) override;
+
+    /**
+     * @brief Perform optimized batch GEMM using pre-prepared metadata
+     *
+     * This optimized variant eliminates allocation and casting overhead by
+     * using pre-prepared metadata. Call batch_prepare_metadata() once before
+     * using this method.
+     *
+     * NOTE: Assumes batch_prepare_metadata() was called successfully.
+     * No redundant validation for maximum performance.
+     *
+     * @param prepared Pre-prepared batch GEMM arguments with DLP metadata
+     * @return UALError Error code indicating success or failure
+     */
+    UALError batch_gemm(const PreparedBatchGemmArgs& prepared) override;
 
     /**
      * @brief Perform general matrix multiplication with raw pointers for

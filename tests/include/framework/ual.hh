@@ -37,8 +37,9 @@
 
 namespace dlp::testing::framework {
 
-// Forward declaration for IOperation
+// Forward declarations
 class IOperation;
+struct PreparedBatchGemmArgs;
 
 /**
  * @brief Enumerates matrix memory formats used inside the UAL test harness.
@@ -269,6 +270,36 @@ class IUal
      */
     virtual UALError batch_gemm(std::vector<BatchGroup>& groups,
                                 MatrixType               accType) = 0;
+
+    /**
+     * @brief Prepare backend-specific metadata for batch GEMM
+     *
+     * This method is called once during benchmark setup to extract or create
+     * all metadata objects. For DLP, this populates dlp_metadata_t pointers.
+     * This separates the metadata preparation overhead from the hot execution
+     * path.
+     *
+     * @param args Prepared batch GEMM arguments to populate with backend
+     * metadata
+     */
+    virtual void batch_prepare_metadata(PreparedBatchGemmArgs& args) = 0;
+
+    /**
+     * @brief Perform optimized batch matrix multiplication using pre-prepared
+     * metadata
+     *
+     * This optimized variant uses pre-prepared backend-specific metadata to
+     * eliminate allocation and casting overhead from the hot execution path.
+     * Call batch_prepare_metadata() once before using this method.
+     *
+     * NOTE: This method assumes batch_prepare_metadata() was called
+     * successfully. Validation is minimal for performance - ensure args are
+     * valid before calling.
+     *
+     * @param prepared Pre-prepared batch GEMM arguments with backend metadata
+     * @return UALError Error code indicating success or failure
+     */
+    virtual UALError batch_gemm(const PreparedBatchGemmArgs& prepared) = 0;
 
     /**
      * @brief Perform general matrix multiplication with raw pointers for

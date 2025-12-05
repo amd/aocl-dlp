@@ -68,6 +68,22 @@ struct PreparedBatchGemmArgs
     std::vector<const void*> b_ptrs;
     std::vector<void*>       c_ptrs;
 
+    // Backend-specific metadata (raw pointers for zero-overhead access)
+    std::vector<void*> backend_metadata;
+
+    // Storage to manage metadata lifetime (keeps objects alive)
+    std::vector<std::shared_ptr<void>> backend_metadata_storage;
+
+    // Post-operations per group
+    std::vector<std::shared_ptr<IOperation>> post_ops;
+
+    // Pre-converted alpha/beta for zero-overhead type casting
+    // These are populated during metadata preparation based on data types
+    std::vector<float>   alpha_f32;
+    std::vector<float>   beta_f32;
+    std::vector<int32_t> alpha_s32;
+    std::vector<int32_t> beta_s32;
+
     void clear() { *this = PreparedBatchGemmArgs{}; }
 };
 
@@ -197,6 +213,7 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
     out.a_ptrs.reserve(total_matrices);
     out.b_ptrs.reserve(total_matrices);
     out.c_ptrs.reserve(total_matrices);
+    out.post_ops.reserve(groups.size());
 
     for (const auto& group : groups) {
         for (md_t i = 0; i < static_cast<md_t>(group.A_matrices.size()); ++i) {
@@ -207,6 +224,9 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
             out.c_ptrs.push_back(
                 group.C_matrices[i].getMatrixData().getMatrixPtr());
         }
+
+        // Store post-operations per group
+        out.post_ops.push_back(group.postOps);
     }
 
     out.total_matrices = total_matrices;
