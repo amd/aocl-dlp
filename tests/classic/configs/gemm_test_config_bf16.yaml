@@ -252,3 +252,26 @@ gemm_tests:
     tolerances:
       absolute: 0
       relative: 0
+
+  # Small batch BF16 with column-major
+  - name: "colmaj_batch_bf16_small"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [8, 16, 32, 64]
+    n: [8, 16, 32, 64]
+    k: [8, 16, 32, 64]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1e-3
+      relative: 1e-3

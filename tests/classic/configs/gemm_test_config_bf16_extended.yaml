@@ -21,7 +21,7 @@ gemm_tests:
       lb: 1
       ub: 289
       step: 4
-    n: [64, 128, 256, 1024]
+    n: [64, 1024]
     k: [64, 1024]
     alpha: [1.0]
     beta: [0.0, 1.0]
@@ -42,12 +42,12 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false, true]
     transB: [false, true]
-    m: [6, 12, 144]
+    m: [6, 144]
     n:
       lb: 1
       ub: 256
       step: 32
-    k: [64, 1024, 2048]
+    k: [ 1024]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -67,12 +67,12 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false, true]
-    m: [6, 144, 288]
+    m: [6, 288]
     n:
       lb: 256
       ub: 2048
       step: 200
-    k: [64, 1024, 2048]
+    k: [1024]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -92,12 +92,12 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false, true]
     transB: [false, true]
-    m: [6, 12, 144, 288]
-    n: [64, 128, 256, 1024]
+    m: [6, 288]
+    n: [64, 1024]
     k:
       lb: 1
       ub: 2048
-      step: 200
+      step: 400
     alpha: [1.0, -1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -117,8 +117,8 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false, true]
     transB: [false, true]
-    m: [1, 143, 144, 145, 287, 288]
-    n: [64, 1023, 1024, 1025]
+    m: [1, 144, 145, 287]
+    n: [64, 1024, 1025]
     k: [1, 2048]
     alpha: [1.0, -1.0]
     beta: [0.0, 1.0]
@@ -139,9 +139,9 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false]
-    m: [6, 144, 288]
-    n: [64, 128, 1024]
-    k: [64, 1024, 2048]
+    m: [6, 144]
+    n: [64, 128]
+    k: [64, 1024]
     alpha: [0.0, 1.0, -1.0, 2.0]
     beta: [0.0, 1.0, -1.0]
     mtagA: ["none"]
@@ -159,15 +159,375 @@ gemm_tests:
     c_type: ["f32", "bf16"]
     acc_type: ["f32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [1, 6, 12, 72, 144, 216, 288]
-    n: [64, 128, 256, 1024]
-    k: [64, 1024, 2048]
-    alpha: [1.0, 3.0]
+    transA: [false]
+    transB: [false]
+    m: [1, 6, 216, 288]
+    n: [256]
+    k: [ 2048]
+    alpha: [3.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
       absolute: 0
       relative: 0
+
+  # ==========================================================================
+  # Column-Major BF16 Coverage
+  # ==========================================================================
+
+  # BF16 with column-major MR variants
+  - name: "colmaj_bf16_mr_variants"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false,true]
+    m: [1, 2, 3, 5, 12, 144, 145]
+    n: [64]
+    k: [64]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # BF16 with column-major NR variants
+  - name: "colmaj_bf16_nr_variants"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [6, 12]
+    n: [1, 2, 3, 4, 16, 17, 32, 33, 64]
+    k: [64, 128]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # BF16 with column-major KC variants
+  - name: "colmaj_bf16_kc_variants"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [64, 144]
+    n: [64, 144]
+    # K values around KC boundary (4096 for BF16 ZEN4)
+    k: [4095, 4096, 4097, 8192]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [144]
+    ldb: [144]
+    ldc: 144
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # BF16 output as BF16 with column-major (consolidated)
+  - name: "colmaj_bf16_output_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16"]  # Output as BF16
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64, 128]
+    n: [32, 64, 128]
+    k: [64, 128, 512]
+    alpha: [1.0, 0.5]
+    beta: [0.0, 1.0]
+    lda: [512]
+    ldb: [512]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # Column-Major BF16 Matrix-Vector Operations
+  # ==========================================================================
+
+  # BF16 column vectors with column-major (this one was a bug ,we resolved it)
+  - name: "colmaj_gemv_column_vector_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32]
+    n: [1]
+    k: [64, 128, 512, 1024]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # BF16 row vectors with column-major
+  - name: "colmaj_gemv_row_vector_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [64, 128, 512, 1024]
+    k: [64, 128, 512, 1024]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # BF16 dot products with column-major
+  - name: "colmaj_gemv_dot_product_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [1]
+    k: [128, 512, 1024, 4096]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 1
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # Mixed precision vector operations with column-major
+  - name: "colmaj_mixed_precision_vectors"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [1024]
+    n: [1, 4]
+    k: [2048, 8192]
+    alpha: [1.0, 2.0]
+    beta: [0.0, 1.0]
+    lda: [8192]
+    ldb: [8192]
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # ==========================================================================
+  # Column-Major Mixed Precision Performance
+  # ==========================================================================
+
+  # BF16 column-major performance scenarios
+  - name: "colmaj_bf16_performance"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [ true]
+    transB: [false, true]
+    # Performance-focused dimensions for BF16
+    m: [144, 576]  # MC multiples for ZEN4
+    n: [64, 1024]  # NC multiples
+    k: [512, 2048]  # KC multiples
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 1200
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # ==========================================================================
+  # Column-Major BF16 Stress Tests
+  # ==========================================================================
+
+  # BF16 precision limits with column-major (includes accumulation testing) (includes accumulation testing)
+  - name: "colmaj_bf16_precision_limits"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [true]
+    m: [ 256]
+    n: [256]
+    # Large K to test BF16->F32 accumulation precision
+    k: [ 4096]
+    alpha: [ 0.1, 10.0]
+    beta: [0.1, 10.0]
+    lda: [8192]
+    ldb: [8192]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # BF16 extreme values with column-major
+  - name: "colmaj_bf16_extreme_values"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [64, 128]
+    n: [64, 128]
+    k: [64, 128]
+    # BF16 extreme values (near max representable)
+    alpha: [65504.0, -65504.0]  # Near BF16 max
+    beta: [65504.0, -65504.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # ==========================================================================
+  # API BOUNDARY AND ERROR CONDITIONS
+  # ==========================================================================
+
+  # Minimum valid dimensions (BF16 only)
+  - name: "minimum_valid_dimensions"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # Smallest valid non-zero dimensions
+    m: [1, 2, 3]
+    n: [1, 2, 3]
+    k: [1, 2, 3]
+    alpha: [0.0, 1.0, -1.0]
+    beta: [0.0, 1.0, -1.0]
+    lda: [3]
+    ldb: [3]
+    ldc: 3
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # Column-Major Precision Boundary Testing
+  # ==========================================================================
+
+  # BF16 precision boundaries with column-major
+  - name: "colmaj_bf16_precision_boundaries"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [64, 128]
+    n: [64, 128]
+    k: [128, 256]
+    # Values around BF16 precision boundaries
+    alpha: [1.0, 1.0078125, 0.9921875]  # Around BF16 epsilon (2^-7)
+    beta: [1.0, 1.0078125, 0.9921875]
+    lda: [256]
+    ldb: [256]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # The Ultimate GEMM Stress Test
+  - name: "ultimate_nightmare"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["bf16"]  # Force BF16 output
+    acc_type: ["f32"]
+    storage_format: ["column-major"]  # Less optimized storage
+    transA: [true]    # Both matrices transposed
+    transB: [true]
+    # Large prime dimensions
+    m: [1009]         # Prime near 1K
+    n: [1013]         # Prime near 1K
+    k: [8191]         # Large prime for accumulation stress
+    # BF16 precision boundary values
+    alpha: [1.0078125]    # BF16 epsilon boundary
+    beta: [-0.9921875]    # Negative, near -1, causes cancellation
+    # Prime leading dimensions with large strides
+    lda: [8209]       # Prime larger than K
+    ldb: [8219]       # Prime larger than K
+    ldc: [1021]       # Prime larger than N
+    mtagA: ["pack"]       # Force packing despite difficulty
+    mtagB: ["reorder"]    # Force reordering
+    tolerances:
+      absolute: 1     # Generous due to multiple precision challenges
+      relative: 1

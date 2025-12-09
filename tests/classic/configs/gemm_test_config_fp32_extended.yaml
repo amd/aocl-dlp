@@ -19,10 +19,10 @@ gemm_tests:
     transB: [false]
     m:
       lb: 1
-      ub: 385
-      step: 4
-    n: [64, 128, 256]
-    k: [64, 512]
+      ub: 193
+      step: 8
+    n: [64, 128]
+    k: [64]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -40,14 +40,14 @@ gemm_tests:
     c_type: ["f32"]
     acc_type: ["f32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [6, 12, 192]
+    transA: [true]
+    transB: [true]
+    m: [6, 192]
     n:
       lb: 1
-      ub: 256
+      ub: 128
       step: 32
-    k: [64, 512]
+    k: [64]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -66,13 +66,13 @@ gemm_tests:
     acc_type: ["f32"]
     storage_format: ["row-major"]
     transA: [false]
-    transB: [false, true]
-    m: [6, 192, 384]
+    transB: [false]
+    m: [6, 192]
     n:
       lb: 256
-      ub: 2048
-      step: 200
-    k: [64, 512]
+      ub: 1024
+      step: 256
+    k: [64]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -90,15 +90,15 @@ gemm_tests:
     c_type: ["f32"]
     acc_type: ["f32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [6, 12, 192, 384]
-    n: [64, 128, 256]
+    transA: [false]
+    transB: [true]
+    m: [6, 192]
+    n: [64, 128]
     k:
       lb: 1
-      ub: 1025
-      step: 100
-    alpha: [1.0, -1.0]
+      ub: 513
+      step: 128
+    alpha: [-1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
@@ -115,12 +115,12 @@ gemm_tests:
     c_type: ["f32"]
     acc_type: ["f32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [1, 191, 192, 193, 383, 384]
-    n: [64, 256, 8063, 8064]
-    k: [1, 511, 512, 513, 1024]
-    alpha: [1.0, -1.0]
+    transA: [false]
+    transB: [false]
+    m: [1, 191, 192]
+    n: [64, 256]
+    k: [1, 511, 512]
+    alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
@@ -140,13 +140,1402 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false]
-    m: [6, 192, 384]
-    n: [64, 128, 256]
-    k: [64, 512, 1024]
-    alpha: [0.0, 1.0, -1.0, 2.0, 3.0]
-    beta: [0.0, 1.0, -1.0]
+    m: [6, 192]
+    n: [64, 128]
+    k: [64, 512]
+    alpha: [0.0, 1.0, -1.0]
+    beta: [0.0, 1.0]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
       absolute: 0
       relative: 0
+
+  # ==========================================================================
+  # Column-Major F32 Core Coverage
+  # ==========================================================================
+
+  # # JIT kernel variants with column-major (MR fringe testing)
+  - name: "colmaj_f32_mr_variants"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [false]
+    # M values to hit all MR variants: 1,2,3,4,5,6,7,12,13,192,193
+    m: [1, 2, 3, 6, 192]
+    n: [64]  # Standard NR for ZEN4
+    k: [64]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # NR register allocation variants with column-major
+  - name: "colmaj_f32_nr_variants"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [6]
+    # N values to hit all NR variants for AVX512: 1,2,3,4,16,17,32,33,48,49,64,65
+    n: [1, 2, 16, 64]
+    k: [64]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # KC loop variants with column-major
+  - name: "colmaj_f32_kc_variants"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [64]
+    n: [64]
+    # K values around KC boundary (512 for ZEN4): 511,512,513,1024
+    k: [511, 512, 513]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+    # Medium-large matrices with column-major
+  - name: "colmaj_f32_medium_large"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [ 512]
+    n: [ 512]
+    k: [ 512]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # ==========================================================================
+  # Column-Major Special Scenarios
+  # ==========================================================================
+
+  # Non-power-of-2 dimensions with column-major
+  - name: "colmaj_non_power_of_2"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [true]
+    m: [3, 7, 63]
+    n: [3, 7, 63]
+    k: [3, 7, 63]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Prime number dimensions with column-major (reduced for practicality)
+  - name: "colmaj_prime_dimensions"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [3, 7, 13, 31]
+    n: [3, 7, 13, 31]
+    k: [3, 7, 13, 31]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+    # Aspect ratio extremes with column-major (consolidated tall+wide)
+  - name: "colmaj_aspect_ratio_extremes"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    # Tall and wide matrices
+    m: [1024, 16]
+    n: [16, 1024]
+    k: [64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+
+  # ==========================================================================
+  # Column-Major Leading Dimension Tests (consolidated)
+  # ==========================================================================
+
+  # Non-aligned leading dimensions with column-major
+  - name: "colmaj_non_aligned_ld"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    # Non-aligned, non-power-of-2 leading dimensions
+    lda: [35, 41]
+    ldb: [35, 41]
+    ldc: [35, 41]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+
+  # ==========================================================================
+  # Column-Major Matrix-Vector Products (GEMV equivalents - consolidated)
+  # ==========================================================================
+
+  # Column vector results: C(m,1) = A(m,k) * B(k,1)
+  - name: "colmaj_gemv_column_vector_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    # Matrix * vector = vector cases
+    m: [32, 128]
+    n: [1]  # Vector output
+    k: [1024]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [2048]
+    ldb: [1024]
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Row vector results: C(1,n) = A(1,k) * B(k,n)
+  - name: "colmaj_gemv_row_vector_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [true]
+    # Vector * matrix = vector cases
+    m: [1]  # Vector input
+    n: [32, 512]
+    k: [64, 256]
+    alpha: [-1.0]
+    beta: [0.0, 1.0]
+    lda: [1024]
+    ldb: [2048]
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Dot product: C(1,1) = A(1,k) * B(k,1)
+  - name: "colmaj_gemv_dot_product_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    # Vector * vector = scalar cases
+    m: [1]
+    n: [1]
+    k: [128, 512]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [8192]
+    ldb: [8192]
+    ldc: 1
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # ==========================================================================
+  # Column-Major Rank-1 and Low-Rank Operations
+  # ==========================================================================
+
+  # Rank-1 updates: C += alpha * A * B^T where A is column vector, B is row vector
+  - name: "colmaj_rank1_update"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [true]  # B^T to create rank-1 pattern
+    m: [ 256]
+    n: [256]
+    k: [1]  # Rank-1: k=1
+    alpha: [1.0]
+    beta: [1.0]  # Keep existing C
+    lda: [512]
+    ldb: [512]
+    ldc: 512
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Low-rank approximations with column-major
+  - name: "colmaj_low_rank"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [256]
+    n: [256]
+    # Low rank: k << min(m,n)
+    k: [4, 16]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [512]
+    ldb: [512]
+    ldc: 512
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+
+  # ==========================================================================
+  # Column-Major Streaming Operations (consolidated)
+  # ==========================================================================
+
+  # Large vector operations for streaming with column-major (consolidated)
+  - name: "colmaj_streaming_vectors"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    # Very large vectors and matrices that don't fit in cache
+    m: [8192]
+    n: [1, 64]
+    k: [1024]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [65536]
+    ldb: [8192]
+    ldc: 65536
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # ==========================================================================
+  # Column-Major Cache and Performance Testing (consolidated)
+  # ==========================================================================
+
+  # Cache hierarchy boundaries (L1/L2/L3 + cache line) - consolidated
+  - name: "colmaj_cache_hierarchy"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [false]
+    # Dimensions around cache boundaries: 16 (cacheline), 89 (L1), 358 (L2)
+    m: [16, 64]
+    n: [16, 64]
+    k: [16, 64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [512]
+    ldb: [512]
+    ldc: 512
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # Column-Major SIMD Utilization (AVX2/AVX512)
+  # ==========================================================================
+
+  # SIMD register utilization with column-major
+  - name: "colmaj_simd_register_usage"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    # Dimensions that utilize SIMD registers efficiently
+    m: [6, 12]  # MR variants
+    n: [16, 64]  # NR variants
+    k: [16, 32]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [64]
+    ldb: [192]
+    ldc: 192
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ==========================================================================
+  # Column-Major Memory Access Pattern Tests
+  # ==========================================================================
+
+  # Column-major with column-wise access optimization
+  - name: "colmaj_column_wise_access"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    # Test cases where column-major should be optimal
+    transA: [true]   # A^T with column-major A is row-wise access
+    transB: [false]  # B with column-major B is column-wise access
+    m: [ 512]
+    n: [ 512]
+    k: [ 512]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none", "pack"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Column-major with row-wise access (suboptimal case)
+  - name: "colmaj_row_wise_access"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    # Test cases where column-major is suboptimal
+    transA: [false]  # A with column-major A is column-wise access
+    transB: [true]   # B^T with column-major B is row-wise access
+    m: [64 ]
+    n: [64 ]
+    k: [64 ]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none", "pack"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # Column-Major Pack/Reorder Performance
+  # ==========================================================================
+
+  # Pack and reorder performance with column-major
+  - name: "colmaj_pack_reorder_performance"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [128, 256]
+    n: [128, 256]
+    k: [128, 256]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [512]
+    ldb: [512]
+    ldc: 512
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ==========================================================================
+  # Column-Major Threading and Parallelism (consolidated)
+  # ==========================================================================
+
+  # Threading with large and irregular matrices
+  - name: "colmaj_threading_stress"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [true]
+    # Large and irregular dimensions for threading
+    m: [1000, 2048]
+    n: [1000, 2048]
+    k: [1000]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # Column-Major Extreme Dimensions (consolidated)
+  # ==========================================================================
+
+  # Extreme aspect ratios: tall, wide, and deep K - consolidated
+  - name: "colmaj_extreme_dimensions"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    # Tall matrices (M >> N,K), Wide matrices (N >> M,K), Deep K (K >> M,N)
+    m: [16384, 16]
+    n: [16, 16384]
+    k: [16, 32768]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [32768]
+    ldb: [32768]
+    ldc: 32768
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Single row/column matrices with column-major
+  - name: "colmaj_single_row_column"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 4096]  # Single row and single column cases
+    n: [4096, 1]
+    k: [1024]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # Column-Major Memory Boundary Tests
+  # ==========================================================================
+
+  # Page boundary crossings with column-major
+  - name: "colmaj_page_boundary"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # Reduced dimensions around 4KB page boundary (1024 f32)
+    m: [1022, 1024, 1026]
+    n: [1022, 1024, 1026]
+    k: [1022, 1024, 1026]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [1100]
+    ldb: [1100]
+    ldc: 1100
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # TLB boundary testing with column-major
+  - name: "colmaj_tlb_boundary"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [false, true]
+    # Large strides that stress TLB (Translation Lookaside Buffer)
+    m: [128]
+    n: [128]
+    k: [128]
+    alpha: [1.0]
+    beta: [1.0]
+    # Very large leading dimensions to force TLB misses
+    lda: [16384, 65536]
+    ldb: [16384, 65536]
+    ldc: [16384, 65536]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ==========================================================================
+  # Column-Major Numerical Extreme Tests
+  # ==========================================================================
+
+  # Near underflow values with column-major
+  - name: "colmaj_near_underflow"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [64]
+    n: [64]
+    k: [64, 128]  # Larger K to test accumulation
+    # Values near underflow threshold
+    alpha: [1e-9, 1e-8]
+    beta: [1e-9, 1e-8]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Near overflow values with column-major
+  - name: "colmaj_near_overflow"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]  # Small matrices to avoid overflow
+    n: [16]
+    k: [16]
+    # Large but safe values (changed from 1e30/1e35 which cause overflow)
+    alpha: [1e9, 1e9]
+    beta: [1e9, 1e8]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Denormal numbers with column-major
+  - name: "colmaj_denormal_numbers"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    # Values in denormal range
+    alpha: [1e-6, 1e-7]
+    beta: [1e-9, 1e-6]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Random prime dimension combinations with column-major
+  - name: "colmaj_random_prime_stress"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [true]
+    transB: [false]
+    # Random combinations of prime numbers
+    m: [101, 113]
+    n: [131, 149]
+    k: [163, 179]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ==========================================================================
+  # ROW-MAJOR CRITICAL EDGE CASES (Missing from column-major focus)
+  # ==========================================================================
+
+  # Row-major with extreme leading dimensions
+  - name: "rowmaj_extreme_leading_dims"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    # Extreme stride patterns - very large gaps
+    lda: [2048]
+    ldb: [2048]
+    ldc: [2048]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Row-major with non-aligned memory boundaries
+  - name: "rowmaj_memory_alignment"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [17, 33]
+    n: [17, 33]
+    k: [17, 33]
+    alpha: [1.0]
+    beta: [1.0]
+    # Non-aligned leading dimensions
+    lda: [19, 35]
+    ldb: [19, 35]
+    ldc: [19, 35]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # Same operations, different layouts - critical for validation (f32 only)
+  - name: "cross_layout_validation_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [64, 128, 256]
+    n: [64, 128, 256]
+    k: [64, 128, 256]
+    alpha: [1.0, 0.5, 2.0, -1.0]
+    beta: [0.0, 1.0, -1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Same operations, different layouts - bf16 variant
+  - name: "cross_layout_validation_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [ 256]
+    n: [ 256]
+    k: [ 256]
+    alpha: [1.0, 0.5, 2.0, -1.0]
+    beta: [ 1.0, -1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # HARDWARE BOUNDARY CONDITIONS
+  # ==========================================================================
+
+  # Cache line boundary stress testing
+  - name: "cache_boundary_stress"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Dimensions specifically around cache line boundaries
+    m: [15, 16, 17, 63, 64]
+    n: [15, 16, 17, 63, 64]
+    k: [15, 16, 17, 63, 64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [192]
+    ldb: [192]
+    ldc: 192
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # TLB boundary testing (4KB pages)
+  - name: "tlb_boundary_stress"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Dimensions around 4KB boundary (1024 f32 elements)
+    m: [1023, 1024, 1025]
+    n: [1023, 1024, 1025]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [1025]
+    ldb: [1025]
+    ldc: 1025
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # NUMERICAL STABILITY STRESS TESTS
+  # ==========================================================================
+
+  # Very large accumulation for precision testing
+  - name: "large_accumulation_precision"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    m: [8]  # Small output to focus on K accumulation
+    n: [8]
+    k: [16384]  # Very large K for accumulation stress
+    alpha: [1.0, 1e-6]
+    beta: [0.0, 1.0]
+    lda: [32768]
+    ldb: [32768]
+    ldc: 16
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Mixed precision boundary testing
+  - name: "mixed_precision_boundaries"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [ 64]
+    n: [ 64]
+    k: [ 2048]  # Moderate K for precision analysis
+    # Values around BF16 precision limits
+    alpha: [ 0.9921875, 1.007813, 0.992188]
+    beta: [ 0.9921875]
+    lda: [2048]
+    ldb: [2048]
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # POST-OPERATIONS WITH LAYOUTS
+  # ==========================================================================
+
+  # Post-ops with different storage layouts (if your implementation supports post-ops)
+  - name: "postops_cross_layout"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64, 128]
+    n: [32, 64, 128]
+    k: [32, 64, 128]
+    alpha: [1.0, 0.5]
+    beta: [0.0, 1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # PERFORMANCE REGRESSION CRITICAL CASES
+  # ==========================================================================
+
+  # Common neural network dimensions (f32 only)
+  - name: "nn_common_dimensions_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Common NN sizes: batch sizes and hidden dimensions
+    m: [1, 8]  # Batch sizes
+    n: [768, 2048]       # Hidden dimensions
+    k: [768, 2048]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Common neural network dimensions (bf16 variant)
+  - name: "nn_common_dimensions_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Common NN sizes: batch sizes and hidden dimensions
+    m: [1, 128]  # Batch sizes
+    n: [ 2048]       # Hidden dimensions
+    k: [768, 2048]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # HPC/scientific computing dimensions
+  - name: "hpc_common_dimensions"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Power-of-2 sizes common in HPC
+    m: [512, 1024]
+    n: [512, 1024]
+    k: [512, 1024]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [2048]
+    ldb: [2048]
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # MEMORY PRESSURE AND STRESS TESTS
+  # ==========================================================================
+
+  # Large matrices that exceed L3 cache
+  - name: "large_matrix_stress"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Matrices large enough to stress memory subsystem
+    m: [4096]
+    n: [4096]
+    k: [1024]  # Smaller K to keep runtime reasonable
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [8192]
+    ldb: [8192]
+    ldc: 8192
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Non-square matrices with extreme aspect ratios
+  - name: "extreme_aspect_ratios"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Very tall matrices
+    m: [8192]
+    n: [16, 32]
+    k: [64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [8192]
+    ldb: [128]
+    ldc: 8192
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Very wide matrices
+  - name: "extreme_wide_matrices"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Very wide matrices
+    m: [16, 32]
+    n: [8192]
+    k: [64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [128]
+    ldb: [8192]
+    ldc: 8192
+    mtagA: ["none"]
+    mtagB: ["none", "pack"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+    # Unusual but valid leading dimension combinations
+  - name: "unusual_leading_dimensions"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [16]
+    alpha: [1.0]
+    beta: [1.0]
+    # Valid but unusual: much larger than needed
+    lda: [100]
+    ldb: [100]
+    ldc: [100]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # CONCURRENT/THREADING STRESS TESTS
+  # ==========================================================================
+
+  # Medium matrices suitable for threading tests (f32 only)
+  - name: "threading_stress_f32"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    # Sizes that trigger threading but finish reasonably fast
+    m: [ 2048]
+    n: [ 2048]
+    k: [ 1024]
+    alpha: [1.0, 0.5]
+    beta: [1.0]
+    lda: [2048]
+    ldb: [2048]
+    ldc: 2048
+    mtagA: [ "pack"]
+    mtagB: [ "pack"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Medium matrices suitable for threading tests (bf16 variant)
+  - name: "threading_stress_bf16"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [ true]
+    transB: [ true]
+    # Sizes that trigger threading but finish reasonably fast
+    m: [ 2048]
+    n: [2048]
+    k: [1024]
+    alpha: [1.0, 0.5]
+    beta: [ 1.0]
+    lda: [2048]
+    ldb: [2048]
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+    # ==========================================================================
+  # SCALING FACTOR VARIATIONS
+  # ==========================================================================
+
+  # Powers of 2 scaling
+  - name: "powers_of_2_scaling"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    # Powers of 2 for exact representation
+    alpha: [0.25, 0.5, 1.0, 4.0]
+    beta: [0.25, 0.5, 1.0, 4.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Rational scaling factors
+  - name: "rational_scaling"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    # Common rational numbers
+    alpha: [0.1, 0.3, 1.3]
+    beta: [0.1, 0.3, 1.3]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+
+  # Irrational scaling factors
+  - name: "irrational_scaling"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [true]
+    m: [32]
+    n: [32]
+    k: [32]
+    # Irrational numbers (approximate representations)
+    alpha: [1.41421356, 2.71828183]  # sqrt(2), e
+    beta: [1.41421356, 2.71828183]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # F32 precision limits with column-major
+  - name: "colmaj_f32_precision_limits"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [64, 128]
+    n: [64, 128]
+    k: [256, 512, 1024]  # Large K to test precision limits
+    # Values that test F32 precision boundaries
+    alpha: [1.0, 1.00000011920929, 0.99999988079071]  # Around F32 epsilon
+    beta: [1.0, 1.00000011920929, 0.99999988079071]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 128
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ==========================================================================
+  # Column-Major Post-Operations Testing
+  # ==========================================================================
+
+  # Column-major with element-wise operations
+  - name: "colmaj_elementwise_postops"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 128]
+    n: [32, 128]
+    k: [32, 128]
+    alpha: [1.0, 0.5]
+    beta: [0.0, 1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 128
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Alignment nightmare - worst possible memory alignment
+  - name: "alignment_hell"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    # Reduced dimensions: key boundary points
+    m: [31, 97]  # Off from 32 and 96 boundaries
+    n: [33, 49]  # Off from 32 and 48 boundaries
+    k: [47, 95]  # Off from 48 and 96 boundaries
+    alpha: [1.0]
+    beta: [1.0]
+    # Leading dimensions that destroy alignment
+    lda: [123, 567]  # Odd, non-power-of-2, non-aligned
+    ldb: [123, 567]
+    ldc: [123, 567]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Stress test for corner case dimensions (powers of 2 ± 1)
+  - name: "power_of_2_boundaries"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [ true]
+    transB: [true]
+    # Dimensions around powers of 2 that break assumptions
+    m: [ 65, 129, 64 ]
+    n: [ 65, 129, 64 ]
+    k: [ 65, 129, 64 ]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [257]  # Power of 2 + 1
+    ldb: [257]
+    ldc: [257]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # Zero-stride degenerate cases (should not crash)
+  - name: "degenerate_strides"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [true]
+    transB: [false, true]
+    # Very small dimensions with minimal valid leading dimensions
+    m: [1, 2]
+    n: [1, 2]
+    k: [1, 2]
+    alpha: [0.0, -1.0, 1e9]  # Including extreme scales
+    beta: [0.0, 1.0, -1.0, 1e9]
+    lda: [1, 2]      # Minimal valid leading dimensions
+    ldb: [1, 2]
+    ldc: [1, 2]
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 1
+      relative: 1

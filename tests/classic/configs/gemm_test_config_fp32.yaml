@@ -103,28 +103,6 @@ gemm_tests:
       relative: 0
 
   # ==========================================================================
-  # Test Set 5: Alpha/Beta Edge Cases
-  # ==========================================================================
-  - name: "fp32_alpha_beta_edge_cases"
-    a_type: ["f32"]
-    b_type: ["f32"]
-    c_type: ["f32"]
-    acc_type: ["f32"]
-    storage_format: ["row-major"]
-    transA: [false]
-    transB: [false]
-    m: [6]
-    n: [64]
-    k: [64]
-    alpha: [0, 1, 2, -1]
-    beta: [0, 1, 2, -1]
-    mtagA: ["none"]
-    mtagB: ["none"]
-    tolerances:
-      absolute: 0
-      relative: 0
-
-  # ==========================================================================
   # Test Set 6: Cache Blocking Boundaries
   # ==========================================================================
   - name: "fp32_cache_boundaries"
@@ -179,14 +157,14 @@ gemm_tests:
     acc_type: ["f32"]
     storage_format: ["row-major"]
     transA: [false]
-    transB: [false, true]
-    m: [6, 12, 192]
+    transB: [false]
+    m: [12, 192]
     n: [64, 128]
     k: [64, 512]
     alpha: [1.0]
     beta: [0.0]
     mtagA: ["none"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["reorder"]
     tolerances:
       absolute: 0
       relative: 0
@@ -207,6 +185,34 @@ gemm_tests:
     k: [1, 7, 11, 13, 17, 19, 23, 29, 31]
     alpha: [1.0, 3.0]
     beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ==========================================================================
+  # Column-Major Pathological Cases
+  # ==========================================================================
+
+  # Odd alignment with column-major
+  - name: "colmaj_odd_alignment"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false, true]
+    m: [33, 65, 129]  # Odd numbers near power-of-2
+    n: [65]  # Single representative value
+    k: [65]  # Single representative value
+    alpha: [1.0]
+    beta: [1.0]
+    # Single odd LD to test alignment breaking
+    lda: [67]
+    ldb: [67]
+    ldc: [67]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:

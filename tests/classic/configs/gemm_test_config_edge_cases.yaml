@@ -1,0 +1,1009 @@
+# GEMM Edge Case Test Configuration
+# Tests for boundary conditions, extreme cases, and stress scenarios
+# These tests complement the main test suite by covering:
+# 1. Zero dimensions (m=0, n=0, k=0)
+# 2. Minimal dimensions (1x1x1, row/column vectors)
+# 3. Maximal sizes (large matrices, stress tests)
+# 4. Extreme aspect ratios (very tall/wide matrices)
+# 5. Special alpha/beta values (zero, negative)
+# 6. Leading dimension edge cases
+# 7. Mixed order (all transpose combinations)
+# 8. Pack/reorder edge cases
+
+gemm_tests:
+
+  # ========== ZERO DIMENSION TESTS (All Types) ==========
+
+  # Test with k=0 (no multiplication, only beta*C scaling) - f32
+  - name: "f32_zero_k_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [0]
+    alpha: [1.0]
+    beta: [0.0, 1.0, 2.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Test with k=0 - bf16
+  - name: "bf16_zero_k_edge"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [0]
+    alpha: [1.0]
+    beta: [0.0, 1.0, 2.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Test with k=0 - u8s8
+  - name: "u8s8_zero_k_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [0]
+    alpha: [1.0]
+    beta: [0.0, 1.0, 2.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  # Test with k=0 - s8s8
+  - name: "s8s8_zero_k_edge"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [0]
+    alpha: [1.0]
+    beta: [0.0, 1.0, 2.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+#   # ========== SINGLE ELEMENT / MINIMAL DIMENSION TESTS ==========
+
+  # 1x1x1 matrix multiplication (scalar multiplication) - f32
+  - name: "f32_1x1x1_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [1]
+    k: [1]
+    alpha: [1.0, 2.5, -1.0, 0.0]
+    beta: [0.0, 1.0]
+    lda: [1]
+    ldb: [1]
+    ldc: 1
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # 1x1x1 matrix multiplication - bf16
+  - name: "bf16_1x1x1_edge"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [1]
+    k: [1]
+    alpha: [1.0, 2.5, -1.0, 0.0]
+    beta: [0.0, 1.0]
+    lda: [1]
+    ldb: [1]
+    ldc: 1
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # 1x1x1 matrix multiplication - u8s8
+  - name: "u8s8_1x1x1_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [1]
+    k: [1]
+    alpha: [1.0, 2.5, -1.0, 0.0]
+    beta: [0.0, 1.0]
+    lda: [1]
+    ldb: [1]
+    ldc: 1
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  # 1x1x1 matrix multiplication - s8s8
+  - name: "s8s8_1x1x1_edge"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [1]
+    k: [1]
+    alpha: [1.0, 2.5, -1.0, 0.0]
+    beta: [0.0, 1.0]
+    lda: [1]
+    ldb: [1]
+    ldc: 1
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  # Row vector (1xK) * (KxN) = (1xN)
+  - name: "f32_row_vector_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [16, 32, 64, 128, 256]
+    k: [16, 32, 64, 128]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [128]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Column vector (Mx1) = (MxK) * (Kx1)
+  - name: "f32_column_vector_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64, 128, 256]
+    n: [1]
+    k: [16, 32, 64, 128]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # k=1 (minimal reduction)
+  - name: "f32_k1_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [1]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ========== MAXIMAL SIZE TESTS ==========
+
+  # Large square matrices (stress test for JIT)
+  - name: "f32_large_square_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [ true]
+    transB: [false, true]
+    m: [2048]
+    n: [2048]
+    k: [2048]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [2048]
+    ldb: [2048]
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-3
+      relative: 1e-3
+
+  # Very large K dimension (stress reduction path)
+  - name: "f32_large_k_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [64, 128]
+    n: [64, 128]
+    k: [2048, 4096]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [4096]
+    ldb: [4096]
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-2
+      relative: 1e-2
+
+  # Very tall matrices (M >> N, K)
+  - name: "f32_tall_matrix_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [2048, 4096]
+    n: [16, 32]
+    k: [128, 256]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [256]
+    ldb: [32]
+    ldc: 32
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-3
+      relative: 1e-3
+
+  # Very wide matrices (N >> M, K)
+  - name: "f32_wide_matrix_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 32]
+    n: [2048, 4096]
+    k: [128, 256]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [256]
+    ldb: [4096]
+    ldc: 4096
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-3
+      relative: 1e-3
+
+  # ========== EXTREME ASPECT RATIO TESTS ==========
+
+  # Extreme aspect ratios with transpose
+  - name: "f32_extreme_aspect_ratio_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 1024]
+    n: [1024, 1]
+    k: [64, 128]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-3
+      relative: 1e-3
+
+  # ========== SPECIAL ALPHA/BETA VALUES ==========
+
+  # Alpha = 0 (should only compute beta*C)
+  - name: "f32_alpha_zero_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [0.0]
+    beta: [0.0, 1.0, 2.5, -1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Beta = 0 (should ignore C input)
+  - name: "f32_beta_zero_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [1.0, 2.5, -1.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Both alpha and beta = 0 (degenerate case)
+  - name: "f32_alpha_beta_zero_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [0.0]
+    beta: [0.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Negative alpha and beta
+  - name: "f32_negative_scaling_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [-1.0, -2.5]
+    beta: [-1.0, -0.5]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ========== LEADING DIMENSION EDGE CASES ==========
+
+  # Minimal valid leading dimensions (tight packing)
+  - name: "f32_minimal_ld_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [32]  # Minimal valid lda = k (when transA=false)
+    ldb: [32]  # Minimal valid ldb = n (when transB=false)
+    ldc: 32    # Minimal valid ldc = n
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Large leading dimensions (sparse storage)
+  - name: "f32_large_ld_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [64]
+    n: [64]
+    k: [64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [512]  # Much larger than needed
+    ldb: [512]
+    ldc: 512
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Misaligned leading dimensions (not power of 2)
+  - name: "f32_misaligned_ld_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32]
+    n: [32]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [35, 37, 41]  # Not cache-aligned, not power of 2
+    ldb: [35, 37, 41]
+    ldc: [35, 37, 41]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ========== MIXED ORDER (TRANSPOSE) EDGE CASES ==========
+
+ #  All transpose combinations with cache boundary dimensions
+  - name: "f32_all_trans_cache_boundary_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 15, 16, 17, 63]  # Key boundaries only
+    n: [1, 15, 16, 17, 63]
+    k: [1, 15, 16, 17, 63]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ========== PACK/REORDER EDGE CASES ==========
+
+  # All mtag combinations with minimal sizes
+  - name: "f32_all_mtag_minimal_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 3, 4]
+    n: [1, 2, 3, 4]
+    k: [1, 2, 3, 4]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [4]
+    ldb: [4]
+    ldc: 4
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ========== INTEGER TYPE EDGE CASES ==========
+
+  # u8s8s32 large dimensions (overflow risk check)
+  - name: "u8s8s32_large_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [256, 512]
+    n: [256, 512]
+    k: [256, 512]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [512]
+    ldb: [512]
+    ldc: 512
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+
+  # u8s8s32 with k=1
+  - name: "u8s8s32_k1_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [1]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  # u8s8s32 with dimensions not divisible by 4 (VNNI edge case)
+  - name: "u8s8s32_vnni_non_divisible_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1, 2, 3, 5, 7, 11, 13]  # Not divisible by 4
+    n: [1, 2, 3, 5, 7, 11, 13]
+    k: [1, 2, 3, 5, 7, 11, 13]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: [16]
+    ldb: [16]
+    ldc: 16
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+
+  # ========== BFLOAT16 EDGE CASES ==========
+
+  # bf16 large matrices
+  - name: "bf16_large_edge"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1024]
+    n: [1024]
+    k: [1024]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: 2048
+    ldb: 2048
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-2
+      relative: 1e-2
+
+  # bf16 row vector (this one is failing as of now)
+  - name: "bf16_row_vector_edge"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [16, 32, 64, 128]
+    k: [16, 32, 64, 128]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: 128
+    ldb: 128
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # bf16 column vector
+  - name: "bf16_column_vector_edge"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32, 64, 128]
+    n: [1]
+    k: [16, 32, 64, 128]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    lda: 128
+    ldb: 128
+    ldc: 128
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ========== COLUMN-MAJOR STORAGE FORMAT EDGE CASES ==========
+
+  # Column-major zero dimensions
+  - name: "f32_zero_k_column_major_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 32]
+    n: [16, 32]
+    k: [0]
+    alpha: [1.0]
+    beta: [0.0, 1.0, 2.0]
+    lda: [32]
+    ldb: [32]
+    ldc: 32
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Column-major 1x1x1
+  - name: "f32_1x1x1_column_major_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [1]
+    n: [1]
+    k: [1]
+    alpha: [1.0, 2.5, -1.0, 0.0]
+    beta: [0.0, 1.0, -0.5, 2.0]
+    lda: [1]
+    ldb: [1]
+    ldc: 1
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Column-major large matrices
+  - name: "f32_large_column_major_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [512]
+    n: [512]
+    k: [512]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-3
+      relative: 1e-3
+
+  # ========== NUMERICAL EXTREMES ==========
+
+  # Extreme scaling values (tiny, huge, mixed)
+  - name: "f32_extreme_scaling_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 32]
+    n: [16, 32]
+    k: [16, 32]
+    alpha: [1e-9, 1e9]  # Tiny and huge
+    beta: [1e-9, 1e9]
+    lda: [32]
+    ldb: [32]
+    ldc: 32
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1
+      relative: 1
+
+  # ========== PRIME AND ODD DIMENSION EDGE CASES ==========
+
+  # Prime dimensions (no clean blocking)
+  - name: "f32_prime_dimensions_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [7, 13, 17, 23, 29, 31, 37, 41, 43, 47]  # Prime numbers
+    n: [7, 13, 17, 23, 29, 31]
+    k: [7, 13, 17, 23, 29, 31]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+
+  # ========== MEMORY ALIGNMENT EDGE CASES ==========
+
+  # Non-aligned leading dimensions (stress memory subsystem)
+  - name: "f32_unaligned_memory_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [64]
+    n: [64]
+    k: [64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [67, 69, 71, 73]  # Not aligned to 4, 8, 16, or 32 bytes
+    ldb: [67, 69, 71, 73]
+    ldc: [67, 69, 71, 73]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # Cache line boundary stress (64-byte boundaries)
+  - name: "f32_cache_line_boundary_edge"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [15, 16, 17]  # Around 64-byte boundary (16*4=64)
+    n: [15, 16, 17]
+    k: [15, 16, 17]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [17]
+    ldb: [17]
+    ldc: 17
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 0
+      relative: 0
+
+  # ========== MIXED DATA TYPE EDGE CASES ==========
+
+  # Mixed integer types with extreme values
+  - name: "mixed_int_extreme_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [64, 128]  # Larger to stress accumulation
+    n: [64, 128]
+    k: [64, 128, 256]  # Large K to test overflow
+    alpha: [1.0, 127.0, 255.0]  # Test scaling with max values
+    beta: [0.0, 1.0]
+    lda: [256]
+    ldb: [256]
+    ldc: 256
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+
+# ========== BFLOAT16 PRECISION EDGE CASES ==========
+
+  # BFloat16 with relaxed tolerances (fix precision issues) (it is failing now)
+  - name: "bf16_precision_realistic_edge"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [32, 64, 128]
+    n: [32, 64, 128]
+    k: [32, 64, 128]
+    alpha: [1.0, 2.0, 0.5]
+    beta: [0.0, 1.0]
+    lda: [128]
+    ldb: [128]
+    ldc: [128]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-2  # Realistic for BF16
+      relative: 1e-2
+
+  # BFloat16 extreme aspect ratios
+  - name: "bf16_extreme_aspect_edge"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 2048]  # Extreme ratios
+    n: [2048, 1]
+    k: [32, 64]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [64]
+    ldb: [2048]
+    ldc: 2048
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 1e-2
+      relative: 1e-2
+
+# ========== INTEGER OVERFLOW DETECTION TESTS ==========
+
+  # Test near s32 overflow boundaries
+  - name: "s8s8s32_overflow_detection_edge"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [128, 256]
+    n: [128, 256]
+    k: [128, 256, 512]  # k=512 can cause overflow with extreme values
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [512]
+    ldb: [512]
+    ldc: 512
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  # Test unsigned overflow scenarios
+  - name: "u8s8s32_unsigned_overflow_edge"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [256]
+    n: [256]
+    k: [256, 512, 1024]  # Progressive overflow risk
+    alpha: [1.0, 255.0]  # Max u8 scaling
+    beta: [1.0]
+    lda: [1024]
+    ldb: [1024]
+    ldc: 1024
+    mtagA: ["none"]
+    mtagB: ["none"]
