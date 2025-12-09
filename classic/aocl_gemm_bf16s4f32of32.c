@@ -98,18 +98,27 @@ aocl_gemm_bf16s4f32of32(const char      order,
     bool is_row_major    = ((order == 'r') || (order == 'R'));
     bool is_column_major = ((order == 'c') || (order == 'C'));
 
+    if (is_column_major == TRUE) {
+        // Swapping inputs not possible in case of mixed precision.
+        dlp_print_msg(
+            " column major not supported yet in bf16s4f32o<f32/bf16>.",
+            __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+
     // The strides are set assuming a row major kernel.
     md_t rs_a = lda;
     md_t cs_a = 1;
 
-    if (dlp_is_trans(dlp_transa)) {
+    if (dlp_is_trans(dlp_transa) == TRUE) {
         rs_a = 1;
         cs_a = lda;
     }
     md_t rs_b = ldb;
     md_t cs_b = 1;
 
-    if (dlp_is_trans(dlp_transb)) {
+    if (dlp_is_trans(dlp_transb) == TRUE) {
         rs_b = 1;
         cs_b = ldb;
     }
@@ -123,45 +132,22 @@ aocl_gemm_bf16s4f32of32(const char      order,
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
 
     // Reorder is not supported for A matrix
-    if ((is_row_major == TRUE) && (mtag_a == REORDERED)) {
-        dlp_print_msg(
-            " Reordering of A matrix is not supported in row major case.",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    // Reorder is not supported for column major matrices.
-    else if ((is_column_major == TRUE)
-             && ((mtag_b == REORDERED) || (mtag_a == REORDERED))) {
-        dlp_print_msg(" Reordering of column major matrices is not supported.",
-                      __FILE__, __LINE__);
+    if (mtag_a == REORDERED) {
+        dlp_print_msg(" Reordering of A matrix is not supported.", __FILE__,
+                      __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
 
-    // From 5-loop function point of view
-    // B matrix needs to be packed in a certain format in order to be loaded
-    // and used in bf16 instrution. As such the mtag_b always needs to be either
-    // packed or reordered. B matrix as it is (unpacked) cannot be used, and
-    // the mtag_b is set to packed to enable runtime packing.
-    if ((is_row_major == TRUE) && (mtag_b == UNPACKED)) {
-        mtag_b = PACK;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    else if ((is_column_major == TRUE) && (mtag_a == UNPACKED)) {
-        mtag_a = PACK;
+    if (mtag_b != REORDERED) {
+        dlp_print_msg(" Reordering of B matrix is mandatory.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
     }
 
-    // From 5-loop function point of view,
-    // A matrix when in column major storage needs to be packed to row-major
-    // storage as kernel expects A matrix to be in row-major format.
-    if ((is_row_major == TRUE) && (dlp_is_trans(dlp_transa))) {
+    if (dlp_is_trans(dlp_transa) == TRUE) {
         mtag_a = PACK;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    else if ((is_column_major == TRUE) && (dlp_is_trans(dlp_transb))) {
-        mtag_b = PACK;
     }
 
     // Convert pre op struct to pre op linked list format.
@@ -169,6 +155,8 @@ aocl_gemm_bf16s4f32of32(const char      order,
     dlp_clsc_err_t err = lpgemm_translate_to_pre_ops_list(metadata->pre_ops,
                                                           pre_op_list, m, n, k);
     if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to translate pre ops list. Invalid pre ops.",
+                      __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
@@ -178,6 +166,8 @@ aocl_gemm_bf16s4f32of32(const char      order,
     err = lpgemm_translate_to_post_ops_list(metadata, post_op_list, (void*)c,
                                             (void*)(&order), m, n);
     if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to translate post ops list. Invalid post ops.",
+                      __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
@@ -191,34 +181,13 @@ aocl_gemm_bf16s4f32of32(const char      order,
 
 #ifdef DLP_ENABLE_OPENMP
 
-    if (is_column_major == TRUE) {
-        // Swapping inputs not possible in case of mixed precision.
-        dlp_print_msg(
-            " column major not supported yet in bf16s4f32o<f32/bf16>.",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    } else {
-        lpgemm_bf16s4f32of32_openmp_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list,
-            DLP_F32);
-    }
+    lpgemm_bf16s4f32of32_openmp_thread_decorator(
+        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
+        alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_F32);
 #else
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        // Swapping inputs not possible in case of mixed precision.
-        dlp_print_msg(
-            " column major not supported yet in bf16s4f32o<f32/bf16>.",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    } else {
-        lpgemm_bf16s4f32of32_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
-            cs_c, alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list,
-            DLP_F32);
-    }
+    lpgemm_bf16s4f32of32_thread_decorator(
+        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
+        alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_F32);
 #endif
 
 err_hndl:;
@@ -286,11 +255,20 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     bool is_row_major    = ((order == 'r') || (order == 'R'));
     bool is_column_major = ((order == 'c') || (order == 'C'));
 
+    if (is_column_major == TRUE) {
+        // Swapping inputs not possible in case of mixed precision.
+        dlp_print_msg(
+            " column major not supported yet in bf16s4f32o<f32/bf16>.",
+            __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+
     // The strides are set assuming a row major kernel.
     md_t rs_a = lda;
     md_t cs_a = 1;
 
-    if (dlp_is_trans(dlp_transa)) {
+    if (dlp_is_trans(dlp_transa) == TRUE) {
         rs_a = 1;
         cs_a = lda;
     }
@@ -298,7 +276,7 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     md_t rs_b = ldb;
     md_t cs_b = 1;
 
-    if (dlp_is_trans(dlp_transb)) {
+    if (dlp_is_trans(dlp_transb) == TRUE) {
         rs_b = 1;
         cs_b = ldb;
     }
@@ -312,45 +290,22 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
 
     // Reorder is not supported for A matrix
-    if ((is_row_major == TRUE) && (mtag_a == REORDERED)) {
-        dlp_print_msg(
-            " Reordering of A matrix is not supported in row major case.",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    // Reorder is not supported for column major matrices.
-    else if ((is_column_major == TRUE)
-             && ((mtag_b == REORDERED) || (mtag_a == REORDERED))) {
-        dlp_print_msg(" Reordering of column major matrices is not supported.",
-                      __FILE__, __LINE__);
+    if (mtag_a == REORDERED) {
+        dlp_print_msg(" Reordering of A matrix is not supported.", __FILE__,
+                      __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
 
-    // From 5-loop function point of view
-    // B matrix needs to be packed in a certain format in order to be loaded
-    // and used in bf16 instrution. As such the mtag_b always needs to be either
-    // packed or reordered. B matrix as it is (unpacked) cannot be used, and
-    // the mtag_b is set to packed to enable runtime packing.
-    if ((is_row_major == TRUE) && (mtag_b == UNPACKED)) {
-        mtag_b = PACK;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    else if ((is_column_major == TRUE) && (mtag_a == UNPACKED)) {
-        mtag_a = PACK;
+    if (mtag_b != REORDERED) {
+        dlp_print_msg(" Reordering of B matrix is mandatory.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
     }
 
-    // From 5-loop function point of view,
-    // A matrix when in column major storage needs to be packed to row-major
-    // storage as kernel expects A matrix to be in row-major format.
-    if ((is_row_major == TRUE) && (dlp_is_trans(dlp_transa))) {
+    if (dlp_is_trans(dlp_transa) == TRUE) {
         mtag_a = PACK;
-    }
-    // Inputs swapped in column major, A becomes B from kernel point of view.
-    else if ((is_column_major == TRUE) && (dlp_is_trans(dlp_transb))) {
-        mtag_b = PACK;
     }
 
     // Convert post op struct to post op linked list format.
@@ -359,6 +314,8 @@ aocl_gemm_bf16s4f32obf16(const char      order,
                                                           pre_op_list, m, n, k);
 
     if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to translate pre ops list. Invalid pre ops.",
+                      __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
@@ -369,6 +326,8 @@ aocl_gemm_bf16s4f32obf16(const char      order,
                                             (void*)(&order), m, n);
 
     if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to translate post ops list. Invalid post ops.",
+                      __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
     }
@@ -381,35 +340,15 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
 
 #ifdef DLP_ENABLE_OPENMP
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        // Swapping inputs not possible in case of mixed precision.
-        dlp_print_msg(
-            " column major not supported yet in bf16s4f32o<f32/bf16>.",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    } else {
-        lpgemm_bf16s4f32of32_openmp_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, pre_op_list,
-            post_op_list, DLP_BF16);
-    }
+    lpgemm_bf16s4f32of32_openmp_thread_decorator(
+        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
+        cs_c, alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list,
+        DLP_BF16);
 #else
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        // Swapping inputs not possible in case of mixed precision.
-        dlp_print_msg(
-            " column major not supported yet in bf16s4f32o<f32/bf16>.",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    } else {
-        lpgemm_bf16s4f32of32_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, pre_op_list,
-            post_op_list, DLP_BF16);
-    }
+    lpgemm_bf16s4f32of32_thread_decorator(m, n, k, a, rs_a, cs_a, mtag_a, b,
+                                          rs_b, cs_b, mtag_b, (float*)c, rs_c,
+                                          cs_c, alpha, beta, &rntm_g, lcntx_g,
+                                          pre_op_list, post_op_list, DLP_BF16);
 #endif
 
 err_hndl:;
