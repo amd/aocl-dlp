@@ -123,11 +123,11 @@ aocl_gemm_s8s8s32os32_ref(const char      order,
             sum = dot_product - (128 * b_sum);
 
             if (order == 'R' || order == 'r')
-                C[i * ldc + j] = static_cast<int32_t>(
-                    static_cast<float>((alpha)*sum + (beta)*C[i * ldc + j]));
+                C[i * ldc + j] =
+                    static_cast<int32_t>((alpha)*sum + (beta)*C[i * ldc + j]);
             else
-                C[j * ldc + i] = static_cast<int32_t>(
-                    static_cast<float>((alpha)*sum + (beta)*C[j * ldc + i]));
+                C[j * ldc + i] =
+                    static_cast<int32_t>((alpha)*sum + (beta)*C[j * ldc + i]);
         }
     }
 }

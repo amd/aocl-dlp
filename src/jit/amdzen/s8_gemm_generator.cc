@@ -166,8 +166,7 @@ jitGEMMS8<KType>::loadBValues()
             return dlp::jit::jitGeneratorError::badKernelInfo;
         }
 
-        // AVX-512: Use vmovdqu32 with mask for int8 data
-        vmovdqu8(RegType(maskRegIndex), ptr[regBptr]);
+        vmovdqu8(RegType(maskRegIndex), ptr[regBptr + bFullReg * RegBytes]);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -716,32 +715,25 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
     for (int i = 0; i < MR; ++i) {
         // Regular Unmasked Store
         for (int j = 0; j < bFullReg; ++j) {
-            if (!hasPostOps) {
-                vcvtdq2ps(RegType(cRegIdx + i * bReg + j),
+            if (hasPostOps) {
+                // Convert post-ops accumulated result from F32 to S32.
+                vcvtps2dq(RegType(cRegIdx + i * bReg + j),
                           RegType(cRegIdx + i * bReg + j));
             }
-
-            // NOTE Converting the result to F32 then back to S32 to follow
-            // s8s8s32os32 static kernel's store pattern since the then
-            // post-ops did not support integer operations.
-            // Also, the gtestsuite aocl_gemm_s8s8s32os32_ref kernel expects
-            // the output in similar format cause of the static kernels.
-            // TODO This SHOULD be fixed in the future to directly store S32
-            // values.
-            vcvtps2dq(RegType(aRegIdx), RegType(cRegIdx + i * bReg + j));
-            vmovdqu32(ptr[regTmpCptr + j * RegBytes], RegType(aRegIdx));
+            vmovdqu32(ptr[regTmpCptr + j * RegBytes],
+                      RegType(cRegIdx + i * bReg + j));
         }
 
         // Masked Store
         if (bMaskReg > 0) {
-            if (!hasPostOps) {
-                vcvtdq2ps(RegType(cRegIdx + i * bReg + bFullReg),
+            if (hasPostOps) {
+                // Convert post-ops accumulated result from F32 to S32.
+                vcvtps2dq(RegType(cRegIdx + i * bReg + bFullReg),
                           RegType(cRegIdx + i * bReg + bFullReg));
             }
-            vcvtps2dq(RegType(aRegIdx), RegType(cRegIdx + i * bReg + bFullReg));
 
             vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes] | k3 | T_z,
-                      RegType(aRegIdx));
+                      RegType(cRegIdx + i * bReg + bFullReg));
         }
 
         add(regTmpCptr, regRsC);

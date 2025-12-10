@@ -179,6 +179,22 @@ aocl_gemm_s8s8s32os32(const char      order,
         mtag_b = PACK;
     }
 
+    // Temporary variables to transform the inputs for col-major cases.
+    md_t            m_use      = m;
+    md_t            n_use      = n;
+    md_t            k_use      = k;
+    const int8_t*   a_use      = a;
+    const int8_t*   b_use      = b;
+    int32_t*        c_use      = c;
+    md_t            rs_a_use   = rs_a;
+    md_t            cs_a_use   = cs_a;
+    md_t            rs_b_use   = rs_b;
+    md_t            cs_b_use   = cs_b;
+    md_t            rs_c_use   = rs_c;
+    md_t            cs_c_use   = cs_c;
+    AOCL_MEMORY_TAG mtag_a_use = mtag_a;
+    AOCL_MEMORY_TAG mtag_b_use = mtag_b;
+
     // Convert post op struct to post op linked list format.
     lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
     dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
@@ -187,6 +203,20 @@ aocl_gemm_s8s8s32os32(const char      order,
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;
+    }
+
+    if (is_column_major) {
+        // Swap A and B for column major case.
+        m_use      = n;
+        n_use      = m;
+        a_use      = b;
+        b_use      = a;
+        rs_a_use   = rs_b;
+        cs_a_use   = cs_b;
+        rs_b_use   = rs_a;
+        cs_b_use   = cs_a;
+        mtag_a_use = mtag_b;
+        mtag_b_use = mtag_a;
     }
 
     // Initialize a local runtime with global settings if necessary. Note
@@ -203,42 +233,22 @@ aocl_gemm_s8s8s32os32(const char      order,
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
 
-    if (is_column_major == TRUE) {
-        dlp_init_and_get_kernel_hndl(
-            DLP_KERNEL_S8S8S32OS32, order, mtag_b, mtag_a, n, m, k, rs_b, cs_b,
-            rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-            lcntx_l.blksz.NR, lcntx_l.blksz.MR, lcntx_l.blksz.KC, DLP_S32,
-            &lcntx_l.dlp_kernel_hndl);
-    } else {
-        dlp_init_and_get_kernel_hndl(
-            DLP_KERNEL_S8S8S32OS32, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
-            rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S32,
-            &lcntx_l.dlp_kernel_hndl);
-    }
+    dlp_init_and_get_kernel_hndl(
+        DLP_KERNEL_S8S8S32OS32, order, mtag_a_use, mtag_b_use, m_use, n_use,
+        k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
+        (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
+        lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S32, &lcntx_l.dlp_kernel_hndl);
 
 #ifdef DLP_ENABLE_OPENMP
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        lpgemm_s8s8s32o32_openmp_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
-    } else {
-        lpgemm_s8s8s32o32_openmp_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
-    }
+    lpgemm_s8s8s32o32_openmp_thread_decorator(
+        m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+        rs_b_use, cs_b_use, mtag_b_use, (int32_t*)c, rs_c_use, cs_c_use, alpha,
+        beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
 #else
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        lpgemm_s8s8s32o32_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
-    } else {
-        lpgemm_s8s8s32o32_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
-    }
+    lpgemm_s8s8s32o32_thread_decorator(
+        m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+        rs_b_use, cs_b_use, mtag_b_use, (int32_t*)c, rs_c_use, cs_c_use, alpha,
+        beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
 #endif
 
 err_hndl:;

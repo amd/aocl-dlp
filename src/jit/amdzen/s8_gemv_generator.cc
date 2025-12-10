@@ -1376,7 +1376,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             int  NR          = 1;
             bool useMask     = !(MR / vnniWidth);
             int  numMaskRegs = 1;
-            int  numCRegs    = ((MR + vnniWidth - 1) / vnniWidth);
+            int  numCRegs    = (MR / vnniWidth);
 
             RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1, MR,
@@ -1492,7 +1492,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             int  NR          = 1;
             bool useMask     = !(M_LEFT / vnniWidth);
             int  numMaskRegs = 1;
-            int  numCRegs    = ((M_LEFT + vnniWidth - 1) / vnniWidth);
+            int  numCRegs    = (M_LEFT / vnniWidth);
 
             RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
@@ -2613,7 +2613,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 imul(regTmp2, regPsB);
                 add(regBptr, regTmp2);
 
-                kLoop();
+                kLoop(false, false);
 
                 mov(regTmp2, KC);
                 add(regIncK, regTmp2);
@@ -2689,12 +2689,10 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(false, true));
-            jmp(".POST_STOREC", T_NEAR);
+        } else {
+            // Store Result
+            RETURN_IF_ERROR(storeY(false, false));
         }
-
-        // Store Result
-        RETURN_IF_ERROR(storeY(false, false));
-        L(".POST_STOREC");
 
         // Update pointers
         mov(regTmp2, NR);
@@ -2842,12 +2840,10 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(true, true));
-            jmp(".POST_STOREC_NFRINGE", T_NEAR);
+        } else {
+            // Store Result
+            RETURN_IF_ERROR(storeY(true, false));
         }
-
-        // Store Result
-        RETURN_IF_ERROR(storeY(true, false));
-        L(".POST_STOREC_NFRINGE");
     }
 
     L(label_n_fringe_end);
