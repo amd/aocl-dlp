@@ -1019,7 +1019,7 @@ void
 UalRef::applyPostOperation(Matrix&                                   matrix,
                            const dlp::testing::framework::BiasParam& op)
 {
-    applyBias(matrix, op.getBias());
+    applyBias(matrix, op.getBias(), op.getScaleFactor(), op.getZeroPoint());
 }
 
 /**
@@ -1718,7 +1718,10 @@ UalRef::applyScale(Matrix&       matrix,
 }
 
 void
-UalRef::applyBias(Matrix& matrix, const Matrix& bias)
+UalRef::applyBias(Matrix&       matrix,
+                  const Matrix& bias,
+                  const Matrix* scaleFactor,
+                  const Matrix* zeroPoint)
 {
     md_t bias_size = bias.getRows() * bias.getCols();
 
@@ -1726,6 +1729,65 @@ UalRef::applyBias(Matrix& matrix, const Matrix& bias)
     std::unique_ptr<float[]> bias_data(new float[bias_size]);
     for (md_t i = 0; i < bias_size; ++i) {
         bias_data[i] = convertToFloat(bias.getData(), bias.getMatrixType(), i);
+    }
+
+    // Apply dequantization to bias if scale factor or zero point is provided
+    if (scaleFactor || zeroPoint) {
+        // Determine if per-tensor or per-channel
+        bool per_channel_sf =
+            scaleFactor
+            && ((scaleFactor->getRows() * scaleFactor->getCols()) > 1);
+        bool per_channel_zp =
+            zeroPoint && ((zeroPoint->getRows() * zeroPoint->getCols()) > 1);
+
+        if (!per_channel_sf && !per_channel_zp) {
+            // Per-tensor: single scale and zero point
+            float scale = 1.0f;
+            float zp    = 0.0f;
+            if (scaleFactor) {
+                scale = convertToFloat(scaleFactor->getData(),
+                                       scaleFactor->getMatrixType(), 0);
+            }
+            if (zeroPoint) {
+                zp = convertToFloat(zeroPoint->getData(),
+                                    zeroPoint->getMatrixType(), 0);
+            }
+            // Dequantize: bias = (bias - zp) * scale
+            for (md_t i = 0; i < bias_size; ++i) {
+                bias_data[i] = (bias_data[i] - zp) * scale;
+            }
+        } else {
+            // Per-channel: scale and/or zero point arrays
+            std::unique_ptr<float[]> scale_data;
+            std::unique_ptr<float[]> zp_data;
+            md_t                     scale_size = 1;
+            md_t                     zp_size    = 1;
+
+            if (scaleFactor) {
+                scale_size = scaleFactor->getRows() * scaleFactor->getCols();
+                scale_data.reset(new float[scale_size]);
+                for (md_t i = 0; i < scale_size; ++i) {
+                    scale_data[i] =
+                        convertToFloat(scaleFactor->getData(),
+                                       scaleFactor->getMatrixType(), i);
+                }
+            }
+            if (zeroPoint) {
+                zp_size = zeroPoint->getRows() * zeroPoint->getCols();
+                zp_data.reset(new float[zp_size]);
+                for (md_t i = 0; i < zp_size; ++i) {
+                    zp_data[i] = convertToFloat(zeroPoint->getData(),
+                                                zeroPoint->getMatrixType(), i);
+                }
+            }
+
+            // Dequantize per-channel: bias = (bias - zp) * scale
+            for (md_t i = 0; i < bias_size; ++i) {
+                float scale  = scaleFactor ? scale_data[i % scale_size] : 1.0f;
+                float zp     = zeroPoint ? zp_data[i % zp_size] : 0.0f;
+                bias_data[i] = (bias_data[i] - zp) * scale;
+            }
+        }
     }
 
     // If matrix is already f32, apply directly

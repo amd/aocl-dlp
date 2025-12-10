@@ -390,6 +390,45 @@ kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
     return jitGeneratorError::success;
 }
 
+// ============================================================================
+// Generic datatype visitor for compile-time type dispatch
+// ============================================================================
+template<typename Func>
+dlp::jit::jitGeneratorError
+dispatchByDatatype(dlp::kernel_frame::DataType dt, Func&& func)
+{
+    switch (dt) {
+        case DataType::f32:
+            return func(float{});
+        case DataType::bf16:
+            return func(bfloat16{});
+        case DataType::s8:
+            return func(int8_t{});
+        case DataType::u8:
+            return func(uint8_t{});
+        case DataType::s32:
+            return func(int32_t{});
+        default:
+            return jitGeneratorError::notSupported;
+    }
+}
+
+// Triple datatype dispatch helper function
+template<typename Func>
+dlp::jit::jitGeneratorError
+dispatch3Datatypes(dlp::kernel_frame::DataType dt1,
+                   dlp::kernel_frame::DataType dt2,
+                   dlp::kernel_frame::DataType dt3,
+                   Func&&                      func)
+{
+    return dispatchByDatatype(dt1, [&](auto t1) {
+        return dispatchByDatatype(dt2, [&](auto t2) {
+            return dispatchByDatatype(
+                dt3, [&](auto t3) { return func(t1, t2, t3); });
+        });
+    });
+}
+
 template<utils::kernelInstrType KType>
 template<typename T>
 int
@@ -704,6 +743,7 @@ kernelOpsGeneratorX86<KType>::relu(kernelOpsMetaData& op)
 
 // ============================================================================
 // GEMM Bias Implementations
+// Formula: C = C + Bias
 // ============================================================================
 
 template<utils::kernelInstrType KType>
@@ -818,50 +858,459 @@ kernelOpsGeneratorX86<KType>::biasColMajorImplGEMVN1()
     return jitGeneratorError::success;
 }
 
+// ============================================================================
+// Unified Row-Major Bias Implementation with Dequantization Support
+// Formula: C = C + SF * (Bias - ZP)
+// ============================================================================
+
+template<utils::kernelInstrType KType>
+template<typename BiasDt, typename SfDt, typename ZpDt>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::biasRowMajorImplUnified(kernelOpsMetaData& op,
+                                                      bool               hasSF,
+                                                      bool               hasZP)
+{
+    bool isGEMVN1 = (algoType_ == dlp::jit::jitAlgoType::gemv_n1);
+    // regTmp1: bias pointer (op_args1)
+    jit_->mov(regTmp1,
+              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+
+    // regTmp2: offset index (post_op_c_j for row-major)
+    jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+
+    // Load SF and ZP pointers (only for dequantization)
+    if (hasSF) {
+        jit_->mov(regTmp3, jit_->ptr[regkernelOpsList
+                                     + offsetof(lpgemm_post_op, scale_factor)]);
+    }
+    if (hasZP) {
+        jit_->mov(
+            regTmp6,
+            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, bias_zp)]);
+    }
+
+    // Calculate load bytes for each datatype
+    int biasLoadBytes = getLoadBytes<BiasDt>();
+    int sfLoadBytes   = getLoadBytes<SfDt>();
+    int zpLoadBytes   = getLoadBytes<ZpDt>();
+
+    // Calculate bias pointer offset first
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(BiasDt)]);
+    jit_->add(regTmp1, regTmp2);
+
+    // Apply post_op_c_j offset to SF pointer (for vector scale factors)
+    if (hasSF && !op.scalarScaleFactorRequired) {
+        // Reload post_op_c_j and apply SF-specific scaling
+        jit_->mov(regTmp2,
+                  jit_->ptr[regkernelOpsAttr
+                            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(SfDt)]);
+        jit_->add(regTmp3, regTmp2);
+    }
+
+    // Apply post_op_c_j offset to ZP pointer (for vector zero points)
+    if (hasZP && !op.scalarZeroPointRequired) {
+        // Reload post_op_c_j and apply ZP-specific scaling
+        jit_->mov(regTmp2,
+                  jit_->ptr[regkernelOpsAttr
+                            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(ZpDt)]);
+        jit_->add(regTmp6, regTmp2);
+    }
+
+    // Element-wise strategy: reserve only 1 register for safety
+    auto    saved_queue = reserveDestRegisters(scratchLoadRegIdx, 1);
+    RegType tempReg     = RegType(scratchLoadRegIdx);
+
+    // Pre-load scalar values for scale factor and zero point
+    RegType scalarSFReg, scalarZPReg;
+    if (hasSF && op.scalarScaleFactorRequired) {
+        scalarSFReg = popAndGetScratchReg();
+        broadcastAndConvertScalar<SfDt>(scalarSFReg, jit_->ptr[regTmp3]);
+    }
+
+    if (hasZP && op.scalarZeroPointRequired) {
+        scalarZPReg = popAndGetScratchReg();
+        broadcastAndConvertScalar<ZpDt>(scalarZPReg, jit_->ptr[regTmp6]);
+    }
+
+    // ============================================================
+    // GEMV N=1 PATH
+    // ============================================================
+    if (isGEMVN1) {
+
+        for (int i = 0; i < numRegsPerRow; i++) {
+            int  accumIdx  = cRegStartIdx + i;
+            bool useMaskOp = useMask && (i >= numFullRegsPerRow);
+
+            // Step 1: Load Bias (broadcast scalar - same for all MR rows)
+            broadcastAndConvertScalar<BiasDt>(tempReg, jit_->ptr[regTmp1]);
+
+            // Step 2: Subtract Zero Point (if present)
+            if (hasZP) {
+                if (op.scalarZeroPointRequired) {
+                    jit_->vsubps(tempReg, tempReg, scalarZPReg);
+                } else {
+                    RegType zpTempReg = popAndGetScratchReg();
+                    loadAndConvertVector<ZpDt>(
+                        zpTempReg, jit_->ptr[regTmp6 + i * zpLoadBytes],
+                        useMaskOp);
+                    jit_->vsubps(tempReg, tempReg, zpTempReg);
+                    scratch_reg_queue.push(zpTempReg);
+                }
+            }
+
+            // Step 3: Multiply by Scale Factor (if present)
+            if (hasSF) {
+                if (op.scalarScaleFactorRequired) {
+                    jit_->vmulps(tempReg, tempReg, scalarSFReg);
+                } else {
+                    RegType sfTempReg = popAndGetScratchReg();
+                    loadAndConvertVector<SfDt>(
+                        sfTempReg, jit_->ptr[regTmp3 + i * sfLoadBytes],
+                        useMaskOp);
+                    jit_->vmulps(tempReg, tempReg, sfTempReg);
+                    scratch_reg_queue.push(sfTempReg);
+                }
+            }
+
+            // Step 4: Add to accumulator
+            jit_->vaddps(RegType(accumIdx), RegType(accumIdx), tempReg);
+        }
+    }
+    // ============================================================
+    // GEMM / GEMV M=1 PATH
+    // ============================================================
+    else {
+        for (int i = 0; i < MR; i++) {
+            for (int j = 0; j < numRegsPerRow; j++) {
+                int  accumIdx  = cRegStartIdx + i * numRegsPerRow + j;
+                bool useMaskOp = useMask && (j >= numFullRegsPerRow);
+
+                // Step 1: Load Bias (vector - different per column segment)
+                loadAndConvertVector<BiasDt>(
+                    tempReg, jit_->ptr[regTmp1 + j * biasLoadBytes], useMaskOp);
+
+                // Step 2: Subtract Zero Point (if present)
+                if (hasZP) {
+                    if (op.scalarZeroPointRequired) {
+                        jit_->vsubps(tempReg, tempReg, scalarZPReg);
+                    } else {
+                        RegType zpTempReg = popAndGetScratchReg();
+                        loadAndConvertVector<ZpDt>(
+                            zpTempReg, jit_->ptr[regTmp6 + j * zpLoadBytes],
+                            useMaskOp);
+                        jit_->vsubps(tempReg, tempReg, zpTempReg);
+                        scratch_reg_queue.push(zpTempReg);
+                    }
+                }
+
+                // Step 3: Multiply by Scale Factor (if present)
+                if (hasSF) {
+                    if (op.scalarScaleFactorRequired) {
+                        jit_->vmulps(tempReg, tempReg, scalarSFReg);
+                    } else {
+                        RegType sfTempReg = popAndGetScratchReg();
+                        loadAndConvertVector<SfDt>(
+                            sfTempReg, jit_->ptr[regTmp3 + j * sfLoadBytes],
+                            useMaskOp);
+                        jit_->vmulps(tempReg, tempReg, sfTempReg);
+                        scratch_reg_queue.push(sfTempReg);
+                    }
+                }
+
+                // Step 4: Add to accumulator
+                jit_->vaddps(RegType(accumIdx), RegType(accumIdx), tempReg);
+            }
+        }
+    }
+
+    // ============================================================
+    // CLEANUP
+    // ============================================================
+    if (hasZP && op.scalarZeroPointRequired) {
+        scratch_reg_queue.push(scalarZPReg);
+    }
+    if (hasSF && op.scalarScaleFactorRequired) {
+        scratch_reg_queue.push(scalarSFReg);
+    }
+
+    restoreScratchQueue(saved_queue);
+
+    return jitGeneratorError::success;
+}
+
+// ============================================================================
+// Unified Column-Major Bias Implementation with Dequantization Support
+// ============================================================================
+
+template<utils::kernelInstrType KType>
+template<typename BiasDt, typename SfDt, typename ZpDt>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::biasColMajorImplUnified(kernelOpsMetaData& op,
+                                                      bool               hasSF,
+                                                      bool               hasZP)
+{
+    bool isGEMVN1 = (algoType_ == dlp::jit::jitAlgoType::gemv_n1);
+    // regTmp1: bias pointer (op_args1)
+    jit_->mov(regTmp1,
+              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+
+    // regTmp2: offset index (post_op_c_i for col-major)
+    jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
+                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+    // Load SF and ZP pointers (only for dequantization)
+    if (hasSF) {
+        jit_->mov(regTmp3, jit_->ptr[regkernelOpsList
+                                     + offsetof(lpgemm_post_op, scale_factor)]);
+    }
+    if (hasZP) {
+        jit_->mov(
+            regTmp6,
+            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, bias_zp)]);
+    }
+
+    // Calculate load bytes for each datatype
+    int biasLoadBytes = getLoadBytes<BiasDt>();
+    int sfLoadBytes   = getLoadBytes<SfDt>();
+    int zpLoadBytes   = getLoadBytes<ZpDt>();
+
+    // Calculate bias pointer offset first
+    jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(BiasDt)]);
+    jit_->add(regTmp1, regTmp2);
+
+    // Apply post_op_c_i offset to SF pointer (for vector scale factors)
+    if (hasSF && !op.scalarScaleFactorRequired) {
+        // Reload post_op_c_i and apply SF-specific scaling
+        jit_->mov(regTmp2,
+                  jit_->ptr[regkernelOpsAttr
+                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(SfDt)]);
+        jit_->add(regTmp3, regTmp2);
+    }
+
+    // Apply post_op_c_i offset to ZP pointer (for vector zero points)
+    if (hasZP && !op.scalarZeroPointRequired) {
+        // Reload post_op_c_i and apply ZP-specific scaling
+        jit_->mov(regTmp2,
+                  jit_->ptr[regkernelOpsAttr
+                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(ZpDt)]);
+        jit_->add(regTmp6, regTmp2);
+    }
+
+    // Element-wise strategy: reserve only 1 register
+    auto    saved_queue = reserveDestRegisters(scratchLoadRegIdx, 1);
+    RegType tempReg     = RegType(scratchLoadRegIdx);
+
+    RegType scalarSFReg, scalarZPReg;
+    if (hasSF && op.scalarScaleFactorRequired) {
+        scalarSFReg = popAndGetScratchReg();
+        broadcastAndConvertScalar<SfDt>(scalarSFReg, jit_->ptr[regTmp3]);
+    }
+
+    if (hasZP && op.scalarZeroPointRequired) {
+        scalarZPReg = popAndGetScratchReg();
+        broadcastAndConvertScalar<ZpDt>(scalarZPReg, jit_->ptr[regTmp6]);
+    }
+
+    // ============================================================
+    // GEMV N=1 PATH
+    // ============================================================
+    if (isGEMVN1) {
+
+        for (int i = 0; i < numRegsPerRow; i++) {
+            int  accumIdx  = cRegStartIdx + i;
+            bool useMaskOp = useMask && (i >= numFullRegsPerRow);
+
+            // Step 1: Load Bias (scalar per row - broadcast)
+            broadcastAndConvertScalar<BiasDt>(tempReg, jit_->ptr[regTmp1]);
+
+            // Step 2: Subtract Zero Point (if present)
+            if (hasZP) {
+                if (op.scalarZeroPointRequired) {
+                    jit_->vsubps(tempReg, tempReg, scalarZPReg);
+                } else {
+                    RegType zpTempReg = popAndGetScratchReg();
+                    loadAndConvertVector<ZpDt>(
+                        zpTempReg, jit_->ptr[regTmp6 + i * zpLoadBytes],
+                        useMaskOp);
+                    jit_->vsubps(tempReg, tempReg, zpTempReg);
+                    scratch_reg_queue.push(zpTempReg);
+                }
+            }
+
+            // Step 3: Multiply by Scale Factor (if present)
+            if (hasSF) {
+                if (op.scalarScaleFactorRequired) {
+                    jit_->vmulps(tempReg, tempReg, scalarSFReg);
+                } else {
+                    RegType sfTempReg = popAndGetScratchReg();
+                    loadAndConvertVector<SfDt>(
+                        sfTempReg, jit_->ptr[regTmp3 + i * sfLoadBytes],
+                        useMaskOp);
+                    jit_->vmulps(tempReg, tempReg, sfTempReg);
+                    scratch_reg_queue.push(sfTempReg);
+                }
+            }
+
+            // Step 4: Add to accumulator
+            jit_->vaddps(RegType(accumIdx), RegType(accumIdx), tempReg);
+        }
+    }
+    // ============================================================
+    // GEMM / GEMV M=1 PATH (Column-major bias)
+    // ============================================================
+    // In column-major, bias is per-row (one value per M row, broadcast to all
+    // N columns). SF and ZP (if vector) are also per-row - one value per row.
+    else {
+        for (int i = 0; i < MR; i++) {
+
+            // Step 1: Load Bias (scalar for this row, broadcast)
+            broadcastAndConvertScalar<BiasDt>(
+                tempReg, jit_->ptr[regTmp1 + i * sizeof(BiasDt)]);
+
+            // Step 2: Subtract Zero Point (if present)
+            // For column-major with vector ZP: each row has one ZP value
+            if (hasZP) {
+                if (op.scalarZeroPointRequired) {
+                    jit_->vsubps(tempReg, tempReg, scalarZPReg);
+                } else {
+                    // Vector ZP for column-major: one ZP per row, broadcast it
+                    RegType zpTempReg = popAndGetScratchReg();
+                    broadcastAndConvertScalar<ZpDt>(
+                        zpTempReg, jit_->ptr[regTmp6 + i * zpLoadBytes]);
+                    jit_->vsubps(tempReg, tempReg, zpTempReg);
+                    scratch_reg_queue.push(zpTempReg);
+                }
+            }
+
+            // Step 3: Multiply by Scale Factor (if present)
+            // For column-major with vector SF: each row has one SF value
+            if (hasSF) {
+                if (op.scalarScaleFactorRequired) {
+                    jit_->vmulps(tempReg, tempReg, scalarSFReg);
+                } else {
+                    // Vector SF for column-major: one SF per row, broadcast it
+                    RegType sfTempReg = popAndGetScratchReg();
+                    broadcastAndConvertScalar<SfDt>(
+                        sfTempReg, jit_->ptr[regTmp3 + i * sizeof(SfDt)]);
+                    jit_->vmulps(tempReg, tempReg, sfTempReg);
+                    scratch_reg_queue.push(sfTempReg);
+                }
+            }
+
+            // Step 4: Add to all accumulators in this row (all columns)
+            for (int j = 0; j < numRegsPerRow; j++) {
+                int accumIdx = cRegStartIdx + i * numRegsPerRow + j;
+                jit_->vaddps(RegType(accumIdx), RegType(accumIdx), tempReg);
+            }
+        }
+    }
+
+    // ============================================================
+    // CLEANUP
+    // ============================================================
+    if (hasZP && op.scalarZeroPointRequired) {
+        scratch_reg_queue.push(scalarZPReg);
+    }
+    if (hasSF && op.scalarScaleFactorRequired) {
+        scratch_reg_queue.push(scalarSFReg);
+    }
+
+    restoreScratchQueue(saved_queue);
+
+    return jitGeneratorError::success;
+}
+
 template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::bias(kernelOpsMetaData& op)
 {
-    // bias pointer is in op_args1 of lpgemm_post_op struct
-    // load bias pointer to regTmp1
-    // First load the kernelOpsList pointer, then dereference it to get op_args1
-    jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+    using namespace dlp::kernel_frame;
 
-    // Dispatch based on algorithm type
-    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
-        // ============ GEMV n=1 path ============
-        // For GEMV n=1, the storage format in op_args2 determines bias shape:
-        // 'r'/'R' = row-major = scalar bias (broadcast)
-        // 'c'/'C' = column-major = vector bias (one per output element)
+    // Check for dequantization (SF/ZP)
+    bool hasSF = (op.scalarScaleFactorRequired || op.vectorScaleFactorRequired);
+    bool hasZP = (op.scalarZeroPointRequired || op.vectorZeroPointRequired);
 
-        if (op.cMatFormat == storageFormat::rowMajor) {
-            // Scalar bias: no offset needed, already points to correct value
-            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasRowMajorImplGEMVN1);
-        } else {
-            // Vector bias: offset by post_op_c_i to get correct elements
-            jit_->mov(regTmp2,
-                      jit_->ptr[regkernelOpsAttr
-                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasColMajorImplGEMVN1);
-        }
-    } else {
-        // ============ GEMM path (default) ============
+    DataType biasDt = op.paramStorageDt;
+
+    // Regular BIAS (no dequantization) - Executing the normal BIAS path
+    if (!hasSF && !hasZP) {
+        // Load pointers into temporary registers needed by simple BIAS
+        // functions.
+        // regTmp1: bias pointer (op_args1)
+        jit_->mov(
+            regTmp1,
+            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+
+        // regTmp2: offset index (post_op_c_j for row-major, post_op_c_i for
+        // col-major)
         if (op.cMatFormat == storageFormat::rowMajor) {
             jit_->mov(regTmp2,
                       jit_->ptr[regkernelOpsAttr
                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
-            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasRowMajorImplGEMM);
         } else {
-            // Column-major
             jit_->mov(regTmp2,
                       jit_->ptr[regkernelOpsAttr
                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-            DISPATCH_BY_DATATYPE(op.paramStorageDt, biasColMajorImplGEMM);
+        }
+
+        // Only dispatch on bias datatype - no SF/ZP involved
+        bool isGEMVN1 = (algoType_ == dlp::jit::jitAlgoType::gemv_n1);
+
+        if (op.cMatFormat == storageFormat::rowMajor) {
+            return dispatchByDatatype(biasDt, [&](auto bt) {
+                if (isGEMVN1) {
+                    return biasRowMajorImplGEMVN1<decltype(bt)>();
+                } else {
+                    return biasRowMajorImplGEMM<decltype(bt)>();
+                }
+            });
+        } else {
+            return dispatchByDatatype(biasDt, [&](auto bt) {
+                if (isGEMVN1) {
+                    return biasColMajorImplGEMVN1<decltype(bt)>();
+                } else {
+                    return biasColMajorImplGEMM<decltype(bt)>();
+                }
+            });
         }
     }
 
-    return jitGeneratorError::success;
+    // BIAS with dequantization.
+    DataType sfDt = op.scaleFactorDt;
+    DataType zpDt = op.zeroPointDt;
+
+    // Using default types when SF or ZP is not present to avoid dispatch
+    // failure. The actual SF/ZP code paths are guarded by hasSF/hasZP guards,
+    // so the type doesn't matter when not present just need a valid type for
+    // dispatch.
+    if (!hasSF) {
+        sfDt =
+            DataType::f32; // Default placeholder, never used if hasSF is false
+    }
+    if (!hasZP) {
+        zpDt =
+            DataType::f32; // Default placeholder, never used if hasZP is false
+    }
+
+    // Triple dispatch for dequantization
+    if (op.cMatFormat == storageFormat::rowMajor) {
+        return dispatch3Datatypes(
+            biasDt, sfDt, zpDt, [&](auto bt, auto st, auto zt) {
+                return biasRowMajorImplUnified<decltype(bt), decltype(st),
+                                               decltype(zt)>(op, hasSF, hasZP);
+            });
+    } else {
+        return dispatch3Datatypes(
+            biasDt, sfDt, zpDt, [&](auto bt, auto st, auto zt) {
+                return biasColMajorImplUnified<decltype(bt), decltype(st),
+                                               decltype(zt)>(op, hasSF, hasZP);
+            });
+    }
 }
 
 template<utils::kernelInstrType KType>

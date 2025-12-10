@@ -232,7 +232,8 @@ typedef struct
 {
     void*     bias;      /**< Pointer to bias values */
     DLP_TYPE  stor_type; /**< Storage type of bias values */
-    dlp_sf_t* sf;        /**< @todo Implement bias scale factor */
+    dlp_sf_t* sf;        /**< Scale factor for dequantization */
+    dlp_zp_t* zp;        /**< Zero point for dequantization */
 } dlp_post_op_bias;
 
 /**

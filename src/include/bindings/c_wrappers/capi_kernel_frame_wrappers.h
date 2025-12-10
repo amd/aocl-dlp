@@ -67,15 +67,17 @@ typedef enum
 // Used as an internal structure.
 typedef struct lpgemm_post_op_t
 {
-    uint64_t                 op_code;
-    void*                    op_args1; // zero_point, bias, sum_buff
-    void*                    op_args2; // alpha, storage order, sum_zero_point
-    void*                    op_args3; // beta, zero_point_len
-    void*                    scale_factor;
-    md_t                     scale_factor_len;
-    uint64_t                 stor_type;
-    uint64_t                 zp_stor_type;
-    uint64_t                 sf_stor_type; // Introduced for sf store type
+    uint64_t op_code;
+    void*    op_args1; // zero_point, bias, sum_buff
+    void*    op_args2; // alpha, storage order, sum_zero_point
+    void*    op_args3; // beta, zero_point_len
+    void*    scale_factor;
+    md_t     scale_factor_len;
+    void*    bias_zp;     // Zero point pointer (for BIAS dequantization)
+    md_t     bias_zp_len; // Zero point length (for BIAS dequantization)
+    uint64_t stor_type;
+    uint64_t zp_stor_type;
+    uint64_t sf_stor_type; // Introduced for sf store type
     struct lpgemm_post_op_t* next;
 } lpgemm_post_op;
 

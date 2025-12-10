@@ -401,6 +401,31 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             metaData->cMatFormat = (storFormatC == 'c')
                                        ? kernel_frame::storageFormat::colMajor
                                        : kernel_frame::storageFormat::rowMajor;
+            // Dequantization support for BIAS
+            if (post_op->scale_factor != nullptr) {
+                // Set scale factor datatype from user-provided type
+                metaData->scaleFactorDt =
+                    utils::getStorageDtFromAoclStorageType(
+                        static_cast<DLP_TYPE>(post_op->sf_stor_type));
+
+                // Determine scalar vs vector scale factor based on length
+                metaData->scalarScaleFactorRequired =
+                    (post_op->scale_factor_len == 1) ? true : false;
+                metaData->vectorScaleFactorRequired =
+                    (post_op->scale_factor_len > 1) ? true : false;
+            }
+
+            if (post_op->bias_zp != nullptr) {
+                // Set zero point datatype from user-provided type
+                metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
+                    static_cast<DLP_TYPE>(post_op->zp_stor_type));
+
+                // Determine scalar vs vector zero point based on length
+                metaData->scalarZeroPointRequired =
+                    (post_op->bias_zp_len == 1) ? true : false;
+                metaData->vectorZeroPointRequired =
+                    (post_op->bias_zp_len > 1) ? true : false;
+            }
             break;
         }
         case POST_OPS_RELU:

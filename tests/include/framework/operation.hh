@@ -189,12 +189,25 @@ class ScaleParam : public IOperationParam
 class BiasParam : public IOperationParam
 {
   private:
-    Matrix m_bias;
+    Matrix                  m_bias;
+    std::unique_ptr<Matrix> m_scaleFactor;
+    std::unique_ptr<Matrix> m_zeroPoint;
 
   public:
     BiasParam(const Matrix& bias)
         : m_bias(bias)
     {
+    }
+
+    BiasParam(const BiasParam& other)
+        : m_bias(other.m_bias)
+    {
+        if (other.m_scaleFactor) {
+            m_scaleFactor = std::make_unique<Matrix>(*other.m_scaleFactor);
+        }
+        if (other.m_zeroPoint) {
+            m_zeroPoint = std::make_unique<Matrix>(*other.m_zeroPoint);
+        }
     }
 
     OperationType getType() const override { return OperationType::Bias; }
@@ -205,6 +218,21 @@ class BiasParam : public IOperationParam
     }
 
     const Matrix& getBias() const { return m_bias; }
+
+    void setScaleFactor(const Matrix& scale)
+    {
+        m_scaleFactor = std::make_unique<Matrix>(scale);
+    }
+
+    void setZeroPoint(const Matrix& zp)
+    {
+        m_zeroPoint = std::make_unique<Matrix>(zp);
+    }
+
+    const Matrix* getScaleFactor() const { return m_scaleFactor.get(); }
+    const Matrix* getZeroPoint() const { return m_zeroPoint.get(); }
+    bool          hasScaleFactor() const { return m_scaleFactor != nullptr; }
+    bool          hasZeroPoint() const { return m_zeroPoint != nullptr; }
 };
 
 /**
@@ -570,6 +598,8 @@ class BiasBuilder
 {
   private:
     std::unique_ptr<Matrix> m_bias;
+    std::unique_ptr<Matrix> m_scaleFactor;
+    std::unique_ptr<Matrix> m_zeroPoint;
 
   public:
     BiasBuilder& setBias(const Matrix& bias)
@@ -578,12 +608,31 @@ class BiasBuilder
         return *this;
     }
 
+    BiasBuilder& setScaleFactor(const Matrix& scale)
+    {
+        m_scaleFactor = std::make_unique<Matrix>(scale);
+        return *this;
+    }
+
+    BiasBuilder& setZeroPoint(const Matrix& zp)
+    {
+        m_zeroPoint = std::make_unique<Matrix>(zp);
+        return *this;
+    }
+
     std::unique_ptr<IOperationParam> build()
     {
         if (!m_bias) {
             throw std::runtime_error("Bias is required for Bias operation");
         }
-        return std::make_unique<BiasParam>(*m_bias);
+        auto param = std::make_unique<BiasParam>(*m_bias);
+        if (m_scaleFactor) {
+            param->setScaleFactor(*m_scaleFactor);
+        }
+        if (m_zeroPoint) {
+            param->setZeroPoint(*m_zeroPoint);
+        }
+        return param;
     }
 };
 

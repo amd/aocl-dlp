@@ -168,7 +168,99 @@ MicroTest::createOperationParam(
             bias = Matrix::fromValue(1.0f, bias_type);
         }
 
-        return createBias().setBias(bias).build();
+        // Start building bias operation
+        BiasBuilder builder;
+        builder.setBias(bias);
+
+        // Optional scale factor for dequantization
+        // Following same pattern as Scale post-op
+        Matrix      scale_matrix;
+        bool        has_sf   = false;
+        std::string sf_len   = "";
+        MatrixType  sf_type  = MatrixType::f32; // default
+        double      sf_value = 2.5;             // default scale factor value
+
+        auto sf_type_it = config.params.find("scale_factor_type");
+        if (sf_type_it != config.params.end() && !sf_type_it->second.empty()) {
+            auto sf_type_str =
+                std::any_cast<std::string>(sf_type_it->second[0]);
+            sf_type = stringToMatrixType(sf_type_str);
+            has_sf  = true;
+        }
+
+        auto sf_len_it = config.params.find("scale_factor_len");
+        if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
+            sf_len = std::any_cast<std::string>(sf_len_it->second[0]);
+            has_sf = true;
+        }
+
+        // If user provided explicit scale_factor value, use it
+        auto sf_it = config.params.find("scale_factor");
+        if (sf_it != config.params.end() && !sf_it->second.empty()) {
+            sf_value = extractDoubleParam("scale_factor", config.params, 2.5);
+            has_sf   = true;
+        }
+
+        if (has_sf) {
+            if (sf_len == "n") {
+                // Per-channel: create vector of length N with scale value
+                std::vector<float> sf_data(getN(),
+                                           static_cast<float>(sf_value));
+                scale_matrix = Matrix::fromVector(sf_data, sf_type);
+            } else {
+                // Scalar (per-tensor) - default when sf_len not specified or
+                // "1"
+                scale_matrix =
+                    Matrix::fromValue(static_cast<float>(sf_value), sf_type);
+            }
+            builder.setScaleFactor(scale_matrix);
+        }
+
+        // Optional zero point for dequantization
+        // Following same pattern as Scale post-op
+        Matrix      zero_point_matrix;
+        bool        has_zp   = false;
+        std::string zp_len   = "";
+        MatrixType  zp_type  = MatrixType::f32; // default
+        double      zp_value = 10.0;            // default zero point value
+
+        auto zp_type_it = config.params.find("zero_point_type");
+        if (zp_type_it != config.params.end() && !zp_type_it->second.empty()) {
+            auto zp_type_str =
+                std::any_cast<std::string>(zp_type_it->second[0]);
+            zp_type = stringToMatrixType(zp_type_str);
+            has_zp  = true;
+        }
+
+        auto zp_len_it = config.params.find("zero_point_len");
+        if (zp_len_it != config.params.end() && !zp_len_it->second.empty()) {
+            zp_len = std::any_cast<std::string>(zp_len_it->second[0]);
+            has_zp = true;
+        }
+
+        // If user provided explicit zero_point value, use it
+        auto zp_it = config.params.find("zero_point");
+        if (zp_it != config.params.end() && !zp_it->second.empty()) {
+            zp_value = extractDoubleParam("zero_point", config.params, 10.0);
+            has_zp   = true;
+        }
+
+        if (has_zp) {
+            if (zp_len == "n") {
+                // Per-channel: create vector of length N with zero point value
+                std::vector<float> zp_data(getN(),
+                                           static_cast<float>(zp_value));
+                zero_point_matrix = Matrix::fromVector(zp_data, zp_type);
+            } else {
+                // Scalar (per-tensor) - default when zp_len not specified or
+                // "1"
+                zero_point_matrix =
+                    Matrix::fromValue(static_cast<float>(zp_value), zp_type);
+            }
+            builder.setZeroPoint(zero_point_matrix);
+        }
+
+        return builder.build();
 
     } else if (config.type == "Elementwise-RELU") {
         // RELU requires no parameters

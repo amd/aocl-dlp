@@ -89,6 +89,19 @@ DlpOperation::~DlpOperation()
             }
         }
 
+        // Clean up manually allocated memory for scale factors and zero points
+        // in Bias operations (both are optional user features)
+        if (m_postops->bias) {
+            for (size_t i = 0; i < m_bias_ops.size(); ++i) {
+                if (m_postops->bias[i].sf) {
+                    delete m_postops->bias[i].sf;
+                }
+                if (m_postops->bias[i].zp) {
+                    delete m_postops->bias[i].zp;
+                }
+            }
+        }
+
         // Clean up all allocated arrays
         delete[] m_postops->eltwise;
         delete[] m_postops->scale;
@@ -339,6 +352,28 @@ DlpOperation::convertBiasOperations()
         m_postops->bias[i].bias = convertMatrixToPtr(param.getBias());
         m_postops->bias[i].stor_type =
             getStorageType(param.getBias().getMatrixType());
+
+        // Set scale factor if provided
+        if (param.hasScaleFactor()) {
+            m_postops->bias[i].sf = new dlp_sf_t;
+            m_postops->bias[i].sf->scale_factor =
+                convertMatrixToPtr(*param.getScaleFactor());
+            m_postops->bias[i].sf->scale_factor_len =
+                param.getScaleFactor()->getCols();
+            m_postops->bias[i].sf->scale_factor_type =
+                getStorageType(param.getScaleFactor()->getMatrixType());
+        }
+
+        // Set zero point if provided
+        if (param.hasZeroPoint()) {
+            m_postops->bias[i].zp = new dlp_zp_t;
+            m_postops->bias[i].zp->zero_point =
+                convertMatrixToPtr(*param.getZeroPoint());
+            m_postops->bias[i].zp->zero_point_len =
+                param.getZeroPoint()->getCols();
+            m_postops->bias[i].zp->zero_point_type =
+                getStorageType(param.getZeroPoint()->getMatrixType());
+        }
     }
 }
 

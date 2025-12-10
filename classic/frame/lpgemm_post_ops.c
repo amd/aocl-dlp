@@ -295,6 +295,8 @@ lpgemm_set_node_params(lpgemm_post_op*     post_op_node,
                        void*               op3,
                        void*               scale_factor,
                        md_t                scale_factor_len,
+                       void*               bias_zp,
+                       md_t                bias_zp_len,
                        DLP_TYPE            stor_type,
                        DLP_TYPE            zp_stor_type,
                        DLP_TYPE            sf_stor_type)
@@ -305,6 +307,8 @@ lpgemm_set_node_params(lpgemm_post_op*     post_op_node,
     post_op_node->op_args3         = op3;
     post_op_node->scale_factor     = scale_factor;
     post_op_node->scale_factor_len = scale_factor_len;
+    post_op_node->bias_zp          = bias_zp;
+    post_op_node->bias_zp_len      = bias_zp_len;
     post_op_node->stor_type        = stor_type;
     post_op_node->zp_stor_type     = zp_stor_type;
     post_op_node->sf_stor_type     = sf_stor_type;
@@ -324,14 +328,16 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
 
     if ((metadata == NULL) || (metadata->seq_length <= 0)) {
         lpgemm_set_node_params(post_op_list, POST_OPS_DISABLE, NULL, NULL, NULL,
-                               NULL, 0, DLP_INVALID, DLP_INVALID, DLP_INVALID);
+                               NULL, 0, NULL, 0, DLP_INVALID, DLP_INVALID,
+                               DLP_INVALID);
 
         return DLP_CLSC_SUCCESS;
     }
 
     if ((metadata->seq_length > AOCL_MAX_POST_OPS)) {
         lpgemm_set_node_params(post_op_list, POST_OPS_DISABLE, NULL, NULL, NULL,
-                               NULL, 0, DLP_INVALID, DLP_INVALID, DLP_INVALID);
+                               NULL, 0, NULL, 0, DLP_INVALID, DLP_INVALID,
+                               DLP_INVALID);
 
         dlp_print_msg(" Max supported post-ops is 5, supplied input post-ops"
                       " are more. Exiting..",
@@ -416,7 +422,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                     (metadata->eltwise + e_i)->sf
                         ? (metadata->eltwise + e_i)->sf->scale_factor_len
                         : 0,
-                    tmp_stor_type, DLP_INVALID, DLP_INVALID);
+                    NULL, 0, tmp_stor_type, DLP_INVALID, DLP_INVALID);
                 e_i += 1;
             } break;
             case BIAS: {
@@ -425,12 +431,39 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                                   __LINE__);
                     return DLP_CLSC_NULL_POINTER;
                 }
+
                 DLP_TYPE tmp_stor_type =
                     get_stor_type((metadata->bias + b_i)->stor_type);
-                lpgemm_set_node_params((post_op_list + i), POST_OPS_BIAS,
-                                       (metadata->bias + b_i)->bias, meta_arg,
-                                       NULL, NULL, 0, tmp_stor_type,
-                                       DLP_INVALID, DLP_INVALID);
+                // Extract SF storage type
+                DLP_TYPE tmp_sf_stor_type =
+                    (metadata->bias + b_i)->sf
+                        ? get_stor_type(
+                              (metadata->bias + b_i)->sf->scale_factor_type)
+                        : DLP_INVALID;
+
+                DLP_TYPE tmp_zp_stor_type =
+                    (metadata->bias + b_i)->zp
+                        ? get_stor_type(
+                              (metadata->bias + b_i)->zp->zero_point_type)
+                        : DLP_INVALID;
+
+                lpgemm_set_node_params(
+                    (post_op_list + i), POST_OPS_BIAS,
+                    (metadata->bias + b_i)->bias, meta_arg,
+                    NULL, // op_args3 is NULL for BIAS
+                    (metadata->bias + b_i)->sf
+                        ? (metadata->bias + b_i)->sf->scale_factor
+                        : NULL,
+                    (metadata->bias + b_i)->sf
+                        ? (metadata->bias + b_i)->sf->scale_factor_len
+                        : 0,
+                    (metadata->bias + b_i)->zp
+                        ? (metadata->bias + b_i)->zp->zero_point
+                        : NULL,
+                    (metadata->bias + b_i)->zp
+                        ? (metadata->bias + b_i)->zp->zero_point_len
+                        : 0,
+                    tmp_stor_type, tmp_zp_stor_type, tmp_sf_stor_type);
 
                 b_i += 1;
             } break;
@@ -496,7 +529,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                     (metadata->scale + s_i)->sf
                         ? (metadata->scale + s_i)->sf->scale_factor_len
                         : 0,
-                    DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type);
+                    NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type);
 
                 s_i += 1;
             } break;
@@ -528,7 +561,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                     (metadata->matrix_add + m_i)->sf
                         ? (metadata->matrix_add + m_i)->sf->scale_factor_len
                         : 0,
-                    tmp_stor_type, DLP_INVALID, sf_stor_type);
+                    NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type);
 
                 m_i += 1;
             } break;
@@ -560,7 +593,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                     (metadata->matrix_mul + mul_i)->sf
                         ? (metadata->matrix_mul + mul_i)->sf->scale_factor_len
                         : 0,
-                    tmp_stor_type, DLP_INVALID, sf_stor_type);
+                    NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type);
 
                 mul_i += 1;
             } break;

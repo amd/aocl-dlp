@@ -314,7 +314,10 @@ class UalRef : public IUal
     void applyScale(Matrix&       matrix,
                     const Matrix* scaleFactor,
                     const Matrix* zeroPoint);
-    void applyBias(Matrix& matrix, const Matrix& bias);
+    void applyBias(Matrix&       matrix,
+                   const Matrix& bias,
+                   const Matrix* scaleFactor = nullptr,
+                   const Matrix* zeroPoint   = nullptr);
     void applyMatrixAdd(Matrix&       matrix,
                         const Matrix& other,
                         const Matrix* scaleFactor);

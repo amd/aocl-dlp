@@ -192,6 +192,15 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     template<typename T>
     dlp::jit::jitGeneratorError biasColMajorImplGEMVN1();
 
+    // Unified bias implementations with dequantization support
+    template<typename BiasDt, typename SfDt, typename ZpDt>
+    dlp::jit::jitGeneratorError biasRowMajorImplUnified(
+        dlp::kernel_frame::kernelOpsMetaData& op, bool hasSF, bool hasZP);
+
+    template<typename BiasDt, typename SfDt, typename ZpDt>
+    dlp::jit::jitGeneratorError biasColMajorImplUnified(
+        dlp::kernel_frame::kernelOpsMetaData& op, bool hasSF, bool hasZP);
+
     template<typename T>
     dlp::jit::jitGeneratorError reluScaleImpl();
 
