@@ -2569,6 +2569,9 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     xor_(regIncN, regIncN); // regIncN is used to increment the pointer for N
                             // dimension(zeroed before the nloop)
 
+    // Load kLeftmask into k2 before n-loop processing
+    kmovw(k2, ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kLeftmask)]);
+
     if (params.nloop) {
         mov(regNIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n_iter)]);
@@ -2708,8 +2711,6 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         kmovw(
             k1,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, nmask_avx512)]);
-        kmovw(k2,
-              ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kLeftmask)]);
 
         mov(regNIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n_left)]);

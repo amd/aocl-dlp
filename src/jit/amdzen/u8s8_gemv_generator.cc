@@ -1504,6 +1504,7 @@ jitU8S8VNNI_GEMVM1<KType>::initializeParameters(
     RegBytes = Traits::regBytes;
     numRegs  = Traits::numRegs;
 
+    loadMasks();
     mov(regRsB, ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, rsB)]);
     // mov(regPsB, ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, psB)]);
 }
@@ -2828,8 +2829,6 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         L(label_n_loop_end);
         if (params.nfringe) {
-            loadMasks();
-
             mov(regNIter,
                 ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n_left)]);
             test(regNIter, regNIter);

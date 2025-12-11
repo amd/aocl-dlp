@@ -369,7 +369,14 @@ gemmS8DEBackend::getKernelInfoForInput(iDEInput* in)
 
     // Only gemm supported in S8 JIT path for now.
     kernel_frame::kernelInfo kI;
-    if (gemmIn->m > 1 && gemmIn->n > 1) {
+    if (gemmIn->m == 1 || gemmIn->n == 1) {
+        kI = getGemvKernelInfoForInputFastPath(
+            gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
+            gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
+            gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
+            gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
+    } else {
         kI = getGemmKernelInfoForInputFastPath(
             gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
