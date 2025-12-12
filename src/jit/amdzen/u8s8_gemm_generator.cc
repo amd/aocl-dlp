@@ -577,8 +577,12 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
             for (int j = 0; j < bFullReg; j++) {
                 vmovdqu8(Xmm(bRegIdx + j), ptr[regTmpCptr + j * 16]);
                 vpmovzxbd(Zmm(bRegIdx + j), Xmm(bRegIdx + j));
-                vpdpbusd(Zmm(cRegIdx + i * bReg + j), Zmm(bRegIdx + j),
-                         Zmm(betaRegIdx));
+                // vpdpbusd(Zmm(cRegIdx + i * bReg + j), Zmm(bRegIdx + j),
+                //          Zmm(betaRegIdx));
+                vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
+                        RegType(betaRegIdx));
+                vpaddd(RegType(cRegIdx + i * bReg + j),
+                       RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j));
             }
 
             // Handle masked beta scaling
@@ -586,8 +590,13 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
                 vmovdqu8(Xmm(bRegIdx + bFullReg) | k3 | T_z,
                          ptr[regTmpCptr + bFullReg * 16]);
                 vpmovzxbd(Zmm(bRegIdx + bFullReg), Xmm(bRegIdx + bFullReg));
-                vpdpbusd(Zmm(cRegIdx + i * bReg + bFullReg),
-                         Zmm(bRegIdx + bFullReg), Zmm(betaRegIdx));
+                // vpdpbusd(Zmm(cRegIdx + i * bReg + bFullReg),
+                //          Zmm(bRegIdx + bFullReg), Zmm(betaRegIdx));
+                vpmulld(RegType(bRegIdx + bFullReg),
+                        RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
+                vpaddd(RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(bRegIdx + bFullReg));
             }
 
             add(regTmpCptr, regTmp1);

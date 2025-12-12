@@ -364,8 +364,10 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
                 vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                        RegType(yBaseIdx));
             } else {
-                vpdpbusd(RegType(accumBaseIdx + i), RegType(yBaseIdx),
-                         RegType(xBaseIdx));
+                vpmulld(RegType(yBaseIdx), RegType(yBaseIdx),
+                        RegType(xBaseIdx));
+                vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx));
             }
         }
 
@@ -375,10 +377,13 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
             if (is_unit_beta) {
                 vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)) | k2,
                        RegType(accumBaseIdx + (mSize / vnniWidth)),
-                       Xbyak::Xmm(yBaseIdx));
+                       RegType(yBaseIdx));
             } else {
-                vpdpbusd(RegType(accumBaseIdx + (mSize / vnniWidth)),
-                         RegType(yBaseIdx), RegType(xBaseIdx));
+                vpmulld(RegType(yBaseIdx), RegType(yBaseIdx),
+                        RegType(xBaseIdx));
+                vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)),
+                       RegType(accumBaseIdx + (mSize / vnniWidth)),
+                       RegType(yBaseIdx));
             }
         }
     } else if (c_downscale == DLP_S8) {
@@ -594,13 +599,11 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
         }
 
         vpmovzxbd(RegType(yBaseIdx), Xbyak::Xmm(yBaseIdx));
-        if (is_unit_beta) {
-            vpaddd(RegType(accumBaseIdx), RegType(accumBaseIdx),
-                   RegType(yBaseIdx));
-        } else {
-            vpdpbusd(RegType(accumBaseIdx), RegType(yBaseIdx),
-                     RegType(xBaseIdx));
+        if (!is_unit_beta) {
+            vpmulld(RegType(yBaseIdx), RegType(yBaseIdx), RegType(xBaseIdx));
         }
+        vpaddd(RegType(accumBaseIdx), RegType(accumBaseIdx), RegType(yBaseIdx));
+
     } else if (c_downscale == DLP_S8) {
         // Load buffer pointers for the downscaled output
         updateCBufferPointers();
@@ -972,7 +975,19 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
             // Convert F32 to BF16
-            vcvtneps2bf16(Xbyak::Ymm(tmpBaseIdx), RegType(accumBaseIdx + i));
+            vpsrld(RegType(tmpBaseIdx), RegType(accumBaseIdx + i), 16);
+            mov(regTmp3, 0x00000001);
+            vpbroadcastd(RegType(tmpBaseIdx + 1), regTmp3.cvt32());
+            vpandd(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                   RegType(tmpBaseIdx + 1));
+            mov(regTmp3, 0x00007FFF);
+            vpbroadcastd(RegType(tmpBaseIdx + 1), regTmp3.cvt32());
+            vpaddd(RegType(tmpBaseIdx + 2), RegType(accumBaseIdx + i),
+                   RegType(tmpBaseIdx + 1));
+            vpaddd(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                   RegType(tmpBaseIdx));
+            vpsrld(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2), 16);
+            vpmovdw(Xbyak::Ymm(tmpBaseIdx), RegType(tmpBaseIdx + 2));
             // Store BF16 result to memory.
             vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(tmpBaseIdx));
         }
@@ -984,8 +999,21 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
                           RegType(accumBaseIdx + (mSize / vnniWidth)));
             }
             // Convert F32 to BF16
-            vcvtneps2bf16(Xbyak::Ymm(tmpBaseIdx),
-                          RegType(accumBaseIdx + (mSize / vnniWidth)));
+            vpsrld(RegType(tmpBaseIdx),
+                   RegType(accumBaseIdx + (mSize / vnniWidth)), 16);
+            mov(regTmp3, 0x00000001);
+            vpbroadcastd(RegType(tmpBaseIdx + 1), regTmp3.cvt32());
+            vpandd(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                   RegType(tmpBaseIdx + 1));
+            mov(regTmp3, 0x00007FFF);
+            vpbroadcastd(RegType(tmpBaseIdx + 1), regTmp3.cvt32());
+            vpaddd(RegType(tmpBaseIdx + 2),
+                   RegType(accumBaseIdx + (mSize / vnniWidth)),
+                   RegType(tmpBaseIdx + 1));
+            vpaddd(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                   RegType(tmpBaseIdx));
+            vpsrld(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2), 16);
+            vpmovdw(Xbyak::Ymm(tmpBaseIdx), RegType(tmpBaseIdx + 2));
             // Store BF16 result to memory based on mask.
             vmovdqu16(ptr[regTmpYptr] | k2 | T_z, Xbyak::Ymm(tmpBaseIdx));
         }
@@ -1119,7 +1147,19 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
             // Convert from F32 to BF16.
-            vcvtneps2bf16(Xbyak::Ymm(tmpBaseIdx), RegType(accumBaseIdx + i));
+            vpsrld(RegType(tmpBaseIdx + 2), RegType(accumBaseIdx + i), 16);
+            mov(regTmp3, 0x00000001);
+            vpbroadcastd(RegType(tmpBaseIdx + 1), regTmp3.cvt32());
+            vpandd(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                   RegType(tmpBaseIdx + 1));
+            mov(regTmp3, 0x00007FFF);
+            vpbroadcastd(RegType(tmpBaseIdx + 1), regTmp3.cvt32());
+            vpaddd(RegType(tmpBaseIdx), RegType(accumBaseIdx + i),
+                   RegType(tmpBaseIdx + 1));
+            vpaddd(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                   RegType(tmpBaseIdx + 2));
+            vpsrld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+            vpmovdw(Xbyak::Ymm(tmpBaseIdx), RegType(tmpBaseIdx));
 
             // Extract 2 128-bit chunks containing 8 bfloat16 elements each from
             // the 512-bit accumulator register into separate temp registers.
@@ -2125,12 +2165,11 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
                 vpmovzxbd(RegType(yBaseIdx + i), Xbyak::Xmm(yBaseIdx + i));
 
                 if (!is_unit_beta) {
-                    vpdpbusd(RegType(accumBaseIdx + i), RegType(yBaseIdx + i),
-                             RegType(xBaseIdx));
-                } else {
-                    vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                           RegType(yBaseIdx + i));
+                    vpmulld(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                            RegType(xBaseIdx));
                 }
+                vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx + i));
             }
         } else {
             int n_iter = N_LEFT / vnniWidth;
@@ -2141,12 +2180,11 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
                 vpmovzxbd(RegType(yBaseIdx + i), Xbyak::Xmm(yBaseIdx + i));
 
                 if (!is_unit_beta) {
-                    vpdpbusd(RegType(accumBaseIdx + i), RegType(yBaseIdx + i),
-                             RegType(xBaseIdx));
-                } else {
-                    vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                           RegType(yBaseIdx + i));
+                    vpmulld(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                            RegType(xBaseIdx));
                 }
+                vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx + i));
             }
 
             if (n_left) {
@@ -2156,13 +2194,12 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
                           Xbyak::Xmm(yBaseIdx + n_iter));
 
                 if (!is_unit_beta) {
-                    vpdpbusd(RegType(accumBaseIdx + n_iter),
-                             RegType(yBaseIdx + n_iter), RegType(xBaseIdx));
-                } else {
-                    vpaddd(RegType(accumBaseIdx + n_iter),
-                           RegType(accumBaseIdx + n_iter),
-                           RegType(yBaseIdx + n_iter));
+                    vpmulld(RegType(yBaseIdx + n_iter),
+                            RegType(yBaseIdx + n_iter), RegType(xBaseIdx));
                 }
+                vpaddd(RegType(accumBaseIdx + n_iter),
+                       RegType(accumBaseIdx + n_iter),
+                       RegType(yBaseIdx + n_iter));
             }
         }
     } else if (c_downscale == DLP_BF16) {
@@ -2435,9 +2472,21 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
                     vcvtdq2ps(RegType(accumBaseIdx + i),
                               RegType(accumBaseIdx + i));
                 }
-                vcvtneps2bf16(Xbyak::Ymm(xBaseIdx + 1),
-                              RegType(accumBaseIdx + i));
-                vmovdqu16(ptr[regTmpYptr + i * 32], Xbyak::Ymm(xBaseIdx + 1));
+                // Convert from F32 to BF16.
+                vpsrld(RegType(xBaseIdx), RegType(accumBaseIdx + i), 16);
+                mov(regTmp1, 0x00000001);
+                vpbroadcastd(RegType(xBaseIdx + 1), regTmp1.cvt32());
+                vpandd(RegType(xBaseIdx), RegType(xBaseIdx),
+                       RegType(xBaseIdx + 1));
+                mov(regTmp1, 0x00007FFF);
+                vpbroadcastd(RegType(xBaseIdx + 1), regTmp1.cvt32());
+                vpaddd(RegType(xBaseIdx + 2), RegType(accumBaseIdx + i),
+                       RegType(xBaseIdx + 1));
+                vpaddd(RegType(xBaseIdx + 2), RegType(xBaseIdx + 2),
+                       RegType(xBaseIdx));
+                vpsrld(RegType(xBaseIdx + 2), RegType(xBaseIdx + 2), 16);
+                vpmovdw(Xbyak::Ymm(xBaseIdx + 2), RegType(xBaseIdx + 2));
+                vmovdqu16(ptr[regTmpYptr + i * 32], Xbyak::Ymm(xBaseIdx + 2));
             }
         } else {
             int n_iter = N_LEFT / vnniWidth;
@@ -2449,9 +2498,21 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
                     vcvtdq2ps(RegType(accumBaseIdx + i),
                               RegType(accumBaseIdx + i));
                 }
-                vcvtneps2bf16(Xbyak::Ymm(xBaseIdx + 1),
-                              RegType(accumBaseIdx + i));
-                vmovdqu16(ptr[regTmpYptr + i * 32], Xbyak::Ymm(xBaseIdx + 1));
+                // Convert from F32 to BF16.
+                vpsrld(RegType(xBaseIdx), RegType(accumBaseIdx + i), 16);
+                mov(regTmp1, 0x00000001);
+                vpbroadcastd(RegType(xBaseIdx + 1), regTmp1.cvt32());
+                vpandd(RegType(xBaseIdx), RegType(xBaseIdx),
+                       RegType(xBaseIdx + 1));
+                mov(regTmp1, 0x00007FFF);
+                vpbroadcastd(RegType(xBaseIdx + 1), regTmp1.cvt32());
+                vpaddd(RegType(xBaseIdx + 2), RegType(accumBaseIdx + i),
+                       RegType(xBaseIdx + 1));
+                vpaddd(RegType(xBaseIdx + 2), RegType(xBaseIdx + 2),
+                       RegType(xBaseIdx));
+                vpsrld(RegType(xBaseIdx + 2), RegType(xBaseIdx + 2), 16);
+                vpmovdw(Xbyak::Ymm(xBaseIdx + 2), RegType(xBaseIdx + 2));
+                vmovdqu16(ptr[regTmpYptr + i * 32], Xbyak::Ymm(xBaseIdx + 2));
             }
 
             if (n_left) {
@@ -2460,10 +2521,21 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
                     vcvtdq2ps(RegType(accumBaseIdx + n_iter),
                               RegType(accumBaseIdx + n_iter));
                 }
-                vcvtneps2bf16(Xbyak::Ymm(xBaseIdx + 1),
-                              RegType(accumBaseIdx + n_iter));
+                vpsrld(RegType(xBaseIdx), RegType(accumBaseIdx + n_iter), 16);
+                mov(regTmp1, 0x00000001);
+                vpbroadcastd(RegType(xBaseIdx + 1), regTmp1.cvt32());
+                vpandd(RegType(xBaseIdx), RegType(xBaseIdx),
+                       RegType(xBaseIdx + 1));
+                mov(regTmp1, 0x00007FFF);
+                vpbroadcastd(RegType(xBaseIdx + 1), regTmp1.cvt32());
+                vpaddd(RegType(xBaseIdx + 2), RegType(accumBaseIdx + n_iter),
+                       RegType(xBaseIdx + 1));
+                vpaddd(RegType(xBaseIdx + 2), RegType(xBaseIdx + 2),
+                       RegType(xBaseIdx));
+                vpsrld(RegType(xBaseIdx + 2), RegType(xBaseIdx + 2), 16);
+                vpmovdw(Xbyak::Ymm(xBaseIdx + 2), RegType(xBaseIdx + 2));
                 vmovdqu16(ptr[regTmpYptr + n_iter * 32] | k1 | T_z,
-                          Xbyak::Ymm(xBaseIdx + 1));
+                          Xbyak::Ymm(xBaseIdx + 2));
             }
         }
     } else if (c_downscale == DLP_F32) {

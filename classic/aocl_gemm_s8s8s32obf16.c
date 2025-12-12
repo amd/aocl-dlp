@@ -72,14 +72,6 @@ aocl_gemm_s8s8s32obf16(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
-    // Check for avx512_bf16 ISA support necessary for BF16.
-    if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
-        dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
-                      "cannot perform s8s8s32obf16 gemm.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
 
 #ifdef LPGEMM_BF16_JIT
     dlp_print_msg("cannot perform s8s8s32obf16 gemm with gcc < 11.2", __FILE__,

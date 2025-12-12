@@ -833,6 +833,18 @@ class gemmS8DEBackend : public iDEBackend
         // support.
         kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
+        // In case the environment variable was not set at all, resort to
+        // setting it based on the native hardware support.
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else {
+                // This is an invalid case, disable jit kernel generation.
+                return INVALID_KERNEL_INFO;
+            }
+        }
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,

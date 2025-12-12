@@ -750,9 +750,15 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_U8(int mSize, bool isRowStored)
 {
     int mLeft = mSize % nElemsPerReg;
 
+    bool is_unit_beta =
+        (betaScalingType == dlp::kernel_frame::scalingType::one);
+
     if (isRowStored) {
         vpmovzxbd(Zmm(yBaseIdx), Xmm(yBaseIdx));
-        vpdpbusd(Zmm(accumBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
+        if (!is_unit_beta) {
+            vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
+        }
+        vpaddd(Zmm(accumBaseIdx), Zmm(accumBaseIdx), Zmm(yBaseIdx));
     } else {
         // For column-stored data, load from downscale buffer
         updateCBufferPointers();
@@ -760,14 +766,29 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_U8(int mSize, bool isRowStored)
         for (int i = 0; i < mSize / nElemsPerReg; i++) {
             vmovdqu8(Xmm(yBaseIdx), ptr[regTmpYptr]);
             vpmovzxbd(Zmm(yBaseIdx), Xmm(yBaseIdx));
-            vpdpbusd(Zmm(accumBaseIdx + i), Zmm(yBaseIdx), Zmm(xBaseIdx));
+            if (is_unit_beta) {
+                vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
+                       Zmm(yBaseIdx));
+            } else {
+                vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
+                vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
+                       Zmm(yBaseIdx));
+            }
         }
 
         if (mLeft) {
             vmovdqu8(Xmm(yBaseIdx) | mask_regs[1], ptr[regTmpYptr]);
             vpmovzxbd(Zmm(yBaseIdx), Xmm(yBaseIdx));
-            vpdpbusd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)), Zmm(yBaseIdx),
-                     Zmm(xBaseIdx));
+            if (is_unit_beta) {
+                vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)) | k2,
+                       Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
+                       Zmm(yBaseIdx));
+            } else {
+                vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
+                vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
+                       Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
+                       Zmm(yBaseIdx));
+            }
         }
     }
 
@@ -1953,13 +1974,10 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBeta_U8(bool nMask, bool isBetaOne)
             vpmovzxbd(Zmm(yBaseIdx + i), Xmm(yBaseIdx + i)); // U8 → S32
 
             if (!isBetaOne) {
-                // Use VNNI for efficient beta scaling with U8
-                vpdpbusd(Zmm(accumBaseIdx + i), Zmm(yBaseIdx + i),
-                         Zmm(xBaseIdx));
-            } else {
-                vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
-                       Zmm(yBaseIdx + i));
+                vpmulld(Zmm(yBaseIdx + i), Zmm(yBaseIdx + i), Zmm(xBaseIdx));
             }
+            vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
+                   Zmm(yBaseIdx + i));
         }
     } else {
         scaleYWithBetaFringe_U8(isBetaOne);
@@ -2093,11 +2111,9 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_U8(bool isBetaOne)
         vpmovzxbd(Zmm(yBaseIdx + i), Xmm(yBaseIdx + i)); // U8 → S32
 
         if (!isBetaOne) {
-            vpdpbusd(Zmm(accumBaseIdx + i), Zmm(yBaseIdx + i), Zmm(xBaseIdx));
-        } else {
-            vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
-                   Zmm(yBaseIdx + i));
+            vpmulld(Zmm(yBaseIdx + i), Zmm(yBaseIdx + i), Zmm(xBaseIdx));
         }
+        vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i), Zmm(yBaseIdx + i));
     }
 
     if (n_left) {
@@ -2106,12 +2122,11 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_U8(bool isBetaOne)
         vpmovzxbd(Zmm(yBaseIdx + n_iter), Xmm(yBaseIdx + n_iter));
 
         if (!isBetaOne) {
-            vpdpbusd(Zmm(accumBaseIdx + n_iter), Zmm(yBaseIdx + n_iter),
-                     Zmm(xBaseIdx));
-        } else {
-            vpaddd(Zmm(accumBaseIdx + n_iter), Zmm(accumBaseIdx + n_iter),
-                   Zmm(yBaseIdx + n_iter));
+            vpmulld(Zmm(yBaseIdx + n_iter), Zmm(yBaseIdx + n_iter),
+                    Zmm(xBaseIdx));
         }
+        vpaddd(Zmm(accumBaseIdx + n_iter), Zmm(accumBaseIdx + n_iter),
+               Zmm(yBaseIdx + n_iter));
     }
 
     return dlp::jit::jitGeneratorError::success;

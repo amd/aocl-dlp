@@ -391,8 +391,10 @@ jitGEMMS8<KType>::scaleBeta()
                 vmovdqu8(Xbyak::Xmm(bRegIdx + j),
                          ptr[regTmpCptr + j * (RegBytes / 4)]);
                 vpmovzxbd(RegType(bRegIdx + j), Xbyak::Xmm(bRegIdx + j));
-                vpdpbusd(RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j),
-                         RegType(betaRegIdx));
+                vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
+                        RegType(betaRegIdx));
+                vpaddd(RegType(cRegIdx + i * bReg + j),
+                       RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j));
             }
 
             // Handle masked beta scaling
@@ -401,8 +403,11 @@ jitGEMMS8<KType>::scaleBeta()
                          ptr[regTmpCptr + (bFullReg * (RegBytes / 4))]);
                 vpmovzxbd(RegType(bRegIdx + bFullReg),
                           Xbyak::Xmm(bRegIdx + bFullReg));
-                vpdpbusd(RegType(cRegIdx + i * bReg + bFullReg),
-                         RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
+                vpmulld(RegType(bRegIdx + bFullReg),
+                        RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
+                vpaddd(RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(bRegIdx + bFullReg));
             }
 
             add(regTmpCptr, regTmp1);
@@ -642,28 +647,49 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                 }
 
                 // Convert F32 to BF16
-                vcvtneps2bf16(Xbyak::Ymm(cRegIdx + i * bReg + j),
-                              RegType(cRegIdx + i * bReg + j));
-
-                // Store BF16 result to memory.
+                vpsrld(RegType(aRegIdx), RegType(cRegIdx + i * bReg + j), 16);
+                mov(regTmp3, 0x00000001);
+                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
+                vpandd(RegType(aRegIdx), RegType(aRegIdx),
+                       RegType(aRegIdx + 1));
+                mov(regTmp3, 0x00007FFF);
+                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
+                vpaddd(RegType(aRegIdx + 2), RegType(cRegIdx + i * bReg + j),
+                       RegType(aRegIdx + 1));
+                vpaddd(RegType(aRegIdx + 2), RegType(aRegIdx + 2),
+                       RegType(aRegIdx));
+                vpsrld(RegType(aRegIdx + 2), RegType(aRegIdx + 2), 16);
+                vpmovdw(Xbyak::Ymm(aRegIdx + 2), RegType(aRegIdx + 2));
                 vmovdqu16(ptr[regTmpCptr + j * (RegBytes / 2)],
-                          Xbyak::Ymm(cRegIdx + i * bReg + j));
+                          Xbyak::Ymm(aRegIdx + 2));
             }
 
             // Masked Store
             if (bMaskReg > 0) {
                 if (!hasPostOps) {
                     // Convert accumulated S32 results to F32.
-                    vcvtdq2ps(RegType(cRegIdx + i * bReg),
-                              RegType(cRegIdx + i * bReg));
+                    vcvtdq2ps(RegType(cRegIdx + i * bReg + bFullReg),
+                              RegType(cRegIdx + i * bReg + bFullReg));
                 }
 
                 // Convert F32 to BF16
-                vcvtneps2bf16(Xbyak::Ymm(cRegIdx + i * bReg),
-                              RegType(cRegIdx + i * bReg));
-
-                // Store BF16 result to memory.
-                vmovdqu16(ptr[regTmpCptr] | k3, Xbyak::Ymm(cRegIdx + i * bReg));
+                vpsrld(RegType(aRegIdx), RegType(cRegIdx + i * bReg + bFullReg),
+                       16);
+                mov(regTmp3, 0x00000001);
+                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
+                vpandd(RegType(aRegIdx), RegType(aRegIdx),
+                       RegType(aRegIdx + 1));
+                mov(regTmp3, 0x00007FFF);
+                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
+                vpaddd(RegType(aRegIdx + 2),
+                       RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(aRegIdx + 1));
+                vpaddd(RegType(aRegIdx + 2), RegType(aRegIdx + 2),
+                       RegType(aRegIdx));
+                vpsrld(RegType(aRegIdx + 2), RegType(aRegIdx + 2), 16);
+                vpmovdw(Xbyak::Ymm(aRegIdx + 2), RegType(aRegIdx + 2));
+                vmovdqu16(ptr[regTmpCptr + bFullReg * (RegBytes / 2)] | k3,
+                          Xbyak::Ymm(aRegIdx + 2));
             }
 
             add(regTmpCptr, regTmp1);
