@@ -439,7 +439,8 @@ jitGEMMS8<KType>::scaleBeta()
 
             // Handle masked beta scaling
             if (bMaskReg > 0) {
-                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | k3,
+                // Use zero-masking (T_z) to zero unmasked elements
+                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | k3 | T_z,
                           ptr[regTmpCptr + (bFullReg * (RegBytes / 2))]);
                 vpmovsxwd(RegType(bRegIdx + bFullReg),
                           Xbyak::Ymm(bRegIdx + bFullReg));

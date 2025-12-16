@@ -183,7 +183,9 @@ dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::loadAValues(int aRegIdx, bool isFringe)
 {
     if (isFringe) {
-        vmovups(RegType(tmpBaseIdx + aRegIdx) | mask_regs[0],
+        // Use zero-masking (T_z) to zero unmasked elements instead of
+        // preserving garbage from previous kernel executions
+        vmovups(RegType(tmpBaseIdx + aRegIdx) | mask_regs[0] | T_z,
                 ptr[regTmpAptr + regTmp1]);
     } else {
         vmovups(RegType(tmpBaseIdx + aRegIdx), ptr[regTmpAptr + regTmp1]);
@@ -211,7 +213,9 @@ dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::loadXValues(bool isFringe)
 {
     if (isFringe) {
-        vmovups(RegType(xBaseIdx) | mask_regs[0], ptr[regXptr]);
+        // Use zero-masking (T_z) to zero unmasked elements instead of
+        // preserving garbage from previous kernel executions
+        vmovups(RegType(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
     } else {
         vmovups(RegType(xBaseIdx), ptr[regXptr]);
     }
@@ -1530,7 +1534,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::maskLoadB(int regIdx, int maskIdx)
 {
-    vmovups(RegType(bBaseIdx + regIdx) | mask_regs[maskIdx],
+    vmovups(RegType(bBaseIdx + regIdx) | mask_regs[maskIdx] | T_z,
             ptr[regTmp2 + regTmp1]);
 
     return dlp::jit::jitGeneratorError::success;

@@ -200,7 +200,9 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::loadXValues(bool isFringe)
 {
     if (isFringe) {
-        vmovdqu16(RegType(xBaseIdx) | mask_regs[0], ptr[regXptr]);
+        // Use zero-masking (T_z) to zero unmasked elements instead of
+        // preserving garbage from previous kernel executions
+        vmovdqu16(RegType(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
     } else {
         vmovdqu16(RegType(xBaseIdx), ptr[regXptr]);
     }
@@ -213,7 +215,9 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::loadAValues(int aRegIdx, bool isFringe)
 {
     if (isFringe) {
-        vmovdqu16(RegType(tmpBaseIdx + aRegIdx) | mask_regs[0],
+        // Use zero-masking (T_z) to zero unmasked elements instead of
+        // preserving garbage from previous kernel executions
+        vmovdqu16(RegType(tmpBaseIdx + aRegIdx) | mask_regs[0] | T_z,
                   ptr[regTmpAptr + regTmp1]);
     } else {
         vmovdqu16(RegType(tmpBaseIdx + aRegIdx), ptr[regTmpAptr + regTmp1]);
@@ -667,7 +671,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
             lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(bfloat16)]);
         }
         if (mLeft) {
-            vmovdqu16(Xbyak::Ymm(tmpBaseIdx + 1) | mask_regs[1],
+            vmovdqu16(Xbyak::Ymm(tmpBaseIdx + 1) | mask_regs[1] | T_z,
                       ptr[regTmpYptr]);
             vpmovsxwd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Ymm(tmpBaseIdx + 1));
             vpsllvd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Zmm(tmpBaseIdx + 1),
@@ -705,7 +709,8 @@ jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
         } else {
             // Todo: change it to fma later along with reference using fma,
             // or else gives accuracy diff
-            vmulps(RegType(tmpBaseIdx) | mask_regs[1], RegType(xBaseIdx),
+            // Use zero-masking (T_z) to zero unmasked elements on temp register
+            vmulps(RegType(tmpBaseIdx) | mask_regs[1] | T_z, RegType(xBaseIdx),
                    ptr[regTmpYptr]);
             vaddps(RegType(accumBaseIdx + (mSize / simdWidthF32)),
                    RegType(accumBaseIdx + (mSize / simdWidthF32)),
@@ -1321,7 +1326,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVM1<KType>::maskLoadB(int regIdx, int maskIdx)
 {
-    vmovups(RegType(bBaseIdx + regIdx) | mask_regs[maskIdx],
+    vmovups(RegType(bBaseIdx + regIdx) | mask_regs[maskIdx] | T_z,
             ptr[regTmp2 + regTmp1]);
 
     return dlp::jit::jitGeneratorError::success;
@@ -1679,7 +1684,8 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
                 lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
             }
             if (n_left) {
-                vmovdqu16(Xbyak::Ymm(tmpBaseIdx) | mask_regs[0],
+                // Use zero-masking (T_z) to zero unmasked elements
+                vmovdqu16(Xbyak::Ymm(tmpBaseIdx) | mask_regs[0] | T_z,
                           ptr[regTmpYptr]);
                 vpmovsxwd(Xbyak::Zmm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx));
                 vpslld(Xbyak::Zmm(tmpBaseIdx), Xbyak::Zmm(tmpBaseIdx), 16);

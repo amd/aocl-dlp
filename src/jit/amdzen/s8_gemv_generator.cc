@@ -372,7 +372,8 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
         }
 
         if (mLeft) {
-            vmovdqu8(Xbyak::Xmm(yBaseIdx) | k2, ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu8(Xbyak::Xmm(yBaseIdx) | k2 | T_z, ptr[regTmpYptr]);
             vpmovzxbd(RegType(yBaseIdx), Xbyak::Xmm(yBaseIdx));
             if (is_unit_beta) {
                 vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)) | k2,
@@ -404,7 +405,8 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
             }
         }
         if (mLeft) {
-            vmovdqu8(Xbyak::Xmm(yBaseIdx) | k2, ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu8(Xbyak::Xmm(yBaseIdx) | k2 | T_z, ptr[regTmpYptr]);
             vpmovsxbd(RegType(yBaseIdx), Xbyak::Xmm(yBaseIdx));
             if (is_unit_beta) {
                 vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)) | k2,
@@ -440,7 +442,8 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
         }
 
         if (mLeft) {
-            vmovdqu16(Xbyak::Ymm(yBaseIdx) | k2, ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu16(Xbyak::Ymm(yBaseIdx) | k2 | T_z, ptr[regTmpYptr]);
             vpmovsxwd(RegType(yBaseIdx), Xbyak::Ymm(yBaseIdx));
             vpslld(RegType(yBaseIdx), RegType(yBaseIdx), 16);
             vcvtps2dq(RegType(yBaseIdx), RegType(yBaseIdx));
@@ -473,7 +476,8 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
             }
         }
         if (mLeft) {
-            vcvtps2dq(RegType(yBaseIdx) | k2, ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vcvtps2dq(RegType(yBaseIdx) | k2 | T_z, ptr[regTmpYptr]);
             if (is_unit_beta) {
                 vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)) | k2,
                        RegType(accumBaseIdx + (mSize / vnniWidth)),
@@ -507,8 +511,9 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
                        RegType(accumBaseIdx + (mSize / vnniWidth)),
                        ptr[regTmpYptr]);
             } else {
-                vmovdqu32(RegType(yBaseIdx) | k2, ptr[regTmpYptr]);
-                vpmulld(RegType(yBaseIdx) | k2, RegType(yBaseIdx),
+                // Use zero-masking (T_z) to zero unmasked elements
+                vmovdqu32(RegType(yBaseIdx) | k2 | T_z, ptr[regTmpYptr]);
+                vpmulld(RegType(yBaseIdx) | k2 | T_z, RegType(yBaseIdx),
                         RegType(xBaseIdx));
                 vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)) | k2,
                        RegType(accumBaseIdx + (mSize / vnniWidth)),
@@ -1702,7 +1707,9 @@ jitGEMVS8M1<KType>::computeKxNfringe()
 
     if (n_left) {
         for (int j = 0; j < K_SUB_ITER; j++) {
-            vmovdqu32(RegType(bBaseIdx + j) | k1, ptr[regTmpYptr + j * 64]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu32(RegType(bBaseIdx + j) | k1 | T_z,
+                      ptr[regTmpYptr + j * 64]);
             vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * n_iter + j),
                      RegType(xBaseIdx + j), RegType(bBaseIdx + j));
         }
@@ -1770,7 +1777,8 @@ jitGEMVS8M1<KType>::compute1xNfringe(bool isLastKGroup)
 
     if (n_left) {
         j = 0;
-        vmovdqu32(RegType(bBaseIdx + j) | k1, ptr[regTmpYptr]);
+        // Use zero-masking (T_z) to zero unmasked elements
+        vmovdqu32(RegType(bBaseIdx + j) | k1 | T_z, ptr[regTmpYptr]);
         vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * n_iter), RegType(xBaseIdx),
                  RegType(bBaseIdx + j));
     }
@@ -2140,7 +2148,8 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             }
 
             if (n_left) {
-                vmovdqu8(Xbyak::Xmm(yBaseIdx + n_iter) | k1,
+                // Use zero-masking (T_z) to zero unmasked elements
+                vmovdqu8(Xbyak::Xmm(yBaseIdx + n_iter) | k1 | T_z,
                          ptr[regTmpYptr + n_iter * 16]);
                 vpmovsxbd(RegType(yBaseIdx + n_iter),
                           Xbyak::Xmm(yBaseIdx + n_iter));
@@ -2188,7 +2197,8 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             }
 
             if (n_left) {
-                vmovdqu8(Xbyak::Xmm(yBaseIdx + n_iter) | k1,
+                // Use zero-masking (T_z) to zero unmasked elements
+                vmovdqu8(Xbyak::Xmm(yBaseIdx + n_iter) | k1 | T_z,
                          ptr[regTmpYptr + n_iter * 16]);
                 vpmovzxbd(RegType(yBaseIdx + n_iter),
                           Xbyak::Xmm(yBaseIdx + n_iter));
@@ -2240,7 +2250,8 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             }
 
             if (n_left) {
-                vmovdqu16(Xbyak::Ymm(yBaseIdx + n_iter) | k1,
+                // Use zero-masking (T_z) to zero unmasked elements
+                vmovdqu16(Xbyak::Ymm(yBaseIdx + n_iter) | k1 | T_z,
                           ptr[regTmpYptr + n_iter * 32]);
                 vpmovsxwd(RegType(yBaseIdx + n_iter),
                           Xbyak::Ymm(yBaseIdx + n_iter));
@@ -2292,7 +2303,8 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             }
 
             if (n_left) {
-                vcvtps2dq(RegType(yBaseIdx + n_iter) | k1,
+                // Use zero-masking (T_z) to zero unmasked elements
+                vcvtps2dq(RegType(yBaseIdx + n_iter) | k1 | T_z,
                           ptr[regTmpYptr + n_iter * RegBytes]);
 
                 if (!is_unit_beta) {
@@ -2334,8 +2346,10 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
                            RegType(yBaseIdx + i));
                 }
                 if (n_left) {
+                    // Use zero-masking (T_z) to zero unmasked result lanes
                     vpmulld(
-                        RegType(yBaseIdx + n_iter) | k1, RegType(xBaseIdx),
+                        RegType(yBaseIdx + n_iter) | k1 | T_z,
+                        RegType(xBaseIdx),
                         ptr[regTmpYptr + n_iter * vnniWidth * sizeof(int32_t)]);
                     vpaddd(RegType(accumBaseIdx + n_iter),
                            RegType(accumBaseIdx + n_iter),

@@ -297,7 +297,8 @@ jitGEMMBF16<KType>::scaleBeta()
                             Xbyak::Zmm(betaRegIdx), Xbyak::Zmm(bRegIdx + j));
             }
             if (bMaskReg > 0) {
-                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | mask_regs[0],
+                // Use zero-masking (T_z) to zero unmasked elements
+                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | mask_regs[0] | T_z,
                           ptr[regTmpCptr + bFullReg * halfRegBytes]);
                 vpmovsxwd(Xbyak::Zmm(bRegIdx + bFullReg),
                           Xbyak::Ymm(bRegIdx + bFullReg));
@@ -321,7 +322,8 @@ jitGEMMBF16<KType>::scaleBeta()
                         RegType(bRegIdx + j));
         }
         if (bMaskReg > 0) {
-            vmovups(RegType(bRegIdx + bFullReg) | mask_regs[0],
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovups(RegType(bRegIdx + bFullReg) | mask_regs[0] | T_z,
                     ptr[regTmpCptr + bFullReg * RegBytes]);
             vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg),
                         RegType(betaRegIdx), RegType(bRegIdx + bFullReg));

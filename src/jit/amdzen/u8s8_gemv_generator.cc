@@ -226,11 +226,10 @@ jitU8S8VNNI_GEMVN1<KType>::storeResult_S32(int mSize, bool isRowStored)
                 // F32 accumulators - convert to S32 before storing
                 vcvtps2dq(Zmm(tmpBaseIdx),
                           Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vmovdqu32(ptr[regTmpYptr] | mask_regs[1] | T_z,
-                          Zmm(tmpBaseIdx));
+                vmovdqu32(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
             } else {
                 // S32 accumulators - direct store
-                vmovdqu32(ptr[regTmpYptr] | mask_regs[1] | T_z,
+                vmovdqu32(ptr[regTmpYptr] | mask_regs[1],
                           Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
             }
         }
@@ -279,13 +278,13 @@ jitU8S8VNNI_GEMVN1<KType>::storeResult_U8(int mSize, bool isRowStored)
                           Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
                 vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1));
                 vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2));
-                vpmovdb(ptr[regTmpYptr] | mask_regs[1] | T_z, Zmm(tmpBaseIdx));
+                vpmovdb(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
             } else {
                 // S32 accumulators - direct clamp to U8
                 vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1),
                         Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
                 vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx));
-                vpmovdb(ptr[regTmpYptr] | mask_regs[1] | T_z, Zmm(tmpBaseIdx));
+                vpmovdb(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
             }
         }
     }
@@ -321,10 +320,10 @@ jitU8S8VNNI_GEMVN1<KType>::storeResult_S8(int mSize, bool isRowStored)
                 // F32 accumulators - convert F32→S32 then saturate to S8
                 vcvtps2dq(Zmm(tmpBaseIdx),
                           Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vpmovsdb(ptr[regTmpYptr] | mask_regs[1] | T_z, Zmm(tmpBaseIdx));
+                vpmovsdb(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
             } else {
                 // S32 accumulators - direct saturation to S8
-                vpmovsdb(ptr[regTmpYptr] | mask_regs[1] | T_z,
+                vpmovsdb(ptr[regTmpYptr] | mask_regs[1],
                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
             }
         }
@@ -358,13 +357,13 @@ jitU8S8VNNI_GEMVN1<KType>::storeResult_F32(int mSize, bool isRowStored)
         if (mLeft) {
             if (accumulatorsAreF32) {
                 // F32 accumulators - direct store
-                vmovups(ptr[regTmpYptr] | mask_regs[1] | T_z,
+                vmovups(ptr[regTmpYptr] | mask_regs[1],
                         Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
             } else {
                 // S32 accumulators - convert to F32 and store
                 vcvtdq2ps(Zmm(tmpBaseIdx),
                           Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vmovups(ptr[regTmpYptr] | mask_regs[1] | T_z, Zmm(tmpBaseIdx));
+                vmovups(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
             }
         }
     }
@@ -439,8 +438,7 @@ jitU8S8VNNI_GEMVN1<KType>::storeResult_BF16(int mSize, bool isRowStored)
             vpsrld(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1), 16);
             vpmovdw(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1));
 
-            vmovdqu16(ptr[regTmpYptr] | mask_regs[1] | T_z,
-                      Ymm(tmpBaseIdx + 1));
+            vmovdqu16(ptr[regTmpYptr] | mask_regs[1], Ymm(tmpBaseIdx + 1));
         }
     }
 
@@ -734,7 +732,7 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_S32(int mSize, bool isRowStored)
         }
 
         if (mLeft) {
-            vpmulld(Zmm(yBaseIdx) | mask_regs[1], Zmm(xBaseIdx),
+            vpmulld(Zmm(yBaseIdx) | mask_regs[1] | T_z, Zmm(xBaseIdx),
                     ptr[regTmpYptr]);
             vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
                    Zmm(accumBaseIdx + (mSize / nElemsPerReg)), Zmm(yBaseIdx));
@@ -777,7 +775,8 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_U8(int mSize, bool isRowStored)
         }
 
         if (mLeft) {
-            vmovdqu8(Xmm(yBaseIdx) | mask_regs[1], ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu8(Xmm(yBaseIdx) | mask_regs[1] | T_z, ptr[regTmpYptr]);
             vpmovzxbd(Zmm(yBaseIdx), Xmm(yBaseIdx));
             if (is_unit_beta) {
                 vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)) | k2,
@@ -814,7 +813,8 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_S8(int mSize, bool isRowStored)
             vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i), Zmm(yBaseIdx));
         }
         if (mLeft) {
-            vmovdqu8(Xmm(yBaseIdx) | mask_regs[1], ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu8(Xmm(yBaseIdx) | mask_regs[1] | T_z, ptr[regTmpYptr]);
             vpmovsxbd(Zmm(yBaseIdx), Xmm(yBaseIdx));
             vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
             vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
@@ -842,7 +842,8 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_F32(int mSize, bool isRowStored)
             vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i), Zmm(yBaseIdx));
         }
         if (mLeft) {
-            vcvtps2dq(Zmm(yBaseIdx) | mask_regs[1], ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vcvtps2dq(Zmm(yBaseIdx) | mask_regs[1] | T_z, ptr[regTmpYptr]);
             vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
             vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
                    Zmm(accumBaseIdx + (mSize / nElemsPerReg)), Zmm(yBaseIdx));
@@ -878,11 +879,11 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_BF16(int mSize, bool isRowStored)
         }
 
         if (mLeft) {
-            vmovdqu16(Ymm(yBaseIdx) | mask_regs[1], ptr[regTmpYptr]);
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu16(Ymm(yBaseIdx) | mask_regs[1] | T_z, ptr[regTmpYptr]);
             vpmovsxwd(Zmm(yBaseIdx), Ymm(yBaseIdx));
             vpslld(Zmm(yBaseIdx), Zmm(yBaseIdx), 16);
             vcvtps2dq(Zmm(yBaseIdx), Zmm(yBaseIdx));
-            // Store the YMM result to debug buffer for inspection
             vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
             vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
                    Zmm(accumBaseIdx + (mSize / nElemsPerReg)), Zmm(yBaseIdx));
@@ -1646,7 +1647,8 @@ jitU8S8VNNI_GEMVM1<KType>::computeKxnfringe()
 
     if (n_left) {
         for (int j = 0; j < K_SUB_ITER; j++) {
-            vmovdqu32(Zmm(bBaseIdx + j) | mask_regs[0],
+            // Use zero-masking (T_z) to zero unmasked elements
+            vmovdqu32(Zmm(bBaseIdx + j) | mask_regs[0] | T_z,
                       ptr[regTmpYptr + j * 64]);
             vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * n_iter + j),
                      Zmm(xBaseIdx + j), Zmm(bBaseIdx + j));
@@ -1711,7 +1713,8 @@ jitU8S8VNNI_GEMVM1<KType>::compute1xnfringe(bool isLastKGroup)
 
     if (n_left) {
         j = 0;
-        vmovdqu32(Zmm(bBaseIdx + j) | mask_regs[0], ptr[regTmpYptr]);
+        // Use zero-masking (T_z) to zero unmasked elements
+        vmovdqu32(Zmm(bBaseIdx + j) | mask_regs[0] | T_z, ptr[regTmpYptr]);
         vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * n_iter), Zmm(xBaseIdx),
                  Zmm(bBaseIdx + j));
     }
@@ -2077,7 +2080,7 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_S32(bool isBetaOne)
                    Zmm(yBaseIdx + i));
         }
         if (n_left) {
-            vpmulld(Zmm(yBaseIdx + n_iter) | mask_regs[0], Zmm(xBaseIdx),
+            vpmulld(Zmm(yBaseIdx + n_iter) | mask_regs[0] | T_z, Zmm(xBaseIdx),
                     ptr[regTmpYptr + n_iter * nElemsPerReg * sizeof(int32_t)]);
             vpaddd(Zmm(accumBaseIdx + n_iter), Zmm(accumBaseIdx + n_iter),
                    Zmm(yBaseIdx + n_iter));
@@ -2088,7 +2091,7 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_S32(bool isBetaOne)
                    ptr[regTmpYptr + i * nElemsPerReg * sizeof(int32_t)]);
         }
         if (n_left) {
-            vpaddd(Zmm(accumBaseIdx + n_iter) | mask_regs[0],
+            vpaddd(Zmm(accumBaseIdx + n_iter) | mask_regs[0] | T_z,
                    Zmm(accumBaseIdx + n_iter),
                    ptr[regTmpYptr + n_iter * nElemsPerReg * sizeof(int32_t)]);
         }
@@ -2117,7 +2120,7 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_U8(bool isBetaOne)
     }
 
     if (n_left) {
-        vmovdqu8(Xmm(yBaseIdx + n_iter) | mask_regs[0],
+        vmovdqu8(Xmm(yBaseIdx + n_iter) | mask_regs[0] | T_z,
                  ptr[regTmpYptr + n_iter * 16]);
         vpmovzxbd(Zmm(yBaseIdx + n_iter), Xmm(yBaseIdx + n_iter));
 
@@ -2152,7 +2155,8 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_S8(bool isBetaOne)
     }
 
     if (n_left) {
-        vmovdqu8(Xmm(yBaseIdx + n_iter) | mask_regs[0],
+        // Use zero-masking (T_z) to zero unmasked elements
+        vmovdqu8(Xmm(yBaseIdx + n_iter) | mask_regs[0] | T_z,
                  ptr[regTmpYptr + n_iter * 16]);
         vpmovsxbd(Zmm(yBaseIdx + n_iter), Xmm(yBaseIdx + n_iter));
 
@@ -2187,7 +2191,7 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_F32(bool isBetaOne)
     }
 
     if (n_left) {
-        vcvtps2dq(Zmm(yBaseIdx + n_iter) | mask_regs[0],
+        vcvtps2dq(Zmm(yBaseIdx + n_iter) | mask_regs[0] | T_z,
                   ptr[regTmpYptr + n_iter * RegBytes]);
 
         if (!isBetaOne) {
@@ -2223,7 +2227,7 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_BF16(bool isBetaOne)
     }
 
     if (n_left) {
-        vmovdqu16(Ymm(yBaseIdx + n_iter) | mask_regs[0],
+        vmovdqu16(Ymm(yBaseIdx + n_iter) | mask_regs[0] | T_z,
                   ptr[regTmpYptr + n_iter * 32]);
         vpmovsxwd(Zmm(yBaseIdx + n_iter), Ymm(yBaseIdx + n_iter));
         vpslld(Zmm(yBaseIdx + n_iter), Zmm(yBaseIdx + n_iter), 16);

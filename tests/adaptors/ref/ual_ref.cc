@@ -1120,9 +1120,14 @@ UalRef::gemm(const Matrix&                      A,
         // etc.)
         Matrix tempC_f32(M, N, MatrixType::f32, MatrixLayout::ROW_MAJOR);
 
-        // Initialize tempC_f32 with original C values when beta != 0
+        // Initialize tempC_f32 appropriately based on beta
         if (beta != 0.0) {
+            // Copy original C values when beta != 0
             copyAndConvertToF32(C, tempC_f32);
+        } else {
+            // Zero-initialize to avoid NaN issues from uninitialized memory
+            // (GEMM implementations may read C even when beta == 0)
+            std::memset(tempC_f32.getData(), 0, tempC_f32.getDataSizeBytes());
         }
 
         // GEMM into f32 intermediate
