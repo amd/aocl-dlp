@@ -31,6 +31,7 @@
 #include <cctype>
 #include <tuple>
 
+#include "classic/dlp_macros.h"
 #include "de_input.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 #include "utils/ctype_utils.hh"
@@ -43,7 +44,7 @@ class gemmDEBackendUtils
                              lpgemm_post_op*                  post_op,
                              kernel_frame::kernelDatatype     k_dtype);
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
     getScalingTypesF32(void* alpha, void* beta, md_t k, md_t kc_hint)
     {
@@ -61,7 +62,7 @@ class gemmDEBackendUtils
         return std::make_pair(alphaScalingType, betaScalingType);
     }
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
     getScalingTypesInt32(void* alpha, void* beta, md_t k, md_t kc_hint)
     {
@@ -81,8 +82,8 @@ class gemmDEBackendUtils
 
   public:
     template<typename T>
-    [[gnu::always_inline]]
-    static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
+    DLP_ALWAYS_INLINE static std::pair<kernel_frame::scalingType,
+                                       kernel_frame::scalingType>
     getScalingTypes(void* alpha, void* beta, md_t k, md_t kc_hint)
     {
         if constexpr (std::is_same_v<float, T>) {
@@ -97,7 +98,7 @@ class gemmDEBackendUtils
                               kernel_frame::scalingType::generic);
     }
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     static kernel_frame::kernelInfo checkPostOpsAndCreateKernelInfo(
         md_t                                mr,
         md_t                                nr,

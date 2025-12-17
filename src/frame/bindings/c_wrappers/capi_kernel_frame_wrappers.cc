@@ -30,6 +30,7 @@
 #include <optional>
 
 #include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
+#include "classic/dlp_macros.h"
 #include "decision_engine/decision_engine.hh"
 #include "jit/jit_kernel_adapter.hh"
 #include "jit_register/jit_register.hh"
@@ -77,8 +78,7 @@ get_kernel_family_name(kernelDatatype kDtype)
     }
 }
 
-[[gnu::always_inline]]
-static inline dlp::kernel_frame::kernelInfo
+DLP_ALWAYS_INLINE static dlp::kernel_frame::kernelInfo
 dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype  kDType,
                                  md_t            m,
                                  md_t            n,

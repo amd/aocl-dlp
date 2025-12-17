@@ -32,6 +32,7 @@
 #include <set>
 #include <vector>
 
+#include "classic/dlp_macros.h"
 #include "de_backend.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 #include "utils/type_utils.hh"
@@ -251,28 +252,28 @@ class decisionEngine
      * INVALID_KERNEL_INFO if no suitable backend is registered
      */
     template<typename T>
-    [[gnu::always_inline]] inline dlp::kernel_frame::kernelInfo
-    getGemmKernelInfoForInputFastPath(
-        md_t                                 m,
-        md_t                                 n,
-        md_t                                 k,
-        md_t                                 rs_a,
-        md_t                                 cs_a,
-        md_t                                 rs_b,
-        md_t                                 cs_b,
-        md_t                                 rs_c,
-        md_t                                 cs_c,
-        void*                                alpha,
-        void*                                beta,
-        AOCL_MEMORY_TAG                      mtag_a,
-        AOCL_MEMORY_TAG                      mtag_b,
-        lpgemm_post_op*                      metadata,
-        md_t                                 mr_hint,
-        md_t                                 nr_hint,
-        md_t                                 kc_hint,
-        md_t                                 c_downscale,
-        dlp::kernel_frame::kernelRoutineType kType,
-        dlp::kernel_frame::kernelDatatype    dt)
+    DLP_ALWAYS_INLINE dlp::kernel_frame::kernelInfo
+                      getGemmKernelInfoForInputFastPath(
+                          md_t                                 m,
+                          md_t                                 n,
+                          md_t                                 k,
+                          md_t                                 rs_a,
+                          md_t                                 cs_a,
+                          md_t                                 rs_b,
+                          md_t                                 cs_b,
+                          md_t                                 rs_c,
+                          md_t                                 cs_c,
+                          void*                                alpha,
+                          void*                                beta,
+                          AOCL_MEMORY_TAG                      mtag_a,
+                          AOCL_MEMORY_TAG                      mtag_b,
+                          lpgemm_post_op*                      metadata,
+                          md_t                                 mr_hint,
+                          md_t                                 nr_hint,
+                          md_t                                 kc_hint,
+                          md_t                                 c_downscale,
+                          dlp::kernel_frame::kernelRoutineType kType,
+                          dlp::kernel_frame::kernelDatatype    dt)
     {
         auto kTypeIdx = utils::getUnderlyingValueOfEnum(kType);
         auto dtIdx    = utils::getUnderlyingValueOfEnum(dt);

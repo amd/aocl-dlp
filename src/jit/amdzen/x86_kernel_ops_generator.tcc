@@ -28,6 +28,7 @@
 
 #include "x86_kernel_ops_generator.hh"
 #include "jit_generator_utils.hh"
+#include "classic/dlp_macros.h"
 
 namespace amdzen::x86gen {
 
@@ -2886,7 +2887,7 @@ kernelOpsGeneratorX86<KType>::POLY_EVAL_HORNER_16_0(int r)
 }
 
 template<>
-void
+DLP_ALWAYS_INLINE void
 kernelOpsGeneratorX86<utils::kernelInstrType::avx512_zmm_32_reg>::ERF(int y,
                                                                       int r)
 {
@@ -3023,7 +3024,7 @@ kernelOpsGeneratorX86<KType>::ERF(int y, int r)
 
 // AVX-512 specialization: Skip 1/√2 scaling since ERF coefficients handle it
 template<>
-void
+DLP_ALWAYS_INLINE void
 kernelOpsGeneratorX86<
     utils::kernelInstrType::avx512_zmm_32_reg>::GELU_ERF_F32_DEF(md_t reg)
 {
@@ -3162,10 +3163,3 @@ kernelOpsGeneratorX86<KType>::sigmoid(kernelOpsMetaData& op)
 }
 
 } // namespace amdzen::x86gen
-// Explicit template instantiations to resolve linker errors
-template class amdzen::x86gen::kernelOpsGeneratorX86<
-    amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;
-template class amdzen::x86gen::kernelOpsGeneratorX86<
-    amdzen::utils::kernelInstrType::avx512_zmm_32_reg>;
-template class amdzen::x86gen::kernelOpsGeneratorX86<
-    amdzen::utils::kernelInstrType::avx512_ymm_32_reg>;

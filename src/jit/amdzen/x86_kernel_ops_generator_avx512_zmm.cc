@@ -12,7 +12,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
@@ -26,41 +26,10 @@
  *
  */
 
-#ifndef DLP_MACROS_H
-#define DLP_MACROS_H
+// Explicit template instantiation for AVX-512 ZMM.
+// Split from x86_kernel_ops_generator.tcc to enable parallel compilation.
 
-/**
- * @brief Force inline macro - portable across compilers
- *
- * Use this macro to force the compiler to inline a function.
- * This is useful for performance-critical code paths where
- * inlining is essential.
- *
- * Usage:
- *   DLP_ALWAYS_INLINE void myFunction() { ... }
- *
- * Note: This macro includes 'inline' so don't add it separately.
- */
-#if defined(_MSC_VER)
-#define DLP_ALWAYS_INLINE __forceinline
-#elif defined(__GNUC__) || defined(__clang__)
-#define DLP_ALWAYS_INLINE [[gnu::always_inline]] inline
-#else
-#define DLP_ALWAYS_INLINE inline
-#endif
+#include "x86_kernel_ops_generator.tcc"
 
-#ifdef __cplusplus
-
-#define DLP_BEGIN_EXTERN_C                                                     \
-    extern "C"                                                                 \
-    {
-#define DLP_END_EXTERN_C }
-
-#else
-
-#define DLP_BEGIN_EXTERN_C
-#define DLP_END_EXTERN_C
-
-#endif
-
-#endif // DLP_MACROS_H
+template class amdzen::x86gen::kernelOpsGeneratorX86<
+    amdzen::utils::kernelInstrType::avx512_zmm_32_reg>;

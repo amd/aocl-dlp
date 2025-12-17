@@ -32,6 +32,7 @@
 #include <optional>
 
 #include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
+#include "classic/dlp_macros.h"
 #include "de_backend_utils.hh"
 #include "de_input.hh"
 #include "kernel_frame/kernel_frame_base.hh"
@@ -130,7 +131,7 @@ class gemmF32DEBackend : public iDEBackend
     std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) override;
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
         md_t                              m,
@@ -242,7 +243,7 @@ class gemmF32DEBackend : public iDEBackend
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
         md_t                              m,
@@ -359,7 +360,7 @@ class gemmBF16DEBackend : public iDEBackend
     std::unique_ptr<gemmF32DEBackend>
         f32Backend; // For rerouting when AVX512BF16 is not supported
 
-    [[gnu::always_inline]] constexpr md_t getPrefetchDistance()
+    DLP_ALWAYS_INLINE constexpr md_t getPrefetchDistance()
     {
         // Setting this to 40, which works for ZEN5. Should we set this in
         // the DE constructor, based on the underlying arch?
@@ -377,7 +378,7 @@ class gemmBF16DEBackend : public iDEBackend
     std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) override;
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
         md_t                              m,
@@ -447,7 +448,7 @@ class gemmBF16DEBackend : public iDEBackend
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
         md_t                              m,
@@ -517,7 +518,7 @@ class gemmU8S8DEBackend : public iDEBackend
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     constexpr md_t getPrefetchDistance()
     {
         // Setting this to 0 for now, should be tuned based on arch
@@ -536,7 +537,7 @@ class gemmU8S8DEBackend : public iDEBackend
     std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) override;
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
         md_t                              m,
@@ -614,7 +615,7 @@ class gemmU8S8DEBackend : public iDEBackend
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
         md_t                              m,
@@ -692,7 +693,7 @@ class gemmS8DEBackend : public iDEBackend
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
 
-    [[gnu::always_inline]] constexpr md_t getPrefetchDistance()
+    DLP_ALWAYS_INLINE constexpr md_t getPrefetchDistance()
     {
         // Setting this to 40, which works for ZEN5. Should we set this in
         // the DE constructor, based on the underlying arch?
@@ -711,28 +712,28 @@ class gemmS8DEBackend : public iDEBackend
     std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) override;
 
-    [[gnu::always_inline]] dlp::kernel_frame::kernelInfo
-    getGemvKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        md_t                              m,
-        md_t                              n,
-        md_t                              k,
-        md_t                              rs_a,
-        md_t                              cs_a,
-        md_t                              rs_b,
-        md_t                              cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
-        [[maybe_unused]] bool rerouted_from_other_backend) override final
+    DLP_ALWAYS_INLINE dlp::kernel_frame::kernelInfo
+                      getGemvKernelInfoForInputFastPath(
+                          dlp::kernel_frame::kernelDatatype k_dtype,
+                          md_t                              m,
+                          md_t                              n,
+                          md_t                              k,
+                          md_t                              rs_a,
+                          md_t                              cs_a,
+                          md_t                              rs_b,
+                          md_t                              cs_b,
+                          md_t                              rs_c,
+                          md_t                              cs_c,
+                          void*                             alpha,
+                          void*                             beta,
+                          AOCL_MEMORY_TAG                   mtag_a,
+                          AOCL_MEMORY_TAG                   mtag_b,
+                          lpgemm_post_op*                   metadata,
+                          md_t                              mr_hint,
+                          md_t                              nr_hint,
+                          md_t                              kc_hint,
+                          md_t                              c_downscale,
+                          [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
             return INVALID_KERNEL_INFO;
@@ -786,7 +787,7 @@ class gemmS8DEBackend : public iDEBackend
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
 
-    [[gnu::always_inline]]
+    DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
         dlp::kernel_frame::kernelDatatype k_dtype,
         md_t                              m,
