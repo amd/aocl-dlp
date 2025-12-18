@@ -1115,10 +1115,8 @@ UalRef::gemm(const Matrix&                      A,
         md_t M = C.getEffectiveRows();
         md_t N = C.getEffectiveCols();
 
-        // Create f32 intermediate matrix for post-ops
-        // This ensures precision for transcendental functions (swish, gelu,
-        // etc.)
-        Matrix tempC_f32(M, N, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+        // Create f32 intermediate matrix with same layout as C for post-ops
+        Matrix tempC_f32(M, N, MatrixType::f32, C.getLayout());
 
         // Initialize tempC_f32 appropriately based on beta
         if (beta != 0.0) {
@@ -1352,6 +1350,7 @@ UalRef::copyAndConvertToF32(const Matrix& src, Matrix& dst_f32)
 
     float*       dst_data       = reinterpret_cast<float*>(dst_f32.getData());
     MatrixLayout src_layout     = src.getLayout();
+    MatrixLayout dst_layout     = dst_f32.getLayout();
     bool         src_transposed = src.isTransposed();
 
     for (md_t i = 0; i < rows; ++i) {
@@ -1368,8 +1367,10 @@ UalRef::copyAndConvertToF32(const Matrix& src, Matrix& dst_f32)
                               : (static_cast<size_t>(j) * src_ld + i);
             }
 
-            // Destination: simple row-major
-            size_t dst_idx = static_cast<size_t>(i) * dst_ld + j;
+            // Calculate destination index based on layout
+            size_t dst_idx = (dst_layout == MatrixLayout::ROW_MAJOR)
+                                 ? (static_cast<size_t>(i) * dst_ld + j)
+                                 : (static_cast<size_t>(j) * dst_ld + i);
 
             dst_data[dst_idx] =
                 convertToFloat(src.getData(), src.getMatrixType(), src_idx);
@@ -1391,13 +1392,16 @@ UalRef::convertF32MatrixToTarget(const Matrix& src_f32,
     md_t dst_ld = dst.getLeadingDimension();
 
     const float* src_data   = reinterpret_cast<const float*>(src_f32.getData());
+    MatrixLayout src_layout = src_f32.getLayout();
     MatrixLayout dst_layout = dst.getLayout();
     bool         dst_transposed = dst.isTransposed();
 
     for (md_t i = 0; i < rows; ++i) {
         for (md_t j = 0; j < cols; ++j) {
-            // Source: simple row-major
-            size_t src_idx = static_cast<size_t>(i) * src_ld + j;
+            // Calculate source index based on source layout
+            size_t src_idx = (src_layout == MatrixLayout::ROW_MAJOR)
+                                 ? (static_cast<size_t>(i) * src_ld + j)
+                                 : (static_cast<size_t>(j) * src_ld + i);
 
             // Calculate destination index accounting for layout and
             // transposition

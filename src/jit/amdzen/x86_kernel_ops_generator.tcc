@@ -1182,7 +1182,7 @@ kernelOpsGeneratorX86<KType>::biasColMajorImplUnified(kernelOpsMetaData& op,
                     // Vector ZP for column-major: one ZP per row, broadcast it
                     RegType zpTempReg = popAndGetScratchReg();
                     broadcastAndConvertScalar<ZpDt>(
-                        zpTempReg, jit_->ptr[regTmp6 + i * zpLoadBytes]);
+                        zpTempReg, jit_->ptr[regTmp6 + i * sizeof(ZpDt)]);
                     jit_->vsubps(tempReg, tempReg, zpTempReg);
                     scratch_reg_queue.push(zpTempReg);
                 }

@@ -416,10 +416,14 @@ MicroTest::createOperationParam(
         MatrixType matrix_type = extractMatrixTypeParam(
             "matrix_type", config.params, MatrixType::f32);
 
-        // Create test matrix with C dimensions and specified type
+        // Get the storage format to match C matrix layout
+        // This ensures ldm is set correctly (rows for column-major, cols for
+        // row-major)
+        MatrixLayout layout = getStorageFormat();
+
         std::vector<std::vector<float>> matrix_data(
             rows, std::vector<float>(cols, 0.5f));
-        auto matrix = Matrix::fromData(matrix_data, matrix_type);
+        auto matrix = Matrix::fromData(matrix_data, matrix_type, layout);
 
         // Parse scale_factor parameter
         double scale_value =
@@ -446,11 +450,12 @@ MicroTest::createOperationParam(
         MatrixType matrix_type = extractMatrixTypeParam(
             "matrix_type", config.params, MatrixType::f32);
 
-        // Create test matrix with C dimensions (identity-like for
-        // multiplication)
+        // Get the storage format to match C matrix layout
+        MatrixLayout layout = getStorageFormat();
+
         std::vector<std::vector<float>> matrix_data(
             rows, std::vector<float>(cols, 1.0f));
-        auto matrix = Matrix::fromData(matrix_data, matrix_type);
+        auto matrix = Matrix::fromData(matrix_data, matrix_type, layout);
 
         // Parse scale_factor parameter
         double scale_value =

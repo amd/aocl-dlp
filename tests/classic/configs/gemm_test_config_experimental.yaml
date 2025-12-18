@@ -2248,7 +2248,7 @@ gemm_tests:
     a_type: ["bf16"]
     b_type: ["bf16"]
     c_type: ["bf16"]
-    acc_type: ["bf16"]
+    acc_type: ["f32"]
     storage_format: ["row-major", "column-major"]
     transA: [false, true]
     transB: [false, true]
