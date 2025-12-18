@@ -1635,7 +1635,7 @@ jitGEMVS8M1<KType>::allocateRegisters()
 
     yReg      = (NR / vnniWidth);
     xReg      = K_SUB_ITER;
-    bReg      = K_SUB_ITER;
+    bReg      = NR / vnniWidth;
     accumReg  = (NR / vnniWidth) * K_SUB_ITER;
     vec128Reg = 1;
 
@@ -1694,25 +1694,21 @@ jitGEMVS8M1<KType>::computeKxNfringe()
     int n_iter = N_LEFT / vnniWidth;
     int n_left = N_LEFT % vnniWidth;
 
-    for (int i = 0; i < n_iter; i++) {
-        for (int j = 0; j < K_SUB_ITER; j++) {
-            offsetBPtr(j);
-            vmovdqu32(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+    for (int j = 0; j < K_SUB_ITER; j++) {
+        for (int i = 0; i < n_iter; i++) {
+            vmovdqu32(RegType(bBaseIdx + i),
+                      ptr[regTmp2 + i * vnniWidth * sizeof(int32_t)]);
 
             vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * i + j),
-                     RegType(xBaseIdx + j), RegType(bBaseIdx + j));
+                     RegType(xBaseIdx + j), RegType(bBaseIdx + i));
         }
-        add(regTmp2, vnniWidth * sizeof(int32_t));
-    }
-
-    if (n_left) {
-        for (int j = 0; j < K_SUB_ITER; j++) {
-            // Use zero-masking (T_z) to zero unmasked elements
-            vmovdqu32(RegType(bBaseIdx + j) | k1 | T_z,
+        if (n_left) {
+            vmovdqu32(RegType(bBaseIdx + n_iter) | k1 | T_z,
                       ptr[regTmpYptr + j * 64]);
             vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * n_iter + j),
-                     RegType(xBaseIdx + j), RegType(bBaseIdx + j));
+                     RegType(xBaseIdx + j), RegType(bBaseIdx + n_iter));
         }
+        add(regTmp2, regRsB);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1732,15 +1728,14 @@ jitGEMVS8M1<KType>::computeKxNR(bool nMask)
         }
 
         int nIter = NR / vnniWidth;
-        for (int i = 0; i < nIter; ++i) {
-            for (int j = 0; j < K_SUB_ITER; j += 1) {
-                offsetBPtr(j);
-                vmovdqu32(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+        for (int j = 0; j < K_SUB_ITER; j += 1) {
+            for (int i = 0; i < nIter; ++i) {
+                vmovdqu32(RegType(bBaseIdx + i),
+                          ptr[regTmp2 + i * vnniWidth * sizeof(int32_t)]);
                 vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * i + j),
-                         RegType(xBaseIdx + j), RegType(bBaseIdx + j));
+                         RegType(xBaseIdx + j), RegType(bBaseIdx + i));
             }
-
-            add(regTmp2, vnniWidth * sizeof(int32_t));
+            add(regTmp2, regRsB);
         }
     } else {
         computeKxNfringe();
@@ -1762,25 +1757,21 @@ jitGEMVS8M1<KType>::compute1xNfringe(bool isLastKGroup)
         vpaddb(RegType(xBaseIdx), RegType(xBaseIdx), RegType(vec128BaseIdx));
     }
 
-    int j      = 0;
     int n_iter = N_LEFT / vnniWidth;
     int n_left = N_LEFT % vnniWidth;
 
     for (int i = 0; i < n_iter; i++) {
-        j = i % K_SUB_ITER;
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * vnniWidth * sizeof(int32_t)]);
-        vmovdqu32(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+        vmovdqu32(RegType(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
         vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
-                 RegType(bBaseIdx + j));
+                 RegType(bBaseIdx + i));
     }
 
     if (n_left) {
-        j = 0;
-        // Use zero-masking (T_z) to zero unmasked elements
-        vmovdqu32(RegType(bBaseIdx + j) | k1 | T_z, ptr[regTmpYptr]);
+        vmovdqu32(RegType(bBaseIdx + n_iter) | k1 | T_z, ptr[regTmpYptr]);
         vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * n_iter), RegType(xBaseIdx),
-                 RegType(bBaseIdx + j));
+                 RegType(bBaseIdx + n_iter));
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1804,14 +1795,12 @@ jitGEMVS8M1<KType>::compute1xNR(bool nMask, bool isLastKGroup)
                    RegType(vec128BaseIdx));
         }
 
-        int j     = 0;
         int nIter = NR / vnniWidth;
         for (int i = 0; i < nIter; ++i) {
-            j = i % K_SUB_ITER;
-            vmovdqu32(RegType(bBaseIdx + j),
+            vmovdqu32(RegType(bBaseIdx + i),
                       ptr[regTmp2 + i * vnniWidth * sizeof(int32_t)]);
             vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
-                     RegType(bBaseIdx + j));
+                     RegType(bBaseIdx + i));
         }
     } else {
         compute1xNfringe(isLastKGroup);

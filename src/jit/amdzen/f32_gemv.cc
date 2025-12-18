@@ -1434,7 +1434,7 @@ jitF32GEMVM1<KType>::allocateRegisters()
     // simdWidth. This makes sense from a performance perspective.
     yReg     = NR / simdWidth;
     xReg     = K_SUB_ITER;
-    bReg     = K_SUB_ITER;
+    bReg     = NR / simdWidth;
     accumReg = (NR / simdWidth) * K_SUB_ITER;
     tmpReg   = yReg;
     maskReg  = 0; // Set this only when AVX512 codepath is disabled.
@@ -1535,7 +1535,7 @@ dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::maskLoadB(int regIdx, int maskIdx)
 {
     vmovups(RegType(bBaseIdx + regIdx) | mask_regs[maskIdx] | T_z,
-            ptr[regTmp2 + regTmp1]);
+            ptr[regTmp2 + regIdx * simdWidth * sizeof(float)]);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -1546,7 +1546,7 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::maskLoadB(int regIdx,
                                                                  int maskIdx)
 {
     vmaskmovps(Xbyak::Ymm(bBaseIdx + regIdx), Xbyak::Ymm(maskBaseIdx + maskIdx),
-               ptr[regTmp2 + regTmp1]);
+               ptr[regTmp2 + regIdx * simdWidth * sizeof(float)]);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -1561,22 +1561,19 @@ jitF32GEMVM1<KType>::computeKxnfringe()
 
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
-    for (int i = 0; i < n_iter; i++) {
-        for (int j = 0; j < K_SUB_ITER; j++) {
-            offsetBPtr(j); // Calculated into regTmp1
-            vmovups(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+    for (int j = 0; j < K_SUB_ITER; j++) {
+        for (int i = 0; i < n_iter; i++) {
+            vmovups(RegType(bBaseIdx + i),
+                    ptr[regTmp2 + i * simdWidth * sizeof(float)]);
             vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
-                        RegType(xBaseIdx + j), RegType(bBaseIdx + j));
+                        RegType(xBaseIdx + j), RegType(bBaseIdx + i));
         }
-        add(regTmp2, simdWidth * sizeof(float));
-    }
-    if (n_left) {
-        for (int j = 0; j < K_SUB_ITER; j++) {
-            offsetBPtr(j); // Calculated into regTmp1
-            maskLoadB(j, 0);
+        if (n_left) {
+            maskLoadB(n_iter, 0);
             vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter + j),
-                        RegType(xBaseIdx + j), RegType(bBaseIdx + j));
+                        RegType(xBaseIdx + j), RegType(bBaseIdx + n_iter));
         }
+        add(regTmp2, regRsB);
     }
     return dlp::jit::jitGeneratorError::success;
 }
@@ -1591,16 +1588,14 @@ jitF32GEMVM1<KType>::computeKxNR(bool nMask)
             vbroadcastss(RegType(xBaseIdx + i),
                          ptr[regXptr + i * sizeof(float)]);
         }
-        for (int i = 0; i < NR / simdWidth; i += 1) {
-            for (int j = 0; j < K_SUB_ITER; j += 1) {
-                offsetBPtr(j); // Calculated into regTmp1
-                vmovups(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+        for (int j = 0; j < K_SUB_ITER; j += 1) {
+            for (int i = 0; i < NR / simdWidth; i += 1) {
+                vmovups(RegType(bBaseIdx + i),
+                        ptr[regTmp2 + i * simdWidth * sizeof(float)]);
                 vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
-                            RegType(xBaseIdx + j), RegType(bBaseIdx + j));
+                            RegType(xBaseIdx + j), RegType(bBaseIdx + i));
             }
-
-            // Update the pointer for B
-            add(regTmp2, simdWidth * sizeof(float));
+            add(regTmp2, regRsB);
         }
     } else {
         computeKxnfringe();
@@ -1615,24 +1610,19 @@ jitF32GEMVM1<KType>::compute1xnfringe()
 {
     vbroadcastss(RegType(xBaseIdx), ptr[regXptr]);
 
-    int j      = 0;
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
     for (int i = 0; i < n_iter; i++) {
-        j = i % K_SUB_ITER;
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * simdWidth * sizeof(float)]);
-        vmovups(RegType(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+        vmovups(RegType(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
         vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
-                    RegType(bBaseIdx + j));
+                    RegType(bBaseIdx + i));
     }
     if (n_left) {
-        j = 0;
-        xor_(regTmp1, regTmp1);
-        lea(regTmp1, ptr[regTmp1 + n_iter * simdWidth * sizeof(float)]);
-        maskLoadB(j, 0);
+        maskLoadB(n_iter, 0);
         vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter),
-                    RegType(xBaseIdx), RegType(bBaseIdx + j));
+                    RegType(xBaseIdx), RegType(bBaseIdx + n_iter));
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1647,13 +1637,11 @@ jitF32GEMVM1<KType>::compute1xNR(bool nMask)
     if (!nMask) {
         vbroadcastss(RegType(xBaseIdx), ptr[regXptr]);
 
-        int j = 0;
         for (int i = 0; i < NR / simdWidth; i += 1) {
-            j = i % K_SUB_ITER;
-            vmovups(RegType(bBaseIdx + j),
+            vmovups(RegType(bBaseIdx + i),
                     ptr[regTmp2 + i * simdWidth * sizeof(float)]);
             vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i),
-                        RegType(xBaseIdx), RegType(bBaseIdx + j));
+                        RegType(xBaseIdx), RegType(bBaseIdx + i));
         }
     } else {
         compute1xnfringe();

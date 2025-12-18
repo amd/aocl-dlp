@@ -1549,7 +1549,7 @@ jitU8S8VNNI_GEMVM1<KType>::allocateRegisters()
 
     yReg     = NR / nElemsPerReg;
     xReg     = K_SUB_ITER;
-    bReg     = K_SUB_ITER;
+    bReg     = NR / nElemsPerReg;
     accumReg = (NR / nElemsPerReg) * K_SUB_ITER;
     maskReg  = 0; // AVX512 has dedicated mask registers
 
@@ -1599,7 +1599,7 @@ dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVM1<KType>::maskLoadB(int regIdx, int maskIdx)
 {
     vmovdqu32(Zmm(bBaseIdx + regIdx) | mask_regs[maskIdx],
-              ptr[regTmp2 + regTmp1]);
+              ptr[regTmp2 + regIdx * nElemsPerReg * sizeof(int32_t)]);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -1634,25 +1634,22 @@ jitU8S8VNNI_GEMVM1<KType>::computeKxnfringe()
     int n_iter = N_LEFT / nElemsPerReg;
     int n_left = N_LEFT % nElemsPerReg;
 
-    for (int i = 0; i < n_iter; i++) {
-        for (int j = 0; j < K_SUB_ITER; j++) {
-            offsetBPtr(j); // Calculate B offset
-            vmovdqu32(Zmm(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+    for (int j = 0; j < K_SUB_ITER; j++) {
+        for (int i = 0; i < n_iter; i++) {
+            // load elements of B
+            vmovdqu32(Zmm(bBaseIdx + i),
+                      ptr[regTmp2 + i * nElemsPerReg * sizeof(int32_t)]);
 
             vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * i + j), Zmm(xBaseIdx + j),
-                     Zmm(bBaseIdx + j));
+                     Zmm(bBaseIdx + i));
         }
-        add(regTmp2, nElemsPerReg * sizeof(int32_t));
-    }
-
-    if (n_left) {
-        for (int j = 0; j < K_SUB_ITER; j++) {
-            // Use zero-masking (T_z) to zero unmasked elements
-            vmovdqu32(Zmm(bBaseIdx + j) | mask_regs[0] | T_z,
+        if (n_left) {
+            vmovdqu32(Zmm(bBaseIdx + n_iter) | mask_regs[0] | T_z,
                       ptr[regTmpYptr + j * 64]);
             vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * n_iter + j),
-                     Zmm(xBaseIdx + j), Zmm(bBaseIdx + j));
+                     Zmm(xBaseIdx + j), Zmm(bBaseIdx + n_iter));
         }
+        add(regTmp2, regRsB);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1670,16 +1667,15 @@ jitU8S8VNNI_GEMVM1<KType>::computeKxNR(bool nMask)
             vpbroadcastd(Zmm(xBaseIdx + i), ptr[regXptr + i * 4]);
         }
 
-        for (int i = 0; i < NR / nElemsPerReg; i += 1) {
-            for (int j = 0; j < K_SUB_ITER; j += 1) {
-                offsetBPtr(j); // Calculate B offset
-                vmovdqu32(Zmm(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+        for (int j = 0; j < K_SUB_ITER; j += 1) {
+            for (int i = 0; i < NR / nElemsPerReg; i += 1) {
+                // load elements of B
+                vmovdqu32(Zmm(bBaseIdx + i),
+                          ptr[regTmp2 + i * nElemsPerReg * sizeof(int32_t)]);
                 vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * i + j),
-                         Zmm(xBaseIdx + j), Zmm(bBaseIdx + j));
+                         Zmm(xBaseIdx + j), Zmm(bBaseIdx + i));
             }
-
-            // Update the pointer for B
-            add(regTmp2, nElemsPerReg * sizeof(int32_t));
+            add(regTmp2, regRsB);
         }
     } else {
         computeKxnfringe();
@@ -1698,25 +1694,21 @@ jitU8S8VNNI_GEMVM1<KType>::compute1xnfringe(bool isLastKGroup)
     } else
         vpbroadcastd(Zmm(xBaseIdx), ptr[regXptr]);
 
-    int j      = 0;
     int n_iter = N_LEFT / nElemsPerReg;
     int n_left = N_LEFT % nElemsPerReg;
 
     for (int i = 0; i < n_iter; i++) {
-        j = i % K_SUB_ITER;
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * nElemsPerReg * sizeof(int32_t)]);
-        vmovdqu32(Zmm(bBaseIdx + j), ptr[regTmp2 + regTmp1]);
+        vmovdqu32(Zmm(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
         vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * i), Zmm(xBaseIdx),
-                 Zmm(bBaseIdx + j));
+                 Zmm(bBaseIdx + i));
     }
 
     if (n_left) {
-        j = 0;
-        // Use zero-masking (T_z) to zero unmasked elements
-        vmovdqu32(Zmm(bBaseIdx + j) | mask_regs[0] | T_z, ptr[regTmpYptr]);
+        vmovdqu32(Zmm(bBaseIdx + n_iter) | mask_regs[0] | T_z, ptr[regTmpYptr]);
         vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * n_iter), Zmm(xBaseIdx),
-                 Zmm(bBaseIdx + j));
+                 Zmm(bBaseIdx + n_iter));
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1736,13 +1728,11 @@ jitU8S8VNNI_GEMVM1<KType>::compute1xNR(bool nMask, bool isLastKGroup)
             vpbroadcastd(Zmm(xBaseIdx), ptr[regXptr]);
         }
 
-        int j = 0;
         for (int i = 0; i < NR / nElemsPerReg; i += 1) {
-            j = i % K_SUB_ITER;
-            vmovdqu32(Zmm(bBaseIdx + j),
+            vmovdqu32(Zmm(bBaseIdx + i),
                       ptr[regTmp2 + i * nElemsPerReg * sizeof(int32_t)]);
             vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * i), Zmm(xBaseIdx),
-                     Zmm(bBaseIdx + j));
+                     Zmm(bBaseIdx + i));
         }
     } else {
         compute1xnfringe(isLastKGroup);
