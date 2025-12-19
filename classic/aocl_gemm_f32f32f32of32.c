@@ -187,6 +187,20 @@ aocl_gemm_f32f32f32of32(const char      order,
     lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
     dlp_clsc_err_t err;
 
+    // Initialize a local runtime with global settings if necessary. Note
+    // that in the case that a runtime is passed in, we make a local copy.
+    dlp_rntm_t rntm_g;
+    dlp_rntm_init_from_global(&rntm_g);
+
+    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32F32F32OF32);
+    lpgemm_cntx_t  lcntx_l;
+    // Create local copy, since each thread in a multi-instance setup
+    // modified the context object.
+    lcntx_l = *lcntx_g;
+
+    // By this point, global_lpgemm_enable_arch is set to the correct
+    // architecture.
+
     // Induce operation transpose and/or swapped strides based on the input.
     // NOTE :
     // This logic is primarily used to decide what JIT kernels are to be
@@ -198,6 +212,13 @@ aocl_gemm_f32f32f32of32(const char      order,
     // kernel.
 
     if (!((m == 1) || (n == 1))) {
+
+        bool avx512_on_non_zen3 =
+            dlp_cpuid_is_avx512_supported()
+            && (lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3);
+        bool has_valid_metadata =
+            (metadata != NULL) && (metadata->seq_length != 0);
+
         // Handling row-major storage.
         if (is_row_major == TRUE) {
             if ((mtag_b != REORDERED)) {
@@ -208,10 +229,8 @@ aocl_gemm_f32f32f32of32(const char      order,
                 // matrix is column-major. This optimization are currently not
                 // supported in post-ops of avx2 kernels.
 
-                if (!((!dlp_cpuid_is_avx512_supported())
-                      && !((metadata == NULL) || (metadata->seq_length == 0)))
-                    && (dlp_is_trans(dlp_transb)
-                        && (dlp_is_trans(dlp_transa)))) {
+                if ((avx512_on_non_zen3 || !has_valid_metadata)
+                    && dlp_is_trans(dlp_transb) && dlp_is_trans(dlp_transa)) {
                     // induce transpose here
                     m_use      = n;
                     n_use      = m;
@@ -252,9 +271,9 @@ aocl_gemm_f32f32f32of32(const char      order,
             // If both A and B are transposed, don't induce transpose here.
             // Instead, store C matrix in col-major format.
             // A and B matrices are row-major, and C matrix is column-major.
+            // scatter-gather approach is not supported with avx2 instructions.
 
-            if (!((!dlp_cpuid_is_avx512_supported())
-                  && !((metadata == NULL) || (metadata->seq_length == 0)))
+            if ((avx512_on_non_zen3 || !has_valid_metadata)
                 && dlp_is_trans(dlp_transa) && (dlp_is_trans(dlp_transb))) {
                 // don't induce transpose here
                 rs_a_use   = cs_a;
@@ -427,17 +446,6 @@ aocl_gemm_f32f32f32of32(const char      order,
             }
         }
     }
-
-    // Initialize a local runtime with global settings if necessary. Note
-    // that in the case that a runtime is passed in, we make a local copy.
-    dlp_rntm_t rntm_g;
-    dlp_rntm_init_from_global(&rntm_g);
-
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32F32F32OF32);
-    lpgemm_cntx_t  lcntx_l;
-    // Create local copy, since each thread in a multi-instance setup
-    // modified the context object.
-    lcntx_l = *lcntx_g;
 
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
