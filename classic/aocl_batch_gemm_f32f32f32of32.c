@@ -105,20 +105,20 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
         dlp_trans_t dlp_transa;
         dlp_trans_t dlp_transb;
 
-        md_t rs_a[g_sz];
-        md_t cs_a[g_sz];
+        md_t rs_a;
+        md_t cs_a;
 
-        md_t rs_b[g_sz];
-        md_t cs_b[g_sz];
+        md_t rs_b;
+        md_t cs_b;
 
-        md_t rs_c[g_sz];
-        md_t cs_c[g_sz];
+        md_t rs_c;
+        md_t cs_c;
 
-        AOCL_MEMORY_TAG mtag_a[g_sz];
-        AOCL_MEMORY_TAG mtag_b[g_sz];
+        AOCL_MEMORY_TAG mtag_a;
+        AOCL_MEMORY_TAG mtag_b;
 
-        float *a_local[g_sz], *b_local[g_sz];
-        md_t   m_local[g_sz], n_local[g_sz], k_local[g_sz];
+        const float **a_local, **b_local;
+        md_t          m_local, n_local, k_local;
 
         // Convert post op struct to post op linked list format.
         lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
@@ -138,119 +138,109 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
 
         bool is_column_major = ((order[gc_i] == 'c') || (order[gc_i] == 'C'));
 
-        for (md_t gs_i = 0; gs_i < g_sz; gs_i++) {
-            if (is_column_major == TRUE) {
-                rs_a[gs_i] = ldb[gc_i];
-                cs_a[gs_i] = 1;
+        if (is_column_major == TRUE) {
+            rs_a = ldb[gc_i];
+            cs_a = 1;
 
-                if (dlp_is_trans(dlp_transb)) {
-                    rs_a[gs_i] = 1;
-                    cs_a[gs_i] = ldb[gc_i];
-                }
-
-                rs_b[gs_i] = lda[gc_i];
-                cs_b[gs_i] = 1;
-
-                if (dlp_is_trans(dlp_transa)) {
-                    rs_b[gs_i] = 1;
-                    cs_b[gs_i] = lda[gc_i];
-                }
-
-                dlp_param_map_char_to_lpmtag(mem_format_a[gc_i],
-                                             &(mtag_b[gs_i]));
-                dlp_param_map_char_to_lpmtag(mem_format_b[gc_i],
-                                             &(mtag_a[gs_i]));
-
-                // Inputs swapped in column major, A becomes B from kernel point
-                // of view. Reorder is not supported for column major matrices.
-                if (((mtag_b[gs_i] == REORDERED)
-                     || (mtag_a[gs_i] == REORDERED))) {
-                    dlp_print_msg(" Reordering of column major matrices is not "
-                                  "supported.",
-                                  __FILE__, __LINE__);
-                    DLP_METADATA_SET_ERROR(metadata[gc_i],
-                                           DLP_CLSC_NOT_SUPPORTED);
-                    goto err_hndl;
-                }
-                // From 5-loop function point of view,
-                // A matrix when in column major storage needs to be packed to
-                // row-major storage as kernel expects A matrix to be in
-                // row-major format. Inputs swapped in column major, A becomes B
-                // from kernel point of view.
-                if (dlp_is_trans(dlp_transb)) {
-                    mtag_a[gs_i] = PACK;
-                }
-
-                if (dlp_is_trans(dlp_transa)) {
-                    mtag_b[gs_i] = PACK;
-                }
-
-                // swap m & n in case of col-major matrices
-                m_local[gs_i] = n[gc_i];
-                n_local[gs_i] = m[gc_i];
-
-                // swap a & b pointers in case of col-major matrices
-                a_local[gs_i] = (float*)(b[mat_idx + gs_i]);
-                b_local[gs_i] = (float*)(a[mat_idx + gs_i]);
-            } else // row-major
-            {
-                rs_a[gs_i] = lda[gc_i];
-                cs_a[gs_i] = 1;
-
-                if (dlp_is_trans(dlp_transa)) {
-                    rs_a[gs_i] = 1;
-                    cs_a[gs_i] = lda[gc_i];
-                }
-
-                rs_b[gs_i] = ldb[gc_i];
-                cs_b[gs_i] = 1;
-
-                if (dlp_is_trans(dlp_transb)) {
-                    rs_b[gs_i] = 1;
-                    cs_b[gs_i] = ldb[gc_i];
-                }
-
-                dlp_param_map_char_to_lpmtag(mem_format_a[gc_i],
-                                             &(mtag_a[gs_i]));
-                dlp_param_map_char_to_lpmtag(mem_format_b[gc_i],
-                                             &(mtag_b[gs_i]));
-
-                // Reorder is not supported for A matrix
-                if (mtag_a[gs_i] == REORDERED) {
-                    dlp_print_msg(
-                        " Reordering of A matrix is not supported in row "
-                        "major case.",
-                        __FILE__, __LINE__);
-                    DLP_METADATA_SET_ERROR(metadata[gc_i],
-                                           DLP_CLSC_NOT_SUPPORTED);
-                    goto err_hndl;
-                }
-                // From 5-loop function point of view,
-                // A matrix when in column major storage needs to be packed to
-                // row-major storage as kernel expects A matrix to be in
-                // row-major format.
-                if (dlp_is_trans(dlp_transa)) {
-                    mtag_a[gs_i] = PACK;
-                }
-
-                if (dlp_is_trans(dlp_transb) && (mtag_b[gs_i] == UNPACKED)) {
-                    mtag_b[gs_i] = PACK;
-                }
-
-                // copy the values of m & n
-                m_local[gs_i] = m[gc_i];
-                n_local[gs_i] = n[gc_i];
-
-                // copy the values of a & b pointers
-                a_local[gs_i] = (float*)(a[mat_idx + gs_i]);
-                b_local[gs_i] = (float*)(b[mat_idx + gs_i]);
+            if (dlp_is_trans(dlp_transb)) {
+                rs_a = 1;
+                cs_a = ldb[gc_i];
             }
-            // Copy the value of k.
-            k_local[gs_i] = k[gc_i];
 
-            rs_c[gs_i] = ldc[gc_i];
-            cs_c[gs_i] = 1;
+            rs_b = lda[gc_i];
+            cs_b = 1;
+
+            if (dlp_is_trans(dlp_transa)) {
+                rs_b = 1;
+                cs_b = lda[gc_i];
+            }
+
+            dlp_param_map_char_to_lpmtag(mem_format_a[gc_i], &(mtag_b));
+            dlp_param_map_char_to_lpmtag(mem_format_b[gc_i], &(mtag_a));
+
+            // Inputs swapped in column major, A becomes B from kernel point
+            // of view. Reorder is not supported for column major matrices.
+            if (((mtag_b == REORDERED) || (mtag_a == REORDERED))) {
+                dlp_print_msg(" Reordering of column major matrices is not "
+                              "supported.",
+                              __FILE__, __LINE__);
+                DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+                goto err_hndl;
+            }
+            // From 5-loop function point of view,
+            // A matrix when in column major storage needs to be packed to
+            // row-major storage as kernel expects A matrix to be in
+            // row-major format. Inputs swapped in column major, A becomes B
+            // from kernel point of view.
+            if (dlp_is_trans(dlp_transb)) {
+                mtag_a = PACK;
+            }
+
+            if (dlp_is_trans(dlp_transa)) {
+                mtag_b = PACK;
+            }
+
+            // swap m & n in case of col-major matrices
+            m_local = n[gc_i];
+            n_local = m[gc_i];
+
+            // swap a & b pointers in case of col-major matrices
+            a_local = (b + mat_idx);
+            b_local = (a + mat_idx);
+        } else // row-major
+        {
+            rs_a = lda[gc_i];
+            cs_a = 1;
+
+            if (dlp_is_trans(dlp_transa)) {
+                rs_a = 1;
+                cs_a = lda[gc_i];
+            }
+
+            rs_b = ldb[gc_i];
+            cs_b = 1;
+
+            if (dlp_is_trans(dlp_transb)) {
+                rs_b = 1;
+                cs_b = ldb[gc_i];
+            }
+
+            dlp_param_map_char_to_lpmtag(mem_format_a[gc_i], &(mtag_a));
+            dlp_param_map_char_to_lpmtag(mem_format_b[gc_i], &(mtag_b));
+
+            // Reorder is not supported for A matrix
+            if (mtag_a == REORDERED) {
+                dlp_print_msg(" Reordering of A matrix is not supported in row "
+                              "major case.",
+                              __FILE__, __LINE__);
+                DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+                goto err_hndl;
+            }
+            // From 5-loop function point of view,
+            // A matrix when in column major storage needs to be packed to
+            // row-major storage as kernel expects A matrix to be in
+            // row-major format.
+            if (dlp_is_trans(dlp_transa)) {
+                mtag_a = PACK;
+            }
+
+            if (dlp_is_trans(dlp_transb) && (mtag_b == UNPACKED)) {
+                mtag_b = PACK;
+            }
+
+            // copy the values of m & n
+            m_local = m[gc_i];
+            n_local = n[gc_i];
+
+            // copy the values of a & b pointers
+            a_local = (a + mat_idx);
+            b_local = (b + mat_idx);
         }
+        // Copy the value of k.
+        k_local = k[gc_i];
+
+        rs_c = ldc[gc_i];
+        cs_c = 1;
 
         // Initialize a local runtime with global settings if necessary. Note
         // that in the case that a runtime is passed in, we make a local copy.
@@ -270,27 +260,26 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
         // DLP Plus can proceed with any 1 input from this group.
         if (g_sz > 0) {
             dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_F32F32F32OF32, order[gc_i], mtag_a[0], mtag_b[0],
-                m_local[0], n_local[0], k_local[0], rs_a[0], cs_a[0], rs_b[0],
-                cs_b[0], rs_c[0], cs_c[0], (void*)&alpha[gc_i],
-                (void*)&beta[gc_i], post_op_list, lcntx_l.blksz.MR,
-                lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
+                DLP_KERNEL_F32F32F32OF32, order[gc_i], mtag_a, mtag_b, m_local,
+                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
                 &lcntx_l.dlp_kernel_hndl);
         }
 
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_f32f32f32of32_openmp_thread_decorator(
-            g_sz, m_local, n_local, k_local, (const float**)a_local, rs_a, cs_a,
-            mtag_a, (const float**)b_local, rs_b, cs_b, mtag_b, &c[mat_idx],
-            rs_c, cs_c, alpha[gc_i], beta[gc_i], &rntm_g, &lcntx_l,
-            post_op_list, DLP_F32);
+            g_sz, &m_local, &n_local, &k_local, (const float**)a_local, &rs_a,
+            &cs_a, &mtag_a, (const float**)b_local, &rs_b, &cs_b, &mtag_b,
+            &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
+            &lcntx_l, post_op_list, DLP_F32);
 
 #else
         batch_lpgemm_f32f32f32of32_thread_decorator(
-            g_sz, m_local, n_local, k_local, (const float**)a_local, rs_a, cs_a,
-            mtag_a, (const float**)b_local, rs_b, cs_b, mtag_b, &c[mat_idx],
-            rs_c, cs_c, alpha[gc_i], beta[gc_i], &rntm_g, lcntx_g, post_op_list,
-            DLP_F32);
+            g_sz, &m_local, &n_local, &k_local, (const float**)a_local, &rs_a,
+            &cs_a, &mtag_a, (const float**)b_local, &rs_b, &cs_b, &mtag_b,
+            &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
+            lcntx_g, post_op_list, DLP_F32);
 #endif
         // Increment the matrix index to get the next matrix in the group.
         mat_idx += g_sz;

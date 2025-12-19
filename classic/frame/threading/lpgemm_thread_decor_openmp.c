@@ -951,10 +951,9 @@ GEN_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
                                                                                \
             for (md_t i = gemm_start; i < gemm_end; i++) {                     \
                 lpgemm_rowvar_##LPGEMM_SFX(                                    \
-                    m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i], \
-                    rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i],       \
-                    alpha, beta, &rntm_l, &thread, lcntx, post_op_list,        \
-                    c_downscale);                                              \
+                    *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b,      \
+                    *cs_b, *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, &rntm_l,  \
+                    &thread, lcntx, post_op_list, c_downscale);                \
             }                                                                  \
         }                                                                      \
         if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
@@ -1259,10 +1258,9 @@ GEN_LPGEMM_OPENMP_DECORATOR_Q(bfloat16, int8_t, int32_t, bf16s8s32os32)
                 }                                                              \
                                                                                \
                 lpgemm_rowvar_##LPGEMM_SFX(                                    \
-                    m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i], \
-                    rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i],       \
-                    alpha, beta, &rntm_l, &thread, lcntx, pre_op_list,         \
-                    post_op_list, c_downscale);                                \
+                    *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b,      \
+                    *cs_b, *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, &rntm_l,  \
+                    &thread, lcntx, pre_op_list, post_op_list, c_downscale);   \
             }                                                                  \
         }                                                                      \
         if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
@@ -1614,9 +1612,9 @@ GEN_LPGEMM_DECORATOR_Q(bfloat16, int8_t, int32_t, bf16s8s32os32)
                                                                                \
         for (md_t i = gemm_start; i < gemm_end; i++) {                         \
             lpgemm_rowvar_##LPGEMM_SFX(                                        \
-                m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i],     \
-                rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i], alpha,    \
-                beta, rntm_g, &thread, lcntx, post_op_list, c_downscale);      \
+                *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b, *cs_b,   \
+                *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, rntm_g, &thread,     \
+                lcntx, post_op_list, c_downscale);                             \
         }                                                                      \
     }
 
@@ -1661,10 +1659,9 @@ GEN_BATCH_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
                                                                                \
         for (md_t i = gemm_start; i < gemm_end; i++) {                         \
             lpgemm_rowvar_##LPGEMM_SFX(                                        \
-                m[i], n[i], k[i], a[i], rs_a[i], cs_a[i], mtag_a[i], b[i],     \
-                rs_b[i], cs_b[i], mtag_b[i], c[i], rs_c[i], cs_c[i], alpha,    \
-                beta, rntm_g, &thread, lcntx, pre_op_list, post_op_list,       \
-                c_downscale);                                                  \
+                *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b, *cs_b,   \
+                *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, rntm_g, &thread,     \
+                lcntx, pre_op_list, post_op_list, c_downscale);                \
         }                                                                      \
     }
 
