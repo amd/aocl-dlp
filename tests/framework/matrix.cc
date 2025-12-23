@@ -1565,7 +1565,7 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Convert matrix to string representation
      */
-    std::string Matrix::matrixToString(int verbosity_level) const
+    std::string Matrix::matrixToString(VerbosityLevel verbosity_level) const
     {
         std::ostringstream oss;
         printToStream(oss, verbosity_level);
@@ -1575,9 +1575,10 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Core matrix printing implementation using std::ostream
      */
-    void Matrix::printToStream(std::ostream& os, int verbosity_level) const
+    void Matrix::printToStream(std::ostream&  os,
+                               VerbosityLevel verbosity_level) const
     {
-        if (verbosity_level < 2) {
+        if (verbosity_level < VerbosityLevel::PARTIAL_MATRIX) {
             return; // No output at low verbosity
         }
 
@@ -1601,7 +1602,8 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Print matrix contents based on verbosity level
      */
-    void Matrix::printMatrix(const std::string& name, int verbosity_level) const
+    void Matrix::printMatrix(const std::string& name,
+                             VerbosityLevel     verbosity_level) const
     {
         if (!name.empty()) {
             std::cout << "\n=== " << name << " ===\n";
@@ -1611,7 +1613,8 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Format matrix data based on type
      */
-    void Matrix::formatMatrixData(std::ostream& os, int verbosity_level) const
+    void Matrix::formatMatrixData(std::ostream&  os,
+                                  VerbosityLevel verbosity_level) const
     {
         switch (m_type) {
             case MatrixType::f32:
@@ -1651,11 +1654,13 @@ namespace dlp { namespace testing { namespace framework {
      * @brief Template formatter for numeric matrix types
      */
     template<typename T>
-    void Matrix::formatNumericMatrix(std::ostream& os,
-                                     int           verbosity_level) const
+    void Matrix::formatNumericMatrix(std::ostream&  os,
+                                     VerbosityLevel verbosity_level) const
     {
-        md_t max_rows = (verbosity_level >= 3) ? 50 : 5;
-        md_t max_cols = (verbosity_level >= 3) ? 50 : 5;
+        md_t max_rows = (verbosity_level >= VerbosityLevel::FULL_MATRIX) ? 50
+                                                                         : 5;
+        md_t max_cols = (verbosity_level >= VerbosityLevel::FULL_MATRIX) ? 50
+                                                                         : 5;
 
         md_t rows_to_print = std::min(m_rows, max_rows);
         md_t cols_to_print = std::min(m_cols, max_cols);
@@ -1683,7 +1688,7 @@ namespace dlp { namespace testing { namespace framework {
         if (m_rows > max_rows || m_cols > max_cols) {
             os << "[Showing " << rows_to_print << "x" << cols_to_print << " of "
                << m_rows << "x" << m_cols << " total";
-            if (verbosity_level < 3) {
+            if (verbosity_level < VerbosityLevel::FULL_MATRIX) {
                 os << " - use -vvv for full matrix";
             }
             os << "]\n";
@@ -1693,10 +1698,13 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Specialized formatter for BF16 matrices
      */
-    void Matrix::formatMatrixBF16(std::ostream& os, int verbosity_level) const
+    void Matrix::formatMatrixBF16(std::ostream&  os,
+                                  VerbosityLevel verbosity_level) const
     {
-        md_t max_rows = (verbosity_level >= 3) ? 20 : 5;
-        md_t max_cols = (verbosity_level >= 3) ? 20 : 5;
+        md_t max_rows = (verbosity_level >= VerbosityLevel::FULL_MATRIX) ? 50
+                                                                         : 5;
+        md_t max_cols = (verbosity_level >= VerbosityLevel::FULL_MATRIX) ? 50
+                                                                         : 5;
 
         md_t rows_to_print = std::min(m_rows, max_rows);
         md_t cols_to_print = std::min(m_cols, max_cols);
@@ -1723,10 +1731,13 @@ namespace dlp { namespace testing { namespace framework {
     /**
      * @brief Specialized formatter for 4-bit packed matrices
      */
-    void Matrix::formatMatrix4Bit(std::ostream& os, int verbosity_level) const
+    void Matrix::formatMatrix4Bit(std::ostream&  os,
+                                  VerbosityLevel verbosity_level) const
     {
-        md_t max_rows = (verbosity_level >= 3) ? 20 : 5;
-        md_t max_cols = (verbosity_level >= 3) ? 20 : 5;
+        md_t max_rows = (verbosity_level >= VerbosityLevel::FULL_MATRIX) ? 50
+                                                                         : 5;
+        md_t max_cols = (verbosity_level >= VerbosityLevel::FULL_MATRIX) ? 50
+                                                                         : 5;
 
         md_t rows_to_print = std::min(m_rows, max_rows);
         md_t cols_to_print = std::min(m_cols, max_cols);

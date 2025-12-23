@@ -132,6 +132,41 @@ namespace testing {
         }
 
         /**
+         * @enum VerbosityLevel
+         * @brief Enumeration of verbosity levels for diagnostic output
+         */
+        enum class VerbosityLevel : uint8_t
+        {
+            SILENT = 0, ///< No verbosity (default)
+            BASIC  = 1, ///< Basic verbosity (-v): Verbose comparison results
+            PARTIAL_MATRIX = 2, ///< Print partial matrices (-vv): 5x5 elements
+            FULL_MATRIX =
+                3 ///< Print full matrices (-vvv): up to 50x50 elements
+        };
+
+        /**
+         * @brief Stream output operator for VerbosityLevel
+         * @param os Output stream
+         * @param level VerbosityLevel to output
+         * @return Reference to the output stream
+         */
+        inline std::ostream& operator<<(std::ostream& os, VerbosityLevel level)
+        {
+            switch (level) {
+                case VerbosityLevel::SILENT:
+                    return os << "SILENT";
+                case VerbosityLevel::BASIC:
+                    return os << "BASIC";
+                case VerbosityLevel::PARTIAL_MATRIX:
+                    return os << "PARTIAL_MATRIX";
+                case VerbosityLevel::FULL_MATRIX:
+                    return os << "FULL_MATRIX";
+                default:
+                    return os << "UNKNOWN";
+            }
+        }
+
+        /**
          * @brief Matrix memory allocation utilities
          */
         namespace MatrixMemory {

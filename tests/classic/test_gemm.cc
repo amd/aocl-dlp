@@ -102,7 +102,7 @@ struct TestGlobalConfig
 static TestGlobalConfig g_test_config;
 
 // Global verbosity level (initialized in main() from command-line arguments)
-static int g_verbosity_level = 0;
+static VerbosityLevel g_verbosity_level = VerbosityLevel::SILENT;
 
 // ============================================================================
 // GLOBAL CONFIGURATION VARIABLES
@@ -411,8 +411,9 @@ void
 PrintTo(const Matrix& matrix, std::ostream* os)
 {
     // Delegate to the unified Matrix printing implementation
-    // Use verbosity level 1 for GoogleTest (shows metadata + small matrices)
-    matrix.printToStream(*os, 1);
+    // Use BASIC verbosity level for GoogleTest (shows metadata + small
+    // matrices)
+    matrix.printToStream(*os, VerbosityLevel::BASIC);
 }
 
 // ============================================================================
@@ -983,8 +984,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         B_ref.setPacked(false);
         C_ref.setPacked(false);
 
-        // Print matrices if verbosity level is 2 or higher
-        if (g_verbosity_level >= 2) {
+        // Print matrices if verbosity level is PARTIAL_MATRIX or higher
+        if (g_verbosity_level >= VerbosityLevel::PARTIAL_MATRIX) {
             A.printMatrix("Matrix A ", g_verbosity_level);
             B.printMatrix("Matrix B ", g_verbosity_level);
             C.printMatrix("Matrix C ", g_verbosity_level);
@@ -1100,7 +1101,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             // Set up comparison options with custom tolerance if specified
             MatrixCompareOptions compare_opts = MatrixCompareOptions::Fast();
-            if (g_verbosity_level >= 1) {
+            if (g_verbosity_level >= VerbosityLevel::BASIC) {
                 compare_opts = MatrixCompareOptions::Verbose(MAX_MISMATCHES);
             }
 
@@ -1120,7 +1121,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                        "valid parameters:\n"
                     << printConfigDetails(config_) << "\n";
 
-                if (g_verbosity_level >= 1) {
+                if (g_verbosity_level >= VerbosityLevel::BASIC) {
                     detailed_error
                         << FormatCompareResult(compare_result, C, C_ref);
                 }
@@ -1793,7 +1794,7 @@ main(int argc, char** argv)
 
     // Set verbosity level from command-line arguments
     g_verbosity_level = parser.getVerbosityLevel();
-    if (g_verbosity_level > 0) {
+    if (g_verbosity_level > VerbosityLevel::SILENT) {
         std::cout << "Verbosity level: " << g_verbosity_level << std::endl;
     }
 

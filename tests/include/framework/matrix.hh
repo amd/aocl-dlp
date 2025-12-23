@@ -529,14 +529,15 @@ namespace dlp { namespace testing { namespace framework {
          *
          * Converts the matrix to a formatted string with support for all matrix
          * types. The amount of output depends on the verbosity level:
-         * - Level 0-1: Empty string (no matrix printing)
-         * - Level 2: Print partial matrices (5x5 elements)
-         * - Level 3+: Print full matrices (up to 20x20)
+         * - SILENT/BASIC: Empty string (no matrix printing)
+         * - PARTIAL_MATRIX: Print partial matrices (5x5 elements)
+         * - FULL_MATRIX: Print full matrices (up to 50x50)
          *
-         * @param verbosity_level Verbosity level (0=none, 2=partial, 3=full)
+         * @param verbosity_level Verbosity level (default: PARTIAL_MATRIX)
          * @return String containing formatted matrix representation
          */
-        std::string matrixToString(int verbosity_level = 2) const;
+        std::string matrixToString(VerbosityLevel verbosity_level =
+                                       VerbosityLevel::PARTIAL_MATRIX) const;
 
         /**
          * @brief Core matrix printing implementation using std::ostream
@@ -548,7 +549,8 @@ namespace dlp { namespace testing { namespace framework {
          * @param os Output stream to write to
          * @param verbosity_level Verbosity level controlling output detail
          */
-        void printToStream(std::ostream& os, int verbosity_level) const;
+        void printToStream(std::ostream&  os,
+                           VerbosityLevel verbosity_level) const;
 
         /**
          * @brief Print matrix contents based on verbosity level
@@ -556,16 +558,16 @@ namespace dlp { namespace testing { namespace framework {
          * Prints the matrix values in a formatted grid. Supports all matrix
          * types with appropriate formatting. The amount of output depends on
          * the verbosity level:
-         * - Level 0-1: No matrix printing
-         * - Level 2: Print partial matrices (5x5 elements)
-         * - Level 3+: Print full matrices (up to 20x20)
+         * - SILENT/BASIC: No matrix printing
+         * - PARTIAL_MATRIX: Print partial matrices (5x5 elements)
+         * - FULL_MATRIX: Print full matrices (up to 50x50)
          *
          * @param name Optional name/label to display above the matrix
-         * @param verbosity_level Verbosity level (0=none, 1=basic, 2=partial,
-         * 3=full)
+         * @param verbosity_level Verbosity level (default: PARTIAL_MATRIX)
          */
-        void printMatrix(const std::string& name            = "",
-                         int                verbosity_level = 2) const;
+        void printMatrix(const std::string& name = "",
+                         VerbosityLevel     verbosity_level =
+                             VerbosityLevel::PARTIAL_MATRIX) const;
 
         /**
          * @brief Get element size in bytes for the matrix type
@@ -815,7 +817,8 @@ namespace dlp { namespace testing { namespace framework {
          * @param os Output stream to write to
          * @param verbosity_level Verbosity level controlling output detail
          */
-        void formatMatrixData(std::ostream& os, int verbosity_level) const;
+        void formatMatrixData(std::ostream&  os,
+                              VerbosityLevel verbosity_level) const;
 
         /**
          * @brief Template formatter for numeric matrix types
@@ -827,7 +830,8 @@ namespace dlp { namespace testing { namespace framework {
          * @param verbosity_level Verbosity level controlling output detail
          */
         template<typename T>
-        void formatNumericMatrix(std::ostream& os, int verbosity_level) const;
+        void formatNumericMatrix(std::ostream&  os,
+                                 VerbosityLevel verbosity_level) const;
 
         /**
          * @brief Specialized formatter for BF16 matrices
@@ -837,7 +841,8 @@ namespace dlp { namespace testing { namespace framework {
          * @param os Output stream to write to
          * @param verbosity_level Verbosity level controlling output detail
          */
-        void formatMatrixBF16(std::ostream& os, int verbosity_level) const;
+        void formatMatrixBF16(std::ostream&  os,
+                              VerbosityLevel verbosity_level) const;
 
         /**
          * @brief Specialized formatter for 4-bit packed matrices
@@ -847,7 +852,8 @@ namespace dlp { namespace testing { namespace framework {
          * @param os Output stream to write to
          * @param verbosity_level Verbosity level controlling output detail
          */
-        void formatMatrix4Bit(std::ostream& os, int verbosity_level) const;
+        void formatMatrix4Bit(std::ostream&  os,
+                              VerbosityLevel verbosity_level) const;
 
         /**
          * @brief Allocate aligned memory with proper size rounding

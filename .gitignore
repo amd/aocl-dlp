@@ -46,3 +46,4 @@ scripts/tools/log2yaml/target/
 scripts/tools/log2yaml/Cargo.lock
 .codex
 *.bak
+compile_commands.json

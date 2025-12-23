@@ -28,12 +28,14 @@
 
 #pragma once
 
+#include "framework/types.hh"
 #include <filesystem>
 #include <iostream>
 #include <string>
 #include <vector>
 
-// Forward declaration for UALType
+// Forward declaration for UALType (VerbosityLevel is now fully defined via
+// types.hh)
 namespace dlp::testing::framework {
 enum class UALType : uint32_t;
 }
@@ -221,25 +223,30 @@ class ArgParser
      * @brief Check if verbose mode was requested
      * @return true if verbose flags (-v, --verbose) are present
      */
-    bool isVerbose() const { return getVerbosityLevel() > 0; }
+    bool isVerbose() const
+    {
+        return getVerbosityLevel()
+               > dlp::testing::framework::VerbosityLevel::SILENT;
+    }
 
     /**
      * @brief Get verbosity level based on command line flags
-     * @return Verbosity level (0=none, 1=-v, 2=-vv, 3=-vvv, etc.)
+     * @return VerbosityLevel enum value (SILENT, BASIC, PARTIAL_MATRIX,
+     * FULL_MATRIX)
      *
      * Supports multiple verbosity levels:
-     * - Level 0: No verbosity (default)
-     * - Level 1: -v or --verbose → Verbose comparison results
-     * - Level 2: -vv → Print partial matrices (5x5 elements)
-     * - Level 3: -vvv → Print full matrices (up to 20x20)
+     * - SILENT: No verbosity (default)
+     * - BASIC: -v or --verbose → Verbose comparison results
+     * - PARTIAL_MATRIX: -vv → Print partial matrices (5x5 elements)
+     * - FULL_MATRIX: -vvv → Print full matrices (up to 50x50)
      *
      * Examples:
-     * - ./test_gemm -v     → Level 1
-     * - ./test_gemm -vv    → Level 2
-     * - ./test_gemm -vvv   → Level 3
-     * - ./test_gemm --verbose → Level 1
+     * - ./test_gemm -v     → BASIC
+     * - ./test_gemm -vv    → PARTIAL_MATRIX
+     * - ./test_gemm -vvv   → FULL_MATRIX
+     * - ./test_gemm --verbose → BASIC
      */
-    int getVerbosityLevel() const
+    dlp::testing::framework::VerbosityLevel getVerbosityLevel() const
     {
         int level = 0;
 
@@ -261,7 +268,16 @@ class ArgParser
             }
         }
 
-        return level;
+        // Convert int to enum, clamping at FULL_MATRIX
+        if (level >= 3) {
+            return dlp::testing::framework::VerbosityLevel::FULL_MATRIX;
+        } else if (level == 2) {
+            return dlp::testing::framework::VerbosityLevel::PARTIAL_MATRIX;
+        } else if (level == 1) {
+            return dlp::testing::framework::VerbosityLevel::BASIC;
+        } else {
+            return dlp::testing::framework::VerbosityLevel::SILENT;
+        }
     }
 
     /**

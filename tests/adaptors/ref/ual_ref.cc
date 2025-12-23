@@ -40,6 +40,7 @@
 #include "adaptors/ref/operation_ref.hh"
 #include "framework/operation.hh"
 #include "utils/conversion_utils.hh"
+#include "utils/matrix_conversion_utils.hh"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -56,229 +57,45 @@ extern "C"
 namespace dlp::testing::classic {
 
 using dlp::testing::framework::BatchGroup;
+using dlp::testing::framework::Matrix;
+using dlp::testing::framework::MatrixType;
 using dlp::testing::framework::UALError;
 using dlp::testing::utils::bf16_to_f32;
 
-// Type conversion utilities for multi-datatype support
 namespace {
 
     /**
-     * @brief Convert a single value from any MatrixType to float
-     * @param src_ptr Pointer to source data
-     * @param src_type Source data type
-     * @param index Element index
-     * @return float Converted value
+     * @brief Create and optionally initialize a temporary matrix for type
+     * conversion
+     * @tparam IntermediateT Intermediate type (float or int32_t)
+     * @param C Destination matrix (provides dimensions and layout)
+     * @param beta Beta value for initialization (0 = skip initialization)
+     * @return Temporary matrix with same dimensions/layout as C
      */
-    float convertToFloat(const void* src_ptr, MatrixType src_type, size_t index)
+    template<typename IntermediateT>
+    Matrix createAndInitializeTempMatrix(const Matrix& C, IntermediateT beta)
     {
-        switch (src_type) {
-            case MatrixType::f32:
-                return static_cast<const float*>(src_ptr)[index];
-            case MatrixType::u8:
-                return static_cast<float>(
-                    static_cast<const uint8_t*>(src_ptr)[index]);
-            case MatrixType::s8:
-                return static_cast<float>(
-                    static_cast<const int8_t*>(src_ptr)[index]);
-            case MatrixType::u16:
-                return static_cast<float>(
-                    static_cast<const uint16_t*>(src_ptr)[index]);
-            case MatrixType::s16:
-                return static_cast<float>(
-                    static_cast<const int16_t*>(src_ptr)[index]);
-            case MatrixType::u32:
-                return static_cast<float>(
-                    static_cast<const uint32_t*>(src_ptr)[index]);
-            case MatrixType::s32:
-                return static_cast<float>(
-                    static_cast<const int32_t*>(src_ptr)[index]);
-            case MatrixType::u4: {
-                const uint8_t* data     = static_cast<const uint8_t*>(src_ptr);
-                size_t         byte_idx = index / 2;
-                size_t         bit_offset = (index % 2) * 4;
-                uint8_t        value = (data[byte_idx] >> bit_offset) & 0x0F;
-                return static_cast<float>(value);
-            }
-            case MatrixType::s4: {
-                const uint8_t* data     = static_cast<const uint8_t*>(src_ptr);
-                size_t         byte_idx = index / 2;
-                size_t         bit_offset = (index % 2) * 4;
-                uint8_t        value = (data[byte_idx] >> bit_offset) & 0x0F;
-                // Sign extend 4-bit to 8-bit
-                if (value & 0x08)
-                    value |= 0xF0;
-                return static_cast<float>(static_cast<int8_t>(value));
-            }
-            case MatrixType::bf16: {
-                const bfloat16* data = static_cast<const bfloat16*>(src_ptr);
-                return bf16_to_f32(data[index]);
-            }
-            default:
-                return 0.0f;
+        // Determine MatrixType from IntermediateT
+        MatrixType tempType;
+        if constexpr (std::is_same_v<IntermediateT, float>) {
+            tempType = MatrixType::f32;
+        } else if constexpr (std::is_same_v<IntermediateT, int32_t>) {
+            tempType = MatrixType::s32;
         }
-    }
 
-    /**
-     * @brief Convert a float value to any MatrixType and store it
-     * @param dst_ptr Pointer to destination data
-     * @param dst_type Destination data type
-     * @param index Element index
-     * @param value Float value to convert
-     */
-    void convertFromFloat(void*      dst_ptr,
-                          MatrixType dst_type,
-                          size_t     index,
-                          float      value)
-    {
-        switch (dst_type) {
-            case MatrixType::f32:
-                static_cast<float*>(dst_ptr)[index] = value;
-                break;
-            case MatrixType::u8:
-                static_cast<uint8_t*>(dst_ptr)[index] = static_cast<uint8_t>(
-                    std::max(0.0f, std::min(255.0f, std::rint(value))));
-                break;
-            case MatrixType::s8:
-                static_cast<int8_t*>(dst_ptr)[index] = static_cast<int8_t>(
-                    std::max(-128.0f, std::min(127.0f, std::rint(value))));
-                break;
-            case MatrixType::u16:
-                static_cast<uint16_t*>(dst_ptr)[index] = static_cast<uint16_t>(
-                    std::max(0.0f, std::min(65535.0f, std::rint(value))));
-                break;
-            case MatrixType::s16:
-                static_cast<int16_t*>(dst_ptr)[index] = static_cast<int16_t>(
-                    std::max(-32768.0f, std::min(32767.0f, std::rint(value))));
-                break;
-            case MatrixType::u32:
-                static_cast<uint32_t*>(dst_ptr)[index] = static_cast<uint32_t>(
-                    std::max(0.0f, std::min(static_cast<float>(UINT32_MAX),
-                                            std::rint(value))));
-                break;
-            case MatrixType::s32:
-                // Match vcvtps2dq behavior: round-to-nearest-even (IEEE 754
-                // default)
-                static_cast<int32_t*>(dst_ptr)[index] = static_cast<int32_t>(
-                    std::max(-2147483648.0f,
-                             std::min(2147483647.0f, std::rint(value))));
-                break;
-            case MatrixType::u4: {
-                uint8_t* data       = static_cast<uint8_t*>(dst_ptr);
-                size_t   byte_idx   = index / 2;
-                size_t   bit_offset = (index % 2) * 4;
-                uint8_t  value4bit =
-                    static_cast<uint8_t>(
-                        std::max(0.0f, std::min(15.0f, std::rint(value))))
-                    & 0x0F;
-                if (bit_offset == 0) {
-                    data[byte_idx] = (data[byte_idx] & 0xF0) | value4bit;
-                } else {
-                    data[byte_idx] = (data[byte_idx] & 0x0F) | (value4bit << 4);
-                }
-                break;
-            }
-            case MatrixType::s4: {
-                uint8_t* data       = static_cast<uint8_t*>(dst_ptr);
-                size_t   byte_idx   = index / 2;
-                size_t   bit_offset = (index % 2) * 4;
-                int8_t   value_s4   = static_cast<int8_t>(
-                    std::max(-8.0f, std::min(7.0f, std::rint(value))));
-                uint8_t value4bit = static_cast<uint8_t>(value_s4) & 0x0F;
-                if (bit_offset == 0) {
-                    data[byte_idx] = (data[byte_idx] & 0xF0) | value4bit;
-                } else {
-                    data[byte_idx] = (data[byte_idx] & 0x0F) | (value4bit << 4);
-                }
-                break;
-            }
-            case MatrixType::bf16: {
-                static_cast<bfloat16*>(dst_ptr)[index] =
-                    dlp::testing::utils::f32_to_bf16(value);
-                break;
-            }
-            default:
-                break;
+        // Create temporary matrix matching C's layout and dimensions
+        md_t   M = C.getEffectiveRows();
+        md_t   N = C.getEffectiveCols();
+        Matrix temp(M, N, tempType, C.getLayout(), C.getLeadingDimension());
+
+        // Initialize with beta*C if beta != 0
+        if (beta != static_cast<IntermediateT>(0)) {
+            dlp::testing::utils::copyMatrixTo<IntermediateT>(
+                C, reinterpret_cast<IntermediateT*>(temp.getData()),
+                temp.getLeadingDimension(), temp.getLayout());
         }
-    }
 
-    /**
-     * @brief Copy matrix data with type conversion to float
-     * @param src Source matrix
-     * @param dst_data Destination float array
-     * @param dst_ld Destination leading dimension
-     * @return bool Success status
-     */
-    bool copyMatrixToFloat(const Matrix& src, float* dst_data, md_t dst_ld)
-    {
-        const void*  src_data   = src.getData();
-        MatrixType   src_type   = src.getMatrixType();
-        md_t         src_rows   = src.getRows();
-        md_t         src_cols   = src.getCols();
-        md_t         src_ld     = src.getLeadingDimension();
-        MatrixLayout layout     = src.getLayout();
-        bool         transposed = src.isTransposed();
-
-        for (md_t i = 0; i < src_rows; ++i) {
-            for (md_t j = 0; j < src_cols; ++j) {
-                size_t src_idx, dst_idx;
-
-                // Calculate source index based on layout and transposition
-                if (layout == MatrixLayout::ROW_MAJOR) {
-                    src_idx = static_cast<size_t>(i) * src_ld + j;
-                } else {
-                    src_idx = static_cast<size_t>(j) * src_ld + i;
-                }
-
-                // Calculate destination index (always row-major for float
-                // conversion)
-                if (transposed) {
-                    // If source is transposed, swap i,j for destination
-                    dst_idx = static_cast<size_t>(j) * dst_ld + i;
-                } else {
-                    dst_idx = static_cast<size_t>(i) * dst_ld + j;
-                }
-
-                dst_data[dst_idx] = convertToFloat(src_data, src_type, src_idx);
-            }
-        }
-        return true;
-    }
-
-    /**
-     * @brief Copy float data back to matrix with type conversion
-     * @param src_data Source float array
-     * @param src_ld Source leading dimension
-     * @param dst Destination matrix
-     * @return bool Success status
-     */
-    bool copyFloatToMatrix(const float* src_data, md_t src_ld, Matrix& dst)
-    {
-        void*        dst_data = dst.getData();
-        MatrixType   dst_type = dst.getMatrixType();
-        md_t         dst_rows = dst.getRows();
-        md_t         dst_cols = dst.getCols();
-        md_t         dst_ld   = dst.getLeadingDimension();
-        MatrixLayout layout   = dst.getLayout();
-
-        for (md_t i = 0; i < dst_rows; ++i) {
-            for (md_t j = 0; j < dst_cols; ++j) {
-                size_t src_idx, dst_idx;
-
-                // Source is always row-major float
-                src_idx = static_cast<size_t>(i) * src_ld + j;
-
-                // Calculate destination index based on layout
-                if (layout == MatrixLayout::ROW_MAJOR) {
-                    dst_idx = static_cast<size_t>(i) * dst_ld + j;
-                } else {
-                    dst_idx = static_cast<size_t>(j) * dst_ld + i;
-                }
-
-                convertFromFloat(dst_data, dst_type, dst_idx,
-                                 src_data[src_idx]);
-            }
-        }
-        return true;
+        return temp;
     }
 
 } // anonymous namespace
@@ -742,7 +559,11 @@ UalRef::gemm(const Matrix& A,
             float alpha_f32 = static_cast<float>(alpha);
             float beta_f32  = static_cast<float>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_bf16bf16f32obf16_ref(
+            // Use f32 output with conversion to bf16
+            Matrix tempC_f32 =
+                createAndInitializeTempMatrix<float>(C, beta_f32);
+
+            dlp::testing::classic::ref::aocl_gemm_bf16bf16f32of32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
                 reinterpret_cast<const bfloat16*>(
@@ -751,8 +572,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const bfloat16*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_f32,
-                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<float*>(tempC_f32.getData()),
+                static_cast<int>(tempC_f32.getLeadingDimension()), nullptr);
+
+            // Convert f32 to bf16
+            dlp::testing::utils::copyToMatrix<float>(
+                reinterpret_cast<const float*>(tempC_f32.getData()),
+                tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
 
             return true;
         }
@@ -804,7 +630,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_u8s8s32of32_ref(
+            // Use s32 output with conversion to f32
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_u8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const uint8_t*>(
@@ -813,8 +643,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to f32
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -824,7 +659,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_u8s8s32os8_ref(
+            // Use s32 output with conversion to s8
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_u8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const uint8_t*>(
@@ -833,8 +672,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<int8_t*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to s8 with saturation
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -843,7 +687,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_u8s8s32ou8_ref(
+            // Use s32 output with conversion to u8
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_u8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const uint8_t*>(
@@ -852,8 +700,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<uint8_t*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to u8 with saturation
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -863,7 +716,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_u8s8s32obf16_ref(
+            // Use s32 output with conversion to bf16
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_u8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const uint8_t*>(
@@ -872,8 +729,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to bf16
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -883,7 +745,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_s8s8s32of32_ref(
+            // Use s32 output with conversion to f32
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_s8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const int8_t*>(
@@ -892,8 +758,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to f32
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -903,7 +774,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_s8s8s32os8_ref(
+            // Use s32 output with conversion to s8
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_s8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const int8_t*>(
@@ -912,8 +787,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<int8_t*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to s8 with saturation
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -923,7 +803,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_s8s8s32obf16_ref(
+            // Use s32 output with conversion to bf16
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_s8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const int8_t*>(
@@ -932,8 +816,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to bf16
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -943,7 +832,11 @@ UalRef::gemm(const Matrix& A,
             int32_t alpha_s32 = static_cast<int32_t>(alpha);
             int32_t beta_s32  = static_cast<int32_t>(beta);
 
-            dlp::testing::classic::ref::aocl_gemm_s8s8s32ou8_ref(
+            // Use s32 output with conversion to u8
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_s8s8s32os32_ref(
                 layoutA, transA, transB, A.getEffectiveRows(),
                 B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
                 reinterpret_cast<const int8_t*>(
@@ -952,8 +845,13 @@ UalRef::gemm(const Matrix& A,
                 reinterpret_cast<const int8_t*>(
                     B.getMatrixData().getMatrixPtr()),
                 static_cast<int>(B.getLeadingDimension()), beta_s32,
-                reinterpret_cast<uint8_t*>(C.getMatrixData().getMatrixPtr()),
-                static_cast<int>(C.getLeadingDimension()), nullptr);
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            // Convert s32 to u8 with saturation
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
 
             return true;
         }
@@ -1134,7 +1032,9 @@ UalRef::gemm(const Matrix&                      A,
         // Initialize tempC_f32 appropriately based on beta
         if (beta != 0.0) {
             // Copy original C values when beta != 0
-            copyAndConvertToF32(C, tempC_f32);
+            dlp::testing::utils::copyMatrixTo<float>(
+                C, reinterpret_cast<float*>(tempC_f32.getData()),
+                tempC_f32.getLeadingDimension(), tempC_f32.getLayout());
         } else {
             // Zero-initialize to avoid NaN issues from uninitialized memory
             // (GEMM implementations may read C even when beta == 0)
@@ -1159,7 +1059,9 @@ UalRef::gemm(const Matrix&                      A,
         }
 
         // Convert f32 → target output type with proper rounding/saturation
-        convertF32MatrixToTarget(tempC_f32, C, outputType);
+        dlp::testing::utils::copyToMatrix<float>(
+            reinterpret_cast<const float*>(tempC_f32.getData()),
+            tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
 
         return UALError::UAL_SUCCESS;
     }
@@ -1408,8 +1310,8 @@ UalRef::copyAndConvertToS32(const Matrix& src, Matrix& dst_s32)
             // Destination: simple row-major
             size_t dst_idx = static_cast<size_t>(i) * dst_ld + j;
 
-            float src_value =
-                convertToFloat(src.getData(), src.getMatrixType(), src_idx);
+            float src_value = dlp::testing::utils::convertTo<float>(
+                src.getData(), src.getMatrixType(), src_idx);
             dst_data[dst_idx] = static_cast<int32_t>(src_value);
         }
     }
@@ -1451,7 +1353,8 @@ UalRef::convertS32MatrixToTarget(const Matrix& src_s32,
             }
 
             float value = static_cast<float>(src_data[src_idx]);
-            convertFromFloat(dst.getData(), targetType, dst_idx, value);
+            dlp::testing::utils::convertFrom<float>(dst.getData(), targetType,
+                                                    dst_idx, value);
         }
     }
 }
@@ -1490,8 +1393,8 @@ UalRef::copyAndConvertToF32(const Matrix& src, Matrix& dst_f32)
                                  ? (static_cast<size_t>(i) * dst_ld + j)
                                  : (static_cast<size_t>(j) * dst_ld + i);
 
-            dst_data[dst_idx] =
-                convertToFloat(src.getData(), src.getMatrixType(), src_idx);
+            dst_data[dst_idx] = dlp::testing::utils::convertTo<float>(
+                src.getData(), src.getMatrixType(), src_idx);
         }
     }
 }
@@ -1534,8 +1437,8 @@ UalRef::convertF32MatrixToTarget(const Matrix& src_f32,
                               : (static_cast<size_t>(j) * dst_ld + i);
             }
 
-            convertFromFloat(dst.getData(), targetType, dst_idx,
-                             src_data[src_idx]);
+            dlp::testing::utils::convertFrom<float>(dst.getData(), targetType,
+                                                    dst_idx, src_data[src_idx]);
         }
     }
 }
@@ -1578,7 +1481,8 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
     std::unique_ptr<float[]> temp_data(new float[rows * ld]);
 
     // Convert to float
-    if (!copyMatrixToFloat(matrix, temp_data.get(), ld)) {
+    if (!dlp::testing::utils::copyMatrixTo<float>(matrix, temp_data.get(), ld,
+                                                  MatrixLayout::ROW_MAJOR)) {
         return;
     }
 
@@ -1593,7 +1497,8 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
     }
 
     // Convert back to original type
-    copyFloatToMatrix(temp_data.get(), ld, matrix);
+    dlp::testing::utils::copyToMatrix<float>(temp_data.get(), ld, matrix,
+                                             MatrixLayout::ROW_MAJOR);
 }
 
 // Helper methods for specific operations
@@ -1615,7 +1520,8 @@ UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
     // Get alpha value
     float alpha_val = 0.01f; // Default alpha
     if (alpha) {
-        alpha_val = convertToFloat(alpha->getData(), alpha->getMatrixType(), 0);
+        alpha_val = dlp::testing::utils::convertTo<float>(
+            alpha->getData(), alpha->getMatrixType(), 0);
     }
 
     // If already f32, apply directly
@@ -1648,7 +1554,8 @@ UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
     std::unique_ptr<float[]> temp_data(new float[rows * ld]);
 
     // Convert to float
-    if (!copyMatrixToFloat(matrix, temp_data.get(), ld)) {
+    if (!dlp::testing::utils::copyMatrixTo<float>(matrix, temp_data.get(), ld,
+                                                  MatrixLayout::ROW_MAJOR)) {
         return;
     }
 
@@ -1661,7 +1568,8 @@ UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
     }
 
     // Convert back to original type
-    copyFloatToMatrix(temp_data.get(), ld, matrix);
+    dlp::testing::utils::copyToMatrix<float>(temp_data.get(), ld, matrix,
+                                             MatrixLayout::ROW_MAJOR);
 }
 
 void
@@ -1696,11 +1604,13 @@ UalRef::applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper)
 
     // Support any datatype for lower bound (alpha parameter)
     if (lower) {
-        lower_val = convertToFloat(lower->getData(), lower->getMatrixType(), 0);
+        lower_val = dlp::testing::utils::convertTo<float>(
+            lower->getData(), lower->getMatrixType(), 0);
     }
     // Support any datatype for upper bound (beta parameter)
     if (upper) {
-        upper_val = convertToFloat(upper->getData(), upper->getMatrixType(), 0);
+        upper_val = dlp::testing::utils::convertTo<float>(
+            upper->getData(), upper->getMatrixType(), 0);
     }
 
     applyUnifiedPostOp(
@@ -1760,12 +1670,12 @@ UalRef::applyScale(Matrix&       matrix,
     if (!per_channel && !per_channel_zp) {
         // Single scale value and optionally single zero point - convert to
         // float
-        float scale = convertToFloat(scaleFactor->getData(),
-                                     scaleFactor->getMatrixType(), 0);
-        float zp    = 0.0f;
+        float scale = dlp::testing::utils::convertTo<float>(
+            scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
+        float zp = 0.0f;
         if (has_zero_point) {
-            zp = convertToFloat(zeroPoint->getData(),
-                                zeroPoint->getMatrixType(), 0);
+            zp = dlp::testing::utils::convertTo<float>(
+                zeroPoint->getData(), zeroPoint->getMatrixType(), 0);
         }
         applyUnifiedPostOp(matrix, [scale, zp](float* data, size_t size) {
             for (size_t i = 0; i < size; ++i) {
@@ -1785,8 +1695,8 @@ UalRef::applyScale(Matrix&       matrix,
     std::unique_ptr<float[]> scale_data(new float[scale_size]);
 
     for (md_t i = 0; i < scale_size; ++i) {
-        scale_data[i] = convertToFloat(scaleFactor->getData(),
-                                       scaleFactor->getMatrixType(), i);
+        scale_data[i] = dlp::testing::utils::convertTo<float>(
+            scaleFactor->getData(), scaleFactor->getMatrixType(), i);
     }
 
     // Convert zero point to float array if provided
@@ -1796,8 +1706,8 @@ UalRef::applyScale(Matrix&       matrix,
         zp_size = zeroPoint->getRows() * zeroPoint->getCols();
         zp_data.reset(new float[zp_size]);
         for (md_t i = 0; i < zp_size; ++i) {
-            zp_data[i] = convertToFloat(zeroPoint->getData(),
-                                        zeroPoint->getMatrixType(), i);
+            zp_data[i] = dlp::testing::utils::convertTo<float>(
+                zeroPoint->getData(), zeroPoint->getMatrixType(), i);
         }
     }
 
@@ -1826,7 +1736,8 @@ UalRef::applyScale(Matrix&       matrix,
     std::unique_ptr<float[]> temp_data(new float[rows * temp_ld]);
 
     // Convert to float
-    if (!copyMatrixToFloat(matrix, temp_data.get(), temp_ld)) {
+    if (!dlp::testing::utils::copyMatrixTo<float>(
+            matrix, temp_data.get(), temp_ld, MatrixLayout::ROW_MAJOR)) {
         return;
     }
 
@@ -1841,7 +1752,8 @@ UalRef::applyScale(Matrix&       matrix,
     }
 
     // Convert back to original type
-    copyFloatToMatrix(temp_data.get(), temp_ld, matrix);
+    dlp::testing::utils::copyToMatrix<float>(temp_data.get(), temp_ld, matrix,
+                                             MatrixLayout::ROW_MAJOR);
 }
 
 void
@@ -1855,7 +1767,8 @@ UalRef::applyBias(Matrix&       matrix,
     // Convert bias to float array
     std::unique_ptr<float[]> bias_data(new float[bias_size]);
     for (md_t i = 0; i < bias_size; ++i) {
-        bias_data[i] = convertToFloat(bias.getData(), bias.getMatrixType(), i);
+        bias_data[i] = dlp::testing::utils::convertTo<float>(
+            bias.getData(), bias.getMatrixType(), i);
     }
 
     // Apply dequantization to bias if scale factor or zero point is provided
@@ -1872,12 +1785,12 @@ UalRef::applyBias(Matrix&       matrix,
             float scale = 1.0f;
             float zp    = 0.0f;
             if (scaleFactor) {
-                scale = convertToFloat(scaleFactor->getData(),
-                                       scaleFactor->getMatrixType(), 0);
+                scale = dlp::testing::utils::convertTo<float>(
+                    scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
             }
             if (zeroPoint) {
-                zp = convertToFloat(zeroPoint->getData(),
-                                    zeroPoint->getMatrixType(), 0);
+                zp = dlp::testing::utils::convertTo<float>(
+                    zeroPoint->getData(), zeroPoint->getMatrixType(), 0);
             }
             // Dequantize: bias = (bias - zp) * scale
             for (md_t i = 0; i < bias_size; ++i) {
@@ -1894,17 +1807,17 @@ UalRef::applyBias(Matrix&       matrix,
                 scale_size = scaleFactor->getRows() * scaleFactor->getCols();
                 scale_data.reset(new float[scale_size]);
                 for (md_t i = 0; i < scale_size; ++i) {
-                    scale_data[i] =
-                        convertToFloat(scaleFactor->getData(),
-                                       scaleFactor->getMatrixType(), i);
+                    scale_data[i] = dlp::testing::utils::convertTo<float>(
+                        scaleFactor->getData(), scaleFactor->getMatrixType(),
+                        i);
                 }
             }
             if (zeroPoint) {
                 zp_size = zeroPoint->getRows() * zeroPoint->getCols();
                 zp_data.reset(new float[zp_size]);
                 for (md_t i = 0; i < zp_size; ++i) {
-                    zp_data[i] = convertToFloat(zeroPoint->getData(),
-                                                zeroPoint->getMatrixType(), i);
+                    zp_data[i] = dlp::testing::utils::convertTo<float>(
+                        zeroPoint->getData(), zeroPoint->getMatrixType(), i);
                 }
             }
 
@@ -1946,7 +1859,8 @@ UalRef::applyBias(Matrix&       matrix,
     std::unique_ptr<float[]> temp_data(new float[rows * ld]);
 
     // Convert to float
-    if (!copyMatrixToFloat(matrix, temp_data.get(), ld)) {
+    if (!dlp::testing::utils::copyMatrixTo<float>(matrix, temp_data.get(), ld,
+                                                  MatrixLayout::ROW_MAJOR)) {
         return;
     }
 
@@ -1960,7 +1874,8 @@ UalRef::applyBias(Matrix&       matrix,
     }
 
     // Convert back to original type
-    copyFloatToMatrix(temp_data.get(), ld, matrix);
+    dlp::testing::utils::copyToMatrix<float>(temp_data.get(), ld, matrix,
+                                             MatrixLayout::ROW_MAJOR);
 }
 
 void
@@ -1970,8 +1885,8 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
 {
     float scale = 1.0f;
     if (scaleFactor) {
-        scale = convertToFloat(scaleFactor->getData(),
-                               scaleFactor->getMatrixType(), 0);
+        scale = dlp::testing::utils::convertTo<float>(
+            scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
     }
 
     // If both matrices are f32, apply directly
@@ -2013,8 +1928,10 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
     std::unique_ptr<float[]> temp_add(new float[rows * ld]);
 
     // Convert both matrices to float
-    if (!copyMatrixToFloat(matrix, temp_matrix.get(), ld)
-        || !copyMatrixToFloat(addMatrix, temp_add.get(), ld)) {
+    if (!dlp::testing::utils::copyMatrixTo<float>(matrix, temp_matrix.get(), ld,
+                                                  MatrixLayout::ROW_MAJOR)
+        || !dlp::testing::utils::copyMatrixTo<float>(
+            addMatrix, temp_add.get(), ld, MatrixLayout::ROW_MAJOR)) {
         return;
     }
 
@@ -2027,7 +1944,8 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
     }
 
     // Convert back to original type
-    copyFloatToMatrix(temp_matrix.get(), ld, matrix);
+    dlp::testing::utils::copyToMatrix<float>(temp_matrix.get(), ld, matrix,
+                                             MatrixLayout::ROW_MAJOR);
 }
 
 void
@@ -2037,8 +1955,8 @@ UalRef::applyMatrixMul(Matrix&       matrix,
 {
     float scale = 1.0f;
     if (scaleFactor) {
-        scale = convertToFloat(scaleFactor->getData(),
-                               scaleFactor->getMatrixType(), 0);
+        scale = dlp::testing::utils::convertTo<float>(
+            scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
     }
 
     // If both matrices are f32, apply directly
@@ -2080,8 +1998,10 @@ UalRef::applyMatrixMul(Matrix&       matrix,
     std::unique_ptr<float[]> temp_mul(new float[rows * ld]);
 
     // Convert both matrices to float
-    if (!copyMatrixToFloat(matrix, temp_matrix.get(), ld)
-        || !copyMatrixToFloat(mulMatrix, temp_mul.get(), ld)) {
+    if (!dlp::testing::utils::copyMatrixTo<float>(matrix, temp_matrix.get(), ld,
+                                                  MatrixLayout::ROW_MAJOR)
+        || !dlp::testing::utils::copyMatrixTo<float>(
+            mulMatrix, temp_mul.get(), ld, MatrixLayout::ROW_MAJOR)) {
         return;
     }
 
@@ -2094,7 +2014,8 @@ UalRef::applyMatrixMul(Matrix&       matrix,
     }
 
     // Convert back to original type
-    copyFloatToMatrix(temp_matrix.get(), ld, matrix);
+    dlp::testing::utils::copyToMatrix<float>(temp_matrix.get(), ld, matrix,
+                                             MatrixLayout::ROW_MAJOR);
 }
 
 } // namespace dlp::testing::classic

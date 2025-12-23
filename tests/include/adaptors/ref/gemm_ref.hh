@@ -67,23 +67,6 @@ aocl_gemm_bf16bf16f32of32_ref(const char      order,
                               dlp_metadata_t* post_ops);
 
 void
-aocl_gemm_bf16bf16f32obf16_ref(const char      order,
-                               const char      transa,
-                               const char      transb,
-                               const md_t      m,
-                               const md_t      n,
-                               const md_t      k,
-                               float           alpha,
-                               const bfloat16* A,
-                               int             lda,
-                               const bfloat16* B,
-                               int             ldb,
-                               float           beta,
-                               bfloat16*       C,
-                               int             ldc,
-                               dlp_metadata_t* post_ops);
-
-void
 aocl_gemm_s8s8s32os32_ref(const char      order,
                           const char      transa,
                           const char      transb,
@@ -135,57 +118,6 @@ aocl_gemm_u8s8s32of32_ref(const char      order,
                           dlp_metadata_t* post_ops);
 
 void
-aocl_gemm_u8s8s32os8_ref(const char      order,
-                         const char      transa,
-                         const char      transb,
-                         const md_t      m,
-                         const md_t      n,
-                         const md_t      k,
-                         int32_t         alpha,
-                         const uint8_t*  A,
-                         int             lda,
-                         const int8_t*   B,
-                         int             ldb,
-                         int32_t         beta,
-                         int8_t*         C,
-                         int             ldc,
-                         dlp_metadata_t* post_ops);
-
-void
-aocl_gemm_u8s8s32ou8_ref(const char      order,
-                         const char      transa,
-                         const char      transb,
-                         const md_t      m,
-                         const md_t      n,
-                         const md_t      k,
-                         int32_t         alpha,
-                         const uint8_t*  A,
-                         int             lda,
-                         const int8_t*   B,
-                         int             ldb,
-                         int32_t         beta,
-                         uint8_t*        C,
-                         int             ldc,
-                         dlp_metadata_t* post_ops);
-
-void
-aocl_gemm_u8s8s32obf16_ref(const char      order,
-                           const char      transa,
-                           const char      transb,
-                           const md_t      m,
-                           const md_t      n,
-                           const md_t      k,
-                           int32_t         alpha,
-                           const uint8_t*  A,
-                           int             lda,
-                           const int8_t*   B,
-                           int             ldb,
-                           int32_t         beta,
-                           bfloat16*       C,
-                           int             ldc,
-                           dlp_metadata_t* post_ops);
-
-void
 aocl_gemm_s8s8s32of32_ref(const char      order,
                           const char      transa,
                           const char      transb,
@@ -201,57 +133,6 @@ aocl_gemm_s8s8s32of32_ref(const char      order,
                           float*          C,
                           int             ldc,
                           dlp_metadata_t* post_ops);
-
-void
-aocl_gemm_s8s8s32obf16_ref(const char      order,
-                           const char      transa,
-                           const char      transb,
-                           const md_t      m,
-                           const md_t      n,
-                           const md_t      k,
-                           int32_t         alpha,
-                           const int8_t*   A,
-                           int             lda,
-                           const int8_t*   B,
-                           int             ldb,
-                           int32_t         beta,
-                           bfloat16*       C,
-                           int             ldc,
-                           dlp_metadata_t* post_ops);
-
-void
-aocl_gemm_s8s8s32os8_ref(const char      order,
-                         const char      transa,
-                         const char      transb,
-                         const md_t      m,
-                         const md_t      n,
-                         const md_t      k,
-                         int32_t         alpha,
-                         const int8_t*   A,
-                         int             lda,
-                         const int8_t*   B,
-                         int             ldb,
-                         int32_t         beta,
-                         int8_t*         C,
-                         int             ldc,
-                         dlp_metadata_t* post_ops);
-
-void
-aocl_gemm_s8s8s32ou8_ref(const char      order,
-                         const char      transa,
-                         const char      transb,
-                         const md_t      m,
-                         const md_t      n,
-                         const md_t      k,
-                         int32_t         alpha,
-                         const int8_t*   A,
-                         int             lda,
-                         const int8_t*   B,
-                         int             ldb,
-                         int32_t         beta,
-                         uint8_t*        C,
-                         int             ldc,
-                         dlp_metadata_t* post_ops);
 
 void
 aocl_gemm_bf16s8s32obf16_ref(const char            order,
