@@ -157,6 +157,13 @@ main()
     int8_t*   b = (int8_t*)malloc(ldb * k * sizeof(int8_t));
     bfloat16* c = (bfloat16*)malloc(ldc * m * sizeof(bfloat16));
 
+    // Initialize pointers for cleanup
+    DLP_POST_OP_TYPE* seq_vector_1        = NULL;
+    DLP_POST_OP_TYPE* seq_vector_2        = NULL;
+    float*            a_pre_quant_sf_row  = NULL;
+    float*            a_post_quant_sf_row = NULL;
+    float*            zero_points         = NULL;
+
     if (!a || !b || !c) {
         printf("Memory allocation failed\n");
         return -1;
@@ -202,8 +209,20 @@ main()
                                   .zp         = NULL,
                                   .symmetric  = true };
 
-    dlp_metadata_t metadata = { .a_pre_quant  = &a_pre_quant,
-                                .a_post_quant = &a_post_quant };
+    // Allocate and set up metadata with sequence vector
+    dlp_metadata_t metadata = { 0 };
+    metadata.a_pre_quant    = &a_pre_quant;
+    metadata.a_post_quant   = &a_post_quant;
+    metadata.seq_length     = 1;
+
+    // Allocate sequence vector for post-quantization operation
+    seq_vector_1 = (DLP_POST_OP_TYPE*)malloc(sizeof(DLP_POST_OP_TYPE));
+    if (!seq_vector_1) {
+        printf("Memory allocation for sequence vector failed\n");
+        goto cleanup;
+    }
+    seq_vector_1[0]     = ADQUANTIZE;
+    metadata.seq_vector = seq_vector_1;
 
     aocl_gemm_bf16s8s32obf16('R', 'N', 'N', m, n, k, 1.0f, a, lda, 'N', b, ldb,
                              'N', 0.0f, c, ldc, &metadata);
@@ -217,9 +236,9 @@ main()
 
     memset(c, 0, ldc * m * sizeof(bfloat16));
 
-    float* a_pre_quant_sf_row  = (float*)malloc(m * sizeof(float));
-    float* a_post_quant_sf_row = (float*)malloc(m * sizeof(float));
-    float* zero_points         = (float*)malloc(m * sizeof(float));
+    a_pre_quant_sf_row  = (float*)malloc(m * sizeof(float));
+    a_post_quant_sf_row = (float*)malloc(m * sizeof(float));
+    zero_points         = (float*)malloc(m * sizeof(float));
 
     if (!a_pre_quant_sf_row || !a_post_quant_sf_row || !zero_points) {
         printf("Memory allocation for quantization parameters failed\n");
@@ -253,21 +272,35 @@ main()
                                       .zp         = &zp_row,
                                       .symmetric  = false };
 
-    dlp_metadata_t metadata_row = { .a_pre_quant  = &a_pre_quant_row,
-                                    .a_post_quant = &a_post_quant_row,
-                                    .b_pre_quant  = NULL,
-                                    .b_post_quant = NULL };
+    // Allocate and set up metadata with sequence vector
+    dlp_metadata_t metadata_row = { 0 };
+    metadata_row.a_pre_quant    = &a_pre_quant_row;
+    metadata_row.a_post_quant   = &a_post_quant_row;
+    metadata_row.b_pre_quant    = NULL;
+    metadata_row.b_post_quant   = NULL;
+    metadata_row.seq_length     = 1;
+
+    // Allocate sequence vector for post-quantization operation
+    seq_vector_2 = (DLP_POST_OP_TYPE*)malloc(sizeof(DLP_POST_OP_TYPE));
+    if (!seq_vector_2) {
+        printf("Memory allocation for sequence vector failed\n");
+        goto cleanup;
+    }
+    seq_vector_2[0]         = ADQUANTIZE;
+    metadata_row.seq_vector = seq_vector_2;
 
     aocl_gemm_bf16s8s32obf16('R', 'N', 'N', m, n, k, 1.0f, a, lda, 'N', b, ldb,
                              'N', 0.0f, c, ldc, &metadata_row);
 
     print_bf16_matrix_section("Result Matrix C", c, m, n, ldc, 3, 3);
 
+cleanup:
+    // Free all allocated resources
+    free(seq_vector_1);
+    free(seq_vector_2);
     free(a_pre_quant_sf_row);
     free(a_post_quant_sf_row);
     free(zero_points);
-
-cleanup:
     free(a);
     free(b);
     free(c);
