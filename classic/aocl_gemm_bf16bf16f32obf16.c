@@ -252,7 +252,7 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     md_t kc_hint = lcntx_l.blksz.KC;
 
     // Create copy of mtag variables to handle jit kernel generation for bf16 on
-    // avx2 arch
+    // architectures without bf16 support.
     AOCL_MEMORY_TAG jit_mtag_a = mtag_a_use;
     AOCL_MEMORY_TAG jit_mtag_b = mtag_b_use;
 
@@ -261,7 +261,8 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     // variable and/or the underlying architecture.
     dlp_arch_t arch_id = dlp_get_arch();
 
-    if ((arch_id == DLP_ARCH_ZEN3) || (arch_id == DLP_ARCH_ZEN2)
+    if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
+        || (arch_id == DLP_ARCH_ZEN3) || (arch_id == DLP_ARCH_ZEN2)
         || (arch_id == DLP_ARCH_ZEN)) {
         // No native BF16 support - will use F32 kernels
         // Get F32 context for proper block sizes

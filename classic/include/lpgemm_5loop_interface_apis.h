@@ -100,8 +100,8 @@ LPGEMM_5LOOP2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant);
 
 LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32);
 
-#define LPGEMM_5LOOP_AVX2(A_type, B_type, C_type, LP_SFX)                      \
-    void lpgemm_rowvar_avx2_##LP_SFX(                                          \
+#define LPGEMM_5LOOP_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)              \
+    void lpgemm_rowvar_f32_fallback_##LP_SFX(                                  \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
         const B_type* b, md_t rs_b, md_t cs_b, AOCL_MEMORY_TAG mtag_b,         \
@@ -110,7 +110,7 @@ LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32);
         lpgemm_cntx_t* lcntx, lpgemm_post_op* post_op_list,                    \
         DLP_TYPE c_downscale)
 
-LPGEMM_5LOOP_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32);
+LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
 
 #define LPGEMM_5LOOP_AVX512BF16(A_type, B_type, C_type, LP_SFX)                \
     void lpgemm_rowvar_avx512bf16_##LP_SFX(                                    \
@@ -152,8 +152,8 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32);
 LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32);
 LPGEMV(int8_t, int8_t, int32_t, s8s8s32os32);
 
-#define LPGEMV_AVX2(A_type, B_type, C_type, LP_SFX)                            \
-    void lpgemv_rowvar_avx2_##LP_SFX(                                          \
+#define LPGEMV_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)                    \
+    void lpgemv_rowvar_f32_fallback_##LP_SFX(                                  \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
@@ -162,7 +162,7 @@ LPGEMV(int8_t, int8_t, int32_t, s8s8s32os32);
         dlp_rntm_t* rntm, lpgemm_thrinfo_t* thread, lpgemm_cntx_t* lcntx,      \
         lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)
 
-LPGEMV_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32);
+LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
 
 #define LPGEMV2(A_type, B_type, C_type, LP_SFX)                                \
     void lpgemv_rowvar_##LP_SFX(                                               \
@@ -188,6 +188,6 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
         dlp_quant_op* a_pre_quant, lpgemm_post_op* post_op_list,               \
         DLP_TYPE c_downscale)
 
-LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32o32);
+LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32);
 
 #endif // LPGEMM_5LOOP_INTF_H

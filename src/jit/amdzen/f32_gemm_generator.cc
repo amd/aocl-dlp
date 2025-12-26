@@ -106,9 +106,13 @@ jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
 
     if (c_downscale < DLP_F32) {
         // Initialize F32→BF16 conversion constants on stack
-        // Stack layout: [0-15]: final result, [16-47]: constants
+        // Stack layout:
+        // [0-15]: intermediate storage for fringe BF16 (16 bytes -
+        // AVX2 only) [16-19]: value 16 for BF16→F32 shift [20-23]:
+        // 0x00010000 for bit 16 extraction [24-27]: 0x00007FFF for rounding
+        // [28-63]: padding/reserved
 
-        // Store value 16 at [rsp + 16] (safely allocated)
+        // Store value 16 at [rsp + 16]
         mov(dword[rsp + 16], 0x10);
 
         // Store constant 0x00010000 at [rsp + 20] for bit 16 extraction
@@ -119,6 +123,7 @@ jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
         mov(regTmp1.cvt32(), 0x00007FFF);
         mov(dword[rsp + 24], regTmp1.cvt32());
     }
+
     mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
     mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsA)]);
     mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csA)]);
@@ -329,41 +334,75 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
     return dlp::jit::jitGeneratorError::success;
 }
 
+// Generic template for AVX2 and AVX512_256 (both use Ymm as RegType)
+// Converts 8×F32 in Ymm(destIdx) → 8×BF16 in Xmm(scratch2)
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
 {
-    return dlp::jit::jitGeneratorError::notSupported;
+    // Manual F32→BF16 conversion using round-to-nearest-even with tie-break
+    // This generic implementation works for AVX2 and AVX512_256
+
+    vbroadcastss(RegType(scratch1), ptr[rsp + 20]); // Load 0x00010000
+    vpand(RegType(scratch1), RegType(destIdx),
+          RegType(scratch1)); // Extract bit 16
+    vpsrld(RegType(scratch1), RegType(scratch1),
+           16); // Shift to position 0 → tlsb
+
+    vbroadcastss(RegType(scratch2), ptr[rsp + 24]); // Load 0x00007FFF
+    vpaddd(RegType(scratch2), RegType(destIdx),
+           RegType(scratch2)); // Add rounding
+    vpaddd(RegType(scratch2), RegType(scratch2),
+           RegType(scratch1)); // Add tlsb → rounded
+
+    vpsrld(RegType(scratch2), RegType(scratch2), 16); // Shift right 16 bits
+
+    // Extract upper 128 bits of YMM → XMM
+    vextracti128(halfRegType(scratch1), RegType(scratch2), 1);
+
+    // Pack 8×32-bit to 8×16-bit (result in halfRegType(scratch2))
+    vpackusdw(halfRegType(scratch2), halfRegType(scratch2),
+              halfRegType(scratch1));
+
+    return dlp::jit::jitGeneratorError::success;
 }
 
 template<>
 dlp::jit::jitGeneratorError
-jitGEMMF32<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
+jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
     int scratch1, int scratch2, int destIdx)
 {
-    vbroadcastss(Ymm(scratch1),
+    // AVX512 ZMM variant: Convert 16 f32 in Zmm to 16 bf16 in Ymm
+    vbroadcastss(RegType(scratch1),
                  ptr[rsp + 20]); // Load 0x00010000
-    vpand(Ymm(scratch1), Ymm(destIdx),
-          Ymm(scratch1)); // Extract bit 16
-    vpsrld(Ymm(scratch1), Ymm(scratch1),
+    vpandd(RegType(scratch1), RegType(destIdx),
+           RegType(scratch1)); // Extract bit 16
+    vpsrld(RegType(scratch1), RegType(scratch1),
            16); // Shift to position 0 → tlsb
 
-    vbroadcastss(Ymm(scratch2),
+    vbroadcastss(RegType(scratch2),
                  ptr[rsp + 24]); // Load 0x00007FFF
-    vpaddd(Ymm(scratch2), Ymm(destIdx),
-           Ymm(scratch2)); // Add rounding to original
+    vpaddd(RegType(scratch2), RegType(destIdx),
+           RegType(scratch2)); // Add rounding to original
 
-    vpaddd(Ymm(scratch2), Ymm(scratch2),
-           Ymm(scratch1)); // Add tlsb → rounded
+    vpaddd(RegType(scratch2), RegType(scratch2),
+           RegType(scratch1)); // Add tlsb → rounded
 
-    vpsrld(Ymm(scratch2), Ymm(scratch2),
+    vpsrld(RegType(scratch2), RegType(scratch2),
            16); // Shift right 16 bits
 
-    // Extract upper 128 bits of YMM → XMM
-    vextracti128(Xmm(scratch1), Ymm(scratch2), 1);
+    // Extract upper 256 bits of ZMM → YMM
+    vextracti64x4(halfRegType(scratch1), RegType(scratch2), 1);
 
-    // Pack 8×32-bit to 8×16-bit
-    vpackusdw(Xmm(scratch2), Xmm(scratch2), Xmm(scratch1));
+    // Pack 16×32-bit to 16×16-bit (lower 8 from scratch2, upper 8 from
+    // scratch1)
+    vpackusdw(halfRegType(scratch2), halfRegType(scratch2),
+              halfRegType(scratch1));
+
+    // Permute to get correct order: [0,1,2,3,8,9,10,11,4,5,6,7,12,13,14,15] ->
+    // [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    vpermq(halfRegType(scratch2), halfRegType(scratch2),
+           0xD8); // 0xD8 = 11011000b = [0,2,1,3]
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -466,34 +505,51 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         imul(regTmp3, regTmp1);
         add(regTmpCptr, regTmp3);
 
-        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-            int scratch1 = aRegIdx;
-            int scratch2 = bRegIdx;
+        // Use convertF32toBF16 for all ISAs (no AVX512_BF16 dependency)
+        int scratch1 = aRegIdx;
+        int scratch2 = bRegIdx;
 
-            for (int i = 0; i < MR; i++) {
-                for (int j = 0; j < bFullReg; j++) {
-                    RETURN_IF_ERROR(convertF32toBF16(scratch1, scratch2,
-                                                     cRegIdx + i * bReg + j));
-                    movdqu(ptr[regTmpCptr + j * halfRegBytes], Xmm(scratch2));
+        // Calculate number of F32 elements per register and BF16 output bytes
+        // For AVX2: 8 F32 elements → 16 bytes BF16 output (Xmm)
+        int nElemsPerReg = RegBytes / sizeof(float);
+
+        for (int i = 0; i < MR; i++) {
+            for (int j = 0; j < bFullReg; j++) {
+                RETURN_IF_ERROR(convertF32toBF16(scratch1, scratch2,
+                                                 cRegIdx + i * bReg + j));
+                // Store the BF16 result (in halfRegType(scratch2))
+                // AVX512: Ymm output (32 bytes), others: Xmm output (16 bytes)
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    // AVX2 and AVX512_256: Use movdqu for Xmm (VEX-encoded)
+                    movdqu(ptr[regTmpCptr + j * halfRegBytes],
+                           halfRegType(scratch2));
+                } else {
+                    // AVX512: Store 32 bytes (16×BF16) from Ymm
+                    vmovdqu16(ptr[regTmpCptr + j * halfRegBytes],
+                              halfRegType(scratch2));
                 }
-                if (bMaskReg > 0) {
-                    // Convert full vector (8×F32 → 8×BF16)
+            }
+            if (bMaskReg > 0) {
+                // Store converted BF16 to stack for element-wise access
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    // Convert fringe register
                     RETURN_IF_ERROR(convertF32toBF16(
                         scratch1, scratch2, cRegIdx + i * bReg + bFullReg));
-
-                    // Now Xmm(scratch2) contains 8×BF16 values
-                    // Store the BF16 result to stack for element-wise access
-                    movdqu(ptr[rsp + 0], Xmm(scratch2)); // 8×16-bit to stack
-
-                    // Get n_remainder: n % 8
+                    // AVX2: Store converted BF16 to stack [rsp+0] for
+                    // element-wise access
+                    movdqu(ptr[rsp + 0], halfRegType(scratch2));
+                    // Get n_remainder: n % nElemsPerReg
                     mov(regTmp2,
                         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
-                    and_(regTmp2.cvt32(), 7); // n % 8
+                    and_(regTmp2.cvt32(), nElemsPerReg - 1);
 
-                    // Calculate destination base address
+                    // Calculate destination base address for fringe elements
                     lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
 
-                    // Loop: copy n_remainder elements from stack to destination
+                    // Loop: copy n_remainder BF16 elements from stack to
+                    // destination
                     xor_(regTmp3.cvt32(), regTmp3.cvt32()); // elem_idx = 0
 
                     Label loop_start, loop_end;
@@ -504,7 +560,6 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
                     jge(loop_end, T_NEAR);
 
                     // Load BF16 value from stack and store to destination
-                    // Use regBptr as temporary (done with B matrix access)
                     mov(regBptr.cvt16(), word[rsp + regTmp3 * sizeof(int16_t)]);
                     mov(word[regKIter + regTmp3 * sizeof(int16_t)],
                         regBptr.cvt16());
@@ -513,28 +568,20 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
                     jmp(loop_start, T_NEAR);
 
                     L(loop_end);
-                }
-                add(regTmpCptr, regTmp1);
-            }
-        } else {
-            for (int i = 0; i < MR; i++) {
-                for (int j = 0; j < bFullReg; j++) {
-                    vcvtneps2bf16(halfRegType(bRegIdx + j),
-                                  RegType(cRegIdx + i * bReg + j));
-                    vmovdqu16(ptr[regTmpCptr + j * halfRegBytes],
-                              halfRegType(bRegIdx + j));
-                }
-                if (bMaskReg > 0) {
+                } else {
+                    // AVX512_ZMM/AVX512_YMM: Store BF16 output directly to
+                    // memory with mask AVX512_ZMM: 32 bytes (16×BF16) from Ymm
+                    // AVX512_YMM: 16 bytes (8×BF16) from Xmm
                     for (int maskI = bFullReg; maskI < bReg; ++maskI) {
-                        vcvtneps2bf16(halfRegType(bRegIdx + maskI),
-                                      RegType(cRegIdx + i * bReg + maskI));
+                        RETURN_IF_ERROR(convertF32toBF16(
+                            scratch1, scratch2, cRegIdx + i * bReg + maskI));
                         vmovdqu16(ptr[regTmpCptr + maskI * halfRegBytes]
                                       | fringeMask[maskI - bFullReg],
-                                  halfRegType(bRegIdx + maskI));
+                                  halfRegType(scratch2));
                     }
                 }
-                add(regTmpCptr, regTmp1);
             }
+            add(regTmpCptr, regTmp1);
         }
 
         jmp(".afterStoreResultRowMajor", T_NEAR);
@@ -920,28 +967,56 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         add(regTmpCptr, regTmp3);
         mov(regKIter, regTmpCptr);
 
-        vpbroadcastd(RegType(aRegIdx + 1),
-                     ptr[rsp + 16]); // Broadcast value 16 from memory
+        // Broadcast shift value 16 for BF16→F32 conversion
+        vpbroadcastd(RegType(aRegIdx + 1), ptr[rsp + 16]);
 
-        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-            for (int i = 0; i < MR; i++) {
-                for (int j = 0; j < bFullReg; j++) {
-                    movdqu(Xmm(bRegIdx + j),
+        // Calculate BF16 input bytes per register
+        // For AVX2/AVX512_256: 8 F32 elements → 16 bytes BF16 input (Xmm)
+        // For AVX512: 16 F32 elements → 32 bytes BF16 input (Ymm)
+        int nElemsPerReg   = RegBytes / sizeof(float);
+        int bf16InputBytes = nElemsPerReg * sizeof(int16_t);
+
+        for (int i = 0; i < MR; i++) {
+            for (int j = 0; j < bFullReg; j++) {
+                // Load BF16 values from buf_downscale and convert to F32
+                // Stack layout [rsp+16] contains shift value 16 for conversion
+                // AVX2: Load Xmm (16 bytes = 8×BF16), expand to Ymm (8×F32)
+                // AVX512_YMM: Load Xmm (16 bytes = 8×BF16), expand to Ymm
+                // (8×F32) AVX512_ZMM: Load Ymm (32 bytes = 16×BF16), expand to
+                // Zmm (16×F32)
+
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    // AVX2: Load 16 bytes (8×BF16) from buf_downscale
+                    movdqu(halfRegType(bRegIdx + j),
                            ptr[regTmpCptr + j * halfRegBytes]);
-                    vpmovsxwd(Ymm(bRegIdx + j), Xmm(bRegIdx + j));
-                    vpsllvd(Ymm(bRegIdx + j), Ymm(bRegIdx + j),
-                            Ymm(aRegIdx + 1));
-                    vfmadd231ps(Ymm(cRegIdx + i * bReg + j), Ymm(bRegIdx + j),
-                                Ymm(betaRegIdx));
+                    vpmovsxwd(RegType(bRegIdx + j), halfRegType(bRegIdx + j));
+                    vpsllvd(RegType(bRegIdx + j), RegType(bRegIdx + j),
+                            RegType(aRegIdx + 1));
+                    vfmadd231ps(RegType(cRegIdx + i * bReg + j),
+                                RegType(bRegIdx + j), RegType(betaRegIdx));
+                } else {
+                    // AVX512_YMM/ZMM: Load BF16 data and convert to F32
+                    vmovdqu16(halfRegType(bRegIdx + j),
+                              ptr[regTmpCptr + j * halfRegBytes]);
+                    vpmovsxwd(RegType(bRegIdx + j), halfRegType(bRegIdx + j));
+                    vpsllvd(RegType(bRegIdx + j), RegType(bRegIdx + j),
+                            RegType(aRegIdx + 1));
+                    vfmadd231ps(RegType(cRegIdx + i * bReg + j),
+                                RegType(bRegIdx + j), RegType(betaRegIdx));
                 }
-                if (bMaskReg > 0) {
-                    // Get n_remainder: n % 8
+            }
+            if (bMaskReg > 0) {
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    // AVX2: Handle fringe BF16 elements via stack [rsp+0]
+                    // Load n_remainder BF16 values to stack, convert, then
+                    // apply beta Get n_remainder: n % nElemsPerReg
                     mov(regTmp2,
                         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)]);
-                    and_(regTmp2.cvt32(), 7); // n % 8
+                    and_(regTmp2.cvt32(), nElemsPerReg - 1);
 
-                    // Calculate destination base address for fringe BF16
-                    // elements
+                    // Calculate source base address for fringe BF16 elements
                     lea(regKIter, ptr[regTmpCptr + bFullReg * halfRegBytes]);
 
                     // Loop: Load n_remainder BF16 elements from C matrix to
@@ -964,33 +1039,20 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
                     jmp(loop_load_start, T_NEAR);
 
                     L(loop_load_end);
+                    // Load BF16 data from stack [rsp+0] and convert to F32
+                    movdqu(halfRegType(bRegIdx + bFullReg), ptr[rsp]);
+                    vpmovsxwd(RegType(bRegIdx + bFullReg),
+                              halfRegType(bRegIdx + bFullReg));
+                    vpsllvd(RegType(bRegIdx + bFullReg),
+                            RegType(bRegIdx + bFullReg), RegType(aRegIdx + 1));
+                    vfmadd231ps(RegType(cRegIdx + i * bReg + bFullReg),
+                                RegType(bRegIdx + bFullReg),
+                                RegType(betaRegIdx));
 
-                    // Load full XMM from stack (8×BF16)
-                    movdqu(Xmm(bRegIdx + bFullReg), ptr[rsp]);
-
-                    // Convert BF16→F32 (expand to YMM)
-                    vpmovsxwd(Ymm(bRegIdx + bFullReg), Xmm(bRegIdx + bFullReg));
-                    vpsllvd(Ymm(bRegIdx + bFullReg), Ymm(bRegIdx + bFullReg),
-                            Ymm(aRegIdx + 1));
-
-                    // Perform beta scaling: C_acc += beta * C_bf16
-                    vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
-                                Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
-                }
-                add(regTmpCptr, regTmp1);
-            }
-        } else {
-            for (int i = 0; i < MR; i++) {
-                for (int j = 0; j < bFullReg; j++) {
-                    vmovdqu16(halfRegType(bRegIdx + j),
-                              ptr[regTmpCptr + j * halfRegBytes]);
-                    vpmovsxwd(RegType(bRegIdx + j), halfRegType(bRegIdx + j));
-                    vpsllvd(RegType(bRegIdx + j), RegType(bRegIdx + j),
-                            RegType(aRegIdx + 1));
-                    vfmadd231ps(RegType(cRegIdx + i * bReg + j),
-                                RegType(betaRegIdx), RegType(bRegIdx + j));
-                }
-                if (bMaskReg > 0) {
+                } else {
+                    // AVX512_YMM/ZMM: Load fringe BF16 elements directly from
+                    // buf_downscale with mask Load BF16 data, sign-extend to
+                    // 32-bit, shift left by 16, then apply beta
                     for (int maskI = bFullReg; maskI < bReg; ++maskI) {
                         vmovdqu16(halfRegType(bRegIdx + maskI)
                                       | fringeMask[maskI - bFullReg],
@@ -1000,12 +1062,12 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
                         vpsllvd(RegType(bRegIdx + maskI),
                                 RegType(bRegIdx + maskI), RegType(aRegIdx + 1));
                         vfmadd231ps(RegType(cRegIdx + i * bReg + maskI),
-                                    RegType(betaRegIdx),
-                                    RegType(bRegIdx + maskI));
+                                    RegType(bRegIdx + maskI),
+                                    RegType(betaRegIdx));
                     }
                 }
-                add(regTmpCptr, regTmp1);
             }
+            add(regTmpCptr, regTmp1);
         }
 
         jmp(".betaOpEnd", T_NEAR);
@@ -1195,10 +1257,14 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
     // need not be used by the kernel.
     // Putting inside a scope so that some tables can be generated post
     // the ret instr. StackFrame inserts a ret instr in its destructor.
-    // Allocate 48 bytes of local stack space:
-    // - 32 bytes for mask storage (fringe BF16 stores)
-    // - 16 bytes for F32→BF16 conversion constants
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 48);
+    // Allocate 64 bytes of local stack space:
+    // - [0-15]: 16 bytes for intermediate storage (fringe BF16 elements - AVX2
+    // only)
+    // - [16-19]: value 16 for BF16→F32 shift
+    // - [20-23]: 0x00010000 for bit 16 extraction
+    // - [24-27]: 0x00007FFF for rounding
+    // - [28-63]: 36 bytes padding/reserved
+    Xbyak::util::StackFrame stackFrame(this, 1, 13, 64);
     initializeStackFrame(stackFrame);
     initializeParameters(params.mLoop);
 

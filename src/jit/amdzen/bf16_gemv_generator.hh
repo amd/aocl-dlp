@@ -31,8 +31,8 @@
  *
  */
 
-#ifndef F32_GEMV_HH
-#define F32_GEMV_HH
+#ifndef BF16_GEMV_GENERATOR_HH
+#define BF16_GEMV_GENERATOR_HH
 
 #include "jit/jit_generator_base.hh"
 #include "jit/xbyak/xbyak.h"
@@ -42,43 +42,37 @@
 #include "kernel_ops_handler.hh"
 #include "traits.hh"
 
+typedef int16_t bfloat16;
+
 namespace amdzen::codegen {
 
 template<utils::kernelInstrType KType>
-class jitF32GEMVN1 : public Xbyak::CodeGenerator
+class jitBF16GEMVN1 : public Xbyak::CodeGenerator
 {
   private:
-    int RegBytes;  // Size of ZMM register in bytes
-    int numRegs;   // Number of ZMM registers
-    int simdWidth; // SIMD width
-    int c_downscale;
-    int MR;          // Number of rows to process at once
-    int M_LEFT;      // M-dimension left over elements
-    int LOAD_UNROLL; // Number of regsiters to be used explicitly for loading
-                     // from A
-    dlp::kernel_frame::storageFormat yFormat; // Storage format of C matrix
-    dlp::kernel_frame::scalingType alphaScalingType; // Type of kernel operation
-    dlp::kernel_frame::scalingType betaScalingType;  // Type of beta scaling
+    int                              RegBytes; // Size of ZMM register in bytes
+    int                              numRegs;  // Number of ZMM registers
+    int                              simdWidthF32;  // SIMD width for F32
+    int                              simdWidthBF16; // SIMD width for BF16
+    int                              MR; // Number of rows to process at once
+    int                              M_LEFT; // M-dimension left over elements
+    int                              c_downscale; // Downscale factor for C
+    dlp::kernel_frame::storageFormat yFormat;     // Storage format of C matrix
+    dlp::kernel_frame::scalingType   alphaScalingType;
+    dlp::kernel_frame::scalingType   betaScalingType;
 
-    // Register counts and indices
     int yReg;     // Number of registers for loading/storing from Y
     int aReg;     // Number of registers for matrix A
     int xReg;     // Number of registers for vector x
     int accumReg; // Number of registers for accumulation (partial dot products)
     int tmpReg;   // Number of registers for temporary use
-    int cvtReg;   // Number of registers to store converted output from f32 to
-                  // bf16
-    int maskReg;  // Number of registers for mask
-    int yBaseIdx; // Starting index for accumulation registers (from end)
-    int aBaseIdx; // Starting index for A registers (from beginning)
-    int xBaseIdx; // Starting index for x registers (after A registers)
-    int cvtBaseIdx;   // Starting index for conversion registers
-    int accumBaseIdx; // Starting index for accumulation registers (after A and
-                      // x
-    int tmpBaseIdx;   // Starting index for temporary registers (after A and x
+    int yBaseIdx; // Starting index for Y registers
+    int aBaseIdx; // Starting index for A registers
+    int xBaseIdx; // Starting index for x registers
+    int accumBaseIdx; // Starting index for accumulation registers
+    int tmpBaseIdx;   // Starting index for temporary registers
     int maskBaseIdx;  // Starting index for mask registers
 
-    // Matrix/Vector pointers and strides
     Xbyak::Reg64 stackPtr;            // Stack frame pointer
     Xbyak::Reg64 regAptr, regTmpAptr; // Pointer to matrix A and its temp
     Xbyak::Reg64 regXptr;             // Pointer to vector x
@@ -97,7 +91,6 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     static constexpr int MASK_START_IDX   = 1;        // Start from k1
     Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
 
-    // Labels for code sections
     Xbyak::Label label_m_loop_start;            // Main m-dimension loop
     Xbyak::Label label_m_loop_end;              // End of m-dimension loop
     Xbyak::Label label_m_loop_k_loop_start;     // Main k-dimension loop
@@ -117,84 +110,81 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     using Traits  = traits::ArchitectureTraits<KType>;
     using RegType = typename Traits::RegType;
 
-    // Stack frame management
+    //------------------------------------------------
+    // ISA agnostic methods
+    // Initializing the stack frame
     void initializeStackFrame(Xbyak::util::StackFrame&);
 
-    // Register initialization
-    void regInit(int, int);
+    // Initializing the parameters
+    void initializeParameters(const utils::gemvN1GeneratorParams&);
 
-    // Implementation utilities
+    // Allocating the registers
     dlp::jit::jitGeneratorError allocateRegisters();
 
-    void initializeParameters(utils::gemvN1GeneratorParams&);
+    //------------------------------------------------
+    // ISA specific methods
+    // Register initialization
+    void regInit(int baseIdx, int numRegs);
 
-    // Core computation functions
-    dlp::jit::jitGeneratorError loadAValues(int, bool = false);
+    dlp::jit::jitGeneratorError loadMasks();
 
     dlp::jit::jitGeneratorError loadXValues(bool = false);
 
-    dlp::jit::jitGeneratorError loadYValues(int);
+    dlp::jit::jitGeneratorError processMRBlock(int, bool = false);
 
-    dlp::jit::jitGeneratorError computeFMA(int, int);
+    dlp::jit::jitGeneratorError loadAValues(int, bool = false);
 
-    dlp::jit::jitGeneratorError computeLoadFMA(int, bool = false);
-
-    dlp::jit::jitGeneratorError reduceToXmm(int, int, int);
+    dlp::jit::jitGeneratorError computeDP(int, int);
 
     dlp::jit::jitGeneratorError reduceAccumulation(int);
 
     dlp::jit::jitGeneratorError scaleAccumulationWithAlpha(int);
 
-    dlp::jit::jitGeneratorError scaleYWithBetaColStored(int, bool = false);
-
-    dlp::jit::jitGeneratorError scaleYWithBetaRowStored(int, bool = false);
-
     dlp::jit::jitGeneratorError scaleYWithBeta(int);
 
-    dlp::jit::jitGeneratorError convertF32toBF16(int, int, int);
+    dlp::jit::jitGeneratorError scaleYWithBetaRowStored(int, bool);
+
+    dlp::jit::jitGeneratorError scaleYWithBetaColStored(int, bool);
+
+    dlp::jit::jitGeneratorError storeYValues(int);
 
     dlp::jit::jitGeneratorError storeYValuesColStored(int);
 
     dlp::jit::jitGeneratorError storeYValuesRowStored(int);
 
-    dlp::jit::jitGeneratorError storeYValues(int);
-
-    dlp::jit::jitGeneratorError processMRBlock(int, bool = false);
-
-    dlp::jit::jitGeneratorError loadMasks();
+    dlp::jit::jitGeneratorError reduceToXmm(int, int, int);
 
   public:
-    // Enforcing RAII, disallowing copy/move operations
-    jitF32GEMVN1(void* buffer = nullptr, size_t size = 0);
-    ~jitF32GEMVN1()                         = default;
-    jitF32GEMVN1(jitF32GEMVN1&)             = delete;
-    jitF32GEMVN1& operator=(jitF32GEMVN1&)  = delete;
-    jitF32GEMVN1(jitF32GEMVN1&&)            = delete;
-    jitF32GEMVN1& operator=(jitF32GEMVN1&&) = delete;
+    jitBF16GEMVN1(void* buffer = nullptr, size_t size = 0);
+    ~jitBF16GEMVN1()                          = default;
+    jitBF16GEMVN1(jitBF16GEMVN1&)             = delete;
+    jitBF16GEMVN1(jitBF16GEMVN1&&)            = delete;
+    jitBF16GEMVN1& operator=(jitBF16GEMVN1&)  = delete;
+    jitBF16GEMVN1& operator=(jitBF16GEMVN1&&) = delete;
 
     // Main kernel generation interface
     dlp::jit::jitGeneratorError generateKernel(
         utils::gemvN1GeneratorParams& params);
 
     // Get the generated kernel function pointer
-    // This class will also contain the pointer type to the JIT kernel
-    // That way, this typedef is available only when an instance of this class
-    // is created.
-    // utils::jit_gemv_n1_kernel getKernel()
-    // {
-    //     return getCode<jit_gemv_n1_kernel>();
+    // utils::jit_gemv_n1_kernel getKernel() {
+    //     return getCode<utils::jit_gemv_n1_kernel>();
     // }
 };
 
 template<utils::kernelInstrType KType>
-class jitF32GEMVM1 : public Xbyak::CodeGenerator
+class jitBF16GEMVM1 : public Xbyak::CodeGenerator
 {
   private:
     int                              RegBytes;  // Size of ZMM register in bytes
     int                              numRegs;   // Number of ZMM registers
-    int                              simdWidth; // SIMD width
+    int                              simdWidth; // SIMD width for f32
     int                              NR;
     int                              N_LEFT;
+    int                              N_LEFT_16;
+    int                              N_LEFT_LT16;
+    int                              RS_B_N_LEFT_16;
+    int                              RS_B_N_LEFT_LT16;
     int                              KC;
     int                              K_SUB_ITER;
     int                              c_downscale;
@@ -247,6 +237,23 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Label label_n_fringe_k_loop_end;
     Xbyak::Label label_n_fringe_k_fringe_start;
     Xbyak::Label label_n_fringe_k_fringe_end;
+
+    Xbyak::Label label_n_fringe_main_start;
+    Xbyak::Label label_n_fringe_main_end;
+
+    Xbyak::Label label_n_fringe_left_start;
+    Xbyak::Label label_n_fringe_left_end;
+
+    Xbyak::Label label_n_fringe_main_k_loop_start;
+    Xbyak::Label label_n_fringe_main_k_loop_end;
+    Xbyak::Label label_n_fringe_main_k_fringe_start;
+    Xbyak::Label label_n_fringe_main_k_fringe_end;
+
+    Xbyak::Label label_n_fringe_left_k_loop_start;
+    Xbyak::Label label_n_fringe_left_k_loop_end;
+    Xbyak::Label label_n_fringe_left_k_fringe_start;
+    Xbyak::Label label_n_fringe_left_k_fringe_end;
+
     Xbyak::Label label_accumulate_result;
     Xbyak::Label label_store_result;
 
@@ -286,9 +293,9 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError computeKxNR(bool = false);
 
-    dlp::jit::jitGeneratorError compute1xnfringe();
+    dlp::jit::jitGeneratorError compute1xnfringe(bool = false);
 
-    dlp::jit::jitGeneratorError compute1xNR(bool = false);
+    dlp::jit::jitGeneratorError compute1xNR(bool = false, bool = false);
 
     dlp::jit::jitGeneratorError loopKSubIter(bool = false, bool = false);
 
@@ -298,23 +305,21 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError scaleYWithBetaFringe(bool = false);
 
-    dlp::jit::jitGeneratorError scaleYWithBeta(bool = false);
-
-    dlp::jit::jitGeneratorError convertF32toBF16(int, int, int);
+    dlp::jit::jitGeneratorError scaleYWithBeta(int);
 
     dlp::jit::jitGeneratorError storeYValuesFringe();
 
-    dlp::jit::jitGeneratorError storeYValues(bool = false);
+    dlp::jit::jitGeneratorError storeYValues(int n_size);
 
     //------------------------------------------------
 
   public:
-    jitF32GEMVM1(void* buffer = nullptr, size_t size = 0);
-    ~jitF32GEMVM1()                         = default;
-    jitF32GEMVM1(jitF32GEMVM1&)             = delete;
-    jitF32GEMVM1(jitF32GEMVM1&&)            = delete;
-    jitF32GEMVM1& operator=(jitF32GEMVM1&)  = delete;
-    jitF32GEMVM1& operator=(jitF32GEMVM1&&) = delete;
+    jitBF16GEMVM1(void* buffer = nullptr, size_t size = 0);
+    ~jitBF16GEMVM1()                          = default;
+    jitBF16GEMVM1(jitBF16GEMVM1&)             = delete;
+    jitBF16GEMVM1(jitBF16GEMVM1&&)            = delete;
+    jitBF16GEMVM1& operator=(jitBF16GEMVM1&)  = delete;
+    jitBF16GEMVM1& operator=(jitBF16GEMVM1&&) = delete;
 
     // Main kernel generation interface
     dlp::jit::jitGeneratorError generateKernel(
@@ -328,18 +333,22 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
 
 } // namespace amdzen::codegen
 
-#endif // F32_GEMV_HH
+#endif // BF16_GEMV_GENERATOR_HH
 
 /*
-    Any JIT generator :
-    ISA agnostic code(loop structuring, pointer arithmetic, etc.)
-    ISA specific code(reigster aliasing difference)
-    ISA specific code(instruction difference)
+    BF16 GEMV N1 Generator:
+    Handles BF16 matrix-vector multiplication where N=1 (single column vector)
 
-    Case 1 does not require regType alias and templatization on regType
-    Case 2 does not require templatization, but regType alias is required
-    Case 3 requires templatization on regType and regType alias
+    The N1 case means we're computing: y = A * x where x is a single column
+   vector
 
-    Define methods accordingly, and implement a unified JIT generator for all
-    ISA. It would be only API specific !!
+    Key characteristics:
+    1. Input matrix A and vector x are BF16, output y is F32
+    2. SIMD width calculations account for BF16 size (2 bytes per element)
+    3. Uses BF16 dot product instructions (e.g., vdpbf16ps for AVX512)
+    4. M-dimension loop for processing multiple rows
+    5. K-dimension reduction within each row
+
+    Supported datatypes:
+    - bf16bf16f32of32: BF16 inputs, F32 computation, F32 output
 */

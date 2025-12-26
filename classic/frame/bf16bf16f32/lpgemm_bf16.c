@@ -666,7 +666,7 @@ typedef void (*lpgemv_n_one_ker_ft)(const md_t,
                                     lpgemm_post_op*,
                                     lpgemm_post_op_attr*);
 
-LPGEMV_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
+LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     // DLP_BF16 Contexts
     md_t NC = lcntx->blksz.NC;
@@ -961,13 +961,13 @@ LPGEMV_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
     }
 }
 
-LPGEMM_5LOOP_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
+LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
 #if (!defined(LPGEMM_BF16_JIT))
     // Handle using LPGEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if ((n == 1) || (m == 1)) {
-        lpgemv_rowvar_avx2_bf16bf16f32of32(
+        lpgemv_rowvar_f32_fallback_bf16bf16f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
             cs_c, alpha, beta, rntm, thread, lcntx, post_op_list, c_downscale);
         return;
@@ -1299,7 +1299,7 @@ LPGEMM_5LOOP_AVX2(bfloat16, bfloat16, float, bf16bf16f32of32)
 LPGEMM_5LOOP(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     if (lcntx->kern_fun_ptr == NULL) {
-        lpgemm_rowvar_avx2_bf16bf16f32of32(
+        lpgemm_rowvar_f32_fallback_bf16bf16f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
             cs_c, alpha, beta, rntm, thread, lcntx, post_op_list, c_downscale);
     } else {

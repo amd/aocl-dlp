@@ -122,6 +122,7 @@ enum class kernelInstrPreference : uint8_t
     avx512_xmm_favour,
     avx512_ymm_favour,
     avx512_zmm_favour,
+    avx512_zmm_bf16_favour, // For machines with AVX512-BF16 support
 
     // ARM specific hints.
     // ...

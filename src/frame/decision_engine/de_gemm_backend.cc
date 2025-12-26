@@ -197,17 +197,10 @@ gemmBF16DEBackend::gemmBF16DEBackend()
                  .isAvx2Fma3SupportedByArch();
 
     if (!isAvx512Bf16) {
-        // Future-proof: reroute to F32 path for any machine without AVX512BF16
-        // This enables BF16 JIT on AVX2 machines by using F32 computation
-        if (isAvx2 && !isAvx512) {
-            // NOTE : Given that the F32-DE tries to set the kernel instruction
-            // preference based on the AOCL_ENABLE_INSTRUCTIONS and native
-            // hardware support, we can safely assume that we would strictly run
-            // the F32 AVX2 JIT.
-            f32Backend = std::make_unique<gemmF32DEBackend>();
-        } else {
-            canGenerateKernelInfo = false;
-        }
+        // Instantiate the F32 DE Backend for rerouting to F32 JIT
+        // for any machine without AVX512BF16 support
+        // where kernel instruction would be set to avx512_zmm_favour
+        f32Backend = std::make_unique<gemmF32DEBackend>();
     } else if (eKernelInstPref
                == kernel_frame::kernelInstrPreference::avx2_ymm_favour) {
         // This would be the scenario where the machine supports AVX512BF16, but
@@ -218,8 +211,10 @@ gemmBF16DEBackend::gemmBF16DEBackend()
         // AVX512_256, or not set at all, we generate the AVX512BF16 JIT
         // kernels. Once the hybrid version is implemented, we will avoid this
         // hardcoding.
+        // kernel instruction preference is set avx512_zmm_bf16_favour when
+        // underlying machine has avx512_bf16 support
         eKernelInstPref =
-            kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            kernel_frame::kernelInstrPreference::avx512_zmm_bf16_favour;
     }
 }
 

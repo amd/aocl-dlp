@@ -29,11 +29,11 @@
 #include "amdzen_generator.hh"
 #include "arch_utils/arch_config_manager.hh"
 #include "bf16_gemm_generator.hh"
-#include "bf16_gemv.hh"
+#include "bf16_gemv_generator.hh"
 #include "cpu_utils/cpu_features.hh"
 #include "f32_gemm_generator.hh"
 #include "f32_gemm_rd_generator.hh"
-#include "f32_gemv.hh"
+#include "f32_gemv_generator.hh"
 #include "jit_register/jit_register.hh"
 #include "s8_gemm_generator.hh"
 #include "s8_gemv_generator.hh"
@@ -46,7 +46,7 @@ namespace amdzen::gen {
 // F32 JIT Generator
 jitAmdZenFP32::jitAmdZenFP32()
     : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f32f32f32of32 })
-    , mIsaFeaturesRequired{}
+    , mIsaFeaturesRequired{ dlp::cpu_utils::isaFeature::avx2 }
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1)     // Initializing with 1 to avoid div by zero
     , usingRDKernels(false) // Initialize to false
@@ -1081,7 +1081,7 @@ jitAmdZenFP32::executeKernelRD(dlp::kernels::kernelParams* _params)
 jitAmdZenBF16::jitAmdZenBF16()
     : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::bf16bf16f32of32,
                          dlp::kernel_frame::kernelDatatype::bf16bf16f32obf16 })
-    , mIsaFeaturesRequired{}
+    , mIsaFeaturesRequired{ dlp::cpu_utils::isaFeature::avx2 }
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
     , f32JitGenerator(nullptr)
@@ -1109,8 +1109,12 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     PREFETCH_C_DIST = (jI.kI).prefetch_c_dist;
     c_downscale     = (jI.kI).c_downscale;
 
+    // Reroute to f32 JIT generator if kernel instruction preference is
+    // avx2_ymm_favour (avx2), avx512_zmm_favour (no avx512_bf16 support)
     if (((jI.kI).kInstPref
-         == dlp::kernel_frame::kernelInstrPreference::avx2_ymm_favour)) {
+         == dlp::kernel_frame::kernelInstrPreference::avx2_ymm_favour)
+        || ((jI.kI).kInstPref
+            == dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour)) {
         // Ideally, a try-catch block should handle a memory allocation failure
         // here.
         f32JitGenerator = std::make_unique<jitAmdZenFP32>();
@@ -1121,10 +1125,13 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     // AVX512-BF16.
 
     // Setting the kernel type based on the instruction preference
-    kType = ((jI.kI).kInstPref
-             == dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour)
-                ? utils::kernelInstrType::avx512_zmm_32_reg
-                : utils::kernelInstrType::none;
+    // kernel instruction preference is set avx512_zmm_bf16_favour by DE when
+    // underlying machine has avx512_bf16 support
+    kType =
+        ((jI.kI).kInstPref
+         == dlp::kernel_frame::kernelInstrPreference::avx512_zmm_bf16_favour)
+            ? utils::kernelInstrType::avx512_zmm_32_reg
+            : utils::kernelInstrType::none;
 
     if (MR == 1) {
 
@@ -1355,6 +1362,8 @@ cleanup:
 dlp::kernels::kernelError
 jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
 {
+    // Execute f32 JIT kernel if f32JitGenerator is available, which means bf16
+    // is not supported and we want to fall back to f32
     if (f32JitGenerator != nullptr) {
         return f32JitGenerator->executeKernel(_params);
     }

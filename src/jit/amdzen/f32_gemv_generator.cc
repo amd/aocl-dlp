@@ -29,20 +29,20 @@
 #include <functional>
 #include <memory>
 
-#include "bf16_gemv.hh"
+#include "f32_gemv_generator.hh"
 #include "jit_register/jit_register.hh"
 
 namespace amdzen::codegen {
 
 template<utils::kernelInstrType KType>
-jitBF16GEMVN1<KType>::jitBF16GEMVN1(void* buffer, size_t size)
+jitF32GEMVN1<KType>::jitF32GEMVN1(void* buffer, size_t size)
     : Xbyak::CodeGenerator(size, buffer) // Call base class constructor
 {
 }
 
 template<utils::kernelInstrType KType>
 void
-jitBF16GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
+jitF32GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 {
     stackPtr   = frame.p[0];
     regAptr    = frame.t[0];
@@ -62,51 +62,48 @@ jitBF16GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 
 template<utils::kernelInstrType KType>
 void
-jitBF16GEMVN1<KType>::initializeParameters(
-    const utils::gemvN1GeneratorParams& params)
+jitF32GEMVN1<KType>::initializeParameters(utils::gemvN1GeneratorParams& params)
 {
     // Set dimensions from params
     MR               = params.MR; // Number of rows to process
     M_LEFT           = params.M_LEFT;
-    c_downscale      = params.c_downscale;
     yFormat          = params.yFormat;          // Storage format of C matrix
     alphaScalingType = params.alphaScalingType; // Type of alpha scaling
     betaScalingType  = params.betaScalingType;  // Type of beta scaling
+    c_downscale      = params.c_downscale;
 
     RegBytes = Traits::regBytes;
     numRegs  = Traits::numRegs;
 
-    // For BF16 GEMV, output is F32, so calculate simdWidthF32 based on output
-    // data type
-    simdWidthF32 = RegBytes / sizeof(float); // For F32 output (16 for AVX512)
-    simdWidthBF16 =
-        RegBytes / sizeof(bfloat16); // For BF16 input (32 for AVX512)
-
-    // Load pointers and strides from the stack
-    // gemvn1params variable created is loaded to stack via execute kernel at
-    // runtime like any other function parameter loaded on its stack
+    simdWidth = RegBytes / sizeof(float); // For f32
 
     if (c_downscale < DLP_F32) {
-        // Broadcast the left shift offset onto a ZMM register
-        // Store to allocated stack space, then broadcast from memory
-        // Using rsp(instead of stackPtr in order to use the local stack space)
-        mov(dword[rsp + 0],
-            0x10); // Store value 16 to local stack (safely allocated)
+        // Initialize F32→BF16 conversion constants on stack
+        // Stack layout: [0-15]: final result, [16-47]: constants
+
+        // Store constant 0x00010000 at [rsp + 16] for bit 16 extraction
+        mov(regTmp1.cvt32(), 0x00010000);
+        mov(dword[rsp + 16], regTmp1.cvt32());
+
+        // Store constant 0x00007FFF at [rsp + 20] for rounding
+        mov(regTmp1.cvt32(), 0x00007FFF);
+        mov(dword[rsp + 20], regTmp1.cvt32());
     }
 
+    // Load pointers and strides from the stack
     mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, rsA)]);
     mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, csA)]);
     mov(regRsC, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, rsC)]);
 
     // Scale strides by data type size
-    lea(regRsA, ptr[regRsA * sizeof(bfloat16)]);
-    lea(regCsA, ptr[regCsA * sizeof(bfloat16)]);
+    lea(regRsA, ptr[regRsA * sizeof(float)]);
+    lea(regCsA, ptr[regCsA * sizeof(float)]);
     lea(regRsC, ptr[regRsC * sizeof(float)]);
 }
 
-template<amdzen::utils::kernelInstrType KType>
+template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::allocateRegisters()
+jitF32GEMVN1<KType>::allocateRegisters()
 {
     // Check if MR is valid
     if (MR <= 0) {
@@ -114,19 +111,14 @@ jitBF16GEMVN1<KType>::allocateRegisters()
     }
 
     // Allocate registers according to the rules:
-    // maskReg = 0; // Set this only when AVX512 codepath is disabled.
+    maskReg = 0; // Set this only when AVX512 codepath is disabled.
 
     // 1. Accumulation registers : MR registers for partial dot products
-    // bf16 gemv mr = 16, 16 rows of A(containing 32 bf16 elements each) will be
-    // multiplied with 1 vector x(32 bf16 elements) to produce 16 outputs in y
-    // which would need 16 zmm registers for accumulation
     accumReg     = MR;
     accumBaseIdx = numRegs - accumReg; // Start from the end
 
-    // Calculate y registers needed for F32 output (16/16 = 1 register for
-    // AVX512)
-    yReg     = MR / simdWidthF32; // Ceiling division for safety
-    yBaseIdx = numRegs - yReg;    // Place before accumulation registers
+    yReg     = MR / simdWidth;
+    yBaseIdx = numRegs - yReg; // Start from the end
 
     // NOTE : Before loading from y, we would be using MR registers from the end
     //        for accumulating alpha*A*B. This would then be reduced to MR/16
@@ -135,7 +127,7 @@ jitBF16GEMVN1<KType>::allocateRegisters()
     //        result, indexed from yBaseIdx(which would be the last MR/16
     //        registers).
 
-    // Ex : If MR is 16 for AVX512
+    // Ex : If MR is 16
     //      accumReg = 16
     //      accumBaseIdx = 32 - 16 = 16
     //      yReg = 16 / (64 / 4) = 1
@@ -145,50 +137,41 @@ jitBF16GEMVN1<KType>::allocateRegisters()
     //      xReg = 31 - 16 - 4 = 11
     //      xBaseIdx = 11
 
+    // registers to store and use for downscaling of f32 values
+    if (c_downscale < DLP_F32) {
+        cvtReg     = 3;
+        cvtBaseIdx = yBaseIdx - cvtReg;
+    }
+
     // Temporary registers (tmpReg): Use remaining registers for reduction
     tmpReg     = 4;
     tmpBaseIdx = 0; // To make sure we index YMM greater than 16
 
     // X registers (xReg): Use remaining registers for vector x
-    // We need to only consider accumReg, tmpReg and xReg for total register
-    // count.
+    // We need to only consider accumReg, tmpReg and maskReg(in case of
+    // ymm_16) for total register count.
     xReg     = 1;
     xBaseIdx = tmpReg;
 
-    maskBaseIdx = xBaseIdx;
+    maskBaseIdx = xBaseIdx + xReg;
+
+    if (!Traits::hasMaskSupport) { // Native mask register-file is not supported
+        maskReg = 2;
+    }
 
     // Check if we have enough registers
-    if (maskBaseIdx >= accumBaseIdx) {
+    if (maskBaseIdx + maskReg > accumBaseIdx) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::loadMasks()
-{
-    // Ensuring mapping only from mask_regs[0] to k7(to avoid k0 usage
-    // internally)
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
-        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
-    }
-
-    // Loading the 32 bit k mask(bf16), 16 bit m mask(f32)
-    kmovd(mask_regs[0],
-          ptr[stackPtr
-              + offsetof(dlp::kernels::gemvN1Params, kmask_bf16_avx512)]);
-    kmovw(mask_regs[1],
-          ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, mmask_avx512)]);
 
     return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 void
-jitBF16GEMVN1<KType>::regInit(int baseIdx, int numRegs)
+jitF32GEMVN1<KType>::regInit(int baseIdx, int numRegs)
 {
-    // Zero out vector registers
+    // Zero out accumulation registers
     vxorps(RegType(baseIdx), RegType(baseIdx), RegType(baseIdx));
     for (int i = 1; i < numRegs; i++) {
         vmovaps(RegType(baseIdx + i), RegType(baseIdx));
@@ -197,14 +180,82 @@ jitBF16GEMVN1<KType>::regInit(int baseIdx, int numRegs)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::loadXValues(bool isFringe)
+jitF32GEMVN1<KType>::loadAValues(int aRegIdx, bool isFringe)
 {
     if (isFringe) {
         // Use zero-masking (T_z) to zero unmasked elements instead of
         // preserving garbage from previous kernel executions
-        vmovdqu16(RegType(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
+        vmovups(RegType(tmpBaseIdx + aRegIdx) | mask_regs[0] | T_z,
+                ptr[regTmpAptr + regTmp1]);
     } else {
-        vmovdqu16(RegType(xBaseIdx), ptr[regXptr]);
+        vmovups(RegType(tmpBaseIdx + aRegIdx), ptr[regTmpAptr + regTmp1]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadAValues(
+    int aRegIdx, bool isFringe)
+{
+    if (isFringe) {
+        vmaskmovps(Xbyak::Ymm(tmpBaseIdx + aRegIdx), Xbyak::Ymm(maskBaseIdx),
+                   ptr[regTmpAptr + regTmp1]);
+    } else {
+        vmovups(Xbyak::Ymm(tmpBaseIdx + aRegIdx), ptr[regTmpAptr + regTmp1]);
+    }
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::loadXValues(bool isFringe)
+{
+    if (isFringe) {
+        // Use zero-masking (T_z) to zero unmasked elements instead of
+        // preserving garbage from previous kernel executions
+        vmovups(RegType(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
+    } else {
+        vmovups(RegType(xBaseIdx), ptr[regXptr]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadXValues(
+    bool isFringe)
+{
+    if (isFringe) {
+        vmaskmovps(Xbyak::Ymm(xBaseIdx), Xbyak::Ymm(maskBaseIdx), ptr[regXptr]);
+    } else {
+        vmovups(Xbyak::Ymm(xBaseIdx), ptr[regXptr]);
+    }
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::computeFMA(int aRegIdx, int accumRegIdx)
+{
+    vfmadd231ps(RegType(accumBaseIdx + accumRegIdx), RegType(xBaseIdx),
+                RegType(tmpBaseIdx + aRegIdx));
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::computeLoadFMA(int rowIdx, bool isFringe)
+{
+    if (isFringe) {
+        vfmadd231ps(RegType(accumBaseIdx + rowIdx) | mask_regs[0],
+                    RegType(xBaseIdx), ptr[regTmpAptr + regTmp1]);
+    } else {
+        vfmadd231ps(RegType(accumBaseIdx + rowIdx), RegType(xBaseIdx),
+                    ptr[regTmpAptr + regTmp1]);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -212,54 +263,27 @@ jitBF16GEMVN1<KType>::loadXValues(bool isFringe)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::loadAValues(int aRegIdx, bool isFringe)
-{
-    if (isFringe) {
-        // Use zero-masking (T_z) to zero unmasked elements instead of
-        // preserving garbage from previous kernel executions
-        vmovdqu16(RegType(tmpBaseIdx + aRegIdx) | mask_regs[0] | T_z,
-                  ptr[regTmpAptr + regTmp1]);
-    } else {
-        vmovdqu16(RegType(tmpBaseIdx + aRegIdx), ptr[regTmpAptr + regTmp1]);
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::computeDP(int aRegIdx, int accumRegIdx)
-{
-    vdpbf16ps(RegType(accumBaseIdx + accumRegIdx), RegType(xBaseIdx),
-              RegType(tmpBaseIdx + aRegIdx));
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
+jitF32GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
 {
     // Perform the compute over the MR rows
     int mLeft = mSize % 4;
     xor_(regTmp1, regTmp1);
     regInit(tmpBaseIdx, tmpReg);
-
-    // compute by unrolling loadA and DP in blocks of 4 rows at a time
     for (int i = 0; i < mSize / 4; i++) {
+
         for (int j = 0; j < 4; j++) {
             RETURN_IF_ERROR((loadAValues(j, isFringe)));
-            RETURN_IF_ERROR((computeDP(j, i * 4 + j)));
+            RETURN_IF_ERROR((computeFMA(j, i * 4 + j)));
 
             add(regTmp1, regRsA);
         }
+        // RETURN_IF_ERROR((computeLoadFMA(i, isFringe)));
+        // add(regTmp1, regRsA);
     }
 
-    // compute by unrolling loadA and DP with left rows
-    // this will used in M fringe case where mSize < MR
     for (int j = 0; j < mLeft; j++) {
         RETURN_IF_ERROR((loadAValues(j, isFringe)));
-        RETURN_IF_ERROR((computeDP(j, (mSize / 4) * 4 + j)));
+        RETURN_IF_ERROR((computeFMA(j, (mSize / 4) * 4 + j)));
         add(regTmp1, regRsA);
     }
 
@@ -268,7 +292,7 @@ jitBF16GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
+jitF32GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
 {
     // Function only handles blocks of 4 or fewer ZMMs
     if (blockSize > 4) {
@@ -325,12 +349,12 @@ jitBF16GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::reduceAccumulation(int mSize)
+jitF32GEMVN1<KType>::reduceAccumulation(int mSize)
 {
-    // Process mSize registers in blocks of the simdWidthF32
-    for (int i = 0; i < mSize; i += simdWidthF32) {
+    // Process mSize registers in blocks of the simdWidth
+    for (int i = 0; i < mSize; i += simdWidth) {
         // Number of registers to process in this ZMM block
-        int blockSize = (mSize - i) < simdWidthF32 ? (mSize - i) : simdWidthF32;
+        int blockSize = (mSize - i) < simdWidth ? (mSize - i) : simdWidth;
 
         // Process this block in groups of 4 registers
         for (int j = 0; j < blockSize; j += 4) {
@@ -344,9 +368,15 @@ jitBF16GEMVN1<KType>::reduceAccumulation(int mSize)
             // into the appropriate
             // position in destination
             // ZMM
-            vinsertf32x4(RegType(accumBaseIdx + i / simdWidthF32),
-                         RegType(accumBaseIdx + i / simdWidthF32),
-                         Xbyak::Xmm(tmpBaseIdx), j / 4);
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vinsertf128(Xbyak::Ymm(accumBaseIdx + i / simdWidth),
+                            Xbyak::Ymm(accumBaseIdx + i / simdWidth),
+                            Xbyak::Xmm(tmpBaseIdx), j / 4);
+            } else {
+                vinsertf32x4(RegType(accumBaseIdx + i / simdWidth),
+                             RegType(accumBaseIdx + i / simdWidth),
+                             Xbyak::Xmm(tmpBaseIdx), j / 4);
+            }
         }
     }
 
@@ -355,11 +385,11 @@ jitBF16GEMVN1<KType>::reduceAccumulation(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::scaleAccumulationWithAlpha(int mSize)
+jitF32GEMVN1<KType>::scaleAccumulationWithAlpha(int mSize)
 {
     mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, alpha)]);
     vbroadcastss(RegType(tmpBaseIdx), ptr[regKIter]);
-    for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
+    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
         vmulps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                RegType(tmpBaseIdx));
     }
@@ -369,7 +399,160 @@ jitBF16GEMVN1<KType>::scaleAccumulationWithAlpha(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
+jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
+{
+    inLocalLabel();
+    Xbyak::Label label_betaop_col, label_betaop_col_end;
+    if (!betaOne) {
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
+        vbroadcastss(RegType(xBaseIdx), ptr[regKIter]);
+    }
+    int mLeft = mSize % simdWidth;
+
+    // beta scaling when output is bf16, where it is converted to accum type f32
+    if (c_downscale < DLP_F32) {
+        // Check for is_first_k
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+        test(regTmp2, regTmp2);
+        je(label_betaop_col, T_NEAR);
+
+        mov(regTmpYptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+        // NULL check
+        cmp(regTmpYptr, 0);
+        je(label_betaop_col, T_NEAR);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+        add(regTmpYptr, regTmp2);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+        imul(regKIter, regTmp2);
+        add(regTmpYptr, regKIter);
+
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            // Store complete SIMD-width chunks
+            for (int i = 0; i < mSize / simdWidth; i += 1) {
+                movdqu(Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr]);
+                vpmovsxwd(Xbyak::Ymm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
+                vpslld(Xbyak::Ymm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx), 16);
+                vfmadd231ps(Xbyak::Ymm(accumBaseIdx + i), Xbyak::Ymm(xBaseIdx),
+                            Xbyak::Ymm(tmpBaseIdx));
+                lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+            }
+            if (mLeft) {
+                mov(regTmp2, mLeft);
+
+                // Loop: Load n_remainder BF16 elements from C matrix to stack
+                xor_(regKIter.cvt32(), regKIter.cvt32()); // elem_idx = 0
+
+                Xbyak::Label loop_load_start, loop_load_end;
+                L(loop_load_start);
+
+                // Check if elem_idx < n_remainder
+                cmp(regKIter.cvt32(), regTmp2.cvt32());
+                jge(loop_load_end, T_NEAR);
+
+                // Load BF16 value from C matrix to stack
+                mov(regXptr.cvt16(),
+                    word[regTmpYptr + regKIter * sizeof(int16_t)]);
+                mov(word[rsp + regKIter * sizeof(int16_t)], regXptr.cvt16());
+
+                inc(regKIter.cvt32()); // elem_idx++
+                jmp(loop_load_start, T_NEAR);
+
+                L(loop_load_end);
+
+                movdqu(Xbyak::Xmm(tmpBaseIdx), ptr[rsp]);
+                vpmovsxwd(Xbyak::Ymm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
+                vpslld(Xbyak::Ymm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx), 16);
+                vfmadd231ps(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
+                            Xbyak::Ymm(xBaseIdx), Xbyak::Ymm(tmpBaseIdx));
+            }
+        } else {
+            for (int i = 0; i < mSize / simdWidth; i += 1) {
+                vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
+                vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                            RegType(tmpBaseIdx));
+                lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+            }
+            if (mLeft) {
+                vmovdqu16(halfRegType(tmpBaseIdx) | mask_regs[1],
+                          ptr[regTmpYptr]);
+                vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                vfmadd231ps(RegType(accumBaseIdx + mSize / simdWidth),
+                            RegType(xBaseIdx), RegType(tmpBaseIdx));
+            }
+        }
+
+        jmp(label_betaop_col_end, T_NEAR);
+        L(label_betaop_col);
+    }
+
+    for (int i = 0; i < mSize / simdWidth; i += 1) {
+        if (betaOne) {
+            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                   ptr[regTmpYptr]);
+        } else {
+            vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                        ptr[regTmpYptr]);
+        }
+        lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(float)]);
+    }
+    if (mLeft) {
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            vmaskmovps(Xbyak::Ymm(yBaseIdx), Xbyak::Ymm(maskBaseIdx + 1),
+                       ptr[regTmpYptr]);
+            if (betaOne) {
+                vaddps(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
+                       Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
+                       Xbyak::Ymm(yBaseIdx));
+            } else {
+                vfmadd231ps(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
+                            Xbyak::Ymm(xBaseIdx), Xbyak::Ymm(yBaseIdx));
+            }
+        } else {
+            if (betaOne) {
+                vaddps(RegType(accumBaseIdx + (mSize / simdWidth))
+                           | mask_regs[1],
+                       RegType(accumBaseIdx + (mSize / simdWidth)),
+                       ptr[regTmpYptr]);
+            } else {
+                vfmadd231ps(RegType(accumBaseIdx + (mSize / simdWidth))
+                                | mask_regs[1],
+                            RegType(xBaseIdx), ptr[regTmpYptr]);
+            }
+        }
+    }
+
+    L(label_betaop_col_end);
+    outLocalLabel();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
 {
     if (!betaOne) {
         mov(regKIter,
@@ -380,7 +563,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
     inLocalLabel();
     Xbyak::Label label_betaop_row, label_betaop_row_end;
 
-    // Check for BF16 downscaling path
+    // beta scaling when output is bf16, where it is converted to accum type f32
     if (c_downscale < DLP_F32) {
         // Check for is_first_k
         mov(regTmp2,
@@ -420,10 +603,10 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         // buffer
         lea(regTmp3, ptr[regTmp2 + 2 * regTmp2]); // regTmp3 = stride + 2*stride
 
-        for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
-            int blockSize  = ((mSize - i * simdWidthF32) < simdWidthF32)
-                                 ? (mSize - i * simdWidthF32)
-                                 : simdWidthF32;
+        for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+            int blockSize  = ((mSize - i * simdWidth) < simdWidth)
+                                 ? (mSize - i * simdWidth)
+                                 : simdWidth;
             int num_blocks = blockSize / 4;
             int rem_block  = blockSize % 4;
             regInit(tmpBaseIdx, tmpReg);
@@ -466,8 +649,16 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                 vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
                         RegType(tmpBaseIdx + 2), 0x44);
 
-                vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
-                             Xbyak::Xmm(tmpBaseIdx), j);
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    vinsertf128(Xbyak::Ymm(yBaseIdx + i),
+                                Xbyak::Ymm(yBaseIdx + i),
+                                Xbyak::Xmm(tmpBaseIdx), j);
+                } else {
+                    vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                                 Xbyak::Xmm(tmpBaseIdx), j);
+                }
+
                 lea(regTmpYptr, ptr[regTmpYptr + regTmp2 * 4]);
             }
 
@@ -511,18 +702,23 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                 vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
                         RegType(tmpBaseIdx + 2), 0x44);
 
-                vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
-                             Xbyak::Xmm(tmpBaseIdx), num_blocks);
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    vinsertf128(Xbyak::Ymm(yBaseIdx + i),
+                                Xbyak::Ymm(yBaseIdx + i),
+                                Xbyak::Xmm(tmpBaseIdx), num_blocks);
+                } else {
+                    vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                                 Xbyak::Xmm(tmpBaseIdx), num_blocks);
+                }
             }
 
             if (betaOne) {
                 vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                        RegType(yBaseIdx + i));
             } else {
-                vmulps(RegType(tmpBaseIdx), RegType(xBaseIdx),
-                       RegType(yBaseIdx + i));
-                vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                       RegType(tmpBaseIdx));
+                vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                            RegType(yBaseIdx + i));
             }
         }
 
@@ -533,10 +729,10 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
     // F32 path (original code)
     // Store offsets for Y, using it's row-stride
     lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = rsC + 2*rsC
-    for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
-        int blockSize  = ((mSize - i * simdWidthF32) < simdWidthF32)
-                             ? (mSize - i * simdWidthF32)
-                             : simdWidthF32;
+    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+        int blockSize  = (mSize - i * simdWidth) < simdWidth
+                             ? (mSize - i * simdWidth)
+                             : simdWidth;
         int num_blocks = blockSize / 4;
         int rem_block  = blockSize % 4;
         regInit(tmpBaseIdx, tmpReg);
@@ -593,12 +789,8 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
             vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                    RegType(yBaseIdx + i));
         } else {
-            // Todo: change it to fma later along with reference using fma,
-            // or else gives accuracy diff
-            vmulps(RegType(tmpBaseIdx), RegType(xBaseIdx),
-                   RegType(yBaseIdx + i));
-            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                   RegType(tmpBaseIdx));
+            vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                        RegType(yBaseIdx + i));
         }
     }
 
@@ -609,128 +801,11 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
-{
-    inLocalLabel();
-    Xbyak::Label label_betaop_col, label_betaop_col_end;
-    if (!betaOne) {
-        mov(regKIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
-        vbroadcastss(RegType(xBaseIdx), ptr[regKIter]);
-    }
-    int mLeft = mSize % simdWidthF32;
-
-    if (c_downscale < DLP_F32) {
-        // Check for is_first_k
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
-        test(regTmp2, regTmp2);
-        je(label_betaop_col, T_NEAR);
-
-        mov(regTmpYptr,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
-
-        // NULL check
-        cmp(regTmpYptr, 0);
-        je(label_betaop_col, T_NEAR);
-
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
-        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
-
-        add(regTmpYptr, regTmp2);
-
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
-        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
-
-        mov(regKIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-
-        imul(regKIter, regTmp2);
-        add(regTmpYptr, regKIter);
-
-        vpbroadcastd(Xbyak::Zmm(tmpBaseIdx),
-                     ptr[rsp + 0]); // Broadcast from memory
-
-        // Store complete SIMD-width chunks
-        for (int i = 0; i < mSize / simdWidthF32; i += 1) {
-            vmovdqu16(Xbyak::Ymm(tmpBaseIdx + 1), ptr[regTmpYptr]);
-            vpmovsxwd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Ymm(tmpBaseIdx + 1));
-            vpsllvd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Zmm(tmpBaseIdx + 1),
-                    Xbyak::Zmm(tmpBaseIdx));
-            vmulps(Xbyak::Zmm(tmpBaseIdx + 2), Xbyak::Zmm(xBaseIdx),
-                   Xbyak::Zmm(tmpBaseIdx + 1));
-            vaddps(Xbyak::Zmm(accumBaseIdx + i), Xbyak::Zmm(accumBaseIdx + i),
-                   Xbyak::Zmm(tmpBaseIdx + 2));
-            lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(bfloat16)]);
-        }
-        if (mLeft) {
-            vmovdqu16(Xbyak::Ymm(tmpBaseIdx + 1) | mask_regs[1] | T_z,
-                      ptr[regTmpYptr]);
-            vpmovsxwd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Ymm(tmpBaseIdx + 1));
-            vpsllvd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Zmm(tmpBaseIdx + 1),
-                    Xbyak::Zmm(tmpBaseIdx));
-            vmulps(Xbyak::Zmm(tmpBaseIdx + 2), Xbyak::Zmm(xBaseIdx),
-                   Xbyak::Zmm(tmpBaseIdx + 1));
-            vaddps(Xbyak::Zmm(accumBaseIdx + (mSize / simdWidthF32)),
-                   Xbyak::Zmm(accumBaseIdx + (mSize / simdWidthF32)),
-                   Xbyak::Zmm(tmpBaseIdx + 2));
-        }
-
-        jmp(label_betaop_col_end, T_NEAR);
-        L(label_betaop_col);
-    }
-
-    for (int i = 0; i < mSize / simdWidthF32; i += 1) {
-        if (betaOne) {
-            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                   ptr[regTmpYptr]);
-        } else {
-            // Todo: change it to fma later along with reference using fma,
-            // or else gives accuracy diff
-            vmulps(RegType(tmpBaseIdx), RegType(xBaseIdx), ptr[regTmpYptr]);
-            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                   RegType(tmpBaseIdx));
-        }
-        lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(float)]);
-    }
-    if (mLeft) {
-        if (betaOne) {
-            vaddps(RegType(accumBaseIdx + (mSize / simdWidthF32))
-                       | mask_regs[1],
-                   RegType(accumBaseIdx + (mSize / simdWidthF32)),
-                   ptr[regTmpYptr]);
-        } else {
-            // Todo: change it to fma later along with reference using fma,
-            // or else gives accuracy diff
-            // Use zero-masking (T_z) to zero unmasked elements on temp register
-            vmulps(RegType(tmpBaseIdx) | mask_regs[1] | T_z, RegType(xBaseIdx),
-                   ptr[regTmpYptr]);
-            vaddps(RegType(accumBaseIdx + (mSize / simdWidthF32)),
-                   RegType(accumBaseIdx + (mSize / simdWidthF32)),
-                   RegType(tmpBaseIdx));
-        }
-    }
-
-    L(label_betaop_col_end);
-    outLocalLabel();
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::scaleYWithBeta(int mSize)
+jitF32GEMVN1<KType>::scaleYWithBeta(int mSize)
 {
     bool is_beta_one = (betaScalingType == dlp::kernel_frame::scalingType::one);
     if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
         mov(regTmpYptr, regYptr);
-        // yFormat is set to colMajor as part of runtime params when rsC = 1
         if (yFormat == dlp::kernel_frame::storageFormat::colMajor) {
             RETURN_IF_ERROR((scaleYWithBetaColStored(mSize, is_beta_one)));
         } else {
@@ -741,14 +816,87 @@ jitBF16GEMVN1<KType>::scaleYWithBeta(int mSize)
     return dlp::jit::jitGeneratorError::success;
 }
 
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
+    int scratch1, int scratch2, int destIdx)
+{
+    // AVX512 ZMM variant: Convert 16 f32 in Zmm to 16 bf16 in Ymm
+    vbroadcastss(RegType(scratch1),
+                 ptr[rsp + 16]); // Load 0x00010000
+    vpandd(RegType(scratch1), RegType(destIdx),
+           RegType(scratch1)); // Extract bit 16
+    vpsrld(RegType(scratch1), RegType(scratch1),
+           16); // Shift to position 0 → tlsb
+
+    vbroadcastss(RegType(scratch2),
+                 ptr[rsp + 20]); // Load 0x00007FFF
+    vpaddd(RegType(scratch2), RegType(destIdx),
+           RegType(scratch2)); // Add rounding to original
+
+    vpaddd(RegType(scratch2), RegType(scratch2),
+           RegType(scratch1)); // Add tlsb → rounded
+
+    vpsrld(RegType(scratch2), RegType(scratch2),
+           16); // Shift right 16 bits
+
+    // Extract upper 256 bits of ZMM → YMM
+    vextracti64x4(halfRegType(scratch1), RegType(scratch2), 1);
+
+    // Pack 16×32-bit to 16×16-bit (lower 8 from scratch2, upper 8 from
+    // scratch1)
+    vpackusdw(halfRegType(scratch2), halfRegType(scratch2),
+              halfRegType(scratch1));
+
+    // Permute to get correct order: [0,1,2,3,8,9,10,11,4,5,6,7,12,13,14,15] ->
+    // [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    vpermq(halfRegType(scratch2), halfRegType(scratch2),
+           0xD8); // 0xD8 = 11011000b = [0,2,1,3]
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
+jitF32GEMVN1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
 {
-    int mLeft = mSize % simdWidthF32;
+    vbroadcastss(RegType(scratch1),
+                 ptr[rsp + 16]); // Load 0x00010000
+    vpand(RegType(scratch1), RegType(destIdx),
+          RegType(scratch1)); // Extract bit 16
+    vpsrld(RegType(scratch1), RegType(scratch1),
+           16); // Shift to position 0 → tlsb
+
+    vbroadcastss(RegType(scratch2),
+                 ptr[rsp + 20]); // Load 0x00007FFF
+    vpaddd(RegType(scratch2), RegType(destIdx),
+           RegType(scratch2)); // Add rounding to original
+
+    vpaddd(RegType(scratch2), RegType(scratch2),
+           RegType(scratch1)); // Add tlsb → rounded
+
+    vpsrld(RegType(scratch2), RegType(scratch2),
+           16); // Shift right 16 bits
+
+    // Extract upper 128 bits of YMM → XMM
+    vextracti128(halfRegType(scratch1), RegType(scratch2), 1);
+
+    // Pack 8×32-bit to 8×16-bit
+    vpackusdw(halfRegType(scratch2), halfRegType(scratch2),
+              halfRegType(scratch1));
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
+{
+    int mLeft = mSize % simdWidth;
     inLocalLabel();
     Xbyak::Label label_storeop_col, label_storeop_col_end;
 
+    // downscaling accum to bf16 before store, when output is of type bf16
     if (c_downscale < DLP_F32) {
         // Check for is_last_k
         mov(regTmp2,
@@ -785,51 +933,90 @@ jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
         add(regTmpYptr, regKIter);
 
         // Store complete SIMD-width chunks
-        for (int i = 0; i < mSize / simdWidthF32; i += 1) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + i),
-                          Xbyak::Zmm(accumBaseIdx + i));
-            vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(accumBaseIdx + i));
-            lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(bfloat16)]);
+        for (int i = 0; i < mSize / simdWidth; i += 1) {
+            RETURN_IF_ERROR(
+                convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1, accumBaseIdx + i));
+
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                movdqu(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+            } else {
+                vmovdqu16(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+            }
+
+            lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
         }
         if (mLeft) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidthF32)),
-                          Xbyak::Zmm(accumBaseIdx + (mSize / simdWidthF32)));
-            vmovdqu16(ptr[regTmpYptr] | mask_regs[1],
-                      Xbyak::Ymm(accumBaseIdx + (mSize / simdWidthF32)));
+            RETURN_IF_ERROR(
+                convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
+                                 accumBaseIdx + (mSize / simdWidth)));
+
+            // Now Xmm(scratch2) contains 8×BF16 values
+            // Store the BF16 result to stack for element-wise access
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                movdqu(ptr[rsp + 0],
+                       Xbyak::Xmm(tmpBaseIdx + 1)); // 8×16-bit to stack
+
+                // Get n_remainder: n % 8
+                mov(regTmp2, mLeft);
+
+                // Loop: copy n_remainder elements from stack to destination
+                xor_(regKIter.cvt32(), regKIter.cvt32()); // elem_idx = 0
+
+                Xbyak::Label loop_start, loop_end;
+                L(loop_start);
+
+                // Check if elem_idx < n_remainder
+                cmp(regKIter.cvt32(), regTmp2.cvt32());
+                jge(loop_end, T_NEAR);
+
+                // Load BF16 value from stack and store to destination
+                // Use regYptr as temporary (done with B matrix access)
+                mov(regXptr.cvt16(), word[rsp + regKIter * sizeof(int16_t)]);
+                mov(word[regTmpYptr + regKIter * sizeof(int16_t)],
+                    regXptr.cvt16());
+
+                inc(regKIter.cvt32()); // elem_idx++
+                jmp(loop_start, T_NEAR);
+
+                L(loop_end);
+            } else {
+                vmovdqu16(ptr[regTmpYptr] | mask_regs[1],
+                          halfRegType(tmpBaseIdx + 1));
+            }
         }
 
         jmp(label_storeop_col_end, T_NEAR);
         L(label_storeop_col);
     }
 
-    // Store complete SIMD-width chunks
-    for (int i = 0; i < mSize / simdWidthF32; i += 1) {
+    for (int i = 0; i < mSize / simdWidth; i += 1) {
         vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + i));
-        lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(float)]);
+        lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(float)]);
     }
     if (mLeft) {
-        vmovups(ptr[regTmpYptr] | mask_regs[1],
-                RegType(accumBaseIdx + (mSize / simdWidthF32)));
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            vmaskmovps(ptr[regTmpYptr], Xbyak::Ymm(maskBaseIdx + 1),
+                       Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)));
+        } else {
+            vmovups(ptr[regTmpYptr] | mask_regs[1],
+                    RegType(accumBaseIdx + (mSize / simdWidth)));
+        }
     }
 
     L(label_storeop_col_end);
     outLocalLabel();
+
     return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
+jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
 {
-    // Store all reduced results - after reduction, results are in
-    // RegType(accumBaseIdx + 0) For MR=16, we need to store 16 float values
-    // from 1 ZMM register vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + 0));
-
     inLocalLabel();
-    for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i++) {
-        Xbyak::Label label_storeop_row, label_storeop_row_end;
-        int          elements_in_reg =
-            (i < mSize / simdWidthF32) ? simdWidthF32 : (mSize % simdWidthF32);
+    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i++) {
+        int elements_in_reg = (i < mSize / simdWidth) ? simdWidth
+                                                      : (mSize % simdWidth);
         if (elements_in_reg == 0)
             break;
 
@@ -844,6 +1031,9 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
             }
         }
 
+        Xbyak::Label label_storeop_row, label_storeop_row_end;
+
+        // downscaling accum to bf16 before store, when output is of type bf16
         if (c_downscale < DLP_F32) {
             mov(regTmp2,
                 ptr[stackPtr
@@ -884,8 +1074,8 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
             add(regTmpYptr, regKIter);
 
             for (int j = 0; j < (elements_in_reg + 3) / 4; j++) {
-                vcvtneps2bf16(Xbyak::Ymm(tmpBaseIdx + j),
-                              Xbyak::Zmm(tmpBaseIdx + j));
+                RETURN_IF_ERROR(convertF32toBF16(
+                    cvtBaseIdx, (cvtBaseIdx + 1 + j), tmpBaseIdx + j));
             }
 
             // Now store each extracted value to its proper row-strided location
@@ -893,7 +1083,7 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
                 int tmp_reg    = j / 4; // Which temp register has our value
                 int pos_in_reg = j % 4; // Position within that temp register
 
-                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
+                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(cvtBaseIdx + 1 + tmp_reg),
                         pos_in_reg);
 
                 // Move to next row
@@ -931,7 +1121,7 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::storeYValues(int mSize)
+jitF32GEMVN1<KType>::storeYValues(int mSize)
 {
     // Store values from Y
     mov(regTmpYptr, regYptr);
@@ -946,13 +1136,54 @@ jitBF16GEMVN1<KType>::storeYValues(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
+jitF32GEMVN1<KType>::loadMasks()
 {
-    Xbyak::util::StackFrame frame(this, 1, 13, 16);
+    // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
+    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
+    }
+
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        // Loading the masks
+        kmovw(
+            mask_regs[0],
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kmask_avx512)]);
+        kmovw(
+            mask_regs[1],
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, mmask_avx512)]);
+    } else if constexpr (KType == utils::kernelInstrType::avx512_ymm_32_reg) {
+        kmovb(mask_regs[0],
+              ptr[stackPtr
+                  + offsetof(dlp::kernels::gemvN1Params, kmask_avx512_256)]);
+        kmovb(mask_regs[1],
+              ptr[stackPtr
+                  + offsetof(dlp::kernels::gemvN1Params, mmask_avx512_256)]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::loadMasks()
+{
+    lea(regKIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kmask_avx2)]);
+    vmovdqu(Xbyak::Ymm(maskBaseIdx), ptr[regKIter]);
+    lea(regKIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, mmask_avx2)]);
+    vmovdqu(Xbyak::Ymm(maskBaseIdx + 1), ptr[regKIter]);
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
+{
+    Xbyak::util::StackFrame frame(this, 1, 13, 48);
     initializeStackFrame(frame);
-    // Initializes generator params
+
     initializeParameters(params);
-    // initialize register allocation params based on ISA
     RETURN_IF_ERROR((allocateRegisters()));
 
     // Acquire the addresses of A and Y
@@ -1015,10 +1246,11 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
                 // Save current A pointer and update pointers for next k
                 // iteration
-                add(regTmpYptr, RegBytes);
+                mov(regTmp1, simdWidth);
+                imul(regTmp1, regCsA);
+                add(regTmpYptr, regTmp1);
                 mov(regTmpAptr, regTmpYptr);
-                add(regXptr, RegBytes); // Since X will be unit-strided (64
-                                        // bytes for ZMM)
+                add(regXptr, RegBytes); // Since B will be unit-strided
 
                 dec(regKIter);
                 jnz(label_m_loop_k_loop_start, T_NEAR);
@@ -1059,6 +1291,13 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 params.MR, 1, false, 1, accumBaseIdx, yReg)));
 
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
+
+            // For avx2 config, we use YMM registers for masks
+            // these mask registers may have been used as scratch registers
+            // by the post-ops handler. Thus, we need to reload them.
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                loadMasks();
+            }
         }
 
         storeYValues(MR);
@@ -1072,17 +1311,18 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         imul(regTmp1, regRsC);
         add(regYptr, regTmp1);
 
+        // Update post_op_c_i for the next m-iteration (similar to GEMM pattern)
+        // This ensures each iteration uses the correct offset for post-ops
         if (c_downscale < DLP_F32 || !params.kernelOps.empty()) {
-            mov(regKIter,
+            mov(regTmp1,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
                     + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-            mov(regTmp2, MR);
-            add(regKIter, regTmp2);
+            add(regTmp1, MR);
             mov(ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
                     + offsetof(lpgemm_post_op_attr, post_op_c_i)],
-                regKIter);
+                regTmp1);
         }
 
         dec(regMIter);
@@ -1091,6 +1331,7 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
     L(label_m_loop_end);
     if (params.mfringe) {
+
         mov(regMIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, m_left)]);
         test(regMIter, regMIter);
@@ -1124,12 +1365,12 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 // Process all rows including fringe
                 RETURN_IF_ERROR((processMRBlock(M_LEFT)));
 
-                // Save current A pointer and update pointers for next k
-                // iteration
-                add(regTmpYptr, RegBytes);
+                // Update pointers for next k iteration
+                mov(regTmp1, simdWidth);
+                imul(regTmp1, regCsA);
+                add(regTmpYptr, regTmp1);
                 mov(regTmpAptr, regTmpYptr);
-                add(regXptr, RegBytes); // Since X will be unit-strided (64
-                                        // bytes for ZMM)
+                add(regXptr, RegBytes); // Since B will be unit-strided
 
                 dec(regKIter);
                 jnz(label_m_fringe_k_loop_start, T_NEAR);
@@ -1164,11 +1405,17 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         if (kernelOpsHandlerPtr) {
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
-                params.M_LEFT, 1, true, 1, accumBaseIdx,
-                M_LEFT / simdWidthF32)));
+                params.M_LEFT, 1, true, 1, accumBaseIdx, M_LEFT / simdWidth)));
 
             // This call will skip embedding tables (already done in main loop)
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
+
+            // For avx2 config, we use YMM registers for masks
+            // these mask registers may have been used as scratch registers
+            // by the post-ops handler. Thus, we need to reload them.
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                loadMasks();
+            }
         }
 
         storeYValues(M_LEFT);
@@ -1180,14 +1427,14 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 }
 
 template<utils::kernelInstrType KType>
-jitBF16GEMVM1<KType>::jitBF16GEMVM1(void* buffer, size_t size)
+jitF32GEMVM1<KType>::jitF32GEMVM1(void* buffer, size_t size)
     : Xbyak::CodeGenerator(size, buffer) // Call base class constructor
 {
 }
 
 template<utils::kernelInstrType KType>
 void
-jitBF16GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
+jitF32GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 {
     stackPtr    = frame.p[0];
     regBptr     = frame.t[0];
@@ -1207,12 +1454,10 @@ jitBF16GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 
 template<utils::kernelInstrType KType>
 void
-jitBF16GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
+jitF32GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
 {
     NR               = params.NR;
     N_LEFT           = params.N_LEFT;
-    RS_B_N_LEFT_16   = params.RS_B_N_LEFT_16;
-    RS_B_N_LEFT_LT16 = params.RS_B_N_LEFT_LT16;
     KC               = params.KC;
     K_SUB_ITER       = params.K_SUB_ITER;
     yFormat          = params.yFormat;
@@ -1226,14 +1471,33 @@ jitBF16GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
     numRegs  = Traits::numRegs;
 
     simdWidth = RegBytes / sizeof(float); // For f32
-    mov(regRsB, NR);
-    lea(regRsB, ptr[regRsB * 2]);                // rsB = NR * 2
-    lea(regRsB, ptr[regRsB * sizeof(bfloat16)]); // rsB = NR * sizeof(bfloat16)
+
+    if (c_downscale < DLP_F32) {
+        // Initialize F32→BF16 conversion constants on stack
+        // Stack layout: [0-15]: final result, [16-47]: constants
+
+        // Store constant 0x00010000 at [rsp + 16] for bit 16 extraction
+        mov(regTmp1.cvt32(), 0x00010000);
+        mov(dword[rsp + 16], regTmp1.cvt32());
+
+        // Store constant 0x00007FFF at [rsp + 20] for rounding
+        mov(regTmp1.cvt32(), 0x00007FFF);
+        mov(dword[rsp + 20], regTmp1.cvt32());
+    }
+
+    if ((mtag_b == REORDERED) || (mtag_b == PACK)) {
+        mov(regRsB, NR);
+        lea(regRsB, ptr[regRsB * sizeof(float)]); // rsB = NR * sizeof(float)
+    } else {
+
+        mov(regRsB, ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, rsB)]);
+        lea(regRsB, ptr[regRsB * sizeof(float)]);
+    }
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::allocateRegisters()
+jitF32GEMVM1<KType>::allocateRegisters()
 {
     if (NR <= 0) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
@@ -1250,7 +1514,7 @@ jitBF16GEMVM1<KType>::allocateRegisters()
     xReg     = K_SUB_ITER;
     bReg     = NR / simdWidth;
     accumReg = (NR / simdWidth) * K_SUB_ITER;
-    tmpReg   = NR / simdWidth;
+    tmpReg   = yReg;
     maskReg  = 0; // Set this only when AVX512 codepath is disabled.
 
     // Direct addressing mode on FMA instructions are avoided here, since
@@ -1258,28 +1522,32 @@ jitBF16GEMVM1<KType>::allocateRegisters()
     // Thus, both x and B loads are done into registers.
     accumBaseIdx = numRegs - accumReg;
     xBaseIdx     = accumBaseIdx - xReg;
-    bBaseIdx     = xBaseIdx - bReg;
     yBaseIdx     = numRegs - yReg;
+    bBaseIdx     = xBaseIdx - bReg;
     maskBaseIdx  = bBaseIdx; // Set this only when AVX512 codepath is disabled.
+
+    // allocting temp reg for storing downscaled values
+    if (c_downscale < DLP_F32) {
+        tmpBaseIdx  = bBaseIdx - tmpReg;
+        maskBaseIdx = tmpBaseIdx;
+    }
 
     if (!Traits::hasMaskSupport) { // Native mask register-file is not supported
                                    // by the architecture.
         maskReg     = 1;
-        maskBaseIdx = bBaseIdx - maskReg;
+        maskBaseIdx = maskBaseIdx - maskReg;
     }
 
     if (maskBaseIdx < 0) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
-    tmpBaseIdx = 0;
     return dlp::jit::jitGeneratorError::success;
 }
 
-// zeros out the mentioned number of registers
 template<utils::kernelInstrType KType>
 void
-jitBF16GEMVM1<KType>::regInit(int baseIdx, int numRegs)
+jitF32GEMVM1<KType>::regInit(int baseIdx, int numRegs)
 {
     for (int i = 0; i < numRegs; i++) {
         vxorps(RegType(baseIdx + i), RegType(baseIdx + i),
@@ -1290,7 +1558,7 @@ jitBF16GEMVM1<KType>::regInit(int baseIdx, int numRegs)
 // Calculates the address by breaking it into powers of 2
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::offsetBPtr(int temp)
+jitF32GEMVM1<KType>::offsetBPtr(int temp)
 {
     // Offset register, to be added with base in the caller method.
     xor_(regTmp1, regTmp1);
@@ -1308,7 +1576,7 @@ jitBF16GEMVM1<KType>::offsetBPtr(int temp)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::loadMasks()
+jitF32GEMVM1<KType>::loadMasks()
 {
     // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
     for (int i = 0; i < NUM_USABLE_MASKS; i++) {
@@ -1316,15 +1584,33 @@ jitBF16GEMVM1<KType>::loadMasks()
     }
 
     // Load the masks
-    kmovw(mask_regs[0],
-          ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, nmask_avx512)]);
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        kmovw(
+            mask_regs[0],
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, nmask_avx512)]);
+    } else if constexpr (KType == utils::kernelInstrType::avx512_ymm_32_reg) {
+        kmovb(mask_regs[0],
+              ptr[stackPtr
+                  + offsetof(dlp::kernels::gemvM1Params, nmask_avx512_256)]);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::loadMasks()
+{
+    lea(regNIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, nmask_avx2)]);
+    vmovdqu(Xbyak::Ymm(maskBaseIdx), ptr[regNIter]);
 
     return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::maskLoadB(int regIdx, int maskIdx)
+jitF32GEMVM1<KType>::maskLoadB(int regIdx, int maskIdx)
 {
     vmovups(RegType(bBaseIdx + regIdx) | mask_regs[maskIdx] | T_z,
             ptr[regTmp2 + regIdx * simdWidth * sizeof(float)]);
@@ -1332,29 +1618,38 @@ jitBF16GEMVM1<KType>::maskLoadB(int regIdx, int maskIdx)
     return dlp::jit::jitGeneratorError::success;
 }
 
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::maskLoadB(int regIdx,
+                                                                 int maskIdx)
+{
+    vmaskmovps(Xbyak::Ymm(bBaseIdx + regIdx), Xbyak::Ymm(maskBaseIdx + maskIdx),
+               ptr[regTmp2 + regIdx * simdWidth * sizeof(float)]);
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::computeKxnfringe()
+jitF32GEMVM1<KType>::computeKxnfringe()
 {
     for (int j = 0; j < K_SUB_ITER; j++) {
-        vpbroadcastd(RegType(xBaseIdx + j),
-                     ptr[regXptr + 2 * j * sizeof(bfloat16)]);
+        vbroadcastss(RegType(xBaseIdx + j), ptr[regXptr + j * sizeof(float)]);
     }
 
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
     for (int j = 0; j < K_SUB_ITER; j++) {
         for (int i = 0; i < n_iter; i++) {
-            // load 32 elements of B
-            vmovdqu16(RegType(bBaseIdx + i),
-                      ptr[regTmp2 + i * simdWidth * sizeof(float)]);
-            vdpbf16ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
-                      RegType(xBaseIdx + j), RegType(bBaseIdx + i));
+            vmovups(RegType(bBaseIdx + i),
+                    ptr[regTmp2 + i * simdWidth * sizeof(float)]);
+            vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
+                        RegType(xBaseIdx + j), RegType(bBaseIdx + i));
         }
         if (n_left) {
             maskLoadB(n_iter, 0);
-            vdpbf16ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter + j),
-                      RegType(xBaseIdx + j), RegType(bBaseIdx + n_iter));
+            vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter + j),
+                        RegType(xBaseIdx + j), RegType(bBaseIdx + n_iter));
         }
         add(regTmp2, regRsB);
     }
@@ -1363,23 +1658,20 @@ jitBF16GEMVM1<KType>::computeKxnfringe()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::computeKxNR(bool nMask)
+jitF32GEMVM1<KType>::computeKxNR(bool nMask)
 {
     mov(regTmp2, regBptr);
     if (!nMask) {
         for (int i = 0; i < K_SUB_ITER; i += 1) {
-            // broadcast two values of x every time
-            // so 4 zmms are used broadcast 8 elements of Xptr(A)
-            vpbroadcastd(RegType(xBaseIdx + i),
-                         ptr[regXptr + 2 * i * sizeof(bfloat16)]);
+            vbroadcastss(RegType(xBaseIdx + i),
+                         ptr[regXptr + i * sizeof(float)]);
         }
         for (int j = 0; j < K_SUB_ITER; j += 1) {
             for (int i = 0; i < NR / simdWidth; i += 1) {
-                // load 32 elements of B
-                vmovdqu16(RegType(bBaseIdx + i),
-                          ptr[regTmp2 + i * simdWidth * sizeof(float)]);
-                vdpbf16ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
-                          RegType(xBaseIdx + j), RegType(bBaseIdx + i));
+                vmovups(RegType(bBaseIdx + i),
+                        ptr[regTmp2 + i * simdWidth * sizeof(float)]);
+                vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
+                            RegType(xBaseIdx + j), RegType(bBaseIdx + i));
             }
             add(regTmp2, regRsB);
         }
@@ -1392,27 +1684,23 @@ jitBF16GEMVM1<KType>::computeKxNR(bool nMask)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::compute1xnfringe(bool kIsOdd)
+jitF32GEMVM1<KType>::compute1xnfringe()
 {
-    if (kIsOdd) {
-        vpbroadcastw(RegType(xBaseIdx), ptr[regXptr]);
-    } else {
-        vpbroadcastd(RegType(xBaseIdx), ptr[regXptr]);
-    }
+    vbroadcastss(RegType(xBaseIdx), ptr[regXptr]);
 
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
     for (int i = 0; i < n_iter; i++) {
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * simdWidth * sizeof(float)]);
-        vmovdqu16(RegType(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
-        vdpbf16ps(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
-                  RegType(bBaseIdx + i));
+        vmovups(RegType(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
+        vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
+                    RegType(bBaseIdx + i));
     }
     if (n_left) {
         maskLoadB(n_iter, 0);
-        vdpbf16ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter),
-                  RegType(xBaseIdx), RegType(bBaseIdx + n_iter));
+        vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * n_iter),
+                    RegType(xBaseIdx), RegType(bBaseIdx + n_iter));
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1420,26 +1708,21 @@ jitBF16GEMVM1<KType>::compute1xnfringe(bool kIsOdd)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::compute1xNR(bool kIsOdd, bool nMask)
+jitF32GEMVM1<KType>::compute1xNR(bool nMask)
 {
     mov(regTmp2, regBptr);
 
     if (!nMask) {
-
-        if (kIsOdd) {
-            vpbroadcastw(RegType(xBaseIdx), ptr[regXptr]);
-        } else {
-            vpbroadcastd(RegType(xBaseIdx), ptr[regXptr]);
-        }
+        vbroadcastss(RegType(xBaseIdx), ptr[regXptr]);
 
         for (int i = 0; i < NR / simdWidth; i += 1) {
-            vmovdqu16(RegType(bBaseIdx + i),
-                      ptr[regTmp2 + i * simdWidth * sizeof(float)]);
-            vdpbf16ps(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
-                      RegType(bBaseIdx + i));
+            vmovups(RegType(bBaseIdx + i),
+                    ptr[regTmp2 + i * simdWidth * sizeof(float)]);
+            vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i),
+                        RegType(xBaseIdx), RegType(bBaseIdx + i));
         }
     } else {
-        compute1xnfringe(kIsOdd);
+        compute1xnfringe();
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1447,7 +1730,7 @@ jitBF16GEMVM1<KType>::compute1xNR(bool kIsOdd, bool nMask)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
+jitF32GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
 {
     // Defining labels locally to avoid redifinition issues
     Xbyak::Label sub_loop_kc_main_loop_start;
@@ -1458,8 +1741,6 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
     Xbyak::Label sub_loop_kf_main_loop_end;
     Xbyak::Label sub_loop_kf_fringe_loop_start;
     Xbyak::Label sub_loop_kf_fringe_loop_end;
-    Xbyak::Label label_k_is_odd_start;
-    Xbyak::Label label_k_is_odd_end;
 
     // We would receive a k-value, representing the blocksize inside
     // the k-loop. If it is possible to iterate over this in blocks of 4,
@@ -1477,16 +1758,13 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         computeKxNR(nfringe);
 
         // Update the pointers for next k iteration
-        // A moved by k*2 bf16 elemnents
-        lea(regXptr, ptr[regXptr + K_SUB_ITER * 2 * sizeof(bfloat16)]);
-        // B moved by 8 rows
+        lea(regXptr, ptr[regXptr + K_SUB_ITER * sizeof(float)]);
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
 
         dec(regKSubIter);
         jnz(sub_loop_kc_main_loop_start, T_NEAR);
 
         L(sub_loop_kc_main_loop_end);
-
         mov(regKSubIter,
             ptr[stackPtr
                 + offsetof(dlp::kernels::gemvM1Params, k_iter_sub_left)]);
@@ -1494,23 +1772,16 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         jz(sub_loop_kc_fringe_loop_end, T_NEAR);
         L(sub_loop_kc_fringe_loop_start);
 
-        compute1xNR(false, nfringe);
+        compute1xNR(nfringe);
 
         // Update the pointers for next k iteration
-        // A moved by 2 bf16 elemnents
-        lea(regXptr, ptr[regXptr + 2 * sizeof(bfloat16)]);
-        // B moved by 2 rows
+        lea(regXptr, ptr[regXptr + sizeof(float)]);
         lea(regBptr, ptr[regBptr + regRsB]);
 
         dec(regKSubIter);
         jnz(sub_loop_kc_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kc_fringe_loop_end);
-
-        if (KC & 1) {
-            compute1xNR(true, nfringe);
-        }
-
     } else {
         mov(regKSubIter,
             ptr[stackPtr
@@ -1522,14 +1793,13 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         computeKxNR(nfringe);
 
         // Update the pointers for next k iteration
-        lea(regXptr, ptr[regXptr + K_SUB_ITER * 2 * sizeof(bfloat16)]);
+        lea(regXptr, ptr[regXptr + K_SUB_ITER * sizeof(float)]);
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
 
         dec(regKSubIter);
         jnz(sub_loop_kf_main_loop_start, T_NEAR);
 
         L(sub_loop_kf_main_loop_end);
-
         mov(regKSubIter,
             ptr[stackPtr
                 + offsetof(dlp::kernels::gemvM1Params, k_left_sub_left)]);
@@ -1537,27 +1807,16 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         jz(sub_loop_kf_fringe_loop_end, T_NEAR);
         L(sub_loop_kf_fringe_loop_start);
 
-        compute1xNR(false, nfringe);
+        compute1xNR(nfringe);
 
         // Update the pointers for next k iteration
-        lea(regXptr, ptr[regXptr + 2 * sizeof(bfloat16)]);
+        lea(regXptr, ptr[regXptr + sizeof(float)]);
         lea(regBptr, ptr[regBptr + regRsB]);
 
         dec(regKSubIter);
         jnz(sub_loop_kf_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kf_fringe_loop_end);
-
-        // add kc0 & 0x1 compute
-        mov(regKSubIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, is_k_odd)]);
-        test(regKSubIter, regKSubIter);
-        jz(label_k_is_odd_end, T_NEAR);
-        L(label_k_is_odd_start);
-
-        compute1xNR(true, nfringe);
-
-        L(label_k_is_odd_end);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1565,7 +1824,7 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::finalAccumulate()
+jitF32GEMVM1<KType>::finalAccumulate()
 {
     for (int i = 0; i < NR / simdWidth; i += 1) {
         for (int j = 1; j < K_SUB_ITER; j += 1) {
@@ -1582,7 +1841,7 @@ jitBF16GEMVM1<KType>::finalAccumulate()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::scaleWithAlpha()
+jitF32GEMVM1<KType>::scaleWithAlpha()
 {
     if (alphaScalingType != dlp::kernel_frame::scalingType::one) {
         mov(regKSubIter,
@@ -1599,7 +1858,162 @@ jitBF16GEMVM1<KType>::scaleWithAlpha()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
+jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
+{
+    inLocalLabel();
+    Xbyak::Label label_beta_scale_fringe, label_beta_scale_fringe_end;
+
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
+
+    // Handle downscaling of Y and scale beta
+    if (c_downscale < DLP_F32) {
+        // Check for is_first_k
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+        test(regTmp2, regTmp2);
+        je(label_beta_scale_fringe, T_NEAR);
+
+        // Get the downscale buffer pointer
+        mov(regTmpYptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+        // NULL check
+        cmp(regTmpYptr, 0);
+        je(label_beta_scale_fringe, T_NEAR);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+        add(regTmpYptr, regTmp2);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+        imul(regKIter, regTmp2);
+        add(regTmpYptr, regKIter);
+
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            // Store complete SIMD-width chunks
+            for (int i = 0; i < n_iter; i += 1) {
+                movdqu(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
+                vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                            RegType(tmpBaseIdx));
+                lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+            }
+            if (n_left) {
+                mov(regTmp2, n_left);
+
+                // Loop: Load n_remainder BF16 elements from C matrix to stack
+                xor_(regKIter.cvt32(), regKIter.cvt32()); // elem_idx = 0
+
+                Xbyak::Label loop_load_start, loop_load_end;
+                L(loop_load_start);
+
+                // Check if elem_idx < n_remainder
+                cmp(regKIter.cvt32(), regTmp2.cvt32());
+                jge(loop_load_end, T_NEAR);
+
+                // Load BF16 value from C matrix to stack
+                mov(regBptr.cvt16(),
+                    word[regTmpYptr + regKIter * sizeof(int16_t)]);
+                mov(word[rsp + regKIter * sizeof(int16_t)], regBptr.cvt16());
+
+                inc(regKIter.cvt32()); // elem_idx++
+                jmp(loop_load_start, T_NEAR);
+
+                L(loop_load_end);
+
+                movdqu(halfRegType(tmpBaseIdx), ptr[rsp]);
+                vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                vfmadd231ps(RegType(accumBaseIdx + n_iter), RegType(xBaseIdx),
+                            RegType(tmpBaseIdx));
+            }
+        } else {
+            for (int i = 0; i < n_iter; i += 1) {
+                vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
+                vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                            RegType(tmpBaseIdx));
+                lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+            }
+            if (n_left) {
+                vmovdqu16(halfRegType(tmpBaseIdx) | mask_regs[0],
+                          ptr[regTmpYptr]);
+                vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                vfmadd231ps(RegType(accumBaseIdx + n_iter), RegType(xBaseIdx),
+                            RegType(tmpBaseIdx));
+            }
+        }
+
+        jmp(label_beta_scale_fringe_end, T_NEAR);
+        L(label_beta_scale_fringe);
+    }
+
+    if (!isBetaOne) {
+        for (int i = 0; i < n_iter; i++) {
+            vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                        ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+        }
+        if (n_left) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vmaskmovps(
+                    RegType(yBaseIdx + n_iter), RegType(maskBaseIdx),
+                    ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
+                vfmadd231ps(RegType(accumBaseIdx + n_iter), RegType(xBaseIdx),
+                            RegType(yBaseIdx + n_iter));
+            } else {
+                vfmadd231ps(
+                    RegType(accumBaseIdx + n_iter) | mask_regs[0],
+                    RegType(xBaseIdx),
+                    ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
+            }
+        }
+    } else {
+        for (int i = 0; i < n_iter; i++) {
+            vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                   ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+        }
+        if (n_left) {
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vmaskmovps(
+                    RegType(yBaseIdx + n_iter), RegType(maskBaseIdx),
+                    ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
+                vaddps(RegType(accumBaseIdx + n_iter),
+                       RegType(accumBaseIdx + n_iter),
+                       RegType(yBaseIdx + n_iter));
+            } else {
+                vaddps(RegType(accumBaseIdx + n_iter) | mask_regs[0],
+                       RegType(accumBaseIdx + n_iter),
+                       ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
+            }
+        }
+    }
+
+    L(label_beta_scale_fringe_end);
+    outLocalLabel();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
 {
     inLocalLabel();
     Xbyak::Label label_beta_scale, label_beta_scale_end;
@@ -1607,29 +2021,326 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
     bool isBetaZero = (betaScalingType == dlp::kernel_frame::scalingType::zero);
     bool isBetaOne  = (betaScalingType == dlp::kernel_frame::scalingType::one);
 
-    int n_iter = n_size / simdWidth;
-    int n_left = n_size % simdWidth;
+    mov(regTmpYptr, regYptr);
 
     if (!isBetaZero) {
-
-        // broadcast beta
         if (!isBetaOne) {
             mov(regKSubIter,
                 ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
             vbroadcastss(RegType(xBaseIdx), ptr[regKSubIter]);
         }
 
-        // Handle downscaling of Y and scale beta
+        if (!nMask) {
+            // Handle downscaling of Y and scale beta
+            if (c_downscale < DLP_F32) {
+                // Check for is_first_k
+                mov(regTmp2,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                test(regTmp2, regTmp2);
+                je(label_beta_scale, T_NEAR);
+
+                // Get the downscale buffer pointer
+                mov(regTmpYptr,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+                // NULL check
+                cmp(regTmpYptr, 0);
+                je(label_beta_scale, T_NEAR);
+
+                mov(regTmp2,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+                add(regTmpYptr, regTmp2);
+
+                mov(regTmp2,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+                mov(regKIter,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+                imul(regKIter, regTmp2);
+                add(regTmpYptr, regKIter);
+
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    // Store complete SIMD-width chunks
+                    for (int i = 0; i < NR / simdWidth; i += 1) {
+                        movdqu(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
+                        vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                        vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                        vfmadd231ps(RegType(accumBaseIdx + i),
+                                    RegType(xBaseIdx), RegType(tmpBaseIdx));
+                        lea(regTmpYptr,
+                            ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+                    }
+                } else {
+                    // Store complete SIMD-width chunks
+                    for (int i = 0; i < NR / simdWidth; i += 1) {
+                        vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
+                        vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
+                        vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
+                        vfmadd231ps(RegType(accumBaseIdx + i),
+                                    RegType(xBaseIdx), RegType(tmpBaseIdx));
+                        lea(regTmpYptr,
+                            ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+                    }
+                }
+
+                jmp(label_beta_scale_end, T_NEAR);
+                L(label_beta_scale);
+            }
+
+            if (!isBetaOne) {
+                for (int i = 0; i < NR / simdWidth; i += 1) {
+                    vfmadd231ps(
+                        RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                        ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+                }
+            } else {
+                for (int i = 0; i < NR / simdWidth; i += 1) {
+                    vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                           ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
+                }
+            }
+
+        } else {
+            scaleYWithBetaFringe();
+        }
+
+        L(label_beta_scale_end);
+    }
+
+    outLocalLabel();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
+    int scratch1, int scratch2, int destIdx)
+{
+    // AVX512 ZMM variant: Convert 16 f32 in Zmm to 16 bf16 in Ymm
+    vbroadcastss(RegType(scratch1),
+                 ptr[rsp + 16]); // Load 0x00010000
+    vpandd(RegType(scratch1), RegType(destIdx),
+           RegType(scratch1)); // Extract bit 16
+    vpsrld(RegType(scratch1), RegType(scratch1),
+           16); // Shift to position 0 → tlsb
+
+    vbroadcastss(RegType(scratch2),
+                 ptr[rsp + 20]); // Load 0x00007FFF
+    vpaddd(RegType(scratch2), RegType(destIdx),
+           RegType(scratch2)); // Add rounding to original
+
+    vpaddd(RegType(scratch2), RegType(scratch2),
+           RegType(scratch1)); // Add tlsb → rounded
+
+    vpsrld(RegType(scratch2), RegType(scratch2),
+           16); // Shift right 16 bits
+
+    // Extract upper 256 bits of ZMM → YMM
+    vextracti64x4(halfRegType(scratch1), RegType(scratch2), 1);
+
+    // Pack 16×32-bit to 16×16-bit (lower 8 from scratch2, upper 8 from
+    // scratch1)
+    vpackusdw(halfRegType(scratch2), halfRegType(scratch2),
+              halfRegType(scratch1));
+
+    // Permute to get correct order: [0,1,2,3,8,9,10,11,4,5,6,7,12,13,14,15] ->
+    // [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15]
+    vpermq(halfRegType(scratch2), halfRegType(scratch2),
+           0xD8); // 0xD8 = 11011000b = [0,2,1,3]
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+{
+    vbroadcastss(RegType(scratch1),
+                 ptr[rsp + 16]); // Load 0x00010000
+    vpand(RegType(scratch1), RegType(destIdx),
+          RegType(scratch1)); // Extract bit 16
+    vpsrld(RegType(scratch1), RegType(scratch1),
+           16); // Shift to position 0 → tlsb
+
+    vbroadcastss(RegType(scratch2),
+                 ptr[rsp + 20]); // Load 0x00007FFF
+    vpaddd(RegType(scratch2), RegType(destIdx),
+           RegType(scratch2)); // Add rounding to original
+
+    vpaddd(RegType(scratch2), RegType(scratch2),
+           RegType(scratch1)); // Add tlsb → rounded
+
+    vpsrld(RegType(scratch2), RegType(scratch2),
+           16); // Shift right 16 bits
+
+    // Extract upper 128 bits of YMM → XMM
+    vextracti128(halfRegType(scratch1), RegType(scratch2), 1);
+
+    // Pack 8×32-bit to 8×16-bit
+    vpackusdw(halfRegType(scratch2), halfRegType(scratch2),
+              halfRegType(scratch1));
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<KType>::storeYValuesFringe()
+{
+    inLocalLabel();
+    Xbyak::Label label_store_fringe, label_store_fringe_end;
+
+    int n_iter = N_LEFT / simdWidth;
+    int n_left = N_LEFT % simdWidth;
+
+    if (c_downscale < DLP_F32) {
+        // Check for is_last_k
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+        test(regTmp2, regTmp2);
+        je(label_store_fringe, T_NEAR);
+
+        mov(regTmpYptr,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+
+        // NULL check
+        cmp(regTmpYptr, 0);
+        je(label_store_fringe, T_NEAR);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+
+        add(regTmpYptr, regTmp2);
+
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
+
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+
+        imul(regKIter, regTmp2);
+        add(regTmpYptr, regKIter);
+
+        // Convert F32 to BF16 for all variants
+        for (int i = 0; i < n_iter; i += 1) {
+            RETURN_IF_ERROR(
+                convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1, accumBaseIdx + i));
+
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                movdqu(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+            } else {
+                vmovdqu16(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+            }
+
+            lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+        }
+
+        if (n_left) {
+            RETURN_IF_ERROR(convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
+                                             accumBaseIdx + n_iter));
+
+            // Store the BF16 result to stack for element-wise access
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                movdqu(ptr[rsp + 0],
+                       halfRegType(tmpBaseIdx + 1)); // 8×16-bit to stack
+                // Get n_remainder
+                mov(regTmp2, n_left);
+
+                // Loop: copy n_remainder elements from stack to destination
+                xor_(regKIter.cvt32(), regKIter.cvt32()); // elem_idx = 0
+
+                Xbyak::Label loop_start, loop_end;
+                L(loop_start);
+
+                // Check if elem_idx < n_remainder
+                cmp(regKIter.cvt32(), regTmp2.cvt32());
+                jge(loop_end, T_NEAR);
+
+                // Load BF16 value from stack and store to destination
+                // Use regBptr as temporary (done with B matrix access)
+                mov(regBptr.cvt16(), word[rsp + regKIter * sizeof(int16_t)]);
+                mov(word[regTmpYptr + regKIter * sizeof(int16_t)],
+                    regBptr.cvt16());
+
+                inc(regKIter.cvt32()); // elem_idx++
+                jmp(loop_start, T_NEAR);
+
+                L(loop_end);
+            } else {
+                vmovdqu16(ptr[regTmpYptr] | mask_regs[0],
+                          halfRegType(tmpBaseIdx + 1));
+            }
+        }
+
+        jmp(label_store_fringe_end, T_NEAR);
+        L(label_store_fringe);
+    }
+
+    for (int i = 0; i < n_iter; i++) {
+        vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
+                RegType(accumBaseIdx + i));
+    }
+    if (n_left) {
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            vmaskmovps(ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)],
+                       RegType(maskBaseIdx), RegType(accumBaseIdx + n_iter));
+        } else {
+            vmovups(ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]
+                        | mask_regs[0],
+                    RegType(accumBaseIdx + n_iter));
+        }
+    }
+
+    L(label_store_fringe_end);
+    outLocalLabel();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<KType>::storeYValues(bool nMask)
+{
+
+    inLocalLabel();
+    Xbyak::Label label_store, label_store_end;
+
+    mov(regTmpYptr, regYptr);
+
+    if (!nMask) {
+
         if (c_downscale < DLP_F32) {
-            // Check for is_first_k
+            // Check for is_last_k
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                    + offsetof(lpgemm_post_op_attr, is_last_k)]);
             test(regTmp2, regTmp2);
-            je(label_beta_scale, T_NEAR);
+            je(label_store, T_NEAR);
 
-            // Get the downscale buffer pointer
             mov(regTmpYptr,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
@@ -1637,7 +2348,7 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
 
             // NULL check
             cmp(regTmpYptr, 0);
-            je(label_beta_scale, T_NEAR);
+            je(label_store, T_NEAR);
 
             mov(regTmp2,
                 ptr[stackPtr
@@ -1662,134 +2373,34 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
             add(regTmpYptr, regKIter);
 
             // Store complete SIMD-width chunks
-            // Store complete SIMD-width chunks
-            for (int i = 0; i < n_iter; i += 1) {
-                vmovdqu16(Xbyak::Ymm(tmpBaseIdx), ptr[regTmpYptr]);
-                vpmovsxwd(Xbyak::Zmm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx));
-                vpslld(Xbyak::Zmm(tmpBaseIdx), Xbyak::Zmm(tmpBaseIdx), 16);
-                vfmadd231ps(Xbyak::Zmm(accumBaseIdx + i), Xbyak::Zmm(xBaseIdx),
-                            Xbyak::Zmm(tmpBaseIdx));
-                lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
-            }
-            if (n_left) {
-                // Use zero-masking (T_z) to zero unmasked elements
-                vmovdqu16(Xbyak::Ymm(tmpBaseIdx) | mask_regs[0] | T_z,
-                          ptr[regTmpYptr]);
-                vpmovsxwd(Xbyak::Zmm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx));
-                vpslld(Xbyak::Zmm(tmpBaseIdx), Xbyak::Zmm(tmpBaseIdx), 16);
-                vfmadd231ps(Xbyak::Zmm(accumBaseIdx + n_iter),
-                            Xbyak::Zmm(xBaseIdx), Xbyak::Zmm(tmpBaseIdx));
-            }
+            for (int i = 0; i < NR / simdWidth; i += 1) {
 
-            jmp(label_beta_scale_end, T_NEAR);
-            L(label_beta_scale);
+                RETURN_IF_ERROR(convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
+                                                 accumBaseIdx + i));
+
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    // AVX2 YMM
+                    movdqu(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+                    lea(regTmpYptr,
+                        ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+                } else {
+                    // AVX512 ZMM and AVX512 YMM variants
+                    vmovdqu16(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+                    lea(regTmpYptr,
+                        ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+                }
+            }
+            jmp(label_store_end, T_NEAR);
+            L(label_store);
         }
 
-        mov(regTmpYptr, regYptr);
-
-        if (!isBetaOne) {
-            for (int i = 0; i < n_iter; i++) {
-                vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
-                            ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
-            }
-            if (n_left) {
-                vfmadd231ps(
-                    RegType(accumBaseIdx + n_iter) | mask_regs[0],
-                    RegType(xBaseIdx),
-                    ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
-            }
-        } else {
-            for (int i = 0; i < n_iter; i++) {
-                vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                       ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
-            }
-            if (n_left) {
-                vaddps(RegType(accumBaseIdx + n_iter) | mask_regs[0],
-                       RegType(accumBaseIdx + n_iter),
-                       ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
-            }
+        for (int i = 0; i < NR / simdWidth; i += 1) {
+            vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
+                    RegType(accumBaseIdx + i));
         }
-
-        L(label_beta_scale_end);
-        outLocalLabel();
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::storeYValues(int n_size)
-{
-
-    int n_iter = n_size / simdWidth;
-    int n_left = n_size % simdWidth;
-
-    inLocalLabel();
-    Xbyak::Label label_store, label_store_end;
-    if (c_downscale < DLP_F32) {
-        // Check for is_last_k
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
-        test(regTmp2, regTmp2);
-        je(label_store, T_NEAR);
-
-        mov(regTmpYptr,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
-
-        // NULL check
-        cmp(regTmpYptr, 0);
-        je(label_store, T_NEAR);
-
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
-        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
-
-        add(regTmpYptr, regTmp2);
-
-        mov(regTmp2,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
-        lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
-
-        mov(regKIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-
-        imul(regKIter, regTmp2);
-        add(regTmpYptr, regKIter);
-
-        // Store complete SIMD-width chunks
-        for (int i = 0; i < n_iter; i += 1) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + i),
-                          Xbyak::Zmm(accumBaseIdx + i));
-            vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(accumBaseIdx + i));
-            lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
-        }
-        if (n_left) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + n_iter),
-                          Xbyak::Zmm(accumBaseIdx + n_iter));
-            vmovdqu16(ptr[regTmpYptr] | mask_regs[0],
-                      Xbyak::Ymm(accumBaseIdx + n_iter));
-        }
-
-        jmp(label_store_end, T_NEAR);
-        L(label_store);
-    }
-
-    mov(regTmpYptr, regYptr);
-
-    for (int i = 0; i < n_iter; i++) {
-        vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
-                RegType(accumBaseIdx + i));
-    }
-    if (n_left) {
-        vmovups(ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]
-                    | mask_regs[0],
-                RegType(accumBaseIdx + n_iter));
+    } else {
+        storeYValuesFringe();
     }
 
     L(label_store_end);
@@ -1800,10 +2411,10 @@ jitBF16GEMVM1<KType>::storeYValues(int n_size)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
+jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
     // Using Xbyak's utility for managing the stack frame
-    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    Xbyak::util::StackFrame frame(this, 1, 13, 48);
     initializeStackFrame(frame);
 
     // Initializing the parameters
@@ -1833,7 +2444,6 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         L(label_n_loop_start);
 
         // Y prefetch, before the k-loop
-        // might change if Y is of type bf16
         if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
             for (int i = 0; i < NR / simdWidth; i++) {
                 prefetcht0(ptr[regYptr + i * simdWidth * sizeof(float)]);
@@ -1871,29 +2481,33 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // whether the matrix is packed/reordered or not This logic
                 // is ported from the static kernels, which requires us to
                 // update it inside the k-loop.
-                mov(regPsB, KC);
-                lea(regPsB,
-                    ptr[regPsB * sizeof(bfloat16)]); // kc is in terms of
-                                                     // bfloat16 elements
-                mov(regTmpYptr, ptr[stackPtr
-                                    + offsetof(dlp::kernels::gemvM1Params,
-                                               jc_cur_loop_rem)]);
-                imul(regTmpYptr, regPsB);
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
-                imul(regTmp2, regIncK); //(kc loop iter)pc*n_sub_updated
-                lea(regTmp2,
-                    ptr[regTmp2 * sizeof(bfloat16)]); // multiply by 2 bytes
+                if ((mtag_b == REORDERED) || (mtag_b == PACK)) {
+                    mov(regPsB, KC);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
+                    mov(regTmpYptr, ptr[stackPtr
+                                        + offsetof(dlp::kernels::gemvM1Params,
+                                                   jc_cur_loop_rem)]);
+                    mov(regTmp2, ptr[stackPtr
+                                     + offsetof(dlp::kernels::gemvM1Params,
+                                                n_sub_updated)]);
+                    imul(regTmpYptr, regPsB);
+                    imul(regTmp2, regIncK);
+                    lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
-                lea(regBptr,
-                    ptr[regBptr + regTmpYptr]); // b = b + kc*jc_cur_loop_rem
-                lea(regBptr, ptr[regBptr + regTmp2]); // b = b +
-                                                      // pc*n_sub_updated
+                    lea(regBptr, ptr[regBptr + regTmpYptr]);
+                    lea(regBptr, ptr[regBptr + regTmp2]);
+                } else {
+                    mov(regPsB, 1);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
+                    mov(regTmp2, regRsB);
+                    imul(regTmp2, regIncK);
+
+                    add(regBptr, regTmp2);
+                }
 
                 // Set the base pointer for the iteration
                 mov(regTmp2, regIncN);
-                imul(regTmp2, regPsB); // b = b + jr*kc
+                imul(regTmp2, regPsB);
 
                 add(regBptr, regTmp2);
 
@@ -1929,35 +2543,32 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 mov(regBptr,
                     ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, b)]);
 
-                mov(regPsB,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, k_left)]);
+                if ((mtag_b == REORDERED) || (mtag_b == PACK)) {
+                    mov(regPsB,
+                        ptr[stackPtr
+                            + offsetof(dlp::kernels::gemvM1Params, k_left)]);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
+                    mov(regTmpYptr, ptr[stackPtr
+                                        + offsetof(dlp::kernels::gemvM1Params,
+                                                   jc_cur_loop_rem)]);
+                    mov(regTmp2, ptr[stackPtr
+                                     + offsetof(dlp::kernels::gemvM1Params,
+                                                n_sub_updated)]);
+                    imul(regTmpYptr, regPsB);
+                    imul(regTmp2, regIncK);
+                    lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
-                // kc needs to be a multiple of 2 so that it can be
-                // used with dpbf16_ps instruction. Padding is added in
-                // cases this condition is not satisfied, and therefore
-                // the kc offsets used for packed/reordered buffers
-                // needs to be updated.
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, is_k_odd)]);
-                add(regPsB, regTmp2);     // k_left = k_left + is_k_odd
-                lea(regPsB, ptr[regPsB]); // kc0_updated should be used
-                lea(regPsB, ptr[regPsB * sizeof(bfloat16)]);
-                mov(regTmpYptr, ptr[stackPtr
-                                    + offsetof(dlp::kernels::gemvM1Params,
-                                               jc_cur_loop_rem)]);
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
-                imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
-                lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+                    lea(regBptr, ptr[regBptr + regTmpYptr]);
+                    lea(regBptr, ptr[regBptr + regTmp2]);
+                } else {
+                    mov(regPsB, 1);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
 
-                lea(regBptr,
-                    ptr[regBptr + regTmpYptr]); // b = b + kc*jc_cur_loop_rem
-                lea(regBptr, ptr[regBptr + regTmp2]); // b = b +
-                                                      // pc*n_sub_updated
+                    mov(regTmp2, regRsB);
+                    imul(regTmp2, regIncK);
+
+                    add(regBptr, regTmp2);
+                }
 
                 mov(regTmp2, regIncN);
                 imul(regTmp2, regPsB);
@@ -1985,17 +2596,17 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         }
 
         // Scale the result by beta, and store it accordingly
-        scaleYWithBeta(NR);
+        scaleYWithBeta(false);
 
         if (kernelOpsHandlerPtr) {
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
-                params.NR, false, 1, accumBaseIdx, NR / simdWidth)));
+                params.NR, false, 1, accumBaseIdx, yReg)));
 
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
         }
 
-        storeYValues(NR);
+        storeYValues(false);
 
         // Update the pointers for next n iteration(NOTE : B pointer is set
         // inside the kloop, owing to the implementation in static kernels)
@@ -2021,194 +2632,19 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         jnz(label_n_loop_start, T_NEAR);
     }
     L(label_n_loop_end);
+    if (params.nfringe) {
 
-    if (params.nfringe_main) {
-
-        N_LEFT = params.N_LEFT_16;
-
-        mov(regNIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n_left_16)]);
-        test(regNIter, regNIter);
-        jz(label_n_fringe_main_end, T_NEAR);
-        L(label_n_fringe_main_start);
-
-        // Zero out accumulator registers for this n iteration
-        regInit(accumBaseIdx, accumReg);
-        xor_(regIncK, regIncK);
-
-        // B matrix is packed by default for bf16, row stride varies based on
-        // n_left
-        mov(regRsB, RS_B_N_LEFT_16);
-        lea(regRsB,
-            ptr[regRsB * sizeof(bfloat16)]); // rsB = NR * sizeof(bfloat16)
-
-        // K-loop is not needed if alpha is zero
-        if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
-            // Vector x
-            mov(regXptr,
-                ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, x)]);
-
-            lea(regTmp1, ptr[regRsB + regRsB * 2]); // 3*rsB
-
-            if (params.kloop) {
-
-                mov(regKIter,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, k_iter)]);
-                test(regKIter, regKIter);
-                jz(label_n_fringe_main_k_loop_end, T_NEAR);
-
-                L(label_n_fringe_main_k_loop_start);
-                mov(regBptr,
-                    ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, b)]);
-
-                mov(regPsB, KC);
-                lea(regPsB, ptr[regPsB * sizeof(bfloat16)]);
-                mov(regTmpYptr, ptr[stackPtr
-                                    + offsetof(dlp::kernels::gemvM1Params,
-                                               jc_cur_loop_rem)]);
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
-                imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
-                lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
-
-                lea(regBptr, ptr[regBptr + regTmpYptr]);
-                lea(regBptr, ptr[regBptr + regTmp2]);
-
-                mov(regTmp2, regIncN);
-                imul(regTmp2, regPsB);
-
-                add(regBptr, regTmp2);
-
-                prefetcht0(ptr[regBptr + K_SUB_ITER * regRsB]);
-
-                loopKSubIter(false, true);
-
-                // Decrement the k-loop iterator
-                // Also, increment the pointer offset
-                mov(regTmp2, KC);
-                add(regIncK, regTmp2);
-                dec(regKIter);
-                jnz(label_n_fringe_main_k_loop_start, T_NEAR);
-            }
-
-            L(label_n_fringe_main_k_loop_end);
-
-            if (params.kfringe) {
-
-                mov(regKIter,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, k_left)]);
-                test(regKIter, regKIter);
-                jz(label_n_fringe_main_k_fringe_end, T_NEAR);
-
-                L(label_n_fringe_main_k_fringe_start);
-                mov(regBptr,
-                    ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, b)]);
-
-                mov(regPsB,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, k_left)]);
-
-                // kc needs to be a multiple of 2 so that it can be
-                // used with dpbf16_ps instruction. Padding is added in
-                // cases this condition is not satisfied, and therefore
-                // the kc offsets used for packed/reordered buffers
-                // needs to be updated.
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, is_k_odd)]);
-                add(regPsB, regTmp2);     // k_left = k_left + is_k_odd
-                lea(regPsB, ptr[regPsB]); // kc0_updated should be used
-                lea(regPsB, ptr[regPsB * sizeof(bfloat16)]);
-                mov(regTmpYptr, ptr[stackPtr
-                                    + offsetof(dlp::kernels::gemvM1Params,
-                                               jc_cur_loop_rem)]);
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
-                imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
-                lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
-
-                lea(regBptr, ptr[regBptr + regTmpYptr]);
-                lea(regBptr, ptr[regBptr + regTmp2]);
-
-                mov(regTmp2, regIncN);
-                imul(regTmp2, regPsB);
-
-                add(regBptr, regTmp2);
-
-                prefetcht0(ptr[regBptr + K_SUB_ITER * regRsB]);
-
-                loopKSubIter(true, true);
-            }
-
-            L(label_n_fringe_main_k_fringe_end);
-
-            // Final accumulattion of the result
-            finalAccumulate();
-
-            // Scale with alpha
-            scaleWithAlpha();
-        }
-
-        // Scale the result by beta, and store it accordingly
-        scaleYWithBeta(N_LEFT);
-
-        if (kernelOpsHandlerPtr) {
-            RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
-                params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
-                params.N_LEFT, true, 1, accumBaseIdx, (N_LEFT / simdWidth))));
-
-            // This call will skip embedding tables (already done in mainloop)
-            kernelOpsHandlerPtr->generateKernelOpsAttributes();
-        }
-
-        storeYValues(N_LEFT);
-
-        mov(regTmp2, N_LEFT);
-        add(regIncN, regTmp2);
-        lea(regYptr, ptr[regYptr + regTmp2 * sizeof(float)]);
-
-        // Update post_op_c_j for the next n-iteration (similar to GEMM pattern)
-        // This ensures each iteration uses the correct offset for post-ops
-        if (c_downscale < DLP_F32 || !params.kernelOps.empty()) {
-            mov(regTmp1,
-                ptr[stackPtr
-                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
-            add(regTmp1, N_LEFT);
-            mov(ptr[stackPtr
-                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)],
-                regTmp1);
-        }
-    }
-
-    L(label_n_fringe_main_end);
-
-    if (params.nfringe_left) {
         loadMasks();
-        N_LEFT = params.N_LEFT_LT16;
 
         mov(regNIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n_left_lt16)]);
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, n_left)]);
         test(regNIter, regNIter);
-        jz(label_n_fringe_left_end, T_NEAR);
-        L(label_n_fringe_left_start);
+        jz(label_n_fringe_end, T_NEAR);
+        L(label_n_fringe_start);
 
         // Zero out accumulator registers for this n iteration
         regInit(accumBaseIdx, accumReg);
         xor_(regIncK, regIncK);
-
-        // B matrix is packed by default for bf16,
-        //  packing is done in a way, that row stride varies based on n_left
-        mov(regRsB, RS_B_N_LEFT_LT16); // rsB is calculated based on n_left
-        lea(regRsB,
-            ptr[regRsB * sizeof(bfloat16)]); // rsB = NR * sizeof(bfloat16)
 
         // K-loop is not needed if alpha is zero
         if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -2224,26 +2660,36 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, k_iter)]);
                 test(regKIter, regKIter);
-                jz(label_n_fringe_left_k_loop_end, T_NEAR);
+                jz(label_n_fringe_k_loop_end, T_NEAR);
 
-                L(label_n_fringe_left_k_loop_start);
+                L(label_n_fringe_k_loop_start);
                 mov(regBptr,
                     ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, b)]);
 
-                mov(regPsB, KC);
-                lea(regPsB, ptr[regPsB * sizeof(bfloat16)]);
-                mov(regTmpYptr, ptr[stackPtr
-                                    + offsetof(dlp::kernels::gemvM1Params,
-                                               jc_cur_loop_rem)]);
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
-                imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
-                lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+                if ((mtag_b == REORDERED) || (mtag_b == PACK)) {
+                    mov(regPsB, KC);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
+                    mov(regTmpYptr, ptr[stackPtr
+                                        + offsetof(dlp::kernels::gemvM1Params,
+                                                   jc_cur_loop_rem)]);
+                    mov(regTmp2, ptr[stackPtr
+                                     + offsetof(dlp::kernels::gemvM1Params,
+                                                n_sub_updated)]);
+                    imul(regTmpYptr, regPsB);
+                    imul(regTmp2, regIncK);
+                    lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
-                lea(regBptr, ptr[regBptr + regTmpYptr]);
-                lea(regBptr, ptr[regBptr + regTmp2]);
+                    lea(regBptr, ptr[regBptr + regTmpYptr]);
+                    lea(regBptr, ptr[regBptr + regTmp2]);
+                } else {
+                    mov(regPsB, 1);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
+
+                    mov(regTmp2, regRsB);
+                    imul(regTmp2, regIncK);
+
+                    add(regBptr, regTmp2);
+                }
 
                 mov(regTmp2, regIncN);
                 imul(regTmp2, regPsB);
@@ -2259,10 +2705,10 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 mov(regTmp2, KC);
                 add(regIncK, regTmp2);
                 dec(regKIter);
-                jnz(label_n_fringe_left_k_loop_start, T_NEAR);
+                jnz(label_n_fringe_k_loop_start, T_NEAR);
             }
 
-            L(label_n_fringe_left_k_loop_end);
+            L(label_n_fringe_k_loop_end);
 
             if (params.kfringe) {
 
@@ -2270,43 +2716,38 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, k_left)]);
                 test(regKIter, regKIter);
-                jz(label_n_fringe_left_k_fringe_end, T_NEAR);
+                jz(label_n_fringe_k_fringe_end, T_NEAR);
 
-                L(label_n_fringe_left_k_fringe_start);
-
-                // Loading B ptr address
+                L(label_n_fringe_k_fringe_start);
                 mov(regBptr,
                     ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, b)]);
 
-                // updating B pointer based on packing params
-                mov(regPsB,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, k_left)]);
+                if ((mtag_b == REORDERED) || (mtag_b == PACK)) {
+                    mov(regPsB,
+                        ptr[stackPtr
+                            + offsetof(dlp::kernels::gemvM1Params, k_left)]);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
+                    mov(regTmpYptr, ptr[stackPtr
+                                        + offsetof(dlp::kernels::gemvM1Params,
+                                                   jc_cur_loop_rem)]);
+                    mov(regTmp2, ptr[stackPtr
+                                     + offsetof(dlp::kernels::gemvM1Params,
+                                                n_sub_updated)]);
+                    imul(regTmpYptr, regPsB);
+                    imul(regTmp2, regIncK);
+                    lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
-                // kc needs to be a multiple of 2 so that it can be
-                // used with dpbf16_ps instruction. Padding is added in
-                // cases this condition is not satisfied, and therefore
-                // the kc offsets used for packed/reordered buffers
-                // needs to be updated.
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, is_k_odd)]);
+                    lea(regBptr, ptr[regBptr + regTmpYptr]);
+                    lea(regBptr, ptr[regBptr + regTmp2]);
+                } else {
+                    mov(regPsB, 1);
+                    lea(regPsB, ptr[regPsB * sizeof(float)]);
 
-                add(regPsB, regTmp2); // k_left = k_left + is_k_odd
-                lea(regPsB, ptr[regPsB]);
-                lea(regPsB, ptr[regPsB * sizeof(bfloat16)]);
-                mov(regTmpYptr, ptr[stackPtr
-                                    + offsetof(dlp::kernels::gemvM1Params,
-                                               jc_cur_loop_rem)]);
-                mov(regTmp2,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
-                imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
-                lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
+                    mov(regTmp2, regRsB);
+                    imul(regTmp2, regIncK);
 
-                lea(regBptr, ptr[regBptr + regTmpYptr]);
-                lea(regBptr, ptr[regBptr + regTmp2]);
+                    add(regBptr, regTmp2);
+                }
 
                 mov(regTmp2, regIncN);
                 imul(regTmp2, regPsB);
@@ -2318,7 +2759,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 loopKSubIter(true, true);
             }
 
-            L(label_n_fringe_left_k_fringe_end);
+            L(label_n_fringe_k_fringe_end);
 
             // Final accumulattion of the result
             finalAccumulate();
@@ -2328,28 +2769,43 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         }
 
         // Scale the result by beta, and store it accordingly
-        scaleYWithBeta(N_LEFT);
+        scaleYWithBeta(true);
 
         if (kernelOpsHandlerPtr) {
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
-                N_LEFT, true, 1, accumBaseIdx, 0)));
+                params.N_LEFT, true, 1, accumBaseIdx, N_LEFT / simdWidth)));
 
             // This call will skip embedding tables (already done in main loop)
             kernelOpsHandlerPtr->generateKernelOpsAttributes();
+
+            // For avx2 config, we use YMM registers for masks
+            // these mask registers may have been used as scratch registers
+            // by the post-ops handler. Thus, we need to reload them.
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                loadMasks();
+            }
         }
 
-        storeYValues(N_LEFT);
+        storeYValues(true);
     }
 
-    L(label_n_fringe_left_end);
+    L(label_n_fringe_end);
     outLocalLabel();
 
     return dlp::jit::jitGeneratorError::success;
 }
 
-// Explicit template instantiations
-template class jitBF16GEMVN1<utils::kernelInstrType::avx512_zmm_32_reg>;
-template class jitBF16GEMVM1<utils::kernelInstrType::avx512_zmm_32_reg>;
-
 } // namespace amdzen::codegen
+template class amdzen::codegen::jitF32GEMVN1<
+    amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;
+template class amdzen::codegen::jitF32GEMVN1<
+    amdzen::utils::kernelInstrType::avx512_ymm_32_reg>;
+template class amdzen::codegen::jitF32GEMVN1<
+    amdzen::utils::kernelInstrType::avx512_zmm_32_reg>;
+template class amdzen::codegen::jitF32GEMVM1<
+    amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;
+template class amdzen::codegen::jitF32GEMVM1<
+    amdzen::utils::kernelInstrType::avx512_ymm_32_reg>;
+template class amdzen::codegen::jitF32GEMVM1<
+    amdzen::utils::kernelInstrType::avx512_zmm_32_reg>;

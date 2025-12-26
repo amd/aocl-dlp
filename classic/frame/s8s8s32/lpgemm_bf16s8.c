@@ -45,7 +45,7 @@
  *   - B is an S8 vector (packed or reordered for efficiency)
  *   - C is an S32 accumulator, which may be downscaled to S8, U8, BF16, or F32
  */
-LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32o32)
+LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -380,10 +380,10 @@ LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
     }
 
     if (m == 1 || n == 1) {
-        lpgemv_rowvar_bf16s8s32o32(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
-                                   cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
-                                   rntm, thread, lcntx, a_pre_quant,
-                                   post_op_list, c_downscale);
+        lpgemv_rowvar_bf16s8s32os32(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
+                                    cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
+                                    rntm, thread, lcntx, a_pre_quant,
+                                    post_op_list, c_downscale);
         return;
     }
 
