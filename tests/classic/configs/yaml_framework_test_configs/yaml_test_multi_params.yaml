@@ -1,0 +1,309 @@
+# GEMM test configuration file for testing multiple parameter value expansion
+# This tests the new feature where PostOps parameters can have multiple values
+# that get expanded into separate test combinations
+
+# =============================================================================
+# PostOps Configuration Guide
+# =============================================================================
+#
+# The 'post_operations' section supports two key features:
+#
+# 1. OPERATION COMBINATION (via 'cartesian' flag)
+# ------------------------------------------------
+#   cartesian: false (Simple Mode)
+#     - Applies all operations in the specified order, once
+#     - Use for testing a specific PostOps pipeline
+#     - Example: [Scale, Bias] → 1 operation combination
+#
+#   cartesian: true (Cartesian Mode)
+#     - Generates all subsets and permutations of operations
+#     - Use for comprehensive testing of each operation independently
+#     - Example: [Scale, Bias] → 5 combinations:
+#         [], [Scale], [Bias], [Scale+Bias], [Bias+Scale]
+#
+# 2. PARAMETER EXPANSION (automatic for both modes)
+# --------------------------------------------------
+#   When parameters have multiple values, all cartesian products are generated.
+#
+#   Example:
+#     - type: "Scale"
+#       params:
+#         scale_factor_len: ["n", "1"]        # 2 values
+#         scale_factor_type: ["f32", "bf16"]  # 2 values
+#     # Results in 4 parameter combinations: (n,f32), (n,bf16), (1,f32), (1,bf16)
+#
+# TOTAL COMBINATIONS:
+# -------------------
+#   Simple Mode:   GEMM_combos × (Param_combos_Op1 × Param_combos_Op2 × ...)
+#   Cartesian Mode: GEMM_combos × Σ(each_op_subset × its_param_combos)
+#
+# Examples:
+#   Simple Mode with Scale(2×2) + Bias(2):
+#     Total = 1_GEMM × (4 × 2) = 8 test combinations
+#
+#   Cartesian Mode with Scale(2) + Bias(2):
+#     Total = 1_GEMM × (1 + 2 + 2 + 4 + 4) = 13 test combinations
+#
+# =============================================================================
+
+yaml_test:
+  # Test Case 1: Two Parameter Expansion (Core Feature)
+  # Scale with 2×2 parameters should generate 4 combinations
+  - name: "two_parameter_expansion"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n", "1"]        # 2 values
+            scale_factor_type: ["f32", "bf16"]  # 2 values
+    # Expected: 1 (GEMM) × 4 (PostOps: 2×2) = 4 total combinations
+
+  # Test Case 2: Three Parameters (Odometer Verification)
+  # A_Quant with 2×2×2 parameters should generate 8 combinations
+  - name: "three_parameter_odometer"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 8
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["1", "m"]          # 2 values
+            a_quant_sf_type: ["f32", "bf16"]    # 2 values
+            a_quant_zp_len: ["1", "m"]          # 2 values
+    # Expected: 1 (GEMM) × 8 (PostOps: 2×2×2) = 8 total combinations
+
+  # Test Case 3: GEMM × PostOps Multiplication
+  # 2 GEMM values × 2 PostOps parameter combinations = 4 total
+  - name: "gemm_postops_sync"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [4, 8]          # 2 GEMM values
+    n: 16              # 1 value (no variation)
+    k: 16              # 1 value (no variation)
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n", "1"]  # 2 values
+            scale_factor_type: ["f32"]    # 1 value (no variation)
+    # Expected: 2 (GEMM) × 2 (PostOps) = 4 total combinations
+
+  # Test Case 4: Cartesian Mode with Multiple Params
+  # Operation combinations × parameter combinations
+  - name: "cartesian_multiple_params"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: true
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n", "1"]  # 2 variants
+            scale_factor_type: ["f32"]    # 1 value
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n", "1"]          # 2 variants
+    # Expected operation combos: Empty=1, Scale=2, Bias=2, Scale+Bias=4, Bias+Scale=4
+    # Total: 13 combinations
+
+  # Test Case 5: Single Value (Backward Compatibility)
+  # Single-value parameters should work unchanged (no expansion)
+  - name: "single_value_compat"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n"]       # Single value only
+            scale_factor_type: ["f32"]    # Single value only
+    # Expected: 1 (GEMM) × 1 (PostOps: 1×1) = 1 combination (no expansion)
+
+  # Test Case 6: Matrix-Add & Matrix-Mul with Multiple Params
+  # Tests both matrix operations with parameter expansion
+  - name: "matrix_ops_multiple_params"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["f32", "bf16"]      # 2 values
+            scale_factor_len: ["n", "1"]      # 2 values
+            scale_factor_type: ["f32"]
+    # Expected: 1 (GEMM) × 4 (PostOps: 2×2) = 4 combinations
+
+  # Test Case 7: All PostOp Types (Comprehensive)
+  # Tests various PostOp types with multiple parameter values
+  - name: "all_postop_types"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n", "1"]                  # 2 values
+            scale_factor_len: ["1", "n"]          # 2 values
+            scale_factor_type: ["f32"]
+    # Expected: 1 (GEMM) × 4 (PostOps: 2×2) = 4 combinations
+
+  # Test Case 8: Edge Case - Empty PostOps
+  # Empty operations array should still work
+  - name: "empty_postops"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 4
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      absolute: 50
+      relative: 50
+    post_operations:
+      cartesian: false
+      operations: []
+    # Expected: 1 (GEMM) × 1 (empty PostOps) = 1 combination

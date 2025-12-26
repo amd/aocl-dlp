@@ -574,13 +574,10 @@ generateTestName(const MicroTest& microTest,
         name << "_beta" << beta_str;
     }
 
-    auto postops_dlp = microTest.getPostOp(UALType::DLP);
     auto postops_ref = microTest.getPostOp(UALType::REF);
 
     std::string postops_desc;
-    if (postops_dlp) {
-        postops_desc = extractPostOpsDescription(postops_dlp);
-    } else if (postops_ref) {
+    if (postops_ref) {
         postops_desc = extractPostOpsDescription(postops_ref);
     }
 

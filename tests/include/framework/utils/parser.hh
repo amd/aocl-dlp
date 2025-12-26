@@ -437,6 +437,11 @@ class MicroTest
             if (m_p_simple_product->has_next()) {
                 m_current_mt = m_p_simple_product->next();
             }
+
+            // Validate PostOps count for SIMPLE_PRODUCT mode
+            if (m_has_postops) {
+                validateSimpleProductPostOps();
+            }
         }
     }
 
@@ -862,31 +867,50 @@ class MicroTest
      * values. The specific algorithm depends on the YieldType (cartesian
      * product vs element-wise). Also increments the internal index counter.
      *
-     * PostOps iteration takes priority: if PostOps are available and have
-     * more combinations, advance PostOps. Otherwise, reset PostOps and
-     * advance base parameters.
+     * CARTESIAN_PRODUCT mode:
+     *   - With PostOps: Nested iteration (PostOps × GEMM params)
+     *   - PostOps advance first (inner loop), then GEMM params advance
+     *
+     * SIMPLE_PRODUCT mode (multi-group):
+     *   - PostOps advance WITH GEMM params (synchronized)
+     *   - Both iterators move together to next group
+     * CARTESIAN_PRODUCT mode:
+     *   - With PostOps: Nested iteration (PostOps × GEMM params)
+     *   - PostOps advance first (inner loop), then GEMM params advance
+     *
+     * SIMPLE_PRODUCT mode (multi-group):
+     *   - PostOps advance WITH GEMM params (synchronized)
+     *   - Both iterators move together to next group
      */
     void next()
     {
-        // Priority 1: Advance PostOps if available
-        if (m_has_postops && m_postops_iterator->hasNext()) {
-            m_postops_iterator->next();
-            m_index++;
-            return;
+        // In CARTESIAN mode: iterate PostOps × GEMM (nested loops)
+        if (m_is_cartesian_product == YieldType::CARTESIAN_PRODUCT) {
+            // Priority 1: Advance PostOps if available
+            if (m_has_postops && m_postops_iterator->hasNext()) {
+                m_postops_iterator->next();
+                m_index++;
+                return;
+            }
+
+            // Priority 2: Reset PostOps and advance base parameters
+            if (m_has_postops) {
+                m_postops_iterator->reset();
+            }
         }
 
-        // Priority 2: Reset PostOps and advance base parameters
-        if (m_has_postops) {
-            m_postops_iterator->reset();
-        }
-
-        // Advance base parameter combination
+        // Advance base parameter combination (GEMM params / groups)
         if (m_is_cartesian_product == YieldType::CARTESIAN_PRODUCT
             && m_p_cartesian_product) {
             m_current_mt = m_p_cartesian_product->next();
         } else if (m_is_cartesian_product == YieldType::SIMPLE_PRODUCT
                    && m_p_simple_product) {
             m_current_mt = m_p_simple_product->next();
+
+            // In SIMPLE mode: PostOps advance WITH GEMM params (synchronized)
+            if (m_has_postops && m_postops_iterator->hasNext()) {
+                m_postops_iterator->next();
+            }
         }
         m_index++;
     }
@@ -900,8 +924,12 @@ class MicroTest
      * sizes. For element-wise combinations, this is the size of the longest
      * iterator (all iterators should have the same size in element-wise mode).
      *
-     * When PostOps are enabled, the total size is base_combinations *
-     * postops_combinations.
+     * CARTESIAN_PRODUCT mode with PostOps:
+     *   Total = base_combinations * postops_combinations
+     *
+     * SIMPLE_PRODUCT mode with PostOps:
+     *   Total = min(base_combinations, postops_combinations)
+     *   (they iterate in lockstep/synchronized)
      */
     size_t getSize() const
     {
@@ -915,9 +943,18 @@ class MicroTest
             base_size = m_p_simple_product->size();
         }
 
-        // Multiply by PostOps combinations if enabled
+        // CARTESIAN: base_size × PostOps (full cartesian product)
+        // SIMPLE: base_size (PostOps are per-group, synchronized with GEMM
+        // params)
         if (m_has_postops) {
-            return base_size * m_postops_iterator->getSize();
+            size_t postops_size = m_postops_iterator->getSize();
+            if (m_is_cartesian_product == YieldType::CARTESIAN_PRODUCT) {
+                return base_size * postops_size;
+            } else {
+                // SIMPLE: return base_size (iterate all groups, PostOps
+                // sync/reuse)
+                return base_size;
+            }
         }
 
         return base_size;
@@ -1027,6 +1064,52 @@ class MicroTest
      */
     bool m_has_postops = false;
 
+    /**
+     * @brief Validate PostOps count for SIMPLE_PRODUCT mode
+     *
+     * Ensures that in SIMPLE_PRODUCT mode, the number of PostOps combinations
+     * matches the number of GEMM parameter combinations, or is exactly 1
+     * (broadcast pattern). Throws an error if validation fails.
+     *
+     * @throws std::runtime_error if PostOps count is invalid for SIMPLE mode
+     */
+    void validateSimpleProductPostOps() const
+    {
+        if (!m_has_postops || !m_p_simple_product) {
+            return;
+        }
+
+        size_t base_size    = m_p_simple_product->size();
+        size_t postops_size = m_postops_iterator->getSize();
+
+        // Allow 1-to-N broadcast: single PostOps configuration for all groups
+        if (postops_size == 1) {
+            return; // Broadcast pattern is valid
+        }
+
+        if (base_size == 1) {
+            return; // Broadcast pattern is valid
+        }
+
+        // Require exact match otherwise
+        if (base_size != postops_size) {
+            throw std::runtime_error(
+                "SIMPLE_PRODUCT mode validation failed:\n"
+                "  GEMM parameter combinations: "
+                + std::to_string(base_size)
+                + "\n"
+                  "  PostOps Parameter combinations: "
+                + std::to_string(postops_size)
+                + "\n"
+                  "In SIMPLE_PRODUCT mode, PostOps Parameter count must "
+                  "either:\n"
+                  "  1. Equal 1 (broadcast same PostOps to all groups)\n"
+                  "  2. Exactly match GEMM count (one PostOps per group)\n"
+                  "Current configuration is invalid. Please update your YAML "
+                  "configuration.");
+        }
+    }
+
     /*
      * Parameter Vector Position Mapping:
      *
@@ -1051,7 +1134,8 @@ class MicroTest
      * 14    | trans_b       | bool         | Transpose flag for B
      * 15    | mtag_a        | MatrixTag    | Matrix tag for A
      * (reorder/pack/none) 16    | mtag_b        | MatrixTag    | Matrix tag for
-     * B (reorder/pack/none)
+     * B (reorder/pack/none) 17    | group_size    | md_t         | Group size
+     * for batch GEMM
      *
      * Note: getReorderA()/getPackA() both check index 15 for different
      * MatrixTag values getReorderB()/getPackB() both check index 16 for
@@ -1064,10 +1148,13 @@ class MicroTest
     /**
      * @brief Create operation parameter from PostOp configuration
      * @param config PostOp configuration from YAML
+     * @param param_indices Map from parameter name to array index for
+     * extraction
      * @return Operation parameter ready to be added to IOperation
      */
     std::unique_ptr<IOperationParam> createOperationParam(
-        const PostOpsIterator::PostOpConfig& config) const;
+        const PostOpsIterator::PostOpConfig& config,
+        const std::map<std::string, size_t>& param_indices) const;
 
     /**
      * @brief Convert string to MatrixType enum

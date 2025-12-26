@@ -41,12 +41,73 @@ namespace dlp::testing::utils {
 
 /**
  * @class PostOpsIterator
- * @brief Iterator for generating PostOps combinations and creating IOperation
- * objects
+ * @brief Iterator for generating combinations of PostOps configurations
  *
- * This class manages the generation of all possible PostOps combinations based
- * on the YAML configuration. It supports both cartesian (all combinations and
- * permutations) and simple (individual operations only) modes.
+ * This class generates test combinations based on two levels of expansion:
+ * 1. **Operation Combination** (controlled by cartesian_enabled)
+ * 2. **Parameter Expansion** (always applied via cartesian product)
+ *
+ * @section operation_modes Operation Combination Modes
+ *
+ * @subsection simple_mode Simple Mode (cartesian_enabled = false)
+ * Generates a single combination with all operations applied in the specified
+ * order.
+ * - Input: [Scale, Bias]
+ * - Output: 1 operation combination: [Scale, Bias]
+ * - Use Case: Test a specific PostOps pipeline with parameter variations
+ *
+ * @subsection cartesian_mode Cartesian Mode (cartesian_enabled = true)
+ * Generates all possible subsets and permutations of operations, including:
+ * - Empty set (no PostOps)
+ * - Each operation individually
+ * - All combinations of operations in all possible orders
+ *
+ * - Input: [Scale, Bias]
+ * - Output: 5 operation combinations:
+ *   1. [] (empty)
+ *   2. [Scale] alone
+ *   3. [Bias] alone
+ *   4. [Scale, Bias] (Scale first)
+ *   5. [Bias, Scale] (Bias first)
+ * - Use Case: Comprehensive testing of each operation independently and in all
+ * sequences
+ *
+ * @section param_expansion Parameter Expansion (Both Modes)
+ *
+ * After generating operation combinations, each combination is expanded by the
+ * cartesian product of all parameter values within each operation.
+ *
+ * Example:
+ * @code
+ *   Scale:
+ *     scale_factor_len: [n, 1]      // 2 values
+ *     scale_factor_type: [f32, bf16] // 2 values
+ *   // Results in 4 parameter variants: (n,f32), (n,bf16), (1,f32), (1,bf16)
+ * @endcode
+ *
+ * Parameter expansion uses an "odometer" approach where the rightmost parameter
+ * varies fastest (similar to nested loops).
+ *
+ * @section total_combinations Total Combinations Formula
+ *
+ * @subsection simple_formula Simple Mode
+ * Total = (Param combinations for Op1) × (Param combinations for Op2) × ...
+ *
+ * Example: Scale(2×2) + Bias(2) → 4 × 2 = 8 total combinations
+ *
+ * @subsection cartesian_formula Cartesian Mode
+ * Total = Σ (each operation subset × its parameter combinations)
+ *
+ * Example: Scale(2 params) + Bias(2 params)
+ * - Empty: 1
+ * - Scale alone: 2
+ * - Bias alone: 2
+ * - Scale+Bias: 2×2 = 4
+ * - Bias+Scale: 2×2 = 4
+ * Total: 1 + 2 + 2 + 4 + 4 = 13 combinations
+ *
+ * @note The iterator maintains synchronization with GEMM parameter iterators,
+ *       resetting PostOps for each GEMM configuration.
  */
 class PostOpsIterator
 {
@@ -61,6 +122,39 @@ class PostOpsIterator
                           ///< "Bias", "Scale")
         std::map<std::string, std::vector<std::any>>
             params; ///< Parameters with their possible values
+
+        /**
+         * @brief Get list of all parameter names
+         * @return Vector of parameter names that have values
+         */
+        std::vector<std::string> getParameterNames() const
+        {
+            std::vector<std::string> names;
+            for (const auto& [name, values] : params) {
+                if (!values.empty()) {
+                    names.push_back(name);
+                }
+            }
+            return names;
+        }
+
+        /**
+         * @brief Calculate number of parameter combinations
+         * @return Total combinations (cartesian product of all param values)
+         */
+        size_t getParameterCombinationCount() const
+        {
+            if (params.empty())
+                return 1;
+
+            size_t count = 1;
+            for (const auto& [name, values] : params) {
+                if (!values.empty()) {
+                    count *= values.size();
+                }
+            }
+            return count;
+        }
     };
 
   private:
@@ -71,6 +165,21 @@ class PostOpsIterator
     std::vector<std::vector<size_t>>
         m_combinations; ///< All possible combinations (indices into
                         ///< m_operations)
+
+    /**
+     * @brief Store parameter indices for each parameter name
+     *
+     * Structure: m_param_variants[combo_idx][op_idx] = {param_name →
+     * array_index} This allows correct extraction of parameter values for
+     * cartesian products.
+     *
+     * Example: For Scale with scale_factor_len: ["n", "1"] and
+     *          scale_factor_type: ["f32", "bf16"], combo 1 might have:
+     *          m_param_variants[1][0] = {"scale_factor_len": 0,
+     * "scale_factor_type": 1} which means use len[0]="n" and type[1]="bf16"
+     */
+    std::vector<std::map<size_t, std::map<std::string, size_t>>>
+        m_param_variants;
 
   public:
     /**
@@ -119,6 +228,18 @@ class PostOpsIterator
     {
         return m_operations;
     }
+
+    /**
+     * @brief Get parameter indices for an operation in current combination
+     * @param op_index The operation index to get parameters for
+     * @return Map from parameter name to array index for that parameter
+     *
+     * This returns the specific parameter indices to use for extracting
+     * parameter values from the PostOpConfig. For example, if the map
+     * contains {"scale_factor_len": 1}, use params["scale_factor_len"][1].
+     */
+    const std::map<std::string, size_t>& getParameterIndices(
+        size_t op_index) const;
 
   private:
     /**

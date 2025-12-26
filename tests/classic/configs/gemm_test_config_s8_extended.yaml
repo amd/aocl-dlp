@@ -16,7 +16,7 @@ gemm_tests:
     # c_type: ["s32", "f32"]
     c_type: ["bf16", "s32"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m:
@@ -42,7 +42,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "bf16"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m:
@@ -72,7 +72,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "bf16"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false, true]
     transB: [false, true]
     m: [6, 7, 12, 13, 145]     # MR, 2×MR, MC
@@ -102,7 +102,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "u8"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false, true]
     transB: [false, true]
     m: [6, 7, 144, 145, 288]    # MR, MC, 2×MC
@@ -132,7 +132,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "bf16"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: [6, 7, 12, 13, 144, 145]     # MR variants and MC
@@ -162,7 +162,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "s8", "u8"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: [143, 144, 145, 287, 288]      # Around MC=144
@@ -189,7 +189,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "bf16", "f32", "u8", "s8"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false, true]
     transB: [false, true]
     m: [5, 6, 11, 12]          # Basic MR variants
@@ -215,7 +215,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "s8", "u8", "f32", "bf16"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: [6, 7, 144, 145]         # MR and MC
@@ -242,7 +242,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m:
@@ -275,7 +275,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "u8", "s8"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false, true]
     transB: [false, true]
     m:
@@ -308,7 +308,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "s8", "u8", "f32", "bf16"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: [1]
@@ -341,7 +341,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: [384, 385, 768, 769]       # 2.67×MC, 5.33×MC
@@ -368,7 +368,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "bf16", "f32", "u8", "s8"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false, true]
     transB: [false, true]
     m: [1, 2]           # Minimal M
@@ -399,7 +399,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32", "u8", "s8", "bf16", "f32"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: 1
@@ -429,7 +429,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: 1
@@ -459,7 +459,7 @@ gemm_tests:
     b_type: ["s8"]
     c_type: ["s32"]
     acc_type: ["s32"]
-    storage_format: ["row-major"]
+    storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
     m: 1

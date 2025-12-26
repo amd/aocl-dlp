@@ -1,0 +1,113 @@
+# ==============================================================================
+# PostOps Validation Test Configuration
+# ==============================================================================
+#
+# This file contains test cases to verify PostOps validation in SIMPLE_PRODUCT mode
+#
+# ==============================================================================
+
+batch_gemm_tests:
+
+  # ==========================================================================
+  # VALID CONFIGURATIONS (Should Pass)
+  # ==========================================================================
+
+  - name: "Valid_BroadcastPattern"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [8, 16, 32]        # 3 GEMM groups
+    n: [8, 16, 32]
+    k: [8, 16, 32]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 1, 1]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params:
+            alpha: [0.0]  # 1 PostOps combo → broadcast to all 3 groups ✓
+
+  - name: "Valid_ExactMatch"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [8, 16]            # 2 GEMM groups
+    n: [8, 16]
+    k: [8, 16]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 1]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params:
+            alpha: [0.0, 0.1]  # 2 PostOps combos for 2 groups ✓
+
+  # ==========================================================================
+  # INVALID CONFIGURATIONS (Should Fail with Clear Error)
+  # ==========================================================================
+
+  - name: "Invalid_ExtraPostOps"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [8, 16]            # 2 GEMM groups
+    n: [8, 16]
+    k: [8, 16]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 1]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params:
+            alpha: [0.0, 0.01, 0.1]  # 3 PostOps combos for 2 groups ✗
+
+  - name: "Invalid_MissingPostOps"
+    product_type: "simple"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row_major"
+    m: [8, 16, 32]        # 3 GEMM groups
+    n: [8, 16, 32]
+    k: [8, 16, 32]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 1, 1]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params:
+            alpha: [0.0, 0.1]  # Only 2 PostOps combos for 3 groups ✗

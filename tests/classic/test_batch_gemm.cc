@@ -90,10 +90,10 @@ struct BatchGemmTestConfig
     double tolerance_relative = -1.0;
     double tolerance_absolute = -1.0;
 
-    // PostOps support (global - same for all groups)
-    bool                        has_postops = false;
-    std::shared_ptr<IOperation> dlp_postops = nullptr;
-    std::shared_ptr<IOperation> ref_postops = nullptr;
+    // PostOps support (per-group to handle dimension-dependent PostOps)
+    bool                                     has_postops = false;
+    std::vector<std::shared_ptr<IOperation>> dlp_postops_per_group;
+    std::vector<std::shared_ptr<IOperation>> ref_postops_per_group;
 
     // Test identification
     size_t config_index = 0;
@@ -259,14 +259,6 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                     config.tolerance_absolute = tol.absolute;
                 }
 
-                // Extract PostOps if present (global - same for all groups)
-                config.dlp_postops = microTest.getPostOp(UALType::DLP);
-                config.ref_postops = microTest.getPostOp(UALType::REF);
-                if (config.dlp_postops != nullptr
-                    || config.ref_postops != nullptr) {
-                    config.has_postops = true;
-                }
-
                 // Collect all iterations as groups
                 size_t j = 0;
                 do {
@@ -291,6 +283,17 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                     config.packB_values.push_back(microTest.getPackB());
                     config.group_size_values.push_back(
                         microTest.getGroupSize());
+
+                    // Extract PostOps for THIS group (sized for current
+                    // dimensions)
+                    auto dlp_postops = microTest.getPostOp(UALType::DLP);
+                    auto ref_postops = microTest.getPostOp(UALType::REF);
+                    config.dlp_postops_per_group.emplace_back(dlp_postops);
+                    config.ref_postops_per_group.emplace_back(ref_postops);
+
+                    if (dlp_postops != nullptr || ref_postops != nullptr) {
+                        config.has_postops = true;
+                    }
 
                     j++;
 
@@ -357,11 +360,13 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                         config.tolerance_absolute = tol.absolute;
                     }
 
-                    // Extract PostOps if present (global - same for all groups)
-                    config.dlp_postops = microTest.getPostOp(UALType::DLP);
-                    config.ref_postops = microTest.getPostOp(UALType::REF);
-                    if (config.dlp_postops != nullptr
-                        || config.ref_postops != nullptr) {
+                    // CARTESIAN: Extract PostOps once (single group per test)
+                    config.dlp_postops_per_group.emplace_back(
+                        microTest.getPostOp(UALType::DLP));
+                    config.ref_postops_per_group.emplace_back(
+                        microTest.getPostOp(UALType::REF));
+                    if (config.dlp_postops_per_group[0] != nullptr
+                        || config.ref_postops_per_group[0] != nullptr) {
                         config.has_postops = true;
                     }
 
@@ -402,12 +407,13 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
  * Creates the actual matrix data and group structures from config.
  *
  * @param config Test configuration
- * @param postops PostOps to apply to all groups (global), can be nullptr
+ * @param postops_per_group PostOps per group (dimension-aware), can be empty
  * @return Vector of BatchGroup objects ready for execution
  */
 std::vector<BatchGroup>
-configToGroups(const BatchGemmTestConfig&  config,
-               std::shared_ptr<IOperation> postops = nullptr)
+configToGroups(
+    const BatchGemmTestConfig&                      config,
+    const std::vector<std::shared_ptr<IOperation>>& postops_per_group = {})
 {
     std::vector<BatchGroup> groups;
     groups.reserve(config.getGroupCount());
@@ -489,8 +495,10 @@ configToGroups(const BatchGemmTestConfig&  config,
             group.memFormatB = deduce_mem_format(group.B_matrices.front());
         }
 
-        // Assign PostOps (global - same for all groups)
-        group.postOps = postops;
+        // Assign PostOps (per-group to handle dimension-dependent PostOps)
+        if (!postops_per_group.empty() && g < postops_per_group.size()) {
+            group.postOps = postops_per_group[g];
+        }
 
         groups.push_back(std::move(group));
     }
@@ -886,10 +894,10 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
         // Check if parameters are valid
         bool params_valid = check_valid_batch_params(config);
 
-        // Convert config to groups (with PostOps if present)
-        auto dlp_groups = configToGroups(config, config.dlp_postops);
+        // Convert config to groups (with per-group PostOps if present)
+        auto dlp_groups = configToGroups(config, config.dlp_postops_per_group);
         auto ref_groups = configToGroups(
-            config, config.ref_postops); // Fresh copy for reference
+            config, config.ref_postops_per_group); // Fresh copy for reference
 
         // Create UAL instances
         auto ual_dlp = UalFactory::createUal(UALType::DLP);
