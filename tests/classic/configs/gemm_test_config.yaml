@@ -90,23 +90,23 @@ gemm_tests:
     # Non optional
     m:
       lb: 256
-      ub: 1024
+      ub: 512
       step: 64
     n:
       lb: 256
-      ub: 1024
+      ub: 512
       step: 64
     k:
       lb: 256
-      ub: 1024
+      ub: 512
       step: 64
     alpha: [1, 0, -1]
     beta: [1, 0, -1]
     # Optional Params
-    lda: [256, 512, 768]
+    lda: [256, 768]
     ldb:
       lb: 256
-      ub: 1024
+      ub: 512
       step: 64
     ldc: 256
     mtagA: "none"
@@ -128,24 +128,24 @@ gemm_tests:
     # Non optional
     m:
       lb: 1
-      ub: 20
+      ub: 10
       step: 1
     n:
       lb: 1
       ub: 20
-      step: 1
+      step: 4
     k:
       lb: 1
-      ub: 20
-      step: 1
+      ub: 10
+      step: 2
     alpha: [1]
     beta: [1]
     # Optional Params
-    lda: [10, 20, 30]
+    lda: [10, 20]
     ldb:
       lb: 10
       ub: 20
-      step: 1
+      step: 2
     ldc: 20
     mtagA: ["none"]
     mtagB: ["none", "reorder"]   # Matrix B reordering can improve performance

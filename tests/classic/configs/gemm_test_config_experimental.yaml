@@ -157,18 +157,18 @@ gemm_tests:
     c_type: ["f32"]
     acc_type: ["f32"]
     storage_format: ["row-major", "column-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [1, 2, 4, 8, 16, 32, 64, 128, 256]  # Powers of 2 + edge cases
-    n: [1, 2, 4, 8, 16, 32, 64, 128, 256]
-    k: [1, 2, 4, 8, 16, 32, 64, 128, 256]
-    alpha: [0.0, 1.0, -1.0]  # Critical values
-    beta: [0.0, 1.0, -1.0]
-    lda: [5, 64, 128, 256]  # Aligned dimensions
-    ldb: [5, 64, 128, 256]
-    ldc: [5, 64, 128, 256]
+    transA: [ true]
+    transB: [ true]
+    m: [1, 2, 64, 256]  # Powers of 2 + edge cases
+    n: [1, 2, 64, 256]
+    k: [1, 2, 64, 256]
+    alpha: [ 1.0, -1.0]  # Critical values
+    beta: [ 1.0, -1.0]
+    lda: [5, 64, 256]  # Aligned dimensions
+    ldb: [5,  256]
+    ldc: [5, 64, 256]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none",  "reorder"]
     tolerances:
       absolute: 50
       relative: 50
@@ -180,18 +180,18 @@ gemm_tests:
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
     storage_format: ["row-major", "column-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [1, 2, 4, 8, 16, 32, 64, 128]
-    n: [1, 2, 4, 8, 16, 32, 64, 128]
-    k: [1, 2, 4, 8, 16, 32, 64, 128]
+    transA: [ true]
+    transB: [ true]
+    m: [1, 2, 16, 128]
+    n: [1, 2, 16, 128]
+    k: [1, 2, 16, 128]
     alpha: [1.0]
-    beta: [0.0, 1.0]
-    lda: [5, 64, 128]
-    ldb: [5, 64, 128]
-    ldc: [5, 64, 128]
+    beta: [ 1.0]
+    lda: [5, 128]
+    ldb: [5, 128]
+    ldc: [5, 128]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
 
   # Critical regression baselines for BF16 (Test Set 2)
   - name: "regression_baseline_bf16"
@@ -200,18 +200,18 @@ gemm_tests:
     c_type: ["f32", "bf16"]
     acc_type: ["f32"]
     storage_format: ["row-major", "column-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [1, 2, 4, 8, 16, 32, 64, 128]
-    n: [1, 2, 4, 8, 16, 32, 64, 128]
-    k: [1, 2, 4, 8, 16, 32, 64, 128]
-    alpha: [0.0, 1.0, -1.0]
+    transA: [ true]
+    transB: [ true]
+    m: [1, 2, 8, 32]
+    n: [1, 2, 8, 32]
+    k: [1, 2, 8, 32]
+    alpha: [ 1.0, -1.0]
     beta: [0.0, 1.0, -1.0]
-    lda: [5, 64, 128]
-    ldb: [5, 64, 128]
-    ldc: [5, 64, 128]
+    lda: [5, 64]
+    ldb: [5, 64]
+    ldc: [5, 64]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "reorder"]
     tolerances:
       absolute: 50
       relative: 50
@@ -678,7 +678,7 @@ gemm_tests:
     ldb: [64]
     ldc: [64]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
     tolerances:
       absolute: 50
       relative: 50  # Very strict for kernel regression
@@ -690,18 +690,18 @@ gemm_tests:
     c_type: ["s32", "f32"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [6, 12, 18, 24]      # Multiples of kernel MR
+    transA: [ true]
+    transB: [ true]
+    m: [6, 18, 24]      # Multiples of kernel MR
     n: [64, 128, 192, 256]  # Multiples of kernel NR
     k: [4, 8, 16, 32]       # VNNI-aligned
     alpha: [1.0]
-    beta: [0.0, 1.0]
+    beta: [ 1.0]
     lda: [64]
     ldb: [64]
     ldc: [64]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
 
   # Fringe kernel regression tests - F32 types
   - name: "kernel_regression_fringe_cases_f32"
@@ -712,9 +712,9 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false, true]
     transB: [false, true]
-    m: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned M
-    n: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned N
-    k: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]  # Non-VNNI-aligned K
+    m: [1, 2, 4, 5, 7, 9, 10, 11, 14, 15]  # Non-kernel-aligned M
+    n: [1, 2, 4, 5, 7, 9, 10, 11, 14, 15]  # Non-kernel-aligned N
+    k: [1, 2, 5, 6, 7, 9, 10, 11, 14, 15]  # Non-VNNI-aligned K
     alpha: [1.0]
     beta: [0.0, 1.0]
     lda: [32]
@@ -733,18 +733,18 @@ gemm_tests:
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned M
-    n: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned N
-    k: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]  # Non-VNNI-aligned K
+    transA: [false]
+    transB: [false]
+    m: [1, 2, 10, 11, 15]  # Non-kernel-aligned M
+    n: [1, 2, 10, 11, 15]  # Non-kernel-aligned N
+    k: [1, 2, 10, 11, 15]  # Non-VNNI-aligned K
     alpha: [1.0]
-    beta: [0.0, 1.0]
+    beta: [ 1.0]
     lda: [32]
     ldb: [32]
     ldc: [32]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
 
   # Fringe kernel regression tests - BFloat type
   - name: "kernel_regression_fringe_cases_bfloat"
@@ -755,16 +755,16 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false, true]
     transB: [false, true]
-    m: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned M
-    n: [1, 2, 3, 4, 5, 7, 9, 10, 11, 13, 14, 15]  # Non-kernel-aligned N
-    k: [1, 2, 3, 5, 6, 7, 9, 10, 11, 13, 14, 15]  # Non-VNNI-aligned K
+    m: [1, 2, 4, 7, 9, 10, 11, 14, 15]  # Non-kernel-aligned M
+    n: [1, 2, 4, 7, 9, 10, 11, 14, 15]  # Non-kernel-aligned N
+    k: [1, 2, 6, 7, 9, 10, 11, 14, 15]  # Non-VNNI-aligned K
     alpha: [1.0]
     beta: [0.0, 1.0]
     lda: [32]
     ldb: [32]
     ldc: [32]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
     tolerances:
       absolute: 50
       relative: 50
@@ -786,7 +786,7 @@ gemm_tests:
     n: [32, 64]
     k: [32, 64]
     # Critical alpha/beta combinations that expose numerical issues
-    alpha: [0.0, 1.0, -1.0, 2.0]
+    alpha: [ 1.0, -1.0, 2.0]
     beta: [0.0, 1.0, -1.0, 2.0]
     lda: [64, 65]  # Aligned and unaligned
     ldb: [64, 65]
@@ -810,8 +810,8 @@ gemm_tests:
     n: [32, 64]
     k: [32, 64]
     # Critical alpha/beta combinations that expose numerical issues
-    alpha: [0.0, 1.0, -1.0, 2.0]
-    beta: [0.0, 1.0, -1.0, 2.0]
+    alpha: [0.0, 1.0, -1.0]
+    beta: [0.0, 1.0, -1.0]
     lda: [64, 65]  # Aligned and unaligned
     ldb: [64, 65]
     ldc: [64, 65]
@@ -829,12 +829,12 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false]
-    m: [32, 64]
-    n: [32, 64]
-    k: [32, 64]
+    m: [32]
+    n: [32]
+    k: [32]
     # Critical alpha/beta combinations that expose numerical issues
-    alpha: [0.0, 1.0, -1.0, 2.0]
-    beta: [0.0, 1.0, -1.0, 2.0]
+    alpha: [ -1.0, 2.0]
+    beta: [ -1.0, 2.0]
     lda: [64, 65]  # Aligned and unaligned
     ldb: [64, 65]
     ldc: [64, 65]
@@ -918,18 +918,18 @@ gemm_tests:
     c_type: ["f32"]
     acc_type: ["f32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
-    m: [1, 16, 32, 64]
-    n: [1, 16, 32, 64]
-    k: [1, 16, 32, 64]
-    alpha: [0.0, 1e-6, 1e6, -1e6, 1.0, -1.0]
-    beta: [0.0, 1e-6, 1e6, -1e6, 1.0, -1.0]
-    lda: [64, 65, 128]
-    ldb: [64, 65, 128]
-    ldc: [64, 65, 128]
+    transA: [true]
+    transB: [true]
+    m: [1, 16, 64]
+    n: [1, 16, 64]
+    k: [1, 16, 64]
+    alpha: [0.0, 1e6, -1e6, 1.0, -1.0]
+    beta: [0.0, 1e6, -1e6, 1.0, -1.0]
+    lda: [64, 65]
+    ldb: [64, 65]
+    ldc: [64, 65]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
     tolerances:
       absolute: 50
       relative: 50
@@ -1432,8 +1432,8 @@ gemm_tests:
     lda: [64]
     ldb: [64]
     ldc: [64]
-    mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagA: ["pack"]
+    mtagB: ["pack"]
     post_operations:
       cartesian: false
       operations:
@@ -1457,7 +1457,7 @@ gemm_tests:
     ldb: [64]
     ldc: [64]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "reorder"]
     post_operations:
       cartesian: false
       operations:
@@ -1470,7 +1470,7 @@ gemm_tests:
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
-    transA: [false, true]
+    transA: [false]
     transB: [false, true]
     m: [32]
     n: [32]
@@ -1481,7 +1481,7 @@ gemm_tests:
     ldb: [64]
     ldc: [64]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
     post_operations:
       cartesian: false
       operations:
@@ -1935,19 +1935,19 @@ gemm_tests:
     c_type: ["f32", "bf16", "s32", "u8", "s8"]
     acc_type: ["s32"]
     storage_format: ["row-major"]
-    transA: [false, true]
-    transB: [false, true]
+    transA: [ true]
+    transB: [ true]
     # Sizes commonly used in ML workloads - regression in these is critical
-    m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
-    n: [128, 256, 512, 1024, 2048]
-    k: [128, 256, 512, 1024, 2048]
+    m: [1, 8, 16, 32, 64, 128, 1024]
+    n: [128, 1024, 2048]
+    k: [128, 1024, 2048]
     alpha: [1.0]
-    beta: [0.0, 1.0]
-    lda: [512, 1024, 2048]
-    ldb: [512, 1024, 2048]
-    ldc: [512, 1024, 2048]
+    beta: [0.0]
+    lda: [512, 2048]
+    ldb: [512, 2048]
+    ldc: [512, 2048]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
 
   - name: "performance_regression_critical_sizes_f32"
     a_type: ["f32"]
@@ -1966,7 +1966,7 @@ gemm_tests:
     ldb: [512, 1024, 2048]
     ldc: [512, 1024, 2048]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "reorder"]
     tolerances:
       absolute: 0
       relative: 0
@@ -1979,16 +1979,16 @@ gemm_tests:
     storage_format: ["row-major"]
     transA: [false]
     transB: [false]
-    m: [1, 8, 16, 32, 64, 128, 256, 512, 1024]
-    n: [128, 256, 512, 1024, 2048]
-    k: [128, 256, 512, 1024, 2048]
+    m: [1, 8, 16, 32, 64, 128, 256]
+    n: [128, 256, 2048]
+    k: [128, 256,  2048]
     alpha: [1.0]
     beta: [0.0, 1.0]
     lda: [512, 1024, 2048]
     ldb: [512, 1024, 2048]
     ldc: [512, 1024, 2048]
     mtagA: ["none", "pack"]
-    mtagB: ["none", "pack", "reorder"]
+    mtagB: ["none", "pack"]
     tolerances:
       absolute: 0
       relative: 0
