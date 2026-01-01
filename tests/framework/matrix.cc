@@ -201,6 +201,11 @@ namespace dlp { namespace testing { namespace framework {
         // Allocate memory using helper method
         m_data = allocateAlignedMemory(m_dataSizeBytes, alignment);
 
+        // Zero-initialize the allocated memory to avoid uninitialized values
+        if (m_data && m_dataSizeBytes > 0) {
+            std::fill(m_data, m_data + m_dataSizeBytes, 0);
+        }
+
         // Update size to reflect actual allocated size if aligned
         if (alignment > 0) {
             size_t alignedSize =
