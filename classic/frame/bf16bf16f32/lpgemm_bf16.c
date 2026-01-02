@@ -1120,14 +1120,30 @@ LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
             // Using child thrinfo (thread_ic) tid to decide chief thread
             // per B matrix chunk (jc work id group)
             if (dlp_thread_am_ochief(&thread_ic)) {
-                // nc0 needs to be a multiple of 16 since this gives maximum
-                // vectorization. Packing B always results in buffers with width
-                // which is a multiple of 16. Subsequently the nc0 offsets used
-                // for packed/reordered buffers needs to be updated.
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
-                mem_b_size_req   = sizeof(float) * nc0_updated * kc0_updated;
-
                 if (cvt_b_buffer_bf16_f32 == NULL) {
+
+                    // Calculate the maximum nc0 across potential panel boundary
+                    // splits (reordered case). When a thread's jc range crosses
+                    // an NC panel boundary, the jc loop splits into multiple
+                    // iterations. The first iteration processes up to the panel
+                    // boundary (nc0 may be reduced), and subsequent iteration
+                    // process the remainder. We allocate for max(current_nc0,
+                    // remaining_work) to handle both iterations with a single
+                    // buffer allocation.
+                    md_t remaining_nc_after_current =
+                        dlp_min((jc_end - jc), NC)
+                        - nc0; // remaining work after current nc0
+                    md_t nc0_buf = dlp_max(remaining_nc_after_current, nc0);
+
+                    // nc0 needs to be a multiple of 16 since this gives maximum
+                    // vectorization. Packing B always results in buffers with
+                    // width which is a multiple of 16. Subsequently the nc0
+                    // offsets used for packed/reordered buffers needs to be
+                    // updated.
+                    md_t nc0_updated =
+                        make_multiple_of_n(nc0_buf, packb_min_NR);
+
+                    mem_b_size_req = sizeof(float) * nc0_updated * kc0_updated;
                     dlp_clsc_err_t ret_err;
                     cvt_b_buffer_bf16_f32 =
                         dlp_malloc_page_aligned(mem_b_size_req, &ret_err);

@@ -1188,7 +1188,11 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
 
     L(label_store_result);
     if (c_downscale < DLP_F32) {
-        RETURN_IF_ERROR(scaleBeta());
+        // skip beta scaling if beta is 0
+        if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
+            RETURN_IF_ERROR(scaleBeta());
+        }
+
         RETURN_IF_ERROR(storeResult(false, params.mLoop));
 
     } else {
