@@ -595,7 +595,9 @@ DlpOperation::buildSequenceVector()
                 matrix_mul_idx++;
                 break;
             case dlp::testing::framework::OperationType::A_Quant:
-                sequence.push_back(ADQUANTIZE);
+                // A_Quant data already collected via convertA_QuantOperations()
+                // Skip adding to sequence since it is not a regular post-op
+                // like BIAS/RELU.
                 break;
             default:
                 throw std::runtime_error(

@@ -79,7 +79,6 @@ typedef enum
     SCALE      = 3, /**< Scaling operation */
     MATRIX_ADD = 4, /**< Matrix addition operation */
     MATRIX_MUL = 5, /**< Matrix multiplication operation */
-    ADQUANTIZE = 6, /**< De-quantization operation */
 } DLP_POST_OP_TYPE;
 
 /**

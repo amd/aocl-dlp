@@ -144,16 +144,6 @@ aocl_gemm_bf16s8s32obf16(const char      order,
     // HARDWARE ISA VALIDATION
     // =========================================================================
     // Verify processor supports required instruction set extensions.
-    // AVX512_VNNI: Required for S8xS8 dot product (vpdpbusd/vpdpwssd)
-    if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
-        dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
-                      "cannot perform bf16s8s32obf16 gemm.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-
-    // AVX512_BF16: Required for BF16 conversions and operations
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16s8s32obf16 gemm.",
@@ -172,6 +162,16 @@ aocl_gemm_bf16s8s32obf16(const char      order,
                     mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
+        goto err_hndl;
+    }
+
+    // Add early returns for NULL pointers.
+    if (metadata == NULL || metadata->a_pre_quant == NULL
+        || metadata->a_post_quant == NULL) {
+        dlp_print_msg("One or more required parameters (metadata, a_pre_quant, "
+                      "a_post_quant) are NULL. Exiting..",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
         goto err_hndl;
     }
 
@@ -240,7 +240,7 @@ aocl_gemm_bf16s8s32obf16(const char      order,
 
     // Translate user-provided post-op metadata to internal linked-list format.
     // Post-ops includes dequantization of results.
-    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
+    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS + 1];
     dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
         metadata, post_op_list, (void*)c, (void*)(&order), m, n);
 
