@@ -239,9 +239,13 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
 
                 BatchGemmTestConfig config;
 
+                // Get the current test set name from YAML (e.g.,
+                // "batch_test_name")
+                std::string currentTestName = parser.getCurrentTestName();
+
                 // Generate test name
-                config.name =
-                    "BatchGemm_set" + std::to_string(i) + "_MultiGroup";
+                config.name = "yaml_" + std::to_string(i) + "_"
+                              + currentTestName + +"_MultiGroup";
                 config.config_index = total_configs;
 
                 // Extract common parameters from first iteration
@@ -322,9 +326,12 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
 
                     BatchGemmTestConfig config;
 
+                    // Get the current test set name from YAML
+                    std::string currentTestName = parser.getCurrentTestName();
+
                     // Generate test name
-                    config.name = "BatchGemm_set" + std::to_string(i) + "_"
-                                  + std::to_string(j);
+                    config.name = "yaml_" + std::to_string(i) + "_"
+                                  + currentTestName + "_" + std::to_string(j);
                     config.config_index = total_configs;
 
                     // Extract common parameters

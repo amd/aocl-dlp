@@ -50,12 +50,14 @@ namespace dlp { namespace testing { namespace utils {
       public:
         YamlParser(const std::string& filename, std::string test_name);
         ~YamlParser();
-        MicroTest& getMicroTest() override;
-        void       next() override;
-        void       reset() override;
-        size_t     getMicroTestCount() const override;
-        void       setYieldType(YieldType yield_type) override;
-        YieldType  getYieldType() const override;
+        MicroTest&  getMicroTest() override;
+        void        next() override;
+        void        reset() override;
+        size_t      getMicroTestCount() const override;
+        void        setYieldType(YieldType yield_type) override;
+        YieldType   getYieldType() const override;
+        std::string getTestSuiteName() const;
+        std::string getCurrentTestName() const;
 
         // Additional convenience methods for backward compatibility
         size_t getTestCount() const { return getMicroTestCount(); }

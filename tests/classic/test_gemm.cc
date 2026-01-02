@@ -509,15 +509,17 @@ extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
 
 // Helper function to generate meaningful test names
 std::string
-generateTestName(const MicroTest& microTest,
-                 size_t           testSetIndex,
-                 size_t           configIndex)
+generateTestName(const MicroTest&   microTest,
+                 const std::string& testSetName,
+                 size_t             testSetIndex,
+                 size_t             configIndex)
 {
     std::ostringstream name;
 
-    // Start with base information
-    name << "yaml_" << testSetIndex << "_M" << microTest.getM() << "_N"
-         << microTest.getN() << "_K" << microTest.getK();
+    // Start with testset name and base information
+    name << "yaml_" << testSetIndex << "_" << testSetName << "_M"
+         << microTest.getM() << "_N" << microTest.getN() << "_K"
+         << microTest.getK();
 
     // Add data type information if not default f32
     if (microTest.getAType() != MatrixType::f32
@@ -618,8 +620,13 @@ loadTestConfigurations(const std::string& yaml_file)
                       << " total combinations" << std::endl;
 
             for (size_t j = 0; j < test_count; ++j) {
+                // Get the current test set name from YAML (e.g.,
+                // "bf16_mr_variants")
+                std::string currentTestName = parser.getCurrentTestName();
+
                 // Generate meaningful test name
-                std::string testName = generateTestName(microTest, i, j);
+                std::string testName =
+                    generateTestName(microTest, currentTestName, i, j);
 
                 // Extract PostOps from MicroTest
                 auto postops_dlp = microTest.getPostOp(UALType::DLP);

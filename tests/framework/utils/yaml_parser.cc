@@ -43,8 +43,9 @@ namespace dlp { namespace testing { namespace utils {
     {
       private:
         YAML::Node                 m_rootNode;
-        int                        m_current_test = 0;
-        std::string                m_test_name    = {};
+        int                        m_current_test          = 0;
+        std::string                m_test_name             = {};
+        std::string                m_current_test_set_name = {};
         YieldType                  m_yield_type = YieldType::CARTESIAN_PRODUCT;
         std::unique_ptr<MicroTest> m_current_micro_test;
 
@@ -417,6 +418,14 @@ namespace dlp { namespace testing { namespace utils {
         MicroTest getMicroTestFromNode(YAML::Node node)
         {
             TestCaseIterators iterators;
+
+            // Store the test set name from the YAML node
+            if (node["name"]) {
+                m_current_test_set_name = node["name"].as<std::string>();
+            } else {
+                m_current_test_set_name =
+                    "yaml_" + std::to_string(m_current_test);
+            }
 
             // Determine yield type for this test (used for ValueIterable
             // behavior)
@@ -837,7 +846,12 @@ namespace dlp { namespace testing { namespace utils {
             return m_rootNode[m_test_name].size();
         }
         void setYieldType(YieldType yield_type) { m_yield_type = yield_type; }
-        YieldType getYieldType() const { return m_yield_type; }
+        YieldType   getYieldType() const { return m_yield_type; }
+        std::string getTestSuiteName() const { return m_test_name; }
+        std::string getCurrentTestName() const
+        {
+            return m_current_test_set_name;
+        }
     };
 
     YamlParser::YamlParser(const std::string& filename, std::string test_name)
@@ -880,6 +894,16 @@ namespace dlp { namespace testing { namespace utils {
     YieldType YamlParser::getYieldType() const
     {
         return m_impl->getYieldType();
+    }
+
+    std::string YamlParser::getTestSuiteName() const
+    {
+        return m_impl->getTestSuiteName();
+    }
+
+    std::string YamlParser::getCurrentTestName() const
+    {
+        return m_impl->getCurrentTestName();
     }
 
     // Convenience methods to access current MicroTest properties
