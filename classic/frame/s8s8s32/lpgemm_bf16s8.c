@@ -121,12 +121,9 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
         // Increased MR from 6 to 16 to make use of 32 ZMM registers
         md_t MR = 16;
 
-        // Align k to multiple of 4 for SIMD instruction requirements
-        md_t k_updated = make_multiple_of_n(k, 4);
-
         // pack B matrix if needed
         if ((mtag_b == PACK)) {
-            mem_b_size_req = sizeof(int8_t) * k_updated + sizeof(int32_t);
+            mem_b_size_req = sizeof(int8_t) * k + sizeof(int32_t);
 
             if (pack_b_buffer_s8s8s32os32 == NULL) {
                 dlp_clsc_err_t ret_err;
@@ -134,8 +131,8 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
                     dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
             }
 
-            pack_b_column_sum = (int32_t*)(pack_b_buffer_s8s8s32os32
-                                           + (sizeof(int8_t) * k_updated));
+            pack_b_column_sum =
+                (int32_t*)(pack_b_buffer_s8s8s32os32 + (sizeof(int8_t) * k));
 
             *pack_b_column_sum = 0;
 
@@ -143,10 +140,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
                 pack_b_buffer_s8s8s32os32[k0] = b[k0 * rs_b];
                 *pack_b_column_sum += pack_b_buffer_s8s8s32os32[k0];
             }
-            // Pad remaining elements with zeros
-            for (md_t k0 = k; k0 < k_updated; k0++) {
-                pack_b_buffer_s8s8s32os32[k0] = 0;
-            }
+
             *pack_b_column_sum *= 128;
             post_ops_attr.b_col_sum_vec = pack_b_column_sum;
 
@@ -155,7 +149,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
             cs_b_use = 1;
         } else if (mtag_b == REORDERED) {
             b_use                       = b;
-            post_ops_attr.b_col_sum_vec = (int32_t*)(b + k_updated);
+            post_ops_attr.b_col_sum_vec = (int32_t*)(b + k);
         }
 
         // Compute the IC loop thread range for the current thread.
@@ -175,7 +169,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
             post_ops_attr.rs_c_downscale = rs_c;
 
             // Allocate buffer for quantized A matrix (BF16 -> S8 conversion).
-            mem_a_s8_size_req = sizeof(int8_t) * mc0 * k_updated;
+            mem_a_s8_size_req = sizeof(int8_t) * mc0 * k;
 
             if (quant_a_buffer_s8 == NULL) {
                 dlp_clsc_err_t ret_err;
@@ -186,12 +180,12 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
             // Perform on-the-fly quantization: BF16 -> S8
             // Uses per-row scale factors and zero-points indexed by IC offset.
             quanta_mr16_bf16s8(quant_a_buffer_s8, (bfloat16*)(a + (rs_a * ic)),
-                               rs_a, cs_a, mc0, k_updated, sf, sf_type, sf_len,
-                               zp_val, zp_type, zp_len, ic);
+                               rs_a, cs_a, mc0, k, sf, sf_type, sf_len, zp_val,
+                               zp_type, zp_len, ic);
 
             // Update A pointer and strides to use quantized buffer.
             a_use    = quant_a_buffer_s8;
-            rs_a_use = k_updated;
+            rs_a_use = k;
             cs_a_use = 4;
 
             dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,

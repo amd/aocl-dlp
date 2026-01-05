@@ -1986,7 +1986,7 @@ packb_nrlt16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             a_reg[jr] =
-                _mm512_maskz_loadu_epi16(0x03, b + (ldb * (jr + 0)) + kr);
+                _mm512_maskz_loadu_epi8(0x03, b + (ldb * (jr + 0)) + kr);
         }
 
         for (; jr < NR; jr++) {

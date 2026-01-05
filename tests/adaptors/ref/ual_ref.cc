@@ -1071,6 +1071,11 @@ UalRef::gemm(const Matrix&                      A,
 
     if (isBf16S8QuantGemm) {
 
+        // Validate parameters BEFORE creating Matrix objects
+        if (!checkValidGemmParams(A, B, C, true)) {
+            return UALError::UAL_FAILURE;
+        }
+
         bool   hasQuant = false;
         Matrix a_pre_quant_sf;
         Matrix a_pre_quant_zp;
