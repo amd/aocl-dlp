@@ -886,7 +886,7 @@ UalRef::applyPostOperation(Matrix& matrix,
             applyClip(matrix, op.getAlpha(), op.getBeta());
             break;
         case dlp::testing::framework::ElementWiseOperation::Swish:
-            applySwish(matrix);
+            applySwish(matrix, op.getAlpha());
             break;
         case dlp::testing::framework::ElementWiseOperation::Tanh:
             applyTanh(matrix);
@@ -1621,13 +1621,29 @@ UalRef::applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper)
         });
 }
 
+/**
+ * @brief Apply Swish activation function to matrix elements
+ *
+ * Swish activation: swish(x) = x * sigmoid(alpha*x) = x / (1 + e^(-alpha*x))
+ * where sigmoid(y) = 1 / (1 + e^(-y))
+ *
+ * @param matrix Matrix on which Swish activation function is to be applied
+ * @param alpha Scaling factor for the sigmoid (default: 2.0)
+ */
 void
-UalRef::applySwish(Matrix& matrix)
+UalRef::applySwish(Matrix& matrix, const Matrix* alpha)
 {
-    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
+    // Get alpha value
+    float alpha_val = 2.0f; // Default alpha(=2.0f)
+    if (alpha) {
+        alpha_val = dlp::testing::utils::convertTo<float>(
+            alpha->getData(), alpha->getMatrixType(), 0);
+    }
+
+    applyUnifiedPostOp(matrix, [alpha_val](float* data, size_t size) {
         for (size_t i = 0; i < size; ++i) {
             float x = data[i];
-            data[i] = x / (1.0f + std::exp(-x));
+            data[i] = x / (1.0f + std::exp(-(alpha_val)*x));
         }
     });
 }

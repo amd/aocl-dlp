@@ -308,7 +308,7 @@ class UalRef : public IUal
     void applyGeluTanh(Matrix& matrix);
     void applyGeluErf(Matrix& matrix);
     void applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper);
-    void applySwish(Matrix& matrix);
+    void applySwish(Matrix& matrix, const Matrix* alpha);
     void applyTanh(Matrix& matrix);
     void applySigmoid(Matrix& matrix);
     void applyScale(Matrix&       matrix,

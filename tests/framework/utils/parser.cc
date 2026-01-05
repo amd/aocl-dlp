@@ -334,8 +334,10 @@ MicroTest::createOperationParam(
         return createGeluErf().build();
 
     } else if (config.type == "Elementwise-SWISH") {
-        // SWISH: Optional alpha parameter, default to 1.0f if not specified
-        auto alpha_type_it = config.params.find("alpha_type");
+        // SWISH: Optional alpha parameter, default to 2.0f if not specified
+        auto   alpha_type_it = config.params.find("alpha_type");
+        double alpha_value   = extractDoubleParam("alpha", config.params, 2.0);
+
         if (alpha_type_it != config.params.end()
             && !alpha_type_it->second.empty()) {
             auto   idx_it = param_indices.find("alpha_type");
@@ -344,7 +346,9 @@ MicroTest::createOperationParam(
             auto alpha_type_str =
                 std::any_cast<std::string>(alpha_type_it->second[idx]);
             auto alpha_type = stringToMatrixType(alpha_type_str);
-            auto alpha      = Matrix::fromValue(1.0f, alpha_type);
+
+            auto alpha =
+                Matrix::fromValue(static_cast<float>(alpha_value), alpha_type);
             return createSwish().setAlpha(alpha).build();
         } else {
             // Use default alpha (will be set automatically in SwishBuilder)
