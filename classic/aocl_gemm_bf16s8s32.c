@@ -38,7 +38,7 @@
 #include "threading/lpgemm_thread_decor_openmp.h"
 
 /**
- * aocl_gemm_bf16s8s32obf16
+ * aocl_gemm_bf16s8s32o<bf16/s32/f32/s8/u8>
  *
  * Performs General Matrix Multiplication (GEMM) with mixed precision:
  *   C = alpha * op(A) * op(B) + beta * C
@@ -47,11 +47,20 @@
  *   - Matrix A is in BF16 (bfloat16) format and is quantized to S8 on-the-fly
  * during computation.
  *   - Matrix B is in S8 (int8) format and should be pre-quantized.
- *   - The result matrix C is in BF16 (bfloat16) format.
+ *   - The result matrix C can be in BF16, S32, F32, S8, or U8 format depending
+ * on the function variant used.
  *   - Dequantization of results is handled during kernel execution as part of
  * the JIT kernel's post-processing steps.
  *   - Intermediate accumulation is performed in S32 precision, which is
- * subsequently downscaled to BF16 through post-processing operations.
+ * subsequently downscaled to the output type through post-processing
+ * operations.
+ *
+ * Function Variants (by output type):
+ *   - aocl_gemm_bf16s8s32obf16: Output in BF16 (bfloat16)
+ *   - aocl_gemm_bf16s8s32os32:  Output in S32 (int32_t)
+ *   - aocl_gemm_bf16s8s32of32:  Output in F32 (float)
+ *   - aocl_gemm_bf16s8s32os8:   Output in S8 (int8_t)
+ *   - aocl_gemm_bf16s8s32ou8:   Output in U8 (uint8_t)
  *
  * Hardware Requirements:
  *   - AVX512_VNNI: Required for S8xS8->S32 dot product instructions
@@ -76,7 +85,7 @@
  * Quantization requirements (via metadata):
  *   - Pre-quantization (BF16 -> S8): Requires a_pre_quant_sf scale factors
  *     Optional: zero_point for asymmetric quantization
- *   - Post-quantization (S32 -> BF16): Requires a_post_quant_sf scale factors
+ *   - Post-quantization (downscaling): Requires a_post_quant_sf scale factors
  *   - Supports per-tensor (scale_factor_len = 1) or per-row (scale_factor_len =
  * m)
  *   - See dlp_quant_op structure for complete quantization parameter details
@@ -87,7 +96,7 @@
  *
  * Example Usage:
  * @code
- *   // Per-tensor symmetric quantization
+ *   // Per-tensor symmetric quantization (BF16 output)
  *   dlp_sf_t a_pre_quant_scl = {&a_pre_quant_sf, 1, DLP_F32};
  *   dlp_sf_t a_post_quant_scl = {&a_post_quant_sf, 1, DLP_F32};
  *   dlp_quant_op a_pre_quant = {0, DLP_BF16, DLP_S8, &a_pre_quant_scl, NULL,
@@ -95,7 +104,7 @@
  * NULL, true}; dlp_metadata_t metadata = {&a_pre_quant, &a_post_quant};
  *
  *   aocl_gemm_bf16s8s32obf16('R', 'N', 'N', m, n, k, 1.0f,
- *                            a, lda, 'N', b, ldb, 'N', 0.0f, c, ldc,
+ *                            a, lda, 'N', b, ldb, 'N', 0.0f, c_bf16, ldc,
  * &metadata);
  *
  *   // Per-row asymmetric quantization (use scale_factor_len = m, add
@@ -113,27 +122,44 @@
  *   - dlp_sf_t: Scale factor structure
  *   - dlp_zp_t: Zero point structure
  */
-void
-aocl_gemm_bf16s8s32obf16(const char      order,
-                         const char      transa,
-                         const char      transb,
-                         const md_t      m,
-                         const md_t      n,
-                         const md_t      k,
-                         const int32_t   alpha,
-                         const bfloat16* a,
-                         const md_t      lda,
-                         const char      mem_format_a,
-                         const int8_t*   b,
-                         const md_t      ldb,
-                         const char      mem_format_b,
-                         const int32_t   beta,
-                         bfloat16*       c,
-                         const md_t      ldc,
-                         dlp_metadata_t* metadata)
+
+/* =========================================================================
+ * Internal Implementation Function
+ * =========================================================================
+ * aocl_gemm_bf16s8s32_impl
+ * Internal implementation function that provides the core GEMM logic for all
+ * bf16s8s32 variants.
+ *
+ * See aocl_gemm_bf16s8s32obf16 documentation for parameter descriptions.
+ * @param func_name Function name for logging and error reporting
+ * @param krnl_dtype Kernel datatype selector for JIT kernel generation
+ * @param c_dtype Output matrix C datatype (DLP_BF16, DLP_S32, DLP_F32, DLP_S8,
+ * DLP_U8)
+ */
+static void
+aocl_gemm_bf16s8s32_impl(const char        order,
+                         const char        transa,
+                         const char        transb,
+                         const md_t        m,
+                         const md_t        n,
+                         const md_t        k,
+                         const int32_t     alpha,
+                         const bfloat16*   a,
+                         const md_t        lda,
+                         const char        mem_format_a,
+                         const int8_t*     b,
+                         const md_t        ldb,
+                         const char        mem_format_b,
+                         const int32_t     beta,
+                         void*             c,
+                         const md_t        ldc,
+                         dlp_metadata_t*   metadata,
+                         const char*       func_name,
+                         kernel_datatype_t krnl_dtype,
+                         DLP_TYPE          c_dtype)
 {
     LPGEMM_START_LOGGER();
-    LPGEMM_WRITE_LOGGER("bf16s8s32obf16", order, transa, transb, m, n, k,
+    LPGEMM_WRITE_LOGGER(func_name, order, transa, transb, m, n, k,
                         ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
                         ((float)beta), ldc, metadata);
 
@@ -146,7 +172,7 @@ aocl_gemm_bf16s8s32obf16(const char      order,
     // Verify processor supports required instruction set extensions.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
-                      "cannot perform bf16s8s32obf16 gemm.",
+                      "cannot perform bf16s8s32 gemm.",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
@@ -158,7 +184,7 @@ aocl_gemm_bf16s8s32obf16(const char      order,
 
     // Validate input parameters (dimensions, strides, pointers, etc.).
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_GEMM_CHECK("bf16s8s32obf16", order, transa, transb, m, n, k, a, lda,
+    AOCL_GEMM_CHECK(func_name, order, transa, transb, m, n, k, a, lda,
                     mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
@@ -263,10 +289,9 @@ aocl_gemm_bf16s8s32obf16(const char      order,
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
 
     dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_S8S8S32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
-        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
-        &lcntx_l.dlp_kernel_hndl);
+        krnl_dtype, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a, rs_b, cs_b,
+        rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
+        lcntx_l.blksz.NR, lcntx_l.blksz.KC, c_dtype, &lcntx_l.dlp_kernel_hndl);
 
     if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
         dlp_print_msg(" Kernel handle is not initialized. Only supported for "
@@ -280,17 +305,144 @@ aocl_gemm_bf16s8s32obf16(const char      order,
     lpgemm_bf16s8s32os32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
         rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, metadata->a_pre_quant,
-        post_op_list, DLP_BF16);
-
+        post_op_list, c_dtype);
 #else
     // Single-threaded or manually-threaded execution.
     lpgemm_bf16s8s32os32_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
         rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, metadata->a_pre_quant,
-        post_op_list, DLP_BF16);
-
+        post_op_list, c_dtype);
 #endif
 
 err_hndl:;
     LPGEMM_STOP_LOGGER();
+}
+
+// =========================================================================
+// API Implementations for bf16s8s32 variants
+// =========================================================================
+
+void
+aocl_gemm_bf16s8s32obf16(const char      order,
+                         const char      transa,
+                         const char      transb,
+                         const md_t      m,
+                         const md_t      n,
+                         const md_t      k,
+                         const int32_t   alpha,
+                         const bfloat16* a,
+                         const md_t      lda,
+                         const char      mem_format_a,
+                         const int8_t*   b,
+                         const md_t      ldb,
+                         const char      mem_format_b,
+                         const int32_t   beta,
+                         bfloat16*       c,
+                         const md_t      ldc,
+                         dlp_metadata_t* metadata)
+{
+    aocl_gemm_bf16s8s32_impl(order, transa, transb, m, n, k, alpha, a, lda,
+                             mem_format_a, b, ldb, mem_format_b, beta, (void*)c,
+                             ldc, metadata, "bf16s8s32obf16",
+                             DLP_KERNEL_S8S8S32OBF16, DLP_BF16);
+}
+
+void
+aocl_gemm_bf16s8s32os32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const int32_t   alpha,
+                        const bfloat16* a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const int8_t*   b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const int32_t   beta,
+                        int32_t*        c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata)
+{
+    aocl_gemm_bf16s8s32_impl(order, transa, transb, m, n, k, alpha, a, lda,
+                             mem_format_a, b, ldb, mem_format_b, beta, (void*)c,
+                             ldc, metadata, "bf16s8s32os32",
+                             DLP_KERNEL_S8S8S32OS32, DLP_S32);
+}
+
+void
+aocl_gemm_bf16s8s32of32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const int32_t   alpha,
+                        const bfloat16* a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const int8_t*   b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const int32_t   beta,
+                        float*          c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata)
+{
+    aocl_gemm_bf16s8s32_impl(order, transa, transb, m, n, k, alpha, a, lda,
+                             mem_format_a, b, ldb, mem_format_b, beta, (void*)c,
+                             ldc, metadata, "bf16s8s32of32",
+                             DLP_KERNEL_S8S8S32OF32, DLP_F32);
+}
+
+void
+aocl_gemm_bf16s8s32os8(const char      order,
+                       const char      transa,
+                       const char      transb,
+                       const md_t      m,
+                       const md_t      n,
+                       const md_t      k,
+                       const int32_t   alpha,
+                       const bfloat16* a,
+                       const md_t      lda,
+                       const char      mem_format_a,
+                       const int8_t*   b,
+                       const md_t      ldb,
+                       const char      mem_format_b,
+                       const int32_t   beta,
+                       int8_t*         c,
+                       const md_t      ldc,
+                       dlp_metadata_t* metadata)
+{
+    aocl_gemm_bf16s8s32_impl(order, transa, transb, m, n, k, alpha, a, lda,
+                             mem_format_a, b, ldb, mem_format_b, beta, (void*)c,
+                             ldc, metadata, "bf16s8s32os8",
+                             DLP_KERNEL_S8S8S32OS8, DLP_S8);
+}
+
+void
+aocl_gemm_bf16s8s32ou8(const char      order,
+                       const char      transa,
+                       const char      transb,
+                       const md_t      m,
+                       const md_t      n,
+                       const md_t      k,
+                       const int32_t   alpha,
+                       const bfloat16* a,
+                       const md_t      lda,
+                       const char      mem_format_a,
+                       const int8_t*   b,
+                       const md_t      ldb,
+                       const char      mem_format_b,
+                       const int32_t   beta,
+                       uint8_t*        c,
+                       const md_t      ldc,
+                       dlp_metadata_t* metadata)
+{
+    aocl_gemm_bf16s8s32_impl(order, transa, transb, m, n, k, alpha, a, lda,
+                             mem_format_a, b, ldb, mem_format_b, beta, (void*)c,
+                             ldc, metadata, "bf16s8s32ou8",
+                             DLP_KERNEL_S8S8S32OU8, DLP_U8);
 }

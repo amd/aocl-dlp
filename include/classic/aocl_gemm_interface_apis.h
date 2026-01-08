@@ -726,6 +726,85 @@ aocl_gemm_bf16s8s32obf16(const char      order,
                          const md_t      ldc,
                          dlp_metadata_t* metadata);
 
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
+aocl_gemm_bf16s8s32os32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const int32_t   alpha,
+                        const bfloat16* a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const int8_t*   b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const int32_t   beta,
+                        int32_t*        c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata);
+
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
+aocl_gemm_bf16s8s32of32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const int32_t   alpha,
+                        const bfloat16* a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const int8_t*   b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const int32_t   beta,
+                        float*          c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata);
+
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
+aocl_gemm_bf16s8s32os8(const char      order,
+                       const char      transa,
+                       const char      transb,
+                       const md_t      m,
+                       const md_t      n,
+                       const md_t      k,
+                       const int32_t   alpha,
+                       const bfloat16* a,
+                       const md_t      lda,
+                       const char      mem_format_a,
+                       const int8_t*   b,
+                       const md_t      ldb,
+                       const char      mem_format_b,
+                       const int32_t   beta,
+                       int8_t*         c,
+                       const md_t      ldc,
+                       dlp_metadata_t* metadata);
+
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
+aocl_gemm_bf16s8s32ou8(const char      order,
+                       const char      transa,
+                       const char      transb,
+                       const md_t      m,
+                       const md_t      n,
+                       const md_t      k,
+                       const int32_t   alpha,
+                       const bfloat16* a,
+                       const md_t      lda,
+                       const char      mem_format_a,
+                       const int8_t*   b,
+                       const md_t      ldb,
+                       const char      mem_format_b,
+                       const int32_t   beta,
+                       uint8_t*        c,
+                       const md_t      ldc,
+                       dlp_metadata_t* metadata);
 /**
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] transa Transpose option for matrix A.

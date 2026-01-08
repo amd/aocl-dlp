@@ -34,49 +34,48 @@
 namespace dlp::testing::classic::ref {
 
 using dlp::testing::utils::bf16_to_f32;
-using dlp::testing::utils::f32_to_bf16_vcvtneps2bf16;
 
 /**
- * Reference implementation of BF16×S8 GEMM with BF16 output.
+ * Reference implementation of BF16×S8 GEMM with float output.
  *
  * This function computes C := alpha * op(A) * op(B) + beta * C where:
  * - A is bfloat16, quantized on-the-fly to int8
  * - B is int8
- * - C is bfloat16
+ * - C is float
  * - Intermediate accumulation is in int32
  *
  * Performs GEMM with on-the-fly quantization of A, VNNI-style multiplication,
- * bias correction, scaling, and BF16 output.
+ * bias correction, scaling, and float output.
  */
 void
-aocl_gemm_bf16s8s32obf16_ref(const char            order,
-                             const char            transa,
-                             const char            transb,
-                             const md_t            m,
-                             const md_t            n,
-                             const md_t            k,
-                             int32_t               alpha,
-                             const bfloat16*       A,
-                             int                   lda,
-                             const int8_t*         B,
-                             int                   ldb,
-                             int32_t               beta,
-                             bfloat16*             C,
-                             int                   ldc,
-                             void*                 a_pre_quant_sf_data,
-                             void*                 a_pre_quant_zp_data,
-                             void*                 a_post_quant_sf_data,
-                             void*                 a_post_quant_zp_data,
-                             md_t                  sf_len,
-                             md_t                  zp_len,
-                             framework::MatrixType sf_type,
-                             framework::MatrixType zp_type)
+aocl_gemm_bf16s8s32of32_ref(const char            order,
+                            const char            transa,
+                            const char            transb,
+                            const md_t            m,
+                            const md_t            n,
+                            const md_t            k,
+                            int32_t               alpha,
+                            const bfloat16*       A,
+                            int                   lda,
+                            const int8_t*         B,
+                            int                   ldb,
+                            int32_t               beta,
+                            float*                C,
+                            int                   ldc,
+                            void*                 a_pre_quant_sf_data,
+                            void*                 a_pre_quant_zp_data,
+                            void*                 a_post_quant_sf_data,
+                            void*                 a_post_quant_zp_data,
+                            md_t                  sf_len,
+                            md_t                  zp_len,
+                            framework::MatrixType sf_type,
+                            framework::MatrixType zp_type)
 {
     // =========================================================================
     // Validate quantization metadata
     // =========================================================================
     if (a_pre_quant_sf_data == nullptr || a_post_quant_sf_data == nullptr) {
-        std::cerr << "bf16s8s32obf16_ref: Missing required scale factors"
+        std::cerr << "bf16s8s32of32_ref: Missing required scale factors"
                   << std::endl;
         return;
     }
@@ -255,9 +254,9 @@ aocl_gemm_bf16s8s32obf16_ref(const char            order,
             if (beta != 0) {
                 float c_f32;
                 if (order == 'R' || order == 'r')
-                    c_f32 = bf16_to_f32(C[i * ldc + j]);
+                    c_f32 = C[i * ldc + j];
                 else
-                    c_f32 = bf16_to_f32(C[j * ldc + i]);
+                    c_f32 = C[j * ldc + i];
 
                 int32_t c_int32 = static_cast<int32_t>(c_f32);
                 int32_t betaC   = (beta * c_int32);
@@ -279,13 +278,12 @@ aocl_gemm_bf16s8s32obf16_ref(const char            order,
             result_f32 = std::nearbyint(result_f32 * a_post_quant_sf);
 
             // -----------------------------------------------------------------
-            // Step 7: Convert to BF16 and store result
+            // Step 7: Store result
             // -----------------------------------------------------------------
-            bfloat16 bf_result = f32_to_bf16_vcvtneps2bf16(result_f32);
             if (order == 'R' || order == 'r')
-                C[i * ldc + j] = bf_result;
+                C[i * ldc + j] = result_f32;
             else
-                C[j * ldc + i] = bf_result;
+                C[j * ldc + i] = result_f32;
         }
     }
 }
