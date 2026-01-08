@@ -305,7 +305,7 @@ lpgemm_s32o32_get_threading(md_t*               n_threads,
         } else {
             // If DLP_NUM_THREADS are set, generate jc,ic from the same.
             dlp_thread_partition_2x2((*n_threads), m, n, ic_ways, jc_ways);
-            if ((mr_blks >= (*ic_ways)) && (nr_blks >= (*jc_ways))) {
+            if ((mr_blks >= (*ic_ways))) {
                 lpgemm_pnl_wrk_heur_adjust_ic_jc_ways(MR, NR, m, n, n_threads,
                                                       ic_ways, jc_ways);
             }
@@ -355,7 +355,7 @@ batch_lpgemm_s32o32_get_threading(md_t                group_size,
             // If DLP_NUM_THREADS are set, generate jc,ic from the same.
             dlp_thread_partition_2x2((*n_threads_per_gemm), m, n, ic_ways,
                                      jc_ways);
-            if ((mr_blks >= (*ic_ways)) && (nr_blks >= (*jc_ways))) {
+            if ((mr_blks >= (*ic_ways))) {
                 lpgemm_pnl_wrk_heur_adjust_ic_jc_ways(
                     MR, NR, m, n, n_threads_per_gemm, ic_ways, jc_ways);
             }
@@ -485,7 +485,15 @@ lpgemm_bf16bf16f32of32_get_threading(md_t*       n_threads,
         } else {
             // If DLP_NUM_THREADS are set, generate jc,ic from the same.
             dlp_thread_partition_2x2((*n_threads), m, n, ic_ways, jc_ways);
-            if ((mr_blks >= (*ic_ways)) && (nr_blks >= (*jc_ways))) {
+
+            // The following function attempts to further redistribute the
+            // threads among the ic and jc ways, in case the initial
+            // partitioning is not optimal. This is done purely based on the
+            // total panels of work per thread, and we attempt to mitigate the
+            // imbalance by increasing the ic ways and decreasing the jc ways.
+            // We check if there is oversubsciption in the ic direction, before
+            // calling the function.
+            if ((mr_blks >= (*ic_ways))) {
                 lpgemm_pnl_wrk_heur_adjust_ic_jc_ways(MR, NR, m, n, n_threads,
                                                       ic_ways, jc_ways);
             }
@@ -534,7 +542,7 @@ batch_lpgemm_bf16bf16f32of32_get_threading(md_t        group_size,
             // If DLP_NUM_THREADS are set, generate jc,ic from the same.
             dlp_thread_partition_2x2((*n_threads_per_gemm), m, n, ic_ways,
                                      jc_ways);
-            if ((mr_blks >= (*ic_ways)) && (nr_blks >= (*jc_ways))) {
+            if ((mr_blks >= (*ic_ways))) {
                 lpgemm_pnl_wrk_heur_adjust_ic_jc_ways(
                     MR, NR, m, n, n_threads_per_gemm, ic_ways, jc_ways);
             }
