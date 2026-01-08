@@ -38,6 +38,14 @@
 #include "kernels/kernel_base.hh"
 #include "traits.hh"
 
+// To indicate the generation of kernel with IR loop outside and JR loop inside
+// within the microkernel for k=1 case. This loop order performs better since it
+// aligns with the memory access patterns of the data.
+#define IR_JR_LOOP_ORDER_FOR_K1
+
+// The implementation with JR loop outside and IR loop inside is not used
+// currently. It is kept for future reference. #define JR_IR_LOOP_ORDER_FOR_K1
+
 namespace amdzen::GEMMcodeGenerator {
 
 template<utils::kernelInstrType KType>
@@ -60,11 +68,13 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     using halfRegType = typename Traits::halfRegType;
 
     // Configuration and state
-    int numRegs      = Traits::numRegs;
-    int RegSize      = Traits::regSize;
-    int RegBytes     = Traits::regBytes;
-    int halfRegBytes = RegBytes / 2;
-    int aReg, bReg, bFullReg, bMaskReg, cReg;
+    int numRegs        = Traits::numRegs;
+    int RegSize        = Traits::regSize;
+    int RegBytes       = Traits::regBytes;
+    int halfRegBytes   = RegBytes / 2;
+    int numElemsPerReg = RegBytes / sizeof(float);
+    // maskVecReg is the number of YMM/ZMM registers used for mask storage.
+    int aReg, bReg, bFullReg, bMaskReg, cReg, maskVecReg;
     int aRegIdx, bRegIdx, cRegIdx, maskRegIdx;
     int MR, NR;
     int c_downscale;
@@ -73,6 +83,7 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmpAptr, regBptr, regTmpCptr, regRsA, regCsA, regRsB,
         regRsC, regKIter;
     Xbyak::Reg64 regMiter;
+    Xbyak::Reg64 regNiter, regNLeft; // For N-loop in k=1 kernels
     Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
@@ -82,6 +93,7 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     Xbyak::Label label_store_result;
 
     Xbyak::Label offsets;
+    bool         dumpedOffsets = false;
 
     Xbyak::Opmask fringeMask[dlp::kernels::maxNumMasks];
 
@@ -94,6 +106,8 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
 
     // Core kernel generation methods - simplified for F32 only
     dlp::jit::jitGeneratorError allocateReg();
+
+    void loadMasks();
 
     void initializeParameters(bool addIrLoop);
 
@@ -116,7 +130,7 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     // Setup and initialization
     void initializeStackFrame(Xbyak::util::StackFrame& stackFrame);
     void regInit();
-    void moveCPtr();
+    void moveCPtr(Xbyak::Reg64 regPtr, Xbyak::Reg64 regStride, int val);
 
     // Scaling operations
     dlp::jit::jitGeneratorError scaleAlpha();
@@ -132,6 +146,27 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError convertF32toBF16(int scratch1,
                                                  int scratch2,
                                                  int destIdx);
+
+    // K=1 kernel generation methods
+    // 2D label vectors: [numNRVariants][MR] - outer loop is NR, inner loop is
+    // MR
+    std::vector<std::vector<Xbyak::Label>> label_store_result_k1;
+
+    int numNRVariants, numMRVariants;
+
+    int currentMR;
+    int currentNR;
+    int currentNRIdx; // Index of current NR variant being generated
+
+    dlp::jit::jitGeneratorError generateKernelK1(
+        utils::generatorParams& params);
+    dlp::jit::jitGeneratorError generateKernel_JR_IR(
+        utils::generatorParams& params);
+    dlp::jit::jitGeneratorError generateKernel_IR_JR(
+        utils::generatorParams& params);
+    dlp::jit::jitGeneratorError generateKernelBodyK1(
+        utils::generatorParams& params,
+        gen::kernelOpsHandler*  kernelOpsHandlerPtr);
 };
 
 // Type aliases for specific instruction sets

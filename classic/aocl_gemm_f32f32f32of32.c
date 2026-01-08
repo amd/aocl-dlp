@@ -44,6 +44,12 @@
 static inline bool
 is_tiny_input_f32(md_t m, md_t n, md_t k, lpgemm_cntx_t* lcntx)
 {
+    // if k == 1, then we can use the single-threaded tiny input kernel.
+    // Multi-threading is not beneficial for k = 1.
+    if (k == 1) {
+        return TRUE;
+    }
+
     const md_t NC = lcntx->blksz.NC;
     const md_t MC = lcntx->blksz.MC;
     const md_t KC = lcntx->blksz.KC;

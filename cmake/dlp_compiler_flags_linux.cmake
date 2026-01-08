@@ -304,6 +304,52 @@ function(dlp_set_arch_flags target arch)
     message(STATUS "Setting ${arch} flags for target ${target}: ${target_flags_str}")
 endfunction()
 
+# Function to apply JIT-specific compiler flags to a target
+# Uses lazy initialization to ensure CMAKE_SYSTEM_PROCESSOR is available
+# These flags are needed for JIT code generation, particularly for large generated kernels.
+# For K=1 kernels, the generated kernel size is 'numNRVariants * MR * utils::JIT_KERNEL_SIZE',
+# which can exceed the default code model limits.
+# Parameters:
+#   target - The target to apply JIT flags to
+#   visibility - Optional: The visibility level (defaults to PRIVATE)
+function(dlp_set_jit_flags target)
+    set(options "")
+    set(oneValueArgs VISIBILITY)
+    set(multiValueArgs "")
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # Default visibility to PRIVATE if not specified
+    if(NOT ARG_VISIBILITY)
+        set(ARG_VISIBILITY PRIVATE)
+    endif()
+
+    # Lazy initialization: Determine JIT flags on first call
+    if(NOT DEFINED DLP_JIT_FLAGS_INITIALIZED)
+        set(DLP_JIT_FLAGS "")
+
+        # x86-specific JIT flags: -mcmodel=medium allows code sections > 2GB
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+            set(DLP_JIT_FLAGS "-mcmodel=medium")
+            message(STATUS "JIT flags initialized for ${CMAKE_SYSTEM_PROCESSOR}: -mcmodel=medium")
+        else()
+            message(STATUS "No architecture-specific JIT flags for ${CMAKE_SYSTEM_PROCESSOR}")
+        endif()
+
+        # Mark as initialized (cache in parent scope)
+        set(DLP_JIT_FLAGS_INITIALIZED TRUE CACHE INTERNAL "JIT flags have been initialized")
+        set(DLP_JIT_FLAGS "${DLP_JIT_FLAGS}" CACHE INTERNAL "JIT compiler flags")
+    endif()
+
+    # Apply JIT-specific flags if they exist
+    if(DLP_JIT_FLAGS)
+        target_compile_options(${target} ${ARG_VISIBILITY} ${DLP_JIT_FLAGS})
+
+        # Log the flags being applied
+        string(REPLACE ";" " " jit_flags_str "${DLP_JIT_FLAGS}")
+        message(STATUS "Applying JIT flags to ${target}: ${jit_flags_str}")
+    endif()
+endfunction()
+
 function(dlp_set_platform_options)
     # Set binary name for static library
     if(DLP_OS_LINUX)

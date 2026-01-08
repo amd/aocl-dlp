@@ -21,7 +21,7 @@ gemm_tests:
     transB: [false]
     m: [1, 6, 32, 145]  # GEMV M=1, Kernel size and standard size
     n: [1, 15, 16, 64, 1025] # GEMV N=1, NR variants
-    k: [5, 33, 2049]  # VNNI aligned
+    k: [1, 5, 33, 2049]  # VNNI aligned
     alpha: [2]
     beta: [2]
     lda: [2049]
@@ -107,7 +107,7 @@ gemm_tests:
     transB: [false]
     m: [1, 6, 32, 145]  # GEMV M=1, Kernel size and standard size
     n: [1, 16, 64, 1025] # GEMV N=1, NR variants
-    k: [4, 32, 2049]
+    k: [1, 4, 32, 2049]
     alpha: [2]
     beta: [2]
     lda: [2049]
@@ -309,7 +309,7 @@ gemm_tests:
     transB: [false]
     m: [1, 6, 32, 145]  # GEMV M=1, Kernel size and standard size
     n: [1, 16, 64, 1025] # GEMV N=1, NR variants
-    k: [4, 32, 2049]
+    k: [1, 4, 32, 2049]
     alpha: [1.0]
     beta: [1]
     lda: [2049]

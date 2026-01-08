@@ -118,6 +118,8 @@ struct generatorParams
     // where NR is a multiple of nElemsPerReg including "0".
     bool useMask;
     bool mLoop; // This will be set to true only for the main kernel
+    bool is_k1; // this will be set to true only for the K=1 kernel where we
+                // need not generate k-unroll loop
     dlp::kernel_frame::scalingType                    alphaScalingType;
     dlp::kernel_frame::scalingType                    betaScalingType;
     kernelInstrType                                   kType;
@@ -131,6 +133,7 @@ struct generatorParams
                     int                            _numMaskRegs,
                     bool                           _useMask,
                     bool                           _mLoop,
+                    bool                           _is_k1,
                     dlp::kernel_frame::scalingType _alphaScalingType =
                         dlp::kernel_frame::scalingType::generic,
                     dlp::kernel_frame::scalingType _betaScalingType =
@@ -144,6 +147,7 @@ struct generatorParams
         , numMaskRegs(_numMaskRegs)
         , useMask(_useMask)
         , mLoop(_mLoop)
+        , is_k1(_is_k1)
         , alphaScalingType(_alphaScalingType)
         , betaScalingType(_betaScalingType)
         , kType(_kType)
@@ -159,6 +163,7 @@ struct generatorParams
         , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
         , mLoop(other.mLoop)
+        , is_k1(other.is_k1)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
@@ -177,6 +182,7 @@ struct generatorParams
             numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;
             mLoop            = other.mLoop;
+            is_k1            = other.is_k1;
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
@@ -194,6 +200,7 @@ struct generatorParams
         , numMaskRegs(other.numMaskRegs)
         , useMask(other.useMask)
         , mLoop(other.mLoop)
+        , is_k1(other.is_k1)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
@@ -212,6 +219,7 @@ struct generatorParams
             numMaskRegs      = other.numMaskRegs;
             useMask          = other.useMask;
             mLoop            = other.mLoop;
+            is_k1            = other.is_k1;
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;

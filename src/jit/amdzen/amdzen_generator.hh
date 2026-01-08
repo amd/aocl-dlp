@@ -61,6 +61,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     md_t               K_UNROLL, PREFETCH_C_DIST;
     md_t               c_downscale;
     std::vector<void*> kernelCodeBlocks;
+    size_t             kernelSize; // Size of each kernel variant in bytes
 
     void setGeneratorKernelMetaInfo(
         dlp::kernel_frame::kernelInstrPreference kInstPref);

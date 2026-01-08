@@ -74,6 +74,9 @@ struct gemmParams : public kernelParams
     void* beta;
 
     md_t     mIter;
+    md_t     mLeft;
+    md_t     nIter;
+    md_t     nLeft;
     md_t     kIterBP;
     md_t     kIterAP;
     md_t     kLeft;
@@ -124,6 +127,9 @@ struct gemmParams : public kernelParams
         , alpha(alpha_acc)
         , beta(beta_acc)
         , mIter(0)
+        , mLeft(0)
+        , nIter(0)
+        , nLeft(0)
         , kIterBP(0)
         , kIterAP(0)
         , kLeft(0)
@@ -155,6 +161,9 @@ struct gemmParams : public kernelParams
         , alpha(other.alpha)
         , beta(other.beta)
         , mIter(other.mIter)
+        , mLeft(other.mLeft)
+        , nIter(other.nIter)
+        , nLeft(other.nLeft)
         , kIterBP(other.kIterBP)
         , kIterAP(other.kIterAP)
         , kLeft(other.kLeft)
@@ -189,6 +198,9 @@ struct gemmParams : public kernelParams
         , alpha(other.alpha)
         , beta(other.beta)
         , mIter(other.mIter)
+        , mLeft(other.mLeft)
+        , nIter(other.nIter)
+        , nLeft(other.nLeft)
         , kIterBP(other.kIterBP)
         , kIterAP(other.kIterAP)
         , kLeft(other.kLeft)
@@ -225,6 +237,9 @@ struct gemmParams : public kernelParams
         alpha   = other.alpha;
         beta    = other.beta;
         mIter   = other.mIter;
+        mLeft   = other.mLeft;
+        nIter   = other.nIter;
+        nLeft   = other.nLeft;
         kIterBP = other.kIterBP;
         kIterAP = other.kIterAP;
         kLeft   = other.kLeft;
@@ -256,6 +271,9 @@ struct gemmParams : public kernelParams
         alpha         = nullptr;
         beta          = nullptr;
         mIter         = 0;
+        mLeft         = 0;
+        nIter         = 0;
+        nLeft         = 0;
         kIterBP       = 0;
         kIterAP       = 0;
         kLeft         = 0;

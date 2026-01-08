@@ -36,11 +36,11 @@ add_subdirectory(jit)
 # Output the found sources (optional, for debugging)
 # message(STATUS "DLP Plus sources: ${DLP_PLUS_SOURCES}")
 
-# Create the classic library without kernel sources (they're in the object libraries)
+# Create the DLP Plus library WITHOUT amdzen object files
+# amdzen will be linked separately to preserve static constructors
 add_library(aocl_dlp_plus OBJECT
     ${DLP_PLUS_SOURCES}
     ${DLP_PLUS_FRAME_SOURCES}
-    ${DLP_PLUS_JIT_SOURCES}
 )
 
 # Enable position-independent code for the object library
@@ -62,9 +62,6 @@ if(DLP_ENABLE_LOGGING)
     target_compile_definitions(aocl_dlp_plus PRIVATE AOCL_LPGEMM_LOGGER_SUPPORT=1)
 endif()
 
-if(DLP_ENABLE_JIT_DEBUGGING)
-    target_compile_definitions(aocl_dlp_plus PRIVATE DLP_JIT_DEBUG=1)
-endif()
 
 set(DLP_PLUS_TARGETS
     aocl_dlp_plus

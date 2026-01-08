@@ -247,6 +247,62 @@ function(dlp_check_znver_support)
     endif()
 endfunction()
 
+# Function to apply JIT-specific compiler flags to a target
+# Uses lazy initialization to ensure CMAKE_SYSTEM_PROCESSOR is available
+# Parameters:
+#   target - The target to apply JIT flags to
+#   visibility - Optional: The visibility level (defaults to PRIVATE)
+function(dlp_set_jit_flags target)
+    set(options "")
+    set(oneValueArgs VISIBILITY)
+    set(multiValueArgs "")
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
+
+    # Default visibility to PRIVATE if not specified
+    if(NOT ARG_VISIBILITY)
+        set(ARG_VISIBILITY PRIVATE)
+    endif()
+
+    # Lazy initialization: Determine JIT flags on first call
+    if(NOT DEFINED DLP_JIT_FLAGS_INITIALIZED)
+        set(DLP_JIT_FLAGS_MSVC "")
+        set(DLP_JIT_FLAGS_OTHER "")
+
+        # MSVC: /bigobj allows more sections in object files (for large JIT-generated code)
+        if(MSVC)
+            list(APPEND DLP_JIT_FLAGS_MSVC /bigobj)
+            message(STATUS "JIT flags (MSVC) initialized: /bigobj")
+        endif()
+
+        # MinGW/Clang on Windows: Use same flags as Linux
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+            list(APPEND DLP_JIT_FLAGS_OTHER -mcmodel=medium)
+            message(STATUS "JIT flags (MinGW/Clang) initialized for ${CMAKE_SYSTEM_PROCESSOR}: -mcmodel=medium")
+        endif()
+
+        # Mark as initialized (cache in parent scope)
+        set(DLP_JIT_FLAGS_INITIALIZED TRUE CACHE INTERNAL "JIT flags have been initialized")
+        set(DLP_JIT_FLAGS_MSVC "${DLP_JIT_FLAGS_MSVC}" CACHE INTERNAL "MSVC JIT flags")
+        set(DLP_JIT_FLAGS_OTHER "${DLP_JIT_FLAGS_OTHER}" CACHE INTERNAL "MinGW/Clang JIT flags")
+    endif()
+
+    # Apply JIT-specific flags based on compiler
+    if(MSVC)
+        if(DLP_JIT_FLAGS_MSVC)
+            target_compile_options(${target} ${ARG_VISIBILITY} ${DLP_JIT_FLAGS_MSVC})
+            string(REPLACE ";" " " jit_flags_str "${DLP_JIT_FLAGS_MSVC}")
+            message(STATUS "Applying JIT flags to ${target}: ${jit_flags_str}")
+        endif()
+    else()
+        # MinGW or Clang on Windows
+        if(DLP_JIT_FLAGS_OTHER)
+            target_compile_options(${target} ${ARG_VISIBILITY} ${DLP_JIT_FLAGS_OTHER})
+            string(REPLACE ";" " " jit_flags_str "${DLP_JIT_FLAGS_OTHER}")
+            message(STATUS "Applying JIT flags to ${target}: ${jit_flags_str}")
+        endif()
+    endif()
+endfunction()
+
 function(dlp_set_platform_options)
     # Ensure symbols are exported for all classic targets when building shared libs
     if(BUILD_SHARED_LIBS)

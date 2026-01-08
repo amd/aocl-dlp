@@ -22,7 +22,7 @@ gemm_tests:
       ub: 193
       step: 8
     n: [64, 128]
-    k: [64]
+    k: [1, 64]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -47,7 +47,7 @@ gemm_tests:
       lb: 1
       ub: 128
       step: 32
-    k: [64]
+    k: [1, 64]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -72,7 +72,7 @@ gemm_tests:
       lb: 256
       ub: 1024
       step: 256
-    k: [64]
+    k: [1, 64]
     alpha: [1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -142,7 +142,7 @@ gemm_tests:
     transB: [false]
     m: [6, 192]
     n: [64, 128]
-    k: [64, 512]
+    k: [1, 64, 512]
     alpha: [0.0, 1.0, -1.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]
@@ -289,7 +289,7 @@ gemm_tests:
     transB: [false]
     m: [3, 7, 13, 31]
     n: [3, 7, 13, 31]
-    k: [3, 7, 13, 31]
+    k: [1, 3, 7, 13, 31]
     alpha: [1.0]
     beta: [1.0]
     lda: [128]
@@ -342,7 +342,7 @@ gemm_tests:
     transB: [false]
     m: [32]
     n: [32]
-    k: [32]
+    k: [1, 32]
     alpha: [1.0]
     beta: [1.0]
     # Non-aligned, non-power-of-2 leading dimensions
@@ -502,7 +502,7 @@ gemm_tests:
     # Very large vectors and matrices that don't fit in cache
     m: [8192]
     n: [1, 64]
-    k: [1024]
+    k: [1, 1024]
     alpha: [1.0]
     beta: [0.0, 1.0]
     lda: [65536]
@@ -717,7 +717,7 @@ gemm_tests:
     transB: [false]
     m: [1, 4096]  # Single row and single column cases
     n: [4096, 1]
-    k: [1024]
+    k: [1, 1024]
     alpha: [1.0]
     beta: [1.0]
     lda: [4096]

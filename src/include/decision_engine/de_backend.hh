@@ -275,10 +275,16 @@ class gemmF32DEBackend : public iDEBackend
         std::tie(alphaScalingType, betaScalingType) =
             gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
 
-        md_t mr              = mr_hint;
-        md_t nr              = nr_hint;
-        md_t k_unroll        = 1;
-        md_t kc              = kc_hint;
+        md_t mr       = mr_hint;
+        md_t nr       = nr_hint;
+        md_t k_unroll = 1;
+        // if k == 1, send hint to generate a single kernel with IR loop outside
+        // and JR loop inside within the microkernel.
+        md_t kc = kc_hint;
+        if ((k == 1) && (!rerouted_from_other_backend)) {
+            kc = 1;
+        }
+
         md_t prefetch_c_dist = 0; // Setting this to 0, until we use it.
         bool anyKOpsOrder    = false;
 

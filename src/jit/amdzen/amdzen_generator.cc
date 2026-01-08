@@ -50,14 +50,14 @@ jitAmdZenFP32::jitAmdZenFP32()
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1)     // Initializing with 1 to avoid div by zero
     , usingRDKernels(false) // Initialize to false
+    , kernelSize(0)         // Initialize to 0, set when allocating kernels
 {
 }
 
 jitAmdZenFP32::~jitAmdZenFP32()
 {
     for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+        utils::jitHelperUtils::deallocateJitMemory(codeBlock, kernelSize);
     }
 }
 
@@ -301,6 +301,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         // and having the specific fringe case implemented.
         numKernelVariants = NR;
         kernelCodeBlocks.resize(numKernelVariants);
+        kernelSize = utils::JIT_KERNEL_SIZE; // Standard size for GEMV M1
 
         utils::gemvM1GeneratorParams params(
             c_downscale, 0, 0, 0, 0, mtag_b, true, true, true, true,
@@ -325,8 +326,8 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.N_LEFT  = i;
             params.nfringe = (i != 0);
 
-            void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                utils::JIT_KERNEL_SIZE);
+            void* codeBuffer =
+                utils::jitHelperUtils::allocateJitMemory(kernelSize);
             if (codeBuffer == nullptr) {
                 err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
                 goto cleanup;
@@ -338,21 +339,21 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 case utils::kernelInstrType::avx2_ymm_16_reg: {
                     codegen::jitF32GEMVM1<
                         utils::kernelInstrType::avx2_ymm_16_reg>
-                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        base(codeBuffer, kernelSize);
                     err = base.generateKernel(params);
                     break;
                 }
                 case utils::kernelInstrType::avx512_ymm_32_reg: {
                     codegen::jitF32GEMVM1<
                         utils::kernelInstrType::avx512_ymm_32_reg>
-                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        base(codeBuffer, kernelSize);
                     err = base.generateKernel(params);
                     break;
                 }
                 case utils::kernelInstrType::avx512_zmm_32_reg: {
                     codegen::jitF32GEMVM1<
                         utils::kernelInstrType::avx512_zmm_32_reg>
-                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                        base(codeBuffer, kernelSize);
                     err = base.generateKernel(params);
                     break;
                 }
@@ -367,9 +368,9 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
             int n_left_suf = (i != 0) ? i : params.NR;
             // The file naming is as such : jit_gemv_m1_kernel.
-            DLP_ENABLE_JIT_DUMP_AND_MONITOR(
-                kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
-                "jit_gemv_m1_kernel", 1, n_left_suf, false, i);
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(kernelCodeBlocks[i], kernelSize,
+                                            "jit_gemv_m1_kernel", 1, n_left_suf,
+                                            false, i);
         }
 
     } else if (NR == 1) {
@@ -410,6 +411,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                                     // element-wise loads/stores for C
 
         kernelCodeBlocks.resize(numKernelVariants);
+        kernelSize = utils::JIT_KERNEL_SIZE; // Standard size for GEMV N1
 
         // Initializing with default values.
         utils::gemvN1GeneratorParams params(
@@ -447,8 +449,8 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 void* codeBuffer = kernelCodeBlocks[m_left * 4 + j];
                 // Allocate executable memory
 
-                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                    utils::JIT_KERNEL_SIZE);
+                codeBuffer =
+                    utils::jitHelperUtils::allocateJitMemory(kernelSize);
                 if (codeBuffer == nullptr) {
                     err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
                     goto cleanup;
@@ -464,7 +466,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                         // code buffer and size
                         codegen::jitF32GEMVN1<
                             utils::kernelInstrType::avx512_zmm_32_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                            base(codeBuffer, kernelSize);
 
                         err = base.generateKernel(params);
                         break;
@@ -472,14 +474,14 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     case utils::kernelInstrType::avx512_ymm_32_reg: {
                         codegen::jitF32GEMVN1<
                             utils::kernelInstrType::avx512_ymm_32_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                            base(codeBuffer, kernelSize);
                         err = base.generateKernel(params);
                         break;
                     }
                     case utils::kernelInstrType::avx2_ymm_16_reg: {
                         codegen::jitF32GEMVN1<
                             utils::kernelInstrType::avx2_ymm_16_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                            base(codeBuffer, kernelSize);
                         err = base.generateKernel(params);
                         break;
                     }
@@ -497,10 +499,81 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 // The idx represents what configuration was used to generate
                 // the kernel.
                 DLP_ENABLE_JIT_DUMP_AND_MONITOR(
-                    kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
+                    kernelCodeBlocks[m_left * 4 + j], kernelSize,
                     "jit_gemv_n1_kernel", m_left_suf, j, false, m_left * 4 + j);
             }
         }
+    } else if ((KC == 1) && (!jI.kI.invokeRD)) {
+        int processBlockSize = getProcessBlockSize();
+
+        numMRVariants = 1;
+        // Generate: 1 mask kernel + kernels for 1x, 2x, 3x, 4x numElemsPerReg
+        // For ZMM: mask(<=16), 16, 32, 48, 64 = 5 kernels total
+        numNRVariants = (processBlockSize / numElemsPerReg) + 1;
+
+        numKernelVariants = 1;
+        kernelCodeBlocks.resize(numKernelVariants);
+        // Single large kernel containing all NR variants
+        // Each NR variant contains MR sub-variants, so total size is:
+        // numNRVariants * MR * base_size_per_MR_variant
+        // Using a conservative estimate for base size
+        kernelSize = numNRVariants * MR * utils::JIT_KERNEL_SIZE;
+
+        // Initializing with default values.
+        utils::generatorParams params(
+            0, 0, (jI.kI).k_unroll, 0, c_downscale, 0, false, false, true,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            // Copy the kernelOps from the kernelInfo to params
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        params.MR = MR;
+        params.NR = processBlockSize;
+
+        void* codeBuffer = kernelCodeBlocks[0];
+        codeBuffer       = utils::jitHelperUtils::allocateJitMemory(kernelSize);
+        if (codeBuffer == nullptr) {
+            err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
+            goto cleanup;
+        }
+        kernelCodeBlocks[0] = codeBuffer;
+
+        switch (kType) {
+            case utils::kernelInstrType::avx512_zmm_32_reg: {
+                GEMMcodeGenerator::jitGEMMF32<
+                    utils::kernelInstrType::avx512_zmm_32_reg>
+                    base(codeBuffer, kernelSize);
+                err = base.generateKernel(params);
+                break;
+            }
+            case utils::kernelInstrType::avx512_ymm_32_reg: {
+                GEMMcodeGenerator::jitGEMMF32<
+                    utils::kernelInstrType::avx512_ymm_32_reg>
+                    base(codeBuffer, kernelSize);
+                err = base.generateKernel(params);
+                break;
+            }
+            case utils::kernelInstrType::avx2_ymm_16_reg: {
+                GEMMcodeGenerator::jitGEMMF32<
+                    utils::kernelInstrType::avx2_ymm_16_reg>
+                    base(codeBuffer, kernelSize);
+                err = base.generateKernel(params);
+                break;
+            }
+            default: {
+                err = dlp::jit::jitGeneratorError::error;
+                break;
+            }
+        }
+        if (err != dlp::jit::jitGeneratorError::success) {
+            goto cleanup;
+        }
+
+        DLP_ENABLE_JIT_DUMP_AND_MONITOR(kernelCodeBlocks[0], kernelSize,
+                                        "jit_kernel_k1", MR, processBlockSize,
+                                        false, processBlockSize);
     } else {
 
         // If the invokeRD flag is set, then we generate the RD kernels.
@@ -517,11 +590,12 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         numKernelVariants = numMRVariants * numNRVariants;
 
         kernelCodeBlocks.resize(numKernelVariants);
+        kernelSize = utils::JIT_KERNEL_SIZE; // Standard size for general GEMM
 
         // Initializing with default values.
         utils::generatorParams params(
             0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
-            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+            false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
@@ -539,8 +613,8 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
                 void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
                 // Allocate executable memory
-                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                    utils::JIT_KERNEL_SIZE);
+                codeBuffer =
+                    utils::jitHelperUtils::allocateJitMemory(kernelSize);
                 if (codeBuffer == nullptr) {
                     err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
                     goto cleanup;
@@ -553,7 +627,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                         // Generate the kernel for AVX512 ZMM 32 register
                         GEMMcodeGenerator::jitGEMMF32<
                             utils::kernelInstrType::avx512_zmm_32_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                            base(codeBuffer, kernelSize);
                         err = base.generateKernel(params);
                         break;
                     }
@@ -561,7 +635,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                         // Generate the kernel for AVX512 YMM 32 register
                         GEMMcodeGenerator::jitGEMMF32<
                             utils::kernelInstrType::avx512_ymm_32_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                            base(codeBuffer, kernelSize);
                         err = base.generateKernel(params);
                         break;
                     }
@@ -569,7 +643,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                         // Generate the kernel for AVX2 YMM 16 register
                         GEMMcodeGenerator::jitGEMMF32<
                             utils::kernelInstrType::avx2_ymm_16_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
+                            base(codeBuffer, kernelSize);
                         err = base.generateKernel(params);
                         break;
                     }
@@ -584,10 +658,9 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 // params.useMask=false implies a fringe or main kernel.
                 // params.useMask=true implies a lt fringe or lt main kernel.
                 DLP_ENABLE_JIT_DUMP_AND_MONITOR(
-                    kernelCodeBlocks[mr * numNRVariants + nr],
-                    utils::JIT_KERNEL_SIZE, "jit_kernel", params.MR,
-                    correspondingMainFringe, params.useMask,
-                    mr * numNRVariants + nr);
+                    kernelCodeBlocks[mr * numNRVariants + nr], kernelSize,
+                    "jit_kernel", params.MR, correspondingMainFringe,
+                    params.useMask, mr * numNRVariants + nr);
             }
         }
     }
@@ -598,8 +671,7 @@ cleanup:
     // Free the memory allocated for the kernel code blocks if
     // allocation fails or if the kernel generation fails
     for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+        utils::jitHelperUtils::deallocateJitMemory(codeBlock, kernelSize);
     }
     return err;
 }
@@ -648,7 +720,7 @@ jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::jitGeneratorContext& jI)
 
     // Initializing with default values.
     utils::generatorParams params(0, 0, (jI.kI).k_unroll, 0, c_downscale, 0,
-                                  false, false, (jI.kI).alphaScalingType,
+                                  false, false, false, (jI.kI).alphaScalingType,
                                   (jI.kI).betaScalingType, kType);
 
     for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
@@ -733,8 +805,7 @@ cleanup:
     // Free the memory allocated for the kernel code blocks if
     // allocation fails or if the kernel generation fails
     for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+        utils::jitHelperUtils::deallocateJitMemory(codeBlock, kernelSize);
     }
     return err;
 }
@@ -869,11 +940,52 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                 kernelCodeBlocks[kernel_idx]);
         kernel(params);
 
+    } else if ((KC == 1) && (!usingRDKernels)) {
+        // Special execution path for k=1 fused kernels
+        // K=1 kernels have both M and N loops internal to the JIT kernel
+        // Framework just sets up parameters and calls the kernel once
+        // Note: It is expected the generateAllKernels is called before
+        // calling this function.
+        auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+
+        int processBlockSize = getProcessBlockSize();
+
+        // Set up M-loop parameters
+        int mFullPieces    = params->m / MR;
+        int mPartialPieces = params->m % MR;
+        params->mIter      = mFullPieces;
+        params->mLeft      = mPartialPieces;
+
+        // Set up N-loop parameters for the JIT kernel
+        // For k=1 kernels, we call ONE kernel that handles the full NR
+        // dimension The kernel variant to call is determined by the
+        // processBlockSize (NR value)
+        md_t n = params->n;
+
+        // Set nIter and nLeft for the kernel
+        // The kernel will handle multiple NR iterations if nIter > 0
+        params->nIter =
+            n / processBlockSize; // Number of full processBlockSize chunks
+        params->nLeft   = n % processBlockSize; // Remaining elements
+        md_t nRemainder = n % numElemsPerReg;
+        if (nRemainder > 0) {
+            setMaskForGEMMLtFringe(params, nRemainder);
+        }
+
+        int kernel_idx = 0; // single kernel index for k=1 kernels
+
+        // Call the k=1 fused kernel - it handles M loop internally
+        // N-loop will be added in next step
+        auto kernel = reinterpret_cast<void (*)(dlp::kernels::gemmParams*)>(
+            kernelCodeBlocks[kernel_idx]);
+        kernel(params);
+
     } else {
 
         if (usingRDKernels) {
             return executeKernelRD(_params);
         }
+
         // Note: It is expected the generateAllKernels is called before
         // calling this function.
         auto params = static_cast<dlp::kernels::gemmParams*>(_params);
@@ -1303,10 +1415,9 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
         kernelCodeBlocks.resize(numKernelVariants);
 
-        // Initializing with default values.
         utils::generatorParams params(
             0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
-            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+            false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
@@ -1788,7 +1899,7 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
         // Initializing with default values.
         utils::generatorParams params(0, 0, K_UNROLL, 0, c_downscale, 0, false,
-                                      false, (jI.kI).alphaScalingType,
+                                      false, false, (jI.kI).alphaScalingType,
                                       (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
@@ -2315,9 +2426,10 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelCodeBlocks.resize(numKernelVariants);
 
         // Initializing with default values.
-        utils::generatorParams params(
-            0, 0, (jI.kI).k_unroll, PREFETCH_C_DIST, c_downscale, 1, false,
-            false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+        utils::generatorParams params(0, 0, (jI.kI).k_unroll, PREFETCH_C_DIST,
+                                      c_downscale, 1, false, false, false,
+                                      (jI.kI).alphaScalingType,
+                                      (jI.kI).betaScalingType, kType);
 
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params

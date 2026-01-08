@@ -50,15 +50,14 @@ dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::allocateReg()
 {
     // check if MR, NR, k_unroll are valid
-    if (!((MR > 0))) {
+    if (currentMR <= 0) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
-    int nElemsPerReg = RegBytes / sizeof(float);
-    bFullReg         = ((NR) / nElemsPerReg);
-    bMaskReg         = (useMask ? numMaskRegs : 0);
-    bReg             = bFullReg + bMaskReg;
-    cReg             = MR * bReg;
-    aReg             = numRegs - cReg - bReg;
+    bFullReg = ((currentNR) / numElemsPerReg);
+    bMaskReg = (useMask ? numMaskRegs : 0);
+    bReg     = bFullReg + bMaskReg;
+    cReg     = currentMR * bReg;
+    aReg     = numRegs - cReg - bReg - maskVecReg;
 
     // Check if we have enough registers
     if (aReg < 1) {
@@ -66,25 +65,7 @@ jitGEMMF32<KType>::allocateReg()
     }
     cRegIdx = numRegs - cReg;
     bRegIdx = cRegIdx - bReg;
-    if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-        aReg = 1;
-        // maskRegIdx is hardcoded to 0 here.
-        // In future, if we need to use a different mask register, we need to
-        // change in transpose_generator.cc as well.
-        if (useMask) {
-            maskRegIdx = 0;
-            aRegIdx    = maskRegIdx + 1;
-        } else {
-            aRegIdx = 0;
-        }
-
-        int totalRegsNeeded = cReg + bReg + aReg + (useMask ? 1 : 0);
-        if (totalRegsNeeded > numRegs || aReg < 1) {
-            return dlp::jit::jitGeneratorError::badKernelInfo;
-        }
-    } else {
-        aRegIdx = 0;
-    }
+    aRegIdx = maskRegIdx + maskVecReg;
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -93,16 +74,7 @@ template<utils::kernelInstrType KType>
 void
 jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
 {
-    if (addIrLoop) {
-        // Move A and C pointers to stack so
-        // they can be accessed at the start or end of IR-loop
-        mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
-        mov(regMiter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
-
-    } else {
-        mov(regTmpAptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
-    }
+    mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
 
     if (c_downscale < DLP_F32) {
         // Initialize F32→BF16 conversion constants on stack
@@ -136,7 +108,12 @@ jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
     lea(regRsC, ptr[regRsC * sizeof(float)]);
 
     mov(regTmpCptr, regCPtr);
+}
 
+template<utils::kernelInstrType KType>
+void
+jitGEMMF32<KType>::loadMasks()
+{
     if (useMask) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             for (int ii = 0; ii < numMaskRegs; ++ii) {
@@ -186,7 +163,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::BroadcastAFMAwithB()
 {
-    for (int i = 0; i < MR; i++) {
+    for (int i = 0; i < currentMR; i++) {
         vbroadcastss(RegType(aRegIdx), ptr[regTmpAptr]);
         add(regTmpAptr, regRsA);
         for (int j = 0; j < bReg; j++) {
@@ -227,7 +204,8 @@ jitGEMMF32<KType>::storeResult(bool fuseBetaWithStore, bool mLoop)
     je(".storeResultRowMajor", T_NEAR);
     // RETURN_IF_ERROR(storeResultColumnMajor());
     x86gen::TransposeGenerator<KType> transposeGenerator(
-        this, MR, NR, useMask, mLoop, numMaskRegs, cRegIdx, cReg, regTmpCptr);
+        this, currentMR, currentNR, useMask, mLoop, numMaskRegs, cRegIdx, cReg,
+        regTmpCptr);
     RETURN_IF_ERROR(transposeGenerator.generateTranspose(
         stackPtr, dlp::jit::jitAlgoType::gemm, fuseBetaWithStore));
     jmp(".end", T_NEAR);
@@ -294,7 +272,7 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
     int scratchReg2 = scratch_reg_queue.front();
     scratch_reg_queue.pop();
 
-    for (int i = 0; i < MR; i++) {
+    for (int i = 0; i < currentMR; i++) {
         mov(regTmp2, regTmpCptr);
         for (int j = 0; j < bFullReg; j++) {
             resetMasks(false, 0);
@@ -432,7 +410,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         je(".storeResultRowMajorBZ", T_NEAR);
 
         // beta is non-zero, fuse with store
-        for (int i = 0; i < MR; i++) {
+        for (int i = 0; i < currentMR; i++) {
             for (int j = 0; j < bFullReg; j++) {
                 // Regular store
                 vmovups(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
@@ -513,7 +491,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         // For AVX2: 8 F32 elements → 16 bytes BF16 output (Xmm)
         int nElemsPerReg = RegBytes / sizeof(float);
 
-        for (int i = 0; i < MR; i++) {
+        for (int i = 0; i < currentMR; i++) {
             for (int j = 0; j < bFullReg; j++) {
                 RETURN_IF_ERROR(convertF32toBF16(scratch1, scratch2,
                                                  cRegIdx + i * bReg + j));
@@ -588,7 +566,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         L(".storeResultF32ToBF16");
     }
 
-    for (int i = 0; i < MR; i++) {
+    for (int i = 0; i < currentMR; i++) {
         for (int j = 0; j < bFullReg; j++) {
             // Regular store
             vmovups(ptr[regTmpCptr + j * RegBytes],
@@ -646,18 +624,37 @@ jitGEMMF32<KType>::regInit()
 
 template<utils::kernelInstrType KType>
 void
-jitGEMMF32<KType>::moveCPtr()
+jitGEMMF32<KType>::moveCPtr(Xbyak::Reg64 regPtr,
+                            Xbyak::Reg64 regStride,
+                            int          val)
 {
     // Update C pointer for next row : cbuf += m * MR * rs_c
     // lea() doesn't work with non-power-of-2 values, and avx2
     // doesn't support imul. Hence, decomposing m value to power
     // of 2 to handle all the cases commonly. Let's say if MR = 13
     // then we can represent it as 8 + 4 + 1
-    int m_val       = MR;
+    int m_val       = val;
     int power2scale = 1;
     while (m_val > 0) {
         if (m_val & 1) {
-            lea(regCPtr, ptr[regCPtr + power2scale * regRsC]);
+            // lea() only supports scale factors of 1, 2, 4, and 8
+            // For powers of 2 greater than 8, use a temporary register
+            if (power2scale <= 8) {
+                lea(regPtr, ptr[regPtr + power2scale * regStride]);
+            } else {
+                // Use regTmp1 as temporary register
+                // regTmp1 = regStride << log2(power2scale)
+                mov(regTmp1, regStride);
+                int shift_amount = 0;
+                int temp_scale   = power2scale;
+                while (temp_scale > 1) {
+                    shift_amount++;
+                    temp_scale >>= 1;
+                }
+                shl(regTmp1, shift_amount);
+                // regPtr += regTmp1
+                add(regPtr, regTmp1);
+            }
         }
         m_val >>= 1;
         power2scale <<= 1;
@@ -723,7 +720,13 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::allocateMaskRegisters()
 {
+    maskVecReg = 0;
+    maskRegIdx = 0;
+
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+        if (useMask) {
+            maskVecReg = numMaskRegs;
+        }
         return dlp::jit::jitGeneratorError::success;
     }
 
@@ -838,7 +841,7 @@ jitGEMMF32<KType>::scaleBetaColumnMajor()
     int scratchReg2 = scratch_reg_queue.front();
     scratch_reg_queue.pop();
 
-    for (int i = 0; i < MR; i++) {
+    for (int i = 0; i < currentMR; i++) {
         mov(regTmp2, regTmpCptr);
         for (int j = 0; j < bFullReg; j++) {
             resetMasks(false, 0);
@@ -901,14 +904,16 @@ jitGEMMF32<KType>::scaleBetaColumnMajor()
     scratch_reg_queue.push(offsets2RegIdx);
     scratch_reg_queue.push(betaRegIdx);
 
-    jmp("offsets_end", T_NEAR);
-    align(64);
-    L(offsets);
-    int64_t offsets[16] = {
-        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
-    };
-    db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
-    L("offsets_end");
+    if (!dumpedOffsets) {
+        jmp("offsets_end", T_NEAR);
+        align(64);
+        L(offsets);
+        int64_t offsets[16] = { 0, 1, 2,  3,  4,  5,  6,  7,
+                                8, 9, 10, 11, 12, 13, 14, 15 };
+        db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
+        L("offsets_end");
+        dumpedOffsets = true;
+    }
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -976,7 +981,7 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         int nElemsPerReg   = RegBytes / sizeof(float);
         int bf16InputBytes = nElemsPerReg * sizeof(int16_t);
 
-        for (int i = 0; i < MR; i++) {
+        for (int i = 0; i < currentMR; i++) {
             for (int j = 0; j < bFullReg; j++) {
                 // Load BF16 values from buf_downscale and convert to F32
                 // Stack layout [rsp+16] contains shift value 16 for conversion
@@ -1074,7 +1079,7 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         L(".betaOp");
     }
 
-    for (int i = 0; i < MR; i++) {
+    for (int i = 0; i < currentMR; i++) {
         for (int j = 0; j < bFullReg; j++) {
             vmovups(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
             vfmadd231ps(RegType(cRegIdx + i * bReg + j), RegType(betaRegIdx),
@@ -1113,11 +1118,13 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     inLocalLabel();
     // calculate and load pointers
     if (params.mLoop) {
+        mov(regMiter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
         L(".BLOOP6X64I");
         // Move A and C pointers to stack so
         // they can be accessed at the start or end of IR-loop
-        mov(regTmpAptr, regAPtr);
     }
+    mov(regTmpAptr, regAPtr);
     mov(regBptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
 
     // zero out accumulators
@@ -1173,8 +1180,8 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
         }
 
         RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
-            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg)));
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, currentMR,
+            currentNR, useMask, numMaskRegs, cRegIdx, cReg)));
 
         // The gelu constants are embedded within the generated JIT kernel.
         // Otherwise a bug was observed whereby the address of gelu constants
@@ -1220,12 +1227,12 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
-        add(regTmp1, MR);
+        add(regTmp1, currentMR);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(lpgemm_post_op_attr, post_op_c_i)],
             regTmp1);
 
-        moveCPtr();
+        moveCPtr(regCPtr, regRsC, currentMR);
 
         // decrement m_iter
         dec(regMiter);
@@ -1243,14 +1250,21 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
 {
+    // Check if this is a k=1 kernel (entire matrix iteration inside JIT)
+    if (params.is_k1) {
+        return generateKernelK1(params);
+    }
+
     MR          = params.MR;
+    currentMR   = MR;
     NR          = params.NR;
+    currentNR   = NR;
     useMask     = params.useMask;
     numMaskRegs = params.numMaskRegs;
     c_downscale = params.c_downscale;
 
-    RETURN_IF_ERROR(allocateReg());
     RETURN_IF_ERROR(allocateMaskRegisters());
+    RETURN_IF_ERROR(allocateReg());
 
     // There are 14 general purpose(64 bit) registers.
     // StackFrame manages these registers, since we are using
@@ -1271,8 +1285,605 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
     Xbyak::util::StackFrame stackFrame(this, 1, 13, 64);
     initializeStackFrame(stackFrame);
     initializeParameters(params.mLoop);
+    loadMasks();
 
     RETURN_IF_ERROR(generateIrLoop(params));
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+// Generate kernel for F32 operations
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::generateKernelBodyK1(utils::generatorParams& params,
+                                        gen::kernelOpsHandler* kernelOpsHandler)
+{
+    inLocalLabel();
+
+    mov(regTmpAptr, regAPtr);
+    mov(regBptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
+
+    // zero out accumulators
+    regInit();
+
+    // k is always 1 for k=1 kernel
+    RETURN_IF_ERROR(kernelUnroll(1));
+
+    L(".BPOSTACCUM");
+
+    if (params.alphaScalingType == dlp::kernel_frame::scalingType::one) {
+        // skip alpha scaling if alpha is 1
+    } else {
+        // alpha scaling
+        RETURN_IF_ERROR(scaleAlpha());
+    }
+
+    // check if is_last_k is set
+    mov(regTmp1,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+    test(regTmp1, regTmp1);
+#ifdef IR_JR_LOOP_ORDER_FOR_K1
+    je(label_store_result_k1[currentMR - 1][currentNRIdx],
+       T_NEAR); // Use 2D indexing: [MR][NR]
+#else
+    je(label_store_result_k1[currentNRIdx][currentMR - 1],
+       T_NEAR); // Use 2D indexing: [NR][MR]
+#endif
+
+    // Create and set up kernelOphandler if there are post-ops
+    if (!params.kernelOps.empty()) {
+        // post-ops are applied in the last k iteration, so we need to
+        // scale beta before applying post-ops
+        // To-Do: add support for beta scaling if beta is 1 using vaddps
+        if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
+            // skip beta scaling if beta is 0
+        } else {
+            // beta scaling
+            RETURN_IF_ERROR(scaleBeta());
+        }
+
+        RETURN_IF_ERROR((kernelOpsHandler->generateKernelOps(
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, currentMR,
+            currentNR, useMask, numMaskRegs, cRegIdx, cReg)));
+
+        // The gelu constants are embedded within the generated JIT kernel.
+        // Otherwise a bug was observed whereby the address of gelu constants
+        // inside the class turned out to be beyond what JIT can access.
+        kernelOpsHandler->generateKernelOpsAttributes();
+
+        // store result without fusing beta with store
+        RETURN_IF_ERROR(storeResult(false, params.mLoop));
+        jmp(".AfterStore", T_NEAR);
+    }
+
+#ifdef IR_JR_LOOP_ORDER_FOR_K1
+    L(label_store_result_k1[currentMR - 1]
+                           [currentNRIdx]); // Use 2D indexing: [MR][NR]
+#else
+    L(label_store_result_k1[currentNRIdx]
+                           [currentMR - 1]); // Use 2D indexing: [NR][MR]
+#endif
+    if (c_downscale < DLP_F32) {
+        RETURN_IF_ERROR(scaleBeta());
+        RETURN_IF_ERROR(storeResult(false, params.mLoop));
+
+    } else {
+        if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
+            // skip beta scaling if beta is 0
+            RETURN_IF_ERROR(storeResult(false, params.mLoop));
+        } else {
+            // beta scaling
+            RETURN_IF_ERROR(storeResult(true, params.mLoop));
+        }
+    }
+
+    L(".AfterStore");
+
+    outLocalLabel();
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::generateKernelK1(utils::generatorParams& params)
+{
+#ifdef IR_JR_LOOP_ORDER_FOR_K1
+    return generateKernel_IR_JR(params);
+#else
+    return generateKernel_JR_IR(params);
+#endif
+}
+
+// ----------------------------unused for now ----------------------------------
+// this function generates the kernel with JR loop outside and IR loop inside
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
+{
+    MR          = params.MR;
+    NR          = params.NR;
+    c_downscale = params.c_downscale;
+
+    // There are 14 general purpose(64 bit) registers.
+    // StackFrame manages these registers, since we are using
+    // one register for the input parameter of the function,
+    // the rest are used as scratch registers to store variables like
+    // pointers, strides, counters, etc.
+    // Note that all the scratch registers allocated by the stack frame
+    // need not be used by the kernel.
+    // Putting inside a scope so that some tables can be generated post
+    // the ret instr. StackFrame inserts a ret instr in its destructor.
+    // Allocate 48 bytes of local stack space:
+    // - 32 bytes for mask storage (fringe BF16 stores)
+    // - 16 bytes for F32→BF16 conversion constants
+    Xbyak::util::StackFrame stackFrame(this, 1, 13, 48);
+    initializeStackFrame(stackFrame);
+    regNiter = regTmp2;
+    regNLeft = regKIter;
+    initializeParameters(true);
+
+    // Create kernel ops handler once for the entire kernel (like f32_gemv.cc)
+    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+    }
+
+    // Calculate number of NR variants we'll need to handle at runtime
+    // For now, we'll handle a single NR variant per kernel (as set in
+    // params.NR) Future: extend to handle multiple NR values in one kernel
+    numNRVariants = NR / numElemsPerReg + 1; // +1 for the mask variant
+    numMRVariants = MR;
+
+    // Initialize 2D label vectors: [numNRVariants][MR]
+    std::vector<std::vector<Xbyak::Label>> m_labels_k1;
+    Xbyak::Label                           done_k1;
+    Xbyak::Label                           NIterLoop;
+    std::vector<Xbyak::Label>              done_mVariants;
+    std::vector<Xbyak::Label>              considerMLeft;
+    Xbyak::Label                           considerNLeft;
+    std::vector<Xbyak::Label>              skip_NR;
+
+    m_labels_k1.resize(numNRVariants);
+    label_store_result_k1.resize(numNRVariants);
+    skip_NR.resize(numNRVariants); // Resize skip_NR for NR variant jumps
+    considerMLeft.resize(
+        numNRVariants); // One considerMLeft label per NR variant
+    done_mVariants.resize(
+        numNRVariants); // One done_mVariants label per NR variant
+
+    // Generate all NR variants
+    for (currentNRIdx = numNRVariants - 1; currentNRIdx >= 0; currentNRIdx--) {
+
+        // Initialize the label vectors for the current NR variant
+        m_labels_k1[currentNRIdx].resize(MR);
+        label_store_result_k1[currentNRIdx].resize(MR);
+
+        // Set currentNR based on currentNRIdx
+        currentNR            = currentNRIdx * numElemsPerReg; // Full variants
+        bool isMainNRVariant = currentNRIdx == numNRVariants - 1;
+
+        // For the main NR variant, we first load nIter and check if > 0,
+        // else we jump to considerNLeft label.
+        if (isMainNRVariant) {
+            mov(regNiter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+            test(regNiter, regNiter);
+            je(considerNLeft, T_NEAR);
+            L(NIterLoop);
+        } else {
+            cmp(regNLeft, currentNR); // Compare with immediate value
+            // if nLeft < currentNR, we need to skip the current NR variant
+            jl(skip_NR[currentNRIdx], T_NEAR);
+        }
+
+        // at the start of each NR variant, load A, B, C pointers
+        mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
+
+        useMask     = currentNRIdx == 0;
+        numMaskRegs = useMask ? 1 : 0;
+        RETURN_IF_ERROR(allocateMaskRegisters());
+        loadMasks();
+
+        // before executing the IR loop, we need to save the original
+        // post_op_c_i value
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+        push(regTmp1);
+
+        // Generate all MR variants for this NR variant
+        for (int mr = MR; mr > 0; mr--) {
+
+            L(m_labels_k1[currentNRIdx][mr - 1]);
+
+            bool isMainMRVariant = mr == MR;
+
+            currentMR = mr;
+
+            RETURN_IF_ERROR(allocateReg());
+
+            inLocalLabel();
+            // calculate and load pointers
+            if (isMainMRVariant) {
+                mov(regMiter,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
+                test(regMiter, regMiter);
+                je(considerMLeft[currentNRIdx], T_NEAR);
+                L(".BLOOP6X64I");
+            }
+
+            RETURN_IF_ERROR(
+                generateKernelBodyK1(params, kernelOpsHandlerPtr.get()));
+
+            if (isMainMRVariant) {
+                // get A pointer from stack
+                // add psA to A pointer
+                mov(regTmp1,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
+                lea(regTmp1, ptr[regTmp1 * sizeof(float)]);
+                lea(regAPtr, ptr[regAPtr + regTmp1]);
+
+                // Update post_op_attr c_i. kernelOpsAttr is not a pointer, so
+                // adding two offsets at the same time is safe.
+                mov(regTmp1,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                add(regTmp1, currentMR);
+                mov(ptr[stackPtr
+                        + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                    regTmp1);
+
+                moveCPtr(regCPtr, regRsC, currentMR);
+
+                // decrement m_iter
+                dec(regMiter);
+
+                jne(".BLOOP6X64I", T_NEAR);
+
+                L(considerMLeft[currentNRIdx]);
+                // load m_left
+                mov(regMiter,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mLeft)]);
+                test(regMiter, regMiter);
+                je(done_mVariants[currentNRIdx], T_NEAR);
+
+                // Jump to appropriate label based on mLeft value
+                for (int mr = MR - 1; mr > 0; mr--) {
+                    cmp(regMiter, mr);
+                    je(m_labels_k1[currentNRIdx][mr - 1],
+                       T_NEAR); // Use 2D indexing: [NR][MR]
+                }
+            } else {
+                jmp(done_mVariants[currentNRIdx], T_NEAR);
+            }
+
+            outLocalLabel();
+        }
+
+        L(done_mVariants[currentNRIdx]);
+
+        // restore the original post_op_c_i value
+        pop(regTmp1);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+            regTmp1);
+
+        // move B pointer to the next NR panel
+        mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
+        add(regTmp1, currentNR * sizeof(float));
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)], regTmp1);
+
+        // move c ptr by csC * currentNR * sizeof(float)
+        mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
+        mov(regTmp3, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
+        lea(regTmp3, ptr[regTmp3 * sizeof(float)]);
+        moveCPtr(regCPtr, regTmp3, currentNR);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)], regCPtr);
+
+        // update post_op_c_j value to point to next NR panel
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        add(regTmp1, currentNR);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+            regTmp1);
+
+        if (isMainNRVariant) {
+
+            // regNiter register may have been overwritten since regTmp2 is used
+            // for nIter load regNiter freshly decrement, store-back and then
+            // check if nIter is 0
+            mov(regNiter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+            dec(regNiter);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)],
+                regNiter);
+            jnz(NIterLoop, T_NEAR);
+
+            L(considerNLeft);
+            mov(regNLeft,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+            test(regNLeft, regNLeft);
+            je(done_k1, T_NEAR);
+        } else {
+            // update nLeft value
+            mov(regNLeft,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+            sub(regNLeft, currentNR);
+            // store back the value of nLeft
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)],
+                regNLeft);
+            test(regNLeft, regNLeft);
+            jz(done_k1, T_NEAR);
+            L(skip_NR[currentNRIdx]);
+        }
+    }
+    L(done_k1);
+
+    vzeroupper();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
+{
+    MR          = params.MR;
+    NR          = params.NR;
+    c_downscale = params.c_downscale;
+
+    // setting params.mLoop to false
+    params.mLoop = false;
+
+    // There are 14 general purpose(64 bit) registers.
+    // StackFrame manages these registers, since we are using
+    // one register for the input parameter of the function,
+    // the rest are used as scratch registers to store variables like
+    // pointers, strides, counters, etc.
+    // Note that all the scratch registers allocated by the stack frame
+    // need not be used by the kernel.
+    // Putting inside a scope so that some tables can be generated post
+    // the ret instr. StackFrame inserts a ret instr in its destructor.
+    // Allocate 48 bytes of local stack space:
+    // - 32 bytes for mask storage (fringe BF16 stores)
+    // - 16 bytes for F32→BF16 conversion constants
+    Xbyak::util::StackFrame stackFrame(this, 1, 13, 48);
+    initializeStackFrame(stackFrame);
+    regNiter = regTmp2;
+    regNLeft = regKIter;
+    initializeParameters(true);
+
+    // Create kernel ops handler once for the entire kernel (like f32_gemv.cc)
+    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+    }
+
+    // Calculate number of NR variants we'll need to handle at runtime
+    // For now, we'll handle a single NR variant per kernel (as set in
+    // params.NR) Future: extend to handle multiple NR values in one kernel
+    numNRVariants = NR / numElemsPerReg + 1; // +1 for the mask variant
+    numMRVariants = MR;
+
+    // Initialize 2D label vectors: [numNRVariants][MR]
+    std::vector<Xbyak::Label>              m_labels_k1;
+    Xbyak::Label                           done_k1;
+    std::vector<Xbyak::Label>              NIterLoop;
+    Xbyak::Label                           MIterLoop;
+    std::vector<Xbyak::Label>              done_nVariants;
+    Xbyak::Label                           considerMLeft;
+    std::vector<Xbyak::Label>              considerNLeft;
+    std::vector<std::vector<Xbyak::Label>> skip_NR;
+
+    m_labels_k1.resize(numMRVariants);
+    label_store_result_k1.resize(numMRVariants);
+    skip_NR.resize(numMRVariants); // Resize skip_NR for NR variant jumps
+    considerNLeft.resize(
+        numMRVariants); // One considerMLeft label per NR variant
+    done_nVariants.resize(
+        numMRVariants); // One done_nVariants label per MR variant
+    NIterLoop.resize(numMRVariants);
+
+    // Generate all MR variants for this NR variant
+    for (int mr = MR; mr > 0; mr--) {
+
+        // Initialize the label vectors for the current NR variant
+        label_store_result_k1[mr - 1].resize(numNRVariants);
+        skip_NR[mr - 1].resize(numNRVariants);
+
+        bool isMainMRVariant = mr == MR;
+
+        currentMR = mr;
+
+        L(m_labels_k1[mr - 1]);
+
+        // calculate and load pointers
+        if (isMainMRVariant) {
+            mov(regMiter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
+            test(regMiter, regMiter);
+            je(considerMLeft, T_NEAR);
+            L(MIterLoop);
+        }
+
+        // before executing the JR loop, we need to save the original
+        // post_op_c_j
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+        push(regTmp1);
+        mov(regNiter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+        push(regNiter);
+        mov(regNLeft,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+        push(regNLeft);
+        mov(regBptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
+        push(regBptr);
+
+        // Generate all NR variants
+        for (currentNRIdx = numNRVariants - 1; currentNRIdx >= 0;
+             currentNRIdx--) {
+
+            // Set currentNR based on currentNRIdx
+            currentNR = currentNRIdx * numElemsPerReg; // Full variants
+            bool isMainNRVariant = currentNRIdx == numNRVariants - 1;
+
+            // For the main NR variant, we first load nIter and check if > 0,
+            // else we jump to considerNLeft label.
+            if (isMainNRVariant) {
+                mov(regNiter,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+                test(regNiter, regNiter);
+                je(considerNLeft[mr - 1], T_NEAR);
+                L(NIterLoop[mr - 1]);
+            } else {
+                cmp(regNLeft, currentNR); // Compare with immediate value
+                // if nLeft < currentNR, we need to skip the current NR variant
+                jl(skip_NR[mr - 1][currentNRIdx], T_NEAR);
+            }
+
+            // at the start of each NR variant, load A, B, C pointers
+            mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
+
+            // Transpose Generator loads the value of n instead of nLeft to
+            // decide how many cols to store. Hence move the value of nLeft to
+            // n.
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)],
+                regNLeft);
+
+            useMask     = currentNRIdx == 0;
+            numMaskRegs = useMask ? 1 : 0;
+            RETURN_IF_ERROR(allocateMaskRegisters());
+            loadMasks();
+
+            RETURN_IF_ERROR(allocateReg());
+
+            RETURN_IF_ERROR(
+                generateKernelBodyK1(params, kernelOpsHandlerPtr.get()));
+
+            // move B pointer to the next NR panel
+            mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
+            add(regTmp1, currentNR * sizeof(float));
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)], regTmp1);
+
+            // move c ptr by csC * currentNR * sizeof(float)
+            mov(regTmp3,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
+            lea(regTmp3, ptr[regTmp3 * sizeof(float)]);
+            moveCPtr(regCPtr, regTmp3, currentNR);
+
+            // update post_op_c_j value to point to next NR panel
+            mov(regTmp1,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            add(regTmp1, currentNR);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                regTmp1);
+
+            if (isMainNRVariant) {
+
+                // regNiter register may have been overwritten since regTmp2 is
+                // used for nIter load regNiter freshly decrement, store-back
+                // and then check if nIter is 0
+                mov(regNiter,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+                dec(regNiter);
+                mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)],
+                    regNiter);
+                jnz(NIterLoop[mr - 1], T_NEAR);
+
+                L(considerNLeft[mr - 1]);
+                mov(regNLeft,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+                test(regNLeft, regNLeft);
+                je(done_nVariants[mr - 1], T_NEAR);
+            } else {
+                // update nLeft value
+                mov(regNLeft,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+                sub(regNLeft, currentNR);
+                // store back the value of nLeft
+                mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)],
+                    regNLeft);
+                test(regNLeft, regNLeft);
+                jz(done_nVariants[mr - 1], T_NEAR);
+                L(skip_NR[mr - 1][currentNRIdx]);
+            }
+        }
+
+        L(done_nVariants[mr - 1]);
+        // restore the original post_op_c_j value
+        pop(regBptr);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)], regBptr);
+        pop(regNLeft);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)],
+            regNLeft);
+        pop(regNiter);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)],
+            regNiter);
+        pop(regTmp1);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+            regTmp1);
+
+        if (isMainMRVariant) {
+            // get A pointer from stack
+            // add psA to A pointer
+            mov(regTmp1,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
+            lea(regTmp1, ptr[regTmp1 * sizeof(float)]);
+            lea(regAPtr, ptr[regAPtr + regTmp1]);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)], regAPtr);
+
+            // Update post_op_attr c_i. kernelOpsAttr is not a pointer, so
+            // adding two offsets at the same time is safe.
+            mov(regTmp1,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            add(regTmp1, currentMR);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                regTmp1);
+
+            mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
+            moveCPtr(regCPtr, regRsC, currentMR);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)], regCPtr);
+
+            // decrement m_iter
+            dec(regMiter);
+
+            jne(MIterLoop, T_NEAR);
+
+            L(considerMLeft);
+            // load m_left
+            mov(regMiter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mLeft)]);
+            test(regMiter, regMiter);
+            je(done_k1, T_NEAR);
+
+            // Jump to appropriate label based on mLeft value
+            for (int mr_idx = MR - 1; mr_idx > 0; mr_idx--) {
+                cmp(regMiter, mr_idx);
+                je(m_labels_k1[mr_idx - 1],
+                   T_NEAR); // Use 2D indexing: [NR][MR]
+            }
+        } else {
+            jmp(done_k1, T_NEAR);
+        }
+    }
+
+    L(done_k1);
+
+    vzeroupper();
 
     return dlp::jit::jitGeneratorError::success;
 }

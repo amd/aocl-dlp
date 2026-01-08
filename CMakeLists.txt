@@ -95,6 +95,7 @@ add_library(${PROJECT_NAME}_static STATIC
     ${DLP_SRCS}
     $<TARGET_OBJECTS:aocl_dlp_classic>
     $<TARGET_OBJECTS:aocl_dlp_plus>
+    $<TARGET_OBJECTS:aocl_dlp_jit_amdzen>
     $<TARGET_OBJECTS:dlp_kernel_zen>
     $<TARGET_OBJECTS:dlp_kernel_zen4>
 )
@@ -107,6 +108,9 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
         ${CLASSIC_TARGETS}
         ${DLP_PLUS_TARGETS}
+        $<$<PLATFORM_ID:Linux>:-Wl,--whole-archive>
+        aocl_dlp_jit_amdzen
+        $<$<PLATFORM_ID:Linux>:-Wl,--no-whole-archive>
     PUBLIC
         Threads::Threads
 )

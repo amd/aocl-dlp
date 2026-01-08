@@ -356,6 +356,9 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
     post_ops_attr.b_sum_offset      = 0;
     post_ops_attr.b_col_sum_vec     = NULL;
     post_ops_attr.b_col_sum_vec_s16 = NULL;
+    post_ops_attr.post_op_c_i       = 0;
+    post_ops_attr.post_op_c_j       = 0;
+    post_ops_attr.rs_c_downscale    = rs_c_downscale;
 
     if (c_downscale < DLP_F32) {
         post_ops_attr.buf_downscale = c;
@@ -367,6 +370,18 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
     post_ops_attr.is_first_k = is_first_k;
     bool is_last_k           = TRUE;
     post_ops_attr.is_last_k  = is_last_k;
+
+    // Column major B matrix is not supported by k=1 JIT kernel. This case is
+    // either handled by Rd kernels or by packing B before calling RV kernels.
+    // In this case, k=1 JIT kernel should not be invoked.
+    if ((k == 1) && ((cs_b == 1))
+        && (lcntx->dlp_kernel_hndl.kernel_base != NULL)) {
+        dlp_execute_kernel(lcntx->dlp_kernel_hndl, m, n, k, (float*)a, rs_a,
+                           cs_a, MR * rs_a, (float*)b, rs_b, cs_b, 0, 0, c,
+                           rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                           post_op_list, post_ops_attr);
+        return;
+    }
 
     // Even if the mtag_b is set to PACK, for tiny sizes its better to
     // pack only if it affects output accuracy (like column major B),
