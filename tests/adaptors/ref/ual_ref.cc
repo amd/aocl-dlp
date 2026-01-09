@@ -996,6 +996,15 @@ UalRef::gemm(const Matrix&                      A,
         return UALError::UAL_CAST_ERROR;
     }
 
+    // Check if post-ops actually contain operations
+    // If the post-ops object is empty (cartesian product generated empty case),
+    // treat it as if no post-ops were provided
+    if (refOp->getPostOpCount() == 0) {
+        bool success = checkValidGemmParams(A, B, C, false)
+                       && gemm(A, B, C, accType, alpha, beta);
+        return success ? UALError::UAL_SUCCESS : UALError::UAL_FAILURE;
+    }
+
     // Helper lambda to apply all post-ops to a matrix
     auto applyAllPostOps = [this, refOp](Matrix& matrix) {
         refOp->resetIterator();

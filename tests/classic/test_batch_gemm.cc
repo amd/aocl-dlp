@@ -26,6 +26,7 @@
  *
  */
 
+#include "adaptors/ref/operation_ref.hh"
 #include "framework/matrix.hh"
 #include "framework/operation.hh"
 #include "framework/ual.hh"
@@ -295,9 +296,14 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                     config.dlp_postops_per_group.emplace_back(dlp_postops);
                     config.ref_postops_per_group.emplace_back(ref_postops);
 
-                    if (dlp_postops != nullptr || ref_postops != nullptr) {
-                        config.has_postops = true;
-                    }
+                    // Check if post-ops actually contain operations (not just
+                    // non-null handles)
+                    bool has_dlp_ops =
+                        dlp_postops && !dlp_postops->getParams().empty();
+                    bool has_ref_ops =
+                        ref_postops && !ref_postops->getParams().empty();
+
+                    config.has_postops = has_dlp_ops && has_ref_ops;
 
                     j++;
 
@@ -372,10 +378,18 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                         microTest.getPostOp(UALType::DLP));
                     config.ref_postops_per_group.emplace_back(
                         microTest.getPostOp(UALType::REF));
-                    if (config.dlp_postops_per_group[0] != nullptr
-                        || config.ref_postops_per_group[0] != nullptr) {
-                        config.has_postops = true;
-                    }
+
+                    // Check if post-ops actually contain operations (not just
+
+                    bool has_dlp_ops = config.dlp_postops_per_group[0]
+                                       && !config.dlp_postops_per_group[0]
+                                               ->getParams()
+                                               .empty();
+                    bool has_ref_ops = config.ref_postops_per_group[0]
+                                       && !config.ref_postops_per_group[0]
+                                               ->getParams()
+                                               .empty();
+                    config.has_postops = has_dlp_ops && has_ref_ops;
 
                     configs.push_back(config);
                     total_configs++;
