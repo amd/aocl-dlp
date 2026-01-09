@@ -157,4 +157,28 @@ aocl_gemm_bf16s8s32of32_ref(const char            order,
                             md_t                  zp_len,
                             framework::MatrixType sf_type,
                             framework::MatrixType zp_type);
+
+void
+aocl_gemm_f32s8s32of32_ref(const char            order,
+                           const char            transa,
+                           const char            transb,
+                           const md_t            m,
+                           const md_t            n,
+                           const md_t            k,
+                           int32_t               alpha,
+                           const float*          A,
+                           int                   lda,
+                           const int8_t*         B,
+                           int                   ldb,
+                           int32_t               beta,
+                           float*                C,
+                           int                   ldc,
+                           void*                 a_pre_quant_sf_data,
+                           void*                 a_pre_quant_zp_data,
+                           void*                 a_post_quant_sf_data,
+                           void*                 a_post_quant_zp_data,
+                           md_t                  sf_len,
+                           md_t                  zp_len,
+                           framework::MatrixType sf_type,
+                           framework::MatrixType zp_type);
 } // namespace dlp::testing::classic::ref

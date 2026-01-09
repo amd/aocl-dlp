@@ -38,14 +38,14 @@
 #include "threading/lpgemm_thread_utils.h"
 
 /**
- * Low-precision GEMV for BF16 x S8 -> S32 with integrated dequantization.
+ * Low-precision GEMV for F32 x S8 -> S32 with integrated dequantization.
  *
  * This function handles matrix-vector multiplication (n=1 case) where:
- *   - A is a BF16 (bfloat16) input, quantized on-the-fly to S8
+ *   - A is a F32 (float) input, quantized on-the-fly to S8
  *   - B is an S8 vector (packed or reordered for efficiency)
  *   - C is an S32 accumulator, which may be downscaled to S8, U8, BF16, or F32
  */
-LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
+LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -168,7 +168,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
             post_ops_attr.post_op_c_j    = 0;
             post_ops_attr.rs_c_downscale = rs_c;
 
-            // Allocate buffer for quantized A matrix (BF16 -> S8 conversion).
+            // Allocate buffer for quantized A matrix (F32 -> S8 conversion).
             mem_a_s8_size_req = sizeof(int8_t) * mc0 * k;
 
             if (quant_a_buffer_s8 == NULL) {
@@ -177,11 +177,11 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
                     dlp_malloc_page_aligned(mem_a_s8_size_req, &ret_err);
             }
 
-            // Perform on-the-fly quantization: BF16 -> S8
+            // Perform on-the-fly quantization: F32 -> S8
             // Uses per-row scale factors and zero-points indexed by IC offset.
-            quanta_mr16_bf16s8(quant_a_buffer_s8, (bfloat16*)(a + (rs_a * ic)),
-                               rs_a, cs_a, mc0, k, sf, sf_type, sf_len, zp_val,
-                               zp_type, zp_len, ic);
+            quanta_mr16_f32s8(quant_a_buffer_s8, (float*)(a + (rs_a * ic)),
+                              rs_a, cs_a, mc0, k, sf, sf_type, sf_len, zp_val,
+                              zp_type, zp_len, ic);
 
             // Update A pointer and strides to use quantized buffer.
             a_use    = quant_a_buffer_s8;
@@ -222,7 +222,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
         rs_a_use = rs_a;
         cs_a_use = 4;
 
-        // Allocate buffer for quantized A matrix (BF16 -> S8 conversion).
+        // Allocate buffer for quantized A matrix (F32 -> S8 conversion).
         mem_a_s8_size_req = sizeof(int8_t) * k_updated;
 
         if (quant_a_buffer_s8 == NULL) {
@@ -231,10 +231,10 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
                 dlp_malloc_page_aligned(mem_a_s8_size_req, &ret_err);
         }
 
-        // Perform on-the-fly quantization: BF16 -> S8 for single row
-        quanta_mr16_bf16s8(quant_a_buffer_s8, (bfloat16*)a, rs_a, cs_a, 1,
-                           k_updated, sf, sf_type, sf_len, zp_val, zp_type,
-                           zp_len, 0);
+        // Perform on-the-fly quantization: F32 -> S8 for single row
+        quanta_mr16_f32s8(quant_a_buffer_s8, (float*)a, rs_a, cs_a, 1,
+                          k_updated, sf, sf_type, sf_len, zp_val, zp_type,
+                          zp_len, 0);
 
         a_use = quant_a_buffer_s8;
 
@@ -321,11 +321,11 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
 }
 
 /**
- * Low-precision GEMM for BF16 x S8 -> S32 with integrated dequantization
+ * Low-precision GEMM for F32 x S8 -> S32 with integrated dequantization
  * post-ops.
  *
  * This function computes C = alpha * (A * B) + beta * C, where:
- *   - A is a BF16 (bfloat16) input, quantized on-the-fly to S8 immediately
+ *   - A is a F32 (float) input, quantized on-the-fly to S8 immediately
  * prior to compute.
  *   - B is an S8 matrix (pre-packed or reordered for efficiency).
  *   - C is an S32 accumulator, which may additionally be downscaled with
@@ -348,7 +348,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
  *   JR: Inner N (NR micro-tile)
  *   IR: Inner M (MR micro-tile, handled by micro-kernel)
  */
-LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
+LPGEMM_5LOOP3(float, int8_t, int32_t, f32s8s32os32)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -374,10 +374,10 @@ LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
     }
 
     if (m == 1 || n == 1) {
-        lpgemv_rowvar_bf16s8s32os32(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
-                                    cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
-                                    rntm, thread, lcntx, a_pre_quant,
-                                    post_op_list, c_downscale);
+        lpgemv_rowvar_f32s8s32os32(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
+                                   cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
+                                   rntm, thread, lcntx, a_pre_quant,
+                                   post_op_list, c_downscale);
         return;
     }
 
@@ -426,7 +426,7 @@ LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
     md_t     rs_c_use = rs_c; // Row stride (may differ if using temp buffer)
     md_t     rs_c_downscale = rs_c; // Row stride for final downscaled output
 
-    // Buffer for quantized A matrix (BF16 -> S8 conversion).
+    // Buffer for quantized A matrix (F32 -> S8 conversion).
     // Allocated per-thread, sized for one MC x KC block.
     int8_t* quant_a_buffer_s8 = NULL;
     msz_t   mem_a_s8_size_req = 0;
@@ -440,9 +440,9 @@ LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
     int32_t* temp_scal_c_buffer_s8s8s32o32 = NULL;
     msz_t    mem_scale_c_size_req          = 0;
 
-    // After quantizing bf16 to s8, the s8 x s8 dot product kernel achieves
+    // After quantizing f32 to s8, the s8 x s8 dot product kernel achieves
     // proper vectorization and alignment with the underlying SIMD instructions
-    // (e.g., vpdpwssd) when the k dimension (kc) is a multiple of 4.
+    // (e.g., vpdpbusd) when the k dimension (kc) is a multiple of 4.
     // This function automatically pads k to a multiple of 4 if needed, so the
     // caller does not need to ensure this property. The k offset used for
     // packed/reordered buffers is updated accordingly.
@@ -680,7 +680,7 @@ LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
                     c_use_ic = c_use_jc + (rs_c_use * ic);
                 }
 
-                // Allocate buffer for quantized A matrix (BF16 -> S8
+                // Allocate buffer for quantized A matrix (F32 -> S8
                 // conversion).
                 mem_a_s8_size_req = sizeof(int8_t) * mc0 * kc0_updated;
 
@@ -690,13 +690,13 @@ LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
                         dlp_malloc_page_aligned(mem_a_s8_size_req, &ret_err);
                 }
 
-                // Perform on-the-fly quantization: BF16 -> S8
+                // Perform on-the-fly quantization: F32 -> S8
                 // Uses per-row scale factors and zero-points indexed by IC
                 // offset.
-                quanta_mr16_bf16s8(quant_a_buffer_s8,
-                                   (bfloat16*)(a + (rs_a * ic) + (cs_a * pc)),
-                                   rs_a, cs_a, mc0, kc0_updated, sf, sf_type,
-                                   sf_len, zp_val, zp_type, zp_len, ic);
+                quanta_mr16_f32s8(quant_a_buffer_s8,
+                                  (float*)(a + (rs_a * ic) + (cs_a * pc)), rs_a,
+                                  cs_a, mc0, kc0_updated, sf, sf_type, sf_len,
+                                  zp_val, zp_type, zp_len, ic);
 
                 // Update A pointer and strides to use quantized buffer.
                 // Quantized layout: row-major with row_stride = kc0_updated

@@ -1,7 +1,7 @@
-# bf16s8 Post-Operations Test Configuration
+# f32s8 Post-Operations Test Configuration
 # ==============================================================================
-# Target: Comprehensive post-ops testing for bf16s8 GEMM/GEMV implementations
-# Input Types: A=bf16, B=s8
+# Target: Comprehensive post-ops testing for f32s8 GEMM/GEMV implementations
+# Input Types: A=f32, B=s8
 # Output Types: s32, f32, bf16, s8, u8
 # Accumulator: s32
 #
@@ -13,17 +13,17 @@
 #   - Comprehensive validation (Tests 22-23): All post-ops combinations
 #   - Performance critical (Test 24): Large matrix sizes
 #
-# Note: All tests include A_Quant for on-the-fly quantization of bf16 input
+# Note: All tests include A_Quant for on-the-fly quantization of f32 input
 # ==============================================================================
 
 gemm_tests:
   # ==========================================================================
-  # INDIVIDUAL POST-OPS TESTS - bf16s8 GEMM
+  # INDIVIDUAL POST-OPS TESTS - f32s8 GEMM
   # ==========================================================================
 
   # Test 0: RELU post-op with all output types
-  - name: "bf16s8_postops_relu"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_relu"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -32,7 +32,7 @@ gemm_tests:
     transB: [false]
     m: [1, 6, 32, 145]  # GEMV M=1, Kernel size and standard size
     n: [1, 15, 16, 64, 1025] # GEMV N=1, NR variants
-    k: [5, 33, 2049]  # VNNI aligned
+    k: [5, 33, 2049]
     alpha: [2]
     beta: [2]
     lda: [2049]
@@ -59,8 +59,8 @@ gemm_tests:
             alpha: 1
 
   # Test 1: PRELU post-op with different alpha values
-  - name: "bf16s8_postops_prelu"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_prelu"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -96,8 +96,8 @@ gemm_tests:
             alpha: [2]
 
   # Test 2: GELU-TANH post-op
-  - name: "bf16s8_postops_gelu_tanh"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_gelu_tanh"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -131,8 +131,8 @@ gemm_tests:
             a_quant_zp_type: ["f32"]
 
   # Test 3: GELU-ERF post-op
-  - name: "bf16s8_postops_gelu_erf"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_gelu_erf"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -166,8 +166,8 @@ gemm_tests:
             a_quant_zp_type: ["f32"]
 
   # Test 4: CLIP post-op with different ranges
-  - name: "bf16s8_postops_clip"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_clip"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -205,8 +205,8 @@ gemm_tests:
             a_quant_zp_type: ["f32"]
 
   # Test 5: SWISH post-op
-  - name: "bf16s8_postops_swish"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_swish"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -242,8 +242,8 @@ gemm_tests:
             alpha: [1.0]
 
   # Test 6: TANH post-op
-  - name: "bf16s8_postops_tanh"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_tanh"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -277,8 +277,8 @@ gemm_tests:
           params: {}
 
   # Test 7: SIGMOID post-op
-  - name: "bf16s8_postops_sigmoid"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_sigmoid"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -315,8 +315,8 @@ gemm_tests:
           params: {}
 
   # Test 8: BIAS post-op with different bias types and dimensions
-  - name: "bf16s8_postops_bias"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_bias"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -352,8 +352,8 @@ gemm_tests:
             bias_dim: ["n"]
 
   # Test 9: SCALE post-op with different scale factors
-  - name: "bf16s8_postops_scale"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_scale"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -389,8 +389,8 @@ gemm_tests:
             scale_factor_len: ["n", "1"]
 
   # Test 10: MATRIX-ADD post-op
-  - name: "bf16s8_postops_matrix_add"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_matrix_add"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -427,8 +427,8 @@ gemm_tests:
             scale_factor_type: ["s32"]
 
   # Test 11: MATRIX-MUL post-op
-  - name: "bf16s8_postops_matrix_mul"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_matrix_mul"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -469,8 +469,8 @@ gemm_tests:
   # ==========================================================================
 
   # Test 12: GEMV M=1 RELU post-op
-  - name: "bf16s8_gemv_m1_postops_relu"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_m1_postops_relu"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -504,8 +504,8 @@ gemm_tests:
           params: {}
 
   # Test 13: GEMV M=1 BIAS post-op
-  - name: "bf16s8_gemv_m1_postops_bias"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_m1_postops_bias"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -541,8 +541,8 @@ gemm_tests:
             bias_dim: ["n"]
 
   # Test 14: GEMV M=1 GELU-TANH post-op
-  - name: "bf16s8_gemv_m1_postops_gelu_tanh"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_m1_postops_gelu_tanh"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -580,8 +580,8 @@ gemm_tests:
   # ==========================================================================
 
   # Test 15: GEMV N=1 RELU post-op
-  - name: "bf16s8_gemv_n1_postops_relu"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_n1_postops_relu"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -615,8 +615,8 @@ gemm_tests:
           params: {}
 
   # Test 16: GEMV N=1 BIAS post-op
-  - name: "bf16s8_gemv_n1_postops_bias"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_n1_postops_bias"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -652,8 +652,8 @@ gemm_tests:
             bias_dim: ["1"]
 
   # Test 17: GEMV N=1 PRELU post-op (fringe case testing)
-  - name: "bf16s8_gemv_n1_postops_prelu"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_n1_postops_prelu"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
     acc_type: ["s32"]
@@ -689,8 +689,8 @@ gemm_tests:
             alpha: [0.2]
 
   # Test 18: GEMV N=1 GELU-TANH post-op (comprehensive output types)
-  - name: "bf16s8_gemv_n1_postops_gelu_tanh"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_n1_postops_gelu_tanh"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -724,8 +724,8 @@ gemm_tests:
           params: {}
 
   # Test 19: GEMV N=1 SWISH post-op (testing the problematic case)
-  - name: "bf16s8_gemv_n1_postops_swish"
-    a_type: ["bf16"]
+  - name: "f32s8_gemv_n1_postops_swish"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -765,8 +765,8 @@ gemm_tests:
   # ==========================================================================
 
   # Test 20: Simple chained post-ops (RELU + BIAS)
-  - name: "bf16s8_postops_chained_relu_bias"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_chained_relu_bias"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -804,8 +804,8 @@ gemm_tests:
             bias_dim: ["n"]
 
   # Test 21: Complex chained post-ops (GELU + SCALE + CLIP)
-  - name: "bf16s8_postops_chained_complex"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_chained_complex"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -854,8 +854,8 @@ gemm_tests:
   # ==========================================================================
 
   # Test 22: All post-ops with S32 output (most compatible)
-  - name: "bf16s8_postops_comprehensive_s32"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_comprehensive_s32"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -901,8 +901,8 @@ gemm_tests:
             bias_dim: ["n"]
 
   # Test 23: All post-ops with F32 output
-  - name: "bf16s8_postops_comprehensive_f32"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_comprehensive_f32"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]
@@ -948,8 +948,8 @@ gemm_tests:
   # ==========================================================================
 
   # Test 24: Post-ops with performance-critical sizes
-  - name: "bf16s8_postops_performance_critical"
-    a_type: ["bf16"]
+  - name: "f32s8_postops_performance_critical"
+    a_type: ["f32"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "u8", "s8"]
     acc_type: ["s32"]

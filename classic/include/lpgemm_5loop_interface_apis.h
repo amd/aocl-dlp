@@ -99,6 +99,7 @@ LPGEMM_5LOOP2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant);
         DLP_TYPE c_downscale)
 
 LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32);
+LPGEMM_5LOOP3(float, int8_t, int32_t, f32s8s32os32);
 
 #define LPGEMM_5LOOP_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)              \
     void lpgemm_rowvar_f32_fallback_##LP_SFX(                                  \
@@ -189,5 +190,6 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
         DLP_TYPE c_downscale)
 
 LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32);
+LPGEMV3(float, int8_t, int32_t, f32s8s32os32);
 
 #endif // LPGEMM_5LOOP_INTF_H

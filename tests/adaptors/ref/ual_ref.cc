@@ -946,7 +946,8 @@ UalRef::applyPostOperation(Matrix& matrix,
 /**
  * @brief Apply A_Quant post-operation to a matrix
  * @note This is a no-op for the reference implementation as quantization
- *       is handled inline in the aocl_gemm_bf16s8s32of32_ref function
+ *       is handled inline in the aocl_gemm_bf16s8s32of32_ref or
+ *       aocl_gemm_f32s8s32of32_ref functions
  */
 template<>
 void
@@ -994,6 +995,19 @@ UalRef::gemm(const Matrix&                      A,
     if (!refOp) {
         return UALError::UAL_CAST_ERROR;
     }
+
+    // Helper lambda to apply all post-ops to a matrix
+    auto applyAllPostOps = [this, refOp](Matrix& matrix) {
+        refOp->resetIterator();
+        while (refOp->hasNextPostOp()) {
+            auto postOp = refOp->getNextPostOp();
+            if (postOp) {
+                std::visit(
+                    [&](const auto& op) { applyPostOperation(matrix, op); },
+                    *postOp);
+            }
+        }
+    };
 
     // Detect GEMM input types
     MatrixType outputType = C.getMatrixType();
@@ -1048,15 +1062,7 @@ UalRef::gemm(const Matrix&                      A,
         }
 
         // Apply post-ops on f32 values (full precision, no rounding)
-        refOp->resetIterator();
-        while (refOp->hasNextPostOp()) {
-            auto postOp = refOp->getNextPostOp();
-            if (postOp) {
-                std::visit(
-                    [&](const auto& op) { applyPostOperation(tempC_f32, op); },
-                    *postOp);
-            }
-        }
+        applyAllPostOps(tempC_f32);
 
         // Convert f32 → target output type with proper rounding/saturation
         dlp::testing::utils::copyToMatrix<float>(
@@ -1069,7 +1075,10 @@ UalRef::gemm(const Matrix&                      A,
     bool isBf16S8QuantGemm =
         (aType == MatrixType::bf16 && bType == MatrixType::s8);
 
-    if (isBf16S8QuantGemm) {
+    bool isF32S8QuantGemm =
+        (aType == MatrixType::f32 && bType == MatrixType::s8);
+
+    if (isBf16S8QuantGemm || isF32S8QuantGemm) {
 
         // Validate parameters BEFORE creating Matrix objects
         if (!checkValidGemmParams(A, B, C, true)) {
@@ -1140,82 +1149,138 @@ UalRef::gemm(const Matrix&                      A,
             MatrixType cType = C.getMatrixType();
 
             // -----------------------------------------------------------------
-            // Dispatch based on output matrix C datatype
+            // Dispatch based on input A type and output matrix C datatype
             // -----------------------------------------------------------------
 
-            if (cType == MatrixType::f32) {
-                dlp::testing::classic::ref::aocl_gemm_bf16s8s32of32_ref(
-                    layout, transA, transB, A.getEffectiveRows(),
-                    B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                    reinterpret_cast<const bfloat16*>(
-                        A.getMatrixData().getMatrixPtr()),
-                    static_cast<int>(A.getLeadingDimension()),
-                    reinterpret_cast<const int8_t*>(
-                        B.getMatrixData().getMatrixPtr()),
-                    static_cast<int>(B.getLeadingDimension()), beta_s32,
-                    reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
-                    static_cast<int>(C.getLeadingDimension()),
-                    a_pre_quant_sf_data, a_pre_quant_zp_data,
-                    a_post_quant_sf_data, a_post_quant_zp_data, sf_len, zp_len,
-                    sf_type, zp_type);
-            } else {
-                // For all other types: compute to F32 temp, then convert
-                Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
-                                 MatrixType::f32, C.getLayout());
-
-                // Initialize tempC_f32 based on beta
-                if (beta_s32 != 0) {
-                    // Copy original C values when beta != 0
-                    dlp::testing::utils::copyMatrixTo<float>(
-                        C, reinterpret_cast<float*>(tempC_f32.getData()),
-                        tempC_f32.getLeadingDimension(), tempC_f32.getLayout());
+            if (isF32S8QuantGemm) {
+                // F32 x S8 GEMM with on-the-fly quantization
+                if (cType == MatrixType::f32) {
+                    dlp::testing::classic::ref::aocl_gemm_f32s8s32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
+                        reinterpret_cast<const float*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const int8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_s32,
+                        reinterpret_cast<float*>(
+                            C.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(C.getLeadingDimension()),
+                        a_pre_quant_sf_data, a_pre_quant_zp_data,
+                        a_post_quant_sf_data, a_post_quant_zp_data, sf_len,
+                        zp_len, sf_type, zp_type);
+                    // Apply remaining post-ops
+                    applyAllPostOps(C);
                 } else {
-                    // Zero-initialize
-                    std::memset(tempC_f32.getData(), 0,
-                                tempC_f32.getDataSizeBytes());
+                    // For all other output types: compute to F32 temp, then
+                    // convert
+                    Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
+                                     MatrixType::f32, C.getLayout());
+
+                    // Initialize tempC_f32 based on beta
+                    if (beta_s32 != 0) {
+                        // Copy original C values when beta != 0
+                        dlp::testing::utils::copyMatrixTo<float>(
+                            C, reinterpret_cast<float*>(tempC_f32.getData()),
+                            tempC_f32.getLeadingDimension(),
+                            tempC_f32.getLayout());
+                    } else {
+                        // Zero-initialize
+                        std::memset(tempC_f32.getData(), 0,
+                                    tempC_f32.getDataSizeBytes());
+                    }
+
+                    // Call F32 reference implementation
+                    dlp::testing::classic::ref::aocl_gemm_f32s8s32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
+                        reinterpret_cast<const float*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const int8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_s32,
+                        reinterpret_cast<float*>(tempC_f32.getData()),
+                        static_cast<int>(tempC_f32.getLeadingDimension()),
+                        a_pre_quant_sf_data, a_pre_quant_zp_data,
+                        a_post_quant_sf_data, a_post_quant_zp_data, sf_len,
+                        zp_len, sf_type, zp_type);
+
+                    // Apply remaining post-ops
+                    applyAllPostOps(tempC_f32);
+
+                    // Convert F32 temp to target output type (BF16/S32/S8/U8)
+                    // copyToMatrix handles saturation automatically
+                    dlp::testing::utils::copyToMatrix<float>(
+                        reinterpret_cast<const float*>(tempC_f32.getData()),
+                        tempC_f32.getLeadingDimension(), C,
+                        tempC_f32.getLayout());
                 }
+            } else {
+                // BF16 x S8 GEMM with on-the-fly quantization
+                if (cType == MatrixType::f32) {
+                    dlp::testing::classic::ref::aocl_gemm_bf16s8s32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
+                        reinterpret_cast<const bfloat16*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const int8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_s32,
+                        reinterpret_cast<float*>(
+                            C.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(C.getLeadingDimension()),
+                        a_pre_quant_sf_data, a_pre_quant_zp_data,
+                        a_post_quant_sf_data, a_post_quant_zp_data, sf_len,
+                        zp_len, sf_type, zp_type);
+                    // Apply remaining post-ops
+                    applyAllPostOps(C);
+                } else {
+                    // For all other output types: compute to F32 temp, then
+                    // convert
+                    Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
+                                     MatrixType::f32, C.getLayout());
 
-                // Call F32 reference implementation
-                dlp::testing::classic::ref::aocl_gemm_bf16s8s32of32_ref(
-                    layout, transA, transB, A.getEffectiveRows(),
-                    B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
-                    reinterpret_cast<const bfloat16*>(
-                        A.getMatrixData().getMatrixPtr()),
-                    static_cast<int>(A.getLeadingDimension()),
-                    reinterpret_cast<const int8_t*>(
-                        B.getMatrixData().getMatrixPtr()),
-                    static_cast<int>(B.getLeadingDimension()), beta_s32,
-                    reinterpret_cast<float*>(tempC_f32.getData()),
-                    static_cast<int>(tempC_f32.getLeadingDimension()),
-                    a_pre_quant_sf_data, a_pre_quant_zp_data,
-                    a_post_quant_sf_data, a_post_quant_zp_data, sf_len, zp_len,
-                    sf_type, zp_type);
+                    // Initialize tempC_f32 based on beta
+                    if (beta_s32 != 0) {
+                        // Copy original C values when beta != 0
+                        dlp::testing::utils::copyMatrixTo<float>(
+                            C, reinterpret_cast<float*>(tempC_f32.getData()),
+                            tempC_f32.getLeadingDimension(),
+                            tempC_f32.getLayout());
+                    } else {
+                        // Zero-initialize
+                        std::memset(tempC_f32.getData(), 0,
+                                    tempC_f32.getDataSizeBytes());
+                    }
 
-                // Convert F32 temp to target output type (BF16/S32/S8/U8)
-                // copyToMatrix handles saturation automatically
-                dlp::testing::utils::copyToMatrix<float>(
-                    reinterpret_cast<const float*>(tempC_f32.getData()),
-                    tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
-            }
+                    // Call F32 reference implementation
+                    dlp::testing::classic::ref::aocl_gemm_bf16s8s32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
+                        reinterpret_cast<const bfloat16*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const int8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_s32,
+                        reinterpret_cast<float*>(tempC_f32.getData()),
+                        static_cast<int>(tempC_f32.getLeadingDimension()),
+                        a_pre_quant_sf_data, a_pre_quant_zp_data,
+                        a_post_quant_sf_data, a_post_quant_zp_data, sf_len,
+                        zp_len, sf_type, zp_type);
 
-            // Apply remaining post-ops
-            refOp->resetIterator();
-            while (refOp->hasNextPostOp()) {
-                auto postOp = refOp->getNextPostOp();
-                if (postOp) {
-                    std::visit(
-                        [&](const auto& op) {
-                            using T = std::decay_t<decltype(op)>;
-                            // Apply post-operations unless it is an AQuantParam
-                            // AQuantParam is handled inline in the GEMM
-                            // function
-                            if constexpr (!std::is_same_v<
-                                              T, dlp::testing::framework::
-                                                     AQuantParam>) {
-                                applyPostOperation(C, op);
-                            }
-                        },
-                        *postOp);
+                    // Apply remaining post-ops
+                    applyAllPostOps(tempC_f32);
+
+                    // Convert F32 temp to target output type (BF16/S32/S8/U8)
+                    // copyToMatrix handles saturation automatically
+                    dlp::testing::utils::copyToMatrix<float>(
+                        reinterpret_cast<const float*>(tempC_f32.getData()),
+                        tempC_f32.getLeadingDimension(), C,
+                        tempC_f32.getLayout());
                 }
             }
             return UALError::UAL_SUCCESS;
@@ -1232,16 +1297,8 @@ UalRef::gemm(const Matrix&                      A,
         return UALError::UAL_FAILURE;
     }
 
-    // Apply post-operations using the iterator pattern
-    refOp->resetIterator();
-    while (refOp->hasNextPostOp()) {
-        auto postOp = refOp->getNextPostOp();
-        if (postOp) {
-            // Process the post-operation using std::visit
-            std::visit([&](const auto& op) { applyPostOperation(C, op); },
-                       *postOp);
-        }
-    }
+    // Apply post-operations
+    applyAllPostOps(C);
     return UALError::UAL_SUCCESS;
 }
 

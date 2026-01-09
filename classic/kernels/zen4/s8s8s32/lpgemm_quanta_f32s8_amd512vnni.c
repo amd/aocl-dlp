@@ -30,18 +30,12 @@
 #include "kernels/s8s8s32/lpgemm_quanta_s8.h"
 #include <immintrin.h>
 
-// Load A BF16 to F32
-#define LOAD_BF16_TO_F32(reg, in)                                              \
-    reg = (__m512)(_mm512_sllv_epi32(                                          \
-        _mm512_cvtepi16_epi32(_mm256_loadu_si256((const __m256i*)(in))),       \
-        _mm512_set1_epi32(16)));
+// Load A (F32)
+#define LOAD_F32(reg, in) reg = _mm512_loadu_ps((const float*)(in));
 
-// Load A masked BF16 to F32
-#define LOAD_MASKED_BF16_TO_F32(reg, mask, in)                                 \
-    reg = (__m512)(_mm512_sllv_epi32(                                          \
-        _mm512_cvtepi16_epi32(                                                 \
-            _mm256_maskz_loadu_epi16(mask, (const __m256i*)(in))),             \
-        _mm512_set1_epi32(16)));
+// Load A masked (F32)
+#define LOAD_MASKED_F32(reg, mask, in)                                         \
+    reg = _mm512_maskz_loadu_ps(mask, (const float*)(in));
 
 // Store int 8
 #define STORE_MASKED_INT8(buffer, mask, ptr)                                   \
@@ -86,41 +80,41 @@ a_quant = round(a * scale_factor)
         _mm512_set1_epi32(16)));
 
 void
-quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                             const bfloat16* a,
-                             const md_t      rs_a,
-                             const md_t      cs_a,
-                             const md_t      MC,
-                             const md_t      KC,
-                             const void*     scale_factor,
-                             const DLP_TYPE  sf_type,
-                             md_t            sf_len,
-                             const md_t      ic_offset);
+quant_a_sym_f32s8_row_major(int8_t*        quant_a_buffer,
+                            const float*   a,
+                            const md_t     rs_a,
+                            const md_t     cs_a,
+                            const md_t     MC,
+                            const md_t     KC,
+                            const void*    scale_factor,
+                            const DLP_TYPE sf_type,
+                            md_t           sf_len,
+                            const md_t     ic_offset);
 
 void
-quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                              const bfloat16* a,
-                              const md_t      rs_a,
-                              const md_t      cs_a,
-                              const md_t      MC,
-                              const md_t      KC,
-                              const void*     scale_factor,
-                              const DLP_TYPE  sf_type,
-                              md_t            sf_len,
-                              const void*     zero_point,
-                              const DLP_TYPE  zp_type,
-                              md_t            zp_len,
-                              const md_t      ic_offset);
+quant_a_asym_f32s8_row_major(int8_t*        quant_a_buffer,
+                             const float*   a,
+                             const md_t     rs_a,
+                             const md_t     cs_a,
+                             const md_t     MC,
+                             const md_t     KC,
+                             const void*    scale_factor,
+                             const DLP_TYPE sf_type,
+                             md_t           sf_len,
+                             const void*    zero_point,
+                             const DLP_TYPE zp_type,
+                             md_t           zp_len,
+                             const md_t     ic_offset);
 /**
- * quanta_mr16_bf16s8
+ * quanta_mr16_f32s8
  *
- * Entry point for BF16 to S8 quantization optimized for AMD Zen4 (AVX-512
+ * Entry point for F32 to S8 quantization optimized for AMD Zen4 (AVX-512
  * VNNI). Dispatcher that routes to symmetric or asymmetric quantization based
  * on zero-point presence.
  *
  * @param quant_a_buffer Output buffer for quantized S8 values (MC x KC,
  * row-major with stride KC)
- * @param a              Input BF16 matrix (MC x KC)
+ * @param a              Input F32 matrix (MC x KC)
  * @param rs_a           Row stride of input matrix a
  * @param cs_a           Column stride of input matrix a (must be 1 for
  * row-major)
@@ -141,32 +135,32 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
  * other layouts.
  */
 void
-quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
-                   const bfloat16* a,
-                   const md_t      rs_a,
-                   const md_t      cs_a,
-                   const md_t      MC,
-                   const md_t      KC,
-                   const void*     scale_factor,
-                   const DLP_TYPE  sf_type,
-                   md_t            sf_len,
-                   const void*     zero_point,
-                   const DLP_TYPE  zp_type,
-                   md_t            zp_len,
-                   const md_t      ic_offset)
+quanta_mr16_f32s8(int8_t*        quant_a_buffer,
+                  const float*   a,
+                  const md_t     rs_a,
+                  const md_t     cs_a,
+                  const md_t     MC,
+                  const md_t     KC,
+                  const void*    scale_factor,
+                  const DLP_TYPE sf_type,
+                  md_t           sf_len,
+                  const void*    zero_point,
+                  const DLP_TYPE zp_type,
+                  md_t           zp_len,
+                  const md_t     ic_offset)
 {
     // Only row-major input (cs_a == 1) is supported by these kernels.
     if (cs_a == 1) {
         if (zero_point) {
             // Asymmetric quantization: q = round(a * scale) - zero_point
-            quant_a_asym_bf16s8_row_major(
+            quant_a_asym_f32s8_row_major(
                 quant_a_buffer, a, rs_a, cs_a, MC, KC, scale_factor, sf_type,
                 sf_len, zero_point, zp_type, zp_len, ic_offset);
         } else {
             // Symmetric quantization: q = round(a * scale)
-            quant_a_sym_bf16s8_row_major(quant_a_buffer, a, rs_a, cs_a, MC, KC,
-                                         scale_factor, sf_type, sf_len,
-                                         ic_offset);
+            quant_a_sym_f32s8_row_major(quant_a_buffer, a, rs_a, cs_a, MC, KC,
+                                        scale_factor, sf_type, sf_len,
+                                        ic_offset);
         }
     } else {
         dlp_print_msg(" Column-major or other layouts not supported.", __FILE__,
@@ -176,9 +170,9 @@ quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
 }
 
 /*
- * quant_a_sym_bf16s8_row_major
+ * quant_a_sym_f32s8_row_major
  *
- * Convert an MC x KC BF16 matrix (row-major, cs_a==1) to int8 using symmetric
+ * Convert an MC x KC F32 matrix (row-major, cs_a==1) to int8 using symmetric
  * per-tensor (sf_len==1) or per-row (sf_len>=MC) scale factors:
  *   q = round( a * scale[row] )
  *
@@ -186,22 +180,21 @@ quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
  *   - Processes columns in 16-element AVX-512 blocks (vectorized K dimension)
  *   - Final tail < 16 elements uses masked operations
  *   - Row blocking: 16/8/4/2/1 unrolling to reduce scalar cleanup
- *   - Pipeline: Load BF16 -> FP32, multiply by scale, round, saturate store to
- * S8
+ *   - Pipeline: Load F32, multiply by scale, round, saturate store to S8
  *
  * Output layout: Dense row-major (row stride = KC)
  */
 void
-quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                             const bfloat16* a,
-                             const md_t      rs_a,
-                             const md_t      cs_a,
-                             const md_t      MC,
-                             const md_t      KC,
-                             const void*     scale_factor,
-                             const DLP_TYPE  sf_type,
-                             md_t            sf_len,
-                             const md_t      ic_offset)
+quant_a_sym_f32s8_row_major(int8_t*        quant_a_buffer,
+                            const float*   a,
+                            const md_t     rs_a,
+                            const md_t     cs_a,
+                            const md_t     MC,
+                            const md_t     KC,
+                            const void*    scale_factor,
+                            const DLP_TYPE sf_type,
+                            md_t           sf_len,
+                            const md_t     ic_offset)
 {
     // AVX-512 parameters: process 16 elements per vector register.
     md_t      MR       = 16;            // Max rows per unrolled block
@@ -211,6 +204,11 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
 
     __m512 a_reg[MR]; // Temporary registers for input data
     __m512 sf[MR];    // Scale factors broadcasted into registers
+
+    // Initialize to avoid uninitialized register warnings
+    for (md_t i = 0; i < MR; i++) {
+        sf[i] = _mm512_setzero_ps();
+    }
 
     md_t ic = 0, kr = 0;
     md_t sf_idx =
@@ -420,23 +418,23 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-15]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[8], a + ((ic + 8) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[9], a + ((ic + 9) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[10], a + ((ic + 10) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[11], a + ((ic + 11) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[12], a + ((ic + 12) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[13], a + ((ic + 13) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[14], a + ((ic + 14) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[15], a + ((ic + 15) * rs_a + kr * cs_a))
+            // load f32 in a_reg[0-15]
+            LOAD_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[8], a + ((ic + 8) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[9], a + ((ic + 9) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[10], a + ((ic + 10) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[11], a + ((ic + 11) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[12], a + ((ic + 12) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[13], a + ((ic + 13) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[14], a + ((ic + 14) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[15], a + ((ic + 15) * rs_a + kr * cs_a))
             // QUANT_SYM a_reg[0-15]
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -491,37 +489,22 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
 
         if (kleft) {
             // Load masked BF16 values into FP32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[2], mask,
-                                    a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[3], mask,
-                                    a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[4], mask,
-                                    a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[5], mask,
-                                    a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[6], mask,
-                                    a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[7], mask,
-                                    a + ((ic + 7) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[8], mask,
-                                    a + ((ic + 8) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[9], mask,
-                                    a + ((ic + 9) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[10], mask,
-                                    a + ((ic + 10) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[11], mask,
-                                    a + ((ic + 11) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[12], mask,
-                                    a + ((ic + 12) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[13], mask,
-                                    a + ((ic + 13) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[14], mask,
-                                    a + ((ic + 14) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[15], mask,
-                                    a + ((ic + 15) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[2], mask, a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[3], mask, a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[4], mask, a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[5], mask, a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[6], mask, a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[7], mask, a + ((ic + 7) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[8], mask, a + ((ic + 8) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[9], mask, a + ((ic + 9) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[10], mask, a + ((ic + 10) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[11], mask, a + ((ic + 11) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[12], mask, a + ((ic + 12) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[13], mask, a + ((ic + 13) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[14], mask, a + ((ic + 14) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[15], mask, a + ((ic + 15) * rs_a + kr * cs_a))
             // QUANT_SYM a_reg[0-15]
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -635,15 +618,15 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-7]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
+            // load in a_reg[0-7]
+            LOAD_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
             // QUANT_SYM a_reg[0-7]
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -674,21 +657,14 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
 
         if (kleft) {
             // Load masked BF16 values into FP32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[2], mask,
-                                    a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[3], mask,
-                                    a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[4], mask,
-                                    a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[5], mask,
-                                    a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[6], mask,
-                                    a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[7], mask,
-                                    a + ((ic + 7) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[2], mask, a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[3], mask, a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[4], mask, a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[5], mask, a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[6], mask, a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[7], mask, a + ((ic + 7) * rs_a + kr * cs_a))
             // QUANT_SYM a_reg[0-7]
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -754,11 +730,11 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-3]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
+            // load in a_reg[0-3]
+            LOAD_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
             // QUANT_SYM a_reg[0-3]
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -777,13 +753,10 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
 
         if (kleft) {
             // load masked bf16 values into fp32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[2], mask,
-                                    a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[3], mask,
-                                    a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[2], mask, a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[3], mask, a + ((ic + 3) * rs_a + kr * cs_a))
             // QUANT_SYM
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -825,9 +798,9 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-3]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic)*rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            // load in a_reg[0-3]
+            LOAD_F32(a_reg[0], a + ((ic)*rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
             // QUANT_SYM a_reg[0-3]
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -840,9 +813,8 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
 
         if (kleft) {
             // load masked bf16 values into fp32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
             // QUANT_SYM
             QUANT_SYM(a_reg[0], sf[0])
             QUANT_SYM(a_reg[1], sf[1])
@@ -871,8 +843,8 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0]
-            LOAD_BF16_TO_F32(a_reg[0], a + (ic * rs_a + kr * cs_a))
+            // load in a_reg[0]
+            LOAD_F32(a_reg[0], a + (ic * rs_a + kr * cs_a))
             // QUANT_SYM
             QUANT_SYM(a_reg[0], sf[0])
             // convert to int8 and store
@@ -881,7 +853,7 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
 
         if (kleft) {
             // load masked bf16 values into fp32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
             // QUANT_SYM
             QUANT_SYM(a_reg[0], sf[0]);
             // convert to int8 and store
@@ -890,9 +862,9 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
     }
 }
 /*
- * quant_a_asym_bf16s8_row_major
+ * quant_a_asym_f32s8_row_major
  *
- * Convert an MC x KC BF16 matrix (row-major, cs_a==1) to int8 using asymmetric
+ * Convert an MC x KC F32 matrix (row-major, cs_a==1) to int8 using asymmetric
  * per-tensor (sf_len==1) or per-row (sf_len>=MC) quantization:
  *   q = round( a * scale[row] ) - zero_point[row]
  *
@@ -908,19 +880,19 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
  * rounding.
  */
 void
-quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                              const bfloat16* a,
-                              const md_t      rs_a,
-                              const md_t      cs_a,
-                              const md_t      MC,
-                              const md_t      KC,
-                              const void*     scale_factor,
-                              const DLP_TYPE  sf_type,
-                              md_t            sf_len,
-                              const void*     zero_point,
-                              const DLP_TYPE  zp_type,
-                              md_t            zp_len,
-                              const md_t      ic_offset)
+quant_a_asym_f32s8_row_major(int8_t*        quant_a_buffer,
+                             const float*   a,
+                             const md_t     rs_a,
+                             const md_t     cs_a,
+                             const md_t     MC,
+                             const md_t     KC,
+                             const void*    scale_factor,
+                             const DLP_TYPE sf_type,
+                             md_t           sf_len,
+                             const void*    zero_point,
+                             const DLP_TYPE zp_type,
+                             md_t           zp_len,
+                             const md_t     ic_offset)
 {
     md_t      MR       = 16;
     md_t      NUM_ELEM = 16;
@@ -1333,23 +1305,23 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-15]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[8], a + ((ic + 8) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[9], a + ((ic + 9) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[10], a + ((ic + 10) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[11], a + ((ic + 11) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[12], a + ((ic + 12) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[13], a + ((ic + 13) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[14], a + ((ic + 14) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[15], a + ((ic + 15) * rs_a + kr * cs_a))
+            // load in a_reg[0-15]
+            LOAD_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[8], a + ((ic + 8) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[9], a + ((ic + 9) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[10], a + ((ic + 10) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[11], a + ((ic + 11) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[12], a + ((ic + 12) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[13], a + ((ic + 13) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[14], a + ((ic + 14) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[15], a + ((ic + 15) * rs_a + kr * cs_a))
             // Apply asymmetric quantization: q = round(a * scale - zero_point)
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1403,38 +1375,23 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         if (kleft) {
-            // load masked bf16 to f32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[2], mask,
-                                    a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[3], mask,
-                                    a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[4], mask,
-                                    a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[5], mask,
-                                    a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[6], mask,
-                                    a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[7], mask,
-                                    a + ((ic + 7) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[8], mask,
-                                    a + ((ic + 8) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[9], mask,
-                                    a + ((ic + 9) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[10], mask,
-                                    a + ((ic + 10) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[11], mask,
-                                    a + ((ic + 11) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[12], mask,
-                                    a + ((ic + 12) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[13], mask,
-                                    a + ((ic + 13) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[14], mask,
-                                    a + ((ic + 14) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[15], mask,
-                                    a + ((ic + 15) * rs_a + kr * cs_a))
+            // load masked f32
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[2], mask, a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[3], mask, a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[4], mask, a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[5], mask, a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[6], mask, a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[7], mask, a + ((ic + 7) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[8], mask, a + ((ic + 8) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[9], mask, a + ((ic + 9) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[10], mask, a + ((ic + 10) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[11], mask, a + ((ic + 11) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[12], mask, a + ((ic + 12) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[13], mask, a + ((ic + 13) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[14], mask, a + ((ic + 14) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[15], mask, a + ((ic + 15) * rs_a + kr * cs_a))
             // asymmetric quantize
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1599,15 +1556,15 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-7]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
+            // load in a_reg[0-7]
+            LOAD_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[4], a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[5], a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[6], a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[7], a + ((ic + 7) * rs_a + kr * cs_a))
             // quant_asym a_reg[0-7]
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1637,22 +1594,15 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         if (kleft) {
-            // load masked bf16 to f32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[2], mask,
-                                    a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[3], mask,
-                                    a + ((ic + 3) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[4], mask,
-                                    a + ((ic + 4) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[5], mask,
-                                    a + ((ic + 5) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[6], mask,
-                                    a + ((ic + 6) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[7], mask,
-                                    a + ((ic + 7) * rs_a + kr * cs_a))
+            // load masked f32
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[2], mask, a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[3], mask, a + ((ic + 3) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[4], mask, a + ((ic + 4) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[5], mask, a + ((ic + 5) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[6], mask, a + ((ic + 6) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[7], mask, a + ((ic + 7) * rs_a + kr * cs_a))
             // asymmetric quantize
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1749,11 +1699,11 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-3]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
+            // load in a_reg[0-3]
+            LOAD_F32(a_reg[0], a + ((ic + 0) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[2], a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_F32(a_reg[3], a + ((ic + 3) * rs_a + kr * cs_a))
             // quant_asym a_reg[0-3]
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1771,14 +1721,11 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         if (kleft) {
-            // load masked bf16 to f32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[2], mask,
-                                    a + ((ic + 2) * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[3], mask,
-                                    a + ((ic + 3) * rs_a + kr * cs_a))
+            // load masked f32
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[2], mask, a + ((ic + 2) * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[3], mask, a + ((ic + 3) * rs_a + kr * cs_a))
             // asymmetric quantize
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1841,9 +1788,9 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0-3]
-            LOAD_BF16_TO_F32(a_reg[0], a + ((ic)*rs_a + kr * cs_a))
-            LOAD_BF16_TO_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
+            // load in a_reg[0-3]
+            LOAD_F32(a_reg[0], a + ((ic)*rs_a + kr * cs_a))
+            LOAD_F32(a_reg[1], a + ((ic + 1) * rs_a + kr * cs_a))
             // quant_asym a_reg[0-3]
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1855,10 +1802,9 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         if (kleft) {
-            // load masked bf16 to f32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
-            LOAD_MASKED_BF16_TO_F32(a_reg[1], mask,
-                                    a + ((ic + 1) * rs_a + kr * cs_a))
+            // load masked f32
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            LOAD_MASKED_F32(a_reg[1], mask, a + ((ic + 1) * rs_a + kr * cs_a))
             // asymmetric quantize
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             QUANT_ASYM(a_reg[1], sf[1], zp[1])
@@ -1903,8 +1849,8 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         for (kr = 0; (kr + 16 - 1) < KC; kr += 16) {
-            // convert a bf16 to f32 and load in a_reg[0]
-            LOAD_BF16_TO_F32(a_reg[0], a + (ic * rs_a + kr * cs_a))
+            // load in a_reg[0]
+            LOAD_F32(a_reg[0], a + (ic * rs_a + kr * cs_a))
             // asymmetric quantize
             QUANT_ASYM(a_reg[0], sf[0], zp[0])
             // store quantized values as int8
@@ -1912,8 +1858,8 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
         }
 
         if (kleft) {
-            // load masked bf16 to f32
-            LOAD_MASKED_BF16_TO_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
+            // load masked f32
+            LOAD_MASKED_F32(a_reg[0], mask, a + (ic * rs_a + kr * cs_a))
             // asymmetric quantize
             QUANT_ASYM(a_reg[0], sf[0], zp[0]);
             // store quantized values as int8

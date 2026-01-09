@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef LPGEMM_BF16S8_QUANTA
-#define LPGEMM_BF16S8_QUANTA
+#ifndef LPGEMM_QUANTA_S8_H
+#define LPGEMM_QUANTA_S8_H
 
 #include <stdint.h>
 
@@ -45,6 +45,19 @@ typedef void (*quanta_bf16s8)(int8_t*,
                               const md_t,
                               const md_t);
 
+typedef void (*quanta_f32s8)(int8_t*,
+                             const float*,
+                             const md_t,
+                             const md_t,
+                             const md_t,
+                             const void*,
+                             const DLP_TYPE,
+                             const md_t,
+                             const void*,
+                             const DLP_TYPE,
+                             const md_t,
+                             const md_t);
+
 void
 quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
                    const bfloat16* a,
@@ -60,4 +73,19 @@ quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
                    md_t            zp_len,
                    const md_t      ic_offset);
 
-#endif // LPGEMM_BF16S8_QUANTA
+void
+quanta_mr16_f32s8(int8_t*        quant_a_buffer,
+                  const float*   a,
+                  const md_t     rs_a,
+                  const md_t     cs_a,
+                  const md_t     MC,
+                  const md_t     KC,
+                  const void*    scale_factor,
+                  const DLP_TYPE sf_type,
+                  md_t           sf_len,
+                  const void*    zero_point,
+                  const DLP_TYPE zp_type,
+                  md_t           zp_len,
+                  const md_t     ic_offset);
+
+#endif // LPGEMM_QUANTA_S8_H

@@ -1181,6 +1181,7 @@ GEN_LPGEMM_OPENMP_DECORATOR_GRP(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         }                                                                      \
     }
 GEN_LPGEMM_OPENMP_DECORATOR_Q(bfloat16, int8_t, int32_t, bf16s8s32os32)
+GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
 
 #define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_MP(A_type, B_type, C_type,           \
                                              LPGEMM_SFX, LPGEMM_PARENT_SFX)    \
@@ -1585,6 +1586,7 @@ GEN_LPGEMM_DECORATOR2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                                    post_op_list, c_downscale);                 \
     }
 GEN_LPGEMM_DECORATOR_Q(bfloat16, int8_t, int32_t, bf16s8s32os32)
+GEN_LPGEMM_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
 
 #define GEN_BATCH_LPGEMM_OPENMP_DECORATOR(A_type, B_type, C_type, LPGEMM_SFX)  \
     void batch_lpgemm_##LPGEMM_SFX##_thread_decorator(                         \
