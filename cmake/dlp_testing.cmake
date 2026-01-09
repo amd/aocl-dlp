@@ -135,7 +135,7 @@ function(dlp_create_test_object_library)
     # Add include directories
     target_include_directories(${OBJ_NAME}
         PRIVATE
-            ${CMAKE_SOURCE_DIR}/include
+            ${DLP_SOURCE_DIR}/include
             ${CMAKE_BINARY_DIR}/include
             ${OBJ_INCLUDE_DIRS}
     )
@@ -225,7 +225,7 @@ function(dlp_add_test)
     # Add include directories - follow modern CMake target-based approach
     target_include_directories(${DLP_TEST_NAME}
         PRIVATE
-            ${CMAKE_SOURCE_DIR}/include
+            ${DLP_SOURCE_DIR}/include
             ${CMAKE_BINARY_DIR}/include
             ${DLP_TEST_INCLUDE_DIRS}
     )

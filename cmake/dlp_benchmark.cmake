@@ -140,7 +140,7 @@ function(dlp_add_benchmark)
     # Add include directories - follow modern CMake target-based approach
     target_include_directories(${DLP_BENCH_NAME}
         PRIVATE
-            ${CMAKE_SOURCE_DIR}/include
+            ${DLP_SOURCE_DIR}/include
             ${CMAKE_BINARY_DIR}/include
             ${BENCH_INCLUDE_DIRS}
     )

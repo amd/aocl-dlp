@@ -155,7 +155,7 @@ endif()
 function(dlp_generate_config_header)
   # Add compiler and platform information to config header
   configure_file(
-    "${CMAKE_SOURCE_DIR}/cmake/aocl_dlp_config.h.in"
+    "${DLP_SOURCE_DIR}/cmake/aocl_dlp_config.h.in"
     "${CMAKE_BINARY_DIR}/include/aocl_dlp_config.h"
   )
 

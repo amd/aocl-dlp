@@ -23,9 +23,12 @@
 # NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE,
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
+# Define DLP_SOURCE_DIR to support FetchContent usage
+# (CMAKE_SOURCE_DIR points to parent project when used as subdirectory)
+set(DLP_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR} CACHE PATH "AOCL-DLP source directory")
 
 # Set CMake module path (must be done before including dlp_variables.cmake)
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${DLP_SOURCE_DIR}/cmake")
 
 # Include dlp_variables.cmake first to get CMAKE_MINIMUM_REQUIRED_VERSION
 include(cmake/dlp_variables.cmake)

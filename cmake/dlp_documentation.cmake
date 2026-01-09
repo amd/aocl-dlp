@@ -27,7 +27,7 @@
 # Doxygen documentation
 set(DOXYGEN_CONFIG ${CMAKE_BINARY_DIR}/docs/doxygen/doxygen.conf)
 set(DOXYGEN_OUTPUT_DIR ${CMAKE_BINARY_DIR}/docs/doxygen)
-set(DOXYGEN_CONFIG_IN ${CMAKE_SOURCE_DIR}/docs/doxygen/doxygen.conf.in)
+set(DOXYGEN_CONFIG_IN ${DLP_SOURCE_DIR}/docs/doxygen/doxygen.conf.in)
 set(DOXYGEN_CONFIG_OUT ${CMAKE_BINARY_DIR}/docs/doxygen/doxygen.conf)
 
 function(dlp_generate_doxygen_config)
@@ -59,7 +59,7 @@ function(dlp_generate_sphinx_docs)
     set(SPHINX_OUTPUT_DIR ${CMAKE_BINARY_DIR}/docs/sphinx)
 
     add_custom_target(sphinx ALL
-        COMMAND ${SPHINX_EXECUTABLE} -b html -Dbreathe_projects.aocl-dlp=${DOXYGEN_OUTPUT_DIR}/xml ${CMAKE_SOURCE_DIR}/docs/sphinx ${SPHINX_OUTPUT_DIR} > ${PROJECT_BINARY_DIR}/docs/sphinx/sphinx.log 2>&1
+        COMMAND ${SPHINX_EXECUTABLE} -b html -Dbreathe_projects.aocl-dlp=${DOXYGEN_OUTPUT_DIR}/xml ${DLP_SOURCE_DIR}/docs/sphinx ${SPHINX_OUTPUT_DIR} > ${PROJECT_BINARY_DIR}/docs/sphinx/sphinx.log 2>&1
         WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
         COMMENT "Generating Sphinx documentation"
         VERBATIM
