@@ -728,6 +728,21 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::scaleYWithBeta(int mSize)
 {
     bool is_beta_one = (betaScalingType == dlp::kernel_frame::scalingType::one);
+
+    // NOTE: The Decision Engine will pass betaScalingType as generic for
+    // k > KC even when beta = 0. Hence, broadcasting beta and checking if
+    // it is actually zero during run-time. This conforms to the standard of
+    // avoiding accesses to C when beta = 0.
+    Xbyak::Label l_skip_beta_scale;
+    int          betaRegIdx    = xBaseIdx;
+    int          scratchRegIdx = tmpBaseIdx;
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
+    vbroadcastss(RegType(betaRegIdx), ptr[regKIter]);
+    vxorps(RegType(scratchRegIdx), RegType(scratchRegIdx),
+           RegType(scratchRegIdx));
+    vucomiss(Xbyak::Xmm(betaRegIdx), Xbyak::Xmm(scratchRegIdx));
+    je(l_skip_beta_scale, T_NEAR);
+
     if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
         mov(regTmpYptr, regYptr);
         // yFormat is set to colMajor as part of runtime params when rsC = 1
@@ -737,6 +752,8 @@ jitBF16GEMVN1<KType>::scaleYWithBeta(int mSize)
             RETURN_IF_ERROR((scaleYWithBetaRowStored(mSize, is_beta_one)));
         }
     }
+
+    L(l_skip_beta_scale);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -1611,6 +1628,19 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
     int n_left = n_size % simdWidth;
 
     if (!isBetaZero) {
+        // NOTE: The Decision Engine will pass betaScalingType as generic for
+        // k > KC even when beta = 0. Hence, broadcasting beta and checking if
+        // it is actually zero during run-time. This conforms to the standard of
+        // avoiding accesses to C when beta = 0.
+        int betaRegIdx    = xBaseIdx;
+        int scratchRegIdx = tmpBaseIdx;
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
+        vbroadcastss(RegType(betaRegIdx), ptr[regKIter]);
+        vxorps(RegType(scratchRegIdx), RegType(scratchRegIdx),
+               RegType(scratchRegIdx));
+        vucomiss(Xbyak::Xmm(betaRegIdx), Xbyak::Xmm(scratchRegIdx));
+        je(label_beta_scale_end, T_NEAR);
 
         // broadcast beta
         if (!isBetaOne) {

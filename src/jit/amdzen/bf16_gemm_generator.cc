@@ -250,6 +250,16 @@ jitGEMMBF16<KType>::scaleBeta()
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
     vbroadcastss(RegType(betaRegIdx), ptr[regTmp1]);
 
+    // NOTE: The Decision Engine will pass betaScalingType as generic for
+    // k > KC even when beta = 0. Hence, broadcasting beta and checking if
+    // it is actually zero during run-time. This conforms to the standard of
+    // avoiding accesses to C when beta = 0.
+    int scratchRegIdx = aRegIdx + 1;
+    vxorps(RegType(scratchRegIdx), RegType(scratchRegIdx),
+           RegType(scratchRegIdx));
+    vucomiss(Xbyak::Xmm(betaRegIdx), Xbyak::Xmm(scratchRegIdx));
+    je("BETAOP_END", T_NEAR);
+
     mov(regTmpCptr, regCPtr);
     if (c_downscale < DLP_F32) {
         // Check for is_first_k

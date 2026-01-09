@@ -803,7 +803,22 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::scaleYWithBeta(int mSize)
 {
+    Xbyak::Label l_skipBetaScale;
     bool is_beta_one = (betaScalingType == dlp::kernel_frame::scalingType::one);
+
+    // NOTE: The Decision Engine will pass betaScalingType as generic for
+    // k > KC even when beta = 0. Hence, broadcasting beta and checking if
+    // it is actually zero during run-time. This conforms to the standard of
+    // avoiding accesses to C when beta = 0.
+    int betaRegIdx    = xBaseIdx;
+    int scratchRegIdx = tmpBaseIdx;
+    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
+    vbroadcastss(RegType(betaRegIdx), ptr[regKIter]);
+    vxorps(RegType(scratchRegIdx), RegType(scratchRegIdx),
+           RegType(scratchRegIdx));
+    vucomiss(Xbyak::Xmm(betaRegIdx), Xbyak::Xmm(scratchRegIdx));
+    je(l_skipBetaScale, T_NEAR);
+
     if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
         mov(regTmpYptr, regYptr);
         if (yFormat == dlp::kernel_frame::storageFormat::colMajor) {
@@ -812,6 +827,8 @@ jitF32GEMVN1<KType>::scaleYWithBeta(int mSize)
             RETURN_IF_ERROR((scaleYWithBetaRowStored(mSize, is_beta_one)));
         }
     }
+
+    L(l_skipBetaScale);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -2021,6 +2038,17 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
     bool isBetaZero = (betaScalingType == dlp::kernel_frame::scalingType::zero);
     bool isBetaOne  = (betaScalingType == dlp::kernel_frame::scalingType::one);
 
+    // NOTE: The Decision Engine will pass betaScalingType as generic for
+    // k > KC even when beta = 0. Hence, broadcasting beta and checking if
+    // it is actually zero during run-time. This conforms to the standard of
+    // avoiding accesses to C when beta = 0.
+    mov(regKSubIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
+    vbroadcastss(RegType(xBaseIdx), ptr[regKSubIter]);
+    vxorps(RegType(tmpBaseIdx), RegType(tmpBaseIdx), RegType(tmpBaseIdx));
+    vucomiss(Xbyak::Xmm(xBaseIdx), Xbyak::Xmm(tmpBaseIdx));
+    je(".skipStore", T_NEAR);
+
     mov(regTmpYptr, regYptr);
 
     if (!isBetaZero) {
@@ -2121,6 +2149,8 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
 
         L(label_beta_scale_end);
     }
+
+    L(".skipStore");
 
     outLocalLabel();
 

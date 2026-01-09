@@ -664,6 +664,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32RD<KType>::storeResults(bool fuseBetaWithStore)
 {
+    Xbyak::Label l_store_bz, l_post_store_bz;
     mov(regRsC, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsC)]);
     lea(regRsC, ptr[regRsC * sizeof(float)]);
 
@@ -680,12 +681,32 @@ jitGEMMF32RD<KType>::storeResults(bool fuseBetaWithStore)
         mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
         vbroadcastss(Xmm(betaRegIdx), ptr[regTmp1]);
 
+        // NOTE: If fuseBetaWithStore is true, then the Decision Engine will
+        // pass betaScalingType as generic for k > KC even when beta = 0. Hence,
+        // broadcasting beta and checking if it is actually zero during
+        // run-time. This conforms to the standard of avoiding accesses to C
+        // when beta = 0.
+        int scratchRegIdx = aRegIdx;
+        vxorps(RegType(scratchRegIdx), RegType(scratchRegIdx),
+               RegType(scratchRegIdx));
+        vucomiss(Xmm(betaRegIdx), Xmm(scratchRegIdx));
+        je(l_store_bz, T_NEAR);
+
         for (int i = 0; i < MR; i++) {
             loadRegF32Xmm(aRegIdx + i, ptr[regTmpCptr]);
             vfmadd231ps(Xmm(cRegIdx + i), Xmm(aRegIdx + i), Xmm(betaRegIdx));
             storeF32Xmm(cRegIdx + i, ptr[regTmpCptr]);
             add(regTmpCptr, regRsC);
         }
+        jmp(l_post_store_bz, T_NEAR);
+
+        L(l_store_bz);
+        for (int i = 0; i < MR; i++) {
+            storeF32Xmm(cRegIdx + i, ptr[regTmpCptr]);
+            add(regTmpCptr, regRsC);
+        }
+
+        L(l_post_store_bz);
     } else {
         for (int i = 0; i < MR; i++) {
             storeF32Xmm(cRegIdx + i, ptr[regTmpCptr]);
