@@ -291,6 +291,11 @@ TEST_F(ComprehensivePostOpsTest, PostOpsWithGemmIntegrationTest)
                     if (postops_dlp) {
                         dlp_status = ual_dlp->gemm(A, B, C_dlp, MatrixType::f32,
                                                    postops_dlp);
+                        // Skip test if ISA not supported
+                        if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
+                            GTEST_SKIP() << "DLP GEMM not supported on this "
+                                            "processor (ISA not available)";
+                        }
                     }
 
                     if (postops_ref) {
@@ -387,6 +392,12 @@ TEST_F(ComprehensivePostOpsTest, BackwardCompatibilityTest)
 
         auto     ual_dlp = UalFactory::createUal(UALType::DLP);
         UALError status  = ual_dlp->gemm(A, B, C, MatrixType::f32, postops_dlp);
+
+        // Skip test if ISA not supported
+        if (status == UALError::UAL_NOT_SUPPORTED) {
+            GTEST_SKIP() << "DLP GEMM not supported on this processor "
+                         << "(ISA not available)";
+        }
 
         EXPECT_EQ(status, UALError::UAL_SUCCESS)
             << "GEMM without PostOps should work";

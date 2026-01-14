@@ -244,6 +244,13 @@ TEST_F(PostOpsYamlTest, PostOpsWithGemmTest)
         UALError ref_status =
             ual_ref->gemm(A, B, C_ref, MatrixType::f32, postops_ref);
 
+        // Skip test if ISA not supported (e.g., AVX512_VNNI for INT8)
+        if (dlp_status == UALError::UAL_NOT_SUPPORTED
+            || ref_status == UALError::UAL_NOT_SUPPORTED) {
+            GTEST_SKIP() << "GEMM not supported on this processor "
+                         << "(ISA not available)";
+        }
+
         std::cout << "GEMM with PostOps:" << std::endl;
         std::cout << "  DLP result: "
                   << (dlp_status == UALError::UAL_SUCCESS ? "SUCCESS"
