@@ -132,11 +132,20 @@ aocl_gemm_f32f32f32of32_ref(const char      order,
                 b_k += b_stride;
             }
 
-            // Write to C
-            if (order == 'R' || order == 'r')
-                C[i * ldc + j] = alpha * sum + beta * C[i * ldc + j];
-            else
-                C[j * ldc + i] = alpha * sum + beta * C[j * ldc + i];
+            if (beta != 0.0f) {
+                // Scale C with beta and write back the result.
+                if (order == 'R' || order == 'r')
+                    C[i * ldc + j] = alpha * sum + beta * C[i * ldc + j];
+                else
+                    C[j * ldc + i] = alpha * sum + beta * C[j * ldc + i];
+            } else {
+                // If beta is zero, do NOT access C to prevent potential NaN
+                // propagation.
+                if (order == 'R' || order == 'r')
+                    C[i * ldc + j] = alpha * sum;
+                else
+                    C[j * ldc + i] = alpha * sum;
+            }
         }
     }
 }

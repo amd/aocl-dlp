@@ -104,12 +104,19 @@ aocl_gemm_u8s8s32of32_ref(const char      order,
                 b_k += b_stride;
             }
 
-            if (order == 'R' || order == 'r')
-                C[i * ldc + j] =
-                    (static_cast<float>((alpha)*sum + (beta)*C[i * ldc + j]));
-            else
-                C[j * ldc + i] =
-                    (static_cast<float>((alpha)*sum + (beta)*C[j * ldc + i]));
+            if (beta != 0) {
+                if (order == 'R' || order == 'r')
+                    C[i * ldc + j] =
+                        static_cast<float>((alpha)*sum + (beta)*C[i * ldc + j]);
+                else
+                    C[j * ldc + i] =
+                        static_cast<float>((alpha)*sum + (beta)*C[j * ldc + i]);
+            } else {
+                if (order == 'R' || order == 'r')
+                    C[i * ldc + j] = static_cast<float>((alpha)*sum);
+                else
+                    C[j * ldc + i] = static_cast<float>((alpha)*sum);
+            }
         }
     }
 }

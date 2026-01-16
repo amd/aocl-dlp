@@ -12,7 +12,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
@@ -25,41 +25,36 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-
 #include "adaptors/ref/gemm_ref.hh"
 
 namespace dlp::testing::classic::ref {
 void
-aocl_gemm_s8s8s32os32_ref(const char      order,
-                          const char      transa,
-                          const char      transb,
-                          const md_t      m,
-                          const md_t      n,
-                          const md_t      k,
-                          int32_t         alpha,
-                          const int8_t*   A,
-                          int             lda,
-                          const int8_t*   B,
-                          int             ldb,
-                          int32_t         beta,
-                          int32_t*        C,
-                          int             ldc,
-                          dlp_metadata_t* post_ops)
+aocl_gemm_u8s8s32os8_ref(const char      order,
+                         const char      transa,
+                         const char      transb,
+                         const md_t      m,
+                         const md_t      n,
+                         const md_t      k,
+                         int32_t         alpha,
+                         const uint8_t*  A,
+                         int             lda,
+                         const int8_t*   B,
+                         int             ldb,
+                         int32_t         beta,
+                         int8_t*         C,
+                         int             ldc,
+                         dlp_metadata_t* post_ops)
 {
-    // Reference implementation that mimics the VNNI vpdpbusd instruction
-    // behavior vpdpbusd performs: unsigned_A × signed_B + accumulator To
-    // compute s8×s8, we convert A to unsigned (A+128), then apply bias
-    // correction Final result: (A+128)×B - 128×sum(B) = A×B + 128×B -
-    // 128×sum(B) = A×B
 
     // Implementation of the reference kernel
     md_t i, j, l;
 
     for (i = 0; i < m; i++) {
         for (j = 0; j < n; j++) {
-            int32_t       sum = 0;
-            const int8_t *a_ptr, *b_ptr;
-            int           a_stride, b_stride;
+            int32_t        sum = 0;
+            const uint8_t* a_ptr;
+            const int8_t*  b_ptr;
+            int            a_stride, b_stride;
 
             if (order == 'R' || order == 'r') {
                 if (transa == 'n' || transa == 'N') {
@@ -92,49 +87,52 @@ aocl_gemm_s8s8s32os32_ref(const char      order,
                     b_stride = ldb;
                 }
             }
-            const int8_t* a_k = a_ptr;
-            const int8_t* b_k = b_ptr;
-
-            int32_t dot_product = 0;
-            int32_t b_sum       = 0; // Sum of B elements for bias correction
+            const uint8_t* a_k = a_ptr;
+            const int8_t*  b_k = b_ptr;
 
             // Loop over k dimension
             for (l = 0; l < k; l++) {
-                // Convert signed A to unsigned (equivalent to adding 128)
-                uint8_t a_unsigned = static_cast<uint8_t>(*a_k + 128);
-                int8_t  b_signed   = *b_k;
+                uint8_t a_unsigned = *a_k; // Already unsigned: 0-255
+                int8_t  b_signed   = *b_k; // Signed: -128 to 127
 
                 int32_t a_as_int32 =
                     static_cast<int32_t>(a_unsigned); // Always positive: 0-255
                 int32_t b_as_int32 = static_cast<int32_t>(
                     b_signed); // Can be negative: -128 to 127
-                dot_product += a_as_int32 * b_as_int32;
-
-                // Accumulate B values for bias correction
-                b_sum += b_as_int32;
-
+                sum += a_as_int32 * b_as_int32;
                 a_k += a_stride;
                 b_k += b_stride;
             }
 
-            // Apply bias correction: subtract 128 * sum(B) to get the correct
-            // s8×s8 result This is because: (a+128)×b = a×b + 128×b, so we
-            // subtract 128×sum(b)
-            sum = dot_product - (128 * b_sum);
-
+            // Compute the result and apply saturation (simulating hardware
+            // behavior)
+            int32_t result = 0;
             if (beta != 0) {
-                if (order == 'R' || order == 'r')
-                    C[i * ldc + j] = static_cast<int32_t>(
-                        (alpha)*sum + (beta)*C[i * ldc + j]);
-                else
-                    C[j * ldc + i] = static_cast<int32_t>(
-                        (alpha)*sum + (beta)*C[j * ldc + i]);
+                result =
+                    alpha * sum
+                    + beta
+                          * static_cast<int32_t>(
+                              C[order == 'R' || order == 'r' ? i * ldc + j
+                                                             : j * ldc + i]);
             } else {
-                if (order == 'R' || order == 'r')
-                    C[i * ldc + j] = static_cast<int32_t>((alpha)*sum);
-                else
-                    C[j * ldc + i] = static_cast<int32_t>((alpha)*sum);
+                result = alpha * sum;
             }
+
+            // Simulate hardware saturation to int8_t range [-128, 127]
+            // This matches what CPU saturation instructions would do
+            int8_t saturated_result;
+            if (result > 127) {
+                saturated_result = 127;
+            } else if (result < -128) {
+                saturated_result = -128;
+            } else {
+                saturated_result = static_cast<int8_t>(result);
+            }
+
+            if (order == 'R' || order == 'r')
+                C[i * ldc + j] = saturated_result;
+            else
+                C[j * ldc + i] = saturated_result;
         }
     }
 }

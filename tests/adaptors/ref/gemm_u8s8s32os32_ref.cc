@@ -108,10 +108,14 @@ aocl_gemm_u8s8s32os32_ref(const char      order,
             // use modular arithmetic - overflow wraps around
             int32_t alpha_sum = static_cast<int32_t>(
                 static_cast<uint32_t>(alpha) * static_cast<uint32_t>(sum));
-            int32_t c_old  = (order == 'R' || order == 'r') ? C[i * ldc + j]
-                                                            : C[j * ldc + i];
-            int32_t beta_c = static_cast<int32_t>(
-                static_cast<uint32_t>(beta) * static_cast<uint32_t>(c_old));
+
+            int32_t beta_c = 0;
+            if (beta != 0) {
+                int32_t c_old = (order == 'R' || order == 'r') ? C[i * ldc + j]
+                                                               : C[j * ldc + i];
+                beta_c        = static_cast<int32_t>(static_cast<uint32_t>(beta)
+                                                     * static_cast<uint32_t>(c_old));
+            }
             int32_t result =
                 static_cast<int32_t>(static_cast<uint32_t>(alpha_sum)
                                      + static_cast<uint32_t>(beta_c));

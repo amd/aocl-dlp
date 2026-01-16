@@ -640,13 +640,58 @@ namespace dlp { namespace testing { namespace framework {
                     float val1 = data1[i];
                     float val2 = data2[i];
 
-                    // Check for exact equality first (handles NaN, Inf, zeros)
-                    if (val1 == val2) {
+                    // NOTE: Special handling for NaN values.
+                    // Even though NaN is mathematically undefined and
+                    // NaN == NaN is false, but since we are testing for NaN
+                    // propagation, we treat the two NaNs at the same position
+                    // to be equal for the following scenarios:
+                    // 1. If A/B matrices contain NaNs, the resulting C matrix
+                    //    should also have NaNs.
+                    // 2. Edge cases where operations result in NaN (0.0f/0.0f)
+                    //    or beta * C(NaN).
+                    if (val1 == val2 // Check for exact equality
+                        || (std::isnan(val1) && std::isnan(val2))) {
                         continue;
                     }
 
-                    // Check for NaN
+                    // Handling the scenario where one value is a NaN. Such
+                    // case is treated as a mismatch, hence a failure is
+                    // reported.
                     if (std::isnan(val1) || std::isnan(val2)) {
+                        result.equal = false;
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(val1)
+                                               - static_cast<double>(val2));
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(val1);
+                            info.value2       = static_cast<double>(val2);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                        continue;
+                    }
+
+                    // Checking for Infs.
+                    // Above val1 == val2 check has failed, hence both values
+                    // are not equal or Inf since Inf == Inf returns true.
+                    // Now, if one of the values is Inf, the case is treated as
+                    // a mismatch and failure is reported.
+                    if (std::isinf(val1) || std::isinf(val2)) {
                         result.equal = false;
                         if (!opts.verbose) {
                             return result;
@@ -729,13 +774,58 @@ namespace dlp { namespace testing { namespace framework {
                     float val1 = bf16_to_f32(bf16_val1);
                     float val2 = bf16_to_f32(bf16_val2);
 
-                    // Check for exact equality first
-                    if (val1 == val2) {
+                    // NOTE: Special handling for NaN values.
+                    // Even though NaN is mathematically undefined and
+                    // NaN == NaN is false, but since we are testing for NaN
+                    // propagation, we treat the two NaNs at the same position
+                    // to be equal for the following scenarios:
+                    // 1. If A/B matrices contain NaNs, the resulting C matrix
+                    //    should also have NaNs.
+                    // 2. Edge cases where operations result in NaN (0.0f/0.0f)
+                    //    or beta * C(NaN).
+                    if (val1 == val2 // Check for exact equality
+                        || (std::isnan(val1) && std::isnan(val2))) {
                         continue;
                     }
 
-                    // Check for NaN
+                    // Handling the scenario where one value is a NaN. Such
+                    // case is treated as a mismatch, hence a failure is
+                    // reported.
                     if (std::isnan(val1) || std::isnan(val2)) {
+                        result.equal = false;
+                        if (!opts.verbose) {
+                            return result;
+                        }
+
+                        double diff = std::abs(static_cast<double>(val1)
+                                               - static_cast<double>(val2));
+                        if (result.mismatches.size() < opts.maxMismatches) {
+                            size_t       r = i / m_leadingDim;
+                            size_t       c = i % m_leadingDim;
+                            MismatchInfo info;
+                            info.row          = r;
+                            info.col          = c;
+                            info.value1       = static_cast<double>(val1);
+                            info.value2       = static_cast<double>(val2);
+                            info.absDiff      = diff;
+                            info.relativeDiff = 0.0;
+                            result.mismatches.push_back(info);
+                        }
+                        result.mismatchCount++;
+                        if (diff > result.maxAbsDiff) {
+                            result.maxAbsDiff = diff;
+                            result.maxDiffRow = i / m_leadingDim;
+                            result.maxDiffCol = i % m_leadingDim;
+                        }
+                        continue;
+                    }
+
+                    // Checking for Infs.
+                    // Above val1 == val2 check has failed, hence both values
+                    // are not equal or Inf since Inf == Inf returns true.
+                    // Now, if one of the values is Inf, the case is treated as
+                    // a mismatch and failure is reported.
+                    if (std::isinf(val1) || std::isinf(val2)) {
                         result.equal = false;
                         if (!opts.verbose) {
                             return result;

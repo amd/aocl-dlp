@@ -1609,7 +1609,11 @@ TEST_F(MatrixCompareTest, VerboseModeStatisticsAccuracy)
     EXPECT_EQ(result.maxAbsDiff, 1.0);  // max(|2-3|, |4-5|) = 1.0
 }
 
-// Test: NaN handling - NaN should not equal NaN
+// Test: NaN handling
+// NOTE: Special handling for NaN values.
+// Even though NaN is mathematically undefined and NaN == NaN is false, but
+// since we are testing for NaN propagation, we treat the two NaNs at the same
+// position to be equal
 TEST_F(MatrixCompareTest, NaNHandling)
 {
     Matrix m1(2, 2, MatrixType::f32);
@@ -1628,14 +1632,45 @@ TEST_F(MatrixCompareTest, NaNHandling)
     m1 = Matrix::fromData(data1, MatrixType::f32);
     m2 = Matrix::fromData(data2, MatrixType::f32);
 
-    // NaN != NaN, so matrices should not be equal
+    // NaN != NaN, but since we're comparing individual elements
+    // using std::isnan checks, TRUE will be reported.
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_TRUE(result.equal);
+
+    // Verbose mode should report equality.
+    result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+    EXPECT_TRUE(result.equal);
+    EXPECT_EQ(result.mismatchCount, 0);
+}
+
+// Test: NaN comparison with a float should report not equal
+TEST_F(MatrixCompareTest, NaNFloatComparison)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    // Create matrices with NaN
+    std::vector<std::vector<float>> data1 = {
+        { 1.0f, 4.0f },
+        { 3.0f, std::numeric_limits<float>::quiet_NaN() }
+    };
+    std::vector<std::vector<float>> data2 = {
+        { 1.0f, std::numeric_limits<float>::quiet_NaN() },
+        { 3.0f, 4.0f }
+    };
+
+    m1 = Matrix::fromData(data1, MatrixType::f32);
+    m2 = Matrix::fromData(data2, MatrixType::f32);
+
+    // NaN != float_val
     auto result = m1.compare(m2, MatrixCompareOptions::Fast());
     EXPECT_FALSE(result.equal);
 
-    // Verbose mode should report the NaN mismatch
+    // Verbose mode should also report inequality.
     result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
     EXPECT_FALSE(result.equal);
-    EXPECT_GE(result.mismatchCount, 1);
+
+    EXPECT_GT(result.mismatchCount, 1);
 }
 
 // Test: Infinity handling
@@ -1660,6 +1695,63 @@ TEST_F(MatrixCompareTest, InfinityHandling)
     // Inf == Inf, so matrices should be equal
     auto result = m1.compare(m2, MatrixCompareOptions::Fast());
     EXPECT_TRUE(result.equal);
+}
+
+// Test: Infinity comparison against NaN should report not equal
+TEST_F(MatrixCompareTest, InfinityNaNComparison)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    // Create matrices with infinity
+    std::vector<std::vector<float>> data1 = {
+        { 1.0f, std::numeric_limits<float>::quiet_NaN() },
+        { std::numeric_limits<float>::quiet_NaN(), 4.0f }
+    };
+    std::vector<std::vector<float>> data2 = {
+        { 1.0f, std::numeric_limits<float>::infinity() },
+        { -std::numeric_limits<float>::infinity(), 4.0f }
+    };
+
+    m1 = Matrix::fromData(data1, MatrixType::f32);
+    m2 = Matrix::fromData(data2, MatrixType::f32);
+
+    // Inf != NaN
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_FALSE(result.equal);
+
+    // Verbose mode should also report inequality.
+    result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+    EXPECT_FALSE(result.equal);
+
+    EXPECT_GT(result.mismatchCount, 1);
+}
+
+// Test: Infinity comparisons against Float value should report not equal
+TEST_F(MatrixCompareTest, InfinityFloatComparison)
+{
+    Matrix m1(2, 2, MatrixType::f32);
+    Matrix m2(2, 2, MatrixType::f32);
+
+    // Create matrices with infinity
+    std::vector<std::vector<float>> data1 = { { 1.0f, 2.0f }, { 3.0f, 4.0f } };
+    std::vector<std::vector<float>> data2 = {
+        { 1.0f, std::numeric_limits<float>::infinity() },
+        { -std::numeric_limits<float>::infinity(), 4.0f }
+    };
+
+    m1 = Matrix::fromData(data1, MatrixType::f32);
+    m2 = Matrix::fromData(data2, MatrixType::f32);
+
+    // Inf != float_val
+    auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_FALSE(result.equal);
+
+    // Verbose mode should also report inequality.
+    result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+    EXPECT_FALSE(result.equal);
+
+    EXPECT_GT(result.mismatchCount, 1);
 }
 
 // ============================================================================
