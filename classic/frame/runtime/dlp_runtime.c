@@ -130,7 +130,8 @@ dlp_update_threading(dlp_rntm_t* rntm)
         md_t max_levels   = omp_get_max_active_levels();
         if (active_level >= max_levels) {
             nt = -1;
-            jc = ic = 1;
+            ic = 1;
+            jc = 1;
         }
 #endif
     } else {
@@ -140,10 +141,14 @@ dlp_update_threading(dlp_rntm_t* rntm)
         if (active_level < max_levels) {
             nt = omp_get_max_threads();
         } else {
-            nt = 1;
+            nt = -1;
+            ic = 1;
+            jc = 1;
         }
 #else
-        nt = 1;
+        nt = -1;
+        ic = 1;
+        jc = 1;
 #endif
     }
 
