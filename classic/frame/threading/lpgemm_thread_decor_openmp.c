@@ -206,6 +206,7 @@ lpgemm_adjust_ic_jc_ways(const md_t m,
     const md_t k_factor            = k / KC;
     const md_t n_jc_modulo_NR      = n_jc % NR;
     const md_t n_prev_jc_modulo_NR = n_prev_jc % NR;
+    const md_t n_next_jc_modulo_NR = n_next_jc % NR;
 
     bool can_increase_ic = FALSE;
     bool can_increase_jc = FALSE;
@@ -238,8 +239,11 @@ lpgemm_adjust_ic_jc_ways(const md_t m,
         }
         // Performance improvement also observed when n_jc is a multiple
         // of NR.
+        // If jc is being increased, and n_next_jc is a multiple of NR,
+        // do not increase ic.
         else if ((n_jc_modulo_NR != 0) && (n_prev_jc_modulo_NR == 0)
-                 && (k_factor > 4)) {
+                 && !((can_increase_jc == TRUE)
+                      && (n_next_jc_modulo_NR == 0))) {
             can_increase_ic = TRUE;
         }
     }
