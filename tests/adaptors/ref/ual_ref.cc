@@ -1134,7 +1134,7 @@ UalRef::gemm(const Matrix&                      A,
             void* a_pre_quant_zp_data  = a_pre_quant_zp.getData();
             void* a_post_quant_sf_data = a_post_quant_sf.getData();
             void* a_post_quant_zp_data = a_post_quant_zp.getData();
-            if (!a_pre_quant_sf_data || !a_pre_quant_zp_data) {
+            if (!a_pre_quant_sf_data || !a_post_quant_sf_data) {
                 return UALError::UAL_FAILURE;
             }
 

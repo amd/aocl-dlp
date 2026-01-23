@@ -494,12 +494,16 @@ DlpOperation::convertA_QuantOperations()
     if (!m_postops->a_pre_quant) {
         m_postops->a_pre_quant = new dlp_quant_op;
         std::memset(m_postops->a_pre_quant, 0, sizeof(dlp_quant_op));
+        // Default to symmetric quantization (no zero-point)
+        m_postops->a_pre_quant->symmetric = true;
     }
 
     // Support only quantization of matrix A (output)
     if (!m_postops->a_post_quant) {
         m_postops->a_post_quant = new dlp_quant_op;
         std::memset(m_postops->a_post_quant, 0, sizeof(dlp_quant_op));
+        // Default to symmetric quantization (no zero-point)
+        m_postops->a_post_quant->symmetric = true;
     }
 
     // Process each quant operation parameter (the last one overrides)

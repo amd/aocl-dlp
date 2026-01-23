@@ -666,8 +666,7 @@ LPGEMM_5LOOP3(float, int8_t, int32_t, f32s8s32os32)
                 return;
             }
             for (md_t ic = ic_start; ic < ic_end; ic += MC) {
-                md_t mc0 = dlp_min((ic_end - ic),
-                                   MC); // Actual height of current panel
+                md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 // Only per thread C matrix is stored in temp buffer, so both
                 // per thread jc and ic start should be normalized to zero.
@@ -703,7 +702,7 @@ LPGEMM_5LOOP3(float, int8_t, int32_t, f32s8s32os32)
                 a_use          = quant_a_buffer_s8;
                 rs_a_use       = kc0_updated; // Elements per row
                 cs_a_use       = 4;           // Stride within SIMD groups
-                a_block_stride = kc0_updated; // Stride between MR blocks
+                a_block_stride = rs_a_use;    // Stride between MR blocks
 
                 // Reset B column sum offset for new IC iteration.
                 post_ops_attr.b_sum_offset = 0;

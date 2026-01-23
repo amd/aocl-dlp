@@ -210,11 +210,9 @@ aocl_gemm_f32s8s32_impl(const char        order,
     // Current implementation limitations:
     // - Only row-major layout supported (column-major requires different
     // kernel)
-    // - A matrix transpose not supported (would require transposed
-    // quantization)
-    if ((is_column_major == TRUE) || (dlp_is_trans(dlp_transa))) {
-        dlp_print_msg("Column major and transpose for A is not supported.",
-                      __FILE__, __LINE__);
+    if (is_column_major == TRUE) {
+        dlp_print_msg("Column major for A is not supported.", __FILE__,
+                      __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
@@ -227,6 +225,11 @@ aocl_gemm_f32s8s32_impl(const char        order,
     md_t rs_b = ldb; // B: depends on transpose
     md_t cs_b = 1;
 
+    // Adjust A strides if transposed (effectively column-major access).
+    if (dlp_is_trans(dlp_transa)) {
+        rs_a = 1;
+        cs_a = lda;
+    }
     // Adjust B strides if transposed (effectively column-major access).
     if (dlp_is_trans(dlp_transb)) {
         rs_b = 1;

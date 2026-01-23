@@ -793,16 +793,21 @@ MicroTest::createOperationParam(
             } else {
                 zp_matrix = Matrix::fromValue(dist(gen), zp_type);
             }
-        } else {
-            zp_matrix = Matrix::fromValue(0, zp_type);
-        }
 
-        return createAQuant()
-            .setA_PreOpScaleFactor(pre_quant_sf_matrix)
-            .setA_PostOpScaleFactor(post_quant_sf_matrix)
-            .setA_PreOpZeroPoint(zp_matrix)
-            .setA_PostOpZeroPoint(zp_matrix)
-            .build();
+            // Asymmetric quantization: include zero-point
+            return createAQuant()
+                .setA_PreOpScaleFactor(pre_quant_sf_matrix)
+                .setA_PostOpScaleFactor(post_quant_sf_matrix)
+                .setA_PreOpZeroPoint(zp_matrix)
+                .setA_PostOpZeroPoint(zp_matrix)
+                .build();
+        } else {
+            // Symmetric quantization: no zero-point
+            return createAQuant()
+                .setA_PreOpScaleFactor(pre_quant_sf_matrix)
+                .setA_PostOpScaleFactor(post_quant_sf_matrix)
+                .build();
+        }
     }
     throw std::runtime_error("Unknown PostOp type: " + config.type);
 }
