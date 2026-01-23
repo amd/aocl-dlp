@@ -30,6 +30,7 @@
 
 #include "bench_config.hh" // For BENCH_CONFIG_DIR macro
 #include "framework/matrix.hh"
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,10 @@
 namespace dlp { namespace testing { namespace utils {
     struct FillValueConfig;
 }}} // namespace dlp::testing::utils
+
+namespace dlp { namespace testing { namespace framework {
+    class IOperation;
+}}} // namespace dlp::testing::framework
 
 namespace dlp::benchmarking {
 
@@ -62,6 +67,10 @@ struct GemmBenchConfig
     double      fill_ub                = 5.0;
     std::string fill_dist              = "uniform";
     bool        force_int_distribution = true;
+
+    // Optional post_operations configuration
+    bool                                                 has_post_ops = false;
+    std::shared_ptr<dlp::testing::framework::IOperation> post_ops;
 
     // Default constructor
     GemmBenchConfig()

@@ -94,6 +94,8 @@ class OptimizedGemmBenchmark : public ConcreteUAL
     OptimizedGemmBenchmark(const GemmBenchConfig& config, int numa_node = 1)
         : config_(config)
         , numa_node_(numa_node)
+        , has_post_ops_(config.has_post_ops)
+        , post_ops_(config.post_ops)
     {
         // Store dimensions
         m_        = config.m;
@@ -163,7 +165,18 @@ class OptimizedGemmBenchmark : public ConcreteUAL
     // Benchmark execution (called once per benchmark)
     void run(benchmark::State& state)
     {
+        // Choose between post_ops path and no-post_ops path
+        if (has_post_ops_) {
+            runWithPostOps(state);
+        } else {
+            runWithoutPostOps(state);
+        }
+    }
 
+  private:
+    // Run benchmark without post_ops (uses low-level interface for max perf)
+    void runWithoutPostOps(benchmark::State& state)
+    {
         // WARMUP: 5 iterations to stabilize CPU/cache
         for (int i = 0; i < 5; ++i) {
             this->gemm(m_, n_, k_, a_ptr_, a_type_, layout_, transA_,
@@ -195,9 +208,41 @@ class OptimizedGemmBenchmark : public ConcreteUAL
                                              b_type_, c_type_);
     }
 
+    // Run benchmark with post_ops (uses Matrix-based interface)
+    void runWithPostOps(benchmark::State& state)
+    {
+        // WARMUP: 5 iterations to stabilize CPU/cache
+        for (int i = 0; i < 5; ++i) {
+            this->gemm(A_, B_, C_, acc_type_, post_ops_, alpha_, beta_);
+        }
+
+        // MEASURED LOOP: GEMM with post_ops
+        for (auto _ : state) {
+            UALError status =
+                this->gemm(A_, B_, C_, acc_type_, post_ops_, alpha_, beta_);
+
+            if (status != UALError::UAL_SUCCESS) {
+                state.SkipWithError("GEMM with post_ops failed");
+                return;
+            }
+
+            // Prevent compiler optimization
+            benchmark::DoNotOptimize(c_ptr_);
+            benchmark::ClobberMemory();
+        }
+
+        // Calculate and report metrics
+        BenchmarkMetrics::calculateAndReport(state, m_, n_, k_, a_type_,
+                                             b_type_, c_type_);
+    }
+
   private:
     const GemmBenchConfig& config_;
     int                    numa_node_;
+
+    // Post-operations support
+    bool                        has_post_ops_;
+    std::shared_ptr<IOperation> post_ops_;
 
     // Matrix storage (allocated once in constructor)
     Matrix A_, B_, C_;

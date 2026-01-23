@@ -27,12 +27,16 @@
  */
 
 #include "bench_types.hh"
+#include "framework/operation.hh"
+#include "framework/utils/parser.hh"
+#include "framework/utils/postops_iterator.hh"
 #include "framework/utils/yaml_parser.hh"
 #include <functional>
 #include <iostream>
 #include <sstream>
 
 using namespace dlp::testing::utils;
+using namespace dlp::testing::framework;
 
 namespace dlp::benchmarking {
 
@@ -54,6 +58,88 @@ GemmBenchConfig::hash() const
     h ^= std::hash<bool>{}(this->reorderA) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<bool>{}(this->reorderB) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;
+}
+
+std::string
+extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
+{
+    if (!postops) {
+        return "";
+    }
+
+    std::ostringstream       postops_desc;
+    std::vector<std::string> op_names;
+
+    // Get the operation parameters
+    const auto& params = postops->getParams();
+
+    for (const auto& param : params) {
+        switch (param->getType()) {
+            case OperationType::ElementWise: {
+                const auto& ew_param =
+                    static_cast<const ElementWiseParam&>(*param);
+                std::string op_name;
+                switch (ew_param.getOperation()) {
+                    case ElementWiseOperation::Relu:
+                        op_name = "Relu";
+                        break;
+                    case ElementWiseOperation::Prelu:
+                        op_name = "Prelu";
+                        break;
+                    case ElementWiseOperation::Gelu_Tanh:
+                        op_name = "GeluTanh";
+                        break;
+                    case ElementWiseOperation::Gelu_Erf:
+                        op_name = "GeluErf";
+                        break;
+                    case ElementWiseOperation::Clip:
+                        op_name = "Clip";
+                        break;
+                    case ElementWiseOperation::Swish:
+                        op_name = "Swish";
+                        break;
+                    case ElementWiseOperation::Tanh:
+                        op_name = "Tanh";
+                        break;
+                    case ElementWiseOperation::Sigmoid:
+                        op_name = "Sigmoid";
+                        break;
+                    default:
+                        op_name = "UnknownEltwise";
+                        break;
+                }
+                op_names.push_back(op_name);
+                break;
+            }
+            case OperationType::Bias:
+                op_names.push_back("Bias");
+                break;
+            case OperationType::MatAdd:
+                op_names.push_back("MatAdd");
+                break;
+            case OperationType::MatMul:
+                op_names.push_back("MatMul");
+                break;
+            case OperationType::Scale:
+                op_names.push_back("Scale");
+                break;
+            case OperationType::A_Quant:
+                op_names.push_back("A_Quant");
+                break;
+            default:
+                op_names.push_back("UnknownOp");
+                break;
+        }
+    }
+
+    if (!op_names.empty()) {
+        postops_desc << "_PostOps";
+        for (size_t i = 0; i < op_names.size(); ++i) {
+            postops_desc << "_" << op_names[i];
+        }
+    }
+
+    return postops_desc.str();
 }
 
 std::string
@@ -81,6 +167,16 @@ generateBenchmarkName(const GemmBenchConfig& config)
     std::string mtagB = config.reorderB ? "r" : "n";
     name << ",mtagA:" << mtagA;
     name << ",mtagB:" << mtagB;
+
+    // Add detailed post_ops information
+    std::string postops_desc;
+    if (config.has_post_ops && config.post_ops) {
+        postops_desc = extractPostOpsDescription(config.post_ops);
+    }
+
+    if (!postops_desc.empty()) {
+        name << postops_desc;
+    }
 
     return name.str();
 }
@@ -175,6 +271,14 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                     config.fill_dist      = fill_val.dist;
                     config.force_int_distribution =
                         fill_val.force_int_distribution;
+                }
+
+                // Extract post_ops if present
+                auto post_op =
+                    microTest.getPostOp(dlp::testing::framework::UALType::DLP);
+                if (post_op) {
+                    config.has_post_ops = true;
+                    config.post_ops     = post_op;
                 }
 
                 // Generate name after populating config

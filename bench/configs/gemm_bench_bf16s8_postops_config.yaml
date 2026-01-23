@@ -1,0 +1,161 @@
+# bf16s8 GEMM Benchmark Configuration with Post-Operations
+# ==============================================================================
+# Target: Simple performance benchmarking for bf16s8 GEMM with post-ops
+# Input Types: A=bf16, B=s8, Output: f32, Accumulator: s32
+#
+# Benchmark Coverage:
+#   - A_Quant baseline
+#   - A_Quant + Single activation (GELU, RELU)
+#   - A_Quant + Chained ops (GELU + SCALE)
+# ==============================================================================
+
+gemm_tests:
+  # ==========================================================================
+  # BENCHMARK 1: A_Quant only (baseline)
+  # ==========================================================================
+  - name: "bf16s8_aquant_baseline"
+    a_type: "bf16"
+    b_type: "s8"
+    c_type: "f32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1, 8, 32, 128]
+    n: [4096, 11008]
+    k: [4096, 11008]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [11008]
+    ldb: [11008]
+    ldc: [11008]
+    mtagA: ["none"]
+    mtagB: ["pack"]
+    post_operations:
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["m"]
+            a_quant_sf_type: ["f32"]
+            a_quant_zp_len: ["m"]
+            a_quant_zp_type: ["f32"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # ==========================================================================
+  # BENCHMARK 2: A_Quant + GELU-TANH
+  # ==========================================================================
+  - name: "bf16s8_aquant_gelu"
+    a_type: "bf16"
+    b_type: "s8"
+    c_type: "f32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1, 8, 32, 128]
+    n: [4096, 11008]
+    k: [4096, 11008]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [11008]
+    ldb: [11008]
+    ldc: [11008]
+    mtagA: ["none"]
+    mtagB: ["pack"]
+    post_operations:
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["m"]
+            a_quant_sf_type: ["f32"]
+            a_quant_zp_len: ["m"]
+            a_quant_zp_type: ["f32"]
+        - type: "Elementwise-GELU-TANH"
+          params: {}
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # ==========================================================================
+  # BENCHMARK 3: A_Quant + RELU
+  # ==========================================================================
+  - name: "bf16s8_aquant_relu"
+    a_type: "bf16"
+    b_type: "s8"
+    c_type: "f32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1, 8, 32, 128]
+    n: [4096, 11008]
+    k: [4096, 11008]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [11008]
+    ldb: [11008]
+    ldc: [11008]
+    mtagA: ["none"]
+    mtagB: ["pack"]
+    post_operations:
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["m"]
+            a_quant_sf_type: ["f32"]
+            a_quant_zp_len: ["m"]
+            a_quant_zp_type: ["f32"]
+        - type: "Elementwise-RELU"
+          params: {}
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
+
+  # ==========================================================================
+  # BENCHMARK 4: Chained Post-Ops - A_Quant + GELU-TANH + SCALE
+  # ==========================================================================
+  - name: "bf16s8_chained_gelu_scale"
+    a_type: "bf16"
+    b_type: "s8"
+    c_type: "f32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1, 8, 32, 128]
+    n: [4096, 11008]
+    k: [4096, 11008]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: [11008]
+    ldb: [11008]
+    ldc: [11008]
+    mtagA: ["none"]
+    mtagB: ["pack"]
+    post_operations:
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["m"]
+            a_quant_sf_type: ["f32"]
+            a_quant_zp_len: ["m"]
+            a_quant_zp_type: ["f32"]
+        - type: "Elementwise-GELU-TANH"
+          params: {}
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["n"]
+    tolerances:
+      float: 1.0e-4
+      bfloat16: 1.0e-2
+      int8: 0
+    product_type: "simple"
