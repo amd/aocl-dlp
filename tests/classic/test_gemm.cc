@@ -143,8 +143,8 @@ struct GemmTestConfig
     bool        force_int_distribution = true;
 
     // Optional fill_pattern configuration
-    bool                has_fill_pattern = false;
-    std::vector<double> fill_pattern;
+    bool                           has_fill_pattern = false;
+    std::vector<MatrixFillPattern> fill_patterns;
 
     // Optional tolerance configuration
     bool   has_tolerances     = false;
@@ -680,8 +680,7 @@ loadTestConfigurations(const std::string& yaml_file)
                 // Extract fill_pattern if present
                 if (microTest.hasFillPattern()) {
                     config.has_fill_pattern = true;
-                    const auto& pattern_cfg = microTest.getFillPattern();
-                    config.fill_pattern     = pattern_cfg.generatePattern();
+                    config.fill_patterns    = microTest.getFillPatterns();
                 }
 
                 // Extract tolerances if present
@@ -946,23 +945,27 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         if (config_.has_fill_pattern) {
             // Warn if both fill_pattern and fill_value are specified
             if (config_.has_fill_value) {
-                std::cerr << "WARNING: Both fill_pattern and fill_value "
-                             "specified in configuration";
-                if (!config_.name.empty()) {
-                    std::cerr << " '" << config_.name << "'";
-                }
-                std::cerr << "WARNING: Both fill_pattern and fill_value "
-                             "specified in configuration";
-                if (!config_.name.empty()) {
-                    std::cerr << " '" << config_.name << "'";
-                }
                 std::cerr
+                    << "WARNING: Both fill_pattern and fill_value "
+                       "specified in configuration"
+                    << (config_.name.empty() ? "" : " '" + config_.name + "'")
                     << ". Using fill_pattern (fill_value will be ignored)."
                     << std::endl;
             }
-            A.fillPattern(config_.fill_pattern);
-            B.fillPattern(config_.fill_pattern);
-            C.fillPattern(config_.fill_pattern);
+
+            // Apply each pattern to its specified matrices
+            for (const auto& matrix_pattern : config_.fill_patterns) {
+                auto pattern_values = matrix_pattern.pattern.generatePattern();
+                if (matrix_pattern.apply_to_A) {
+                    A.fillPattern(pattern_values);
+                }
+                if (matrix_pattern.apply_to_B) {
+                    B.fillPattern(pattern_values);
+                }
+                if (matrix_pattern.apply_to_C) {
+                    C.fillPattern(pattern_values);
+                }
+            }
         }
         /* --- RANDOM FILL (Recommended for production) --- */
         // Initialize matrices with deterministic random values

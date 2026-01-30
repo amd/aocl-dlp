@@ -201,10 +201,9 @@ namespace dlp { namespace testing { namespace framework {
         // Allocate memory using helper method
         m_data = allocateAlignedMemory(m_dataSizeBytes, alignment);
 
-        // Zero-initialize the allocated memory to avoid uninitialized values
-        if (m_data && m_dataSizeBytes > 0) {
-            std::fill(m_data, m_data + m_dataSizeBytes, 0);
-        }
+        // Note: Matrices will be initialized with random or specific values
+        // by the test code (fillRandom/fillValue/fillPattern), so we skip
+        // zero-initialization here to improve performance.
 
         // Update size to reflect actual allocated size if aligned
         if (alignment > 0) {
@@ -1764,7 +1763,12 @@ namespace dlp { namespace testing { namespace framework {
 
         for (md_t i = 0; i < rows_to_print; ++i) {
             for (md_t j = 0; j < cols_to_print; ++j) {
-                size_t idx = i * m_leadingDim + j;
+                // Calculate index based on layout:
+                // Row-major: rows are contiguous, idx = row * ld + col
+                // Column-major: columns are contiguous, idx = col * ld + row
+                size_t idx = (m_layout == MatrixLayout::ROW_MAJOR)
+                                 ? (i * m_leadingDim + j)
+                                 : (j * m_leadingDim + i);
 
                 if constexpr (std::is_floating_point_v<T>) {
                     os << std::setw(10) << std::fixed << std::setprecision(4)
@@ -1808,7 +1812,10 @@ namespace dlp { namespace testing { namespace framework {
 
         for (md_t i = 0; i < rows_to_print; ++i) {
             for (md_t j = 0; j < cols_to_print; ++j) {
-                size_t idx = i * m_leadingDim + j;
+                // Calculate index based on layout
+                size_t idx = (m_layout == MatrixLayout::ROW_MAJOR)
+                                 ? (i * m_leadingDim + j)
+                                 : (j * m_leadingDim + i);
                 float  f32_val =
                     bf16_to_f32(data[idx]); // Reuse existing conversion
                 os << std::setw(10) << std::fixed << std::setprecision(4)
@@ -1841,8 +1848,10 @@ namespace dlp { namespace testing { namespace framework {
 
         for (md_t i = 0; i < rows_to_print; ++i) {
             for (md_t j = 0; j < cols_to_print; ++j) {
-                // Unpack 4-bit value
-                size_t elem_idx   = i * m_leadingDim + j;
+                // Unpack 4-bit value - calculate index based on layout
+                size_t elem_idx   = (m_layout == MatrixLayout::ROW_MAJOR)
+                                        ? (i * m_leadingDim + j)
+                                        : (j * m_leadingDim + i);
                 size_t byte_idx   = elem_idx / 2;
                 size_t bit_offset = (elem_idx % 2) * 4;
 

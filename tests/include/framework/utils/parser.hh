@@ -137,6 +137,23 @@ struct FillPatternConfig
 };
 
 /**
+ * @struct MatrixFillPattern
+ * @brief Associates a fill pattern with specific matrices
+ */
+struct MatrixFillPattern
+{
+    FillPatternConfig pattern;           ///< The fill pattern configuration
+    bool              apply_to_A = true; ///< Apply pattern to matrix A
+    bool              apply_to_B = true; ///< Apply pattern to matrix B
+    bool              apply_to_C = true; ///< Apply pattern to matrix C
+
+    /**
+     * @brief Default constructor - applies to all matrices
+     */
+    MatrixFillPattern() = default;
+};
+
+/**
  * @brief Output stream support for PatternType (for debugging)
  */
 std::ostream&
@@ -241,8 +258,9 @@ struct TestCaseIterators
     FillValueConfig fill_value; ///< Fill value configuration if present
 
     // Optional fill_pattern configuration
-    bool has_fill_pattern = false;  ///< Whether fill_pattern is present
-    FillPatternConfig fill_pattern; ///< Fill pattern configuration if present
+    bool has_fill_pattern = false; ///< Whether fill_pattern is present
+    std::vector<MatrixFillPattern>
+        fill_patterns; ///< Fill pattern configurations with matrix targeting
 
     // Optional tolerance configuration
     bool            has_tolerances = false; ///< Whether tolerance is present
@@ -795,12 +813,12 @@ class MicroTest
     }
 
     /**
-     * @brief Get the fill_pattern configuration
-     * @return FillPatternConfig The fill pattern configuration
+     * @brief Get the fill_pattern configurations
+     * @return Vector of MatrixFillPattern configurations
      */
-    const FillPatternConfig& getFillPattern() const
+    const std::vector<MatrixFillPattern>& getFillPatterns() const
     {
-        return m_test_case_iterators.fill_pattern;
+        return m_test_case_iterators.fill_patterns;
     }
 
     /**

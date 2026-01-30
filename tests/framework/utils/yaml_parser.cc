@@ -99,6 +99,94 @@ namespace dlp { namespace testing { namespace utils {
         }
 
         /**
+         * @brief Parse a single fill pattern configuration from YAML node
+         *
+         * @param pattern_node YAML node containing pattern configuration
+         * @param pattern_config Output FillPatternConfig to populate
+         * @throws std::runtime_error if configuration is invalid
+         */
+        void parseFillPatternConfig(const YAML::Node&  pattern_node,
+                                    FillPatternConfig& pattern_config)
+        {
+            // Determine pattern type (default to "static")
+            std::string type_str = "static";
+            if (pattern_node["type"]) {
+                type_str = pattern_node["type"].as<std::string>();
+            }
+
+            // Parse based on type
+            if (type_str == "static") {
+                pattern_config.type = PatternType::Static;
+                if (!pattern_node["values"]) {
+                    throw std::runtime_error(
+                        "Static pattern requires 'values' field");
+                }
+                for (const auto& val : pattern_node["values"]) {
+                    pattern_config.values.push_back(val.as<double>());
+                }
+            } else if (type_str == "modulo") {
+                pattern_config.type = PatternType::Modulo;
+                if (!pattern_node["lb"] || !pattern_node["ub"]) {
+                    throw std::runtime_error(
+                        "Modulo pattern requires 'lb' and 'ub' fields");
+                }
+                pattern_config.lb = pattern_node["lb"].as<double>();
+                pattern_config.ub = pattern_node["ub"].as<double>();
+                if (pattern_node["step"]) {
+                    pattern_config.step = pattern_node["step"].as<double>();
+                }
+                if (pattern_node["offset"]) {
+                    pattern_config.offset = pattern_node["offset"].as<double>();
+                }
+            } else if (type_str == "linear") {
+                pattern_config.type = PatternType::Linear;
+                if (!pattern_node["lb"] || !pattern_node["ub"]) {
+                    throw std::runtime_error(
+                        "Linear pattern requires 'lb' and 'ub' fields");
+                }
+                pattern_config.lb = pattern_node["lb"].as<double>();
+                pattern_config.ub = pattern_node["ub"].as<double>();
+                if (pattern_node["step"]) {
+                    pattern_config.step = pattern_node["step"].as<double>();
+                }
+                if (pattern_node["multiplier"]) {
+                    pattern_config.multiplier =
+                        pattern_node["multiplier"].as<double>();
+                }
+                if (pattern_node["offset"]) {
+                    pattern_config.offset = pattern_node["offset"].as<double>();
+                }
+            } else if (type_str == "sequence") {
+                pattern_config.type = PatternType::Sequence;
+                if (!pattern_node["lb"]) {
+                    throw std::runtime_error(
+                        "Sequence pattern requires 'lb' field");
+                }
+                pattern_config.lb = pattern_node["lb"].as<double>();
+                if (pattern_node["ub"]) {
+                    pattern_config.ub = pattern_node["ub"].as<double>();
+                } else {
+                    pattern_config.ub = 1000.0; // Default large value
+                }
+                if (pattern_node["step"]) {
+                    pattern_config.step = pattern_node["step"].as<double>();
+                }
+            } else {
+                throw std::runtime_error("Unknown fill_pattern type: "
+                                         + type_str
+                                         + ". Allowed: static, modulo, "
+                                           "linear, sequence");
+            }
+
+            // Validate configuration
+            std::string error_msg;
+            if (!pattern_config.validate(error_msg)) {
+                throw std::runtime_error("Invalid fill_pattern config: "
+                                         + error_msg);
+            }
+        }
+
+        /**
          * @brief Compute the maximum minimum legal leading dimension
          *
          * When LDA/LDB/LDC are not specified in YAML, compute the minimum legal
@@ -592,91 +680,57 @@ namespace dlp { namespace testing { namespace utils {
             // Parse fill_pattern if present
             if (node["fill_pattern"]) {
                 iterators.has_fill_pattern = true;
-                auto pattern_node          = node["fill_pattern"];
+                auto fill_pattern_node     = node["fill_pattern"];
 
-                // Determine pattern type (default to "static")
-                std::string type_str = "static";
-                if (pattern_node["type"]) {
-                    type_str = pattern_node["type"].as<std::string>();
-                }
+                // Check if fill_pattern is a list (multiple patterns) or a
+                // single pattern
+                if (fill_pattern_node.IsSequence()) {
+                    // Multiple patterns with potential apply_matrix
+                    // specification
+                    for (const auto& pattern_node : fill_pattern_node) {
+                        MatrixFillPattern matrix_pattern;
 
-                // Parse based on type
-                if (type_str == "static") {
-                    iterators.fill_pattern.type = PatternType::Static;
-                    if (!pattern_node["values"]) {
-                        throw std::runtime_error(
-                            "Static pattern requires 'values' field");
-                    }
-                    for (const auto& val : pattern_node["values"]) {
-                        iterators.fill_pattern.values.push_back(
-                            val.as<double>());
-                    }
-                } else if (type_str == "modulo") {
-                    iterators.fill_pattern.type = PatternType::Modulo;
-                    if (!pattern_node["lb"] || !pattern_node["ub"]) {
-                        throw std::runtime_error(
-                            "Modulo pattern requires 'lb' and 'ub' fields");
-                    }
-                    iterators.fill_pattern.lb = pattern_node["lb"].as<double>();
-                    iterators.fill_pattern.ub = pattern_node["ub"].as<double>();
-                    if (pattern_node["step"]) {
-                        iterators.fill_pattern.step =
-                            pattern_node["step"].as<double>();
-                    }
-                    if (pattern_node["offset"]) {
-                        iterators.fill_pattern.offset =
-                            pattern_node["offset"].as<double>();
-                    }
-                } else if (type_str == "linear") {
-                    iterators.fill_pattern.type = PatternType::Linear;
-                    if (!pattern_node["lb"] || !pattern_node["ub"]) {
-                        throw std::runtime_error(
-                            "Linear pattern requires 'lb' and 'ub' fields");
-                    }
-                    iterators.fill_pattern.lb = pattern_node["lb"].as<double>();
-                    iterators.fill_pattern.ub = pattern_node["ub"].as<double>();
-                    if (pattern_node["step"]) {
-                        iterators.fill_pattern.step =
-                            pattern_node["step"].as<double>();
-                    }
-                    if (pattern_node["multiplier"]) {
-                        iterators.fill_pattern.multiplier =
-                            pattern_node["multiplier"].as<double>();
-                    }
-                    if (pattern_node["offset"]) {
-                        iterators.fill_pattern.offset =
-                            pattern_node["offset"].as<double>();
-                    }
-                } else if (type_str == "sequence") {
-                    iterators.fill_pattern.type = PatternType::Sequence;
-                    if (!pattern_node["lb"]) {
-                        throw std::runtime_error(
-                            "Sequence pattern requires 'lb' field");
-                    }
-                    iterators.fill_pattern.lb = pattern_node["lb"].as<double>();
-                    if (pattern_node["ub"]) {
-                        iterators.fill_pattern.ub =
-                            pattern_node["ub"].as<double>();
-                    } else {
-                        iterators.fill_pattern.ub =
-                            1000.0; // Default large value
-                    }
-                    if (pattern_node["step"]) {
-                        iterators.fill_pattern.step =
-                            pattern_node["step"].as<double>();
+                        // Parse apply_matrix if present
+                        if (pattern_node["apply_matrix"]) {
+                            // Initialize all to false, then set specified ones
+                            // to true
+                            matrix_pattern.apply_to_A = false;
+                            matrix_pattern.apply_to_B = false;
+                            matrix_pattern.apply_to_C = false;
+
+                            for (const auto& mat :
+                                 pattern_node["apply_matrix"]) {
+                                std::string mat_name = mat.as<std::string>();
+                                if (mat_name == "A") {
+                                    matrix_pattern.apply_to_A = true;
+                                } else if (mat_name == "B") {
+                                    matrix_pattern.apply_to_B = true;
+                                } else if (mat_name == "C") {
+                                    matrix_pattern.apply_to_C = true;
+                                } else {
+                                    throw std::runtime_error(
+                                        "Invalid matrix name in apply_matrix: "
+                                        + mat_name + ". Allowed: A, B, C");
+                                }
+                            }
+                        }
+                        // If no apply_matrix is specified, matrix_pattern keeps
+                        // its default of applying to all matrices (see
+                        // MatrixFillPattern initialization).
+
+                        // Parse pattern configuration
+                        parseFillPatternConfig(pattern_node,
+                                               matrix_pattern.pattern);
+
+                        iterators.fill_patterns.push_back(matrix_pattern);
                     }
                 } else {
-                    throw std::runtime_error("Unknown fill_pattern type: "
-                                             + type_str
-                                             + ". Allowed: static, modulo, "
-                                               "linear, sequence");
-                }
-
-                // Validate configuration
-                std::string error_msg;
-                if (!iterators.fill_pattern.validate(error_msg)) {
-                    throw std::runtime_error("Invalid fill_pattern config: "
-                                             + error_msg);
+                    // Single pattern (backward compatibility) - applies to all
+                    // matrices
+                    MatrixFillPattern matrix_pattern;
+                    parseFillPatternConfig(fill_pattern_node,
+                                           matrix_pattern.pattern);
+                    iterators.fill_patterns.push_back(matrix_pattern);
                 }
             }
 

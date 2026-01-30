@@ -275,3 +275,31 @@ gemm_tests:
     tolerances:
       absolute: 1e-3
       relative: 1e-3
+
+  # Special Floating-Point Values (NaN, Infinity)
+
+  - name: "bf16_special_values_nan_inf"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major","column-major"]
+    transA: [false]
+    transB: [false]
+    m: [12]
+    n: [10]
+    k: [8]
+    alpha: [1.0]
+    beta: [0.0, 1.0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_pattern:
+      - type: "static"
+        values: [.NaN]
+        apply_matrix: ["C"]
+      - type: "static"
+        values: [.inf]
+        apply_matrix: ["A", "B"]
+    tolerances:
+      absolute: 0
+      relative: 0
