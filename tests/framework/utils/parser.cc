@@ -588,9 +588,25 @@ MicroTest::createOperationParam(
             rows, std::vector<float>(cols, 0.5f));
         auto matrix = Matrix::fromData(matrix_data, matrix_type, layout);
 
-        // Parse scale_factor parameter
-        double scale_value = 0.8; // default
-        auto   sf_it       = config.params.find("scale_factor");
+        // Check if scale_factor is explicitly provided (optional parameter)
+        auto sf_it      = config.params.find("scale_factor");
+        auto sf_type_it = config.params.find("scale_factor_type");
+        auto sf_len_it  = config.params.find("scale_factor_len");
+
+        // Scale factor is present if any of these params are specified
+        bool has_sf =
+            (sf_it != config.params.end() && !sf_it->second.empty())
+            || (sf_type_it != config.params.end()
+                && !sf_type_it->second.empty())
+            || (sf_len_it != config.params.end() && !sf_len_it->second.empty());
+
+        // If no scale factor, return without it
+        if (!has_sf) {
+            return createMatrixAdd().setMatrix(matrix).build();
+        }
+
+        // Build with scale factor
+        double scale_value = 0.8; // default when sf params present
         if (sf_it != config.params.end() && !sf_it->second.empty()) {
             auto   idx_it = param_indices.find("scale_factor");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
@@ -600,7 +616,6 @@ MicroTest::createOperationParam(
         }
 
         MatrixType scale_type = MatrixType::f32; // default
-        auto       sf_type_it = config.params.find("scale_factor_type");
         if (sf_type_it != config.params.end() && !sf_type_it->second.empty()) {
             auto   idx_it = param_indices.find("scale_factor_type");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
@@ -611,8 +626,7 @@ MicroTest::createOperationParam(
 
         // Check scale_factor_len to determine scalar vs vector
         Matrix      scale_matrix;
-        std::string sf_len    = "";
-        auto        sf_len_it = config.params.find("scale_factor_len");
+        std::string sf_len = "";
         if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
             auto   idx_it = param_indices.find("scale_factor_len");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
@@ -660,9 +674,25 @@ MicroTest::createOperationParam(
             rows, std::vector<float>(cols, 1.0f));
         auto matrix = Matrix::fromData(matrix_data, matrix_type, layout);
 
-        // Parse scale_factor parameter
-        double scale_value = 1.2; // default
-        auto   sf_it       = config.params.find("scale_factor");
+        // Check if scale_factor is explicitly provided (optional parameter)
+        auto sf_it      = config.params.find("scale_factor");
+        auto sf_type_it = config.params.find("scale_factor_type");
+        auto sf_len_it  = config.params.find("scale_factor_len");
+
+        // Scale factor is present if any of these params are specified
+        bool has_sf =
+            (sf_it != config.params.end() && !sf_it->second.empty())
+            || (sf_type_it != config.params.end()
+                && !sf_type_it->second.empty())
+            || (sf_len_it != config.params.end() && !sf_len_it->second.empty());
+
+        // If no scale factor, return without it
+        if (!has_sf) {
+            return createMatrixMul().setMatrix(matrix).build();
+        }
+
+        // Build with scale factor
+        double scale_value = 1.2; // default scale factor for Matrix-Mul
         if (sf_it != config.params.end() && !sf_it->second.empty()) {
             auto   idx_it = param_indices.find("scale_factor");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
@@ -672,7 +702,6 @@ MicroTest::createOperationParam(
         }
 
         MatrixType scale_type = MatrixType::f32; // default
-        auto       sf_type_it = config.params.find("scale_factor_type");
         if (sf_type_it != config.params.end() && !sf_type_it->second.empty()) {
             auto   idx_it = param_indices.find("scale_factor_type");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
@@ -683,8 +712,7 @@ MicroTest::createOperationParam(
 
         // Check scale_factor_len to determine scalar vs vector
         Matrix      scale_matrix;
-        std::string sf_len    = "";
-        auto        sf_len_it = config.params.find("scale_factor_len");
+        std::string sf_len = "";
         if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
             auto   idx_it = param_indices.find("scale_factor_len");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;

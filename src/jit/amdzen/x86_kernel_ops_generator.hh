@@ -293,34 +293,16 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     };
 
     template<typename sfDt, typename matOpDt>
-    dlp::jit::jitGeneratorError matOpScaleFactorImpl(matOpType      opType,
-                                                     matOpScaleType sclType);
-
-    template<typename sfDt, typename matOpDt>
-    dlp::jit::jitGeneratorError matOpScaleFactorImplColMat(
-        matOpType opType, matOpScaleType sclType);
-
-    template<typename sfDt, typename matOpDt>
     dlp::jit::jitGeneratorError matOpScaleFactorImplMerged(
-        matOpType opType, matOpScaleType sclType);
-
-    // Helper to dispatch matOpScaleFactorImplMerged on matrix datatype
-    template<typename SfType>
-    dlp::jit::jitGeneratorError dispatchMatOpByMatrixType(
-        dlp::kernel_frame::DataType matOpDt,
-        matOpType                   opType,
-        matOpScaleType              sclType);
-
-    // Helper to dispatch matOpScaleFactorImplGEMVN1 on matrix datatype
-    template<typename SfType>
-    dlp::jit::jitGeneratorError dispatchMatOpByMatrixTypeGEMVN1(
-        dlp::kernel_frame::DataType matOpDt,
-        matOpType                   opType,
-        matOpScaleType              sclType);
+        matOpType opType, matOpScaleType sclType, bool hasSF);
 
     template<typename sfDt, typename matOpDt>
     dlp::jit::jitGeneratorError matOpScaleFactorImplGEMVN1(
-        matOpType opType, matOpScaleType sclType);
+        matOpType opType, matOpScaleType sclType, bool hasSF);
+
+    // Unified MatOp handler for both matadd and matmul
+    dlp::jit::jitGeneratorError matOp(dlp::kernel_frame::kernelOpsMetaData& op,
+                                      matOpType opType);
 
     // TODO: Math Utils, move to different class.
     void POLY_EVAL_6();

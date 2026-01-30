@@ -414,6 +414,18 @@ dispatchByDatatype(dlp::kernel_frame::DataType dt, Func&& func)
     }
 }
 
+// Dual datatype dispatch helper function
+template<typename Func>
+dlp::jit::jitGeneratorError
+dispatch2Datatypes(dlp::kernel_frame::DataType dt1,
+                   dlp::kernel_frame::DataType dt2,
+                   Func&&                      func)
+{
+    return dispatchByDatatype(dt1, [&](auto t1) {
+        return dispatchByDatatype(dt2, [&](auto t2) { return func(t1, t2); });
+    });
+}
+
 // Triple datatype dispatch helper function
 template<typename Func>
 dlp::jit::jitGeneratorError
@@ -1808,18 +1820,19 @@ template<utils::kernelInstrType KType>
 template<typename sfDt, typename matOpDt>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
-                                                         matOpScaleType sclType)
+                                                         matOpScaleType sclType,
+                                                         bool           hasSF)
 {
-    // Float types need 5 ZMM spare registers minimum.
+    // Float types need 5 ZMM spare registers minimum (with SF).
     // Non-float types (int8/uint8/bf16/int32) need 7 ZMM spare registers
     // minimum due to additional dword offset conversion requirements.
+    // When hasSF is false, we need 1 less register (no sf_reg needed).
     // TODO: Implement a strategy like gelu_tanh post-ops using
     // stack in case sufficient registers are not available.
 
-    int minRegsRequired = 5; // Default for float
+    int minRegsRequired = hasSF ? 5 : 4; // Default for float
     if constexpr (!std::is_same_v<matOpDt, float>) {
-        minRegsRequired =
-            7; // Non-float types need 2 extra for dword offset conversion
+        minRegsRequired = hasSF ? 7 : 6;
     }
 
     if (cRegStartIdx < minRegsRequired) {
@@ -1839,25 +1852,27 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
 
     int matRegIdx = scratch_reg_queue.front();
     scratch_reg_queue.pop();
-    int sf_reg = scratch_reg_queue.front();
-    scratch_reg_queue.pop();
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
                                  + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
     jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
                                  + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
 
-    if (sclType == matOpScaleType::scalar) {
-        broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
-    } else if (sclType == matOpScaleType::columnVector) {
-        jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp6 * sizeof(sfDt)]);
-    } else { // row-vector
-        jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
-    }
+    int sf_reg      = -1;
+    int sfLoadBytes = 0;
+    if (hasSF) {
+        sf_reg = scratch_reg_queue.front();
+        scratch_reg_queue.pop();
 
-    // Calculate load bytes based on sfDt template parameter for scale factor
-    // addressing
-    int sfLoadBytes = getLoadBytes<sfDt>();
+        if (sclType == matOpScaleType::scalar) {
+            broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
+        } else if (sclType == matOpScaleType::columnVector) {
+            jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp6 * sizeof(sfDt)]);
+        } else { // row-vector
+            jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
+        }
+        sfLoadBytes = getLoadBytes<sfDt>();
+    }
 
     // load ldm into regTmp3 and multiply with sizeof(dt)
     jit_->mov(regTmp3,
@@ -2021,8 +2036,10 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
             return jitGeneratorError::notSupported;
         }
 
-        // multiply scale factor with matOp
-        jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx), RegType(sfRegIdx));
+        // multiply scale factor with matOp (only if hasSF)
+        if (hasSF) {
+            jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx), RegType(sfRegIdx));
+        }
         if (opType == matOpType::matOpAdd) {
             jit_->vaddps(RegType(accumRegIdx), RegType(accumRegIdx),
                          RegType(matRegIdx));
@@ -2035,13 +2052,13 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
     };
 
     for (int i = 0; i < MR; i++) {
-        if (sclType == matOpScaleType::columnVector) {
+        if (hasSF && sclType == matOpScaleType::columnVector) {
             broadcastAndConvertScalar<sfDt>(
                 RegType(sf_reg), jit_->ptr[regTmp1 + i * sizeof(sfDt)]);
         }
         jit_->mov(regTmp4, regTmp2);
         for (int j = 0; j < numFullRegsPerRow; j++) {
-            if (sclType == matOpScaleType::rowVector) {
+            if (hasSF && sclType == matOpScaleType::rowVector) {
                 loadAndConvertVector<sfDt>(RegType(sf_reg),
                                            jit_->ptr[regTmp1 + j * sfLoadBytes],
                                            false);
@@ -2059,7 +2076,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
         if (numMaskRegsPerRow > 0) {
             for (int k = 0; k < numMaskRegsPerRow; k++) {
 
-                if (sclType == matOpScaleType::rowVector) {
+                if (hasSF && sclType == matOpScaleType::rowVector) {
                     loadAndConvertVector<sfDt>(
                         RegType(sf_reg),
                         jit_->ptr[regTmp1 + numFullRegsPerRow * sfLoadBytes],
@@ -2090,7 +2107,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
     jit_->jmp(".endOfMatOp", jit_->T_NEAR);
     jit_->L(".rowMajorMatOp");
 
-    if (sclType == matOpScaleType::rowVector) {
+    if (hasSF && sclType == matOpScaleType::rowVector) {
         loadAndConvertRows<sfDt>(regTmp1, sf_reg);
     }
 
@@ -2112,9 +2129,11 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
                                       jit_->ptr[regTmp2 + loadIdx], useMask,
                                       fringeMaskId);
 
-        // multiply scale factor with matOp
-        jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
-                     RegType(sfRegIdx + sclIdx));
+        // multiply scale factor with matOp (only if hasSF)
+        if (hasSF) {
+            jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
+                         RegType(sfRegIdx + sclIdx));
+        }
         if (opType == matOpType::matOpAdd) {
             if (useMask) {
                 jit_->vaddps(RegType(accumRegIdx) | fringeMask[fringeMaskId],
@@ -2137,12 +2156,12 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
 
     int sclIdx = 0;
     for (int i = 0; i < MR; i++) {
-        if (sclType == matOpScaleType::columnVector) {
+        if (hasSF && sclType == matOpScaleType::columnVector) {
             broadcastAndConvertScalar<sfDt>(
                 RegType(sf_reg), jit_->ptr[regTmp1 + i * sizeof(sfDt)]);
         }
         for (int j = 0; j < numFullRegsPerRow; j++) {
-            if (sclType == matOpScaleType::rowVector) {
+            if (hasSF && sclType == matOpScaleType::rowVector) {
                 sclIdx = j;
             }
 
@@ -2157,7 +2176,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 for (int mIdx = numFullRegsPerRow; mIdx < numRegsPerRow;
                      mIdx++) {
-                    if (sclType == matOpScaleType::rowVector) {
+                    if (hasSF && sclType == matOpScaleType::rowVector) {
                         sclIdx = mIdx;
                     }
                     jitGeneratorError err = opLambdaRowMat(
@@ -2170,7 +2189,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
                     }
                 }
             } else {
-                if (sclType == matOpScaleType::rowVector) {
+                if (hasSF && sclType == matOpScaleType::rowVector) {
                     sclIdx = numFullRegsPerRow;
                 }
                 jitGeneratorError err = opLambdaRowMat(
@@ -2189,7 +2208,9 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
 
     jit_->L(".endOfMatOp");
 
-    scratch_reg_queue.push(sf_reg);
+    if (hasSF) {
+        scratch_reg_queue.push(sf_reg);
+    }
     scratch_reg_queue.push(matRegIdx);
 
     // Restore global scratch queue
@@ -2203,16 +2224,19 @@ template<>
 template<typename sfDt, typename matOpDt>
 jitGeneratorError
 kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
-    matOpScaleFactorImplMerged(matOpType opType, matOpScaleType sclType)
+    matOpScaleFactorImplMerged(matOpType opType, matOpScaleType sclType,
+                               bool hasSF)
 {
     // Reserve registers to prevent corruption during BF16/S8/U8 conversions
-    // Need to protect: sf_reg, matreg and the scratch loadRegs
     auto saved_queue =
         reserveDestRegisters(scratchLoadRegIdx, numRegsPerRow + 2);
 
-    md_t sf_reg = scratchLoadRegIdx;
-    if (sclType == matOpScaleType::scalar) {
-        broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
+    md_t sf_reg = -1;
+    if (hasSF) {
+        sf_reg = scratchLoadRegIdx;
+        if (sclType == matOpScaleType::scalar) {
+            broadcastAndConvertScalar<sfDt>(RegType(sf_reg), jit_->ptr[regTmp1]);
+        }
     }
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
@@ -2221,8 +2245,7 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
                                  + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
 
     // Load scale factors FIRST - use sizeof(sfDt) for offset calculation
-    if (sclType == matOpScaleType::rowVector) {
-        // Calculate: scale_factor_ptr + post_op_c_j * sizeof(sfDt)
+    if (hasSF && sclType == matOpScaleType::rowVector) {
         jit_->lea(regTmp3, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
         loadAndConvertRows<sfDt>(regTmp3, sf_reg);
     }
@@ -2244,7 +2267,7 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
     jit_->add(regTmp7, regTmp6);
     jit_->add(regTmp2, regTmp7);
 
-    if (sclType == matOpScaleType::columnVector) {
+    if (hasSF && sclType == matOpScaleType::columnVector) {
         jit_->mov(regTmp6,
                   jit_->ptr[regkernelOpsAttr
                             + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
@@ -2262,9 +2285,11 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
         loadAndConvertVector<matOpDt>(RegType(matRegIdx),
                                       jit_->ptr[regTmp2 + loadIdx], useMask);
 
-        // multiply scale factor with matOp
-        jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
-                     RegType(sfRegIdx + sclIdx));
+        // multiply scale factor with matOp (only if hasSF)
+        if (hasSF) {
+            jit_->vmulps(RegType(matRegIdx), RegType(matRegIdx),
+                         RegType(sfRegIdx + sclIdx));
+        }
         if (opType == matOpType::matOpAdd) {
             if (useMask) {
                 // AVX2 doesn't support masking on arithmetic ops, zero out
@@ -2293,14 +2318,12 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
 
     int sclIdx = 0;
     for (int i = 0; i < MR; i++) {
-        if (sclType == matOpScaleType::columnVector) {
-            // broadcast scale factor along the m dimension since the A and B
-            // matrices are swapped for column major inputs.
+        if (hasSF && sclType == matOpScaleType::columnVector) {
             broadcastAndConvertScalar<sfDt>(
                 RegType(sf_reg), jit_->ptr[regTmp6 + i * sizeof(sfDt)]);
         }
         for (int j = 0; j < numFullRegsPerRow; j++) {
-            if (sclType == matOpScaleType::rowVector) {
+            if (hasSF && sclType == matOpScaleType::rowVector) {
                 sclIdx = j;
             }
             jitGeneratorError err =
@@ -2312,7 +2335,7 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
             }
         }
         if (numMaskRegsPerRow > 0) {
-            if (sclType == matOpScaleType::rowVector) {
+            if (hasSF && sclType == matOpScaleType::rowVector) {
                 sclIdx = numFullRegsPerRow;
             }
             jitGeneratorError err = opLambda(
@@ -2329,7 +2352,6 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
 
     // Restore original scratch queue
     restoreScratchQueue(saved_queue);
-
     return jitGeneratorError::success;
 }
 
@@ -2337,25 +2359,24 @@ template<utils::kernelInstrType KType>
 template<typename sfDt, typename matOpDt>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
-                                                         matOpScaleType sclType)
+                                                         matOpScaleType sclType,
+                                                         bool           hasSF)
 {
     // GEMV n=1: MR outputs packed across accumulator registers
     // ldm is always 1 for n=1 case (contiguous storage)
 
     // Check register availability before proceeding
-    // Minimum registers needed:
-    // - 2 base registers (sfReg, matReg)
-    // - 1 temp for non-float sfDt conversion (if sfDt != float)
-    // - 1 temp for non-float matOpDt conversion (if matOpDt != float)
-    int minRegsNeeded = 2; // Base: sfReg + matReg
-    if constexpr (!std::is_same_v<sfDt, float>) {
-        minRegsNeeded++; // Extra temp for scale factor conversion
+    int minRegsNeeded = 1; // Base: matReg
+    if (hasSF) {
+        minRegsNeeded++; // sfReg
+        if constexpr (!std::is_same_v<sfDt, float>) {
+            minRegsNeeded++; // Extra temp for scale factor conversion
+        }
     }
     if constexpr (!std::is_same_v<matOpDt, float>) {
         minRegsNeeded++; // Extra temp for matrix data conversion
     }
 
-    // Ensure enough registers available
     if (static_cast<int>(scratch_reg_queue.size()) < minRegsNeeded) {
         return jitGeneratorError::badKernelInfo;
     }
@@ -2363,7 +2384,6 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
     // Reserve all accumulator registers to prevent conflicts
     auto saved_queue = reserveDestRegisters(cRegStartIdx, numRegsPerRow + 2);
 
-    RegType sfReg  = popAndGetScratchReg();
     RegType matReg = popAndGetScratchReg();
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
@@ -2373,7 +2393,6 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
 
     // Calculate load bytes based on matrix datatype
     int matLoadBytes = getLoadBytes<matOpDt>();
-    int sfLoadBytes  = getLoadBytes<sfDt>();
 
     // ============ GEMV n=1: Always process M elements as a vector ============
     // For n=1, auxiliary matrix is [M, 1] with contiguous elements
@@ -2387,17 +2406,22 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
     jit_->lea(regTmp3, jit_->ptr[regTmp6 * sizeof(matOpDt)]);
     jit_->add(regTmp2, regTmp3);
 
-    // Handle scale factor loading based on type
-    if (sclType == matOpScaleType::scalar) {
-        // Scalar: Broadcast single value to all lanes (only once)
-        broadcastAndConvertScalar<sfDt>(sfReg, jit_->ptr[regTmp1]);
-    } else if (sclType == matOpScaleType::rowVector) {
-        // Row vector: For n=1, j=0, so it's effectively scalar
-        jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
-        broadcastAndConvertScalar<sfDt>(sfReg, jit_->ptr[regTmp1]);
-    } else {
-        // Column vector: Offset to start of scale factor array
-        jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp6 * sizeof(sfDt)]);
+    // Handle scale factor setup and loading (only if hasSF)
+    int sf_reg = -1;
+    RegType sfReg       = RegType(sf_reg);
+    int     sfLoadBytes = 0;
+    if (hasSF) {
+        sfReg       = popAndGetScratchReg();
+        sfLoadBytes = getLoadBytes<sfDt>();
+
+        if (sclType == matOpScaleType::scalar) {
+            broadcastAndConvertScalar<sfDt>(sfReg, jit_->ptr[regTmp1]);
+        } else if (sclType == matOpScaleType::rowVector) {
+            jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp7 * sizeof(sfDt)]);
+            broadcastAndConvertScalar<sfDt>(sfReg, jit_->ptr[regTmp1]);
+        } else {
+            jit_->lea(regTmp1, jit_->ptr[regTmp1 + regTmp6 * sizeof(sfDt)]);
+        }
     }
 
     // Process full accumulator registers
@@ -2406,16 +2430,15 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
         loadAndConvertVector<matOpDt>(
             matReg, jit_->ptr[regTmp2 + i * matLoadBytes], false);
 
-        // Load scale factor (if column vector, load per register)
-        if (sclType == matOpScaleType::columnVector) {
+        if (hasSF && sclType == matOpScaleType::columnVector) {
             loadAndConvertVector<sfDt>(
                 sfReg, jit_->ptr[regTmp1 + i * sfLoadBytes], false);
         }
 
-        // Multiply scale factor with matrix data
-        jit_->vmulps(matReg, matReg, sfReg);
+        if (hasSF) {
+            jit_->vmulps(matReg, matReg, sfReg);
+        }
 
-        // Apply operation to accumulator
         if (opType == matOpType::matOpAdd) {
             jit_->vaddps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
                          matReg);
@@ -2434,13 +2457,14 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
             matReg, jit_->ptr[regTmp2 + i * matLoadBytes], true);
 
         // Load scale factor (if column vector, load per register)
-        if (sclType == matOpScaleType::columnVector) {
+        if (hasSF && sclType == matOpScaleType::columnVector) {
             loadAndConvertVector<sfDt>(
                 sfReg, jit_->ptr[regTmp1 + i * sfLoadBytes], true);
         }
-
         // Multiply scale factor with matrix data
-        jit_->vmulps(matReg, matReg, sfReg);
+        if (hasSF) {
+            jit_->vmulps(matReg, matReg, sfReg);
+        }
 
         // Apply operation to accumulator
         if (opType == matOpType::matOpAdd) {
@@ -2454,128 +2478,70 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
 
     // Push registers back to the queue
     scratch_reg_queue.push(matReg);
-    scratch_reg_queue.push(sfReg);
+    if (hasSF) {
+        scratch_reg_queue.push(sfReg);
+    }
 
-    // Restore scratch queue
     restoreScratchQueue(saved_queue);
-
     return jitGeneratorError::success;
 }
 
-// Dispatcher for matrix operations (GEMM path)
+// ============================================================================
+// Unified MatOp Implementation - Handles both matadd and matmul
+// ============================================================================
 template<utils::kernelInstrType KType>
-template<typename SfType>
 jitGeneratorError
-kernelOpsGeneratorX86<KType>::dispatchMatOpByMatrixType(
-    dlp::kernel_frame::DataType matOpDt,
-    matOpType                   opType,
-    matOpScaleType              sclType)
+kernelOpsGeneratorX86<KType>::matOp(kernelOpsMetaData& op, matOpType opType)
 {
-    DISPATCH_OP_BY_DUAL_DATATYPE(SfType, matOpDt, matOpScaleFactorImplMerged,
-                                 opType, sclType);
-}
+    // Check if scale factor is required
+    bool hasSF = (op.scalarScaleFactorRequired || op.vectorScaleFactorRequired);
 
-// Dispatcher for matrix operations (GEMV N=1 path)
-template<utils::kernelInstrType KType>
-template<typename SfType>
-jitGeneratorError
-kernelOpsGeneratorX86<KType>::dispatchMatOpByMatrixTypeGEMVN1(
-    dlp::kernel_frame::DataType matOpDt,
-    matOpType                   opType,
-    matOpScaleType              sclType)
-{
-    DISPATCH_OP_BY_DUAL_DATATYPE(SfType, matOpDt, matOpScaleFactorImplGEMVN1,
-                                 opType, sclType);
+    // Only load scale factor pointer if it exists
+    if (hasSF) {
+        jit_->mov(
+            regTmp1,
+            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
+    }
+
+    // f32 is used as a placeholder type when SF is not present; the actual value
+    // won't be used since all SF code paths are guarded by hasSF
+    DataType sfDt = hasSF ? op.scaleFactorDt : DataType::f32;
+
+    // Determine scale type
+    matOpScaleType sclType = matOpScaleType::scalar;
+    if (hasSF && !op.scalarScaleFactorRequired) {
+        sclType = (op.cMatFormat == storageFormat::rowMajor)
+                      ? matOpScaleType::rowVector
+                      : matOpScaleType::columnVector;
+    }
+
+    bool isGEMVN1 = (algoType_ == dlp::jit::jitAlgoType::gemv_n1);
+
+    // Single dispatch - no macros, no intermediate functions
+    return dispatch2Datatypes(
+        sfDt, op.paramStorageDt, [&](auto sfType, auto matType) {
+            using SfT  = decltype(sfType);
+            using MatT = decltype(matType);
+            return isGEMVN1
+                       ? matOpScaleFactorImplGEMVN1<SfT, MatT>(opType, sclType,
+                                                               hasSF)
+                       : matOpScaleFactorImplMerged<SfT, MatT>(opType, sclType,
+                                                               hasSF);
+        });
 }
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::matadd(kernelOpsMetaData& op)
 {
-    jit_->mov(
-        regTmp1,
-        jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
-
-    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
-        // ============ GEMV n=1 path ============
-        if (op.scalarScaleFactorRequired) {
-            DISPATCH_BY_DATATYPE(
-                op.scaleFactorDt, dispatchMatOpByMatrixTypeGEMVN1,
-                op.paramStorageDt, matOpType::matOpAdd, matOpScaleType::scalar);
-        } else if (op.cMatFormat == storageFormat::rowMajor) {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
-                                 dispatchMatOpByMatrixTypeGEMVN1,
-                                 op.paramStorageDt, matOpType::matOpAdd,
-                                 matOpScaleType::rowVector);
-        } else {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
-                                 dispatchMatOpByMatrixTypeGEMVN1,
-                                 op.paramStorageDt, matOpType::matOpAdd,
-                                 matOpScaleType::columnVector);
-        }
-    } else {
-        // ============ GEMM path ============
-        if (op.scalarScaleFactorRequired) {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt, dispatchMatOpByMatrixType,
-                                 op.paramStorageDt, matOpType::matOpAdd,
-                                 matOpScaleType::scalar);
-        } else if (op.cMatFormat == storageFormat::rowMajor) {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt, dispatchMatOpByMatrixType,
-                                 op.paramStorageDt, matOpType::matOpAdd,
-                                 matOpScaleType::rowVector);
-        } else {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt, dispatchMatOpByMatrixType,
-                                 op.paramStorageDt, matOpType::matOpAdd,
-                                 matOpScaleType::columnVector);
-        }
-    }
-
-    return jitGeneratorError::success;
+    return matOp(op, matOpType::matOpAdd);
 }
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::matmul(kernelOpsMetaData& op)
 {
-    jit_->mov(
-        regTmp1,
-        jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
-
-    if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
-        // ============ GEMV n=1 path ============
-        if (op.scalarScaleFactorRequired) {
-            DISPATCH_BY_DATATYPE(
-                op.scaleFactorDt, dispatchMatOpByMatrixTypeGEMVN1,
-                op.paramStorageDt, matOpType::matOpMul, matOpScaleType::scalar);
-        } else if (op.cMatFormat == storageFormat::rowMajor) {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
-                                 dispatchMatOpByMatrixTypeGEMVN1,
-                                 op.paramStorageDt, matOpType::matOpMul,
-                                 matOpScaleType::rowVector);
-        } else {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt,
-                                 dispatchMatOpByMatrixTypeGEMVN1,
-                                 op.paramStorageDt, matOpType::matOpMul,
-                                 matOpScaleType::columnVector);
-        }
-    } else {
-        // ============ GEMM path ============
-        if (op.scalarScaleFactorRequired) {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt, dispatchMatOpByMatrixType,
-                                 op.paramStorageDt, matOpType::matOpMul,
-                                 matOpScaleType::scalar);
-        } else if (op.cMatFormat == storageFormat::rowMajor) {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt, dispatchMatOpByMatrixType,
-                                 op.paramStorageDt, matOpType::matOpMul,
-                                 matOpScaleType::rowVector);
-        } else {
-            DISPATCH_BY_DATATYPE(op.scaleFactorDt, dispatchMatOpByMatrixType,
-                                 op.paramStorageDt, matOpType::matOpMul,
-                                 matOpScaleType::columnVector);
-        }
-    }
-
-    return jitGeneratorError::success;
+    return matOp(op, matOpType::matOpMul);
 }
 
 template<utils::kernelInstrType KType>

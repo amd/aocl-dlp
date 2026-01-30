@@ -656,6 +656,134 @@ gemm_tests:
             scale_factor_type: ["f32"]
 
   # =============================================================================
+  # MATRIX-ADD/MUL WITHOUT SCALE FACTOR (SF=NULL) TEST CASES
+  # =============================================================================
+
+  # Test Matrix-Add with SF=NULL (no scale factor parameters specified)
+  - name: "f32_matrix_add_no_scale_factor"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32]
+    alpha: [1.2]
+    beta: [1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 50
+      relative: 50
+    # Matrix-Add without scale factor - tests SF=NULL code path
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["f32"]
+            # No scale_factor, scale_factor_type, or scale_factor_len specified
+
+  # Test Matrix-Mul with SF=NULL (no scale factor parameters specified)
+  - name: "f32_matrix_mul_no_scale_factor"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 50
+      relative: 50
+    # Matrix-Mul without scale factor - tests SF=NULL code path
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            matrix_type: ["f32"]
+            # No scale_factor, scale_factor_type, or scale_factor_len specified
+
+  # Test BF16 API with Matrix-Add SF=NULL
+  - name: "bf16_matrix_add_no_scale_factor"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 50
+      relative: 50
+    # BF16 API Matrix-Add without scale factor - tests SF=NULL code path
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["bf16"]
+            # No scale_factor, scale_factor_type, or scale_factor_len specified
+
+  # Test BF16 API with Matrix-Mul SF=NULL
+  - name: "bf16_matrix_mul_no_scale_factor"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [32, 64]
+    n: [32, 64]
+    k: [32]
+    alpha: [1.0]
+    beta: [1.0]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      absolute: 50
+      relative: 50
+    # BF16 API Matrix-Mul without scale factor - tests SF=NULL code path
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            matrix_type: ["f32"]
+            # No scale_factor, scale_factor_type, or scale_factor_len specified
+
+  # =============================================================================
   # KERNEL REGRESSION TESTING - SPECIFIC SIZES
   # =============================================================================
 

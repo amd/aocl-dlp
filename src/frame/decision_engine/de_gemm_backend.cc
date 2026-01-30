@@ -480,15 +480,19 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
                 static_cast<DLP_TYPE>(post_op->stor_type));
             char storFormatC =
                 std::tolower(*(static_cast<char*>(post_op->op_args2)));
-            metaData->cMatFormat    = (storFormatC == 'c')
-                                          ? kernel_frame::storageFormat::colMajor
-                                          : kernel_frame::storageFormat::rowMajor;
-            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
-                static_cast<DLP_TYPE>(post_op->sf_stor_type));
-            metaData->scalarScaleFactorRequired =
-                (post_op->scale_factor_len == 1) ? true : false;
-            metaData->vectorScaleFactorRequired =
-                (post_op->scale_factor_len > 1) ? true : false;
+            metaData->cMatFormat = (storFormatC == 'c')
+                                       ? kernel_frame::storageFormat::colMajor
+                                       : kernel_frame::storageFormat::rowMajor;
+            // Only set scale factor metadata if scale_factor is provided
+            if (post_op->scale_factor != nullptr) {
+                metaData->scaleFactorDt =
+                    utils::getStorageDtFromAoclStorageType(
+                        static_cast<DLP_TYPE>(post_op->sf_stor_type));
+                metaData->scalarScaleFactorRequired =
+                    (post_op->scale_factor_len == 1) ? true : false;
+                metaData->vectorScaleFactorRequired =
+                    (post_op->scale_factor_len > 1) ? true : false;
+            }
             break;
         }
         case POST_OPS_MATRIX_MUL: {
@@ -497,15 +501,19 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
                 static_cast<DLP_TYPE>(post_op->stor_type));
             char storFormatC =
                 std::tolower(*(static_cast<char*>(post_op->op_args2)));
-            metaData->cMatFormat    = (storFormatC == 'c')
-                                          ? kernel_frame::storageFormat::colMajor
-                                          : kernel_frame::storageFormat::rowMajor;
-            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
-                static_cast<DLP_TYPE>(post_op->sf_stor_type));
-            metaData->scalarScaleFactorRequired =
-                (post_op->scale_factor_len == 1) ? true : false;
-            metaData->vectorScaleFactorRequired =
-                (post_op->scale_factor_len > 1) ? true : false;
+            metaData->cMatFormat = (storFormatC == 'c')
+                                       ? kernel_frame::storageFormat::colMajor
+                                       : kernel_frame::storageFormat::rowMajor;
+            // Only set scale factor metadata if scale_factor is provided
+            if (post_op->scale_factor != nullptr) {
+                metaData->scaleFactorDt =
+                    utils::getStorageDtFromAoclStorageType(
+                        static_cast<DLP_TYPE>(post_op->sf_stor_type));
+                metaData->scalarScaleFactorRequired =
+                    (post_op->scale_factor_len == 1) ? true : false;
+                metaData->vectorScaleFactorRequired =
+                    (post_op->scale_factor_len > 1) ? true : false;
+            }
             break;
         }
         case POST_OPS_ADQUANTIZE: {
