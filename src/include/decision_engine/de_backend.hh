@@ -343,7 +343,7 @@ class gemmF32DEBackend : public iDEBackend
         // using rerouted_from_other_backend to check if the DE is rerouted from
         // other backend.
         if (!hasPostOps && !(rerouted_from_other_backend)
-            && ((n < 48) || (m < 16)) && (rs_b == 1) && (mtag_b == PACK)
+            && ((n < 48) || (m < 16)) && (cs_b != 1) && (mtag_b == PACK)
             && (mtag_a == UNPACKED)) {
             invokeRD = true;
             k_unroll = 4; // equal to intrinsics kernel. To be tuned later.
