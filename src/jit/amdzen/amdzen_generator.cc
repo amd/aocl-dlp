@@ -276,7 +276,6 @@ jitAmdZenFP32::deriveGEMMNRAndMaskUse(int                     nr,
 dlp::jit::jitGeneratorError
 jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 {
-
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
     MR              = (jI.kI).mr;
@@ -1244,6 +1243,11 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
          == dlp::kernel_frame::kernelInstrPreference::avx512_zmm_bf16_favour)
             ? utils::kernelInstrType::avx512_zmm_32_reg
             : utils::kernelInstrType::none;
+
+    if (kType == utils::kernelInstrType::none) {
+        err = dlp::jit::jitGeneratorError::notSupported;
+        goto cleanup;
+    }
 
     if (MR == 1) {
 

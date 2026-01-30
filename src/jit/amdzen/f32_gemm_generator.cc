@@ -314,9 +314,10 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
 
 // Generic template for AVX2 and AVX512_256 (both use Ymm as RegType)
 // Converts 8×F32 in Ymm(destIdx) → 8×BF16 in Xmm(scratch2)
-template<utils::kernelInstrType KType>
+template<>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+jitGEMMF32<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
+    int scratch1, int scratch2, int destIdx)
 {
     // Manual F32→BF16 conversion using round-to-nearest-even with tie-break
     // This generic implementation works for AVX2 and AVX512_256
@@ -383,6 +384,15 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
            0xD8); // 0xD8 = 11011000b = [0,2,1,3]
 
     return dlp::jit::jitGeneratorError::success;
+}
+
+// F32 to BF16 conversion routines are currently only implemented for avx512_zmm
+// and avx2 variants
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+{
+    return dlp::jit::jitGeneratorError::notSupported;
 }
 
 template<utils::kernelInstrType KType>
@@ -546,7 +556,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
                     jmp(loop_start, T_NEAR);
 
                     L(loop_end);
-                } else {
+                } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                     // AVX512_ZMM/AVX512_YMM: Store BF16 output directly to
                     // memory with mask AVX512_ZMM: 32 bytes (16×BF16) from Ymm
                     // AVX512_YMM: 16 bytes (8×BF16) from Xmm
@@ -557,6 +567,8 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
                                       | fringeMask[maskI - bFullReg],
                                   halfRegType(scratch2));
                     }
+                } else {
+                    return dlp::jit::jitGeneratorError::notSupported;
                 }
             }
             add(regTmpCptr, regTmp1);
@@ -687,10 +699,15 @@ jitGEMMF32<KType>::scaleBeta()
     // paths. For these cases, we ensure that the C matrix is row-major and then
     // call the JIT kernel. The logic to ensure this is in
     // aocl_gemm_f32f32f32of32.c file.
-    if (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+
+    // Additionally, when C is downscaled the current implementation only
+    // supports the row-major beta-scaling path.
+    if (KType == utils::kernelInstrType::avx2_ymm_16_reg
+        || c_downscale < DLP_F32) {
         return scaleBetaRowMajor();
     }
 
+    inLocalLabel();
     // broadcast beta value
     int betaRegIdx    = aRegIdx;
     int scratchRegIdx = bRegIdx;
@@ -712,7 +729,7 @@ jitGEMMF32<KType>::scaleBeta()
     L(".scaleBetaRowMajor");
     RETURN_IF_ERROR(scaleBetaRowMajor());
     L(".end");
-
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -1054,7 +1071,7 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
                                 RegType(bRegIdx + bFullReg),
                                 RegType(betaRegIdx));
 
-                } else {
+                } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                     // AVX512_YMM/ZMM: Load fringe BF16 elements directly from
                     // buf_downscale with mask Load BF16 data, sign-extend to
                     // 32-bit, shift left by 16, then apply beta
@@ -1070,6 +1087,8 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
                                     RegType(bRegIdx + maskI),
                                     RegType(betaRegIdx));
                     }
+                } else {
+                    return dlp::jit::jitGeneratorError::notSupported;
                 }
             }
             add(regTmpCptr, regTmp1);
@@ -1194,6 +1213,9 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     }
 
     L(label_store_result);
+
+    // c downscaling support is currently only implemented with scale beta and
+    // not fused with store
     if (c_downscale < DLP_F32) {
         // skip beta scaling if beta is 0
         if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {

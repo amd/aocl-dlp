@@ -158,6 +158,18 @@ class gemmF32DEBackend : public iDEBackend
             return INVALID_KERNEL_INFO;
         }
 
+        // BF16 operations don't support AVX512_YMM (256-bit) kernel variants.
+        // When BF16 backend reroutes to F32 backend on AVX512 machines and
+        // AOCL_ENABLE_INSTRUCTIONS is set to avx512_ymm, we must override
+        // the preference to avx512_zmm_favour since AVX512_YMM kernels are
+        // not available for the rerouted BF16->F32 operations.
+        if (rerouted_from_other_backend
+            && eKernelInstPref
+                   == kernel_frame::kernelInstrPreference::avx512_ymm_favour) {
+            eKernelInstPref =
+                kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+        }
+
         kernel_frame::scalingType alphaScalingType;
         kernel_frame::scalingType betaScalingType;
         std::tie(alphaScalingType, betaScalingType) =
@@ -283,6 +295,18 @@ class gemmF32DEBackend : public iDEBackend
         md_t kc = kc_hint;
         if ((k == 1) && (!rerouted_from_other_backend)) {
             kc = 1;
+        }
+
+        // BF16 operations don't support AVX512_YMM (256-bit) kernel variants.
+        // When BF16 backend reroutes to F32 backend on AVX512 machines and
+        // AOCL_ENABLE_INSTRUCTIONS is set to avx512_ymm, we must override
+        // the preference to avx512_zmm_favour since AVX512_YMM kernels are
+        // not available for the rerouted BF16->F32 operations.
+        if (rerouted_from_other_backend
+            && eKernelInstPref
+                   == kernel_frame::kernelInstrPreference::avx512_ymm_favour) {
+            eKernelInstPref =
+                kernel_frame::kernelInstrPreference::avx512_zmm_favour;
         }
 
         md_t prefetch_c_dist = 0; // Setting this to 0, until we use it.

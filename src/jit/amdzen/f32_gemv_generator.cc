@@ -485,7 +485,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
                 vfmadd231ps(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidth)),
                             Xbyak::Ymm(xBaseIdx), Xbyak::Ymm(tmpBaseIdx));
             }
-        } else {
+        } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             for (int i = 0; i < mSize / simdWidth; i += 1) {
                 vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
                 vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
@@ -502,6 +502,9 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
                 vfmadd231ps(RegType(accumBaseIdx + mSize / simdWidth),
                             RegType(xBaseIdx), RegType(tmpBaseIdx));
             }
+        } else {
+            // AVX512_YMM not supported for BF16 downscaling
+            return dlp::jit::jitGeneratorError::notSupported;
         }
 
         jmp(label_betaop_col_end, T_NEAR);
@@ -603,123 +606,241 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         // buffer
         lea(regTmp3, ptr[regTmp2 + 2 * regTmp2]); // regTmp3 = stride + 2*stride
 
-        for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
-            int blockSize  = ((mSize - i * simdWidth) < simdWidth)
-                                 ? (mSize - i * simdWidth)
-                                 : simdWidth;
-            int num_blocks = blockSize / 4;
-            int rem_block  = blockSize % 4;
-            regInit(tmpBaseIdx, tmpReg);
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+                int blockSize  = ((mSize - i * simdWidth) < simdWidth)
+                                     ? (mSize - i * simdWidth)
+                                     : simdWidth;
+                int num_blocks = blockSize / 4;
+                int rem_block  = blockSize % 4;
+                regInit(tmpBaseIdx, tmpReg);
 
-            for (int j = 0; j < num_blocks; j += 1) {
-                // Load 4 BF16 values and convert to F32 by placing in upper 16
-                // bits
-                vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
-                       Xbyak::Xmm(tmpBaseIdx));
-                vpinsrw(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
-                        ptr[regTmpYptr], 1); // position 1 = bits 16-31
-                vbroadcastss(RegType(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
+                for (int j = 0; j < num_blocks; j += 1) {
+                    // Load 4 BF16 values and convert to F32 by placing in upper
+                    // 16 bits
+                    vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                           Xbyak::Xmm(tmpBaseIdx));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                            ptr[regTmpYptr], 1); // position 1 = bits 16-31
+                    vbroadcastss(RegType(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
 
-                vxorps(Xbyak::Xmm(tmpBaseIdx + 1), Xbyak::Xmm(tmpBaseIdx + 1),
-                       Xbyak::Xmm(tmpBaseIdx + 1));
-                vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1), Xbyak::Xmm(tmpBaseIdx + 1),
-                        ptr[regTmpYptr + regTmp2], 1);
-                vbroadcastss(RegType(tmpBaseIdx + 1),
-                             Xbyak::Xmm(tmpBaseIdx + 1));
+                    vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
+                           Xbyak::Xmm(tmpBaseIdx + 1),
+                           Xbyak::Xmm(tmpBaseIdx + 1));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1),
+                            Xbyak::Xmm(tmpBaseIdx + 1),
+                            ptr[regTmpYptr + regTmp2], 1);
+                    vbroadcastss(RegType(tmpBaseIdx + 1),
+                                 Xbyak::Xmm(tmpBaseIdx + 1));
 
-                vxorps(Xbyak::Xmm(tmpBaseIdx + 2), Xbyak::Xmm(tmpBaseIdx + 2),
-                       Xbyak::Xmm(tmpBaseIdx + 2));
-                vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2), Xbyak::Xmm(tmpBaseIdx + 2),
-                        ptr[regTmpYptr + 2 * regTmp2], 1);
-                vbroadcastss(RegType(tmpBaseIdx + 2),
-                             Xbyak::Xmm(tmpBaseIdx + 2));
+                    vxorps(Xbyak::Xmm(tmpBaseIdx + 2),
+                           Xbyak::Xmm(tmpBaseIdx + 2),
+                           Xbyak::Xmm(tmpBaseIdx + 2));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2),
+                            Xbyak::Xmm(tmpBaseIdx + 2),
+                            ptr[regTmpYptr + 2 * regTmp2], 1);
+                    vbroadcastss(RegType(tmpBaseIdx + 2),
+                                 Xbyak::Xmm(tmpBaseIdx + 2));
 
-                vxorps(Xbyak::Xmm(tmpBaseIdx + 3), Xbyak::Xmm(tmpBaseIdx + 3),
-                       Xbyak::Xmm(tmpBaseIdx + 3));
-                vpinsrw(Xbyak::Xmm(tmpBaseIdx + 3), Xbyak::Xmm(tmpBaseIdx + 3),
-                        ptr[regTmpYptr + regTmp3], 1);
-                vbroadcastss(RegType(tmpBaseIdx + 3),
-                             Xbyak::Xmm(tmpBaseIdx + 3));
+                    vxorps(Xbyak::Xmm(tmpBaseIdx + 3),
+                           Xbyak::Xmm(tmpBaseIdx + 3),
+                           Xbyak::Xmm(tmpBaseIdx + 3));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx + 3),
+                            Xbyak::Xmm(tmpBaseIdx + 3),
+                            ptr[regTmpYptr + regTmp3], 1);
+                    vbroadcastss(RegType(tmpBaseIdx + 3),
+                                 Xbyak::Xmm(tmpBaseIdx + 3));
 
-                // Now continue with EXACT same logic as F32 path
-                vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
-                          RegType(tmpBaseIdx + 1));
-                vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
-                          RegType(tmpBaseIdx + 3));
-                vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
-                        RegType(tmpBaseIdx + 2), 0x44);
+                    // Now continue with EXACT same logic as F32 path
+                    vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                              RegType(tmpBaseIdx + 1));
+                    vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                              RegType(tmpBaseIdx + 3));
+                    vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                            RegType(tmpBaseIdx + 2), 0x44);
 
-                if constexpr (KType
-                              == utils::kernelInstrType::avx2_ymm_16_reg) {
-                    vinsertf128(Xbyak::Ymm(yBaseIdx + i),
-                                Xbyak::Ymm(yBaseIdx + i),
-                                Xbyak::Xmm(tmpBaseIdx), j);
-                } else {
-                    vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
-                                 Xbyak::Xmm(tmpBaseIdx), j);
+                    if constexpr (KType
+                                  == utils::kernelInstrType::avx2_ymm_16_reg) {
+                        vinsertf128(Xbyak::Ymm(yBaseIdx + i),
+                                    Xbyak::Ymm(yBaseIdx + i),
+                                    Xbyak::Xmm(tmpBaseIdx), j);
+                    } else {
+                        vinsertf32x4(RegType(yBaseIdx + i),
+                                     RegType(yBaseIdx + i),
+                                     Xbyak::Xmm(tmpBaseIdx), j);
+                    }
+
+                    lea(regTmpYptr, ptr[regTmpYptr + regTmp2 * 4]);
                 }
 
-                lea(regTmpYptr, ptr[regTmpYptr + regTmp2 * 4]);
-            }
+                if (rem_block) {
+                    // Handle remaining elements with same pattern
+                    switch (rem_block) {
+                        case 3:
+                            vxorps(Xbyak::Xmm(tmpBaseIdx + 2),
+                                   Xbyak::Xmm(tmpBaseIdx + 2),
+                                   Xbyak::Xmm(tmpBaseIdx + 2));
+                            vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2),
+                                    Xbyak::Xmm(tmpBaseIdx + 2),
+                                    ptr[regTmpYptr + regTmp2 * 2], 1);
+                            vbroadcastss(RegType(tmpBaseIdx + 2),
+                                         Xbyak::Xmm(tmpBaseIdx + 2));
+                        case 2:
+                            vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
+                                   Xbyak::Xmm(tmpBaseIdx + 1),
+                                   Xbyak::Xmm(tmpBaseIdx + 1));
+                            vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1),
+                                    Xbyak::Xmm(tmpBaseIdx + 1),
+                                    ptr[regTmpYptr + regTmp2], 1);
+                            vbroadcastss(RegType(tmpBaseIdx + 1),
+                                         Xbyak::Xmm(tmpBaseIdx + 1));
+                        case 1:
+                            vxorps(Xbyak::Xmm(tmpBaseIdx),
+                                   Xbyak::Xmm(tmpBaseIdx),
+                                   Xbyak::Xmm(tmpBaseIdx));
+                            vpinsrw(Xbyak::Xmm(tmpBaseIdx),
+                                    Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr], 1);
+                            vbroadcastss(RegType(tmpBaseIdx),
+                                         Xbyak::Xmm(tmpBaseIdx));
+                        case 0:
+                            break;
+                    }
 
-            if (rem_block) {
-                // Handle remaining elements with same pattern
-                switch (rem_block) {
-                    case 3:
-                        vxorps(Xbyak::Xmm(tmpBaseIdx + 2),
-                               Xbyak::Xmm(tmpBaseIdx + 2),
-                               Xbyak::Xmm(tmpBaseIdx + 2));
-                        vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2),
-                                Xbyak::Xmm(tmpBaseIdx + 2),
-                                ptr[regTmpYptr + regTmp2 * 2], 1);
-                        vbroadcastss(RegType(tmpBaseIdx + 2),
-                                     Xbyak::Xmm(tmpBaseIdx + 2));
-                    case 2:
-                        vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
-                               Xbyak::Xmm(tmpBaseIdx + 1),
-                               Xbyak::Xmm(tmpBaseIdx + 1));
-                        vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1),
-                                Xbyak::Xmm(tmpBaseIdx + 1),
-                                ptr[regTmpYptr + regTmp2], 1);
-                        vbroadcastss(RegType(tmpBaseIdx + 1),
-                                     Xbyak::Xmm(tmpBaseIdx + 1));
-                    case 1:
-                        vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
-                               Xbyak::Xmm(tmpBaseIdx));
-                        vpinsrw(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
-                                ptr[regTmpYptr], 1);
-                        vbroadcastss(RegType(tmpBaseIdx),
-                                     Xbyak::Xmm(tmpBaseIdx));
-                    case 0:
-                        break;
-                }
+                    // Same unpack/shuffle logic as F32
+                    vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                              RegType(tmpBaseIdx + 1));
+                    vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                              RegType(tmpBaseIdx + 3));
+                    vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                            RegType(tmpBaseIdx + 2), 0x44);
 
-                // Same unpack/shuffle logic as F32
-                vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
-                          RegType(tmpBaseIdx + 1));
-                vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
-                          RegType(tmpBaseIdx + 3));
-                vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
-                        RegType(tmpBaseIdx + 2), 0x44);
-
-                if constexpr (KType
-                              == utils::kernelInstrType::avx2_ymm_16_reg) {
                     vinsertf128(Xbyak::Ymm(yBaseIdx + i),
                                 Xbyak::Ymm(yBaseIdx + i),
                                 Xbyak::Xmm(tmpBaseIdx), num_blocks);
+                }
+
+                if (betaOne) {
+                    vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                           RegType(yBaseIdx + i));
                 } else {
+                    vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                                RegType(yBaseIdx + i));
+                }
+            }
+        } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            // Similar logic for AVX512_ZMM - simplified version for BF16
+            // loading
+            for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+                int blockSize  = ((mSize - i * simdWidth) < simdWidth)
+                                     ? (mSize - i * simdWidth)
+                                     : simdWidth;
+                int num_blocks = blockSize / 4;
+                int rem_block  = blockSize % 4;
+                regInit(tmpBaseIdx, tmpReg);
+
+                for (int j = 0; j < num_blocks; j += 1) {
+                    // Load 4 BF16 values and convert to F32 by placing in upper
+                    // 16 bits
+                    vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                           Xbyak::Xmm(tmpBaseIdx));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
+                            ptr[regTmpYptr], 1);
+                    vbroadcastss(RegType(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
+
+                    vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
+                           Xbyak::Xmm(tmpBaseIdx + 1),
+                           Xbyak::Xmm(tmpBaseIdx + 1));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1),
+                            Xbyak::Xmm(tmpBaseIdx + 1),
+                            ptr[regTmpYptr + regTmp2], 1);
+                    vbroadcastss(RegType(tmpBaseIdx + 1),
+                                 Xbyak::Xmm(tmpBaseIdx + 1));
+
+                    vxorps(Xbyak::Xmm(tmpBaseIdx + 2),
+                           Xbyak::Xmm(tmpBaseIdx + 2),
+                           Xbyak::Xmm(tmpBaseIdx + 2));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2),
+                            Xbyak::Xmm(tmpBaseIdx + 2),
+                            ptr[regTmpYptr + 2 * regTmp2], 1);
+                    vbroadcastss(RegType(tmpBaseIdx + 2),
+                                 Xbyak::Xmm(tmpBaseIdx + 2));
+
+                    vxorps(Xbyak::Xmm(tmpBaseIdx + 3),
+                           Xbyak::Xmm(tmpBaseIdx + 3),
+                           Xbyak::Xmm(tmpBaseIdx + 3));
+                    vpinsrw(Xbyak::Xmm(tmpBaseIdx + 3),
+                            Xbyak::Xmm(tmpBaseIdx + 3),
+                            ptr[regTmpYptr + regTmp3], 1);
+                    vbroadcastss(RegType(tmpBaseIdx + 3),
+                                 Xbyak::Xmm(tmpBaseIdx + 3));
+
+                    vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                              RegType(tmpBaseIdx + 1));
+                    vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                              RegType(tmpBaseIdx + 3));
+                    vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                            RegType(tmpBaseIdx + 2), 0x44);
+
+                    vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                                 Xbyak::Xmm(tmpBaseIdx), j);
+
+                    lea(regTmpYptr, ptr[regTmpYptr + regTmp2 * 4]);
+                }
+
+                if (rem_block) {
+                    switch (rem_block) {
+                        case 3:
+                            vxorps(Xbyak::Xmm(tmpBaseIdx + 2),
+                                   Xbyak::Xmm(tmpBaseIdx + 2),
+                                   Xbyak::Xmm(tmpBaseIdx + 2));
+                            vpinsrw(Xbyak::Xmm(tmpBaseIdx + 2),
+                                    Xbyak::Xmm(tmpBaseIdx + 2),
+                                    ptr[regTmpYptr + regTmp2 * 2], 1);
+                            vbroadcastss(RegType(tmpBaseIdx + 2),
+                                         Xbyak::Xmm(tmpBaseIdx + 2));
+                        case 2:
+                            vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
+                                   Xbyak::Xmm(tmpBaseIdx + 1),
+                                   Xbyak::Xmm(tmpBaseIdx + 1));
+                            vpinsrw(Xbyak::Xmm(tmpBaseIdx + 1),
+                                    Xbyak::Xmm(tmpBaseIdx + 1),
+                                    ptr[regTmpYptr + regTmp2], 1);
+                            vbroadcastss(RegType(tmpBaseIdx + 1),
+                                         Xbyak::Xmm(tmpBaseIdx + 1));
+                        case 1:
+                            vxorps(Xbyak::Xmm(tmpBaseIdx),
+                                   Xbyak::Xmm(tmpBaseIdx),
+                                   Xbyak::Xmm(tmpBaseIdx));
+                            vpinsrw(Xbyak::Xmm(tmpBaseIdx),
+                                    Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr], 1);
+                            vbroadcastss(RegType(tmpBaseIdx),
+                                         Xbyak::Xmm(tmpBaseIdx));
+                        case 0:
+                            break;
+                    }
+
+                    vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                              RegType(tmpBaseIdx + 1));
+                    vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
+                              RegType(tmpBaseIdx + 3));
+                    vshufps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
+                            RegType(tmpBaseIdx + 2), 0x44);
+
                     vinsertf32x4(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
                                  Xbyak::Xmm(tmpBaseIdx), num_blocks);
                 }
-            }
 
-            if (betaOne) {
-                vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
-                       RegType(yBaseIdx + i));
-            } else {
-                vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
-                            RegType(yBaseIdx + i));
+                if (betaOne) {
+                    vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                           RegType(yBaseIdx + i));
+                } else {
+                    vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
+                                RegType(yBaseIdx + i));
+                }
             }
+        } else {
+            // AVX512_YMM not supported for BF16 downscaling
+            return dlp::jit::jitGeneratorError::notSupported;
         }
 
         jmp(label_betaop_row_end, T_NEAR);
@@ -873,9 +994,10 @@ jitF32GEMVN1<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
     return dlp::jit::jitGeneratorError::success;
 }
 
-template<utils::kernelInstrType KType>
+template<>
 dlp::jit::jitGeneratorError
-jitF32GEMVN1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
+    int scratch1, int scratch2, int destIdx)
 {
     vbroadcastss(RegType(scratch1),
                  ptr[rsp + 16]); // Load 0x00010000
@@ -903,6 +1025,15 @@ jitF32GEMVN1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
               halfRegType(scratch1));
 
     return dlp::jit::jitGeneratorError::success;
+}
+
+// F32 to BF16 conversion routines are currently only implemented for avx512_zmm
+// and avx2 variants
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVN1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+{
+    return dlp::jit::jitGeneratorError::notSupported;
 }
 
 template<utils::kernelInstrType KType>
@@ -949,27 +1080,22 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
 
-        // Store complete SIMD-width chunks
-        for (int i = 0; i < mSize / simdWidth; i += 1) {
-            RETURN_IF_ERROR(
-                convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1, accumBaseIdx + i));
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            // Store complete SIMD-width chunks
+            for (int i = 0; i < mSize / simdWidth; i += 1) {
+                RETURN_IF_ERROR(convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
+                                                 accumBaseIdx + i));
 
-            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 movdqu(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
-            } else {
-                vmovdqu16(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+                lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
             }
+            if (mLeft) {
+                RETURN_IF_ERROR(
+                    convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
+                                     accumBaseIdx + (mSize / simdWidth)));
 
-            lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
-        }
-        if (mLeft) {
-            RETURN_IF_ERROR(
-                convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
-                                 accumBaseIdx + (mSize / simdWidth)));
-
-            // Now Xmm(scratch2) contains 8×BF16 values
-            // Store the BF16 result to stack for element-wise access
-            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                // Now Xmm(scratch2) contains 8×BF16 values
+                // Store the BF16 result to stack for element-wise access
                 movdqu(ptr[rsp + 0],
                        Xbyak::Xmm(tmpBaseIdx + 1)); // 8×16-bit to stack
 
@@ -996,10 +1122,27 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
                 jmp(loop_start, T_NEAR);
 
                 L(loop_end);
-            } else {
+            }
+        } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            // Store complete SIMD-width chunks
+            for (int i = 0; i < mSize / simdWidth; i += 1) {
+                RETURN_IF_ERROR(convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
+                                                 accumBaseIdx + i));
+
+                vmovdqu16(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+                lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+            }
+            if (mLeft) {
+                RETURN_IF_ERROR(
+                    convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
+                                     accumBaseIdx + (mSize / simdWidth)));
+
                 vmovdqu16(ptr[regTmpYptr] | mask_regs[1],
                           halfRegType(tmpBaseIdx + 1));
             }
+        } else {
+            // AVX512_YMM not supported for BF16 downscaling
+            return dlp::jit::jitGeneratorError::notSupported;
         }
 
         jmp(label_storeop_col_end, T_NEAR);
@@ -1090,21 +1233,29 @@ jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
             imul(regKIter, regTmp2);
             add(regTmpYptr, regKIter);
 
-            for (int j = 0; j < (elements_in_reg + 3) / 4; j++) {
-                RETURN_IF_ERROR(convertF32toBF16(
-                    cvtBaseIdx, (cvtBaseIdx + 1 + j), tmpBaseIdx + j));
-            }
+            // AVX512_YMM not supported for BF16 downscaling
+            if constexpr (KType == utils::kernelInstrType::avx512_ymm_32_reg) {
+                return dlp::jit::jitGeneratorError::notSupported;
+            } else {
+                // Common code for AVX2 and AVX512_ZMM
+                for (int j = 0; j < (elements_in_reg + 3) / 4; j++) {
+                    RETURN_IF_ERROR(convertF32toBF16(
+                        cvtBaseIdx, (cvtBaseIdx + 1 + j), tmpBaseIdx + j));
+                }
 
-            // Now store each extracted value to its proper row-strided location
-            for (int j = 0; j < elements_in_reg; j++) {
-                int tmp_reg    = j / 4; // Which temp register has our value
-                int pos_in_reg = j % 4; // Position within that temp register
+                // Now store each extracted value to its proper row-strided
+                // location
+                for (int j = 0; j < elements_in_reg; j++) {
+                    int tmp_reg = j / 4; // Which temp register has our value
+                    int pos_in_reg =
+                        j % 4; // Position within that temp register
 
-                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(cvtBaseIdx + 1 + tmp_reg),
-                        pos_in_reg);
+                    vpextrw(ptr[regTmpYptr],
+                            Xbyak::Xmm(cvtBaseIdx + 1 + tmp_reg), pos_in_reg);
 
-                // Move to next row
-                add(regTmpYptr, regTmp2);
+                    // Move to next row
+                    add(regTmpYptr, regTmp2);
+                }
             }
 
             jmp(label_storeop_row_end, T_NEAR);
@@ -1957,7 +2108,7 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
                 vfmadd231ps(RegType(accumBaseIdx + n_iter), RegType(xBaseIdx),
                             RegType(tmpBaseIdx));
             }
-        } else {
+        } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             for (int i = 0; i < n_iter; i += 1) {
                 vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
                 vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
@@ -1974,6 +2125,9 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
                 vfmadd231ps(RegType(accumBaseIdx + n_iter), RegType(xBaseIdx),
                             RegType(tmpBaseIdx));
             }
+        } else {
+            // AVX512_YMM not supported for BF16 downscaling
+            return dlp::jit::jitGeneratorError::notSupported;
         }
 
         jmp(label_beta_scale_fringe_end, T_NEAR);
@@ -2111,7 +2265,7 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                         lea(regTmpYptr,
                             ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
                     }
-                } else {
+                } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                     // Store complete SIMD-width chunks
                     for (int i = 0; i < NR / simdWidth; i += 1) {
                         vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
@@ -2122,6 +2276,9 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                         lea(regTmpYptr,
                             ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
                     }
+                } else {
+                    // AVX512_YMM not supported for BF16 downscaling
+                    return dlp::jit::jitGeneratorError::notSupported;
                 }
 
                 jmp(label_beta_scale_end, T_NEAR);
@@ -2195,9 +2352,10 @@ jitF32GEMVM1<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
     return dlp::jit::jitGeneratorError::success;
 }
 
-template<utils::kernelInstrType KType>
+template<>
 dlp::jit::jitGeneratorError
-jitF32GEMVM1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
+    int scratch1, int scratch2, int destIdx)
 {
     vbroadcastss(RegType(scratch1),
                  ptr[rsp + 16]); // Load 0x00010000
@@ -2225,6 +2383,15 @@ jitF32GEMVM1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
               halfRegType(scratch1));
 
     return dlp::jit::jitGeneratorError::success;
+}
+
+// F32 to BF16 conversion routines are currently only implemented for avx512_zmm
+// and avx2 variants
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitF32GEMVM1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+{
+    return dlp::jit::jitGeneratorError::notSupported;
 }
 
 template<utils::kernelInstrType KType>
@@ -2279,8 +2446,11 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
 
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 movdqu(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
-            } else {
+            } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 vmovdqu16(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
+            } else {
+                // AVX512_YMM not supported for BF16 downscaling
+                return dlp::jit::jitGeneratorError::notSupported;
             }
 
             lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
@@ -2317,9 +2487,12 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
                 jmp(loop_start, T_NEAR);
 
                 L(loop_end);
-            } else {
+            } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 vmovdqu16(ptr[regTmpYptr] | mask_regs[0],
                           halfRegType(tmpBaseIdx + 1));
+            } else {
+                // AVX512_YMM not supported for BF16 downscaling
+                return dlp::jit::jitGeneratorError::notSupported;
             }
         }
 
@@ -2412,11 +2585,14 @@ jitF32GEMVM1<KType>::storeYValues(bool nMask)
                     movdqu(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
                     lea(regTmpYptr,
                         ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
-                } else {
+                } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                     // AVX512 ZMM and AVX512 YMM variants
                     vmovdqu16(ptr[regTmpYptr], halfRegType(tmpBaseIdx + 1));
                     lea(regTmpYptr,
                         ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
+                } else {
+                    // AVX512_YMM not supported for BF16 downscaling
+                    return dlp::jit::jitGeneratorError::notSupported;
                 }
             }
             jmp(label_store_end, T_NEAR);
