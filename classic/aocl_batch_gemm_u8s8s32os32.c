@@ -213,20 +213,38 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         dlp_rntm_init_from_global(&rntm_g);
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
+        lpgemm_cntx_t  lcntx_l;
+        // Create local copy, since each thread in a multi-instance setup
+        // modifies the context object.
+        lcntx_l = *lcntx_g;
+
+        // Initialize DLP Plus kernel path.
+        lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+        // All the g_sz inputs in a given group will have the same matrix
+        // dimensions/attributes. Therefore the DE and Jit generation in
+        // DLP Plus can proceed with any 1 input from this group.
+        if (g_sz > 0) {
+            dlp_init_and_get_kernel_hndl(
+                DLP_KERNEL_U8S8S32OS32, order[gc_i], mtag_a, mtag_b, m_local,
+                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S32,
+                &lcntx_l.dlp_kernel_hndl);
+        }
 
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
-            lcntx_g, post_op_list, DLP_S32);
+            &lcntx_l, post_op_list, DLP_S32);
 
 #else
         batch_lpgemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
-            lcntx_g, post_op_list, DLP_S32);
+            &lcntx_l, post_op_list, DLP_S32);
 #endif
         mat_idx += g_sz;
     }
@@ -410,20 +428,38 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         dlp_rntm_init_from_global(&rntm_g);
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
+        lpgemm_cntx_t  lcntx_l;
+        // Create local copy, since each thread in a multi-instance setup
+        // modifies the context object.
+        lcntx_l = *lcntx_g;
+
+        // Initialize DLP Plus kernel path.
+        lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+        // All the g_sz inputs in a given group will have the same matrix
+        // dimensions/attributes. Therefore the DE and Jit generation in
+        // DLP Plus can proceed with any 1 input from this group.
+        if (g_sz > 0) {
+            dlp_init_and_get_kernel_hndl(
+                DLP_KERNEL_U8S8S32OS8, order[gc_i], mtag_a, mtag_b, m_local,
+                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S8,
+                &lcntx_l.dlp_kernel_hndl);
+        }
 
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_S8);
+            &rntm_g, &lcntx_l, post_op_list, DLP_S8);
 
 #else
         batch_lpgemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_S8);
+            &rntm_g, &lcntx_l, post_op_list, DLP_S8);
 #endif
         mat_idx += g_sz;
     }
@@ -608,20 +644,38 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         dlp_rntm_init_from_global(&rntm_g);
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
+        lpgemm_cntx_t  lcntx_l;
+        // Create local copy, since each thread in a multi-instance setup
+        // modifies the context object.
+        lcntx_l = *lcntx_g;
+
+        // Initialize DLP Plus kernel path.
+        lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+        // All the g_sz inputs in a given group will have the same matrix
+        // dimensions/attributes. Therefore the DE and Jit generation in
+        // DLP Plus can proceed with any 1 input from this group.
+        if (g_sz > 0) {
+            dlp_init_and_get_kernel_hndl(
+                DLP_KERNEL_U8S8S32OF32, order[gc_i], mtag_a, mtag_b, m_local,
+                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
+                &lcntx_l.dlp_kernel_hndl);
+        }
 
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_F32);
+            &rntm_g, &lcntx_l, post_op_list, DLP_F32);
 
 #else
         batch_lpgemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_F32);
+            &rntm_g, &lcntx_l, post_op_list, DLP_F32);
 #endif
         mat_idx += g_sz;
     }
@@ -799,20 +853,38 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         dlp_rntm_init_from_global(&rntm_g);
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
+        lpgemm_cntx_t  lcntx_l;
+        // Create local copy, since each thread in a multi-instance setup
+        // modifies the context object.
+        lcntx_l = *lcntx_g;
+
+        // Initialize DLP Plus kernel path.
+        lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+        // All the g_sz inputs in a given group will have the same matrix
+        // dimensions/attributes. Therefore the DE and Jit generation in
+        // DLP Plus can proceed with any 1 input from this group.
+        if (g_sz > 0) {
+            dlp_init_and_get_kernel_hndl(
+                DLP_KERNEL_U8S8S32OBF16, order[gc_i], mtag_a, mtag_b, m_local,
+                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
+                &lcntx_l.dlp_kernel_hndl);
+        }
 
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_BF16);
+            &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
 
 #else
         batch_lpgemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_BF16);
+            &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
 #endif
         mat_idx += g_sz;
     }
@@ -996,20 +1068,38 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         dlp_rntm_init_from_global(&rntm_g);
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
+        lpgemm_cntx_t  lcntx_l;
+        // Create local copy, since each thread in a multi-instance setup
+        // modifies the context object.
+        lcntx_l = *lcntx_g;
+
+        // Initialize DLP Plus kernel path.
+        lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+        // All the g_sz inputs in a given group will have the same matrix
+        // dimensions/attributes. Therefore the DE and Jit generation in
+        // DLP Plus can proceed with any 1 input from this group.
+        if (g_sz > 0) {
+            dlp_init_and_get_kernel_hndl(
+                DLP_KERNEL_U8S8S32OU8, order[gc_i], mtag_a, mtag_b, m_local,
+                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_U8,
+                &lcntx_l.dlp_kernel_hndl);
+        }
 
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_U8);
+            &rntm_g, &lcntx_l, post_op_list, DLP_U8);
 
 #else
         batch_lpgemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, post_op_list, DLP_U8);
+            &rntm_g, &lcntx_l, post_op_list, DLP_U8);
 #endif
         mat_idx += g_sz;
     }
