@@ -1537,17 +1537,15 @@ jitF32GEMVM1<KType>::allocateRegisters()
     // Direct addressing mode on FMA instructions are avoided here, since
     // we could initiate loads eariler with explicit loads.
     // Thus, both x and B loads are done into registers.
+    // NOTE : Currently, the usage of tmpReg registers(starting from tmpBaseIdx)
+    // is only while downscaling values from F32 to BF16(in case of using F32
+    // kernel as part of BF16 rerouting).
     accumBaseIdx = numRegs - accumReg;
     xBaseIdx     = accumBaseIdx - xReg;
     yBaseIdx     = numRegs - yReg;
     bBaseIdx     = xBaseIdx - bReg;
-    maskBaseIdx  = bBaseIdx; // Set this only when AVX512 codepath is disabled.
-
-    // allocting temp reg for storing downscaled values
-    if (c_downscale < DLP_F32) {
-        tmpBaseIdx  = bBaseIdx - tmpReg;
-        maskBaseIdx = tmpBaseIdx;
-    }
+    tmpBaseIdx   = bBaseIdx - tmpReg;
+    maskBaseIdx = tmpBaseIdx; // Set this only when AVX512 codepath is disabled.
 
     if (!Traits::hasMaskSupport) { // Native mask register-file is not supported
                                    // by the architecture.
@@ -2045,8 +2043,8 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
     mov(regKSubIter,
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
     vbroadcastss(RegType(xBaseIdx), ptr[regKSubIter]);
-    vxorps(RegType(tmpBaseIdx), RegType(tmpBaseIdx), RegType(tmpBaseIdx));
-    vucomiss(Xbyak::Xmm(xBaseIdx), Xbyak::Xmm(tmpBaseIdx));
+    vxorps(RegType(bBaseIdx), RegType(bBaseIdx), RegType(bBaseIdx));
+    vucomiss(Xbyak::Xmm(xBaseIdx), Xbyak::Xmm(bBaseIdx));
     je(".skipStore", T_NEAR);
 
     mov(regTmpYptr, regYptr);
