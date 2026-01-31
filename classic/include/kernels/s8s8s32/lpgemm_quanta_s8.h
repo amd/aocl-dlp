@@ -93,14 +93,14 @@
 // ============================================================================
 
 #define BCST_SFZP_OP(i, MACRO, dest_array, ptr, base_idx, stride)              \
-    MACRO(dest_array[i], ptr[base_idx + (i * stride)])
+    MACRO(dest_array[i], ptr[base_idx + ((i) * (stride))])
 
 #define QUANT_SYM_OP(i, dest, sf) QUANT_SYM(dest[i], sf[i])
 
 #define QUANT_ASYM_OP(i, dest, sf, zp) QUANT_ASYM(dest[i], sf[i], zp[i])
 
 #define STORE_INT8_OP(i, dst, ic, kr, KC, mask, src)                           \
-    STORE_MASKED_INT8(dst + ((ic + i) * KC + kr), mask, src[i])
+    STORE_MASKED_INT8((dst) + (((ic) + (i)) * (KC) + (kr)), mask, src[i])
 
 // ============================================================================
 // PUBLIC API - Unrolled operations for 2/4/8/16 elements

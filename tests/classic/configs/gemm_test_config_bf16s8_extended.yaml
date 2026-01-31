@@ -10,14 +10,14 @@ gemm_tests:
   # Test Set 1: Systematic M Sweep (GEMM MR variants + MC boundaries)
   # Tests: All MR remainders (1-6) + MC=144 boundary + large M
   # ==========================================================================
-  - name: "bf16s8s32_optimized_m_sweep"
+  - name: "bf16s8s32_asymmetric_optimized_m_sweep"
     a_type: ["bf16"]
     b_type: ["s8"]
     c_type: ["bf16", "s32"]
     acc_type: ["s32"]
     storage_format: ["row-major", "column-major"]
-    transA: [false]
-    transB: [false]
+    transA: [false, true]
+    transB: [false, true]
     m:
       lb: 1
       ub: 30
@@ -39,11 +39,42 @@ gemm_tests:
       operations:
         - type: "A_Quant"
           params:
-            a_quant_sf_len: ["m"]
+            a_quant_sf_len: ["1", "m"]
             a_quant_sf_type: ["f32"]
-            a_quant_zp_len: ["m"]
+            a_quant_zp_len: ["1", "m"]
             a_quant_zp_type: ["f32"]
 
+  - name: "bf16s8s32_symmetric_optimized_m_sweep"
+    a_type: ["bf16"]
+    b_type: ["s8"]
+    c_type: ["bf16", "s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m:
+      lb: 1
+      ub: 30
+      step: 3
+    n: [1, 2, 15, 16, 17, 31, 32, 33, 47, 48, 49, 63, 64, 65, 129, 1024, 1025]  # NR, 2×NR, NC boundaries
+    k: [1, 2, 3, 4, 8, 2048, 2049]     # VNNI min, small, KC boundary
+    alpha: [3.0]
+    beta: [3.0]
+    lda: [2049]
+    ldb: [2049]
+    ldc: [2049]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 0
+      int8: 0
+    post_operations:
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["1", "m"]
+            a_quant_sf_type: ["f32"]
 
   - name: "bf16s8s32_optimized_m_sweep_1"
     a_type: ["bf16"]
@@ -51,8 +82,8 @@ gemm_tests:
     c_type: ["s32", "bf16"]
     acc_type: ["s32"]
     storage_format: ["row-major", "column-major"]
-    transA: [false]
-    transB: [false]
+    transA: [false, true]
+    transB: [false, true]
     m:
       lb: 144
       ub: 174
@@ -74,9 +105,9 @@ gemm_tests:
       operations:
         - type: "A_Quant"
           params:
-            a_quant_sf_len: ["m"]
+            a_quant_sf_len: ["1", "m"]
             a_quant_sf_type: ["f32"]
-            a_quant_zp_len: ["m"]
+            a_quant_zp_len: ["1", "m"]
             a_quant_zp_type: ["f32"]
 
   # ==========================================================================
