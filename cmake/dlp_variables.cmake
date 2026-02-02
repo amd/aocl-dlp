@@ -39,10 +39,10 @@ set(CMAKE_MINIMUM_REQUIRED_VERSION "3.26")
 
 # Project
 set(PROJECT_NAME "aocl-dlp")
-set(PROJECT_VERSION "5.1.1")
+set(PROJECT_VERSION "5.2.2")
 set(PROJECT_VERSION_MAJOR "5")
-set(PROJECT_VERSION_MINOR "1")
-set(PROJECT_VERSION_PATCH "1")
+set(PROJECT_VERSION_MINOR "2")
+set(PROJECT_VERSION_PATCH "2")
 
 # Set default build type to Release if not specified
 if(NOT CMAKE_BUILD_TYPE)
