@@ -30,6 +30,7 @@
 #define LPGEMM_5LOOP_INTF_H
 
 #include "classic/aocl_bf16_type.h"
+#include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
@@ -46,60 +47,47 @@
 LPGEMM_TINY(float, float, float, f32f32f32of32);
 LPGEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32);
 
-#define LPGEMM_5LOOP(A_type, B_type, C_type, LP_SFX)                           \
+/**
+ * @brief Unified 5-loop GEMM macro with lpgemm_ops_bundle_t interface.
+ *
+ * @param A_type          Type of A matrix elements
+ * @param B_type          Type of B matrix elements
+ * @param C_type          Type used for alpha/beta scalars
+ * @param C_type_actual   Actual type of C matrix (may differ for sym_quant)
+ * @param LP_SFX          Suffix for function name
+ * @param MTAG_B_CONST    "const" for const mtag_b, empty for mutable
+ */
+#define LPGEMM_5LOOP_UNIFIED(A_type, B_type, C_type, C_type_actual, LP_SFX,    \
+                             MTAG_B_CONST)                                     \
     void lpgemm_rowvar_##LP_SFX(                                               \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, md_t rs_b, md_t cs_b, AOCL_MEMORY_TAG mtag_b,         \
-        C_type* c, const md_t rs_c, const md_t cs_c, const C_type alpha,       \
+        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
+        MTAG_B_CONST AOCL_MEMORY_TAG mtag_b, C_type_actual* c,                 \
+        const md_t rs_c, const md_t cs_c, const C_type alpha,                  \
         const C_type beta, dlp_rntm_t* rntm, lpgemm_thrinfo_t* thread,         \
-        lpgemm_cntx_t* lcntx, lpgemm_post_op* post_op_list,                    \
+        lpgemm_cntx_t* lcntx, const lpgemm_ops_bundle_t* ops,                  \
         DLP_TYPE c_downscale)
 
-LPGEMM_5LOOP(uint8_t, int8_t, int32_t, u8s8s32o32);
-LPGEMM_5LOOP(float, float, float, f32f32f32of32);
-LPGEMM_5LOOP(bfloat16, bfloat16, float, bf16bf16f32of32);
-LPGEMM_5LOOP(int8_t, int8_t, int32_t, s8s8s32o32);
+// BASE variants (mutable rs_b/cs_b/mtag_b for runtime modification)
+LPGEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
+                     /* mutable */);
+LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */);
+LPGEMM_5LOOP_UNIFIED(bfloat16, bfloat16, float, float, bf16bf16f32of32,
+                     /* mutable */);
+LPGEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
+                     /* mutable */);
 
-#define LPGEMM_5LOOP1(A_type, B_type, C_type, LP_SFX)                          \
-    void lpgemm_rowvar_##LP_SFX(                                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
-        const md_t cs_c, const C_type alpha, const C_type beta,                \
-        dlp_rntm_t* rntm, lpgemm_thrinfo_t* thread, lpgemm_cntx_t* lcntx,      \
-        lpgemm_pre_op* pre_op_list, lpgemm_post_op* post_op_list,              \
-        DLP_TYPE c_downscale)
+// MP variant (const rs_b/cs_b/mtag_b)
+LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const);
 
-LPGEMM_5LOOP1(bfloat16, int8_t, float, bf16s4f32of32);
+// GRP variant (const rs_b/cs_b/mtag_b, C forced to float)
+LPGEMM_5LOOP_UNIFIED(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, const);
 
-#define LPGEMM_5LOOP2(A_type, B_type, C_type, LP_SFX)                          \
-    void lpgemm_rowvar_##LP_SFX(                                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, float* c, const md_t rs_c,               \
-        const md_t cs_c, const C_type alpha, const C_type beta,                \
-        dlp_rntm_t* rntm, lpgemm_thrinfo_t* thread, lpgemm_cntx_t* lcntx,      \
-        lpgemm_group_post_op* grp_post_op_list, lpgemm_post_op* post_op_list,  \
-        DLP_TYPE c_downscale)
-
-LPGEMM_5LOOP2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant);
-
-#define LPGEMM_5LOOP3(A_type, B_type, C_type, LP_SFX)                          \
-    void lpgemm_rowvar_##LP_SFX(                                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
-        const md_t cs_c, const C_type alpha, const C_type beta,                \
-        dlp_rntm_t* rntm, lpgemm_thrinfo_t* thread, lpgemm_cntx_t* lcntx,      \
-        dlp_quant_op* a_pre_quant, lpgemm_post_op* post_op_list,               \
-        DLP_TYPE c_downscale)
-
-LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32);
-LPGEMM_5LOOP3(float, int8_t, int32_t, f32s8s32os32);
+// Q variants (const rs_b/cs_b/mtag_b)
+LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const);
+LPGEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const);
 
 #define LPGEMM_5LOOP_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)              \
     void lpgemm_rowvar_f32_fallback_##LP_SFX(                                  \

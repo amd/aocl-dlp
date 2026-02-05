@@ -384,8 +384,11 @@ LPGEMV(float, float, float, f32f32f32of32)
     }
 }
 
-LPGEMM_5LOOP(float, float, float, f32f32f32of32)
+LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
 {
+    // Extract operations from bundle into local variables
+    LPGEMM_OPS_EXTRACT(ops);
+
     // Handle using LPGEMV when m or/and n equal to 1
     if (((m == 1) || (n == 1))
         && ((dlp_cpuid_is_avx512_supported() == TRUE)

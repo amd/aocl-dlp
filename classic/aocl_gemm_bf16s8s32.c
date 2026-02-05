@@ -32,6 +32,7 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "logging/lpgemm_logger.h"
 #include "lpgemm_5loop_interface_apis.h"
+#include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
@@ -303,18 +304,19 @@ aocl_gemm_bf16s8s32_impl(const char        order,
         goto err_hndl;
     }
 
+    lpgemm_ops_bundle_t ops =
+        LPGEMM_OPS_BUNDLE_INIT_QUANT(metadata->a_pre_quant, post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
     // Multi-threaded execution using OpenMP parallel regions.
     lpgemm_bf16s8s32os32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-        rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, metadata->a_pre_quant,
-        post_op_list, c_dtype);
+        rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops, c_dtype);
 #else
     // Single-threaded or manually-threaded execution.
     lpgemm_bf16s8s32os32_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
-        rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, metadata->a_pre_quant,
-        post_op_list, c_dtype);
+        rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops, c_dtype);
 #endif
 
 err_hndl:;

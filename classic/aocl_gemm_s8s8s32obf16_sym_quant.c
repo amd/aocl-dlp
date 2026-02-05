@@ -32,6 +32,7 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "logging/lpgemm_logger.h"
 #include "lpgemm_5loop_interface_apis.h"
+#include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
@@ -199,31 +200,30 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
 
+    lpgemm_ops_bundle_t ops =
+        LPGEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
         lpgemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, grp_post_op_list,
-            post_op_list, DLP_BF16);
+            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     } else {
         lpgemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, grp_post_op_list,
-            post_op_list, DLP_BF16);
+            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     }
 #else
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
         lpgemm_s8s8s32o32_sym_quant_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, grp_post_op_list,
-            post_op_list, DLP_BF16);
+            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     } else {
         lpgemm_s8s8s32o32_sym_quant_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, grp_post_op_list,
-            post_op_list, DLP_BF16);
+            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     }
 #endif
 

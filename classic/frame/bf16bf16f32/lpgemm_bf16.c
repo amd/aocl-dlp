@@ -1312,8 +1312,12 @@ LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
     }
 }
 
-LPGEMM_5LOOP(bfloat16, bfloat16, float, bf16bf16f32of32)
+LPGEMM_5LOOP_UNIFIED(bfloat16, bfloat16, float, float, bf16bf16f32of32,
+                     /* mutable */)
 {
+    // Extract operations from bundle into local variables
+    LPGEMM_OPS_EXTRACT(ops);
+
     if (lcntx->kern_fun_ptr == NULL) {
         lpgemm_rowvar_f32_fallback_bf16bf16f32of32(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,

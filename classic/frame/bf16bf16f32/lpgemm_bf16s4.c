@@ -54,8 +54,11 @@ typedef void (*lpgemm_rowvar_bf16)(const md_t,
                                    lpgemm_post_op_attr);
 
 // B should always be packed.
-LPGEMM_5LOOP1(bfloat16, int8_t, float, bf16s4f32of32)
+LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
 {
+    // Extract operations from bundle into local variables
+    LPGEMM_OPS_EXTRACT(ops);
+
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;

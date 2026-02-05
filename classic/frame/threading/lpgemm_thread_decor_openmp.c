@@ -33,7 +33,6 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "lpgemm_5loop_interface_apis.h"
 #include "lpgemm_eltwise_ops_interface_apis.h"
-#include "lpgemm_types.h"
 #include "sys_utils/lpgemm_sys.h"
 #include "threading/lpgemm_thread_decor_openmp.h"
 #include "threading/lpgemm_thread_utils.h"
@@ -819,28 +818,61 @@ lpgemm_modify_tid_on_distr_type(md_t*               tid,
                  ( ( ( thread.tid / 8 ) * 2 ) + ( thread.tid % 2 ) ); */
 }
 
-#define GEN_LPGEMM_OPENMP_DECORATOR(A_type, B_type, C_type, LPGEMM_SFX)        \
+/**
+ * @brief Unified OpenMP thread decorator macro for LPGEMM variants.
+ *
+ * Generates thread decorators with unified interface using lpgemm_ops_bundle_t.
+ * Handles thread setup, work distribution, and OpenMP parallelization.
+ *
+ * @param A_type          Type of A matrix elements (e.g., uint8_t, bfloat16,
+ * float)
+ * @param B_type          Type of B matrix elements (e.g., int8_t, bfloat16,
+ * float)
+ * @param C_type          Type used for alpha/beta scalars
+ * @param C_type_actual   Actual type of C matrix (may differ, e.g., float for
+ * sym_quant)
+ * @param LPGEMM_SFX      Suffix for function names (e.g., u8s8s32o32,
+ * bf16s4f32of32)
+ * @param THREADING_SFX   Suffix for threading function (may differ from
+ * LPGEMM_SFX)
+ * @param HAS_MC_LOGIC    1 to enable MC-based mtag_b decision (MP variant), 0
+ * otherwise
+ */
+#define GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(                                   \
+    A_type, B_type, C_type, C_type_actual, LPGEMM_SFX, THREADING_SFX,          \
+    HAS_MC_LOGIC, MC_OP_TYPE)                                                  \
+                                                                               \
     void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
+        AOCL_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,             \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
         dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,                              \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                  \
     {                                                                          \
-        md_t n_threads;                                                        \
+        md_t n_threads = 1;                                                    \
+        md_t ic_ways   = 1;                                                    \
+        md_t jc_ways   = 1;                                                    \
                                                                                \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways;                                                          \
-        md_t jc_ways;                                                          \
+        /* Call appropriate threading function */                              \
+        lpgemm_##THREADING_SFX##_get_threading(&n_threads, &ic_ways, &jc_ways, \
+                                               m, n, k, rntm_g);               \
                                                                                \
-        lpgemm_##LPGEMM_SFX##_get_threading(&n_threads, &ic_ways, &jc_ways, m, \
-                                            n, k, rntm_g);                     \
-                                                                               \
+        /* Get thread distribution type */                                     \
         AOCL_TID_DISTR_TYPE tid_distr = lpgemm_get_tid_distr_type(             \
             m, n, k, n_threads, ic_ways, jc_ways, lcntx);                      \
                                                                                \
+        /* MP-specific: Decide mtag_b based on MC threshold */                 \
+        if (HAS_MC_LOGIC) {                                                    \
+            md_t MC = lpgemm_get_block_size_MC_global_cntx(MC_OP_TYPE);        \
+            if ((m / ic_ways) > MC)                                            \
+                mtag_b = PACK_KC;                                              \
+            else                                                               \
+                mtag_b = UNPACKED;                                             \
+        }                                                                      \
+                                                                               \
+        /* Communication structure setup */                                    \
         dlp_task_comm_t  static_lpgemm_comms[DLP_NUM_STATIC_COMMS];            \
         dlp_task_comm_t* cur_lpgemm_comms = static_lpgemm_comms;               \
                                                                                \
@@ -859,14 +891,12 @@ lpgemm_modify_tid_on_distr_type(md_t*               tid,
              * stack.*/                                                        \
             dlp_rntm_t rntm_l = *rntm_g;                                       \
                                                                                \
-            /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t  \
-             * objects for use in dlp mt framework inside the respective mat   \
-             * mul driver functions.*/                                         \
+            /* Thread info setup */                                            \
             lpgemm_thrinfo_t thread;                                           \
             thread.n_threads = n_threads;                                      \
             thread.tid       = omp_get_thread_num();                           \
-            /* Performance improvement only observed when reordered buffers    \
-             * are used. */                                                    \
+                                                                               \
+            /* Adjust TID for REORDERED buffers */                             \
             if (mtag_b == REORDERED) {                                         \
                 lpgemm_modify_tid_on_distr_type(&thread.tid, n_threads,        \
                                                 tid_distr);                    \
@@ -876,319 +906,69 @@ lpgemm_modify_tid_on_distr_type(md_t*               tid,
             thread.jc_ways = jc_ways;                                          \
             thread.comm    = cur_lpgemm_comms;                                 \
                                                                                \
+            /* Call the row-variant GEMM function with unified ops bundle */   \
             lpgemm_rowvar_##LPGEMM_SFX(m, n, k, a, rs_a, cs_a, mtag_a, b,      \
                                        rs_b, cs_b, mtag_b, c, rs_c, cs_c,      \
                                        alpha, beta, &rntm_l, &thread, lcntx,   \
-                                       post_op_list, c_downscale);             \
+                                       ops, c_downscale);                      \
         }                                                                      \
+                                                                               \
         if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
             free(cur_lpgemm_comms);                                            \
         }                                                                      \
     }
 
-GEN_LPGEMM_OPENMP_DECORATOR(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_LPGEMM_OPENMP_DECORATOR(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_LPGEMM_OPENMP_DECORATOR(float, float, float, f32f32f32of32)
-GEN_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
+// BASE variants (standard post-ops only)
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    uint8_t, int8_t, int32_t, int32_t, u8s8s32o32, u8s8s32o32, 0, 0)
 
-#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR(A_type, B_type, C_type, LPGEMM_SFX)  \
-    void batch_lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                  \
-        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
-        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
-        const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
-        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
-        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_post_op(*post_op_list), DLP_TYPE c_downscale)                   \
-    {                                                                          \
-        /* For now, Assuming all the problems in GEMM are of same size.        \
-         * To-Do: optimize work distribution for case where a batch contains   \
-           GEMM problems of different sizes.                                   \
-         */                                                                    \
-        md_t n_threads;                                                        \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways;                                                          \
-        md_t jc_ways;                                                          \
-        md_t n_gemms_in_parallel;                                              \
-        md_t n_threads_per_gemm;                                               \
-                                                                               \
-        /* Assuming all the problems in GEMM are of same size */               \
-        batch_lpgemm_##LPGEMM_SFX##_get_threading(                             \
-            group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
-            &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g);                     \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comms[DLP_NUM_STATIC_COMMS];            \
-        dlp_task_comm_t* cur_lpgemm_comms = static_lpgemm_comms;               \
-                                                                               \
-        if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
-            cur_lpgemm_comms = malloc(jc_ways * n_gemms_in_parallel            \
-                                      * sizeof(dlp_task_comm_t));              \
-        }                                                                      \
-        for (md_t i = 0; i < n_gemms_in_parallel * jc_ways; i++) {             \
-            dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
-        }                                                                      \
-                                                                               \
-        _Pragma("omp parallel num_threads(n_threads)")                         \
-        {                                                                      \
-            /* Create a thread-local copy of the master thread's dlp_rntm_t.   \
-             * This is necessary since we want each thread to be able to track \
-             * its own small block pool_t as it executes down the function     \
-             * stack.*/                                                        \
-            dlp_rntm_t rntm_l = *rntm_g;                                       \
-                                                                               \
-            /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t  \
-             * objects for use in dlp mt framework inside the respective mat   \
-             * mul driver functions.*/                                         \
-            lpgemm_thrinfo_t thread;                                           \
-            thread.n_threads = n_threads_per_gemm;                             \
-            thread.tid       = omp_get_thread_num() % n_threads_per_gemm;      \
-            thread.ic_ways   = ic_ways;                                        \
-            thread.jc_ways   = jc_ways;                                        \
-            thread.comm =                                                      \
-                cur_lpgemm_comms                                               \
-                + (omp_get_thread_num() / n_threads_per_gemm) * jc_ways;       \
-                                                                               \
-            md_t gemm_start;                                                   \
-            md_t gemm_end;                                                     \
-                                                                               \
-            /* This structure is filled only to calculate workload             \
-               distribution of GEMM problems among threads. This struct is not \
-               passed to 5-loop.                                               \
-            */                                                                 \
-            dlp_task_id_t thrinfo;                                             \
-            thrinfo.n_way   = n_gemms_in_parallel;                             \
-            thrinfo.work_id = omp_get_thread_num() / n_threads_per_gemm;       \
-            dlp_thread_task_range(&thrinfo, group_size, 1, FALSE, &gemm_start, \
-                                  &gemm_end);                                  \
-                                                                               \
-            for (md_t i = gemm_start; i < gemm_end; i++) {                     \
-                lpgemm_rowvar_##LPGEMM_SFX(                                    \
-                    *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b,      \
-                    *cs_b, *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, &rntm_l,  \
-                    &thread, lcntx, post_op_list, c_downscale);                \
-            }                                                                  \
-        }                                                                      \
-        if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
-            free(cur_lpgemm_comms);                                            \
-        }                                                                      \
-    }
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, bfloat16, float, float, bf16bf16f32of32, bf16bf16f32of32, 0, 0)
 
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(float, float, float, f32f32f32of32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    float, float, float, float, f32f32f32of32, f32f32f32of32, 0, 0)
 
-#define GEN_LPGEMM_OPENMP_DECORATOR_MP(A_type, B_type, C_type, LPGEMM_SFX)     \
-    void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, lpgemm_pre_op* pre_op_list,                      \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
-    {                                                                          \
-        md_t n_threads;                                                        \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways;                                                          \
-        md_t jc_ways;                                                          \
-                                                                               \
-        lpgemm_bf16bf16f32of32_get_threading(&n_threads, &ic_ways, &jc_ways,   \
-                                             m, n, k, rntm_g);                 \
-                                                                               \
-        AOCL_TID_DISTR_TYPE tid_distr = lpgemm_get_tid_distr_type(             \
-            m, n, k, n_threads, ic_ways, jc_ways, lcntx);                      \
-                                                                               \
-        /* Decide whether to go with pack-based implementation                 \
-           or kernel-level implementation */                                   \
-        md_t MC = lpgemm_get_block_size_MC_global_cntx(BF16BF16F32OF32);       \
-        if ((m / ic_ways) > MC)                                                \
-            mtag_b = PACK_KC;                                                  \
-        else                                                                   \
-            mtag_b = UNPACKED;                                                 \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comms[DLP_NUM_STATIC_COMMS];            \
-        dlp_task_comm_t* cur_lpgemm_comms = static_lpgemm_comms;               \
-                                                                               \
-        if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
-            cur_lpgemm_comms = malloc(jc_ways * sizeof(dlp_task_comm_t));      \
-        }                                                                      \
-        for (md_t i = 0; i < jc_ways; ++i) {                                   \
-            dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
-        }                                                                      \
-                                                                               \
-        _Pragma("omp parallel num_threads(n_threads)")                         \
-        {                                                                      \
-            /* Create a thread-local copy of the master thread's dlp_rntm_t.   \
-             * This is necessary since we want each thread to be able to track \
-             * its own small block pool_t as it executes down the function     \
-             * stack.*/                                                        \
-            dlp_rntm_t rntm_l = *rntm_g;                                       \
-                                                                               \
-            /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t  \
-             * objects for use in dlp mt framework inside the respective mat   \
-             * mul driver functions.*/                                         \
-            lpgemm_thrinfo_t thread;                                           \
-            thread.n_threads = n_threads;                                      \
-            thread.tid       = omp_get_thread_num();                           \
-            if (mtag_b == REORDERED) {                                         \
-                lpgemm_modify_tid_on_distr_type(&thread.tid, n_threads,        \
-                                                tid_distr);                    \
-            }                                                                  \
-                                                                               \
-            thread.ic_ways = ic_ways;                                          \
-            thread.jc_ways = jc_ways;                                          \
-            thread.comm    = cur_lpgemm_comms;                                 \
-                                                                               \
-            lpgemm_rowvar_##LPGEMM_SFX(                                        \
-                m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c,      \
-                rs_c, cs_c, alpha, beta, &rntm_l, &thread, lcntx, pre_op_list, \
-                post_op_list, c_downscale);                                    \
-        }                                                                      \
-        if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
-            free(cur_lpgemm_comms);                                            \
-        }                                                                      \
-    }
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    int8_t, int8_t, int32_t, int32_t, s8s8s32o32, s8s8s32o32, 0, 0)
 
-GEN_LPGEMM_OPENMP_DECORATOR_MP(bfloat16, int8_t, float, bf16s4f32of32)
+// MP variant (pre-ops + post-ops, mutable mtag_b, MC logic)
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
+                                    int8_t,
+                                    float,
+                                    float,
+                                    bf16s4f32of32,
+                                    bf16bf16f32of32,
+                                    1,
+                                    BF16BF16F32OF32)
 
-#define GEN_LPGEMM_OPENMP_DECORATOR_GRP(A_type, B_type, C_type, LPGEMM_SFX)    \
-    void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, float* c, const md_t rs_c, const md_t cs_c,    \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, lpgemm_group_post_op* grp_post_op_list,          \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
-    {                                                                          \
-        md_t n_threads;                                                        \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways;                                                          \
-        md_t jc_ways;                                                          \
-                                                                               \
-        lpgemm_s8s8s32o32_get_threading(&n_threads, &ic_ways, &jc_ways, m, n,  \
-                                        k, rntm_g);                            \
-                                                                               \
-        AOCL_TID_DISTR_TYPE tid_distr = lpgemm_get_tid_distr_type(             \
-            m, n, k, n_threads, ic_ways, jc_ways, lcntx);                      \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comms[DLP_NUM_STATIC_COMMS];            \
-        dlp_task_comm_t* cur_lpgemm_comms = static_lpgemm_comms;               \
-                                                                               \
-        if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
-            cur_lpgemm_comms = malloc(jc_ways * sizeof(dlp_task_comm_t));      \
-        }                                                                      \
-        for (md_t i = 0; i < jc_ways; ++i) {                                   \
-            dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
-        }                                                                      \
-                                                                               \
-        _Pragma("omp parallel num_threads(n_threads)")                         \
-        {                                                                      \
-            /* Create a thread-local copy of the master thread's dlp_rntm_t.   \
-             * This is necessary since we want each thread to be able to track \
-             * its own small block pool_t as it executes down the function     \
-             * stack.*/                                                        \
-            dlp_rntm_t rntm_l = *rntm_g;                                       \
-                                                                               \
-            /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t  \
-             * objects for use in dlp mt framework inside the respective mat   \
-             * mul driver functions.*/                                         \
-            lpgemm_thrinfo_t thread;                                           \
-            thread.n_threads = n_threads;                                      \
-            thread.tid       = omp_get_thread_num();                           \
-            if (mtag_b == REORDERED) {                                         \
-                lpgemm_modify_tid_on_distr_type(&thread.tid, n_threads,        \
-                                                tid_distr);                    \
-            }                                                                  \
-                                                                               \
-            thread.ic_ways = ic_ways;                                          \
-            thread.jc_ways = jc_ways;                                          \
-            thread.comm    = cur_lpgemm_comms;                                 \
-                                                                               \
-            lpgemm_rowvar_##LPGEMM_SFX(                                        \
-                m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c,      \
-                rs_c, cs_c, alpha, beta, &rntm_l, &thread, lcntx,              \
-                grp_post_op_list, post_op_list, c_downscale);                  \
-        }                                                                      \
-        if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
-            free(cur_lpgemm_comms);                                            \
-        }                                                                      \
-    }
+// GRP variant (grouped post-ops, mutable mtag_b, C forced to float)
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, s8s8s32o32, 0, 0)
 
-GEN_LPGEMM_OPENMP_DECORATOR_GRP(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
+// Q variants (quantization, mutable mtag_b)
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, s8s8s32o32, 0, 0)
 
-#define GEN_LPGEMM_OPENMP_DECORATOR_Q(A_type, B_type, C_type, LPGEMM_SFX)      \
-    void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, dlp_quant_op* a_pre_quant,                       \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
-    {                                                                          \
-        md_t n_threads;                                                        \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways;                                                          \
-        md_t jc_ways;                                                          \
-                                                                               \
-        lpgemm_s8s8s32o32_get_threading(&n_threads, &ic_ways, &jc_ways, m, n,  \
-                                        k, rntm_g);                            \
-                                                                               \
-        AOCL_TID_DISTR_TYPE tid_distr = lpgemm_get_tid_distr_type(             \
-            m, n, k, n_threads, ic_ways, jc_ways, lcntx);                      \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comms[DLP_NUM_STATIC_COMMS];            \
-        dlp_task_comm_t* cur_lpgemm_comms = static_lpgemm_comms;               \
-                                                                               \
-        if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
-            cur_lpgemm_comms = malloc(jc_ways * sizeof(dlp_task_comm_t));      \
-        }                                                                      \
-        for (md_t i = 0; i < jc_ways; ++i) {                                   \
-            dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
-        }                                                                      \
-                                                                               \
-        _Pragma("omp parallel num_threads(n_threads)")                         \
-        {                                                                      \
-            /* Create a thread-local copy of the master thread's dlp_rntm_t.   \
-             * This is necessary since we want each thread to be able to track \
-             * its own small block pool_t as it executes down the function     \
-             * stack.*/                                                        \
-            dlp_rntm_t rntm_l = *rntm_g;                                       \
-                                                                               \
-            /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t  \
-             * objects for use in dlp mt framework inside the respective mat   \
-             * mul driver functions.*/                                         \
-            lpgemm_thrinfo_t thread;                                           \
-            thread.n_threads = n_threads;                                      \
-            thread.tid       = omp_get_thread_num();                           \
-            if (mtag_b == REORDERED) {                                         \
-                lpgemm_modify_tid_on_distr_type(&thread.tid, n_threads,        \
-                                                tid_distr);                    \
-            }                                                                  \
-                                                                               \
-            thread.ic_ways = ic_ways;                                          \
-            thread.jc_ways = jc_ways;                                          \
-            thread.comm    = cur_lpgemm_comms;                                 \
-                                                                               \
-            lpgemm_rowvar_##LPGEMM_SFX(                                        \
-                m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c,      \
-                rs_c, cs_c, alpha, beta, &rntm_l, &thread, lcntx, a_pre_quant, \
-                post_op_list, c_downscale);                                    \
-        }                                                                      \
-        if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
-            free(cur_lpgemm_comms);                                            \
-        }                                                                      \
-    }
-GEN_LPGEMM_OPENMP_DECORATOR_Q(bfloat16, int8_t, int32_t, bf16s8s32os32)
-GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    float, int8_t, int32_t, int32_t, f32s8s32os32, s8s8s32o32, 0, 0)
 
-#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_MP(A_type, B_type, C_type,           \
-                                             LPGEMM_SFX, LPGEMM_PARENT_SFX)    \
+/**
+ * @brief Unified batch GEMM OpenMP decorator macro.
+ *
+ * Consolidates standard and MP batch GEMM decorators using ops bundle approach.
+ *
+ * @param A_type           Type of A matrix elements
+ * @param B_type           Type of B matrix elements
+ * @param C_type           Type used for alpha/beta scalars
+ * @param LPGEMM_SFX       Suffix for function name
+ * @param THREADING_SFX    Suffix for threading function (may differ from
+ * LPGEMM_SFX)
+ * @param HAS_MC_LOGIC     1 to enable MC-based mtag_b decision (MP variant), 0
+ * otherwise
+ */
+#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_UNIFIED(A_type, B_type, C_type,      \
+                                                  LPGEMM_SFX, THREADING_SFX,   \
+                                                  HAS_MC_LOGIC, MC_OP_TYPE)    \
     void batch_lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                  \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
@@ -1196,22 +976,15 @@ GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
         const md_t* cs_b, AOCL_MEMORY_TAG* mtag_b, C_type** c,                 \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_pre_op(*pre_op_list), lpgemm_post_op(*post_op_list),            \
-        DLP_TYPE c_downscale)                                                  \
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                  \
     {                                                                          \
-        /* For now, Assuming all the problems in GEMM are of same size.        \
-         * To-Do: optimize work distribution for case where a batch contains   \
-           GEMM problems of different sizes.                                   \
-         */                                                                    \
-        md_t n_threads;                                                        \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways;                                                          \
-        md_t jc_ways;                                                          \
-        md_t n_gemms_in_parallel;                                              \
-        md_t n_threads_per_gemm;                                               \
+        md_t n_threads           = 1;                                          \
+        md_t ic_ways             = 1;                                          \
+        md_t jc_ways             = 1;                                          \
+        md_t n_gemms_in_parallel = 1;                                          \
+        md_t n_threads_per_gemm  = 1;                                          \
                                                                                \
-        /* Assuming all the problems in GEMM are of same size */               \
-        batch_lpgemm_##LPGEMM_PARENT_SFX##_get_threading(                      \
+        batch_lpgemm_##THREADING_SFX##_get_threading(                          \
             group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
             &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g);                     \
                                                                                \
@@ -1226,7 +999,11 @@ GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
             dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
         }                                                                      \
                                                                                \
-        md_t MC = lpgemm_get_block_size_MC_global_cntx(BF16BF16F32OF32);       \
+        /* MC logic for MP variant */                                          \
+        md_t MC = 0;                                                           \
+        if (HAS_MC_LOGIC) {                                                    \
+            MC = lpgemm_get_block_size_MC_global_cntx(MC_OP_TYPE);             \
+        }                                                                      \
                                                                                \
         _Pragma("omp parallel num_threads(n_threads)")                         \
         {                                                                      \
@@ -1236,9 +1013,6 @@ GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
              * stack.*/                                                        \
             dlp_rntm_t rntm_l = *rntm_g;                                       \
                                                                                \
-            /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t  \
-             * objects for use in dlp mt framework inside the respective mat   \
-             * mul driver functions.*/                                         \
             lpgemm_thrinfo_t thread;                                           \
             thread.n_threads = n_threads_per_gemm;                             \
             thread.tid       = omp_get_thread_num() % n_threads_per_gemm;      \
@@ -1248,13 +1022,7 @@ GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
                 cur_lpgemm_comms                                               \
                 + (omp_get_thread_num() / n_threads_per_gemm) * jc_ways;       \
                                                                                \
-            md_t gemm_start;                                                   \
-            md_t gemm_end;                                                     \
-                                                                               \
-            /* This structure is filled only to calculate workload             \
-               distribution of GEMM problems among threads. This struct is not \
-               passed to 5-loop.                                               \
-            */                                                                 \
+            md_t          gemm_start, gemm_end;                                \
             dlp_task_id_t thrinfo;                                             \
             thrinfo.n_way   = n_gemms_in_parallel;                             \
             thrinfo.work_id = omp_get_thread_num() / n_threads_per_gemm;       \
@@ -1262,18 +1030,18 @@ GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
                                   &gemm_end);                                  \
                                                                                \
             for (md_t i = gemm_start; i < gemm_end; i++) {                     \
-                /* Decide whether to go with pack-based implementation         \
-                or kernel-level implementation */                              \
-                if ((m[i] / ic_ways) > MC) {                                   \
-                    mtag_b[i] = PACK_KC;                                       \
-                } else {                                                       \
-                    mtag_b[i] = UNPACKED;                                      \
+                if (HAS_MC_LOGIC) {                                            \
+                    if ((m[i] / ic_ways) > MC) {                               \
+                        mtag_b[i] = PACK_KC;                                   \
+                    } else {                                                   \
+                        mtag_b[i] = UNPACKED;                                  \
+                    }                                                          \
                 }                                                              \
                                                                                \
                 lpgemm_rowvar_##LPGEMM_SFX(                                    \
                     *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b,      \
                     *cs_b, *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, &rntm_l,  \
-                    &thread, lcntx, pre_op_list, post_op_list, c_downscale);   \
+                    &thread, lcntx, ops, c_downscale);                         \
             }                                                                  \
         }                                                                      \
         if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
@@ -1281,8 +1049,22 @@ GEN_LPGEMM_OPENMP_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
         }                                                                      \
     }
 
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR_MP(
-    bfloat16, int8_t, float, bf16s4f32of32, bf16bf16f32of32)
+// Standard batch GEMM variants
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, bfloat16, float, bf16bf16f32of32, bf16bf16f32of32, 0, 0)
+
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    float, float, float, f32f32f32of32, f32f32f32of32, 0, 0)
+
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    uint8_t, int8_t, int32_t, u8s8s32o32, u8s8s32o32, 0, 0)
+
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    int8_t, int8_t, int32_t, s8s8s32o32, s8s8s32o32, 0, 0)
+
+// MP batch GEMM variant
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, int8_t, float, bf16s4f32of32, bf16bf16f32of32, 1, BF16BF16F32OF32)
 
 DLP_INLINE void
 lpgemm_eltwise_ops_bf16of32_get_threading(md_t*                      n_threads,
@@ -1374,11 +1156,11 @@ lpgemm_eltwise_ops_f32of32_get_threading(md_t*                      n_threads,
         dlp_rntm_t* rntm_g, lpgemm_eltwise_ops_cntx_t* lcntx,                  \
         lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
     {                                                                          \
-        md_t n_threads;                                                        \
+        md_t n_threads = 1;                                                    \
                                                                                \
         /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways;                                                          \
-        md_t jc_ways;                                                          \
+        md_t ic_ways = 1;                                                      \
+        md_t jc_ways = 1;                                                      \
                                                                                \
         lpgemm_eltwise_ops_##LPGEMM_SFX##_get_threading(                       \
             &n_threads, &ic_ways, &jc_ways, m, n, rntm_g, lcntx);              \
@@ -1425,30 +1207,52 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
 
 #else
 
-#define GEN_LPGEMM_DECORATOR(A_type, B_type, C_type, LPGEMM_SFX)               \
+/**
+ * @brief Unified non-OpenMP thread decorator macro for LPGEMM variants.
+ *
+ * Single-threaded decorator with unified interface using lpgemm_ops_bundle_t.
+ * Used when OpenMP is not available or disabled.
+ *
+ * @param A_type          Type of A matrix elements
+ * @param B_type          Type of B matrix elements
+ * @param C_type          Type used for alpha/beta scalars
+ * @param C_type_actual   Actual type of C matrix
+ * @param LPGEMM_SFX      Suffix for function names
+ * @param HAS_MC_LOGIC    1 to enable MC-based mtag_b decision, 0 otherwise
+ */
+#define GEN_LPGEMM_DECORATOR_UNIFIED(A_type, B_type, C_type, C_type_actual,    \
+                                     LPGEMM_SFX, HAS_MC_LOGIC, MC_OP_TYPE)     \
+                                                                               \
     void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
+        AOCL_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,             \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
         dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,                              \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                  \
     {                                                                          \
+        /* Single-threaded execution */                                        \
         md_t n_threads = 1;                                                    \
+        md_t ic_ways   = 1;                                                    \
+        md_t jc_ways   = 1;                                                    \
                                                                                \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways = 1;                                                      \
-        md_t jc_ways = 1;                                                      \
+        /* MP-specific: Decide mtag_b based on MC threshold */                 \
+        if (HAS_MC_LOGIC) {                                                    \
+            md_t MC = lpgemm_get_block_size_MC_global_cntx(MC_OP_TYPE);        \
+            if ((m / ic_ways) > MC)                                            \
+                mtag_b = PACK_KC;                                              \
+            else                                                               \
+                mtag_b = UNPACKED;                                             \
+        }                                                                      \
                                                                                \
+        /* Single comm structure for single thread */                          \
         dlp_task_comm_t  static_lpgemm_comm;                                   \
         dlp_task_comm_t* cur_lpgemm_comm = &static_lpgemm_comm;                \
                                                                                \
         dlp_task_comm_init(ic_ways, cur_lpgemm_comm);                          \
                                                                                \
-        /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t      \
-         * objects for use in dlp mt framework inside the respective mat mul   \
-         * driver functions.*/                                                 \
+        /* Thread info setup (single thread) */                                \
         lpgemm_thrinfo_t thread;                                               \
         thread.n_threads = n_threads;                                          \
         thread.tid       = 0;                                                  \
@@ -1456,230 +1260,87 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
         thread.jc_ways   = jc_ways;                                            \
         thread.comm      = cur_lpgemm_comm;                                    \
                                                                                \
+        /* Call the row-variant GEMM function */                               \
         lpgemm_rowvar_##LPGEMM_SFX(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,    \
                                    cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,   \
-                                   rntm_g, &thread, lcntx, post_op_list,       \
-                                   c_downscale);                               \
+                                   rntm_g, &thread, lcntx, ops, c_downscale);  \
     }
 
-GEN_LPGEMM_DECORATOR(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_LPGEMM_DECORATOR(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_LPGEMM_DECORATOR(float, float, float, f32f32f32of32)
-GEN_LPGEMM_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
+// BASE variants
+GEN_LPGEMM_DECORATOR_UNIFIED(
+    uint8_t, int8_t, int32_t, int32_t, u8s8s32o32, 0, 0)
 
-#define GEN_LPGEMM_DECORATOR1(A_type, B_type, C_type, LPGEMM_SFX)              \
-    void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, lpgemm_pre_op* pre_op_list,                      \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
-    {                                                                          \
-        md_t n_threads = 1;                                                    \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways = 1;                                                      \
-        md_t jc_ways = 1;                                                      \
-                                                                               \
-        /* Decide whether to go with pack-based implementation                 \
-           or kernel-level implementation */                                   \
-        md_t MC = lpgemm_get_block_size_MC_global_cntx(BF16BF16F32OF32);       \
-        if ((m / ic_ways) > MC)                                                \
-            mtag_b = PACK_KC;                                                  \
-        else                                                                   \
-            mtag_b = UNPACKED;                                                 \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comm;                                   \
-        dlp_task_comm_t* cur_lpgemm_comm = &static_lpgemm_comm;                \
-                                                                               \
-        dlp_task_comm_init(ic_ways, cur_lpgemm_comm);                          \
-                                                                               \
-        /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t      \
-         * objects for use in dlp mt framework inside the respective mat mul   \
-         * driver functions.*/                                                 \
-        lpgemm_thrinfo_t thread;                                               \
-        thread.n_threads = n_threads;                                          \
-        thread.tid       = 0;                                                  \
-        thread.ic_ways   = ic_ways;                                            \
-        thread.jc_ways   = jc_ways;                                            \
-        thread.comm      = cur_lpgemm_comm;                                    \
-                                                                               \
-        lpgemm_rowvar_##LPGEMM_SFX(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,    \
-                                   cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,   \
-                                   rntm_g, &thread, lcntx, pre_op_list,        \
-                                   post_op_list, c_downscale);                 \
-    }
+GEN_LPGEMM_DECORATOR_UNIFIED(
+    bfloat16, bfloat16, float, float, bf16bf16f32of32, 0, 0)
 
-GEN_LPGEMM_DECORATOR1(bfloat16, int8_t, float, bf16s4f32of32)
+GEN_LPGEMM_DECORATOR_UNIFIED(float, float, float, float, f32f32f32of32, 0, 0)
 
-#define GEN_LPGEMM_DECORATOR2(A_type, B_type, C_type, LPGEMM_SFX)              \
-    void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, float* c, const md_t rs_c, const md_t cs_c,    \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, lpgemm_group_post_op* grp_post_op_list,          \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
-    {                                                                          \
-        md_t n_threads = 1;                                                    \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways = 1;                                                      \
-        md_t jc_ways = 1;                                                      \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comm;                                   \
-        dlp_task_comm_t* cur_lpgemm_comm = &static_lpgemm_comm;                \
-                                                                               \
-        dlp_task_comm_init(ic_ways, cur_lpgemm_comm);                          \
-                                                                               \
-        /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t      \
-         * objects for use in dlp mt framework inside the respective mat mul   \
-         * driver functions.*/                                                 \
-        lpgemm_thrinfo_t thread;                                               \
-        thread.n_threads = n_threads;                                          \
-        thread.tid       = 0;                                                  \
-        thread.ic_ways   = ic_ways;                                            \
-        thread.jc_ways   = jc_ways;                                            \
-        thread.comm      = cur_lpgemm_comm;                                    \
-                                                                               \
-        lpgemm_rowvar_##LPGEMM_SFX(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,    \
-                                   cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,   \
-                                   rntm_g, &thread, lcntx, grp_post_op_list,   \
-                                   post_op_list, c_downscale);                 \
-    }
+GEN_LPGEMM_DECORATOR_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32, 0, 0)
 
-GEN_LPGEMM_DECORATOR2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
+// MP variant (pre-ops + post-ops, mutable mtag_b, MC logic)
+GEN_LPGEMM_DECORATOR_UNIFIED(
+    bfloat16, int8_t, float, float, bf16s4f32of32, 1, BF16BF16F32OF32)
 
-#define GEN_LPGEMM_DECORATOR_Q(A_type, B_type, C_type, LPGEMM_SFX)             \
-    void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, dlp_quant_op* a_pre_quant,                       \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale)                    \
-    {                                                                          \
-        md_t n_threads = 1;                                                    \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways = 1;                                                      \
-        md_t jc_ways = 1;                                                      \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comm;                                   \
-        dlp_task_comm_t* cur_lpgemm_comm = &static_lpgemm_comm;                \
-                                                                               \
-        dlp_task_comm_init(ic_ways, cur_lpgemm_comm);                          \
-                                                                               \
-        /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t      \
-         * objects for use in dlp mt framework inside the respective mat mul   \
-         * driver functions.*/                                                 \
-        lpgemm_thrinfo_t thread;                                               \
-        thread.n_threads = n_threads;                                          \
-        thread.tid       = 0;                                                  \
-        thread.ic_ways   = ic_ways;                                            \
-        thread.jc_ways   = jc_ways;                                            \
-        thread.comm      = cur_lpgemm_comm;                                    \
-                                                                               \
-        lpgemm_rowvar_##LPGEMM_SFX(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,    \
-                                   cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,   \
-                                   rntm_g, &thread, lcntx, a_pre_quant,        \
-                                   post_op_list, c_downscale);                 \
-    }
-GEN_LPGEMM_DECORATOR_Q(bfloat16, int8_t, int32_t, bf16s8s32os32)
-GEN_LPGEMM_DECORATOR_Q(float, int8_t, int32_t, f32s8s32os32)
+// GRP variant (grouped post-ops, mutable mtag_b, C forced to float)
+GEN_LPGEMM_DECORATOR_UNIFIED(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, 0, 0)
 
-#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR(A_type, B_type, C_type, LPGEMM_SFX)  \
+// Q variants (quantization, mutable mtag_b)
+GEN_LPGEMM_DECORATOR_UNIFIED(
+    bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, 0, 0)
+
+GEN_LPGEMM_DECORATOR_UNIFIED(
+    float, int8_t, int32_t, int32_t, f32s8s32os32, 0, 0)
+
+/**
+ * @brief Unified non-OpenMP batch GEMM decorator macro.
+ *
+ * @param A_type        Type of A matrix elements
+ * @param B_type        Type of B matrix elements
+ * @param C_type        Type for alpha/beta
+ * @param LPGEMM_SFX    Function suffix
+ */
+#define GEN_BATCH_LPGEMM_DECORATOR_UNIFIED(A_type, B_type, C_type, LPGEMM_SFX) \
     void batch_lpgemm_##LPGEMM_SFX##_thread_decorator(                         \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
         const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
-        const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
+        const md_t* cs_b, AOCL_MEMORY_TAG* mtag_b, C_type** c,                 \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_post_op(*post_op_list), DLP_TYPE c_downscale)                   \
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                  \
     {                                                                          \
         md_t n_threads = 1;                                                    \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways = 1;                                                      \
-        md_t jc_ways = 1;                                                      \
+        md_t ic_ways   = 1;                                                    \
+        md_t jc_ways   = 1;                                                    \
                                                                                \
         dlp_task_comm_t  static_lpgemm_comm;                                   \
         dlp_task_comm_t* cur_lpgemm_comm = &static_lpgemm_comm;                \
-                                                                               \
         dlp_task_comm_init(ic_ways, cur_lpgemm_comm);                          \
-        /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t      \
-         * objects for use in dlp mt framework inside the respective mat mul   \
-         * driver functions.*/                                                 \
+                                                                               \
         lpgemm_thrinfo_t thread;                                               \
         thread.n_threads = n_threads;                                          \
         thread.tid       = 0;                                                  \
         thread.ic_ways   = ic_ways;                                            \
         thread.jc_ways   = jc_ways;                                            \
         thread.comm      = cur_lpgemm_comm;                                    \
-        md_t gemm_start  = 0;                                                  \
-        md_t gemm_end    = group_size;                                         \
                                                                                \
-        for (md_t i = gemm_start; i < gemm_end; i++) {                         \
+        for (md_t i = 0; i < group_size; i++) {                                \
             lpgemm_rowvar_##LPGEMM_SFX(                                        \
                 *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b, *cs_b,   \
                 *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, rntm_g, &thread,     \
-                lcntx, post_op_list, c_downscale);                             \
+                lcntx, ops, c_downscale);                                      \
         }                                                                      \
     }
 
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(float, float, float, f32f32f32of32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR(int8_t, int8_t, int32_t, s8s8s32o32)
+// Standard batch GEMM variants
+GEN_BATCH_LPGEMM_DECORATOR_UNIFIED(bfloat16, bfloat16, float, bf16bf16f32of32)
+GEN_BATCH_LPGEMM_DECORATOR_UNIFIED(float, float, float, f32f32f32of32)
+GEN_BATCH_LPGEMM_DECORATOR_UNIFIED(uint8_t, int8_t, int32_t, u8s8s32o32)
+GEN_BATCH_LPGEMM_DECORATOR_UNIFIED(int8_t, int8_t, int32_t, s8s8s32o32)
 
-#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_MP(A_type, B_type, C_type,           \
-                                             LPGEMM_SFX)                       \
-    void batch_lpgemm_##LPGEMM_SFX##_thread_decorator(                         \
-        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
-        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
-        const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
-        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
-        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_pre_op(*pre_op_list), lpgemm_post_op(*post_op_list),            \
-        DLP_TYPE c_downscale)                                                  \
-    {                                                                          \
-        md_t n_threads = 1;                                                    \
-                                                                               \
-        /* Factorization of threads along m and n dimension respectively.*/    \
-        md_t ic_ways = 1;                                                      \
-        md_t jc_ways = 1;                                                      \
-                                                                               \
-        dlp_task_comm_t  static_lpgemm_comm;                                   \
-        dlp_task_comm_t* cur_lpgemm_comm = &static_lpgemm_comm;                \
-                                                                               \
-        dlp_task_comm_init(ic_ways, cur_lpgemm_comm);                          \
-        /* lpgemm_thrinfo_t object will be used to generate dlp_task_id_t      \
-         * objects for use in dlp mt framework inside the respective mat mul   \
-         * driver functions.*/                                                 \
-        lpgemm_thrinfo_t thread;                                               \
-        thread.n_threads = n_threads;                                          \
-        thread.tid       = 0;                                                  \
-        thread.ic_ways   = ic_ways;                                            \
-        thread.jc_ways   = jc_ways;                                            \
-        thread.comm      = cur_lpgemm_comm;                                    \
-        md_t gemm_start  = 0;                                                  \
-        md_t gemm_end    = group_size;                                         \
-                                                                               \
-        for (md_t i = gemm_start; i < gemm_end; i++) {                         \
-            lpgemm_rowvar_##LPGEMM_SFX(                                        \
-                *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b, *cs_b,   \
-                *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, rntm_g, &thread,     \
-                lcntx, pre_op_list, post_op_list, c_downscale);                \
-        }                                                                      \
-    }
-
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR_MP(bfloat16, int8_t, float, bf16s4f32of32)
+// MP batch GEMM variant
+GEN_BATCH_LPGEMM_DECORATOR_UNIFIED(bfloat16, int8_t, float, bf16s4f32of32)
 
 #define GEN_UTIL_ELTWISE_OPS_DECORATOR(A_type, B_type, LPGEMM_SFX)             \
     void lpgemm_eltwise_ops_##LPGEMM_SFX##_thread_decorator(                   \

@@ -245,16 +245,19 @@ aocl_gemm_s8s8s32obf16(const char      order,
         (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
         lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16, &lcntx_l.dlp_kernel_hndl);
 
+    // Create ops bundle for standard GEMM (post-ops only)
+    lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
     lpgemm_s8s8s32o32_openmp_thread_decorator(
         m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
         rs_b_use, cs_b_use, mtag_b_use, (int32_t*)c, rs_c_use, cs_c_use, alpha,
-        beta, &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
+        beta, &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #else
     lpgemm_s8s8s32o32_thread_decorator(
         m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
         rs_b_use, cs_b_use, mtag_b_use, (int32_t*)c, rs_c_use, cs_c_use, alpha,
-        beta, &rntm_g, &lcntx_l, post_op_list, DLP_BF16);
+        beta, &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #endif
 
 err_hndl:;

@@ -238,7 +238,7 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
 
 // Experimentally derived alignment, needs further analysis but gives
 // consistent good performance on zen5 machines.
-[[gnu::aligned(512)]]
+[[gnu::aligned(64)]]
 void
 dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                    md_t                m,

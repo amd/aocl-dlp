@@ -226,19 +226,22 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
 
+        lpgemm_ops_bundle_t ops =
+            LPGEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_bf16s4f32of32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const bfloat16**)a_local,
             &rs_a, &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b,
             &mtag_b, &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_F32);
+            &rntm_g, lcntx_g, &ops, DLP_F32);
 
 #else
         batch_lpgemm_bf16s4f32of32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const bfloat16**)a_local,
             &rs_a, &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b,
             &mtag_b, &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
-            &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_F32);
+            &rntm_g, lcntx_g, &ops, DLP_F32);
 #endif
         mat_idx += g_sz;
     }
@@ -435,19 +438,22 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
 
         lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
 
+        lpgemm_ops_bundle_t ops =
+            LPGEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
         batch_lpgemm_bf16s4f32of32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const bfloat16**)a_local,
             &rs_a, &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b,
             &mtag_b, (float**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i],
-            beta[gc_i], &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_BF16);
+            beta[gc_i], &rntm_g, lcntx_g, &ops, DLP_BF16);
 
 #else
         batch_lpgemm_bf16s4f32of32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const bfloat16**)a_local,
             &rs_a, &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b,
             &mtag_b, (float**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i],
-            beta[gc_i], &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_BF16);
+            beta[gc_i], &rntm_g, lcntx_g, &ops, DLP_BF16);
 #endif
         mat_idx += g_sz;
     }

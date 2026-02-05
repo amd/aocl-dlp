@@ -30,45 +30,48 @@
 #define LPGEMM_THREAD_DECOR_OPENMP_H
 
 #include "classic/aocl_bf16_type.h"
+#include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
 
 #ifdef DLP_ENABLE_OPENMP
 
-#define GEN_LPGEMM_OPENMP_DECORATOR_FN(A_type, B_type, C_type, LPGEMM_SFX)     \
+/**
+ * @brief Unified decorator function declaration macro for OpenMP builds.
+ */
+#define GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(A_type, B_type, C_type,            \
+                                            C_type_actual, LPGEMM_SFX)         \
     void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
+        AOCL_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,             \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
         dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,                              \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale);
 
-GEN_LPGEMM_OPENMP_DECORATOR_FN(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_LPGEMM_OPENMP_DECORATOR_FN(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_LPGEMM_OPENMP_DECORATOR_FN(float, float, float, f32f32f32of32)
-GEN_LPGEMM_OPENMP_DECORATOR_FN(int8_t, int8_t, int32_t, s8s8s32o32)
+// BASE variants (const mtag_b)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    uint8_t, int8_t, int32_t, int32_t, u8s8s32o32)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    bfloat16, bfloat16, float, float, bf16bf16f32of32)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(float, float, float, float, f32f32f32of32)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
 
-#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN(A_type, B_type, C_type,           \
-                                             LPGEMM_SFX)                       \
-    void batch_lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                  \
-        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
-        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
-        const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
-        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
-        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_post_op(*post_op_list), DLP_TYPE c_downscale);
+// MP, GRP, Q variants (mutable mtag_b)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    bfloat16, int8_t, float, float, bf16s4f32of32)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    float, int8_t, int32_t, int32_t, f32s8s32os32)
 
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN(float, float, float, f32f32f32of32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN(int8_t, int8_t, int32_t, s8s8s32o32)
-
-#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_MXP(A_type, B_type, C_type,       \
-                                                 LPGEMM_SFX)                   \
+#define GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_DECL(A_type, B_type, C_type,      \
+                                                  LPGEMM_SFX)                  \
     void batch_lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                  \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
@@ -76,47 +79,25 @@ GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN(int8_t, int8_t, int32_t, s8s8s32o32)
         const md_t* cs_b, AOCL_MEMORY_TAG* mtag_b, C_type** c,                 \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_pre_op(*pre_op_list), lpgemm_post_op(*post_op_list),            \
-        DLP_TYPE c_downscale);
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale);
 
-GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_MXP(bfloat16, int8_t, float, bf16s4f32of32)
+// Standard batch GEMM variants
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_DECL(bfloat16,
+                                          bfloat16,
+                                          float,
+                                          bf16bf16f32of32)
 
-#define GEN_LPGEMM_OPENMP_DECORATOR_FN1(A_type, B_type, C_type, LPGEMM_SFX)    \
-    void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, lpgemm_pre_op* pre_op_list,                      \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_DECL(float, float, float, f32f32f32of32)
 
-GEN_LPGEMM_OPENMP_DECORATOR_FN1(bfloat16, int8_t, float, bf16s4f32of32)
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_DECL(uint8_t, int8_t, int32_t, u8s8s32o32)
 
-#define GEN_LPGEMM_OPENMP_DECORATOR_FN2(A_type, B_type, C_type, LPGEMM_SFX)    \
-    void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, float* c, const md_t rs_c, const md_t cs_c,    \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, lpgemm_group_post_op* grp_post_op_list,          \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, s8s8s32o32)
 
-GEN_LPGEMM_OPENMP_DECORATOR_FN2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
-
-#define GEN_LPGEMM_OPENMP_DECORATOR_FN3(A_type, B_type, C_type, LPGEMM_SFX)    \
-    void lpgemm_##LPGEMM_SFX##_openmp_thread_decorator(                        \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, dlp_quant_op* a_pre_quant,                       \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
-
-GEN_LPGEMM_OPENMP_DECORATOR_FN3(bfloat16, int8_t, int32_t, bf16s8s32os32)
-GEN_LPGEMM_OPENMP_DECORATOR_FN3(float, int8_t, int32_t, f32s8s32os32)
+// MP batch GEMM variant
+GEN_BATCH_LPGEMM_OPENMP_DECORATOR_FN_DECL(bfloat16,
+                                          int8_t,
+                                          float,
+                                          bf16s4f32of32)
 
 #define GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR_FN(A_type, B_type, LPGEMM_SFX)   \
     void lpgemm_eltwise_ops_##LPGEMM_SFX##_openmp_thread_decorator(            \
@@ -130,85 +111,54 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR_FN(float, float, f32of32)
 
 #else
 
-#define GEN_LPGEMM_DECORATOR_FN(A_type, B_type, C_type, LPGEMM_SFX)            \
+/**
+ * @brief Unified decorator function declaration macro for non-OpenMP builds.
+ */
+#define GEN_LPGEMM_DECORATOR_FN_DECL(A_type, B_type, C_type, C_type_actual,    \
+                                     LPGEMM_SFX)                               \
     void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
+        AOCL_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,             \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
         dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,                              \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale);
 
-GEN_LPGEMM_DECORATOR_FN(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_LPGEMM_DECORATOR_FN(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_LPGEMM_DECORATOR_FN(float, float, float, f32f32f32of32)
-GEN_LPGEMM_DECORATOR_FN(int8_t, int8_t, int32_t, s8s8s32o32)
+// BASE variants (const mtag_b)
+GEN_LPGEMM_DECORATOR_FN_DECL(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32)
+GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, bfloat16, float, float, bf16bf16f32of32)
+GEN_LPGEMM_DECORATOR_FN_DECL(float, float, float, float, f32f32f32of32)
+GEN_LPGEMM_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
 
-#define GEN_BATCH_LPGEMM_DECORATOR_FN(A_type, B_type, C_type, LPGEMM_SFX)      \
+// MP, GRP, Q variants (mutable mtag_b)
+GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, int8_t, float, float, bf16s4f32of32)
+GEN_LPGEMM_DECORATOR_FN_DECL(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
+GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32)
+GEN_LPGEMM_DECORATOR_FN_DECL(float, int8_t, int32_t, int32_t, f32s8s32os32)
+
+#define GEN_BATCH_LPGEMM_DECORATOR_FN_DECL(A_type, B_type, C_type, LPGEMM_SFX) \
     void batch_lpgemm_##LPGEMM_SFX##_thread_decorator(                         \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
         const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
-        const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
+        const md_t* cs_b, AOCL_MEMORY_TAG* mtag_b, C_type** c,                 \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_post_op(*post_op_list), DLP_TYPE c_downscale);
+        const lpgemm_ops_bundle_t* ops, DLP_TYPE c_downscale);
 
-GEN_BATCH_LPGEMM_DECORATOR_FN(bfloat16, bfloat16, float, bf16bf16f32of32)
-GEN_BATCH_LPGEMM_DECORATOR_FN(float, float, float, f32f32f32of32)
-GEN_BATCH_LPGEMM_DECORATOR_FN(uint8_t, int8_t, int32_t, u8s8s32o32)
-GEN_BATCH_LPGEMM_DECORATOR_FN(int8_t, int8_t, int32_t, s8s8s32o32)
+// Standard batch GEMM variants
+GEN_BATCH_LPGEMM_DECORATOR_FN_DECL(bfloat16, bfloat16, float, bf16bf16f32of32)
 
-#define GEN_BATCH_LPGEMM_DECORATOR_FN_MP(A_type, B_type, C_type, LPGEMM_SFX)   \
-    void batch_lpgemm_##LPGEMM_SFX##_thread_decorator(                         \
-        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
-        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,     \
-        const md_t* cs_b, const AOCL_MEMORY_TAG* mtag_b, C_type** c,           \
-        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
-        const C_type beta, dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx,           \
-        lpgemm_pre_op(*pre_op_list), lpgemm_post_op(*post_op_list),            \
-        DLP_TYPE c_downscale);
+GEN_BATCH_LPGEMM_DECORATOR_FN_DECL(float, float, float, f32f32f32of32)
 
-GEN_BATCH_LPGEMM_DECORATOR_FN_MP(bfloat16, int8_t, float, bf16s4f32of32)
+GEN_BATCH_LPGEMM_DECORATOR_FN_DECL(uint8_t, int8_t, int32_t, u8s8s32o32)
 
-#define GEN_LPGEMM_DECORATOR_FN1(A_type, B_type, C_type, LPGEMM_SFX)           \
-    void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        const AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,              \
-        const md_t cs_c, const C_type alpha, const C_type beta,                \
-        dlp_rntm_t* rntm_g, lpgemm_cntx_t* lcntx, lpgemm_pre_op* pre_op_list,  \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
+GEN_BATCH_LPGEMM_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, s8s8s32o32)
 
-GEN_LPGEMM_DECORATOR_FN1(bfloat16, int8_t, float, bf16s4f32of32)
-
-#define GEN_LPGEMM_OPENMP_DECORATOR_FN2(A_type, B_type, C_type, LPGEMM_SFX)    \
-    void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, float* c, const md_t rs_c, const md_t cs_c,    \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, lpgemm_group_post_op* grp_post_op_list,          \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
-
-GEN_LPGEMM_OPENMP_DECORATOR_FN2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
-
-#define GEN_LPGEMM_DECORATOR_FN3(A_type, B_type, C_type, LPGEMM_SFX)           \
-    void lpgemm_##LPGEMM_SFX##_thread_decorator(                               \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_MEMORY_TAG mtag_a,        \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c, const md_t cs_c,   \
-        const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,             \
-        lpgemm_cntx_t* lcntx, dlp_quant_op* a_pre_quant,                       \
-        lpgemm_post_op* post_op_list, DLP_TYPE c_downscale);
-
-GEN_LPGEMM_DECORATOR_FN3(bfloat16, int8_t, int32_t, bf16s8s32os32)
-GEN_LPGEMM_DECORATOR_FN3(float, int8_t, int32_t, f32s8s32os32)
+// MP batch GEMM variant
+GEN_BATCH_LPGEMM_DECORATOR_FN_DECL(bfloat16, int8_t, float, bf16s4f32of32)
 
 #define GEN_UTIL_ELTWISE_OPS_DECORATOR_FN(A_type, B_type, LPGEMM_SFX)          \
     void lpgemm_eltwise_ops_##LPGEMM_SFX##_thread_decorator(                   \

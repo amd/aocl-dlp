@@ -32,6 +32,7 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "logging/lpgemm_logger.h"
 #include "lpgemm_5loop_interface_apis.h"
+#include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
@@ -180,14 +181,17 @@ aocl_gemm_u8s8s32os32(const char      order,
         lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S32,
         &lcntx_l.dlp_kernel_hndl);
 
+    // Create ops bundle for standard GEMM (post-ops only)
+    lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
     lpgemm_u8s8s32o32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
-        alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
+        alpha, beta, &rntm_g, &lcntx_l, &ops, DLP_S32);
 #else
-    lpgemm_u8s8s32o32_thread_decorator(
-        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
-        alpha, beta, &rntm_g, &lcntx_l, post_op_list, DLP_S32);
+    lpgemm_u8s8s32o32_thread_decorator(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
+                                       cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
+                                       &rntm_g, &lcntx_l, &ops, DLP_S32);
 #endif
 
 err_hndl:;

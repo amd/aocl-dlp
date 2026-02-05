@@ -32,6 +32,7 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "logging/lpgemm_logger.h"
 #include "lpgemm_5loop_interface_apis.h"
+#include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
@@ -179,15 +180,18 @@ aocl_gemm_bf16s4f32of32(const char      order,
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
 
+    lpgemm_ops_bundle_t ops =
+        LPGEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
 
     lpgemm_bf16s4f32of32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
-        alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_F32);
+        alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
 #else
     lpgemm_bf16s4f32of32_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
-        alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list, DLP_F32);
+        alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
 #endif
 
 err_hndl:;
@@ -339,16 +343,17 @@ aocl_gemm_bf16s4f32obf16(const char      order,
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
 
+    lpgemm_ops_bundle_t ops =
+        LPGEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
     lpgemm_bf16s4f32of32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
-        cs_c, alpha, beta, &rntm_g, lcntx_g, pre_op_list, post_op_list,
-        DLP_BF16);
+        cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
 #else
-    lpgemm_bf16s4f32of32_thread_decorator(m, n, k, a, rs_a, cs_a, mtag_a, b,
-                                          rs_b, cs_b, mtag_b, (float*)c, rs_c,
-                                          cs_c, alpha, beta, &rntm_g, lcntx_g,
-                                          pre_op_list, post_op_list, DLP_BF16);
+    lpgemm_bf16s4f32of32_thread_decorator(
+        m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
+        cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
 #endif
 
 err_hndl:;

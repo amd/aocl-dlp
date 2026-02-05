@@ -32,6 +32,7 @@
 #include "kernels/u8s8s32/lpgemm_packa.h"
 #include "kernels/u8s8s32/lpgemm_packb.h"
 #include "lpgemm_5loop_interface_apis.h"
+#include "lpgemm_ops_bundle.h"
 #include "sys_utils/lpgemm_sys.h"
 #include "threading/lpgemm_thread_utils.h"
 // Kernel function prototypes
@@ -281,8 +282,12 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
 #endif
 
 // B should always be packed.
-LPGEMM_5LOOP(uint8_t, int8_t, int32_t, u8s8s32o32)
+LPGEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
+                     /* mutable */)
 {
+    // Extract operations from bundle into local variables
+    LPGEMM_OPS_EXTRACT(ops);
+
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;

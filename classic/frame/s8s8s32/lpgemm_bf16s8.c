@@ -348,8 +348,11 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
  *   JR: Inner N (NR micro-tile)
  *   IR: Inner M (MR micro-tile, handled by micro-kernel)
  */
-LPGEMM_5LOOP3(bfloat16, int8_t, int32_t, bf16s8s32os32)
+LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
 {
+    // Extract operations from bundle into local variables
+    LPGEMM_OPS_EXTRACT(ops);
+
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;

@@ -32,6 +32,7 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "logging/lpgemm_logger.h"
 #include "lpgemm_5loop_interface_apis.h"
+#include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
 #include "runtime/dlp_runtime.h"
@@ -308,16 +309,19 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     }
 #endif
 
+    // Create ops bundle for standard GEMM (post-ops only)
+    lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+
 #ifdef DLP_ENABLE_OPENMP
     lpgemm_bf16bf16f32of32_openmp_thread_decorator(
         m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
         cs_b_use, mtag_b_use, c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l,
-        post_op_list, DLP_F32);
+        &ops, DLP_F32);
 #else
     lpgemm_bf16bf16f32of32_thread_decorator(
         m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
         cs_b_use, mtag_b_use, c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l,
-        post_op_list, DLP_F32);
+        &ops, DLP_F32);
 #endif
 
 err_hndl:;
