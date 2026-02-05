@@ -264,7 +264,7 @@ initMultipleBiasPostOp(dlp_metadata_t* mData,
 {
     mData->bias = NULL;
     mData->bias =
-        (dlp_post_op_bias*)malloc(repeat_post_ops * sizeof(dlp_post_op_bias));
+        (dlp_post_op_bias*)calloc(repeat_post_ops, sizeof(dlp_post_op_bias));
     if (!mData->bias) {
         return false;
     }
@@ -314,8 +314,8 @@ initMultipleGeluTanhPostOp(dlp_metadata_t* mData,
                            int             repeat_post_ops)
 {
     mData->eltwise = NULL;
-    mData->eltwise = (dlp_post_op_eltwise*)malloc(
-        repeat_post_ops * sizeof(dlp_post_op_eltwise));
+    mData->eltwise = (dlp_post_op_eltwise*)calloc(repeat_post_ops,
+                                                  sizeof(dlp_post_op_eltwise));
     if (!mData->eltwise) {
         return false;
     }
@@ -373,8 +373,8 @@ initMultipleMatAddPostOp(dlp_metadata_t* mData,
                          int             repeat_post_ops)
 {
     mData->matrix_add = NULL;
-    mData->matrix_add = (dlp_post_op_matrix_add*)malloc(
-        repeat_post_ops * sizeof(dlp_post_op_matrix_add));
+    mData->matrix_add = (dlp_post_op_matrix_add*)calloc(
+        repeat_post_ops, sizeof(dlp_post_op_matrix_add));
     if (!mData->matrix_add) {
         return false;
     }
@@ -408,7 +408,7 @@ initPostOps(dlp_metadata_t* mData, md_t m, md_t n, int repeat_post_ops)
     mData->num_eltwise = repeat_post_ops;
     mData->seq_vector  = NULL;
     mData->seq_vector =
-        (DLP_POST_OP_TYPE*)malloc(mData->seq_length * sizeof(DLP_POST_OP_TYPE));
+        (DLP_POST_OP_TYPE*)calloc(mData->seq_length, sizeof(DLP_POST_OP_TYPE));
     if (!mData->seq_vector) {
         return false;
     }
@@ -458,7 +458,7 @@ initialize_memory(multi_instance_gemm_f32_args_t* args, int num_instances)
         init_matrix(args->c[i], args->m[i], args->n[i], args->ldc[i],
                     0.0f); // Initialize C with zeros
 
-        args->mData[i] = (dlp_metadata_t*)malloc(sizeof(dlp_metadata_t));
+        args->mData[i] = (dlp_metadata_t*)calloc(1, sizeof(dlp_metadata_t));
         if (!args->mData[i]) {
             return false;
         }

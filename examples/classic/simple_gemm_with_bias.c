@@ -161,18 +161,19 @@ main()
     add_bias(c2, bias, m, n);
 
     // Method 2: Set up post-op for bias addition
-    dlp_metadata_t* metadata = (dlp_metadata_t*)malloc(sizeof(dlp_metadata_t));
+    dlp_metadata_t* metadata =
+        (dlp_metadata_t*)calloc(1, sizeof(dlp_metadata_t));
     if (!metadata) {
         printf("Memory allocation for post-ops failed\n");
         goto cleanup;
     }
-    memset(metadata, 0, sizeof(dlp_metadata_t));
 
     // Initialize post-ops structure
     metadata->seq_length = 1; // One operation: bias
 
     // Allocate sequence vector
-    metadata->seq_vector = (DLP_POST_OP_TYPE*)malloc(sizeof(DLP_POST_OP_TYPE));
+    metadata->seq_vector =
+        (DLP_POST_OP_TYPE*)calloc(1, sizeof(DLP_POST_OP_TYPE));
     if (!metadata->seq_vector) {
         printf("Memory allocation for sequence vector failed\n");
         goto cleanup;
@@ -180,7 +181,7 @@ main()
     metadata->seq_vector[0] = BIAS; // First operation is bias addition
 
     // Allocate and set up bias post-op
-    metadata->bias = (dlp_post_op_bias*)malloc(sizeof(dlp_post_op_bias));
+    metadata->bias = (dlp_post_op_bias*)calloc(1, sizeof(dlp_post_op_bias));
     if (!metadata->bias) {
         printf("Memory allocation for bias post-op failed\n");
         goto cleanup;
