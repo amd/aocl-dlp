@@ -223,7 +223,7 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
         cs_a_use = 4;
 
         // Allocate buffer for quantized A matrix (F32 -> S8 conversion).
-        mem_a_s8_size_req = sizeof(int8_t) * k_updated;
+        mem_a_s8_size_req = sizeof(int8_t) * k;
 
         if (quant_a_buffer_s8 == NULL) {
             dlp_clsc_err_t ret_err;
@@ -232,9 +232,8 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
         }
 
         // Perform on-the-fly quantization: F32 -> S8 for single row
-        quanta_mr16_f32s8(quant_a_buffer_s8, (float*)a, rs_a, cs_a, 1,
-                          k_updated, sf, sf_type, sf_len, zp_val, zp_type,
-                          zp_len, 0);
+        quanta_mr16_f32s8(quant_a_buffer_s8, (float*)a, rs_a, cs_a, 1, k, sf,
+                          sf_type, sf_len, zp_val, zp_type, zp_len, 0);
 
         a_use = quant_a_buffer_s8;
 
@@ -684,7 +683,7 @@ LPGEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
 
                 // Allocate buffer for quantized A matrix (F32 -> S8
                 // conversion).
-                mem_a_s8_size_req = sizeof(int8_t) * mc0 * kc0_updated;
+                mem_a_s8_size_req = sizeof(int8_t) * mc0 * kc0;
 
                 if (quant_a_buffer_s8 == NULL) {
                     dlp_clsc_err_t ret_err;
@@ -697,15 +696,15 @@ LPGEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
                 // offset.
                 quanta_mr16_f32s8(quant_a_buffer_s8,
                                   (float*)(a + (rs_a * ic) + (cs_a * pc)), rs_a,
-                                  cs_a, mc0, kc0_updated, sf, sf_type, sf_len,
-                                  zp_val, zp_type, zp_len, ic);
+                                  cs_a, mc0, kc0, sf, sf_type, sf_len, zp_val,
+                                  zp_type, zp_len, ic);
 
                 // Update A pointer and strides to use quantized buffer.
-                // Quantized layout: row-major with row_stride = kc0_updated
+                // Quantized layout: row-major with row_stride = kc0
                 a_use          = quant_a_buffer_s8;
-                rs_a_use       = kc0_updated; // Elements per row
-                cs_a_use       = 4;           // Stride within SIMD groups
-                a_block_stride = rs_a_use;    // Stride between MR blocks
+                rs_a_use       = kc0;      // Elements per row
+                cs_a_use       = 4;        // Stride within SIMD groups
+                a_block_stride = rs_a_use; // Stride between MR blocks
 
                 // Reset B column sum offset for new IC iteration.
                 post_ops_attr.b_sum_offset = 0;
