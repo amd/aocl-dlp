@@ -239,6 +239,17 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
 // Experimentally derived alignment, needs further analysis but gives
 // consistent good performance on zen5 machines.
 [[gnu::aligned(64)]]
+// Force inlining of dlp_execute_kernel to ensure optimal performance,
+// especially when building with Link Time Optimization (LTO). Without the
+// always_inline attribute, some compilers may not inline this function even
+// with LTO enabled, which can lead to suboptimal performance in tiny shape
+// scenarios. Explicitly marking this function as always_inline guarantees that
+// the optimizer can inline it as intended when LTO is enabled. Note: With LLVM
+// 19, this attribute has no effect unless LTO is enabled; in non-LTO builds,
+// the compiler may still choose not to inline this function.
+#if defined(__clang__) && __clang_major__ >= 19
+__attribute__((always_inline))
+#endif
 void
 dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                    md_t                m,
