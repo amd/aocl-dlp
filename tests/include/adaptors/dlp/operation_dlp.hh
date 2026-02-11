@@ -74,6 +74,7 @@ class DlpOperation : public dlp::testing::framework::IOperation
         m_matrix_mul_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::AQuantParam>>
         m_a_quant_ops;
+    std::vector<std::unique_ptr<dlp::testing::framework::WOQParam>> m_woq_ops;
 
     // Friend class - UalDlp can access private members and methods
     friend class UalDlp;
@@ -89,6 +90,7 @@ class DlpOperation : public dlp::testing::framework::IOperation
     void convertMatrixMulOperations();
     void buildSequenceVector();
     void convertA_QuantOperations();
+    void convertWOQOperations();
 
     // Helper to convert Matrix to appropriate DLP format
     void*    convertMatrixToPtr(const dlp::testing::framework::Matrix& matrix);

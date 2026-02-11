@@ -48,6 +48,7 @@ using dlp::testing::framework::postops::createScale;
 using dlp::testing::framework::postops::createSigmoid;
 using dlp::testing::framework::postops::createSwish;
 using dlp::testing::framework::postops::createTanh;
+using dlp::testing::framework::postops::createWOQ;
 
 namespace dlp::testing::utils {
 
@@ -836,8 +837,95 @@ MicroTest::createOperationParam(
                 .setA_PostOpScaleFactor(post_quant_sf_matrix)
                 .build();
         }
+    } else if (config.type == "WOQ") {
+        // WOQ: Weight-Only Quantization for bf16s4
+        // Parse scale_factor_len
+        std::string sf_len    = "1"; // default
+        auto        sf_len_it = config.params.find("scale_factor_len");
+        if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
+            auto   idx_it = param_indices.find("scale_factor_len");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, sf_len_it->second.size() - 1);
+            sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
+        }
+
+        // Parse scale_factor_type
+        MatrixType sf_type    = MatrixType::f32; // default
+        auto       sf_type_it = config.params.find("scale_factor_type");
+        if (sf_type_it != config.params.end() && !sf_type_it->second.empty()) {
+            auto   idx_it = param_indices.find("scale_factor_type");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, sf_type_it->second.size() - 1);
+            auto type_str = std::any_cast<std::string>(sf_type_it->second[idx]);
+            sf_type       = stringToMatrixType(type_str);
+        }
+
+        // Create scale factor matrix based on length specification
+        Matrix b_scale_factor_matrix;
+        // Use fixed seed for reproducible random values
+        std::mt19937                          gen(RANDOM_SEED);
+        std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
+
+        if (sf_len == "n") {
+            // Per-channel quantization: one scale per output channel
+            std::vector<float> sf_data(getN());
+            for (size_t i = 0; i < sf_data.size(); ++i) {
+                // Generate random scale values between MIN_VALUE and MAX_VALUE
+                sf_data[i] = dist(gen);
+            }
+            b_scale_factor_matrix = Matrix::fromVector(sf_data, sf_type);
+        } else {
+            // Per-tensor quantization: single scale for entire matrix
+            float sf_value        = dist(gen);
+            b_scale_factor_matrix = Matrix::fromValue(sf_value, sf_type);
+        }
+
+        // Parse zero_point_len
+        std::string zp_len    = "1"; // default
+        auto        zp_len_it = config.params.find("zero_point_len");
+        if (zp_len_it != config.params.end() && !zp_len_it->second.empty()) {
+            auto   idx_it = param_indices.find("zero_point_len");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, zp_len_it->second.size() - 1);
+            zp_len     = std::any_cast<std::string>(zp_len_it->second[idx]);
+        }
+
+        // Parse zero_point_type
+        MatrixType zp_type    = MatrixType::f32; // default
+        auto       zp_type_it = config.params.find("zero_point_type");
+        if (zp_type_it != config.params.end() && !zp_type_it->second.empty()) {
+            auto   idx_it = param_indices.find("zero_point_type");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, zp_type_it->second.size() - 1);
+            auto zp_type_str =
+                std::any_cast<std::string>(zp_type_it->second[idx]);
+            zp_type = stringToMatrixType(zp_type_str);
+        }
+
+        // Create zero point matrix based on length specification
+        Matrix b_zero_point_matrix;
+        if (zp_len == "n") {
+            // Per-channel: one zero point per output channel
+            std::vector<float> zp_data(getN());
+            for (size_t i = 0; i < zp_data.size(); ++i) {
+                // Generate random zero point values using the configured
+                // distribution
+                zp_data[i] = dist(gen);
+            }
+            b_zero_point_matrix = Matrix::fromVector(zp_data, zp_type);
+        } else {
+            // Per-tensor: single zero point
+            b_zero_point_matrix = Matrix::fromValue(dist(gen), zp_type);
+        }
+
+        // Create WOQ pre-operation using the same structure as A_Quant
+        // but for B matrix (weights)
+        return createWOQ()
+            .setB_ScaleFactor(b_scale_factor_matrix)
+            .setB_ZeroPoint(b_zero_point_matrix)
+            .build();
     }
-    throw std::runtime_error("Unknown PostOp type: " + config.type);
+    throw std::runtime_error("Unknown operation type: " + config.type);
 }
 
 std::string

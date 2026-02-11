@@ -123,6 +123,17 @@ DlpOperation::~DlpOperation()
             delete m_postops->a_post_quant;
         }
 
+        // Clean up manually allocated memory for B matrix quantization
+        if (m_postops->pre_ops) {
+            if (m_postops->pre_ops->b_scl) {
+                delete m_postops->pre_ops->b_scl;
+            }
+            if (m_postops->pre_ops->b_zp) {
+                delete m_postops->pre_ops->b_zp;
+            }
+            delete m_postops->pre_ops;
+        }
+
         // Clean up all allocated arrays
         delete[] m_postops->eltwise;
         delete[] m_postops->scale;
@@ -212,6 +223,13 @@ DlpOperation::addOperation(
             m_a_quant_ops.push_back(std::move(a_quant_param));
             break;
         }
+        case dlp::testing::framework::OperationType::WOQ: {
+            auto woq_param = std::unique_ptr<dlp::testing::framework::WOQParam>(
+                static_cast<dlp::testing::framework::WOQParam*>(
+                    param.release()));
+            m_woq_ops.push_back(std::move(woq_param));
+            break;
+        }
         default:
             throw std::runtime_error("Unsupported operation type");
     }
@@ -254,6 +272,10 @@ DlpOperation::finalize()
 
     if (!m_a_quant_ops.empty()) {
         convertA_QuantOperations();
+    }
+
+    if (!m_woq_ops.empty()) {
+        convertWOQOperations();
     }
 
     // Build the sequence vector based on the original order
@@ -565,6 +587,54 @@ DlpOperation::convertA_QuantOperations()
 }
 
 void
+DlpOperation::convertWOQOperations()
+{
+    size_t count = m_woq_ops.size();
+    if (count == 0)
+        return;
+
+    // Allocate and zero the pre_ops structure
+    if (!m_postops->pre_ops) {
+        m_postops->pre_ops = new dlp_pre_op;
+        std::memset(m_postops->pre_ops, 0, sizeof(dlp_pre_op));
+    }
+
+    // Process each WOQ operation parameter (the last one overrides)
+    for (size_t i = 0; i < count; ++i) {
+        const auto& param = *m_woq_ops[i];
+
+        // Scale factor assignment for B matrix
+        if (param.hasB_ScaleFactor()) {
+            if (!m_postops->pre_ops->b_scl) {
+                m_postops->pre_ops->b_scl = new dlp_sf_t;
+            }
+            auto* scl         = m_postops->pre_ops->b_scl;
+            scl->scale_factor = convertMatrixToPtr(*param.getB_ScaleFactor());
+            scl->scale_factor_len = param.getB_ScaleFactor()->getCols();
+            scl->scale_factor_type =
+                getStorageType(param.getB_ScaleFactor()->getMatrixType());
+        }
+
+        // Zero point assignment for B matrix
+        if (param.hasB_ZeroPoint()) {
+            if (!m_postops->pre_ops->b_zp) {
+                m_postops->pre_ops->b_zp = new dlp_zp_t;
+            }
+            auto* zp           = m_postops->pre_ops->b_zp;
+            zp->zero_point     = convertMatrixToPtr(*param.getB_ZeroPoint());
+            zp->zero_point_len = param.getB_ZeroPoint()->getCols();
+            zp->zero_point_type =
+                getStorageType(param.getB_ZeroPoint()->getMatrixType());
+        }
+    }
+
+    // Set sequence information
+    m_postops->pre_ops->seq_length = 1; // One WOQ operation
+    m_postops->pre_ops->group_size =
+        0; // 0 here indicates no explicit group size for WOQ
+}
+
+void
 DlpOperation::buildSequenceVector()
 {
     // Build sequence vector based on original operation order
@@ -602,6 +672,10 @@ DlpOperation::buildSequenceVector()
                 // A_Quant data already collected via convertA_QuantOperations()
                 // Skip adding to sequence since it is not a regular post-op
                 // like BIAS/RELU.
+                break;
+            case dlp::testing::framework::OperationType::WOQ:
+                // WOQ data already collected via convertWOQOperations()
+                // Skip adding to sequence since it is a pre-op, not a post-op.
                 break;
             default:
                 throw std::runtime_error(

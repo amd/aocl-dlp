@@ -782,9 +782,30 @@ namespace dlp { namespace testing { namespace utils {
                 }
             }
 
-            // Parse PostOps if present
+            // Parse PostOps and PreOps if present.
+            // Pre-operations (e.g. WOQ for bf16s4) and post_operations are
+            // combined into one iterator: pre_ops first, then post_ops, so
+            // both appear in the benchmark name and in execution.
             std::unique_ptr<PostOpsIterator> postops_iterator = nullptr;
-            if (node["post_operations"]) {
+            bool has_post = (node["post_operations"] ? true : false);
+            bool has_pre  = (node["pre_operations"] ? true : false);
+            if (has_post && has_pre) {
+                auto preops_config  = parsePostOps(node["pre_operations"]);
+                auto postops_config = parsePostOps(node["post_operations"]);
+                std::vector<PostOpsIterator::PostOpConfig> merged;
+                merged.reserve(preops_config.operations.size()
+                               + postops_config.operations.size());
+                merged.insert(merged.end(), preops_config.operations.begin(),
+                              preops_config.operations.end());
+                merged.insert(merged.end(), postops_config.operations.begin(),
+                              postops_config.operations.end());
+                postops_iterator = std::make_unique<PostOpsIterator>(
+                    merged, false); // cartesian false = one sequence
+            } else if (has_pre) {
+                auto preops_config = parsePostOps(node["pre_operations"]);
+                postops_iterator   = std::make_unique<PostOpsIterator>(
+                    preops_config.operations, preops_config.cartesian);
+            } else if (has_post) {
                 auto postops_config = parsePostOps(node["post_operations"]);
                 postops_iterator    = std::make_unique<PostOpsIterator>(
                     postops_config.operations, postops_config.cartesian);

@@ -358,31 +358,49 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                             pre_ops_attr);
 
                         /* packed B kernel */
-                        ((lpgemm_rowvar_bf16)lcntx->kern_fun_ptr)(
-                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                            a_block_stride, b_use_jr, rs_b_use, cs_b_use,
-                            (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                            post_op_list, post_ops_attr);
+                        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                            dlp_execute_kernel(
+                                lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                                (bfloat16*)a_use, rs_a_use, cs_a_use,
+                                a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
+                                cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                                (void*)&alpha, (void*)&beta0, post_op_list,
+                                post_ops_attr);
+                        } else {
+                            ((lpgemm_rowvar_bf16)lcntx->kern_fun_ptr)(
+                                mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
+                                a_block_stride, b_use_jr, rs_b_use, cs_b_use,
+                                (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
+                                post_op_list, post_ops_attr);
+                        }
                     } else if (mtag_b == PACK_KC) {
                         bfloat16* b_use_jr =
                             (bfloat16*)b_use + (jr * kc0_updated);
 
                         /* packed B kernel */
-                        ((lpgemm_rowvar_bf16)lcntx->kern_fun_ptr)(
-                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                            a_block_stride, b_use_jr, rs_b_use, cs_b_use,
-                            (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                            post_op_list, post_ops_attr);
+                        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                            dlp_execute_kernel(
+                                lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                                (bfloat16*)a_use, rs_a_use, cs_a_use,
+                                a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
+                                cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                                (void*)&alpha, (void*)&beta0, post_op_list,
+                                post_ops_attr);
+                        } else {
+                            ((lpgemm_rowvar_bf16)lcntx->kern_fun_ptr)(
+                                mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
+                                a_block_stride, b_use_jr, rs_b_use, cs_b_use,
+                                (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
+                                post_op_list, post_ops_attr);
+                        }
                     }
-/* The check here is to ensure that the bf16 s4 kernel paths are not taken while
- * JIT is enabled. */
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
+#if (defined(DLP_KERNELS_ZEN4))
                     else // mtag_b == UNPACKED
                     {
                         int8_t* b_jr = b_reorder + (jr * kc0_updated) / 2;
 
-                        /* set offsets to determine scale factors and zero-point
-                         * values */
+                        /* set offsets to determine scale factors and
+                         * zero-point values */
                         pre_ops_attr.pre_op_b_i = pc;
                         pre_ops_attr.pre_op_b_j =
                             jc_cur_loop + jc_cur_loop_rem + jr;

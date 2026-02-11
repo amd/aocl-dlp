@@ -51,6 +51,7 @@ enum class OperationType : uint8_t
     MatMul      = 3,
     Scale       = 4,
     A_Quant     = 5,
+    WOQ         = 6, // Weight-Only Quantization for bf16s4
 };
 
 /**
@@ -249,6 +250,55 @@ class AQuantParam : public IOperationParam
     bool hasA_PreOpZeroPoint() const { return m_a_pre_op_zp != nullptr; }
     bool hasA_PostOpZeroPoint() const { return m_a_post_op_zp != nullptr; }
 };
+
+/**
+ * @class WOQParam
+ * @brief Parameter class for Weight-Only Quantization (WOQ) pre-operations
+ * Used for bf16s4 quantization with scale factors and zero points for B matrix
+ */
+class WOQParam : public IOperationParam
+{
+  private:
+    std::unique_ptr<Matrix> m_b_scale_factor;
+    std::unique_ptr<Matrix> m_b_zero_point;
+
+  public:
+    WOQParam() = default;
+
+    WOQParam(const WOQParam& other)
+    {
+        if (other.m_b_scale_factor) {
+            m_b_scale_factor =
+                std::make_unique<Matrix>(*other.m_b_scale_factor);
+        }
+        if (other.m_b_zero_point) {
+            m_b_zero_point = std::make_unique<Matrix>(*other.m_b_zero_point);
+        }
+    }
+
+    OperationType getType() const override { return OperationType::WOQ; }
+
+    std::unique_ptr<IOperationParam> clone() const override
+    {
+        return std::make_unique<WOQParam>(*this);
+    }
+
+    void setB_ScaleFactor(const Matrix& sf)
+    {
+        m_b_scale_factor = std::make_unique<Matrix>(sf);
+    }
+
+    void setB_ZeroPoint(const Matrix& zp)
+    {
+        m_b_zero_point = std::make_unique<Matrix>(zp);
+    }
+
+    const Matrix* getB_ScaleFactor() const { return m_b_scale_factor.get(); }
+    const Matrix* getB_ZeroPoint() const { return m_b_zero_point.get(); }
+    bool hasB_ScaleFactor() const { return m_b_scale_factor != nullptr; }
+    bool hasB_ZeroPoint() const { return m_b_zero_point != nullptr; }
+};
+
 /**
  * @class BiasParam
  * @brief Parameter class for bias operations
@@ -712,6 +762,45 @@ class AQuantBuilder
         return param;
     }
 };
+
+/**
+ * @class WOQBuilder
+ * @brief Type-safe builder for Weight-Only Quantization (WOQ) pre-operations
+ */
+class WOQBuilder
+{
+  private:
+    std::unique_ptr<Matrix> m_b_scale_factor;
+    std::unique_ptr<Matrix> m_b_zero_point;
+
+  public:
+    WOQBuilder& setB_ScaleFactor(const Matrix& sf)
+    {
+        m_b_scale_factor = std::make_unique<Matrix>(sf);
+        return *this;
+    }
+
+    WOQBuilder& setB_ZeroPoint(const Matrix& zp)
+    {
+        m_b_zero_point = std::make_unique<Matrix>(zp);
+        return *this;
+    }
+
+    std::unique_ptr<IOperationParam> build()
+    {
+        if (!m_b_scale_factor) {
+            throw std::runtime_error(
+                "B_ScaleFactor is required for WOQ operation");
+        }
+        auto param = std::make_unique<WOQParam>();
+        param->setB_ScaleFactor(*m_b_scale_factor);
+        if (m_b_zero_point) {
+            param->setB_ZeroPoint(*m_b_zero_point);
+        }
+        return param;
+    }
+};
+
 /**
  * @class BiasBuilder
  * @brief Type-safe builder for Bias operations
@@ -891,6 +980,10 @@ namespace postops {
     inline AQuantBuilder createAQuant()
     {
         return AQuantBuilder{};
+    }
+    inline WOQBuilder createWOQ()
+    {
+        return WOQBuilder{};
     }
 
 } // namespace postops

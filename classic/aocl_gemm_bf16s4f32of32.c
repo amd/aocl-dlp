@@ -73,10 +73,6 @@ aocl_gemm_bf16s4f32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
-#ifdef LPGEMM_BF16_JIT
-    dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);
-    goto err_hndl;
-#endif
 
     // Set MC, NC, KC, NR, MR.
     aocl_lpgemm_init_global_cntx();
@@ -179,6 +175,16 @@ aocl_gemm_bf16s4f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
+    lpgemm_cntx_t  lcntx_l = *lcntx_g;
+
+    lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+    // Use BF16BF16F32OF32 kernel : S4->BF16 dequantization is done
+    // in the framework (lpgemm_bf16s4.c) via pre-ops before the micro-kernel.
+    dlp_init_and_get_kernel_hndl(
+        DLP_KERNEL_BF16BF16F32OF32, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
+        &lcntx_l.dlp_kernel_hndl);
 
     lpgemm_ops_bundle_t ops =
         LPGEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
@@ -187,11 +193,11 @@ aocl_gemm_bf16s4f32of32(const char      order,
 
     lpgemm_bf16s4f32of32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
-        alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
+        alpha, beta, &rntm_g, &lcntx_l, &ops, DLP_F32);
 #else
     lpgemm_bf16s4f32of32_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c, cs_c,
-        alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
+        alpha, beta, &rntm_g, &lcntx_l, &ops, DLP_F32);
 #endif
 
 err_hndl:;
@@ -233,10 +239,6 @@ aocl_gemm_bf16s4f32obf16(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
-#ifdef LPGEMM_BF16_JIT
-    dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);
-    goto err_hndl;
-#endif
 
     // Set MC, NC, KC, NR, MR.
     aocl_lpgemm_init_global_cntx();
@@ -312,7 +314,7 @@ aocl_gemm_bf16s4f32obf16(const char      order,
         mtag_a = PACK;
     }
 
-    // Convert post op struct to post op linked list format.
+    // Convert pre op struct to pre op linked list format.
     lpgemm_pre_op  pre_op_list[AOCL_MAX_PRE_OPS];
     dlp_clsc_err_t err = lpgemm_translate_to_pre_ops_list(metadata->pre_ops,
                                                           pre_op_list, m, n, k);
@@ -342,6 +344,17 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
+    lpgemm_cntx_t  lcntx_l = *lcntx_g;
+
+    lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
+    // Use BF16BF16F32OBF16 kernel : S4->BF16 dequantization is done
+    // in the framework (lpgemm_bf16s4.c) via pre-ops before
+    // the micro-kernel.
+    dlp_init_and_get_kernel_hndl(
+        DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
+        &lcntx_l.dlp_kernel_hndl);
 
     lpgemm_ops_bundle_t ops =
         LPGEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
@@ -349,11 +362,11 @@ aocl_gemm_bf16s4f32obf16(const char      order,
 #ifdef DLP_ENABLE_OPENMP
     lpgemm_bf16s4f32of32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
-        cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
+        cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #else
     lpgemm_bf16s4f32of32_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c, rs_c,
-        cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
+        cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #endif
 
 err_hndl:;
