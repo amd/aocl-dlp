@@ -103,15 +103,20 @@ The library provides specialized element-wise operations:
 | f32os32         | float input to int32_t output |
 | f32os8          | float input to int8_t output |
 
-## Hardware Support
+## Hardware Requirements
 
-AOCL-DLP is optimized for AMD processors with the following instruction sets:
-- AVX2/FMA3      (available on Zen1 and newer)
-- AVX512         (available on Zen4 and newer)
-- AVX512_VNNI    (available on Zen4 and newer, for int8 operations)
-- AVX512_BF16    (available on Zen4 and newer, for bfloat16 operations)
+AOCL-DLP is optimized for AMD processors and requires specific minimum architecture support based on the functions being used:
 
-It also runs on any x86_64 (AMD64) CPU that supports these instruction sets.
+### Minimum Architecture Requirements
+
+| Function Type          | Minimum Required ISA      | Available On                                        |
+|------------------------|---------------------------|-----------------------------------------------------|
+| f32 (float)            | AVX2/FMA3                 | AMD Zen1 and newer, Intel Haswell and newer         |
+| bf16 (bfloat16)        | AVX2/FMA3                 | AMD Zen1 and newer, Intel Haswell and newer         |
+| ↳                      | AVX512_BF16 (optimal)     | AMD Zen4 and newer, Intel Cooper Lake and newer     |
+| int8 (int8, uint8)     | AVX512_VNNI               | AMD Zen4 and newer, Intel Cascade Lake and newer    |
+
+While optimized for AMD processors, the library is compatible with any x86_64 CPU that meets these minimum requirements. For best performance on AMD processors, it is recommended to use Zen4 or newer architectures which support all instruction sets.
 
 ## Build
 
