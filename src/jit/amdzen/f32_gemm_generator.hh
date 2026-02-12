@@ -105,6 +105,8 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
     int numMaskRegs = 0;
 
     // Core kernel generation methods - simplified for F32 only
+    dlp::jit::jitGeneratorError checkValidF32GemmParams(
+        const utils::generatorParams& params);
     dlp::jit::jitGeneratorError allocateReg();
 
     void loadMasks();

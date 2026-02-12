@@ -104,15 +104,10 @@ jitBF16GEMVN1<KType>::initializeParameters(
     lea(regRsC, ptr[regRsC * sizeof(float)]);
 }
 
-template<amdzen::utils::kernelInstrType KType>
+template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::allocateRegisters()
 {
-    // Check if MR is valid
-    if (MR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     // Allocate registers according to the rules:
     // maskReg = 0; // Set this only when AVX512 codepath is disabled.
 
@@ -965,6 +960,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
+
     Xbyak::util::StackFrame frame(this, 1, 13, 16);
     initializeStackFrame(frame);
     // Initializes generator params
@@ -1250,12 +1247,25 @@ jitBF16GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitBF16GEMVM1<KType>::allocateRegisters()
+jitBF16GEMVM1<KType>::checkValidBF16GemvM1NLeftParams(
+    const utils::gemvM1GeneratorParams& params)
 {
-    if (NR <= 0) {
+    // Common GEMV-M1 validation
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
+
+    // BF16-specific: validate N_LEFT sub-decomposition fields
+    if (params.N_LEFT_LT16 < 0 || params.N_LEFT_LT16 >= 16
+        || (params.N_LEFT_16 % 16 != 0) || params.N_LEFT_16 < 0
+        || params.N_LEFT_16 > params.NR) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
+    return dlp::jit::jitGeneratorError::success;
+}
 
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitBF16GEMVM1<KType>::allocateRegisters()
+{
     // Allocate registers according to the following rules:
     // x Registers : K_SUB_ITER(hardset to 4 for now)
     // y Registers : NR/simdWidth
@@ -1832,6 +1842,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(checkValidBF16GemvM1NLeftParams(params));
+
     // Using Xbyak's utility for managing the stack frame
     Xbyak::util::StackFrame frame(this, 1, 13, 0);
     initializeStackFrame(frame);

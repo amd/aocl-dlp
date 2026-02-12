@@ -105,11 +105,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::allocateRegisters()
 {
-    // Check if MR is valid
-    if (MR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     // Allocate registers according to the rules:
     maskReg = 0; // Set this only when AVX512 codepath is disabled.
 
@@ -1348,6 +1343,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
+
     Xbyak::util::StackFrame frame(this, 1, 13, 48);
     initializeStackFrame(frame);
 
@@ -1667,10 +1664,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::allocateRegisters()
 {
-    if (NR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     // Allocate registers according to the following rules:
     // x Registers : K_SUB_ITER(hardset to 4 for now)
     // y Registers : NR/simdWidth
@@ -2617,6 +2610,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
+
     // Using Xbyak's utility for managing the stack frame
     Xbyak::util::StackFrame frame(this, 1, 13, 48);
     initializeStackFrame(frame);

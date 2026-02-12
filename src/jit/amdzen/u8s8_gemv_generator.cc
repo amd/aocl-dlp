@@ -76,11 +76,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVN1<KType>::allocateRegisters()
 {
-    // Validate MR parameter
-    if (MR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     // Calculate SIMD width for int32 accumulators
     nElemsPerReg = RegBytes / sizeof(int32_t); // ZMM: 64/4 = 16 int32 elements
 
@@ -1342,6 +1337,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
+
     c_downscale      = params.c_downscale;
     MR               = params.MR;
     M_LEFT           = params.M_LEFT;
@@ -1535,10 +1532,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVM1<KType>::allocateRegisters()
 {
-    if (NR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     // Register allocation for U8S8 GEMV M=1:
     // x Registers : K_SUB_ITER (4 registers for X broadcasts)
     // b Registers : K_SUB_ITER (4 registers for B loads)
@@ -2665,6 +2658,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
+
     // Initialize kernel ops handler if post-ops are present
     if (!params.kernelOps.empty()) {
         kernelOpsHandlerPtr =

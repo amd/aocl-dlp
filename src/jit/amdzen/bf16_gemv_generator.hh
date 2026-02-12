@@ -269,6 +269,8 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     // Initializing the parameters
     void initializeParameters(utils::gemvM1GeneratorParams&);
 
+    dlp::jit::jitGeneratorError checkValidBF16GemvM1NLeftParams(
+        const utils::gemvM1GeneratorParams& params);
     // Allocating the registers
     dlp::jit::jitGeneratorError allocateRegisters();
 

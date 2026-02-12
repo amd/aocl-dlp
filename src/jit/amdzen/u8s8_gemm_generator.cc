@@ -42,10 +42,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::allocateRegisters()
 {
-    // check if MR, NR are valid
-    if (MR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
     // For u8s8 VNNI: each register holds RegBytes/4 VNNI groups (4 int8s each)
     // But we work with int32 accumulator, so calculate based on int32 elements
     int nElemsPerReg = RegBytes / sizeof(int32_t);
@@ -797,6 +793,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::generateKernel(utils::generatorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemmParams(params));
+
     MR          = params.MR;
     NR          = params.NR;
     useMask     = params.useMask; // Use generation-time mask setting

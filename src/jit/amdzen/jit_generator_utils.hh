@@ -580,4 +580,47 @@ class registerGuard
     registerGuard& operator=(registerGuard&&) = delete;
 };
 
+class jitGeneratorUtils
+{
+  public:
+    // GEMM param validation (common across bf16, s8, u8s8)
+    static dlp::jit::jitGeneratorError checkValidGemmParams(
+        const generatorParams& params)
+    {
+        if (params.MR <= 0 || params.NR < 0 || params.K_UNROLL <= 0
+            || params.numMaskRegs < 0
+            || params.numMaskRegs > dlp::kernels::maxNumMasks
+            || params.c_downscale <= DLP_INVALID
+            || params.c_downscale >= DLP_MAX) {
+            return dlp::jit::jitGeneratorError::badKernelInfo;
+        }
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    // GEMV-N1 param validation (identical across ALL datatypes)
+    static dlp::jit::jitGeneratorError checkValidGemvN1Params(
+        const gemvN1GeneratorParams& params)
+    {
+        if (params.MR <= 0 || params.M_LEFT < 0 || params.M_LEFT > params.MR
+            || params.c_downscale <= DLP_INVALID
+            || params.c_downscale >= DLP_MAX) {
+            return dlp::jit::jitGeneratorError::badKernelInfo;
+        }
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    // GEMV-M1 param validation (common across f32, s8, u8s8)
+    static dlp::jit::jitGeneratorError checkValidGemvM1Params(
+        const gemvM1GeneratorParams& params)
+    {
+        if (params.NR <= 0 || params.N_LEFT < 0 || params.N_LEFT > params.NR
+            || params.KC <= 0 || params.K_SUB_ITER <= 0
+            || params.c_downscale <= DLP_INVALID
+            || params.c_downscale >= DLP_MAX) {
+            return dlp::jit::jitGeneratorError::badKernelInfo;
+        }
+        return dlp::jit::jitGeneratorError::success;
+    }
+};
+
 } // namespace amdzen::utils

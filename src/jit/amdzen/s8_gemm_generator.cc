@@ -48,10 +48,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMS8<KType>::allocateReg()
 {
-    if (MR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     // Using int32 since accumulation is done in int32
     int nElemsPerReg =
         RegBytes
@@ -917,6 +913,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMS8<KType>::generateKernel(utils::generatorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemmParams(params));
+
     MR          = params.MR;
     NR          = params.NR;
     useMask     = params.useMask;

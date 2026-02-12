@@ -48,11 +48,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::allocateReg()
 {
-    // Check if MR, NR are valid
-    if (!((MR > 0))) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     // For BF16: B registers load BF16 data, C registers accumulate F32
     // results
 
@@ -570,6 +565,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::generateKernel(utils::generatorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemmParams(params));
+
     MR              = params.MR;
     NR              = params.NR;
     K_UNROLL        = params.K_UNROLL;

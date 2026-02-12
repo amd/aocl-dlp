@@ -47,10 +47,23 @@ jitGEMMF32<KType>::jitGEMMF32(void* buffer, size_t bufferSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::checkValidF32GemmParams(const utils::generatorParams& params)
+{
+    // Check: K_UNROLL (when !is_k1), c_downscale (MR/NR/numMaskRegs validated
+    // in allocateReg/allocateMaskRegisters).
+    if ((!params.is_k1 && params.K_UNROLL <= 0)
+        || params.c_downscale <= DLP_INVALID || params.c_downscale >= DLP_MAX) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::allocateReg()
 {
-    // check if MR, NR, k_unroll are valid
-    if (currentMR <= 0) {
+    // check if MR, NR are valid
+    if (currentMR <= 0 || currentNR < 0) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
     bFullReg = ((currentNR) / numElemsPerReg);
@@ -740,6 +753,9 @@ jitGEMMF32<KType>::allocateMaskRegisters()
     maskVecReg = 0;
     maskRegIdx = 0;
 
+    if (numMaskRegs < 0) {
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
         if (useMask) {
             maskVecReg = numMaskRegs;
@@ -1272,6 +1288,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
 {
+    RETURN_IF_ERROR(checkValidF32GemmParams(params));
+
     // Check if this is a k=1 kernel (entire matrix iteration inside JIT)
     if (params.is_k1) {
         return generateKernelK1(params);

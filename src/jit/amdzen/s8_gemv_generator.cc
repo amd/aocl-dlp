@@ -67,10 +67,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMVS8N1<KType>::allocateRegisters()
 {
-    if (MR <= 0) { // invalid MR
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     accumReg     = MR;
     accumBaseIdx = numRegs - accumReg;
 
@@ -1305,6 +1301,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
+
     Xbyak::util::StackFrame frame(this, 1, 13, 0);
     initializeStackFrame(frame);
     initializeParameters(params);
@@ -1629,10 +1627,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMVS8M1<KType>::allocateRegisters()
 {
-    if (NR <= 0) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
     yReg      = (NR / vnniWidth);
     xReg      = K_SUB_ITER;
     bReg      = NR / vnniWidth;
@@ -2607,6 +2601,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
+    RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
+
     Xbyak::util::StackFrame frame(this, 1, 13, 0);
     initializeStackFrame(frame);
     initializeParameters(params);
