@@ -171,6 +171,48 @@ lpgemm_pnl_wrk_heur_adjust_ic_jc_ways(md_t  MR,
 }
 
 DLP_INLINE void
+lpgemm_pnl_wrk_heur_adjust_threading_for_prime_nt(md_t  MR,
+                                                  md_t  NR,
+                                                  md_t  m,
+                                                  md_t  n,
+                                                  md_t* n_threads,
+                                                  md_t* ic_ways,
+                                                  md_t* jc_ways)
+{
+    md_t mr_blks = (m + MR - 1) / MR;
+    md_t nr_blks = (n + NR - 1) / NR;
+
+    // With prime numbers, only two pairs of factors are possible
+    // (1, prime number) and (prime number, 1). Both of these
+    // scenarios can lead to suboptimal threading performance
+    // depending on the input. Hence, we try to adjust the factors
+    // to get a better balance by reducing the number of threads
+    // by 1 and checking if it results in more favourable factors.
+    md_t reduced_ic        = 1;
+    md_t reduced_jc        = 1;
+    md_t reduced_n_threads = (*n_threads) - 1;
+    dlp_thread_partition_2x2(reduced_n_threads, m, n, &reduced_ic, &reduced_jc);
+    if (mr_blks >= reduced_ic) {
+        lpgemm_pnl_wrk_heur_adjust_ic_jc_ways(MR, NR, m, n, &reduced_n_threads,
+                                              &reduced_ic, &reduced_jc);
+    }
+
+    md_t mr_blks_ic     = (mr_blks + (*ic_ways) - 1) / (*ic_ways);
+    md_t nr_blks_jc     = (nr_blks + (*jc_ways) - 1) / (*jc_ways);
+    md_t panel_work_org = mr_blks_ic + nr_blks_jc;
+
+    md_t mr_blks_reduced_ic = (mr_blks + reduced_ic - 1) / reduced_ic;
+    md_t nr_blks_reduced_jc = (nr_blks + reduced_jc - 1) / reduced_jc;
+    md_t panel_work_red     = mr_blks_reduced_ic + nr_blks_reduced_jc;
+
+    if (panel_work_red < panel_work_org) {
+        (*ic_ways)   = reduced_ic;
+        (*jc_ways)   = reduced_jc;
+        (*n_threads) = reduced_n_threads;
+    }
+}
+
+DLP_INLINE void
 lpgemm_adjust_ic_jc_ways(const md_t m,
                          const md_t n,
                          const md_t k,
@@ -496,9 +538,14 @@ lpgemm_bf16bf16f32of32_get_threading(md_t*       n_threads,
             // imbalance by increasing the ic ways and decreasing the jc ways.
             // We check if there is oversubsciption in the ic direction, before
             // calling the function.
-            if ((mr_blks >= (*ic_ways))) {
+            if (mr_blks >= (*ic_ways)) {
                 lpgemm_pnl_wrk_heur_adjust_ic_jc_ways(MR, NR, m, n, n_threads,
                                                       ic_ways, jc_ways);
+            }
+
+            if (dlp_is_prime(*n_threads)) {
+                lpgemm_pnl_wrk_heur_adjust_threading_for_prime_nt(
+                    MR, NR, m, n, n_threads, ic_ways, jc_ways);
             }
         }
     } else {

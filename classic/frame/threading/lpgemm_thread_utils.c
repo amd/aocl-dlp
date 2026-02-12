@@ -277,16 +277,9 @@ dlp_prime_factorization(md_t n, dlp_prime_factors_t* factors)
 static md_t
 dlp_next_prime_factor(dlp_prime_factors_t* factors)
 {
-    // Return the prime factorization of the original number n one-by-one.
-    // Return 1 after all factors have been exhausted.
-
-    // Looping over possible factors in increasing order assures we will
-    // only return prime factors (a la the Sieve of Eratosthenes).
+    // Sieve of eratosthenes style approach, but only for the factors of a
+    // single number n, not for a range of numbers.
     while (factors->f <= factors->sqrt_n) {
-        // Special cases for factors 2-7 handle all numbers not divisible by 11
-        // or another larger prime. The slower loop version is used after that.
-        // If you use a number of threads with large prime factors you get
-        // what you deserve.
         if (factors->f == 2) {
             if (factors->n % 2 == 0) {
                 factors->n /= 2;
@@ -325,6 +318,20 @@ dlp_next_prime_factor(dlp_prime_factors_t* factors)
     md_t tmp   = factors->n;
     factors->n = 1;
     return tmp;
+}
+
+bool
+dlp_is_prime(md_t n)
+{
+    if (n < 2) {
+        return FALSE;
+    }
+
+    dlp_prime_factors_t factors;
+    dlp_prime_factorization(n, &factors);
+    md_t f = dlp_next_prime_factor(&factors);
+
+    return (f == n);
 }
 
 void

@@ -273,6 +273,9 @@ dlp_thread_partition_2x2(md_t n_thread,
                          md_t* restrict nt1,
                          md_t* restrict nt2);
 
+bool
+dlp_is_prime(md_t n);
+
 DLP_INLINE bool
 dlp_thread_am_ochief(dlp_task_id_t* t)
 {
