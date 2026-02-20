@@ -39,6 +39,8 @@
 
 #if defined(_MSC_VER)
 
+#include <errno.h>
+
 typedef INIT_ONCE dlp_pthread_once_t;
 
 static BOOL
@@ -59,6 +61,29 @@ dlp_pthread_once(dlp_pthread_once_t* once, void (*init)(void))
 
 #define DLP_PTHREAD_ONCE_INIT INIT_ONCE_STATIC_INIT
 
+typedef SRWLOCK dlp_pthread_mutex_t;
+#define DLP_PTHREAD_MUTEX_INITIALIZER SRWLOCK_INIT
+
+DLP_INLINE int
+dlp_pthread_mutex_lock(dlp_pthread_mutex_t* mutex)
+{
+    AcquireSRWLockExclusive(mutex);
+    return 0;
+}
+
+DLP_INLINE int
+dlp_pthread_mutex_trylock(dlp_pthread_mutex_t* mutex)
+{
+    return TryAcquireSRWLockExclusive(mutex) ? 0 : EBUSY;
+}
+
+DLP_INLINE int
+dlp_pthread_mutex_unlock(dlp_pthread_mutex_t* mutex)
+{
+    ReleaseSRWLockExclusive(mutex);
+    return 0;
+}
+
 #else
 
 #include <pthread.h>
@@ -71,7 +96,28 @@ dlp_pthread_once(dlp_pthread_once_t* once, void (*init)(void))
     pthread_once(once, init);
 }
 
-#define DLP_PTHREAD_ONCE_INIT PTHREAD_ONCE_INIT
+#define DLP_PTHREAD_ONCE_INIT         PTHREAD_ONCE_INIT
+
+typedef pthread_mutex_t dlp_pthread_mutex_t;
+#define DLP_PTHREAD_MUTEX_INITIALIZER PTHREAD_MUTEX_INITIALIZER
+
+DLP_INLINE int
+dlp_pthread_mutex_lock(dlp_pthread_mutex_t* mutex)
+{
+    return pthread_mutex_lock(mutex);
+}
+
+DLP_INLINE int
+dlp_pthread_mutex_trylock(dlp_pthread_mutex_t* mutex)
+{
+    return pthread_mutex_trylock(mutex);
+}
+
+DLP_INLINE int
+dlp_pthread_mutex_unlock(dlp_pthread_mutex_t* mutex)
+{
+    return pthread_mutex_unlock(mutex);
+}
 
 #endif
 

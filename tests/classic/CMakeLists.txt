@@ -44,5 +44,8 @@ foreach(test_source ${TEST_SOURCES})
         INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
         DEPENDS yaml-cpp
     )
+    if(DLP_ENABLE_OPENMP)
+        target_link_libraries(${test_name} PRIVATE dlp::openmp)
+    endif()
     dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
 endforeach()
