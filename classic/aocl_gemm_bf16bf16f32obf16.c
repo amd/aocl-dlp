@@ -208,29 +208,77 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     }
 
     // Create copy variables to handle column major case
-    md_t            m_use      = m;
-    md_t            n_use      = n;
-    md_t            rs_a_use   = rs_a;
-    md_t            cs_a_use   = cs_a;
-    md_t            rs_b_use   = rs_b;
-    md_t            cs_b_use   = cs_b;
-    AOCL_MEMORY_TAG mtag_a_use = mtag_a;
-    AOCL_MEMORY_TAG mtag_b_use = mtag_b;
-    const bfloat16* a_use      = a;
-    const bfloat16* b_use      = b;
+    md_t            m_use          = m;
+    md_t            n_use          = n;
+    md_t            rs_a_use       = rs_a;
+    md_t            cs_a_use       = cs_a;
+    md_t            rs_b_use       = rs_b;
+    md_t            cs_b_use       = cs_b;
+    md_t            rs_c_use       = rs_c;
+    md_t            cs_c_use       = cs_c;
+    AOCL_MEMORY_TAG mtag_a_use     = mtag_a;
+    AOCL_MEMORY_TAG mtag_b_use     = mtag_b;
+    dlp_trans_t     dlp_transa_use = dlp_transa;
+    dlp_trans_t     dlp_transb_use = dlp_transb;
+    const bfloat16* a_use          = a;
+    const bfloat16* b_use          = b;
 
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
-        m_use      = n;
-        n_use      = m;
-        rs_a_use   = rs_b;
-        cs_a_use   = cs_b;
-        rs_b_use   = rs_a;
-        cs_b_use   = cs_a;
-        mtag_a_use = mtag_b;
-        mtag_b_use = mtag_a;
-        a_use      = b;
-        b_use      = a;
+        m_use          = n;
+        n_use          = m;
+        rs_a_use       = rs_b;
+        cs_a_use       = cs_b;
+        rs_b_use       = rs_a;
+        cs_b_use       = cs_a;
+        mtag_a_use     = mtag_b;
+        mtag_b_use     = mtag_a;
+        dlp_transa_use = dlp_transb;
+        dlp_transb_use = dlp_transa;
+        a_use          = b;
+        b_use          = a;
+    }
+
+    // GEMV-specific optimization for avoiding unnecessary packing.
+    // This optimization is enabled only when post-ops are disabled and
+    // k >= 256, below which the packing cost is too small to justify the
+    // overhead of the operation transpose.
+    // We perform an "operation transpose" to use a more efficient kernel path.
+
+    // For GEMV_M1: If B is transposed and not reordered, swap to use
+    // GEMV_N1 to avoid packing B matrix. GEMV_N1 kernels support both
+    // unit/non-unit strided loads/stores for C vector.
+    if (((m_use == 1) && (k >= 256) && (dlp_is_trans(dlp_transb_use))
+         && (mtag_b_use != REORDERED))
+        && (post_op_list[0].op_code == POST_OPS_DISABLE)) {
+
+        // Store temporary values before potential operation transpose
+        md_t            m_tmp    = m_use;
+        md_t            n_tmp    = n_use;
+        md_t            rs_a_tmp = rs_a_use;
+        md_t            cs_a_tmp = cs_a_use;
+        md_t            rs_b_tmp = rs_b_use;
+        md_t            cs_b_tmp = cs_b_use;
+        md_t            rs_c_tmp = rs_c_use;
+        md_t            cs_c_tmp = cs_c_use;
+        const bfloat16* a_tmp    = a_use;
+        const bfloat16* b_tmp    = b_use;
+
+        m_use      = n_tmp;
+        n_use      = m_tmp;
+        a_use      = b_tmp;
+        rs_a_use   = cs_b_tmp;
+        cs_a_use   = rs_b_tmp;
+        b_use      = a_tmp;
+        rs_b_use   = cs_a_tmp;
+        cs_b_use   = rs_a_tmp;
+        rs_c_use   = cs_c_tmp;
+        cs_c_use   = rs_c_tmp;
+        mtag_a_use = UNPACKED;
+        // Setting mtag_b_use is purely a safety measure. The input
+        // vector(after our operation transpose) will anyways be
+        // contiguous, and the framework will not pack it further.
+        mtag_b_use = PACK;
     }
 
     // Initialize a local runtime with global settings if necessary. Note
@@ -285,7 +333,7 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
 
     dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_BF16BF16F32OBF16, order, jit_mtag_a, jit_mtag_b, m_use,
-        n_use, k, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c, cs_c,
+        n_use, k, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
         (void*)&alpha, (void*)&beta, post_op_list, mr_hint, nr_hint, kc_hint,
         DLP_BF16, &lcntx_l.dlp_kernel_hndl);
 
@@ -301,8 +349,8 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
         lpgemm_rowvar_tiny_bf16bf16f32of32(
             m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
-            rs_b_use, cs_b_use, mtag_b_use, (float*)c, rs_c, cs_c, alpha, beta,
-            &lcntx_l, post_op_list, DLP_BF16);
+            rs_b_use, cs_b_use, mtag_b_use, (float*)c, rs_c_use, cs_c_use,
+            alpha, beta, &lcntx_l, post_op_list, DLP_BF16);
         goto err_hndl;
     }
 #endif
@@ -313,13 +361,13 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
 #ifdef DLP_ENABLE_OPENMP
     lpgemm_bf16bf16f32of32_openmp_thread_decorator(
         m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
-        cs_b_use, mtag_b_use, (float*)c, rs_c, cs_c, alpha, beta, &rntm_g,
-        &lcntx_l, &ops, DLP_BF16);
+        cs_b_use, mtag_b_use, (float*)c, rs_c_use, cs_c_use, alpha, beta,
+        &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #else
     lpgemm_bf16bf16f32of32_thread_decorator(
         m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
-        cs_b_use, mtag_b_use, (float*)c, rs_c, cs_c, alpha, beta, &rntm_g,
-        &lcntx_l, &ops, DLP_BF16);
+        cs_b_use, mtag_b_use, (float*)c, rs_c_use, cs_c_use, alpha, beta,
+        &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #endif
 
 err_hndl:;
