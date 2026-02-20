@@ -140,15 +140,23 @@ class OptimizedGemmBenchmark : public ConcreteUAL
             C_.fillRandom(44 + k_);
         }
 
-        // Apply reordering if needed
+        // Apply memory tag for A (reorder and pack are mutually exclusive)
         if (config.reorderA) {
             A_.setReordered(true);
+        } else if (config.packA) {
+            A_.setPacked(true);
         }
+
+        // Apply memory tag for B (reorder and pack are mutually exclusive)
         if (config.reorderB) {
             Matrix B_reordered;
             this->reorder(B_, B_reordered, a_type_, b_type_, c_type_,
                           acc_type_);
             B_ = std::move(B_reordered);
+            // Reorder handles transposition; reset trans flag for GEMM call
+            transB_ = false;
+        } else if (config.packB) {
+            B_.setPacked(true);
         }
 
         // Cache pointers and metadata for hot path

@@ -499,7 +499,7 @@ gemm_tests:
 # ==============================================================================
 # GEMV N = 1
 # ==============================================================================
-  - name: "u8s8s32_kernel_N=1_small_set1"
+  - name: "u8s8s32_kernel_N1_small_set1"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["f32"]
@@ -528,7 +528,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set2"
+  - name: "u8s8s32_kernel_N1_small_set2"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["f32"]
@@ -557,7 +557,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set3"
+  - name: "u8s8s32_kernel_N1_small_set3"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["bf16"]
@@ -586,7 +586,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set4"
+  - name: "u8s8s32_kernel_N1_small_set4"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["bf16"]
@@ -615,7 +615,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set5"
+  - name: "u8s8s32_kernel_N1_small_set5"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["u8"]
@@ -644,7 +644,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set6"
+  - name: "u8s8s32_kernel_N1_small_set6"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["u8"]
@@ -673,7 +673,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set7a"
+  - name: "u8s8s32_kernel_N1_small_set7a"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -702,7 +702,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set7b"
+  - name: "u8s8s32_kernel_N1_small_set7b"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -731,7 +731,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set8a"
+  - name: "u8s8s32_kernel_N1_small_set8a"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s8"]
@@ -760,7 +760,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_small_set8b"
+  - name: "u8s8s32_kernel_N1_small_set8b"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s8"]
@@ -789,7 +789,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_large_set1"
+  - name: "u8s8s32_kernel_N1_large_set1"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -820,7 +820,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_large_set2"
+  - name: "u8s8s32_kernel_N1_large_set2"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -851,7 +851,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_N=1_large_set3"
+  - name: "u8s8s32_kernel_N1_large_set3"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -886,7 +886,7 @@ gemm_tests:
 # GEMV M = 1
 # ==============================================================================
 
-  - name: "u8s8s32_kernel_M=1_small"
+  - name: "u8s8s32_kernel_M1_small"
     a_type: ["u8"]
     b_type: ["s8"]
     # c_type: ["bf16"]
@@ -917,7 +917,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_M=1_large"
+  - name: "u8s8s32_kernel_M1_large"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["s32", "u8", "s8"]
@@ -948,7 +948,7 @@ gemm_tests:
       bfloat16: 1.0e-2
       int8: 0
 
-  - name: "u8s8s32_kernel_M=1_large"
+  - name: "u8s8s32_kernel_M1_large"
     a_type: ["u8"]
     b_type: ["s8"]
     c_type: ["bf16", "f32"]

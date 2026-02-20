@@ -57,6 +57,8 @@ GemmBenchConfig::hash() const
     h ^= std::hash<bool>{}(this->transB) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<bool>{}(this->reorderA) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<bool>{}(this->reorderB) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(this->packA) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(this->packB) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;
 }
 
@@ -165,9 +167,9 @@ generateBenchmarkName(const GemmBenchConfig& config)
     name << (config.transA ? ",trA:t" : ",trA:n");
     name << (config.transB ? ",trB:t" : ",trB:n");
 
-    // Add reordering
-    std::string mtagA = config.reorderA ? "r" : "n";
-    std::string mtagB = config.reorderB ? "r" : "n";
+    // Add memory tags (pack takes precedence over reorder)
+    std::string mtagA = config.packA ? "p" : (config.reorderA ? "r" : "n");
+    std::string mtagB = config.packB ? "p" : (config.reorderB ? "r" : "n");
     name << ",mtagA:" << mtagA;
     name << ",mtagB:" << mtagB;
 
@@ -264,6 +266,8 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                 config.transB         = microTest.getTransB();
                 config.reorderA       = microTest.getReorderA();
                 config.reorderB       = microTest.getReorderB();
+                config.packA          = microTest.getPackA();
+                config.packB          = microTest.getPackB();
 
                 // Extract fill_value if present
                 if (microTest.hasFillValue()) {

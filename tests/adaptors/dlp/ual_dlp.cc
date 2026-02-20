@@ -1681,8 +1681,10 @@ UalDlp::gemm(md_t         m,
 
     uint64_t type = encode_types(matA_type, matB_type, matC_type, accType);
 
-    char transA  = matA_transposed ? 't' : 'n';
-    char transB  = matB_transposed ? 't' : 'n';
+    char transA = matA_transposed ? 't' : 'n';
+    // Reordered B has transposition baked in; pass 'n' to GEMM.
+    // This matches the Matrix-based gemm() overload behaviour.
+    char transB  = (memFormatB == 'r') ? 'n' : (matB_transposed ? 't' : 'n');
     char layoutA = matA_layout == MatrixLayout::ROW_MAJOR ? 'r' : 'c';
 
     switch (type) {

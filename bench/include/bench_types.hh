@@ -60,6 +60,7 @@ struct GemmBenchConfig
     double       alpha, beta;
     bool         transA, transB;
     bool         reorderA, reorderB;
+    bool         packA, packB;
 
     // Optional fill_value configuration
     bool        has_fill_value         = false;
@@ -92,6 +93,8 @@ struct GemmBenchConfig
         , transB(false)
         , reorderA(false)
         , reorderB(false)
+        , packA(false)
+        , packB(false)
     {
     }
 
