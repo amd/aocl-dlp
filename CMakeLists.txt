@@ -134,6 +134,11 @@ if(DLP_ENABLE_OPENMP)
     target_link_libraries(${PROJECT_NAME}_static PRIVATE dlp::openmp)
 endif()
 
+# Setup atomic support for 16-byte atomic structs (platform-specific)
+if(COMMAND dlp_setup_atomic_support)
+    dlp_setup_atomic_support()
+endif()
+
 # Add all sanitizers to the target
 dlp_add_all_sanitizers(${PROJECT_NAME} ${PROJECT_NAME}_static)
 

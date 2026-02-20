@@ -57,6 +57,16 @@ typedef struct __attribute__((aligned(64)))
         .ext_mt_ctr_var = TRUE,                                                \
     }
 
+#define DLP_CLASSIC_RNTM_RESET(rntm)                                           \
+    do {                                                                       \
+        (rntm).num_threads    = -1;                                            \
+        (rntm).ic_ways        = -1;                                            \
+        (rntm).jc_ways        = -1;                                            \
+        (rntm).pack_a         = FALSE;                                         \
+        (rntm).pack_b         = FALSE;                                         \
+        (rntm).ext_mt_ctr_var = TRUE;                                          \
+    } while (0)
+
 void
 dlp_rntm_init_from_global(dlp_rntm_t* rntm);
 

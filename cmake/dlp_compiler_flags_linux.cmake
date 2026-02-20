@@ -350,6 +350,29 @@ function(dlp_set_jit_flags target)
     endif()
 endfunction()
 
+# Function to setup atomic support for 16-byte atomic structs
+# This is required for lock-free atomic operations on structures used in multi-threaded inference
+function(dlp_setup_atomic_support)
+    # GCC/Clang require libatomic for 16-byte atomic operations
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        # Find libatomic library
+        find_library(ATOMIC_LIBRARY NAMES atomic)
+
+        if(ATOMIC_LIBRARY)
+            target_link_libraries(${PROJECT_NAME} PRIVATE ${ATOMIC_LIBRARY})
+            target_link_libraries(${PROJECT_NAME}_static PRIVATE ${ATOMIC_LIBRARY})
+            message(STATUS "Linking with libatomic: ${ATOMIC_LIBRARY}")
+        else()
+            # Try to link anyway (might be built-in on some platforms)
+            target_link_libraries(${PROJECT_NAME} PRIVATE atomic)
+            target_link_libraries(${PROJECT_NAME}_static PRIVATE atomic)
+            message(STATUS "Linking with libatomic (assuming available)")
+        endif()
+    else()
+        message(STATUS "Atomic support: compiler-specific handling required")
+    endif()
+endfunction()
+
 function(dlp_set_platform_options)
     # Set binary name for static library
     if(DLP_OS_LINUX)

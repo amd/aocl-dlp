@@ -303,6 +303,37 @@ function(dlp_set_jit_flags target)
     endif()
 endfunction()
 
+# Function to setup atomic support for 16-byte atomic structs
+# This is required for lock-free atomic operations on structures used in multi-threaded inference
+function(dlp_setup_atomic_support)
+    if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
+        # MSVC has built-in atomic support, no linking needed
+        message(STATUS "MSVC: atomic support built-in, no additional linking needed")
+
+        # Verify x64 build for 16-byte atomic support
+        if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+            message(STATUS "MSVC x64 build: CMPXCHG16B available")
+        else()
+            message(WARNING "MSVC 32-bit build: 16-byte atomics not supported!")
+        endif()
+    elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+        # MinGW/Clang on Windows - similar to Linux
+        find_library(ATOMIC_LIBRARY NAMES atomic)
+
+        if(ATOMIC_LIBRARY)
+            target_link_libraries(${PROJECT_NAME} PRIVATE ${ATOMIC_LIBRARY})
+            target_link_libraries(${PROJECT_NAME}_static PRIVATE ${ATOMIC_LIBRARY})
+            message(STATUS "Linking with libatomic: ${ATOMIC_LIBRARY}")
+        else()
+            target_link_libraries(${PROJECT_NAME} PRIVATE atomic)
+            target_link_libraries(${PROJECT_NAME}_static PRIVATE atomic)
+            message(STATUS "Linking with libatomic (assuming available)")
+        endif()
+    else()
+        message(STATUS "Atomic support: compiler-specific handling required")
+    endif()
+endfunction()
+
 function(dlp_set_platform_options)
     # Ensure symbols are exported for all classic targets when building shared libs
     if(BUILD_SHARED_LIBS)
