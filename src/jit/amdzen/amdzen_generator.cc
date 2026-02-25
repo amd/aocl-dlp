@@ -883,7 +883,7 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         }
 
         // Deploy the associated kernel
-        int kernel_idx = static_cast<int>(params->n_left);
+        md_t kernel_idx = params->n_left;
 
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
@@ -1513,7 +1513,7 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
         params->nmask_avx512 = 0xFFFF >> (numElemsPerReg - partial_elements);
 
         // Deploy the associated kernel
-        int kernel_idx = static_cast<int>(params->n_left);
+        md_t kernel_idx = params->n_left;
 
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
@@ -2022,7 +2022,7 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
                 0xFFFF >> (numElemsPerReg - partial_elements);
         }
 
-        int kernel_idx = static_cast<int>(params->n_left);
+        md_t kernel_idx = params->n_left;
 
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
@@ -2578,7 +2578,7 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
         params->psB = (params->k_left + 3) & ~3;
 
         // Deploy associated M=1 kernel
-        int ker_idx = static_cast<int>(params->n_left);
+        md_t ker_idx = params->n_left;
 
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(

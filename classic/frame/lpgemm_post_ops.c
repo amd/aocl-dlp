@@ -153,8 +153,9 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
                 return DLP_CLSC_FAILURE;
         }
 
-        if (((metadata->a_scl)->scale_factor_type)
-            != ((metadata->b_scl)->scale_factor_type)) {
+        if ((metadata->a_scl != NULL) && (metadata->b_scl != NULL)
+            && (((metadata->a_scl)->scale_factor_type)
+                != ((metadata->b_scl)->scale_factor_type))) {
             dlp_print_msg(" A and B scale factor type mismatch. Exiting..",
                           __FILE__, __LINE__);
             return DLP_CLSC_FAILURE;
@@ -464,11 +465,18 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
     // Example with ADQUANTIZE + seq_length=2:
     //   post_op_list[0] = ADQUANTIZE, [1] = seq_vector[0], [2] = seq_vector[1]
     md_t post_op_offset = (has_adquantize) ? 1 : 0;
-    md_t e_i            = 0; // Multiple eltwise supported.
-    md_t s_i            = 0; // Multiple sum/scale supported.
-    md_t b_i            = 0; // Multiple bias supported.
-    md_t m_i            = 0; // Multiple matrix add supported.
-    md_t mul_i          = 0; // Multiple matrix mul supported.
+
+    if ((metadata->seq_length > 0) && (metadata->seq_vector == NULL)) {
+        dlp_print_msg(" Post_op seq_vector is NULL. Exiting..", __FILE__,
+                      __LINE__);
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    md_t e_i   = 0; // Multiple eltwise supported.
+    md_t s_i   = 0; // Multiple sum/scale supported.
+    md_t b_i   = 0; // Multiple bias supported.
+    md_t m_i   = 0; // Multiple matrix add supported.
+    md_t mul_i = 0; // Multiple matrix mul supported.
     for (md_t i = post_op_offset; i < metadata->seq_length + post_op_offset;
          ++i) {
         // Dispatcher code
