@@ -3131,7 +3131,7 @@ kernelOpsGeneratorX86<KType>::sigmoid(kernelOpsMetaData& op)
 // ============================================================================
 // A-Dequantization: Scale Factor Application (Per-Tensor)
 // ============================================================================
-// Formula: acc[i][j] = round(acc[i][j] * a_post_quant_sf)
+// Formula: acc[i][j] = acc[i][j] * a_post_quant_sf
 // Used for per-tensor quantization (single scale factor for entire matrix).
 template<utils::kernelInstrType KType>
 template<typename T>
@@ -3142,12 +3142,10 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorScalarImpl()
     RegType sfReg = popAndGetScratchReg();
     broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp1]);
 
-    // Apply: acc = round(acc * a_post_quant_sf) for all accumulator registers
+    // Apply: acc = (acc * a_post_quant_sf) for all accumulator registers
     for (int i = 0; i < MR * numRegsPerRow; i++) {
         jit_->vmulps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
                      sfReg);
-        jit_->vrndscaleps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
-                          0x00); // Round to nearest even
     }
     scratch_reg_queue.push(sfReg);
     return jitGeneratorError::success;
@@ -3156,7 +3154,7 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorScalarImpl()
 // ============================================================================
 // A-Dequantization: Scale Factor Application (Per-Row)
 // ============================================================================
-// Formula: acc[row][col] = round(acc[row][col] * a_post_quant_sf[row])
+// Formula: acc[row][col] = acc[row][col] * a_post_quant_sf[row]
 // Used for per-row/per-channel quantization (different scale factor per row).
 template<utils::kernelInstrType KType>
 template<typename T>
@@ -3170,7 +3168,7 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorRowMajorImpl()
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
 
-    // For each row: broadcast its scale factor and apply with rounding
+    // For each row: broadcast its scale factor and apply
     for (int i = 0; i < MR; i++) {
         RegType sfReg = popAndGetScratchReg();
         broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp3 + i * sizeof(T)]);
@@ -3178,9 +3176,6 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorRowMajorImpl()
         for (int j = 0; j < numRegsPerRow; j++) {
             jit_->vmulps(RegType(cRegStartIdx + i * numRegsPerRow + j),
                          RegType(cRegStartIdx + i * numRegsPerRow + j), sfReg);
-            jit_->vrndscaleps(RegType(cRegStartIdx + i * numRegsPerRow + j),
-                              RegType(cRegStartIdx + i * numRegsPerRow + j),
-                              0x00); // Round to nearest even
         }
         scratch_reg_queue.push(sfReg);
     }
@@ -3190,7 +3185,7 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorRowMajorImpl()
 // ============================================================
 // A-Dequantization: Scale Factor Application (per-tensor) (GEMV N=1)
 // ============================================================
-// Formula: acc[i] = round(acc[i] * a_post_quant_sf)
+// Formula: acc[i] = acc[i] * a_post_quant_sf
 // Used for GEMV N=1 with scalar scale factor.
 template<utils::kernelInstrType KType>
 template<typename T>
@@ -3201,12 +3196,10 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorScalarImplGEMVN1()
     RegType sfReg = popAndGetScratchReg();
     broadcastAndConvertScalar<T>(sfReg, jit_->ptr[regTmp1]);
 
-    // Apply: acc = round(acc * a_post_quant_sf) for all accumulator registers
+    // Apply: acc = (acc * a_post_quant_sf) for all accumulator registers
     for (int i = 0; i < numRegsPerRow; i++) {
         jit_->vmulps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
                      sfReg);
-        jit_->vrndscaleps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
-                          0x00);
     }
     // Return scratch register to the pool
     scratch_reg_queue.push(sfReg);
@@ -3216,7 +3209,7 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorScalarImplGEMVN1()
 // ============================================================================
 // A-Dequantization: Scale Factor Application per-row (GEMV N=1)
 // ============================================================================
-// Formula: acc[i] = round(acc[i] * a_post_quant_sf)
+// Formula: acc[i] = acc[i] * a_post_quant_sf
 // Used for GEMV N=1 with row-major scale factor.
 template<utils::kernelInstrType KType>
 template<typename T>
@@ -3234,12 +3227,10 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorRowMajorImplGEMVN1()
     // Load scale factor values into registers using abstracted helper
     loadAndConvertRows<T>(regTmp1, scratchLoadRegIdx);
 
-    // Apply: acc = round(acc * a_post_quant_sf) for all accumulator registers
+    // Apply: acc = (acc * a_post_quant_sf) for all accumulator registers
     for (int i = 0; i < numRegsPerRow; i++) {
         jit_->vmulps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
                      RegType(scratchLoadRegIdx + i));
-        jit_->vrndscaleps(RegType(cRegStartIdx + i), RegType(cRegStartIdx + i),
-                          0x00); // Round to nearest even
     }
     restoreScratchQueue(saved_queue);
     return jitGeneratorError::success;
@@ -3281,7 +3272,6 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointScalarImpl()
         jit_->vcvtdq2ps(RegType(scratchLoadRegIdx + i),
                         RegType(scratchLoadRegIdx + i));
         // Use separate multiply and add instead of FMA to match reference
-        // rounding behavior (two rounding points instead of one)
         RegType tempReg = popAndGetScratchReg();
         jit_->vmulps(tempReg, RegType(scratchLoadRegIdx + i), zpReg);
         for (int j = 0; j < MR; j++) {
@@ -3345,7 +3335,6 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointRowMajorImpl()
 
         for (int i = 0; i < numRegsPerRow; i++) {
             // Use separate multiply and add instead of FMA to match reference
-            // rounding behavior (two rounding points instead of one)
             RegType tempReg = popAndGetScratchReg();
             jit_->vmulps(tempReg, RegType(scratchLoadRegIdx + i), zpReg);
             jit_->vaddps(RegType(cRegStartIdx + j * numRegsPerRow + i),
@@ -3524,8 +3513,8 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointImpl(kernelOpsMetaData& op)
     return jitGeneratorError::success;
 }
 
-// A-dequantization: result = round((acc + b_col_sum * a_post_quant_zp) * a_post_quant_sf)
-// Order: (1) zero-point correction, (2) scale factor application with rounding
+// A-dequantization: result = (acc + b_col_sum * a_post_quant_zp) * a_post_quant_sf
+// Order: (1) zero-point correction, (2) scale factor application
 template<utils::kernelInstrType KType>
 jitGeneratorError
 kernelOpsGeneratorX86<KType>::aDQuantize(kernelOpsMetaData& op)

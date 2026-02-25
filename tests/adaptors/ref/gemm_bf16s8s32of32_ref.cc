@@ -274,8 +274,8 @@ aocl_gemm_bf16s8s32of32_ref(const char            order,
                 result_f32 = result_f32 + (b_sum)*a_post_quant_zp;
             }
 
-            // Apply inverse scale factor and round to nearest
-            result_f32 = std::nearbyint(result_f32 * a_post_quant_sf);
+            // Apply inverse scale factor
+            result_f32 = result_f32 * a_post_quant_sf;
 
             // -----------------------------------------------------------------
             // Step 7: Store result
