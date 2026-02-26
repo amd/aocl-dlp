@@ -176,12 +176,44 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::BroadcastAFMAwithB()
 {
+
     for (int i = 0; i < currentMR; i++) {
-        vbroadcastss(RegType(aRegIdx), ptr[regTmpAptr]);
-        add(regTmpAptr, regRsA);
-        for (int j = 0; j < bReg; j++) {
-            vfmadd231ps(RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j),
-                        RegType(aRegIdx));
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            // Fusing broadcast with fma when there is no reuse of A values
+            if (bReg == 1) {
+                // EVEX broadcast path: fuse scalar broadcast from memory
+                // with FMA in a single instruction
+                int imod4 = i % 4;
+                switch (imod4) {
+                    case 0:
+                    case 1:
+                    case 2:
+                        vfmadd231ps(RegType(cRegIdx + i * bReg + 0),
+                                    RegType(bRegIdx + 0),
+                                    ptr_b[regTmpAptr + imod4 * regRsA]);
+                        break;
+                    case 3:
+                        vfmadd231ps(RegType(cRegIdx + i * bReg + 0),
+                                    RegType(bRegIdx + 0),
+                                    ptr_b[regTmpAptr + regTmp2]);
+                        lea(regTmpAptr, ptr[regTmpAptr + 4 * regRsA]);
+                        break;
+                }
+            } else {
+                vbroadcastss(RegType(aRegIdx), ptr[regTmpAptr]);
+                add(regTmpAptr, regRsA);
+                for (int j = 0; j < bReg; j++) {
+                    vfmadd231ps(RegType(cRegIdx + i * bReg + j),
+                                RegType(bRegIdx + j), RegType(aRegIdx));
+                }
+            }
+        } else {
+            vbroadcastss(RegType(aRegIdx), ptr[regTmpAptr]);
+            add(regTmpAptr, regRsA);
+            for (int j = 0; j < bReg; j++) {
+                vfmadd231ps(RegType(cRegIdx + i * bReg + j),
+                            RegType(bRegIdx + j), RegType(aRegIdx));
+            }
         }
     }
     return dlp::jit::jitGeneratorError::success;
@@ -192,6 +224,12 @@ dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::kernelUnroll(int unroll)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
+
+    // 3*rsA is needed for the EVEX broadcast path in BroadcastAFMAwithB
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        lea(regTmp2, ptr[regRsA + regRsA * 2]);
+    }
+
     // Unroll the kernel loop
     for (int p = 0; p < unroll; p++) {
         // copy A ptr to another register
@@ -1230,25 +1268,24 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
 
     L(label_store_result);
 
-    // c downscaling support is currently only implemented with scale beta and
-    // not fused with store
-    if (c_downscale < DLP_F32) {
-        // skip beta scaling if beta is 0
+    // Decoupled beta scaling: scaleBeta() is called separately from
+    // storeResult(). This is required for c_downscale, and on AVX512_ZMM
+    // it is also used for bReg == 1 since scaleBeta() handles both
+    // row-major and column-major C on that ISA.
+    bool decoupleBeta = (c_downscale < DLP_F32);
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        decoupleBeta = decoupleBeta || (bReg == 1);
+    }
+
+    if (decoupleBeta) {
         if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
             RETURN_IF_ERROR(scaleBeta());
         }
-
         RETURN_IF_ERROR(storeResult(false, params.mLoop));
-
+    } else if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
+        RETURN_IF_ERROR(storeResult(false, params.mLoop));
     } else {
-        // store C
-        if (params.betaScalingType == dlp::kernel_frame::scalingType::zero) {
-            // skip beta scaling if beta is 0
-            RETURN_IF_ERROR(storeResult(false, params.mLoop));
-        } else {
-            // beta scaling
-            RETURN_IF_ERROR(storeResult(true, params.mLoop));
-        }
+        RETURN_IF_ERROR(storeResult(true, params.mLoop));
     }
 
     L(".AfterStore");

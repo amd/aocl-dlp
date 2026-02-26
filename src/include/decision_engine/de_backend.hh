@@ -366,9 +366,17 @@ class gemmF32DEBackend : public iDEBackend
         // be used when bf16 API is rerouted to FP32.
         // using rerouted_from_other_backend to check if the DE is rerouted from
         // other backend.
+        //
+        // RD kernel threshold: RD avoids B packing (cost ~ n*k*sizeof(float)).
+        // RD is beneficial when packing overhead exceeds computation benefit.
+        // - Very small m (<=6) with k<=64: avoids lt16 kernel optimizations
+        // - Small n (<=8) with k>=32: packing overhead dominates
+        // - Small m with larger k: row-wise computation favors RD
         if (!hasPostOps && !(rerouted_from_other_backend)
-            && ((n < 48) || (m < 16)) && (cs_b != 1) && (mtag_b == PACK)
-            && (mtag_a == UNPACKED)) {
+            && ((m <= 6 && k <= 64) || (n <= 8 && k >= 32)
+                || (m <= 12 && k >= 128) || (m <= 24 && k >= 256)
+                || (m <= 64 && k >= 512))
+            && (cs_b != 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)) {
             invokeRD = true;
             k_unroll = 4; // equal to intrinsics kernel. To be tuned later.
         }
