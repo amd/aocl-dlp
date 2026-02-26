@@ -2611,6 +2611,9 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
     inLocalLabel();
 
+    // Broadcast 128 to a vector register.
+    // This value will be added to A to convert the broadcasted A values
+    // from signed int8 to unsigned int8 for the VNNI instruction.
     vxorps(RegType(vec128BaseIdx), RegType(vec128BaseIdx),
            RegType(vec128BaseIdx));
     mov(regTmp2, 128);
@@ -2743,6 +2746,13 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(false, true));
+
+            // Re-broadcasting 128 to vec128BaseIdx to reset the register as
+            // it is overwritten for post-ops with high register pressure.
+            vxorps(RegType(vec128BaseIdx), RegType(vec128BaseIdx),
+                   RegType(vec128BaseIdx));
+            mov(regTmp2, 128);
+            vpbroadcastb(RegType(vec128BaseIdx), regTmp2.cvt8());
         } else {
             // Store Result
             RETURN_IF_ERROR(storeY(false, false));
@@ -2901,6 +2911,13 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(true, true));
+
+            // Re-broadcasting 128 to vec128BaseIdx to reset the register as
+            // it is overwritten for post-ops with high register pressure.
+            vxorps(RegType(vec128BaseIdx), RegType(vec128BaseIdx),
+                   RegType(vec128BaseIdx));
+            mov(regTmp2, 128);
+            vpbroadcastb(RegType(vec128BaseIdx), regTmp2.cvt8());
         } else {
             // Store Result
             RETURN_IF_ERROR(storeY(true, false));
