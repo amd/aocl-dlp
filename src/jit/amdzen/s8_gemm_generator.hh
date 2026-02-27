@@ -44,8 +44,9 @@ template<utils::kernelInstrType KType>
 class jitGEMMS8 : public Xbyak::CodeGenerator
 {
   public:
-    // Constructor that takes buffer and its size for JIT code dumping
-    jitGEMMS8(void* buffer, size_t bufferSize);
+    // Constructor that specifies the maximum size of generated JIT code.
+    // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
+    jitGEMMS8(size_t maxSize);
     ~jitGEMMS8()                      = default;
     jitGEMMS8(jitGEMMS8&)             = delete;
     jitGEMMS8& operator=(jitGEMMS8&)  = delete;

@@ -40,8 +40,8 @@ using namespace Xbyak;
 
 // Constructor
 template<utils::kernelInstrType KType>
-jitGEMMF32RD<KType>::jitGEMMF32RD(void* buffer, size_t bufferSize)
-    : Xbyak::CodeGenerator(bufferSize, buffer)
+jitGEMMF32RD<KType>::jitGEMMF32RD(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
     // initialize all non-static members to 0
     nSubBlockSize = 0;

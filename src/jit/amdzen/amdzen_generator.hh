@@ -62,6 +62,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     md_t               c_downscale;
     std::vector<void*> kernelCodeBlocks;
     size_t             kernelSize; // Size of each kernel variant in bytes
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
 
     void setGeneratorKernelMetaInfo(
         dlp::kernel_frame::kernelInstrPreference kInstPref);
@@ -199,6 +200,7 @@ class jitAmdZenBF16 : public dlp::jit::jitGeneratorBase
     md_t                           c_downscale;
     std::vector<void*>             kernelCodeBlocks;
     std::unique_ptr<jitAmdZenFP32> f32JitGenerator;
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
 
     jitAmdZenBF16();
     ~jitAmdZenBF16();
@@ -259,6 +261,7 @@ class jitAmdZenU8S8 : public dlp::jit::jitGeneratorBase
     md_t               K_UNROLL;
     md_t               c_downscale;
     std::vector<void*> kernelCodeBlocks;
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
 
     // u8s8s32-specific parameters
     bool requiresBPacking; // B matrix packing is mandatory for VNNI
@@ -332,6 +335,7 @@ class jitAmdZenS8 : public dlp::jit::jitGeneratorBase
     md_t               K_UNROLL, PREFETCH_C_DIST;
     md_t               c_downscale;
     std::vector<void*> kernelCodeBlocks;
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
 
     jitAmdZenS8();
     ~jitAmdZenS8();

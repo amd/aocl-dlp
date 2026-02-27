@@ -39,8 +39,8 @@ namespace amdzen::GEMMcodeGenerator {
 using namespace Xbyak;
 
 template<utils::kernelInstrType KType>
-jitGEMMBF16<KType>::jitGEMMBF16(void* buffer, size_t bufferSize)
-    : Xbyak::CodeGenerator(bufferSize, buffer)
+jitGEMMBF16<KType>::jitGEMMBF16(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
 }
 

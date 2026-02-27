@@ -45,8 +45,9 @@ template<utils::kernelInstrType KType>
 class jitGEMMF32RD : public Xbyak::CodeGenerator
 {
   public:
-    // Constructor that takes buffer and its size for JIT code dumping
-    jitGEMMF32RD(void* buffer, size_t bufferSize);
+    // Constructor that specifies the maximum size of generated JIT code.
+    // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
+    jitGEMMF32RD(size_t maxSize);
     ~jitGEMMF32RD()                         = default;
     jitGEMMF32RD(jitGEMMF32RD&)             = delete;
     jitGEMMF32RD& operator=(jitGEMMF32RD&)  = delete;

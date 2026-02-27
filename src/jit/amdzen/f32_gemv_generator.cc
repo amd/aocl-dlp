@@ -35,8 +35,8 @@
 namespace amdzen::codegen {
 
 template<utils::kernelInstrType KType>
-jitF32GEMVN1<KType>::jitF32GEMVN1(void* buffer, size_t size)
-    : Xbyak::CodeGenerator(size, buffer) // Call base class constructor
+jitF32GEMVN1<KType>::jitF32GEMVN1(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
 }
 
@@ -1592,8 +1592,8 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 }
 
 template<utils::kernelInstrType KType>
-jitF32GEMVM1<KType>::jitF32GEMVM1(void* buffer, size_t size)
-    : Xbyak::CodeGenerator(size, buffer) // Call base class constructor
+jitF32GEMVM1<KType>::jitF32GEMVM1(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
 }
 

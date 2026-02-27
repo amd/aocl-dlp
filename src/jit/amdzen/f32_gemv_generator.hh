@@ -166,7 +166,7 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
 
   public:
     // Enforcing RAII, disallowing copy/move operations
-    jitF32GEMVN1(void* buffer = nullptr, size_t size = 0);
+    jitF32GEMVN1(size_t maxSize);
     ~jitF32GEMVN1()                         = default;
     jitF32GEMVN1(jitF32GEMVN1&)             = delete;
     jitF32GEMVN1& operator=(jitF32GEMVN1&)  = delete;
@@ -311,7 +311,7 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     //------------------------------------------------
 
   public:
-    jitF32GEMVM1(void* buffer = nullptr, size_t size = 0);
+    jitF32GEMVM1(size_t maxSize);
     ~jitF32GEMVM1()                         = default;
     jitF32GEMVM1(jitF32GEMVM1&)             = delete;
     jitF32GEMVM1(jitF32GEMVM1&&)            = delete;

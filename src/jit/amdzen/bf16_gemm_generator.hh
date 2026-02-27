@@ -46,7 +46,7 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
 {
   public:
     // Constructor that takes buffer and its size for JIT code dumping
-    jitGEMMBF16(void* buffer, size_t bufferSize);
+    jitGEMMBF16(size_t maxSize);
     ~jitGEMMBF16()                        = default;
     jitGEMMBF16(jitGEMMBF16&)             = delete;
     jitGEMMBF16& operator=(jitGEMMBF16&)  = delete;

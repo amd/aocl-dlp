@@ -33,8 +33,8 @@ namespace amdzen::gen {
 using namespace Xbyak;
 
 template<utils::kernelInstrType KType>
-jitU8S8VNNI_GEMM<KType>::jitU8S8VNNI_GEMM(void* buffer, size_t bufferSize)
-    : Xbyak::CodeGenerator(bufferSize, buffer)
+jitU8S8VNNI_GEMM<KType>::jitU8S8VNNI_GEMM(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
 }
 
@@ -841,7 +841,11 @@ jitU8S8VNNI_GEMM<KType>::generateConstantData()
     // These are placed after the function return, so they won't be executed
 
     if (c_downscale == DLP_BF16) {
-        align(16);
+        {
+            size_t remain = getSize() % 16;
+            if (remain)
+                nop(16 - remain);
+        }
         L(label_bf16_round_bias);
         for (int i = 0; i < 16; i++)
             dd(0x00007FFF);

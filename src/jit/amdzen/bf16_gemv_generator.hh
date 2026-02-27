@@ -155,7 +155,7 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError reduceToXmm(int, int, int);
 
   public:
-    jitBF16GEMVN1(void* buffer = nullptr, size_t size = 0);
+    jitBF16GEMVN1(size_t maxSize);
     ~jitBF16GEMVN1()                          = default;
     jitBF16GEMVN1(jitBF16GEMVN1&)             = delete;
     jitBF16GEMVN1(jitBF16GEMVN1&&)            = delete;
@@ -316,7 +316,7 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     //------------------------------------------------
 
   public:
-    jitBF16GEMVM1(void* buffer = nullptr, size_t size = 0);
+    jitBF16GEMVM1(size_t maxSize);
     ~jitBF16GEMVM1()                          = default;
     jitBF16GEMVM1(jitBF16GEMVM1&)             = delete;
     jitBF16GEMVM1(jitBF16GEMVM1&&)            = delete;

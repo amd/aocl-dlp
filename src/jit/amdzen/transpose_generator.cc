@@ -1374,7 +1374,11 @@ void
 TransposeGenerator<KType>::embedSelectors()
 {
     jit_->jmp(".selectorsEnd", jit_->T_NEAR);
-    jit_->align(64);
+    {
+        size_t remain = jit_->getSize() % 64;
+        if (remain)
+            jit_->nop(64 - remain);
+    }
     jit_->L(selectors);
     jit_->db(reinterpret_cast<uint8_t*>(&selector1), sizeof(selector1));
     jit_->db(reinterpret_cast<uint8_t*>(&selector2), sizeof(selector2));

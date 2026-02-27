@@ -56,8 +56,9 @@ jitAmdZenFP32::jitAmdZenFP32()
 
 jitAmdZenFP32::~jitAmdZenFP32()
 {
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock, kernelSize);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
 }
 
@@ -325,35 +326,27 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.N_LEFT  = i;
             params.nfringe = (i != 0);
 
-            void* codeBuffer =
-                utils::jitHelperUtils::allocateJitMemory(kernelSize);
-            if (codeBuffer == nullptr) {
-                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                goto cleanup;
-            }
-            kernelCodeBlocks[i] = codeBuffer;
-
-            // Handle different kernel types based on instruction preference.
+            std::unique_ptr<Xbyak::CodeGenerator> gen;
             switch (kType) {
                 case utils::kernelInstrType::avx2_ymm_16_reg: {
-                    codegen::jitF32GEMVM1<
-                        utils::kernelInstrType::avx2_ymm_16_reg>
-                        base(codeBuffer, kernelSize);
-                    err = base.generateKernel(params);
+                    auto g = std::make_unique<codegen::jitF32GEMVM1<
+                        utils::kernelInstrType::avx2_ymm_16_reg>>(kernelSize);
+                    err    = g->generateKernel(params);
+                    gen    = std::move(g);
                     break;
                 }
                 case utils::kernelInstrType::avx512_ymm_32_reg: {
-                    codegen::jitF32GEMVM1<
-                        utils::kernelInstrType::avx512_ymm_32_reg>
-                        base(codeBuffer, kernelSize);
-                    err = base.generateKernel(params);
+                    auto g = std::make_unique<codegen::jitF32GEMVM1<
+                        utils::kernelInstrType::avx512_ymm_32_reg>>(kernelSize);
+                    err    = g->generateKernel(params);
+                    gen    = std::move(g);
                     break;
                 }
                 case utils::kernelInstrType::avx512_zmm_32_reg: {
-                    codegen::jitF32GEMVM1<
-                        utils::kernelInstrType::avx512_zmm_32_reg>
-                        base(codeBuffer, kernelSize);
-                    err = base.generateKernel(params);
+                    auto g = std::make_unique<codegen::jitF32GEMVM1<
+                        utils::kernelInstrType::avx512_zmm_32_reg>>(kernelSize);
+                    err    = g->generateKernel(params);
+                    gen    = std::move(g);
                     break;
                 }
                 default: {
@@ -364,6 +357,13 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
+            // Must call ready() to readjust jump/branch targets with
+            // respect to any new buffer created as part of AutoGrow mode
+            // in Xbyak.
+            gen->ready();
+            kernelCodeBlocks[i] =
+                const_cast<void*>(static_cast<const void*>(gen->getCode()));
+            codeGenerators.push_back(std::move(gen));
 
             int n_left_suf = (i != 0) ? i : params.NR;
             // The file naming is as such : jit_gemv_m1_kernel.
@@ -445,43 +445,30 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     ((j / 2) == 0) ? dlp::kernel_frame::storageFormat::rowMajor
                                    : dlp::kernel_frame::storageFormat::colMajor;
 
-                void* codeBuffer = kernelCodeBlocks[m_left * 4 + j];
-                // Allocate executable memory
-
-                codeBuffer =
-                    utils::jitHelperUtils::allocateJitMemory(kernelSize);
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-
-                kernelCodeBlocks[m_left * 4 + j] = codeBuffer;
-
-                // Handle different kernel types based on instruction
-                // preference.
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
-                        // Create a new instance of jitAVX512GEMVN1 with the
-                        // code buffer and size
-                        codegen::jitF32GEMVN1<
-                            utils::kernelInstrType::avx512_zmm_32_reg>
-                            base(codeBuffer, kernelSize);
-
-                        err = base.generateKernel(params);
+                        auto g = std::make_unique<codegen::jitF32GEMVN1<
+                            utils::kernelInstrType::avx512_zmm_32_reg>>(
+                            kernelSize);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
                     case utils::kernelInstrType::avx512_ymm_32_reg: {
-                        codegen::jitF32GEMVN1<
-                            utils::kernelInstrType::avx512_ymm_32_reg>
-                            base(codeBuffer, kernelSize);
-                        err = base.generateKernel(params);
+                        auto g = std::make_unique<codegen::jitF32GEMVN1<
+                            utils::kernelInstrType::avx512_ymm_32_reg>>(
+                            kernelSize);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
                     case utils::kernelInstrType::avx2_ymm_16_reg: {
-                        codegen::jitF32GEMVN1<
-                            utils::kernelInstrType::avx2_ymm_16_reg>
-                            base(codeBuffer, kernelSize);
-                        err = base.generateKernel(params);
+                        auto g = std::make_unique<codegen::jitF32GEMVN1<
+                            utils::kernelInstrType::avx2_ymm_16_reg>>(
+                            kernelSize);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
                     default: {
@@ -492,6 +479,13 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[m_left * 4 + j] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 int m_left_suf = (m_left != 0) ? m_left : params.MR;
                 // The file naming is as such : id_jit_gemv_n1_kernels_MR_idx.
@@ -531,43 +525,45 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.MR = MR;
         params.NR = processBlockSize;
 
-        void* codeBuffer = kernelCodeBlocks[0];
-        codeBuffer       = utils::jitHelperUtils::allocateJitMemory(kernelSize);
-        if (codeBuffer == nullptr) {
-            err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-            goto cleanup;
-        }
-        kernelCodeBlocks[0] = codeBuffer;
-
-        switch (kType) {
-            case utils::kernelInstrType::avx512_zmm_32_reg: {
-                GEMMcodeGenerator::jitGEMMF32<
-                    utils::kernelInstrType::avx512_zmm_32_reg>
-                    base(codeBuffer, kernelSize);
-                err = base.generateKernel(params);
-                break;
+        {
+            std::unique_ptr<Xbyak::CodeGenerator> gen;
+            switch (kType) {
+                case utils::kernelInstrType::avx512_zmm_32_reg: {
+                    auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                        utils::kernelInstrType::avx512_zmm_32_reg>>(kernelSize);
+                    err    = g->generateKernel(params);
+                    gen    = std::move(g);
+                    break;
+                }
+                case utils::kernelInstrType::avx512_ymm_32_reg: {
+                    auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                        utils::kernelInstrType::avx512_ymm_32_reg>>(kernelSize);
+                    err    = g->generateKernel(params);
+                    gen    = std::move(g);
+                    break;
+                }
+                case utils::kernelInstrType::avx2_ymm_16_reg: {
+                    auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                        utils::kernelInstrType::avx2_ymm_16_reg>>(kernelSize);
+                    err    = g->generateKernel(params);
+                    gen    = std::move(g);
+                    break;
+                }
+                default: {
+                    err = dlp::jit::jitGeneratorError::error;
+                    break;
+                }
             }
-            case utils::kernelInstrType::avx512_ymm_32_reg: {
-                GEMMcodeGenerator::jitGEMMF32<
-                    utils::kernelInstrType::avx512_ymm_32_reg>
-                    base(codeBuffer, kernelSize);
-                err = base.generateKernel(params);
-                break;
+            if (err != dlp::jit::jitGeneratorError::success) {
+                goto cleanup;
             }
-            case utils::kernelInstrType::avx2_ymm_16_reg: {
-                GEMMcodeGenerator::jitGEMMF32<
-                    utils::kernelInstrType::avx2_ymm_16_reg>
-                    base(codeBuffer, kernelSize);
-                err = base.generateKernel(params);
-                break;
-            }
-            default: {
-                err = dlp::jit::jitGeneratorError::error;
-                break;
-            }
-        }
-        if (err != dlp::jit::jitGeneratorError::success) {
-            goto cleanup;
+            // Must call ready() to readjust jump/branch targets with
+            // respect to any new buffer created as part of AutoGrow mode
+            // in Xbyak.
+            gen->ready();
+            kernelCodeBlocks[0] =
+                const_cast<void*>(static_cast<const void*>(gen->getCode()));
+            codeGenerators.push_back(std::move(gen));
         }
 
         DLP_ENABLE_JIT_DUMP_AND_MONITOR(kernelCodeBlocks[0], kernelSize,
@@ -610,40 +606,30 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 int correspondingMainFringe = 0;
                 deriveGEMMNRAndMaskUse(nr, params, correspondingMainFringe);
 
-                void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
-                // Allocate executable memory
-                codeBuffer =
-                    utils::jitHelperUtils::allocateJitMemory(kernelSize);
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-                kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
-
-                // Architecture specific dispatch happens here.
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
-                        // Generate the kernel for AVX512 ZMM 32 register
-                        GEMMcodeGenerator::jitGEMMF32<
-                            utils::kernelInstrType::avx512_zmm_32_reg>
-                            base(codeBuffer, kernelSize);
-                        err = base.generateKernel(params);
+                        auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                            utils::kernelInstrType::avx512_zmm_32_reg>>(
+                            kernelSize);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
                     case utils::kernelInstrType::avx512_ymm_32_reg: {
-                        // Generate the kernel for AVX512 YMM 32 register
-                        GEMMcodeGenerator::jitGEMMF32<
-                            utils::kernelInstrType::avx512_ymm_32_reg>
-                            base(codeBuffer, kernelSize);
-                        err = base.generateKernel(params);
+                        auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                            utils::kernelInstrType::avx512_ymm_32_reg>>(
+                            kernelSize);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
                     case utils::kernelInstrType::avx2_ymm_16_reg: {
-                        // Generate the kernel for AVX2 YMM 16 register
-                        GEMMcodeGenerator::jitGEMMF32<
-                            utils::kernelInstrType::avx2_ymm_16_reg>
-                            base(codeBuffer, kernelSize);
-                        err = base.generateKernel(params);
+                        auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                            utils::kernelInstrType::avx2_ymm_16_reg>>(
+                            kernelSize);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
                     default:
@@ -653,6 +639,13 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[mr * numNRVariants + nr] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 // params.useMask=false implies a fringe or main kernel.
                 // params.useMask=true implies a lt fringe or lt main kernel.
@@ -667,10 +660,9 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     return dlp::jit::jitGeneratorError::success;
 
 cleanup:
-    // Free the memory allocated for the kernel code blocks if
-    // allocation fails or if the kernel generation fails
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock, kernelSize);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
     return err;
 }
@@ -744,50 +736,46 @@ jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::jitGeneratorContext& jI)
             params.useMask     = true;
             params.numMaskRegs = params.useMask ? 1 : 0;
 
-            void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
-            // Allocate executable memory
-            codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                utils::JIT_KERNEL_SIZE);
-            if (codeBuffer == nullptr) {
-                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                goto cleanup;
-            }
-            kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
-
-            // Architecture specific dispatch happens here.
+            std::unique_ptr<Xbyak::CodeGenerator> gen;
             switch (kType) {
                 case utils::kernelInstrType::avx512_zmm_32_reg: {
-                    // Generate the kernel for AVX512 ZMM 32 register
-                    GEMMcodeGenerator::jitGEMMF32RD<
-                        utils::kernelInstrType::avx512_zmm_32_reg>
-                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
-                    err = base.generateKernel(params);
+                    auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32RD<
+                        utils::kernelInstrType::avx512_zmm_32_reg>>(
+                        utils::JIT_KERNEL_SIZE);
+                    err = g->generateKernel(params);
+                    gen = std::move(g);
                     break;
                 }
                 case utils::kernelInstrType::avx512_ymm_32_reg: {
-                    // Generate the kernel for AVX512 YMM 32 register
-                    GEMMcodeGenerator::jitGEMMF32RD<
-                        utils::kernelInstrType::avx512_ymm_32_reg>
-                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
-                    err = base.generateKernel(params);
+                    auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32RD<
+                        utils::kernelInstrType::avx512_ymm_32_reg>>(
+                        utils::JIT_KERNEL_SIZE);
+                    err = g->generateKernel(params);
+                    gen = std::move(g);
                     break;
                 }
                 case utils::kernelInstrType::avx2_ymm_16_reg: {
-                    // Generate the kernel for AVX2 YMM 16 register
-                    GEMMcodeGenerator::jitGEMMF32RD<
-                        utils::kernelInstrType::avx2_ymm_16_reg>
-                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
-                    err = base.generateKernel(params);
+                    auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32RD<
+                        utils::kernelInstrType::avx2_ymm_16_reg>>(
+                        utils::JIT_KERNEL_SIZE);
+                    err = g->generateKernel(params);
+                    gen = std::move(g);
                     break;
                 }
                 default:
                     err = dlp::jit::jitGeneratorError::error;
                     break;
             }
-
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
+            // Must call ready() to readjust jump/branch targets with
+            // respect to any new buffer created as part of AutoGrow mode
+            // in Xbyak.
+            gen->ready();
+            kernelCodeBlocks[mr * numNRVariants + nr] =
+                const_cast<void*>(static_cast<const void*>(gen->getCode()));
+            codeGenerators.push_back(std::move(gen));
 
             // params.useMask=false implies a fringe or main kernel.
             // params.useMask=true implies a lt fringe or lt main kernel.
@@ -801,10 +789,9 @@ jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::jitGeneratorContext& jI)
     return dlp::jit::jitGeneratorError::success;
 
 cleanup:
-    // Free the memory allocated for the kernel code blocks if
-    // allocation fails or if the kernel generation fails
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock, kernelSize);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
     return err;
 }
@@ -1201,9 +1188,9 @@ jitAmdZenBF16::jitAmdZenBF16()
 
 jitAmdZenBF16::~jitAmdZenBF16()
 {
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
 }
 
@@ -1301,21 +1288,21 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.RS_B_N_LEFT_16   = (params.N_LEFT_16) * 2;
             params.RS_B_N_LEFT_LT16 = 32;
 
-            void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+            auto gen = std::make_unique<codegen::jitBF16GEMVM1<
+                utils::kernelInstrType::avx512_zmm_32_reg>>(
                 utils::JIT_KERNEL_SIZE);
-            if (codeBuffer == nullptr) {
-                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                goto cleanup;
-            }
-            kernelCodeBlocks[i] = codeBuffer;
-
-            codegen::jitBF16GEMVM1<utils::kernelInstrType::avx512_zmm_32_reg>
-                base(codeBuffer, utils::JIT_KERNEL_SIZE);
-            err = base.generateKernel(params);
+            err = gen->generateKernel(params);
 
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
+            // Must call ready() to readjust jump/branch targets with
+            // respect to any new buffer created as part of AutoGrow mode
+            // in Xbyak.
+            gen->ready();
+            kernelCodeBlocks[i] =
+                const_cast<void*>(static_cast<const void*>(gen->getCode()));
+            codeGenerators.push_back(std::move(gen));
 
             int n_left_suf = (i != 0) ? i : params.NR;
             // The file naming is as such : jit_gemv_m1_kernel.
@@ -1360,22 +1347,6 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.mfringe = (m_left != 0);
             // Generate 4 kernels for each m_left
             for (int variant = 0; variant < 4; variant++) {
-                void* codeBuffer = kernelCodeBlocks[m_left * 4 + variant];
-
-                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                    utils::JIT_KERNEL_SIZE);
-
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-
-                kernelCodeBlocks[m_left * 4 + variant] = codeBuffer;
-
-                codegen::jitBF16GEMVN1<
-                    utils::kernelInstrType::avx512_zmm_32_reg>
-                    base(codeBuffer, utils::JIT_KERNEL_SIZE);
-
                 params.mloop = (variant == 1)
                                || (variant == 3); // 1,3 has mloop true
                 params.yFormat =
@@ -1384,10 +1355,20 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                         : dlp::kernel_frame::storageFormat::
                               colMajor; // 2,3 has column major true
 
-                err = base.generateKernel(params);
+                auto gen = std::make_unique<codegen::jitBF16GEMVN1<
+                    utils::kernelInstrType::avx512_zmm_32_reg>>(
+                    utils::JIT_KERNEL_SIZE);
+                err = gen->generateKernel(params);
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[m_left * 4 + variant] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[m_left * 4 + variant],
@@ -1436,24 +1417,20 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 params.NR          = (nr * numElemsPerReg);
                 params.useMask     = (nr == 0);
                 params.numMaskRegs = (params.useMask) ? 1 : 0;
-                void* codeBuffer   = kernelCodeBlocks[mr * numNRVariants + nr];
-                // Allocate executable memory
-                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+                auto gen = std::make_unique<GEMMcodeGenerator::jitGEMMBF16<
+                    utils::kernelInstrType::avx512_zmm_32_reg>>(
                     utils::JIT_KERNEL_SIZE);
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-                kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
-
-                GEMMcodeGenerator::jitGEMMBF16<
-                    utils::kernelInstrType::avx512_zmm_32_reg>
-                    base(codeBuffer, utils::JIT_KERNEL_SIZE);
-
-                err = base.generateKernel(params);
+                err = gen->generateKernel(params);
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[mr * numNRVariants + nr] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[mr * numNRVariants + nr],
@@ -1465,11 +1442,9 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
     return dlp::jit::jitGeneratorError::success;
 cleanup:
-    // Free the memory allocated for the kernel code blocks if
-    // allocation fails or if the kernel generation fails
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
     return err;
 }
@@ -1695,9 +1670,9 @@ jitAmdZenU8S8::jitAmdZenU8S8()
 
 jitAmdZenU8S8::~jitAmdZenU8S8()
 {
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
 }
 
@@ -1790,22 +1765,20 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.N_LEFT  = i;
             params.nfringe = (i != 0);
 
-            void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
+            auto gen = std::make_unique<amdzen::gen::jitU8S8VNNI_GEMVM1<
+                utils::kernelInstrType::avx512_zmm_32_reg>>(
                 utils::JIT_KERNEL_SIZE);
-            if (codeBuffer == nullptr) {
-                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                goto cleanup;
-            }
-            kernelCodeBlocks[i] = codeBuffer;
-
-            amdzen::gen::jitU8S8VNNI_GEMVM1<
-                utils::kernelInstrType::avx512_zmm_32_reg>
-                base(codeBuffer, utils::JIT_KERNEL_SIZE);
-
-            err = base.generateKernel(params);
+            err = gen->generateKernel(params);
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
+            // Must call ready() to readjust jump/branch targets with
+            // respect to any new buffer created as part of AutoGrow mode
+            // in Xbyak.
+            gen->ready();
+            kernelCodeBlocks[i] =
+                const_cast<void*>(static_cast<const void*>(gen->getCode()));
+            codeGenerators.push_back(std::move(gen));
             int n_left_suf = (i != 0) ? i : params.NR;
             DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                 kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
@@ -1856,29 +1829,15 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     ((j / 2) == 0) ? dlp::kernel_frame::storageFormat::rowMajor
                                    : dlp::kernel_frame::storageFormat::colMajor;
 
-                void* codeBuffer = kernelCodeBlocks[m_left * 4 + j];
-                // Allocate executable memory
-
-                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                    utils::JIT_KERNEL_SIZE);
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-
-                kernelCodeBlocks[m_left * 4 + j] = codeBuffer;
-
-                // Handle different kernel types based on instruction
-                // preference.
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
-                        // Create a new instance of jitAVX512GEMVN1 with the
-                        // code buffer and size
-                        amdzen::gen::jitU8S8VNNI_GEMVN1<
-                            utils::kernelInstrType::avx512_zmm_32_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
-
-                        err = base.generateKernel(params);
+                        auto g =
+                            std::make_unique<amdzen::gen::jitU8S8VNNI_GEMVN1<
+                                utils::kernelInstrType::avx512_zmm_32_reg>>(
+                                utils::JIT_KERNEL_SIZE);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
                     default: {
@@ -1889,6 +1848,13 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[m_left * 4 + j] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 int m_left_suf = (m_left != 0) ? m_left : params.MR;
                 // The file naming is as such : jit_gemv_n1_kernels_MR_idx.
@@ -1922,14 +1888,6 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             for (md_t nr_var = 0; nr_var < numNRVariants; nr_var++) {
                 int variant_idx = mr_var * numNRVariants + nr_var;
 
-                void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                    utils::JIT_KERNEL_SIZE);
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-                kernelCodeBlocks[variant_idx] = codeBuffer;
-
                 // Set parameters for this specific kernel variant
                 params.c_downscale = c_downscale;
                 params.MR          = mr_var == 0 ? MR : mr_var;
@@ -1938,19 +1896,16 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 params.useMask     = (nr_var == 0);
                 params.numMaskRegs = (params.useMask) ? 1 : 0;
 
-                // Generate u8s8s32 kernel using template dispatch
-                // Architecture specific dispatch happens here.
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
-                        // Generate the kernel for AVX512 ZMM 32 register with
-                        // VNNI
-                        amdzen::gen::jitU8S8VNNI_GEMM<
-                            utils::kernelInstrType::avx512_zmm_32_reg>
-                            vnniGen(codeBuffer, utils::JIT_KERNEL_SIZE);
-                        err = vnniGen.generateKernel(params);
+                        auto g = std::make_unique<amdzen::gen::jitU8S8VNNI_GEMM<
+                            utils::kernelInstrType::avx512_zmm_32_reg>>(
+                            utils::JIT_KERNEL_SIZE);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
-
                     default:
                         err = dlp::jit::jitGeneratorError::error;
                         break;
@@ -1958,6 +1913,13 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[variant_idx] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 // Enhanced file naming with fringe info and index
                 bool isFringe =
@@ -1973,13 +1935,9 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     return dlp::jit::jitGeneratorError::success;
 
 cleanup:
-    // Free the memory allocated for the kernel code blocks if
-    // allocation fails or if the kernel generation fails
-    for (auto& codeBlock : kernelCodeBlocks) {
-        if (codeBlock != nullptr) {
-            utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                       utils::JIT_KERNEL_SIZE);
-        }
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
     return err;
 }
@@ -2199,9 +2157,9 @@ jitAmdZenS8::jitAmdZenS8()
 
 jitAmdZenS8::~jitAmdZenS8()
 {
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
 }
 
@@ -2299,25 +2257,16 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.N_LEFT_LT16 = i % 16;
             params.nfringe     = (i != 0);
 
-            void* codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                utils::JIT_KERNEL_SIZE);
-            if (codeBuffer == nullptr) {
-                err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                goto cleanup;
-            }
-            kernelCodeBlocks[i] = codeBuffer;
-
+            std::unique_ptr<Xbyak::CodeGenerator> gen;
             switch (kType) {
                 case utils::kernelInstrType::avx512_zmm_32_reg: {
-                    amdzen::gen::jitGEMVS8M1<
-                        utils::kernelInstrType::avx512_zmm_32_reg>
-                        base(codeBuffer, utils::JIT_KERNEL_SIZE);
-                    err = base.generateKernel(params);
-
+                    auto g = std::make_unique<amdzen::gen::jitGEMVS8M1<
+                        utils::kernelInstrType::avx512_zmm_32_reg>>(
+                        utils::JIT_KERNEL_SIZE);
+                    err = g->generateKernel(params);
+                    gen = std::move(g);
                     break;
                 }
-
-                // Not Supported!
                 case utils::kernelInstrType::avx512_ymm_32_reg:
                 case utils::kernelInstrType::avx2_ymm_16_reg:
                 default:
@@ -2327,6 +2276,13 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             if (err != dlp::jit::jitGeneratorError::success) {
                 goto cleanup;
             }
+            // Must call ready() to readjust jump/branch targets with
+            // respect to any new buffer created as part of AutoGrow mode
+            // in Xbyak.
+            gen->ready();
+            kernelCodeBlocks[i] =
+                const_cast<void*>(static_cast<const void*>(gen->getCode()));
+            codeGenerators.push_back(std::move(gen));
 
             int n_left_suf = (i != 0) ? i : params.NR;
             DLP_ENABLE_JIT_DUMP_AND_MONITOR(
@@ -2377,30 +2333,16 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                     ((j / 2) == 0) ? dlp::kernel_frame::storageFormat::rowMajor
                                    : dlp::kernel_frame::storageFormat::colMajor;
 
-                void* codeBuffer = kernelCodeBlocks[m_left * 4 + j];
-                // Allocate executable memory
-                codeBuffer = utils::jitHelperUtils::allocateJitMemory(
-                    utils::JIT_KERNEL_SIZE);
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-
-                kernelCodeBlocks[m_left * 4 + j] = codeBuffer;
-
-                // Handle different kernel types based on instruction
-                // preference.
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
-                        amdzen::gen::jitGEMVS8N1<
-                            utils::kernelInstrType::avx512_zmm_32_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
-                        err = base.generateKernel(params);
-
+                        auto g = std::make_unique<amdzen::gen::jitGEMVS8N1<
+                            utils::kernelInstrType::avx512_zmm_32_reg>>(
+                            utils::JIT_KERNEL_SIZE);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
-
-                    // Not Supported!
                     case utils::kernelInstrType::avx512_ymm_32_reg:
                     case utils::kernelInstrType::avx2_ymm_16_reg:
                     default:
@@ -2410,6 +2352,13 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[m_left * 4 + j] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 int m_left_suf = (m_left != 0) ? m_left : params.MR;
                 // The file naming is as such : id_jit_s8_gemv_n1_kernel_MR_idx.
@@ -2451,29 +2400,16 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
                 params.numMaskRegs = (params.useMask) ? 1 : 0;
 
-                // Allocate executable memory
-                void* codeBuffer = kernelCodeBlocks[mr * numNRVariants + nr];
-                codeBuffer       = utils::jitHelperUtils::allocateJitMemory(
-                    utils::JIT_KERNEL_SIZE);
-                if (codeBuffer == nullptr) {
-                    err = dlp::jit::jitGeneratorError::errorAllocatingMemory;
-                    goto cleanup;
-                }
-
-                kernelCodeBlocks[mr * numNRVariants + nr] = codeBuffer;
-
-                // Architecture specific dispatch happens here.
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
-                        // Generate the kernel for AVX512 ZMM 32 register
-                        GEMMcodeGenerator::jitGEMMS8<
-                            utils::kernelInstrType::avx512_zmm_32_reg>
-                            base(codeBuffer, utils::JIT_KERNEL_SIZE);
-                        err = base.generateKernel(params);
+                        auto g = std::make_unique<GEMMcodeGenerator::jitGEMMS8<
+                            utils::kernelInstrType::avx512_zmm_32_reg>>(
+                            utils::JIT_KERNEL_SIZE);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
                         break;
                     }
-
-                    // Not Supported!
                     case utils::kernelInstrType::avx512_ymm_32_reg:
                     case utils::kernelInstrType::avx2_ymm_16_reg:
                     default:
@@ -2483,6 +2419,13 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
+                // Must call ready() to readjust jump/branch targets with
+                // respect to any new buffer created as part of AutoGrow mode
+                // in Xbyak.
+                gen->ready();
+                kernelCodeBlocks[mr * numNRVariants + nr] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
 
                 DLP_ENABLE_JIT_DUMP_AND_MONITOR(
                     kernelCodeBlocks[mr * numNRVariants + nr],
@@ -2495,11 +2438,9 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     return dlp::jit::jitGeneratorError::success;
 
 cleanup:
-    // Free the memory allocated for the kernel code blocks if
-    // allocation fails or if the kernel generation fails
-    for (auto& codeBlock : kernelCodeBlocks) {
-        utils::jitHelperUtils::deallocateJitMemory(codeBlock,
-                                                   utils::JIT_KERNEL_SIZE);
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
     }
     return err;
 }

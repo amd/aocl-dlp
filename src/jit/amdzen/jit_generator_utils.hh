@@ -51,50 +51,13 @@
 
 namespace amdzen::utils {
 
-class jitHelperUtils
-{
-  public:
-    static void* allocateJitMemory(std::size_t jitKernSize)
-    {
-        void* codeBuffer = nullptr;
-#if DLP_OS_WINDOWS
-        codeBuffer =
-            VirtualAlloc(nullptr, jitKernSize, MEM_COMMIT | MEM_RESERVE,
-                         PAGE_EXECUTE_READWRITE);
-#else
-        codeBuffer =
-            mmap(nullptr, jitKernSize, PROT_READ | PROT_WRITE | PROT_EXEC,
-                 MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        if (codeBuffer == MAP_FAILED) {
-            codeBuffer = nullptr;
-        }
-#endif
-        return codeBuffer;
-    }
-
-    static void deallocateJitMemory(void*& codeBuffer, std::size_t jitKernSize)
-    {
-        if (codeBuffer != nullptr) {
-#if DLP_OS_WINDOWS
-            VirtualFree(codeBuffer, 0, MEM_RELEASE);
-#else
-            munmap(codeBuffer, jitKernSize);
-#endif
-            codeBuffer = nullptr;
-        }
-    }
-};
-
 typedef void (*jit_kernel)(dlp::kernels::gemmParams*);
 using jit_gemv_n1_kernel = void (*)(dlp::kernels::gemvN1Params*);
 using jit_gemv_m1_kernel = void (*)(dlp::kernels::gemvM1Params*);
 
-// JIT_KERNEL_SIZE has been increased from 8 * 4096 to 16 * 4096 to accommodate
-// the larger code size required for M=1 kernels. This change ensures that
-// generated kernels do not overflow the buffer, but may cause excessive memory
-// usage for smaller kernels. Consider making this size dynamic in the future
-// to optimize memory usage.
-constexpr uint64_t JIT_KERNEL_SIZE = 16 * 4096;
+// This size is used to allocate the memory for the JIT code generator, where
+// xbyak in autogrow mode will automatically grow the buffer size if needed.
+constexpr uint64_t JIT_KERNEL_SIZE = 8 * 4096;
 
 enum class kernelInstrType : uint16_t
 {

@@ -37,8 +37,8 @@ using namespace Xbyak;
 
 // Begin S8 GEMV N=1 JIT
 template<utils::kernelInstrType KType>
-jitGEMVS8N1<KType>::jitGEMVS8N1(void* buffer, size_t bufferSize)
-    : Xbyak::CodeGenerator(bufferSize, buffer)
+jitGEMVS8N1<KType>::jitGEMVS8N1(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
 }
 
@@ -1573,8 +1573,8 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
 // Begin S8 GEMV M=1 JIT
 template<utils::kernelInstrType KType>
-jitGEMVS8M1<KType>::jitGEMVS8M1(void* buffer, size_t bufferSize)
-    : Xbyak::CodeGenerator(bufferSize, buffer)
+jitGEMVS8M1<KType>::jitGEMVS8M1(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
 }
 

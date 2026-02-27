@@ -372,7 +372,11 @@ kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
     // Using instance-specific Xbyak::Label to avoid any potential conflicts
     // with string labels in multi-threaded kernel generation scenarios
     jit_->jmp(table_store_end, jit_->T_NEAR);
-    jit_->align(64);
+    {
+        size_t remain = jit_->getSize() % 64;
+        if (remain)
+            jit_->nop(64 - remain);
+    }
     jit_->L(tables);
     jit_->db(reinterpret_cast<uint8_t*>(&gelu_consts), sizeof(gelu_consts));
     jit_->db(reinterpret_cast<uint8_t*>(&gelu_macros), sizeof(gelu_macros));
@@ -1898,7 +1902,11 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
     };
 
     jit_->jmp(".offset_end", jit_->T_NEAR);
-    jit_->align(64);
+    {
+        size_t remain = jit_->getSize() % 64;
+        if (remain)
+            jit_->nop(64 - remain);
+    }
     jit_->L(offsets_label);
     jit_->db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
     jit_->L(".offset_end");

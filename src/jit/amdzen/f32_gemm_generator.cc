@@ -40,8 +40,8 @@ namespace amdzen::GEMMcodeGenerator {
 using namespace Xbyak;
 
 template<utils::kernelInstrType KType>
-jitGEMMF32<KType>::jitGEMMF32(void* buffer, size_t bufferSize)
-    : Xbyak::CodeGenerator(bufferSize, buffer)
+jitGEMMF32<KType>::jitGEMMF32(size_t maxSize)
+    : Xbyak::CodeGenerator(maxSize, Xbyak::AutoGrow)
 {
 }
 
@@ -977,7 +977,11 @@ jitGEMMF32<KType>::scaleBetaColumnMajor()
 
     if (!dumpedOffsets) {
         jmp("offsets_end", T_NEAR);
-        align(64);
+        {
+            size_t remain = getSize() % 64;
+            if (remain)
+                nop(64 - remain);
+        }
         L(offsets);
         int64_t offsets[16] = { 0, 1, 2,  3,  4,  5,  6,  7,
                                 8, 9, 10, 11, 12, 13, 14, 15 };
