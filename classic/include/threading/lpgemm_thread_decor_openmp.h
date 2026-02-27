@@ -69,6 +69,8 @@ GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
 GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
     bfloat16, int8_t, float, float, bf16s4f32of32)
 GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    bfloat16, uint8_t, float, float, bf16u4f32of32)
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
     int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
 GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
     bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32)
@@ -141,6 +143,7 @@ GEN_LPGEMM_DECORATOR_FN_DECL(float16, float16, float16, float16, f16f16f16of16)
 
 // MP, GRP, Q variants (mutable mtag_b)
 GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, int8_t, float, float, bf16s4f32of32)
+GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, uint8_t, float, float, bf16u4f32of32)
 GEN_LPGEMM_DECORATOR_FN_DECL(
     int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
 GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32)

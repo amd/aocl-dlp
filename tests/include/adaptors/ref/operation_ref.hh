@@ -45,6 +45,7 @@ using dlp::testing::framework::MatrixAddParam;
 using dlp::testing::framework::MatrixMulParam;
 using dlp::testing::framework::OperationParams;
 using dlp::testing::framework::ScaleParam;
+using dlp::testing::framework::WOQParam;
 
 // Forward declaration for friend class
 class UalRef;
@@ -69,7 +70,8 @@ class RefOperation : public IOperation
                                        BiasParam,
                                        MatrixAddParam,
                                        MatrixMulParam,
-                                       AQuantParam>;
+                                       AQuantParam,
+                                       WOQParam>;
 
   private:
     bool m_finalized = false;
@@ -88,12 +90,14 @@ class RefOperation : public IOperation
         m_matrix_mul_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::AQuantParam>>
         m_a_quant_ops;
+    std::vector<std::unique_ptr<dlp::testing::framework::WOQParam>> m_woq_ops;
     // Helper methods for batch conversion (called once in finalize)
     void convertElementWiseOperations();
     void convertSumOperations();
     void convertBiasOperations();
     void convertMatrixAddOperations();
     void convertMatrixMulOperations();
+    void convertWOQOperations();
     void buildSequenceVector();
     void convertA_QuantOperations();
 

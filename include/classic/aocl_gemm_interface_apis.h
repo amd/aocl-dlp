@@ -715,6 +715,46 @@ aocl_gemm_bf16s4f32of32(const char      order,
 
 /// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
+aocl_gemm_bf16u4f32of32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const float     alpha,
+                        const bfloat16* a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const uint8_t*  b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const float     beta,
+                        float*          c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata);
+
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
+aocl_gemm_bf16u4f32obf16(const char      order,
+                         const char      transa,
+                         const char      transb,
+                         const md_t      m,
+                         const md_t      n,
+                         const md_t      k,
+                         const float     alpha,
+                         const bfloat16* a,
+                         const md_t      lda,
+                         const char      mem_format_a,
+                         const uint8_t*  b,
+                         const md_t      ldb,
+                         const char      mem_format_b,
+                         const float     beta,
+                         bfloat16*       c,
+                         const md_t      ldc,
+                         dlp_metadata_t* metadata);
+
+/// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16s4f32obf16(const char      order,
                          const char      transa,
                          const char      transb,

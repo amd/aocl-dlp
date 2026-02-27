@@ -60,6 +60,14 @@ typedef void (*pack_s4bf16)(bfloat16*,
                             md_t*,
                             lpgemm_pre_op_attr);
 
+typedef void (*pack_u4bf16)(bfloat16*,
+                            const uint8_t*,
+                            const md_t,
+                            const md_t,
+                            md_t*,
+                            md_t*,
+                            lpgemm_pre_op_attr);
+
 typedef void (*pack_bf16)(bfloat16*,
                           const bfloat16*,
                           const md_t,
@@ -119,6 +127,18 @@ packb_nr64_bf16s4f32of32(int8_t*          pack_b_buffer,
                          AOCL_MATRIX_TYPE mtag);
 
 void
+packb_nr64_bf16u4f32of32(uint8_t*         pack_b_buffer,
+                         const uint8_t*   b,
+                         const md_t       rs_b,
+                         const md_t       cs_b,
+                         const md_t       NC,
+                         const md_t       KC,
+                         md_t*            rs_p,
+                         md_t*            cs_p,
+                         lpgemm_pre_op*   pre_op,
+                         AOCL_MATRIX_TYPE mtag);
+
+void
 packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
                             const int8_t*      b,
                             const md_t         NC,
@@ -126,6 +146,27 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
                             md_t*              rs_p,
                             md_t*              cs_p,
                             lpgemm_pre_op_attr pre_ops_attr);
+
+void
+packsclb_nr64_bf16u4f32of32(bfloat16*          packb_bf16,
+                            const uint8_t*     b,
+                            const md_t         NC,
+                            const md_t         KC,
+                            md_t*              rs_p,
+                            md_t*              cs_p,
+                            lpgemm_pre_op_attr pre_ops_attr);
+
+void
+packsclb_nr1_bf16s4f32of32(bfloat16*          packb_bf16,
+                           const int8_t*      b,
+                           const md_t         KC,
+                           lpgemm_pre_op_attr pre_ops_attr);
+
+void
+packsclb_nr1_bf16u4f32of32(bfloat16*          packb_bf16,
+                           const uint8_t*     b,
+                           const md_t         KC,
+                           lpgemm_pre_op_attr pre_ops_attr);
 
 void
 packa_mr16_bf16bf16f32of32(bfloat16*       pack_a_buffer,

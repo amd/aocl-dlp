@@ -27,9 +27,9 @@
  */
 
 /*
- * Framework for GEMM with bfloat16 A and signed 4-bit (s4) quantized B
- * (symmetric weight-only quantization). B is dequantized to bf16 via pre-ops
- * (scale only) then the standard bf16*bf16 micro-kernel runs. B must be
+ * Framework for GEMM with bfloat16 A and unsigned 4-bit (u4) quantized B
+ * (asymmetric weight-only quantization). B is dequantized to bf16 via pre-ops
+ * (scale/zero-point) then the standard bf16*bf16 micro-kernel runs. B must be
  * provided in reordered format.
  *
  */
@@ -61,7 +61,7 @@ typedef void (*lpgemm_rowvar_bf16)(const md_t,
                                    lpgemm_post_op_attr);
 
 // B should always be packed.
-LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
+LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
 {
     // Extract operations from bundle into local variables
     LPGEMM_OPS_EXTRACT(ops);
@@ -80,7 +80,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
     md_t           a_block_stride = 0;
 
     const bfloat16* b_use     = NULL;
-    int8_t*         b_reorder = NULL;
+    uint8_t*        b_reorder = NULL;
     md_t            rs_b_use  = rs_b;
     md_t            cs_b_use  = cs_b;
 
@@ -110,7 +110,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
     // To decide whether to apply post ops or not.
     bool is_last_k = FALSE;
 
-    // To decide whether to use original s8 C or temp buffer for beta scale.
+    // To decide whether to use original C or temp buffer for beta scale.
     bool is_first_k = FALSE;
 
     lpgemm_post_op_attr post_ops_attr;
@@ -208,7 +208,8 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                 }
 
                 c_use_jc = (float*)temp_scal_c_buffer_bf16;
-                // Temp buffer layout: rows contiguous per thread (stride nc0).
+                // The temp c buffer stride is modified as opposed to original C
+                // matrix.
                 rs_c_use = nc0;
             }
         }
@@ -227,13 +228,13 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
             // kc0 needs to be a multiple of 2 so that it can be
             // used with dpbf16_ps instruction. Padding is added in
             // cases this condition is not satisfied, and therefore
-            // the kc0 offsets used for packed/reordered buffers
-            // needs to be updated.
+            // the k offset used for packed/reordered buffer needs to be
+            // updated.
             md_t kc0_updated = kc0;
             kc0_updated += (kc0_updated & 0x1);
 
             // B is always supposed to be reordered.
-            b_reorder = (int8_t*)b
+            b_reorder = (uint8_t*)b
                         + ((jc_cur_loop * k_updated) + (n_sub_updated * pc)
                            + (jc_cur_loop_rem * kc0_updated))
                               / 2;
@@ -283,21 +284,20 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                 pre_ops_attr.pre_op_b_j =
                     jc_cur_loop + jc_cur_loop_rem + jc_packb_start;
 
-                // Ensure thread ranges are valid, especially cases where no:
-                // of threads available for parallelization are greater than
-                // no: of B panel NR chunks.
+                // Ensure thread ranges are valid, especially when no. of
+                // threads exceeds no. of B panel NR chunks.
                 if ((jc_packb_end > jc_packb_start)
                     && (jc_packb_start < (jc + nc0))) {
                     /* Use dedicated nr1 packer for single-column (gemv): output
                      * layout is contiguous (2 bf16 per k-pair), required by
                      * JIT gemvn1; generic packer uses NR-stride layout. */
                     if (n == 1) {
-                        packsclb_nr1_bf16s4f32of32(
+                        packsclb_nr1_bf16u4f32of32(
                             pack_b_buffer_bf16 + (jc_packb_start * kc0_updated),
                             b_reorder + (jc_packb_start * kc0_updated) / 2, kc0,
                             pre_ops_attr);
                     } else {
-                        ((pack_s4bf16)lcntx->packsclb_fun_ptr)(
+                        ((pack_u4bf16)lcntx->packsclb_fun_ptr)(
                             pack_b_buffer_bf16 + (jc_packb_start * kc0_updated),
                             b_reorder + (jc_packb_start * kc0_updated) / 2,
                             (jc_packb_end - jc_packb_start), kc0, &rs_b_use,
@@ -360,7 +360,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
                     if (mtag_b == PACK_NR) {
-                        int8_t* b_jr = b_reorder + (jr * kc0_updated) / 2;
+                        uint8_t* b_jr = b_reorder + (jr * kc0_updated) / 2;
                         pre_ops_attr.pre_op_b_i = pc;
                         pre_ops_attr.pre_op_b_j =
                             jc_cur_loop + jc_cur_loop_rem + jr;
@@ -371,15 +371,14 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                         /* n==1: use nr1 packer for contiguous layout (gemvn1).
                          */
                         if (n == 1) {
-                            packsclb_nr1_bf16s4f32of32(b_use_jr, b_jr, kc0,
+                            packsclb_nr1_bf16u4f32of32(b_use_jr, b_jr, kc0,
                                                        pre_ops_attr);
                         } else {
-                            ((pack_s4bf16)lcntx->packsclb_fun_ptr)(
+                            ((pack_u4bf16)lcntx->packsclb_fun_ptr)(
                                 b_use_jr, b_jr, nr0, kc0, &rs_b_use, &cs_b_use,
                                 pre_ops_attr);
                         }
 
-                        /* packed B kernel */
                         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                             dlp_execute_kernel(
                                 lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
@@ -399,7 +398,6 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
                         bfloat16* b_use_jr =
                             (bfloat16*)b_use + (jr * kc0_updated);
 
-                        /* packed B kernel */
                         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                             dlp_execute_kernel(
                                 lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
@@ -419,15 +417,15 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
 #if (defined(DLP_KERNELS_ZEN4))
                     else // mtag_b == UNPACKED
                     {
-                        int8_t* b_jr = b_reorder + (jr * kc0_updated) / 2;
+                        uint8_t* b_jr = b_reorder + (jr * kc0_updated) / 2;
 
                         /* set offsets to determine scale factors and
                          * zero-point values */
                         pre_ops_attr.pre_op_b_i = pc;
                         pre_ops_attr.pre_op_b_j =
                             jc_cur_loop + jc_cur_loop_rem + jr;
-                        /* bf16s4f32of32 kernel */
-                        lpgemm_rowvar_bf16s4f32of32_6x64m(
+                        /* bf16u4f32of32 kernel */
+                        lpgemm_rowvar_bf16u4f32of32_6x64m(
                             mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
                             a_block_stride, b_jr, rs_b_use, cs_b_use,
                             (c_use_ic + jr), rs_c_use, 1, alpha, beta0,

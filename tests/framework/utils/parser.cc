@@ -55,7 +55,7 @@ namespace dlp::testing::utils {
 // Constants for reproducible random quantization parameters
 constexpr unsigned int RANDOM_SEED = 12345; // Fixed seed for reproducibility
 constexpr float MIN_VALUE = 1.0f;  // Minimum value for random quant params
-constexpr float MAX_VALUE = 20.0f; // Maximum value for random quant params
+constexpr float MAX_VALUE = 15.0f; // Maximum value for random quant params
 
 // Helper functions for parameter extraction
 double
@@ -838,7 +838,7 @@ MicroTest::createOperationParam(
                 .build();
         }
     } else if (config.type == "WOQ") {
-        // WOQ: Weight-Only Quantization for bf16s4
+        // WOQ: Weight-Only Quantization for bf16s4/bf16u4
         // Parse scale_factor_len
         std::string sf_len    = "1"; // default
         auto        sf_len_it = config.params.find("scale_factor_len");
@@ -861,37 +861,38 @@ MicroTest::createOperationParam(
         }
 
         // Create scale factor matrix based on length specification
-        Matrix b_scale_factor_matrix;
-        // Use fixed seed for reproducible random values
+        Matrix sf_matrix;
+        // Use fixed seed for reproducible random values across DLP and REF
         std::mt19937                          gen(RANDOM_SEED);
         std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
-
         if (sf_len == "n") {
-            // Per-channel quantization: one scale per output channel
             std::vector<float> sf_data(getN());
             for (size_t i = 0; i < sf_data.size(); ++i) {
-                // Generate random scale values between MIN_VALUE and MAX_VALUE
                 sf_data[i] = dist(gen);
             }
-            b_scale_factor_matrix = Matrix::fromVector(sf_data, sf_type);
+            sf_matrix = Matrix::fromVector(sf_data, sf_type);
         } else {
-            // Per-tensor quantization: single scale for entire matrix
-            float sf_value        = dist(gen);
-            b_scale_factor_matrix = Matrix::fromValue(sf_value, sf_type);
+            float sf_value = dist(gen);
+            sf_matrix      = Matrix::fromValue(sf_value, sf_type);
         }
 
+        // Parse optional zero point for asymmetric quantization
+        Matrix      zp_matrix;
+        bool        has_zp = false;
+        std::string zp_len = "1";
+
         // Parse zero_point_len
-        std::string zp_len    = "1"; // default
-        auto        zp_len_it = config.params.find("zero_point_len");
+        auto zp_len_it = config.params.find("zero_point_len");
         if (zp_len_it != config.params.end() && !zp_len_it->second.empty()) {
             auto   idx_it = param_indices.find("zero_point_len");
             size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
             idx        = std::min(idx, zp_len_it->second.size() - 1);
             zp_len     = std::any_cast<std::string>(zp_len_it->second[idx]);
+            has_zp     = true;
         }
 
         // Parse zero_point_type
-        MatrixType zp_type    = MatrixType::f32; // default
+        MatrixType zp_type    = MatrixType::f32;
         auto       zp_type_it = config.params.find("zero_point_type");
         if (zp_type_it != config.params.end() && !zp_type_it->second.empty()) {
             auto   idx_it = param_indices.find("zero_point_type");
@@ -900,30 +901,28 @@ MicroTest::createOperationParam(
             auto zp_type_str =
                 std::any_cast<std::string>(zp_type_it->second[idx]);
             zp_type = stringToMatrixType(zp_type_str);
+            has_zp  = true;
         }
 
-        // Create zero point matrix based on length specification
-        Matrix b_zero_point_matrix;
-        if (zp_len == "n") {
-            // Per-channel: one zero point per output channel
-            std::vector<float> zp_data(getN());
-            for (size_t i = 0; i < zp_data.size(); ++i) {
-                // Generate random zero point values using the configured
-                // distribution
-                zp_data[i] = dist(gen);
+        if (has_zp) {
+            if (zp_len == "n") {
+                std::vector<float> zp_data(getN());
+                for (size_t i = 0; i < zp_data.size(); ++i) {
+                    zp_data[i] = dist(gen);
+                }
+                zp_matrix = Matrix::fromVector(zp_data, zp_type);
+            } else {
+                zp_matrix = Matrix::fromValue(dist(gen), zp_type);
             }
-            b_zero_point_matrix = Matrix::fromVector(zp_data, zp_type);
+            // Asymmetric quantization: include zero-point
+            return createWOQ()
+                .setB_ScaleFactor(sf_matrix)
+                .setB_ZeroPoint(zp_matrix)
+                .build();
         } else {
-            // Per-tensor: single zero point
-            b_zero_point_matrix = Matrix::fromValue(dist(gen), zp_type);
+            // Symmetric quantization: no zero-point
+            return createWOQ().setB_ScaleFactor(sf_matrix).build();
         }
-
-        // Create WOQ pre-operation using the same structure as A_Quant
-        // but for B matrix (weights)
-        return createWOQ()
-            .setB_ScaleFactor(b_scale_factor_matrix)
-            .setB_ZeroPoint(b_zero_point_matrix)
-            .build();
     }
     throw std::runtime_error("Unknown operation type: " + config.type);
 }

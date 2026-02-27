@@ -987,6 +987,18 @@ UalRef::applyPostOperation(Matrix&                                     matrix,
 }
 
 /**
+ * @brief Apply WOQ post-operation to a matrix
+ * @note No-op for ref: WOQ (B scale/zp) is applied inline in
+ *       aocl_gemm_bf16s4f32of32_ref and aocl_gemm_bf16u4f32of32_ref
+ */
+template<>
+void
+UalRef::applyPostOperation(Matrix&                                  matrix,
+                           const dlp::testing::framework::WOQParam& op)
+{
+}
+
+/**
  * @brief Perform general matrix multiplication with post-operations: C =
  * alpha*A*B + beta*C + PostOps
  *
@@ -1109,6 +1121,207 @@ UalRef::gemm(const Matrix&                      A,
             tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
 
         return UALError::UAL_SUCCESS;
+    }
+
+    bool isBf16S4Gemm = (aType == MatrixType::bf16 && bType == MatrixType::s4);
+    bool isBf16U4Gemm = (aType == MatrixType::bf16 && bType == MatrixType::u4);
+
+    if (isBf16S4Gemm || isBf16U4Gemm) {
+        // bf16×s4 ref requires WOQ (B scale). No zero-point support (symmetric
+        // only).
+        if (!checkValidGemmParams(A, B, C, true)) {
+            return UALError::UAL_FAILURE;
+        }
+
+        bool   hasWOQ = false;
+        Matrix b_scale_factor;
+        Matrix b_zero_point;
+
+        refOp->resetIterator();
+        while (refOp->hasNextPostOp()) {
+            auto postOp = refOp->getNextPostOp();
+            if (postOp) {
+                std::visit(
+                    [&](const auto& op) {
+                        using T = std::decay_t<decltype(op)>;
+                        if constexpr (std::is_same_v<
+                                          T,
+                                          dlp::testing::framework::WOQParam>) {
+                            hasWOQ = true;
+                            if (op.hasB_ScaleFactor()) {
+                                b_scale_factor = *op.getB_ScaleFactor();
+                            }
+                            if (op.hasB_ZeroPoint()) {
+                                b_zero_point = *op.getB_ZeroPoint();
+                            }
+                        }
+                    },
+                    *postOp);
+            }
+        }
+
+        if (hasWOQ) {
+            void* b_scale_data = b_scale_factor.getData();
+            void* b_zp_data    = b_zero_point.getData();
+            if (!b_scale_data) {
+                return UALError::UAL_FAILURE;
+            }
+
+            // Get the length of the scale factor and zero point matrices
+            md_t sf_len = b_scale_factor.getRows() * b_scale_factor.getCols();
+            md_t zp_len = b_zero_point.getRows() * b_zero_point.getCols();
+            MatrixType sf_type = b_scale_factor.getMatrixType();
+            MatrixType zp_type = b_zero_point.getMatrixType();
+
+            // Get the layout and transposition
+            char layout = (A.getLayout() == MatrixLayout::ROW_MAJOR) ? 'R'
+                                                                     : 'C';
+            char transA = A.isTransposed() ? 'T' : 'N';
+            char transB = B.isTransposed() ? 'T' : 'N';
+
+            // Get the alpha and beta values
+            float alpha_f32 = static_cast<float>(alpha);
+            float beta_f32  = static_cast<float>(beta);
+
+            // Get output matrix C datatype
+            MatrixType cType = C.getMatrixType();
+
+            // -----------------------------------------------------------------
+            // Dispatch based on input B type and output matrix C datatype
+            // -----------------------------------------------------------------
+
+            if (isBf16S4Gemm) {
+                // bf16×s4 ref requires WOQ (B scale).
+                // No zero-point support (symmetric only).
+                if (b_zp_data != nullptr) {
+                    return UALError::UAL_FAILURE;
+                }
+
+                if (cType == MatrixType::f32) {
+                    dlp::testing::classic::ref::aocl_gemm_bf16s4f32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
+                        reinterpret_cast<const bfloat16*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const int8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_f32,
+                        reinterpret_cast<float*>(
+                            C.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(C.getLeadingDimension()), b_scale_data,
+                        sf_len, sf_type, B.isReordered());
+                    // Apply remaining post-ops
+                    applyAllPostOps(C);
+                } else {
+                    // For all other output types: compute to F32 temp, then
+                    // convert
+                    Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
+                                     MatrixType::f32, C.getLayout());
+                    // Initialize tempC_f32 based on beta
+                    if (beta_f32 != 0.0f) {
+                        // Copy original C values when beta != 0
+                        dlp::testing::utils::copyMatrixTo<float>(
+                            C, reinterpret_cast<float*>(tempC_f32.getData()),
+                            tempC_f32.getLeadingDimension(),
+                            tempC_f32.getLayout());
+                    } else {
+                        // Zero-initialize
+                        std::memset(tempC_f32.getData(), 0,
+                                    tempC_f32.getDataSizeBytes());
+                    }
+                    // Call F32 reference implementation
+                    dlp::testing::classic::ref::aocl_gemm_bf16s4f32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
+                        reinterpret_cast<const bfloat16*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const int8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_f32,
+                        reinterpret_cast<float*>(tempC_f32.getData()),
+                        static_cast<int>(tempC_f32.getLeadingDimension()),
+                        b_scale_data, sf_len, sf_type, B.isReordered());
+                    // Apply remaining post-ops
+                    applyAllPostOps(tempC_f32);
+                    // Convert f32 to target output type (BF16/S32/S8/U8)
+                    // copyToMatrix handles saturation automatically
+                    dlp::testing::utils::copyToMatrix<float>(
+                        reinterpret_cast<const float*>(tempC_f32.getData()),
+                        tempC_f32.getLeadingDimension(), C,
+                        tempC_f32.getLayout());
+                }
+            } else {
+                // bf16×u4 ref requires WOQ (B scale and zero-point).
+                // U4 supports asymmetric dequant only; zero_point must be
+                // provided.
+                if (b_zp_data == nullptr) {
+                    return UALError::UAL_FAILURE;
+                }
+
+                if (cType == MatrixType::f32) {
+                    dlp::testing::classic::ref::aocl_gemm_bf16u4f32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
+                        reinterpret_cast<const bfloat16*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const uint8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_f32,
+                        reinterpret_cast<float*>(
+                            C.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(C.getLeadingDimension()), b_scale_data,
+                        b_zp_data, sf_len, zp_len, sf_type, zp_type,
+                        B.isReordered());
+                    // Apply remaining post-ops
+                    applyAllPostOps(C);
+                } else {
+                    // For all other output types: compute to F32 temp, then
+                    // convert
+                    Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
+                                     MatrixType::f32, C.getLayout());
+                    // Initialize tempC_f32 based on beta
+                    if (beta_f32 != 0.0f) {
+                        // Copy original C values when beta != 0
+                        dlp::testing::utils::copyMatrixTo<float>(
+                            C, reinterpret_cast<float*>(tempC_f32.getData()),
+                            tempC_f32.getLeadingDimension(),
+                            tempC_f32.getLayout());
+                    } else {
+                        // Zero-initialize
+                        std::memset(tempC_f32.getData(), 0,
+                                    tempC_f32.getDataSizeBytes());
+                    }
+                    // Call F32 reference implementation
+                    dlp::testing::classic::ref::aocl_gemm_bf16u4f32of32_ref(
+                        layout, transA, transB, A.getEffectiveRows(),
+                        B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
+                        reinterpret_cast<const bfloat16*>(
+                            A.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(A.getLeadingDimension()),
+                        reinterpret_cast<const uint8_t*>(
+                            B.getMatrixData().getMatrixPtr()),
+                        static_cast<int>(B.getLeadingDimension()), beta_f32,
+                        reinterpret_cast<float*>(tempC_f32.getData()),
+                        static_cast<int>(tempC_f32.getLeadingDimension()),
+                        b_scale_data, b_zp_data, sf_len, zp_len, sf_type,
+                        zp_type, B.isReordered());
+                    // Apply remaining post-ops
+                    applyAllPostOps(tempC_f32);
+                    // Convert f32 to target output type (BF16/S32/S8/U8)
+                    // copyToMatrix handles saturation automatically
+                    dlp::testing::utils::copyToMatrix<float>(
+                        reinterpret_cast<const float*>(tempC_f32.getData()),
+                        tempC_f32.getLeadingDimension(), C,
+                        tempC_f32.getLayout());
+                }
+            }
+            return UALError::UAL_SUCCESS;
+        } else {
+            return UALError::UAL_FAILURE;
+        }
     }
 
     bool isBf16S8QuantGemm =

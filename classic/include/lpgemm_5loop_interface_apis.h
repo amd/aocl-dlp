@@ -85,6 +85,7 @@ LPGEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
 
 // MP variant (const rs_b/cs_b/mtag_b)
 LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const);
+LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const);
 
 // GRP variant (const rs_b/cs_b/mtag_b, C forced to float)
 LPGEMM_5LOOP_UNIFIED(

@@ -1051,6 +1051,14 @@ GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
                                     bf16bf16f32of32,
                                     1,
                                     BF16BF16F32OF32)
+GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
+                                    uint8_t,
+                                    float,
+                                    float,
+                                    bf16u4f32of32,
+                                    bf16bf16f32of32,
+                                    1,
+                                    BF16BF16F32OF32)
 
 // GRP variant (grouped post-ops, mutable mtag_b, C forced to float)
 GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
@@ -1395,6 +1403,9 @@ GEN_LPGEMM_DECORATOR_UNIFIED(
 // MP variant (pre-ops + post-ops, mutable mtag_b, MC logic)
 GEN_LPGEMM_DECORATOR_UNIFIED(
     bfloat16, int8_t, float, float, bf16s4f32of32, 1, BF16BF16F32OF32)
+
+GEN_LPGEMM_DECORATOR_UNIFIED(
+    bfloat16, uint8_t, float, float, bf16u4f32of32, 1, BF16BF16F32OF32)
 
 // GRP variant (grouped post-ops, mutable mtag_b, C forced to float)
 GEN_LPGEMM_DECORATOR_UNIFIED(

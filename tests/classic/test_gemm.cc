@@ -495,6 +495,9 @@ extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
             case OperationType::A_Quant:
                 op_names.push_back("A_Quant");
                 break;
+            case OperationType::WOQ:
+                op_names.push_back("WOQ");
+                break;
             default:
                 op_names.push_back("UnknownOp");
                 break;
@@ -1052,9 +1055,15 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                     config_.c_type, config_.acc_type);
 
                 if (ref_reorder_status == UALError::UAL_SUCCESS) {
-                    B_ref = B_ref_reordered;
-                    // Reset packing state after reordering assignment
-                    B_ref.setPacked(false);
+                    // For bf16×s4 and bf16×u4, the reference uses row-major B
+                    // (original layout); keep B_ref as original so ref sees
+                    // non-reordered B.
+                    if (config_.b_type != MatrixType::s4
+                        && config_.b_type != MatrixType::u4) {
+                        B_ref = B_ref_reordered;
+                        // Reset packing state after reordering assignment
+                        B_ref.setPacked(false);
+                    }
                 }
             } else {
                 ref_reorder_status = UALError::UAL_FAILURE;

@@ -228,6 +228,7 @@ _lpgemm_cntx_init_func_map()
     global_cntx_t_list[BF16BF16F32OF32].kern_fun_ptr = NULL;
     global_cntx_t_list[BF16S4F32OF32].kern_fun_ptr   = NULL;
     global_cntx_t_list[F32OBF16].kern_fun_ptr        = NULL;
+    global_cntx_t_list[BF16U4F32OF32].kern_fun_ptr   = NULL;
 
     // Kernel dispatch object factory.
     if (dlp_cpuid_is_avx512bf16_supported() == TRUE) {

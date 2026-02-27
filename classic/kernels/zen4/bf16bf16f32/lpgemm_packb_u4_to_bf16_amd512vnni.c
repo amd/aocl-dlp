@@ -26,6 +26,11 @@
  *
  */
 
+/*
+ * Zen4 pack-B that converts u4 B to bf16 with fused dequant (scale and
+ * zero_point from pre_ops_attr). Asymmetric u4 only; symmetric (scale-only)
+ * is not supported. Output is bf16 in packed layout for bf16 GEMM.
+ */
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 #include <string.h>
@@ -36,15 +41,15 @@
 #ifdef LPGEMM_BF16_JIT
 
 void
-packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
-                            const int8_t*      b,
+packsclb_nr64_bf16u4f32of32(bfloat16*          packb_bf16,
+                            const uint8_t*     b,
                             const md_t         NC,
                             const md_t         KC,
                             md_t*              rs_p,
                             md_t*              cs_p,
                             lpgemm_pre_op_attr pre_ops_attr)
 {
-    // This bf16 packB_s4_bf16 is Not supported for gcc<11.2
+    // This bf16 packB_u4_bf16 is Not supported for gcc<11.2
 }
 
 #else // LPGEMM_BF16_JIT
@@ -58,8 +63,8 @@ output: two __m512 containing 16 f32 elements
                    scale_reg))
 
 void
-packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
-                            const int8_t*      b,
+packsclb_nr48_bf16u4f32of32(bfloat16*          packb_bf16,
+                            const uint8_t*     b,
                             const md_t         KC,
                             bool               signed_upscale,
                             lpgemm_pre_op_attr pre_ops_attr)
@@ -70,6 +75,8 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
 
     /* Regs to load int4 elements */
     __m256i ymm0, ymm1;
+    /* Regs to store zero-point values */
+    __m512i zero_point, zero_point0, zero_point1;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5, zmm6, zmm7, zmm8, zmm9;
     /* Regs to store intermediate int8 elements */
@@ -77,11 +84,21 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
     /* Regs to store bf16 values */
     __m512bh zmm0, zmm1, zmm2;
     /* Regs to store masks */
-    __m512i mask_scale1, mask_scale2;
+    __m512i mask_zp1, mask_zp2, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
 
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
+
+    mask_zp1 = _mm512_set_epi64(0x5F1F5E1E5D1D5C1C, 0x5B1B5A1A59195818,
+                                0x5717561655155414, 0x5313521251115010,
+                                0x4F0F4E0E4D0D4C0C, 0x4B0B4A0A49094808,
+                                0x4707460645054404, 0x4303420241014000);
+
+    mask_zp2 = _mm512_set_epi64(0x7F3F7E3E7D3D7C3C, 0x7B3B7A3A79397838,
+                                0x7737763675357434, 0x7333723271317030,
+                                0x6F2F6E2E6D2D6C2C, 0x6B2B6A2A69296828,
+                                0x6727662665256424, 0x6323622261216020);
 
     mask_scale1 =
         _mm512_set_epi32(0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04, 0x13,
@@ -93,19 +110,34 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
 
     __m512i sign_comp = _mm512_set1_epi8(0x08);
 
-    int8_t*   b_group;
+    uint8_t*  b_group;
     bfloat16* packb_group;
 
     md_t group_start = pre_ops_attr.pre_op_b_i / pre_ops_attr.group_size;
     md_t group_end =
         (pre_ops_attr.pre_op_b_i + KC - 1) / pre_ops_attr.group_size;
 
-    b_group     = (int8_t*)b;
+    b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
     for (md_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+
+        /* load zero_point values */
+        if (pre_ops_attr.zero_point_len == 1) {
+            zero_point = _mm512_set1_epi8(
+                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+        } else {
+            zero_point = _mm512_maskz_loadu_epi8(
+                0xFFFFFFFFFFFF, (pre_ops_attr.zero_point + pre_op_off));
+        }
+
+        /* interleave zero-point values */
+        zero_point1 =
+            _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+        zero_point0 =
+            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -164,6 +196,8 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
 
@@ -175,6 +209,8 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                sign_comp, signed_upscale);
+
+            zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
 
             zmm2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
                                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
@@ -194,11 +230,21 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
+            __m512i zero_reg = _mm512_setzero_si512();
+
+            /* Interleave zero_point values with zeroes */
+            zero_point1 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+            zero_point0 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
             ymm0 = _mm256_loadu_si256((__m256i const*)(b_group));
             ymm1 = _mm256_maskz_loadu_epi8(0xFFFF, b_group + 32);
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
+
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
@@ -207,6 +253,8 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                sign_comp, signed_upscale);
+
+            zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
 
             zmm2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
                                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
@@ -220,8 +268,8 @@ packsclb_nr48_bf16s4f32of32(bfloat16*          packb_bf16,
 }
 
 void
-packsclb_nr32_bf16s4f32of32(bfloat16*          packb_bf16,
-                            const int8_t*      b,
+packsclb_nr32_bf16u4f32of32(bfloat16*          packb_bf16,
+                            const uint8_t*     b,
                             const md_t         KC,
                             bool               signed_upscale,
                             lpgemm_pre_op_attr pre_ops_attr)
@@ -232,6 +280,8 @@ packsclb_nr32_bf16s4f32of32(bfloat16*          packb_bf16,
 
     /* Regs to load int4 elements */
     __m256i ymm0;
+    /* Regs to store zero-point values */
+    __m512i zero_point, zero_point0;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5, zmm6, zmm7;
     /* Regs to store intermediate int8 elements */
@@ -239,11 +289,16 @@ packsclb_nr32_bf16s4f32of32(bfloat16*          packb_bf16,
     /* Regs to store bf16 values */
     __m512bh zmm0, zmm1;
     /* Regs to store masks */
-    __m512i mask_scale1, mask_scale2;
+    __m512i mask_zp1, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
     __m512i sign_comp = _mm512_set1_epi8(0x08);
+
+    mask_zp1 = _mm512_set_epi64(0x5F1F5E1E5D1D5C1C, 0x5B1B5A1A59195818,
+                                0x5717561655155414, 0x5313521251115010,
+                                0x4F0F4E0E4D0D4C0C, 0x4B0B4A0A49094808,
+                                0x4707460645054404, 0x4303420241014000);
 
     mask_scale1 =
         _mm512_set_epi32(0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04, 0x13,
@@ -253,19 +308,32 @@ packsclb_nr32_bf16s4f32of32(bfloat16*          packb_bf16,
         _mm512_set_epi32(0x1F, 0x0F, 0x1E, 0x0E, 0x1D, 0x0D, 0x1C, 0x0C, 0x1B,
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
-    int8_t*   b_group;
+    uint8_t*  b_group;
     bfloat16* packb_group;
 
     md_t group_start = pre_ops_attr.pre_op_b_i / pre_ops_attr.group_size;
     md_t group_end =
         (pre_ops_attr.pre_op_b_i + KC - 1) / pre_ops_attr.group_size;
 
-    b_group     = (int8_t*)b;
+    b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
     for (md_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+
+        /* load zero_point values */
+        if (pre_ops_attr.zero_point_len == 1) {
+            zero_point = _mm512_set1_epi8(
+                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+        } else {
+            zero_point = _mm512_maskz_loadu_epi8(
+                0xFFFFFFFF, (pre_ops_attr.zero_point + pre_op_off));
+        }
+
+        /* interleave zero-point values */
+        zero_point0 =
+            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -316,6 +384,8 @@ packsclb_nr32_bf16s4f32of32(bfloat16*          packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
 
@@ -334,10 +404,18 @@ packsclb_nr32_bf16s4f32of32(bfloat16*          packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
+            __m512i zero_reg = _mm512_setzero_si512();
+
+            /* Interleave zero_point values with zeroes */
+            zero_point0 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
             ymm0 = _mm256_loadu_si256((__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
+
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
@@ -352,8 +430,8 @@ packsclb_nr32_bf16s4f32of32(bfloat16*          packb_bf16,
 }
 
 void
-packsclb_nr16_bf16s4f32of32(bfloat16*          packb_bf16,
-                            const int8_t*      b,
+packsclb_nr16_bf16u4f32of32(bfloat16*          packb_bf16,
+                            const uint8_t*     b,
                             const md_t         KC,
                             bool               signed_upscale,
                             lpgemm_pre_op_attr pre_ops_attr)
@@ -363,6 +441,8 @@ packsclb_nr16_bf16s4f32of32(bfloat16*          packb_bf16,
 
     /* Regs to load int4 elements */
     __m256i ymm0;
+    /* Regs to store zero-point values */
+    __m512i zero_point, zero_point0;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5;
     /* Regs to store intermediate int8 elements */
@@ -370,11 +450,16 @@ packsclb_nr16_bf16s4f32of32(bfloat16*          packb_bf16,
     /* Regs to store bf16 values */
     __m512bh zmm0;
     /* Regs to store masks */
-    __m512i mask_scale1, mask_scale2;
+    __m512i mask_zp1, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
     __m512i sign_comp = _mm512_set1_epi8(0x08);
+
+    mask_zp1 = _mm512_set_epi64(0x5F1F5E1E5D1D5C1C, 0x5B1B5A1A59195818,
+                                0x5717561655155414, 0x5313521251115010,
+                                0x4F0F4E0E4D0D4C0C, 0x4B0B4A0A49094808,
+                                0x4707460645054404, 0x4303420241014000);
 
     mask_scale1 =
         _mm512_set_epi32(0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04, 0x13,
@@ -384,19 +469,32 @@ packsclb_nr16_bf16s4f32of32(bfloat16*          packb_bf16,
         _mm512_set_epi32(0x1F, 0x0F, 0x1E, 0x0E, 0x1D, 0x0D, 0x1C, 0x0C, 0x1B,
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
-    int8_t*   b_group;
+    uint8_t*  b_group;
     bfloat16* packb_group;
 
     md_t group_start = pre_ops_attr.pre_op_b_i / pre_ops_attr.group_size;
     md_t group_end =
         (pre_ops_attr.pre_op_b_i + KC - 1) / pre_ops_attr.group_size;
 
-    b_group     = (int8_t*)b;
+    b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
     for (md_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+
+        /* load zero_point values */
+        if (pre_ops_attr.zero_point_len == 1) {
+            zero_point = _mm512_set1_epi8(
+                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+        } else {
+            zero_point = _mm512_maskz_loadu_epi8(
+                0xFFFF, (pre_ops_attr.zero_point + pre_op_off));
+        }
+
+        /* interleave zero-point values */
+        zero_point0 =
+            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -438,6 +536,8 @@ packsclb_nr16_bf16s4f32of32(bfloat16*          packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
 
@@ -451,10 +551,18 @@ packsclb_nr16_bf16s4f32of32(bfloat16*          packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
+            __m512i zero_reg = _mm512_setzero_si512();
+
+            /* Interleave zero_point values with zeroes */
+            zero_point0 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
             ymm0 = _mm256_maskz_loadu_epi8(0xFFFF, (__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
+
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
@@ -466,8 +574,8 @@ packsclb_nr16_bf16s4f32of32(bfloat16*          packb_bf16,
 }
 
 void
-packsclb_nrlt16_bf16s4f32of32(bfloat16*          packb_bf16,
-                              const int8_t*      b,
+packsclb_nrlt16_bf16u4f32of32(bfloat16*          packb_bf16,
+                              const uint8_t*     b,
                               const md_t         KC,
                               const md_t         n_rem,
                               bool               signed_upscale,
@@ -478,6 +586,8 @@ packsclb_nrlt16_bf16s4f32of32(bfloat16*          packb_bf16,
 
     /* Regs to load int4 elements */
     __m256i ymm0;
+    /* Regs to store zero-point values */
+    __m512i zero_point, zero_point0;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5;
     /* Regs to store intermediate int8 elements */
@@ -508,19 +618,32 @@ packsclb_nrlt16_bf16s4f32of32(bfloat16*          packb_bf16,
         _mm512_set_epi32(0x1F, 0x0F, 0x1E, 0x0E, 0x1D, 0x0D, 0x1C, 0x0C, 0x1B,
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
-    int8_t*   b_group;
+    uint8_t*  b_group;
     bfloat16* packb_group;
 
     md_t group_start = pre_ops_attr.pre_op_b_i / pre_ops_attr.group_size;
     md_t group_end =
         (pre_ops_attr.pre_op_b_i + KC - 1) / pre_ops_attr.group_size;
 
-    b_group     = (int8_t*)b;
+    b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
     for (md_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+
+        /* load zero_point values */
+        if (pre_ops_attr.zero_point_len == 1) {
+            zero_point = _mm512_set1_epi8(
+                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+        } else {
+            zero_point = _mm512_maskz_loadu_epi8(
+                lmask, (pre_ops_attr.zero_point + pre_op_off));
+        }
+
+        /* interleave zero-point values */
+        zero_point0 =
+            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -563,6 +686,8 @@ packsclb_nrlt16_bf16s4f32of32(bfloat16*          packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
 
@@ -578,10 +703,18 @@ packsclb_nrlt16_bf16s4f32of32(bfloat16*          packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
+            __m512i zero_reg = _mm512_setzero_si512();
+
+            /* Interleave zero_point values with zeroes */
+            zero_point0 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
             ymm0 = _mm256_maskz_loadu_epi8(lmask, (__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
+
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
@@ -593,8 +726,8 @@ packsclb_nrlt16_bf16s4f32of32(bfloat16*          packb_bf16,
 }
 
 void
-packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
-                            const int8_t*      b,
+packsclb_nr64_bf16u4f32of32(bfloat16*          packb_bf16,
+                            const uint8_t*     b,
                             const md_t         NC,
                             const md_t         KC,
                             md_t*              rs_p,
@@ -606,7 +739,8 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
     md_t n_full_pieces            = NC / NR;
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;
     md_t n_partial_pieces         = NC % NR;
-    bool signed_upscale           = true;
+    /* Asymmetric u4: interpret as unsigned 0..15 for scale*(u4 - zero_point) */
+    bool signed_upscale = false;
 
     md_t pre_op_off = pre_ops_attr.pre_op_b_j;
 
@@ -618,15 +752,29 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
     __m512bh zmm0, zmm1, zmm2, zmm3;
     /* Regs to store DLP_F32 scale */
     __m512 zmm4, zmm5, zmm6, zmm7, zmm8, zmm9, zmm10, zmm11;
+    /* Regs to store int8 elems zero-point values */
+    __m512i zero_point, zero_point0, zero_point1;
     /* Reg to load int4 data */
     __m256i ymm0, ymm1;
     /* Reg to store intermediate int8 elements */
     __m512i zmm14, zmm15;
     /* Reg to store masks to interleave scale factor */
     __m512i mask_scale1, mask_scale2;
+    /* Regs to store masks to interleave zero_point values */
+    __m512i mask_zp1, mask_zp2;
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
+
+    mask_zp1 = _mm512_set_epi64(0x5F1F5E1E5D1D5C1C, 0x5B1B5A1A59195818,
+                                0x5717561655155414, 0x5313521251115010,
+                                0x4F0F4E0E4D0D4C0C, 0x4B0B4A0A49094808,
+                                0x4707460645054404, 0x4303420241014000);
+
+    mask_zp2 = _mm512_set_epi64(0x7F3F7E3E7D3D7C3C, 0x7B3B7A3A79397838,
+                                0x7737763675357434, 0x7333723271317030,
+                                0x6F2F6E2E6D2D6C2C, 0x6B2B6A2A69296828,
+                                0x6727662665256424, 0x6323622261216020);
 
     mask_scale1 =
         _mm512_set_epi32(0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04, 0x13,
@@ -638,20 +786,35 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
 
     __m512i sign_comp = _mm512_set1_epi8(0x08);
 
-    int8_t*   b_group;
+    uint8_t*  b_group;
     bfloat16* packb_group;
 
     md_t KC_updated = KC;
     KC_updated += (KC_updated & 0x1);
 
     for (md_t jr = 0; jr < n_full_pieces_loop_limit; jr += NR) {
-        b_group     = (int8_t*)b;
+        b_group     = (uint8_t*)b;
         packb_group = packb_bf16;
 
         for (md_t group = group_start; group <= group_end; group++) {
             /* offset if pre_op_len == 'n' */
             pre_op_off =
                 (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+
+            /* load zero_point values */
+            if (pre_ops_attr.zero_point_len == 1) {
+                zero_point = _mm512_set1_epi8(
+                    *((uint8_t*)(pre_ops_attr.zero_point) + group));
+            } else {
+                zero_point = _mm512_loadu_si512((pre_ops_attr.zero_point)
+                                                + pre_op_off + jr);
+            }
+
+            /* interleave zero-point values */
+            zero_point1 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+            zero_point0 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
             /* load scale factor values */
             if (pre_ops_attr.scale_factor_len > 1) {
@@ -734,6 +897,8 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                    sign_comp, signed_upscale);
 
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
                 zmm0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                         CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
@@ -744,6 +909,8 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
 
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                    sign_comp, signed_upscale);
+
+                zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
 
                 zmm2 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
@@ -774,6 +941,14 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
             // appear in the last group. So, packb_group and b_group pointers
             // need not be updated after handling k_partial pieces.
             if (k_partial_pieces) {
+                __m512i zero_reg = _mm512_setzero_si512();
+
+                /* Interleave zero_point values with zeroes */
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
                 ymm0 = _mm256_loadu_si256(
                     (__m256i const*)(b_group + (jr * KC_updated) / 2));
                 ymm1 = _mm256_loadu_si256(
@@ -781,6 +956,8 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
 
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                    sign_comp, signed_upscale);
+
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
                 zmm0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
@@ -791,6 +968,8 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
 
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                    sign_comp, signed_upscale);
+
+                zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
 
                 zmm2 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
@@ -826,21 +1005,21 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
         md_t n0_16 = n_partial_pieces / 16;
 
         if (n0_48 == 1) {
-            packsclb_nr48_bf16s4f32of32(
+            packsclb_nr48_bf16u4f32of32(
                 (packb_bf16 + (n_full_pieces_loop_limit * KC_updated)),
                 (b + (n_full_pieces_loop_limit * KC_updated / 2)), KC,
                 signed_upscale, pre_ops_attr);
 
             n0_partial_pack = 48;
         } else if (n0_32 == 1) {
-            packsclb_nr32_bf16s4f32of32(
+            packsclb_nr32_bf16u4f32of32(
                 (packb_bf16 + (n_full_pieces_loop_limit * KC_updated)),
                 (b + (n_full_pieces_loop_limit * KC_updated / 2)), KC,
                 signed_upscale, pre_ops_attr);
 
             n0_partial_pack = 32;
         } else if (n0_16 == 1) {
-            packsclb_nr16_bf16s4f32of32(
+            packsclb_nr16_bf16u4f32of32(
                 (packb_bf16 + (n_full_pieces_loop_limit * KC_updated)),
                 (b + (n_full_pieces_loop_limit * KC_updated / 2)), KC,
                 signed_upscale, pre_ops_attr);
@@ -850,7 +1029,7 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
 
         if (n0_partial_rem > 0) {
             pre_ops_attr.pre_op_b_j += n0_partial_pack;
-            packsclb_nrlt16_bf16s4f32of32(
+            packsclb_nrlt16_bf16u4f32of32(
                 (packb_bf16 + (n_full_pieces_loop_limit * KC_updated)
                  + (n0_partial_pack * KC_updated)),
                 (b
@@ -866,14 +1045,13 @@ packsclb_nr64_bf16s4f32of32(bfloat16*          packb_bf16,
 
 /*
  * Pack a single column (n=1) contiguously for JIT gemvn1.
- * Same group/scale/k loop and int4->bf16 conversion as packsclb_nrlt16 with
+ * Same group/scale/k loop and uint4->bf16 conversion as packsclb_nrlt16 with
  * n_rem=1; only the store differs (contiguous 2 bf16 per k-pair via
  * _mm_storeu_si32 instead of strided _mm512_mask_storeu_epi32).
- * S4 uses symmetric quantization (no zero-point).
  */
 void
-packsclb_nr1_bf16s4f32of32(bfloat16*          packb_bf16,
-                           const int8_t*      b,
+packsclb_nr1_bf16u4f32of32(bfloat16*          packb_bf16,
+                           const uint8_t*     b,
                            const md_t         KC,
                            lpgemm_pre_op_attr pre_ops_attr)
 {
@@ -881,10 +1059,11 @@ packsclb_nr1_bf16s4f32of32(bfloat16*          packb_bf16,
     md_t pre_op_off = pre_ops_attr.pre_op_b_j;
 
     __m256i  ymm0;
+    __m512i  zero_point, zero_point0;
     __m512   zmm4, zmm5;
     __m512i  zmm14;
     __m512bh zmm0;
-    __m512i  mask_scale1, mask_scale2;
+    __m512i  mask_zp1, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
@@ -892,6 +1071,10 @@ packsclb_nr1_bf16s4f32of32(bfloat16*          packb_bf16,
     __m512i   sign_comp = _mm512_set1_epi8(0x08);
     __mmask16 lmask     = _cvtu32_mask16(0x0001);
 
+    mask_zp1 = _mm512_set_epi64(0x5F1F5E1E5D1D5C1C, 0x5B1B5A1A59195818,
+                                0x5717561655155414, 0x5313521251115010,
+                                0x4F0F4E0E4D0D4C0C, 0x4B0B4A0A49094808,
+                                0x4707460645054404, 0x4303420241014000);
     mask_scale1 =
         _mm512_set_epi32(0x17, 0x07, 0x16, 0x06, 0x15, 0x05, 0x14, 0x04, 0x13,
                          0x03, 0x12, 0x02, 0x11, 0x01, 0x10, 0x00);
@@ -899,18 +1082,31 @@ packsclb_nr1_bf16s4f32of32(bfloat16*          packb_bf16,
         _mm512_set_epi32(0x1F, 0x0F, 0x1E, 0x0E, 0x1D, 0x0D, 0x1C, 0x0C, 0x1B,
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
-    int8_t*   b_group;
+    uint8_t*  b_group;
     bfloat16* packb_group;
 
     md_t group_start = pre_ops_attr.pre_op_b_i / pre_ops_attr.group_size;
     md_t group_end =
         (pre_ops_attr.pre_op_b_i + KC - 1) / pre_ops_attr.group_size;
 
-    b_group     = (int8_t*)b;
+    b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
     for (md_t group = group_start; group <= group_end; group++) {
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+
+        /* load zero_point values */
+        if (pre_ops_attr.zero_point_len == 1) {
+            zero_point = _mm512_set1_epi8(
+                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+        } else {
+            zero_point = _mm512_maskz_loadu_epi8(
+                0xFFFF, (pre_ops_attr.zero_point + pre_op_off));
+        }
+
+        /* interleave zero-point values */
+        zero_point0 =
+            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -949,7 +1145,9 @@ packsclb_nr1_bf16s4f32of32(bfloat16*          packb_bf16,
                 lmask, (__m256i const*)(b_group + (kr * NR) / 2));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
-                                               sign_comp, true);
+                                               sign_comp, false);
+
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
@@ -962,10 +1160,18 @@ packsclb_nr1_bf16s4f32of32(bfloat16*          packb_bf16,
         packb_group += k_full_pieces_per_group;
 
         if (k_partial_pieces) {
+            __m512i zero_reg = _mm512_setzero_si512();
+
+            /* Interleave zero_point values with zeroes */
+            zero_point0 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
             ymm0 = _mm256_maskz_loadu_epi8(lmask, (__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
-                                               sign_comp, true);
+                                               sign_comp, false);
+
+            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
             zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));

@@ -26,6 +26,19 @@
  *
  */
 
+/*
+ * GEMM for symmetric weight-only quantization (WOQ): C = alpha * A * B + beta
+ * * C
+ * - A: bfloat16, B: signed 4-bit (s4) quantized, C: float or bfloat16.
+ * - B must be provided in reordered format.
+ * - S4 to BF16 dequantization is done via pre-ops in the framework
+ *   before the micro-kernel.
+ * - Zero-point (asymmetric WOQ) is not supported, only scale factor is
+ * required.
+ * - Two output variants: aocl_gemm_bf16s4f32of32 (float C),
+ *   aocl_gemm_bf16s4f32obf16 (bfloat16 C).
+ */
+
 #include "aocl_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
 #include "config/lpgemm_config.h"
@@ -86,6 +99,25 @@ aocl_gemm_bf16s4f32of32(const char      order,
         goto err_hndl;
     }
 
+    // Add early returns for NULL pointers.
+    if (metadata == NULL || metadata->pre_ops == NULL
+        || metadata->pre_ops->b_scl == NULL) {
+        dlp_print_msg(
+            "Required parameters for symmetric woq missing. Exiting..",
+            __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
+        goto err_hndl;
+    }
+
+    // Note: b_zp is not required for this kernel.
+    if (metadata->pre_ops->b_zp != NULL) {
+        dlp_print_msg(" zero-point is not required, asymmetric woq not "
+                      "supported. Exiting..",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+
     dlp_trans_t dlp_transa;
     dlp_trans_t dlp_transb;
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
@@ -136,15 +168,15 @@ aocl_gemm_bf16s4f32of32(const char      order,
         goto err_hndl;
     }
 
+    if (dlp_is_trans(dlp_transa) == TRUE) {
+        mtag_a = PACK;
+    }
+
     if (mtag_b != REORDERED) {
         dlp_print_msg(" Reordering of B matrix is mandatory.", __FILE__,
                       __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
-    }
-
-    if (dlp_is_trans(dlp_transa) == TRUE) {
-        mtag_a = PACK;
     }
 
     // Convert pre op struct to pre op linked list format.
@@ -249,6 +281,25 @@ aocl_gemm_bf16s4f32obf16(const char      order,
                     mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
+        goto err_hndl;
+    }
+
+    // Add early returns for NULL pointers.
+    if (metadata == NULL || metadata->pre_ops == NULL
+        || metadata->pre_ops->b_scl == NULL) {
+        dlp_print_msg(
+            "Required parameters for symmetric woq missing. Exiting..",
+            __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
+        goto err_hndl;
+    }
+
+    // Note: b_zp is not required for this kernel.
+    if (metadata->pre_ops->b_zp != NULL) {
+        dlp_print_msg(" zero-point is not required, asymmetric woq not "
+                      "supported. Exiting..",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
 

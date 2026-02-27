@@ -26,6 +26,15 @@
  *
  */
 
+/*
+ * Zen4 6x64 micro-kernel for GEMM with bfloat16 A and unsigned 4-bit (u4) B
+ * (asymmetric weight-only quantization). Fused dequant: scale * (u4 -
+ * zero_point). B is reordered/packed (2 u4 values per byte). Supports
+ * group-wise scale and zero-point. Symmetric (scale-only) quantization is not
+ * supported.
+ *
+ */
+
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 
@@ -35,7 +44,7 @@
 #ifndef LPGEMM_BF16_JIT
 
 // 6x64 bf16 kernel
-LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
+LPGEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
@@ -58,7 +67,7 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
     if (n0 < NR) {
         md_t n0_rem = n0 % 16;
 
-        // Split md_to multiple smaller fringe kernels, so as to maximize
+        // Split n0 into multiple smaller fringe kernels, so as to maximize
         // vectorization. Any n0 < NR(64) can be expressed as n0 = 48 + n`
         // or n0 = 32 + n` or n0 = 16 + n`, where n` < 16.
         md_t n0_48 = n0 / 48;
@@ -72,45 +81,45 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
         k0_updated += (k0_updated & 0x1);
 
         if (n0_48 == 1) {
-            lpgemm_rowvar_bf16s4f32of32_6x48m(
+            lpgemm_rowvar_bf16u4f32of32_6x48m(
                 m0, k0, a, rs_a, cs_a, ps_a, b, ((rs_b / 4) * 3), cs_b, c, rs_c,
                 alpha, beta, post_ops_list, post_ops_attr, pre_ops_attr);
 
-            b = b + ((48 * k0_updated) / 2); // k0x48 packed contiguosly.
+            b = b + ((48 * k0_updated) / 2); // k0x48 packed contiguously.
             c = c + 48;
             post_ops_attr.post_op_c_j += 48;
             pre_ops_attr.pre_op_b_j += 48;
         }
 
         else if (n0_32 == 1) {
-            lpgemm_rowvar_bf16s4f32of32_6x32m(
+            lpgemm_rowvar_bf16u4f32of32_6x32m(
                 m0, k0, a, rs_a, cs_a, ps_a, b, ((rs_b / 4) * 2), cs_b, c, rs_c,
                 alpha, beta, post_ops_list, post_ops_attr, pre_ops_attr);
 
-            b = b + ((32 * k0_updated) / 2); // k0x32 packed contiguosly.
+            b = b + ((32 * k0_updated) / 2); // k0x32 packed contiguously.
             c = c + 32;
             post_ops_attr.post_op_c_j += 32;
             pre_ops_attr.pre_op_b_j += 32;
         }
 
         else if (n0_16 == 1) {
-            lpgemm_rowvar_bf16s4f32of32_6x16m(
+            lpgemm_rowvar_bf16u4f32of32_6x16m(
                 m0, k0, a, rs_a, cs_a, ps_a, b, ((rs_b / 4) * 1), cs_b, c, rs_c,
                 alpha, beta, post_ops_list, post_ops_attr, pre_ops_attr);
 
-            b = b + ((16 * k0_updated) / 2); // k0x16 packed contiguosly.
+            b = b + ((16 * k0_updated) / 2); // k0x16 packed contiguously.
             c = c + 16;
             post_ops_attr.post_op_c_j += 16;
             pre_ops_attr.pre_op_b_j += 16;
         }
 
         if (n0_rem > 0) {
-            lpgemm_rowvar_bf16s4f32of32_6xlt16m(
+            lpgemm_rowvar_bf16u4f32of32_6xlt16m(
                 m0, k0, a, rs_a, cs_a, ps_a, b, ((rs_b / 4) * 1), cs_b, c, rs_c,
                 alpha, beta, n0_rem, post_ops_list, post_ops_attr,
                 pre_ops_attr);
 
-            // No leftover fringe after this podint.
+            // No leftover fringe after this point.
         }
         return;
     }
@@ -130,8 +139,10 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp      = _mm512_set1_epi8(0x08);
-    bool    signed_upscale = true;
+    __m512i sign_comp = _mm512_set1_epi8(0x08);
+    /* U4 asymmetric: unpack as unsigned (0..15); dequant = scale * (u4 -
+     * zero_point) */
+    bool signed_upscale = false;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8, b1_s8;
@@ -201,8 +212,12 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
         md_t group_end   = (pre_ops_attr.pre_op_b_i + k0 - 1) / group_size;
 
         bfloat16* a_group = (bfloat16*)a;
-        int8_t*   b_group = (int8_t*)b;
+        uint8_t*  b_group = (uint8_t*)b;
 
+        /* Asymmetric dequant: scale * (u4 - zero_point). Pass zero_point for
+         * correct dequant. */
+        md_t pre_op_sf_off = 0;
+        md_t pre_op_zp_off = 0;
         for (md_t group = group_start; group <= group_end; group++) {
             md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
             md_t k_end   = dlp_min(((group + 1) * group_size - 1),
@@ -213,8 +228,6 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 
             int16_t a_kfringe_buf;
 
-            // Calculate offsets
-            md_t pre_op_sf_off = 0;
             if (pre_ops_attr.scale_factor_len > 1) {
                 pre_op_sf_off =
                     (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
@@ -260,6 +273,7 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
                 if (pre_ops_attr.scale_factor_type == DLP_F32) {
                     scale0 = _mm512_set1_ps(
                         *((float*)pre_ops_attr.scale_factor + pre_op_sf_off));
+
                 } else {
                     scale0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
                         *((bfloat16*)(pre_ops_attr.scale_factor)
@@ -275,6 +289,23 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
                 scale7 = scale0;
             }
 
+            if (pre_ops_attr.zero_point_len > 1) {
+                pre_op_zp_off =
+                    (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
+                zero_point = _mm512_loadu_si512(
+                    (uint8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off);
+            } else {
+                pre_op_zp_off = group;
+                zero_point    = _mm512_set1_epi8(
+                    *((uint8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+            }
+
+            zero_point1 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+
+            zero_point0 =
+                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+
             for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
                 // Broadcast a[0,kr:kr+2]
                 a_bf16_0 = (__m512bh)_mm512_set1_epi32(
@@ -285,6 +316,8 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                    sign_comp, signed_upscale);
+
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -299,6 +332,8 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                    sign_comp, signed_upscale);
+
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
 
                 b2 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
@@ -374,7 +409,7 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
                 c_float_5p1 = _mm512_dpbf16_ps(c_float_5p1, a_bf16_1, b1);
                 c_float_5p2 = _mm512_dpbf16_ps(c_float_5p2, a_bf16_1, b2);
                 c_float_5p3 = _mm512_dpbf16_ps(c_float_5p3, a_bf16_1, b3);
-            }
+            } // k-loop
 
             a_group += k_full_pieces * cs_a;
             b_group += (k_full_pieces * rs_b) / 2;
@@ -383,6 +418,14 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
             // appear in the last group. So, a_group and b_group pointers
             // need not be updated after handling k_partial pieces.
             if (k_partial_pieces) {
+                __m512i zero_reg = _mm512_setzero_si512();
+
+                /* Interleave zero_point values with zeroes */
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
                 // Broadcast a[0,kr:kr+2].
                 a_kfringe_buf = *(a_group + (rs_a * 0));
                 a_bf16_0      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
@@ -391,6 +434,8 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                    sign_comp, signed_upscale);
+
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
 
                 b0 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
@@ -404,6 +449,8 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
 
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                    sign_comp, signed_upscale);
+
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
 
                 b2 =
                     _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
@@ -480,7 +527,7 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
                 c_float_5p2 = _mm512_dpbf16_ps(c_float_5p2, a_bf16_1, b2);
                 c_float_5p3 = _mm512_dpbf16_ps(c_float_5p3, a_bf16_1, b3);
             } // k_partial_pieces
-        }
+        } // group loop
 
         // Load alpha and beta
         __m512 selector1 = _mm512_set1_ps(alpha);
@@ -2394,31 +2441,31 @@ LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m)
             // elements, and subsequently following adjustment of cs_a is
             // required before calling m fringe kernels.
             md_t cs_a_use = (cs_a == 2) ? 2 : ((cs_a / 6) * 5);
-            lpgemm_rowvar_bf16s4f32of32_5x64(
+            lpgemm_rowvar_bf16u4f32of32_5x64(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
                 (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
                 post_ops_list, post_ops_attr, pre_ops_attr);
         } else if (m_partial_pieces == 4) {
             md_t cs_a_use = (cs_a == 2) ? 2 : ((cs_a / 6) * 4);
-            lpgemm_rowvar_bf16s4f32of32_4x64(
+            lpgemm_rowvar_bf16u4f32of32_4x64(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
                 (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
                 post_ops_list, post_ops_attr, pre_ops_attr);
         } else if (m_partial_pieces == 3) {
             md_t cs_a_use = (cs_a == 2) ? 2 : ((cs_a / 6) * 3);
-            lpgemm_rowvar_bf16s4f32of32_3x64(
+            lpgemm_rowvar_bf16u4f32of32_3x64(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
                 (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
                 post_ops_list, post_ops_attr, pre_ops_attr);
         } else if (m_partial_pieces == 2) {
             md_t cs_a_use = (cs_a == 2) ? 2 : ((cs_a / 6) * 2);
-            lpgemm_rowvar_bf16s4f32of32_2x64(
+            lpgemm_rowvar_bf16u4f32of32_2x64(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
                 (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
                 post_ops_list, post_ops_attr, pre_ops_attr);
         } else if (m_partial_pieces == 1) {
             md_t cs_a_use = (cs_a == 2) ? 2 : ((cs_a / 6) * 1);
-            lpgemm_rowvar_bf16s4f32of32_1x64(
+            lpgemm_rowvar_bf16u4f32of32_1x64(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
                 (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
                 post_ops_list, post_ops_attr, pre_ops_attr);

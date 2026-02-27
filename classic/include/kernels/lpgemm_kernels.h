@@ -106,6 +106,7 @@ LPGEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64);
         lpgemm_pre_op_attr pre_ops_attr)
 
 LPGEMM_MAIN_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x64m);
+LPGEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m);
 
 #define LPGEMM_MAIN_KERN2(A_type, B_type, C_type, LP_SFX)                      \
     void lpgemm_rowvar_##LP_SFX(                                               \
@@ -238,10 +239,15 @@ LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_1x64);
         lpgemm_pre_op_attr pre_ops_attr)
 
 LPGEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x64);
+LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64);
 LPGEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x64);
+LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64);
 LPGEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x64);
+LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64);
 LPGEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x64);
+LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64);
 LPGEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x64);
+LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64);
 
 #define LPGEMM_M_FRINGE_KERN2(A_type, B_type, C_type, LP_SFX)                  \
     void lpgemm_rowvar_##LP_SFX(                                               \
@@ -296,8 +302,11 @@ LPGEMM_N_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x48);
         lpgemm_post_op_attr post_ops_attr, lpgemm_pre_op_attr pre_ops_attr)
 
 LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x16m);
+LPGEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x16m);
 LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x32m);
+LPGEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x32m);
 LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m);
+LPGEMM_N_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x48m);
 
 #define LPGEMM_N_FRINGE_KERN2(A_type, B_type, C_type, LP_SFX)                  \
     void lpgemm_rowvar_##LP_SFX(                                               \
@@ -351,6 +360,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6xlt16);
         lpgemm_post_op_attr post_ops_attr, lpgemm_pre_op_attr pre_ops_attr)
 
 LPGEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m);
+LPGEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6xlt16m);
 
 #define LPGEMM_MN_FRINGE_KERN(A_type, B_type, C_type, LP_SFX)                  \
     void lpgemm_rowvar_##LP_SFX(                                               \
@@ -431,6 +441,22 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48);
 LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x48);
 LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x48);
 
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x16);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x16);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x16);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x16);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x16);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x32);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x32);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x32);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x32);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x32);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x48);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x48);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x48);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x48);
+LPGEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x48);
+
 #define LPGEMM_MN_FRINGE_KERN2(A_type, B_type, C_type, LP_SFX)                 \
     void lpgemm_rowvar_##LP_SFX(                                               \
         const md_t k0, const A_type* a, const md_t rs_a, const md_t cs_a,      \
@@ -506,6 +532,12 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16);
 LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16);
 LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2xlt16);
 LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1xlt16);
+
+LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5xlt16);
+LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4xlt16);
+LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3xlt16);
+LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2xlt16);
+LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1xlt16);
 
 #define LPGEMM_MN_LT_NR0_FRINGE_KERN2(A_type, B_type, C_type, LP_SFX)          \
     void lpgemm_rowvar_##LP_SFX(                                               \

@@ -110,6 +110,13 @@ RefOperation::addOperation(
             m_a_quant_ops.push_back(std::move(a_quant_param));
             break;
         }
+        case dlp::testing::framework::OperationType::WOQ: {
+            auto woq_param = std::unique_ptr<dlp::testing::framework::WOQParam>(
+                static_cast<dlp::testing::framework::WOQParam*>(
+                    param.release()));
+            m_woq_ops.push_back(std::move(woq_param));
+            break;
+        }
         default:
             throw std::runtime_error("Unsupported operation type");
     }
@@ -153,6 +160,10 @@ RefOperation::finalize()
 
     if (!m_a_quant_ops.empty()) {
         convertA_QuantOperations();
+    }
+
+    if (!m_woq_ops.empty()) {
+        convertWOQOperations();
     }
 
     // Build the sequence vector based on the original order
@@ -212,6 +223,11 @@ RefOperation::getNextPostOp() const
                 static_cast<const dlp::testing::framework::AQuantParam&>(
                     *param);
             return PostOpVariant{ a_quant_param };
+        }
+        case dlp::testing::framework::OperationType::WOQ: {
+            const auto& woq_param =
+                static_cast<const dlp::testing::framework::WOQParam&>(*param);
+            return PostOpVariant{ woq_param };
         }
         default:
             throw std::runtime_error(
@@ -273,6 +289,13 @@ RefOperation::convertA_QuantOperations()
     // For reference implementation, we don't need to convert to backend format
     // This method is kept for consistency with the DLP implementation
 }
+
+void
+RefOperation::convertWOQOperations()
+{
+    // For reference implementation, we don't need to convert to backend format
+}
+
 void
 RefOperation::buildSequenceVector()
 {
@@ -336,6 +359,9 @@ RefOperation::buildSequenceVector()
                 break;
             case dlp::testing::framework::OperationType::A_Quant:
                 opName = "A_Quant";
+                break;
+            case dlp::testing::framework::OperationType::WOQ:
+                opName = "WOQ";
                 break;
             default:
                 opName = "Unknown";

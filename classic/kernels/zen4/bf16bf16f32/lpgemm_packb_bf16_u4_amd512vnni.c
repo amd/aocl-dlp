@@ -26,6 +26,11 @@
  *
  */
 
+/*
+ * Zen4 pack-B for GEMM with bfloat16 A and unsigned 4-bit (u4) B. Layout
+ * reorder only; no dequant (scale/zero_point applied in compute kernels).
+ * Supports standard and AWQ B matrix layouts via mtag.
+ */
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 #include <string.h>
@@ -33,8 +38,8 @@
 #include "../int4_utils_avx512.h"
 
 void
-packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr64_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       NC,
                                    const md_t       KC,
@@ -44,8 +49,8 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
                                    AOCL_MATRIX_TYPE mtag);
 
 void
-packb_nr64_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr64_bf16u4f32of32_col_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       NC,
                                    const md_t       KC,
@@ -55,37 +60,37 @@ packb_nr64_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
                                    AOCL_MATRIX_TYPE mtag);
 
 void
-packb_nr48_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr48_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       KC,
                                    AOCL_MATRIX_TYPE mtag);
 
 void
-packb_nr32_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr32_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       KC,
                                    AOCL_MATRIX_TYPE mtag);
 
 void
-packb_nr16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr16_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       KC,
                                    AOCL_MATRIX_TYPE mtag);
 
 void
-packb_nrlt16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                     const int8_t*    b,
+packb_nrlt16_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                     const uint8_t*   b,
                                      const md_t       rs_b,
                                      const md_t       KC,
                                      const md_t       n0_partial_rem,
                                      AOCL_MATRIX_TYPE mtag);
 
 void
-packb_nr64_bf16s4f32of32(int8_t*          pack_b_buffer,
-                         const int8_t*    b,
+packb_nr64_bf16u4f32of32(uint8_t*         pack_b_buffer,
+                         const uint8_t*   b,
                          const md_t       rs_b,
                          const md_t       cs_b,
                          const md_t       NC,
@@ -96,17 +101,17 @@ packb_nr64_bf16s4f32of32(int8_t*          pack_b_buffer,
                          AOCL_MATRIX_TYPE mtag)
 {
     if (cs_b == 1) {
-        packb_nr64_bf16s4f32of32_row_major(pack_b_buffer, b, rs_b, NC, KC, rs_p,
+        packb_nr64_bf16u4f32of32_row_major(pack_b_buffer, b, rs_b, NC, KC, rs_p,
                                            cs_p, pre_op, mtag);
     } else {
-        packb_nr64_bf16s4f32of32_col_major(pack_b_buffer, b, cs_b, NC, KC, rs_p,
+        packb_nr64_bf16u4f32of32_col_major(pack_b_buffer, b, cs_b, NC, KC, rs_p,
                                            cs_p, pre_op, mtag);
     }
 }
 
 void
-packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr64_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       NC,
                                    const md_t       KC,
@@ -133,8 +138,8 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     }
 
     bool       is_odd_stride   = ((rs_b % 2) == 0) ? FALSE : TRUE;
-    bool       signed_upscale  = TRUE;
-    const md_t incr_adj_factor = 2; // (Byte / 2) for int4 increments.
+    bool       signed_upscale  = FALSE; /* u4: unsigned unpack 0..15 */
+    const md_t incr_adj_factor = 2;     // (Byte / 2) for int4 increments.
 
     // Used for permuting the mm512i elements for use in dpbf16_ps instruction.
     __m512i selector1 =
@@ -271,7 +276,7 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
         md_t n0_16 = n_partial_pieces / 16;
 
         if (n0_48 == 1) {
-            packb_nr48_bf16s4f32of32_row_major(
+            packb_nr48_bf16u4f32of32_row_major(
                 (pack_b_buffer
                  + ((n_full_pieces_loop_limit * KC_updated) / incr_adj_factor)),
                 (b + (n_full_pieces_loop_limit / incr_adj_factor)), rs_b, KC,
@@ -279,7 +284,7 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
 
             n0_partial_pack = 48;
         } else if (n0_32 == 1) {
-            packb_nr32_bf16s4f32of32_row_major(
+            packb_nr32_bf16u4f32of32_row_major(
                 (pack_b_buffer
                  + ((n_full_pieces_loop_limit * KC_updated) / incr_adj_factor)),
                 (b + (n_full_pieces_loop_limit / incr_adj_factor)), rs_b, KC,
@@ -287,7 +292,7 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
 
             n0_partial_pack = 32;
         } else if (n0_16 == 1) {
-            packb_nr16_bf16s4f32of32_row_major(
+            packb_nr16_bf16u4f32of32_row_major(
                 (pack_b_buffer
                  + ((n_full_pieces_loop_limit * KC_updated) / incr_adj_factor)),
                 (b + (n_full_pieces_loop_limit / incr_adj_factor)), rs_b, KC,
@@ -297,7 +302,7 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
         }
 
         if (n0_partial_rem > 0) {
-            packb_nrlt16_bf16s4f32of32_row_major(
+            packb_nrlt16_bf16u4f32of32_row_major(
                 (pack_b_buffer
                  + (((n_full_pieces_loop_limit * KC_updated)
                      + (n0_partial_pack * KC_updated))
@@ -313,8 +318,8 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
 }
 
 void
-packb_nr48_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr48_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       KC,
                                    AOCL_MATRIX_TYPE mtag)
@@ -327,8 +332,8 @@ packb_nr48_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     md_t k_partial_pieces   = KC % 2;
 
     bool       is_odd_stride   = ((rs_b % 2) == 0) ? FALSE : TRUE;
-    bool       signed_upscale  = TRUE;
-    const md_t incr_adj_factor = 2; // (Byte / 2) for int4 increments.
+    bool       signed_upscale  = FALSE; /* u4: unsigned unpack 0..15 */
+    const md_t incr_adj_factor = 2;     // (Byte / 2) for int4 increments.
 
     // Used for permuting the mm512i elements for use in dpbf16_ps instruction.
     __m256i selector1_32   = _mm256_setr_epi64x(0x0, 0x1, 0x4, 0x5);
@@ -520,8 +525,8 @@ packb_nr48_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
 }
 
 void
-packb_nr32_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr32_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       KC,
                                    AOCL_MATRIX_TYPE mtag)
@@ -533,8 +538,8 @@ packb_nr32_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     md_t k_partial_pieces   = KC % 2;
 
     bool       is_odd_stride   = ((rs_b % 2) == 0) ? FALSE : TRUE;
-    bool       signed_upscale  = TRUE;
-    const md_t incr_adj_factor = 2; // (Byte / 2) for int4 increments.
+    bool       signed_upscale  = FALSE; /* u4: unsigned unpack 0..15 */
+    const md_t incr_adj_factor = 2;     // (Byte / 2) for int4 increments.
 
     // Used for permuting the mm512i elements for use in dpbf16_ps instruction.
     __m256i selector1_32   = _mm256_setr_epi64x(0x0, 0x1, 0x4, 0x5);
@@ -638,8 +643,8 @@ packb_nr32_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
 }
 
 void
-packb_nr16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr16_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       rs_b,
                                    const md_t       KC,
                                    AOCL_MATRIX_TYPE mtag)
@@ -651,8 +656,8 @@ packb_nr16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     md_t k_partial_pieces   = KC % 2;
 
     bool       is_odd_stride   = ((rs_b % 2) == 0) ? FALSE : TRUE;
-    bool       signed_upscale  = TRUE;
-    const md_t incr_adj_factor = 2; // (Byte / 2) for int4 increments.
+    bool       signed_upscale  = FALSE; /* u4: unsigned unpack 0..15 */
+    const md_t incr_adj_factor = 2;     // (Byte / 2) for int4 increments.
 
     // Selectors for int4 -> int8 conversion.
     __m128i shift_idx_16;
@@ -744,8 +749,8 @@ packb_nr16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
 }
 
 void
-packb_nrlt16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
-                                     const int8_t*    b,
+packb_nrlt16_bf16u4f32of32_row_major(uint8_t*         pack_b_buffer,
+                                     const uint8_t*   b,
                                      const md_t       rs_b,
                                      const md_t       KC,
                                      const md_t       n0_partial_rem,
@@ -758,8 +763,8 @@ packb_nrlt16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     md_t k_partial_pieces   = KC % 2;
 
     bool       is_odd_stride   = ((rs_b % 2) == 0) ? FALSE : TRUE;
-    bool       signed_upscale  = TRUE;
-    const md_t incr_adj_factor = 2; // (Byte / 2) for int4 increments.
+    bool       signed_upscale  = FALSE; /* u4: unsigned unpack 0..15 */
+    const md_t incr_adj_factor = 2;     // (Byte / 2) for int4 increments.
 
     // Selectors for int4 -> int8 conversion.
     __m128i shift_idx_16;
@@ -925,7 +930,7 @@ packb_nrlt16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     __m512i sign_comp = _mm512_set1_epi8(0x08);                                \
     __m256i even;                                                              \
     __m256i odd;                                                               \
-    bool    signed_upscale = TRUE;                                             \
+    bool    signed_upscale = FALSE; /* u4: unsigned unpack 0..15 */            \
     ORDER_SHIFT_AVX2(a_reg[0])                                                 \
     ORDER_SHIFT_AVX2(a_reg[1])                                                 \
     ORDER_SHIFT_AVX2(a_reg[2])                                                 \
@@ -1184,8 +1189,8 @@ packb_nrlt16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
         _mm512_and_epi32(_mm512_cvtepu8_epi16(a_reg[15]), clear_hi_bits_odd));
 
 void
-packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
-                                         const int8_t*    b,
+packb_nr_mult_16_bf16u4f32of32_col_major(uint8_t*         pack_b_buffer,
+                                         const uint8_t*   b,
                                          const md_t       NR,
                                          const md_t       ldb,
                                          const md_t       KC,
@@ -1492,25 +1497,6 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
             }
         }
 
-        for (; kr < KC; kr += 1) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
-                /* Single k column: only low nibble valid per row; clear high
-                 * nibbles. */
-                MASK_LOAD_16_COLS_AVX2_LAST_4BITS(0x01)
-                CLEAN_HIGH_4BITS_EVEN;
-                CLEAN_HIGH_4BITS_ODD
-                UNPACKHILO8_AVX2
-                UNPACKHILO16_AVX2
-                UNPACKHILO32_AVX2
-                UNPACKHILO64_AVX2
-
-                // store to pack_b buffer
-                _mm256_mask_storeu_epi32(
-                    ((pack_b_buffer + ((jr * 2) + ((kr + 0) * NR)) / 2)), msk0,
-                    a_reg[0]);
-            }
-        }
-
     } else {
         for (; (kr + 31) < KC; kr += 32) {
             for (md_t jr = 0; jr < NR; jr += 16) {
@@ -1680,11 +1666,12 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
         for (; kr < KC; kr += 1) {
             for (md_t jr = 0; jr < NR; jr += 16) {
-                /* Rearrange for dpbf16_ps, read 16 cols
-                from B with 64 elements in each row.*/
+                /* Single k column: only low nibble valid per row; clear high
+                 * nibbles. */
                 MASK_LOAD_16_COLS_AVX2_LAST_4BITS(0x01)
                 RIGHT_SHIFT_LAST_4BITS_ODD
                 CLEAN_HIGH_4BITS_EVEN
+                CLEAN_HIGH_4BITS_ODD
                 UNPACKHILO8_AVX2
                 UNPACKHILO16_AVX2
                 UNPACKHILO32_AVX2
@@ -1700,8 +1687,8 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
 }
 
 void
-packb_nrlt16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
-                                     const int8_t*    b,
+packb_nrlt16_bf16u4f32of32_col_major(uint8_t*         pack_b_buffer,
+                                     const uint8_t*   b,
                                      const md_t       ldb,
                                      const md_t       KC,
                                      const md_t       n0_partial_rem,
@@ -1723,7 +1710,7 @@ packb_nrlt16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
     __m512i sign_comp = _mm512_set1_epi8(0x08);
     __m256i even;
     __m256i odd;
-    bool    signed_upscale = TRUE;
+    bool    signed_upscale = FALSE; /* u4: unsigned unpack 0..15 */
 
     if (is_odd_stride == FALSE) {
         for (kr = 0; (kr + 63) < KC; kr += 64) {
@@ -2003,7 +1990,8 @@ packb_nrlt16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
 
         for (; kr < KC; kr += 1) {
             for (jr = 0; jr < n0_partial_rem; jr += 1) {
-                /* Single k column: read one byte per row (low nibble valid). */
+                /*Rearrange for dpbf16_ps, read n0_partial_rem
+                cols from B with 64 elements in each row*/
                 a_reg[jr] = _mm256_maskz_loadu_epi8(
                     0x01, (b + ((ldb * (jr + 0)) + kr) / 2));
             }
@@ -2011,18 +1999,14 @@ packb_nrlt16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
                 a_reg[jr] = _mm256_setzero_si256();
             }
 
-            /* Single column: only low nibble valid per row; clear high nibbles.
-             */
-            CLEAN_HIGH_4BITS_EVEN;
-            CLEAN_HIGH_4BITS_ODD
             UNPACKHILO8_AVX2
             UNPACKHILO16_AVX2
             UNPACKHILO32_AVX2
             UNPACKHILO64_AVX2
 
-            // store to pack_b buffer (UNPACKHILO64 outputs to a_reg)
+            // store to pack_b buffer
             _mm256_mask_storeu_epi32(((pack_b_buffer + (((kr + 0) * NR)) / 2)),
-                                     msk0, a_reg[0]);
+                                     msk0, b_reg[0]);
         }
     } else {
         __m256i shift_index = _mm256_setr_epi8(
@@ -2218,8 +2202,7 @@ packb_nrlt16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
 
         for (; kr < KC; kr += 1) {
             for (jr = 0; jr < n0_partial_rem; jr += 1) {
-                /*Rearrange for dpbf16_ps, read n0_partial_rem
-                cols from B with 64 elements in each row*/
+                /* Single k column: read one byte per row (low nibble valid). */
                 a_reg[jr] = _mm256_maskz_loadu_epi8(
                     0x01, (b + ((ldb * (jr + 0)) + kr) / 2));
             }
@@ -2227,26 +2210,26 @@ packb_nrlt16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
                 a_reg[jr] = _mm256_setzero_si256();
             }
 
+            /* Single column: only low nibble valid per row; clear high nibbles.
+             */
             RIGHT_SHIFT_LAST_4BITS_ODD
             CLEAN_HIGH_4BITS_EVEN
+            CLEAN_HIGH_4BITS_ODD
             UNPACKHILO8_AVX2
             UNPACKHILO16_AVX2
             UNPACKHILO32_AVX2
             UNPACKHILO64_AVX2
 
-            // store to pack_b buffer
+            // store to pack_b buffer (UNPACKHILO64 outputs to a_reg)
             _mm256_mask_storeu_epi32(((pack_b_buffer + (((kr + 0) * NR)) / 2)),
-                                     msk0, b_reg[0]);
-            // store remaining elements after 8 elements are stored
-            _mm256_mask_storeu_epi32(
-                ((pack_b_buffer + 8 + (((kr + 0) * NR)) / 2)), msk0, b_reg[1]);
+                                     msk0, a_reg[0]);
         }
     }
 }
 
 void
-packb_nr64_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
-                                   const int8_t*    b,
+packb_nr64_bf16u4f32of32_col_major(uint8_t*         pack_b_buffer,
+                                   const uint8_t*   b,
                                    const md_t       ldb,
                                    const md_t       NC,
                                    const md_t       KC,
@@ -2267,7 +2250,7 @@ packb_nr64_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
     }
 
     for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        packb_nr_mult_16_bf16s4f32of32_col_major(
+        packb_nr_mult_16_bf16u4f32of32_col_major(
             (pack_b_buffer + ((jc * KC_updated) / 2)), (b + (jc * ldb) / 2), 64,
             ldb, KC, mtag);
     }
@@ -2285,19 +2268,19 @@ packb_nr64_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         md_t n0_16 = n_partial_pieces / 16;
 
         if (n0_48 == 1) {
-            packb_nr_mult_16_bf16s4f32of32_col_major(
+            packb_nr_mult_16_bf16u4f32of32_col_major(
                 (pack_b_buffer + (n_full_pieces_loop_limit * KC_updated) / 2),
                 (b + (n_full_pieces_loop_limit * ldb) / 2), 48, ldb, KC, mtag);
 
             n0_partial_pack = 48;
         } else if (n0_32 == 1) {
-            packb_nr_mult_16_bf16s4f32of32_col_major(
+            packb_nr_mult_16_bf16u4f32of32_col_major(
                 (pack_b_buffer + (n_full_pieces_loop_limit * KC_updated) / 2),
                 (b + (n_full_pieces_loop_limit * ldb) / 2), 32, ldb, KC, mtag);
 
             n0_partial_pack = 32;
         } else if (n0_16 == 1) {
-            packb_nr_mult_16_bf16s4f32of32_col_major(
+            packb_nr_mult_16_bf16u4f32of32_col_major(
                 (pack_b_buffer + (n_full_pieces_loop_limit * KC_updated) / 2),
                 (b + (n_full_pieces_loop_limit * ldb) / 2), 16, ldb, KC, mtag);
 
@@ -2305,7 +2288,7 @@ packb_nr64_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         if (n0_partial_rem > 0) {
-            packb_nrlt16_bf16s4f32of32_col_major(
+            packb_nrlt16_bf16u4f32of32_col_major(
                 (pack_b_buffer
                  + ((n_full_pieces_loop_limit * KC_updated)
                     + (n0_partial_pack * KC_updated))
