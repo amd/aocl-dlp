@@ -442,11 +442,12 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
                 static_cast<DLP_TYPE>(post_op->stor_type));
             break;
-        case POST_OPS_SWISH:
-            metaData->type = kernel_frame::kernelOps::swish;
-            metaData->paramStorageDt =
-                utils::getStorageDtFromDlpKernelDatatype(k_dtype);
+        case POST_OPS_SWISH: {
+            metaData->type           = kernel_frame::kernelOps::swish;
+            metaData->paramStorageDt = utils::getStorageDtFromAoclStorageType(
+                static_cast<DLP_TYPE>(post_op->stor_type));
             break;
+        }
         case POST_OPS_TANH:
             metaData->type = kernel_frame::kernelOps::tanh;
             break;

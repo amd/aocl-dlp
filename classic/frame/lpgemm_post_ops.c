@@ -528,6 +528,8 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                                           __FILE__, __LINE__);
                             return DLP_CLSC_NULL_POINTER;
                         }
+                        tmp_stor_type = get_stor_type(
+                            (metadata->eltwise + e_i)->algo.stor_type);
                         tmp_code = POST_OPS_SWISH;
                         break;
                     case TANH:
