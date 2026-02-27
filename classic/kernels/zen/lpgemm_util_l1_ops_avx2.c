@@ -88,7 +88,7 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_gelu_tanh_avx2)
         }
         // non vector remainder block.
         if (n_part4_rem > 0) {
-            for (md_t rem_idx = 0; rem_idx < n_part4_rem; ++rem_idx) {
+            for (iter_t rem_idx = 0; rem_idx < n_part4_rem; ++rem_idx) {
                 float temp_val       = *(x + idx + rem_idx);
                 *(x + idx + rem_idx) = GELU_TANH_NONVEC(temp_val);
             }
@@ -97,7 +97,7 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_gelu_tanh_avx2)
     // For non unit increment, use non-vectorized code.
     else {
         md_t n_incx = n * incx;
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             *(x + idx)     = GELU_TANH_NONVEC(temp_val);
         }
@@ -138,7 +138,7 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_gelu_erf_avx2)
         }
         // non vector remainder block.
         if (n_part4_rem > 0) {
-            for (md_t rem_idx = 0; rem_idx < n_part4_rem; ++rem_idx) {
+            for (iter_t rem_idx = 0; rem_idx < n_part4_rem; ++rem_idx) {
                 float temp_val       = *(x + idx + rem_idx);
                 *(x + idx + rem_idx) = GELU_ERF_NONVEC(temp_val);
             }
@@ -147,7 +147,7 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_gelu_erf_avx2)
     // For non unit increment, use non-vectorized code.
     else {
         md_t n_incx = n * incx;
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             *(x + idx)     = GELU_ERF_NONVEC(temp_val);
         }
@@ -327,12 +327,12 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx2)
         md_t n_incx = n * incx;
 
         // Exp reduction of the array.
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             exp_sum += (double)(expf(temp_val));
         }
         // Exp division of the array.
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             *(x + idx)     = (float)((double)temp_val / exp_sum);
         }

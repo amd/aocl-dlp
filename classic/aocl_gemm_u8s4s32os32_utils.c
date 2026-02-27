@@ -173,7 +173,7 @@ aocl_reorder_u8s4s32os32(const char      order,
 
 #ifdef DLP_KERNELS_ZEN4
     if (n == 1) {
-        for (md_t ii = 0; ii < k; ++ii) {
+        for (iter_t ii = 0; ii < k; ++ii) {
             int8_t lo_val;
             md_t   b_inc = ii * rs_b;
             // Even index will have data at low 4 bits, and odd at hi 4 bits.

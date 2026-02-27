@@ -59,18 +59,18 @@ packa_mr32_f16f16f16of16_row_major_ref(float16*       pack_a,
                                        const md_t     m_actual)
 {
     // Copy M-rows, each with KC elements
-    for (md_t m = 0; m < m_actual; m++) {
+    for (iter_t m = 0; m < m_actual; m++) {
         const float16* inp  = a + m * lda;
         float16*       outp = pack_a + m * KC;
-        for (md_t k = 0; k < KC; k++) {
+        for (iter_t k = 0; k < KC; k++) {
             *outp++ = *inp++;
         }
     }
 
     // Zero-pad remaining rows to MR
-    for (md_t m = m_actual; m < MR; m++) {
+    for (iter_t m = m_actual; m < MR; m++) {
         float16* outp = pack_a + m * KC;
-        for (md_t k = 0; k < KC; k++) {
+        for (iter_t k = 0; k < KC; k++) {
             *outp++ = 0;
         }
     }
@@ -94,17 +94,17 @@ packa_mr32_f16f16f16of16_col_major_ref(float16*       pack_a,
                                        const md_t     m_actual)
 {
     // Transpose: read column-wise, write row-wise
-    for (md_t m = 0; m < m_actual; m++) {
+    for (iter_t m = 0; m < m_actual; m++) {
         float16* outp = pack_a + m * KC;
-        for (md_t k = 0; k < KC; k++) {
+        for (iter_t k = 0; k < KC; k++) {
             *outp++ = a[k * lda + m]; // Transpose: read column-wise
         }
     }
 
     // Zero-pad remaining rows to MR
-    for (md_t m = m_actual; m < MR; m++) {
+    for (iter_t m = m_actual; m < MR; m++) {
         float16* outp = pack_a + m * KC;
-        for (md_t k = 0; k < KC; k++) {
+        for (iter_t k = 0; k < KC; k++) {
             *outp++ = 0;
         }
     }
@@ -137,7 +137,7 @@ packa_f16f16f16of16_reference(float16*       pack_a,
     if (cs_a == 1) {
         // Row-major input
         // Pack full MR=32 blocks
-        for (md_t ic = 0; ic < m_full * MR; ic += MR) {
+        for (iter_t ic = 0; ic < m_full * MR; ic += MR) {
             packa_mr32_f16f16f16of16_row_major_ref(
                 pack_a + ic * KC, a + ic * rs_a, MR, rs_a, KC, MR);
         }
@@ -151,7 +151,7 @@ packa_f16f16f16of16_reference(float16*       pack_a,
     } else {
         // Column-major input
         // Pack full MR=32 blocks
-        for (md_t ic = 0; ic < m_full * MR; ic += MR) {
+        for (iter_t ic = 0; ic < m_full * MR; ic += MR) {
             packa_mr32_f16f16f16of16_col_major_ref(pack_a + ic * KC, a + ic, MR,
                                                    cs_a, KC, MR);
         }
@@ -184,10 +184,10 @@ unpacka_mr32_f16f16f16of16_row_major_ref(float16*       a,
                                          const md_t     m_actual)
 {
     // Copy M-rows from packed format back to row-major
-    for (md_t m = 0; m < m_actual; m++) {
+    for (iter_t m = 0; m < m_actual; m++) {
         const float16* inp  = pack_a + m * KC;
         float16*       outp = a + m * lda;
-        for (md_t k = 0; k < KC; k++) {
+        for (iter_t k = 0; k < KC; k++) {
             *outp++ = *inp++;
         }
     }
@@ -202,9 +202,9 @@ unpacka_mr32_f16f16f16of16_col_major_ref(float16*       a,
                                          const md_t     m_actual)
 {
     // Transpose: read row-wise from packed, write column-wise to output
-    for (md_t m = 0; m < m_actual; m++) {
+    for (iter_t m = 0; m < m_actual; m++) {
         const float16* inp = pack_a + m * KC;
-        for (md_t k = 0; k < KC; k++) {
+        for (iter_t k = 0; k < KC; k++) {
             a[k * lda + m] = *inp++; // Transpose: write column-wise
         }
     }
@@ -236,7 +236,7 @@ unpacka_f16f16f16of16_reference(float16*       a,
     if (cs_a == 1) {
         // Row-major output
         // Unpack full MR=32 blocks
-        for (md_t ic = 0; ic < m_full * MR; ic += MR) {
+        for (iter_t ic = 0; ic < m_full * MR; ic += MR) {
             unpacka_mr32_f16f16f16of16_row_major_ref(
                 a + ic * rs_a, pack_a + ic * KC, MR, rs_a, KC, MR);
         }
@@ -250,7 +250,7 @@ unpacka_f16f16f16of16_reference(float16*       a,
     } else {
         // Column-major output
         // Unpack full MR=32 blocks
-        for (md_t ic = 0; ic < m_full * MR; ic += MR) {
+        for (iter_t ic = 0; ic < m_full * MR; ic += MR) {
             unpacka_mr32_f16f16f16of16_col_major_ref(a + ic, pack_a + ic * KC,
                                                      MR, cs_a, KC, MR);
         }

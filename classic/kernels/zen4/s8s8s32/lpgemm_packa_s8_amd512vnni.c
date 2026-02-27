@@ -121,8 +121,8 @@ packa_k64_s8s8s32os32(int8_t*       pack_a_buffer_s8s8s32o32,
     __m512i e01;
     __m256i last_piece;
 
-    for (md_t ic = 0; ic < m_full_pieces_loop_limit; ic += MR) {
-        for (md_t kr = 0; kr < KC; kr += NR) {
+    for (iter_t ic = 0; ic < m_full_pieces_loop_limit; ic += MR) {
+        for (iter_t kr = 0; kr < KC; kr += NR) {
             // Rearrange for vpdpbusd, read 6 rows from A with 64 elements in
             // each row.
             a0 = _mm512_loadu_si512(a + (lda * (ic + 0)) + kr);
@@ -284,7 +284,7 @@ packa_m5_k64_s8s8s32os32(int8_t*       pack_a_buffer_s8s8s32o32,
     __m512i c01;
     __m128i last_piece;
 
-    for (md_t kr = 0; kr < KC; kr += NR) {
+    for (iter_t kr = 0; kr < KC; kr += NR) {
         // Rearrange for vpdpbusd, read 5 rows from A with 64 elements in each
         // row.
         a0 = _mm512_loadu_si512(a + (lda * 0) + kr);
@@ -371,7 +371,7 @@ packa_m4_k64_s8s8s32os32(int8_t*       pack_a_buffer_s8s8s32o32,
     __m512i a01;
     __m512i c01;
 
-    for (md_t kr = 0; kr < KC; kr += NR) {
+    for (iter_t kr = 0; kr < KC; kr += NR) {
         // Rearrange for vpdpbusd, read 4 rows from A with 64 elements in each
         // row.
         a0 = _mm512_loadu_si512(a + (lda * 0) + kr);
@@ -445,7 +445,7 @@ packa_m3_k64_s8s8s32os32(int8_t*       pack_a_buffer_s8s8s32o32,
     __m512i a01;
     __m256i last_piece;
 
-    for (md_t kr = 0; kr < KC; kr += NR) {
+    for (iter_t kr = 0; kr < KC; kr += NR) {
         // Rearrange for vpdpbusd, read 3 rows from A with 64 elements in each
         // row.
         a0 = _mm512_loadu_si512(a + (lda * 0) + kr);
@@ -494,7 +494,7 @@ packa_m2_k64_s8s8s32os32(int8_t*       pack_a_buffer_s8s8s32o32,
     __m512i b0;
     __m512i a01;
 
-    for (md_t kr = 0; kr < KC; kr += NR) {
+    for (iter_t kr = 0; kr < KC; kr += NR) {
         // Rearrange for vpdpbusd, read 2 rows from A with 64 elements in each
         // row.
         a0 = _mm512_loadu_si512(a + (lda * 0) + kr);
@@ -519,7 +519,7 @@ packa_m1_k64_s8s8s32os32(int8_t*       pack_a_buffer_s8s8s32o32,
 {
     __m512i a0;
 
-    for (md_t kr = 0; kr < KC; kr += NR) {
+    for (iter_t kr = 0; kr < KC; kr += NR) {
         // Rearrange for vpdpbusd, read 1 row from A with 64 elements in each
         // row.
         a0 = _mm512_loadu_si512(a + (lda * 0) + kr);

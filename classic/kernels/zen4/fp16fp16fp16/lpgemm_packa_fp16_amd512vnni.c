@@ -337,7 +337,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
         for (kr = 0; (kr + 31) < KC; kr += 32) {
             /* Load and store 32 rows, each with 32 FP16 elements (interleaved)
              */
-            for (md_t m = 0; m < 32; m++) {
+            for (iter_t m = 0; m < 32; m++) {
                 a_reg[m] = _mm512_loadu_si512(a + ((ic + m) * rs_a) + kr);
                 _mm512_storeu_si512(pack_a_buffer + ((ic + m) * KC) + kr,
                                     a_reg[m]);
@@ -350,13 +350,13 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
             __mmask32 k_mask = (__mmask32)((1ULL << k_rem) - 1);
 
             /* Load 32 rows with masked load */
-            for (md_t m = 0; m < 32; m++) {
+            for (iter_t m = 0; m < 32; m++) {
                 a_reg[m] = _mm512_maskz_loadu_epi16(k_mask,
                                                     a + ((ic + m) * rs_a) + kr);
             }
 
             /* Store with masked store */
-            for (md_t m = 0; m < 32; m++) {
+            for (iter_t m = 0; m < 32; m++) {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + m) * KC) + kr,
                                          k_mask, a_reg[m]);
             }
@@ -366,7 +366,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
     /* M-fringe: Handle remaining M-rows (load/store already interleaved) */
     for (; (ic + 15) < MC; ic += 16) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t m = 0; m < 16; m++) {
+            for (iter_t m = 0; m < 16; m++) {
                 a_reg[m] = _mm512_loadu_si512(a + ((ic + m) * rs_a) + kr);
                 _mm512_storeu_si512(pack_a_buffer + ((ic + m) * KC) + kr,
                                     a_reg[m]);
@@ -375,7 +375,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
         if (kr < KC) {
             md_t      k_rem  = KC - kr;
             __mmask32 k_mask = (__mmask32)((1ULL << k_rem) - 1);
-            for (md_t m = 0; m < 16; m++) {
+            for (iter_t m = 0; m < 16; m++) {
                 a_reg[m] = _mm512_maskz_loadu_epi16(k_mask,
                                                     a + ((ic + m) * rs_a) + kr);
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + m) * KC) + kr,
@@ -386,7 +386,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
 
     for (; (ic + 7) < MC; ic += 8) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t m = 0; m < 8; m++) {
+            for (iter_t m = 0; m < 8; m++) {
                 a_reg[m] = _mm512_loadu_si512(a + ((ic + m) * rs_a) + kr);
                 _mm512_storeu_si512(pack_a_buffer + ((ic + m) * KC) + kr,
                                     a_reg[m]);
@@ -395,7 +395,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
         if (kr < KC) {
             md_t      k_rem  = KC - kr;
             __mmask32 k_mask = (__mmask32)((1ULL << k_rem) - 1);
-            for (md_t m = 0; m < 8; m++) {
+            for (iter_t m = 0; m < 8; m++) {
                 a_reg[m] = _mm512_maskz_loadu_epi16(k_mask,
                                                     a + ((ic + m) * rs_a) + kr);
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + m) * KC) + kr,
@@ -406,7 +406,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
 
     for (; (ic + 3) < MC; ic += 4) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t m = 0; m < 4; m++) {
+            for (iter_t m = 0; m < 4; m++) {
                 a_reg[m] = _mm512_loadu_si512(a + ((ic + m) * rs_a) + kr);
                 _mm512_storeu_si512(pack_a_buffer + ((ic + m) * KC) + kr,
                                     a_reg[m]);
@@ -415,7 +415,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
         if (kr < KC) {
             md_t      k_rem  = KC - kr;
             __mmask32 k_mask = (__mmask32)((1ULL << k_rem) - 1);
-            for (md_t m = 0; m < 4; m++) {
+            for (iter_t m = 0; m < 4; m++) {
                 a_reg[m] = _mm512_maskz_loadu_epi16(k_mask,
                                                     a + ((ic + m) * rs_a) + kr);
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + m) * KC) + kr,
@@ -426,7 +426,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
 
     for (; (ic + 1) < MC; ic += 2) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t m = 0; m < 2; m++) {
+            for (iter_t m = 0; m < 2; m++) {
                 a_reg[m] = _mm512_loadu_si512(a + ((ic + m) * rs_a) + kr);
                 _mm512_storeu_si512(pack_a_buffer + ((ic + m) * KC) + kr,
                                     a_reg[m]);
@@ -435,7 +435,7 @@ packa_mr32_f16f16f16of16_row_major(float16*       pack_a_buffer,
         if (kr < KC) {
             md_t      k_rem  = KC - kr;
             __mmask32 k_mask = (__mmask32)((1ULL << k_rem) - 1);
-            for (md_t m = 0; m < 2; m++) {
+            for (iter_t m = 0; m < 2; m++) {
                 a_reg[m] = _mm512_maskz_loadu_epi16(k_mask,
                                                     a + ((ic + m) * rs_a) + kr);
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + m) * KC) + kr,
@@ -498,7 +498,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
         /* Process 32 K-elements at a time (32x32 transpose) */
         for (kr = 0; (kr + 31) < KC; kr += 32) {
             /* Load 32 columns (K-dim), each with 32 M-elements */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 a_reg[i] = _mm512_loadu_si512(a + ic + ((kr + i) * cs_a));
             }
 
@@ -506,7 +506,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             TRANSPOSE_32x32_FP16_AVX512
 
                 /* Store transposed result in M-MAJOR layout */
-                for (md_t i = 0; i < 32; i++)
+                for (iter_t i = 0; i < 32; i++)
             {
                 _mm512_storeu_si512(pack_a_buffer + ((ic + i) * KC) + kr,
                                     a_reg[i]);
@@ -523,7 +523,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFFFF; /* Store only 16 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -536,7 +536,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
                 /* Store ALL 32 transposed rows with masked store (only k_cols
                    K-elements each) */
-                for (md_t i = 0; i < 32; i++)
+                for (iter_t i = 0; i < 32; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -550,7 +550,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFF; /* Store only 8 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -563,7 +563,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
                 /* Store ALL 32 transposed rows with masked store (only k_cols
                    K-elements each) */
-                for (md_t i = 0; i < 32; i++)
+                for (iter_t i = 0; i < 32; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -577,7 +577,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xF; /* Store only 4 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -590,7 +590,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
                 /* Store ALL 32 transposed rows with masked store (only k_cols
                    K-elements each) */
-                for (md_t i = 0; i < 32; i++)
+                for (iter_t i = 0; i < 32; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -604,7 +604,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x3; /* Store only 2 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -617,7 +617,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
                 /* Store ALL 32 transposed rows with masked store (only k_cols
                    K-elements each) */
-                for (md_t i = 0; i < 32; i++)
+                for (iter_t i = 0; i < 32; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -631,7 +631,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x1; /* Store only 1 element per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -644,7 +644,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
                 /* Store ALL 32 transposed rows with masked store (only k_cols
                    K-elements each) */
-                for (md_t i = 0; i < 32; i++)
+                for (iter_t i = 0; i < 32; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -656,7 +656,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
     for (; (ic + 15) < MC; ic += 16) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
             /* Load 32 columns, each with 16 M-elements (zero-pad upper 16) */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 __mmask32 m_mask = 0xFFFF; /* 16 elements valid */
                 a_reg[i]         = _mm512_maskz_loadu_epi16(m_mask,
                                                             a + ic + ((kr + i) * cs_a));
@@ -665,7 +665,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             TRANSPOSE_32x32_FP16_AVX512
 
                 /* Store first 16 transposed rows */
-                for (md_t i = 0; i < 16; i++)
+                for (iter_t i = 0; i < 16; i++)
             {
                 _mm512_storeu_si512(pack_a_buffer + ((ic + i) * KC) + kr,
                                     a_reg[i]);
@@ -679,7 +679,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFFFF; /* Store only 16 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -692,7 +692,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
                 /* Store 16 M-rows with masked store (only k_cols K-elements
                    each) */
-                for (md_t i = 0; i < 16; i++)
+                for (iter_t i = 0; i < 16; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -705,7 +705,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFF;   /* Store only 8 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -716,7 +716,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 16; i++)
+                for (iter_t i = 0; i < 16; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -729,7 +729,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xF;    /* Store only 4 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -740,7 +740,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 16; i++)
+                for (iter_t i = 0; i < 16; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -753,7 +753,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x3;    /* Store only 2 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -764,7 +764,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 16; i++)
+                for (iter_t i = 0; i < 16; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -777,7 +777,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x1;    /* Store only 1 element per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -788,7 +788,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 16; i++)
+                for (iter_t i = 0; i < 16; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -798,7 +798,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
     for (; (ic + 7) < MC; ic += 8) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 __mmask32 m_mask = 0xFF; /* 8 elements valid */
                 a_reg[i]         = _mm512_maskz_loadu_epi16(m_mask,
                                                             a + ic + ((kr + i) * cs_a));
@@ -806,7 +806,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 8; i++)
+                for (iter_t i = 0; i < 8; i++)
             {
                 _mm512_storeu_si512(pack_a_buffer + ((ic + i) * KC) + kr,
                                     a_reg[i]);
@@ -819,7 +819,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFFFF; /* Store only 16 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -830,7 +830,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 8; i++)
+                for (iter_t i = 0; i < 8; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -842,7 +842,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFF; /* Store only 8 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -853,7 +853,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 8; i++)
+                for (iter_t i = 0; i < 8; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -865,7 +865,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xF;  /* Store only 4 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -876,7 +876,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 8; i++)
+                for (iter_t i = 0; i < 8; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -888,7 +888,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x3;  /* Store only 2 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -899,7 +899,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 8; i++)
+                for (iter_t i = 0; i < 8; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -911,7 +911,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x1;  /* Store only 1 element per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -922,7 +922,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 8; i++)
+                for (iter_t i = 0; i < 8; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -932,7 +932,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
     for (; (ic + 3) < MC; ic += 4) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 __mmask32 m_mask = 0xF; /* 4 elements valid */
                 a_reg[i]         = _mm512_maskz_loadu_epi16(m_mask,
                                                             a + ic + ((kr + i) * cs_a));
@@ -940,7 +940,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 4; i++)
+                for (iter_t i = 0; i < 4; i++)
             {
                 _mm512_storeu_si512(pack_a_buffer + ((ic + i) * KC) + kr,
                                     a_reg[i]);
@@ -953,7 +953,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFFFF; /* Store only 16 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -964,7 +964,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 4; i++)
+                for (iter_t i = 0; i < 4; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -976,7 +976,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFF; /* Store only 8 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -987,7 +987,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 4; i++)
+                for (iter_t i = 0; i < 4; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -999,7 +999,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xF; /* Store only 4 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1010,7 +1010,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 4; i++)
+                for (iter_t i = 0; i < 4; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1022,7 +1022,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x3; /* Store only 2 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1033,7 +1033,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 4; i++)
+                for (iter_t i = 0; i < 4; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1045,7 +1045,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x1; /* Store only 1 element per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1056,7 +1056,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 4; i++)
+                for (iter_t i = 0; i < 4; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1066,7 +1066,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
     for (; (ic + 1) < MC; ic += 2) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 __mmask32 m_mask = 0x3; /* 2 elements valid */
                 a_reg[i]         = _mm512_maskz_loadu_epi16(m_mask,
                                                             a + ic + ((kr + i) * cs_a));
@@ -1074,7 +1074,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 2; i++)
+                for (iter_t i = 0; i < 2; i++)
             {
                 _mm512_storeu_si512(pack_a_buffer + ((ic + i) * KC) + kr,
                                     a_reg[i]);
@@ -1087,7 +1087,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFFFF; /* Store only 16 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1098,7 +1098,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 2; i++)
+                for (iter_t i = 0; i < 2; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1110,7 +1110,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFF; /* Store only 8 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1121,7 +1121,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 2; i++)
+                for (iter_t i = 0; i < 2; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1133,7 +1133,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xF; /* Store only 4 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1144,7 +1144,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 2; i++)
+                for (iter_t i = 0; i < 2; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1156,7 +1156,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x3; /* Store only 2 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1167,7 +1167,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 2; i++)
+                for (iter_t i = 0; i < 2; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1179,7 +1179,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x1; /* Store only 1 element per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1190,7 +1190,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
             TRANSPOSE_32x32_FP16_AVX512
 
-                for (md_t i = 0; i < 2; i++)
+                for (iter_t i = 0; i < 2; i++)
             {
                 _mm512_mask_storeu_epi16(pack_a_buffer + ((ic + i) * KC) + kr,
                                          store_mask, a_reg[i]);
@@ -1200,7 +1200,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
 
     for (; ic < MC; ic += 1) {
         for (kr = 0; (kr + 31) < KC; kr += 32) {
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 __mmask32 m_mask = 0x1; /* 1 element valid */
                 a_reg[i]         = _mm512_maskz_loadu_epi16(m_mask,
                                                             a + ic + ((kr + i) * cs_a));
@@ -1217,7 +1217,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFFFF; /* Store only 16 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1237,7 +1237,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xFF; /* Store only 8 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1257,7 +1257,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0xF; /* Store only 4 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1277,7 +1277,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x3; /* Store only 2 elements per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));
@@ -1297,7 +1297,7 @@ packa_mr32_f16f16f16of16_col_major(float16*       pack_a_buffer,
             __mmask32 store_mask = 0x1; /* Store only 1 element per row */
 
             /* Load only valid columns, zero-pad the rest */
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 if (i < k_cols) {
                     a_reg[i] = _mm512_maskz_loadu_epi16(
                         m_mask, a + ic + ((kr + i) * cs_a));

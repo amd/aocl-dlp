@@ -95,7 +95,7 @@ LPGEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
             pack_b_buffer_bf16 =
                 (bfloat16*)dlp_malloc_page_aligned(mem_b_size_req, &err);
 
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_b_buffer_bf16[k0] = b[k0 * rs_b];
             }
 
@@ -253,7 +253,7 @@ LPGEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         a_block_stride = rs_a_use;
     }
 
-    for (md_t jr = 0; jr < n; jr += NR) {
+    for (iter_t jr = 0; jr < n; jr += NR) {
         md_t nr0 = dlp_min((n - jr), NR);
 
         // Post ops meta attributes.

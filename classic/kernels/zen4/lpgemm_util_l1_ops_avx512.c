@@ -79,7 +79,7 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_gelu_tanh_avx512)
     // For non unit increment, use non-vectorized code.
     else {
         md_t n_incx = n * incx;
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             *(x + idx)     = GELU_TANH_NONVEC(temp_val);
         }
@@ -114,7 +114,7 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_gelu_erf_avx512)
     // For non unit increment, use non-vectorized code.
     else {
         md_t n_incx = n * incx;
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             *(x + idx)     = GELU_ERF_NONVEC(temp_val);
         }
@@ -255,12 +255,12 @@ LPGEMM_UTIL_L1_OP_KERNEL(float, f32_softmax_avx512)
         md_t n_incx = n * incx;
 
         // Exp reduction of the array.
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             exp_sum += (double)(expf(temp_val));
         }
         // Exp division of the array.
-        for (md_t idx = 0; idx < n_incx; idx += incx) {
+        for (iter_t idx = 0; idx < n_incx; idx += incx) {
             float temp_val = *(x + idx);
             *(x + idx)     = (float)((double)temp_val / exp_sum);
         }

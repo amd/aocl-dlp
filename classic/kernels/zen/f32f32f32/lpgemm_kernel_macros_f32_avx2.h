@@ -217,7 +217,7 @@ multiply with Beta, and add to alpha*A*B*/
                                 + post_ops_attr.post_op_c_j + (n_ind * 8);     \
         int32_t ele[8] = { 0 };                                                \
         _mm256_storeu_si256((__m256i*)ele, mask);                              \
-        for (md_t i = 0; i < 8; i++) {                                         \
+        for (iter_t i = 0; i < 8; i++) {                                       \
             if (ele[i] == -1) {                                                \
                 data_feeder[i] = *(post_op_ptr + i);                           \
             }                                                                  \
@@ -234,7 +234,7 @@ multiply with Beta, and add to alpha*A*B*/
         bfloat16  data_feeder[8] = { 0 };                                      \
         bfloat16* post_op_ptr    = (bfloat16*)(post_ops_attr.buf_downscale)    \
                                 + (post_ops_attr.post_op_c_j + (n_ind * 8));   \
-        for (md_t i = 0; i < n_elems; i++)                                     \
+        for (iter_t i = 0; i < n_elems; i++)                                   \
             data_feeder[i] = *(post_op_ptr + i);                               \
         ymm0 =                                                                 \
             (__m256)_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(   \
@@ -397,7 +397,7 @@ multiply with Beta, and add to alpha*A*B*/
         bfloat16* post_op_ptr =                                                \
             (bfloat16*)(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm)   \
                         + post_ops_attr.post_op_c_j + (n_ind * 8));            \
-        for (md_t i = 0; i < n_elems; i++)                                     \
+        for (iter_t i = 0; i < n_elems; i++)                                   \
             data_feeder[i] = *(post_op_ptr + i);                               \
         scr = (__m256)_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128( \
                                             (__m128i const*)(data_feeder))),   \
@@ -436,7 +436,7 @@ multiply with Beta, and add to alpha*A*B*/
         bfloat16 data_feeder[8] = { 0 };                                       \
         int32_t  ele[8]         = { 0 };                                       \
         _mm256_storeu_si256((__m256i*)ele, mask);                              \
-        for (md_t i = 0; i < 8; i++) {                                         \
+        for (iter_t i = 0; i < 8; i++) {                                       \
             if (ele[i] == -1) {                                                \
                 data_feeder[i] = *(post_op_ptr + i);                           \
             }                                                                  \
@@ -480,7 +480,7 @@ multiply with Beta, and add to alpha*A*B*/
             (bfloat16*)(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm)   \
                         + post_ops_attr.post_op_c_j);                          \
                                                                                \
-        for (md_t i = 0; i < 1; i++)                                           \
+        for (iter_t i = 0; i < 1; i++)                                         \
             data_feeder[i] = *(post_op_ptr + i);                               \
         scr = (__m128)_mm_sllv_epi32(                                          \
             _mm_cvtepi16_epi32(                                                \
@@ -692,7 +692,7 @@ multiply with Beta, and add to alpha*A*B*/
         _mm256_storeu_si256((__m256i*)ele, mask);                              \
         bfloat16* post_op_ptr = ((bfloat16*)(post_ops_list_temp->op_args1))    \
                                 + post_ops_attr.post_op_c_j + (n_ind * 8);     \
-        for (md_t i = 0; i < 8; i++) {                                         \
+        for (iter_t i = 0; i < 8; i++) {                                       \
             if (ele[i] == -1) {                                                \
                 data_feeder[i] = *(post_op_ptr + i);                           \
             }                                                                  \
@@ -763,7 +763,7 @@ multiply with Beta, and add to alpha*A*B*/
         bfloat16* post_op_ptr    = (bfloat16*)(post_ops_attr.buf_downscale)    \
                                 + post_ops_attr.post_op_c_i                    \
                                 + (post_ops_attr.post_op_c_j + (n_ind * 8));   \
-        for (md_t i = 0; i < n_elems; i++)                                     \
+        for (iter_t i = 0; i < n_elems; i++)                                   \
             data_feeder[i] = *(post_op_ptr + i);                               \
         scr = (__m256)_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128( \
                                             (__m128i const*)(data_feeder))),   \
@@ -809,7 +809,7 @@ multiply with Beta, and add to alpha*A*B*/
         int      n_elems = 0;                                                  \
         _mm256_storeu_ps((float*)temp, reg);                                   \
         _mm256_storeu_si256((__m256i*)ele, mask);                              \
-        for (md_t i = 0; i < 8; i++) {                                         \
+        for (iter_t i = 0; i < 8; i++) {                                       \
             if (ele[i] == -1) {                                                \
                 n_elems++;                                                     \
             }                                                                  \
@@ -911,7 +911,7 @@ multiply with Beta, and add to alpha*A*B*/
 #define GET_STORE_MASK(mask, store_mask)                                       \
     {                                                                          \
         int32_t mask_vec[8] = { 0 };                                           \
-        for (md_t i = 0; i < mask; i++)                                        \
+        for (iter_t i = 0; i < mask; i++)                                      \
             mask_vec[i] = -1;                                                  \
         store_mask = _mm256_loadu_si256((__m256i const*)mask_vec);             \
     }

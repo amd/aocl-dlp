@@ -163,8 +163,8 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
     // C = beta*C (or 0 when beta=0 too).
     // This prevents Inf*0=NaN propagation from A or B.
     if (alpha_f32_val == 0.0f) {
-        for (md_t i = 0; i < m; i++) {
-            for (md_t j = 0; j < n; j++) {
+        for (iter_t i = 0; i < m; i++) {
+            for (iter_t j = 0; j < n; j++) {
                 float16& c_ref = getC(i, j);
                 if (beta_f32_val != 0.0f) {
                     float c_f32 = fp16_to_f32(c_ref);
@@ -178,8 +178,8 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
     }
 
     // Triple loop GEMM: C = alpha*A*B + beta*C
-    for (md_t i = 0; i < m; i++) {
-        for (md_t j = 0; j < n; j++) {
+    for (iter_t i = 0; i < m; i++) {
+        for (iter_t j = 0; j < n; j++) {
             float16& c_ref = getC(i, j);
 
             if (isGemv) {
@@ -206,7 +206,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                     // Small K: Simple sequential accumulation (gold standard)
                     float16 sum = static_cast<float16>(0);
 
-                    for (md_t p = 0; p < k; p++) {
+                    for (iter_t p = 0; p < k; p++) {
                         float16 a_val = getA(i, p);
                         float16 b_val = getB(p, j);
 
@@ -235,7 +235,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                     // accumulators after each KC block, then stores to C
                     const md_t K_SUB_ITER = 4;
 
-                    for (md_t pc = 0; pc < k; pc += KC) {
+                    for (iter_t pc = 0; pc < k; pc += KC) {
                         md_t kc0 = (k - pc) < KC ? (k - pc) : KC;
 
                         // Beta handling: use user beta for first K-block, 1.0
@@ -249,8 +249,8 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                         md_t k_groups = kc0 / K_SUB_ITER;
                         md_t k_left   = kc0 % K_SUB_ITER;
 
-                        for (md_t g = 0; g < k_groups; g++) {
-                            for (md_t s = 0; s < K_SUB_ITER; s++) {
+                        for (iter_t g = 0; g < k_groups; g++) {
+                            for (iter_t s = 0; s < K_SUB_ITER; s++) {
                                 md_t    p     = pc + g * K_SUB_ITER + s;
                                 float16 a_val = getA(i, p);
                                 float16 b_val = getB(p, j);
@@ -264,7 +264,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                         }
 
                         // Handle remaining elements
-                        for (md_t s = 0; s < k_left; s++) {
+                        for (iter_t s = 0; s < k_left; s++) {
                             md_t    p     = pc + k_groups * K_SUB_ITER + s;
                             float16 a_val = getA(i, p);
                             float16 b_val = getB(p, j);
@@ -279,7 +279,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                         // Consolidate accumulators (matches kernel's
                         // finalAccumulate)
                         float16 sum = accum[0];
-                        for (md_t s = 1; s < K_SUB_ITER; s++) {
+                        for (iter_t s = 1; s < K_SUB_ITER; s++) {
                             float sum_f32 = fp16_to_f32(sum);
                             float acc_f32 = fp16_to_f32(accum[s]);
                             sum           = f32_to_fp16(sum_f32 + acc_f32);
@@ -315,7 +315,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                     const md_t SIMD_WIDTH           = 32;
                     float16    lane_acc[SIMD_WIDTH] = { 0 };
 
-                    for (md_t p = 0; p < k; p++) {
+                    for (iter_t p = 0; p < k; p++) {
                         md_t    lane  = p % SIMD_WIDTH;
                         float16 a_val = getA(i, p);
                         float16 b_val = getB(p, j);
@@ -334,25 +334,25 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                     // 3. Continue...
 
                     // Step 1: 32 -> 16
-                    for (md_t i = 0; i < 16; i++) {
+                    for (iter_t i = 0; i < 16; i++) {
                         float f1    = fp16_to_f32(lane_acc[i]);
                         float f2    = fp16_to_f32(lane_acc[i + 16]);
                         lane_acc[i] = f32_to_fp16(f1 + f2);
                     }
                     // Step 2: 16 -> 8
-                    for (md_t i = 0; i < 8; i++) {
+                    for (iter_t i = 0; i < 8; i++) {
                         float f1    = fp16_to_f32(lane_acc[i]);
                         float f2    = fp16_to_f32(lane_acc[i + 8]);
                         lane_acc[i] = f32_to_fp16(f1 + f2);
                     }
                     // Step 3: 8 -> 4
-                    for (md_t i = 0; i < 4; i++) {
+                    for (iter_t i = 0; i < 4; i++) {
                         float f1    = fp16_to_f32(lane_acc[i]);
                         float f2    = fp16_to_f32(lane_acc[i + 4]);
                         lane_acc[i] = f32_to_fp16(f1 + f2);
                     }
                     // Step 4: 4 -> 2
-                    for (md_t i = 0; i < 2; i++) {
+                    for (iter_t i = 0; i < 2; i++) {
                         float f1    = fp16_to_f32(lane_acc[i]);
                         float f2    = fp16_to_f32(lane_acc[i + 2]);
                         lane_acc[i] = f32_to_fp16(f1 + f2);
@@ -385,8 +385,8 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                     md_t k_groups = k / K_SUB_ITER;
                     md_t k_left   = k % K_SUB_ITER;
 
-                    for (md_t g = 0; g < k_groups; g++) {
-                        for (md_t s = 0; s < K_SUB_ITER; s++) {
+                    for (iter_t g = 0; g < k_groups; g++) {
+                        for (iter_t s = 0; s < K_SUB_ITER; s++) {
                             md_t    p     = g * K_SUB_ITER + s;
                             float16 a_val = getA(i, p);
                             float16 b_val = getB(p, j);
@@ -399,7 +399,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                         }
                     }
 
-                    for (md_t s = 0; s < k_left; s++) {
+                    for (iter_t s = 0; s < k_left; s++) {
                         md_t    p     = k_groups * K_SUB_ITER + s;
                         float16 a_val = getA(i, p);
                         float16 b_val = getB(p, j);
@@ -413,7 +413,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
 
                     // Consolidate accumulators
                     float16 sum = accum[0];
-                    for (md_t s = 1; s < K_SUB_ITER; s++) {
+                    for (iter_t s = 1; s < K_SUB_ITER; s++) {
                         float sum_f32 = fp16_to_f32(sum);
                         float acc_f32 = fp16_to_f32(accum[s]);
                         sum           = f32_to_fp16(sum_f32 + acc_f32);
@@ -439,7 +439,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                 // - It's framework behavior, not kernel optimization
                 // - DLP framework stores to C after each KC block
                 // - This causes precision loss that must be matched
-                for (md_t pc = 0; pc < k; pc += KC) {
+                for (iter_t pc = 0; pc < k; pc += KC) {
                     md_t kc0 = (k - pc) < KC ? (k - pc) : KC;
 
                     // Beta handling: use user beta for first K-block, 1.0 for
@@ -449,7 +449,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                     // FP16 accumulator for this K-block
                     float16 sum = static_cast<float16>(0);
 
-                    for (md_t p = 0; p < kc0; p++) {
+                    for (iter_t p = 0; p < kc0; p++) {
                         float16 a_val = getA(i, pc + p);
                         float16 b_val = getB(pc + p, j);
 

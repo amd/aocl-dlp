@@ -159,8 +159,8 @@ packa_f32f32f32of32_row_major_avx2(float*       pack_a_buf,
     __m128 e0_128;
     __m128 f0_128;
 
-    for (md_t ic = 0; ic < m_full_pieces_loop_limit; ic += MR) {
-        for (md_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
+    for (iter_t ic = 0; ic < m_full_pieces_loop_limit; ic += MR) {
+        for (iter_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
             a01 = _mm256_loadu_ps(a + (lda * (ic + 0)) + kr);
             b0  = _mm256_loadu_ps(a + (lda * (ic + 1)) + kr);
             c01 = _mm256_loadu_ps(a + (lda * (ic + 2)) + kr);
@@ -208,7 +208,7 @@ packa_f32f32f32of32_row_major_avx2(float*       pack_a_buf,
     if (m_partial_pieces > 0) {
         md_t   ic = m_full_pieces_loop_limit;
         __m256 temp_a_reg[6];
-        for (md_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
+        for (iter_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
             for (int ii = 0; ii < m_partial_pieces; ++ii) {
                 temp_a_reg[ii] = _mm256_loadu_ps(a + (lda * (ic + ii)) + kr);
             }
@@ -356,8 +356,8 @@ packa_f32f32f32of32_col_major_avx2(float*       pack_a_buf,
     __m128 g0_2e;
     __m128 h0_2e;
 
-    for (md_t ic = 0; ic < m_full_pieces_loop_limit; ic += MR) {
-        for (md_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
+    for (iter_t ic = 0; ic < m_full_pieces_loop_limit; ic += MR) {
+        for (iter_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
             // First 4 elements.
             a0 = _mm_loadu_ps(a + ic + (lda * (kr + 0)));
             b0 = _mm_loadu_ps(a + ic + (lda * (kr + 1)));
@@ -389,7 +389,7 @@ packa_f32f32f32of32_col_major_avx2(float*       pack_a_buf,
             F32_COL_MAJOR_K_PACK_STORE_SSE();
         }
         if (kr_partial_pieces) {
-            for (md_t kr = kr_full_pieces_loop_limit; kr < KC; ++kr) {
+            for (iter_t kr = kr_full_pieces_loop_limit; kr < KC; ++kr) {
                 a0    = _mm_loadu_ps(a + ic + (lda * (kr + 0)));
                 a0_2e = _mm_castpd_ps(
                     _mm_load_sd((double*)(a + (ic + 4) + (lda * (kr + 0)))));
@@ -411,7 +411,7 @@ packa_f32f32f32of32_col_major_avx2(float*       pack_a_buf,
 
         float temp_pack_a_buf[6] = { 0 };
 
-        for (md_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
+        for (iter_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
             F32_COL_MAJOR_K_PACK_LOAD_MEMCPY(cp_st, temp_pack_a_buf,
                                              a + ic + (lda * (kr + 0)));
             a0    = _mm_loadu_ps(temp_pack_a_buf);
@@ -455,7 +455,7 @@ packa_f32f32f32of32_col_major_avx2(float*       pack_a_buf,
             F32_COL_MAJOR_K_PACK_STORE_SSE();
         }
         if (kr_partial_pieces) {
-            for (md_t kr = kr_full_pieces_loop_limit; kr < KC; ++kr) {
+            for (iter_t kr = kr_full_pieces_loop_limit; kr < KC; ++kr) {
                 F32_COL_MAJOR_K_PACK_LOAD_MEMCPY(cp_st, temp_pack_a_buf,
                                                  a + ic + (lda * (kr + 0)));
                 a0 = _mm_loadu_ps(temp_pack_a_buf);

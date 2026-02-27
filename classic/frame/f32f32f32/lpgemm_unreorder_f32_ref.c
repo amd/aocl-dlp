@@ -43,12 +43,12 @@ unpackb_f32f32f32of32_row_major_ref(float*     b,
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;
     md_t n_partial_pieces         = NC % NR;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < KC; kr++) {
             float* outp = (unpack_b + (ldb * kr) + jc);
             float* inp  = (b + (jc * KC) + (kr * NR));
 
-            for (md_t i = 0; i < NR; i++) {
+            for (iter_t i = 0; i < NR; i++) {
                 *outp++ = *inp++;
             }
         }
@@ -58,11 +58,11 @@ unpackb_f32f32f32of32_row_major_ref(float*     b,
         float* b_rem        = (b + (n_full_pieces_loop_limit * KC));
         float* unpack_b_rem = (unpack_b + n_full_pieces_loop_limit);
 
-        for (md_t kr = 0; kr < KC; kr++) {
+        for (iter_t kr = 0; kr < KC; kr++) {
             float* inp  = (b_rem + kr * NR);
             float* outp = (unpack_b_rem + (ldb * kr));
 
-            for (md_t i = 0; i < nr0; i++) {
+            for (iter_t i = 0; i < nr0; i++) {
                 *outp++ = *inp++;
             }
         }
@@ -81,12 +81,12 @@ unpackb_f32f32f32of32_col_major_ref(float*     b,
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;
     md_t n_partial_pieces         = NC % NR;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < KC; kr++) {
             float* outp = (unpack_b + jc * KC + kr);
             float* inp  = (b + (jc * ldb) + (kr * NR));
 
-            for (md_t i = 0; i < NR; i++) {
+            for (iter_t i = 0; i < NR; i++) {
                 *(outp + i * ldb) = *inp++;
             }
         }
@@ -95,11 +95,11 @@ unpackb_f32f32f32of32_col_major_ref(float*     b,
         float* b_rem        = (b + (n_full_pieces_loop_limit * KC));
         float* unpack_b_rem = (unpack_b + n_full_pieces_loop_limit * ldb);
 
-        for (md_t kr = 0; kr < KC; kr++) {
+        for (iter_t kr = 0; kr < KC; kr++) {
             float* inp  = (b_rem + kr * NR);
             float* outp = (unpack_b_rem + kr);
 
-            for (md_t i = 0; i < n_partial_pieces; i++) {
+            for (iter_t i = 0; i < n_partial_pieces; i++) {
                 *(outp + i * ldb) = *inp++;
             }
         }

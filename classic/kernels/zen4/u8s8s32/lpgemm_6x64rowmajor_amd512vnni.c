@@ -124,7 +124,7 @@ LPGEMM_MAIN_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x64)
     __m512i a_int32_3 = _mm512_setzero_epi32();
 
     _mm_prefetch(a, _MM_HINT_T0);
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         _mm_prefetch(b, _MM_HINT_T0);
         _mm_prefetch(a + (MR * ps_a) + (0 * 16), _MM_HINT_T1);
 
@@ -166,7 +166,7 @@ LPGEMM_MAIN_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x64)
         __m512i c_int32_5p2 = _mm512_setzero_epi32();
         __m512i c_int32_5p3 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // The instructions are arranged in a mixed way to reduce data
             // chain dependencies.
 

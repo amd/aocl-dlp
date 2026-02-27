@@ -51,7 +51,7 @@ unpackb_nr48_s8_row_major_ref(int8_t*    b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         int8_t* outp0 = (unpack_b + (ldb * (kr + 0)));
         int8_t* outp1 = (unpack_b + (ldb * (kr + 1)));
         int8_t* outp2 = (unpack_b + (ldb * (kr + 2)));
@@ -62,7 +62,7 @@ unpackb_nr48_s8_row_major_ref(int8_t*    b,
         int8_t* inp1 = (b + (kr_new + 1) * NR);
         int8_t* inp2 = (b + (kr_new + 2) * NR);
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0 = *inp0++;
             *outp1 = *inp0++;
             *outp2 = *inp0++;
@@ -97,7 +97,7 @@ unpackb_nr48_s8_row_major_ref(int8_t*    b,
         int8_t* inp1 = (b + ((kr_new + 1) * NR));
         int8_t* inp2 = (b + ((kr_new + 2) * NR));
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0        = *inp0++;
             *(outp0 + 16) = *inp1++;
             *(outp0 + 32) = *inp2++;
@@ -145,7 +145,7 @@ unpackb_nr32_s8_row_major_ref(int8_t*    b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         int8_t* outp0 = (unpack_b + (ldb * (kr + 0)));
         int8_t* outp1 = (unpack_b + (ldb * (kr + 1)));
         int8_t* outp2 = (unpack_b + (ldb * (kr + 2)));
@@ -155,7 +155,7 @@ unpackb_nr32_s8_row_major_ref(int8_t*    b,
         int8_t* inp0 = (b + (kr_new + 0) * NR);
         int8_t* inp1 = (b + (kr_new + 1) * NR);
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0 = *inp0++;
             *outp1 = *inp0++;
             *outp2 = *inp0++;
@@ -184,7 +184,7 @@ unpackb_nr32_s8_row_major_ref(int8_t*    b,
         int8_t* inp0 = (b + ((kr_new + 0) * NR));
         int8_t* inp1 = (b + ((kr_new + 1) * NR));
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0        = *inp0++;
             *(outp0 + 16) = *inp1++;
 
@@ -226,7 +226,7 @@ unpackb_nr16_s8_row_major_ref(int8_t*    b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         int8_t* outp0 = (unpack_b + (ldb * (kr + 0)));
         int8_t* outp1 = (unpack_b + (ldb * (kr + 1)));
         int8_t* outp2 = (unpack_b + (ldb * (kr + 2)));
@@ -235,7 +235,7 @@ unpackb_nr16_s8_row_major_ref(int8_t*    b,
         // load from b reordered buffer
         int8_t* inp0 = (b + (kr_new + 0) * NR);
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0 = *inp0++;
             *outp1 = *inp0++;
             *outp2 = *inp0++;
@@ -258,7 +258,7 @@ unpackb_nr16_s8_row_major_ref(int8_t*    b,
         // load from b reordered buffer
         int8_t* inp0 = (b + ((kr_new + 0) * NR));
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0 = *inp0++;
 
             if (k_partial_pieces > 1) {
@@ -293,7 +293,7 @@ unpackb_nrlt16_s8_row_major_ref(
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         int8_t* outp0 = (unpack_b + (ldb * (kr + 0)));
         int8_t* outp1 = (unpack_b + (ldb * (kr + 1)));
         int8_t* outp2 = (unpack_b + (ldb * (kr + 2)));
@@ -302,7 +302,7 @@ unpackb_nrlt16_s8_row_major_ref(
         // load from b reordered buffer
         int8_t* inp0 = (b + (kr_new + 0) * NR);
 
-        for (md_t i = 0; i < n0_partial_rem; i++) {
+        for (iter_t i = 0; i < n0_partial_rem; i++) {
             *outp0 = *inp0++;
             *outp1 = *inp0++;
             *outp2 = *inp0++;
@@ -325,7 +325,7 @@ unpackb_nrlt16_s8_row_major_ref(
         // load from b reordered buffer
         int8_t* inp0 = (b + ((kr_new + 0) * NR));
 
-        for (md_t i = 0; i < n0_partial_rem; i++) {
+        for (iter_t i = 0; i < n0_partial_rem; i++) {
             *outp0 = *inp0++;
 
             if (k_partial_pieces > 1) {
@@ -369,8 +369,8 @@ unpackb_nr64_s8_row_major_ref(
         KC_updated += (4 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
             int8_t* outp0 = (unpack_b + (ldb * (kr + 0)) + jc);
             int8_t* outp1 = (unpack_b + (ldb * (kr + 1)) + jc);
             int8_t* outp2 = (unpack_b + (ldb * (kr + 2)) + jc);
@@ -382,7 +382,7 @@ unpackb_nr64_s8_row_major_ref(
             int8_t* inp2 = (b + (jc * KC_updated) + ((kr + 2) * NR));
             int8_t* inp3 = (b + (jc * KC_updated) + ((kr + 3) * NR));
 
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 *outp0 = *inp0++;
                 *outp1 = *inp0++;
                 *outp2 = *inp0++;
@@ -421,7 +421,7 @@ unpackb_nr64_s8_row_major_ref(
             int8_t* inp2 = (b + (jc * KC_updated) + ((k_full_pieces + 2) * NR));
             int8_t* inp3 = (b + (jc * KC_updated) + ((k_full_pieces + 3) * NR));
 
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 *outp0        = *inp0++;
                 *(outp0 + 16) = *inp1++;
                 *(outp0 + 32) = *inp2++;
@@ -511,11 +511,11 @@ unpackb_nrlt16_s8_col_major_ref(
     md_t kr = 0;
     for (kr = 0; (kr + 63) < KC; kr += 64) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 16; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < n0_partial_rem; j++) {
+                for (iter_t j = 0; j < n0_partial_rem; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -527,11 +527,11 @@ unpackb_nrlt16_s8_col_major_ref(
 
     for (; (kr + 31) < KC; kr += 32) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 8; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 8; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < n0_partial_rem; j++) {
+                for (iter_t j = 0; j < n0_partial_rem; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -543,11 +543,11 @@ unpackb_nrlt16_s8_col_major_ref(
 
     for (; (kr + 15) < KC; kr += 16) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 4; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 4; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < n0_partial_rem; j++) {
+                for (iter_t j = 0; j < n0_partial_rem; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -559,11 +559,11 @@ unpackb_nrlt16_s8_col_major_ref(
 
     for (; (kr + 7) < KC; kr += 8) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 2; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 2; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < n0_partial_rem; j++) {
+                for (iter_t j = 0; j < n0_partial_rem; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -575,11 +575,11 @@ unpackb_nrlt16_s8_col_major_ref(
 
     for (; (kr + 3) < KC; kr += 4) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 1; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 1; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < n0_partial_rem; j++) {
+                for (iter_t j = 0; j < n0_partial_rem; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -591,11 +591,11 @@ unpackb_nrlt16_s8_col_major_ref(
 
     for (; kr < KC; kr += 3) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 1; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 1; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * (KC & 0x3) + (ldb * jr) + kr);
-                for (md_t j = 0; j < n0_partial_rem; j++) {
+                for (iter_t j = 0; j < n0_partial_rem; j++) {
                     *(outp + j * ldb) = *inp++;
 
                     if (KC & 0x2)
@@ -620,11 +620,11 @@ unpackb_nr_mult_16_s8_col_major_ref(
     md_t kr = 0;
     for (kr = 0; (kr + 63) < KC; kr += 64) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 16; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -636,11 +636,11 @@ unpackb_nr_mult_16_s8_col_major_ref(
 
     for (; (kr + 31) < KC; kr += 32) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 8; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 8; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -652,11 +652,11 @@ unpackb_nr_mult_16_s8_col_major_ref(
 
     for (; (kr + 15) < KC; kr += 16) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 4; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 4; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -668,11 +668,11 @@ unpackb_nr_mult_16_s8_col_major_ref(
 
     for (; (kr + 7) < KC; kr += 8) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 2; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 2; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -684,11 +684,11 @@ unpackb_nr_mult_16_s8_col_major_ref(
 
     for (; (kr + 3) < KC; kr += 4) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 1; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 1; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * 4 + (ldb * jr) + kr);
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + j * ldb)     = *inp++;
                     *(outp + j * ldb + 1) = *inp++;
                     *(outp + j * ldb + 2) = *inp++;
@@ -700,11 +700,11 @@ unpackb_nr_mult_16_s8_col_major_ref(
 
     for (; kr < KC; kr += 3) {
         int8_t *inp, *outp;
-        for (md_t jr = 0; jr < NR; jr += 16) {
-            for (md_t i = 0; i < 1; i++) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t i = 0; i < 1; i++) {
                 inp  = (b + (jr * 4) + ((kr + i * 4) * NR));
                 outp = (unpack_b + i * (KC & 0x3) + (ldb * jr) + kr);
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + j * ldb) = *inp++;
 
                     if (KC & 0x2)
@@ -739,7 +739,7 @@ unpackb_nr64_s8_col_major_ref(
         KC_updated += (4 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         unpackb_nr_mult_16_s8_col_major_ref(b + (jc * KC_updated),
                                             unpack_b + (jc * ldb), 64, KC, ldb);
     }

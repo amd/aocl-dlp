@@ -49,11 +49,11 @@ packb_f32f32f32of32_row_major_ref(float*       pack_b,
     md_t n_full_pieces            = NC / NR;
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;
     md_t n_partial_pieces         = NC % NR;
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < KC; kr++) {
             const float* inp0  = (b + (ldb * kr) + jc);
             float*       outp0 = (pack_b + (jc * KC) + (kr * NR));
-            for (md_t i = 0; i < NR; i++)
+            for (iter_t i = 0; i < NR; i++)
                 *outp0++ = *inp0++;
         }
     }
@@ -61,10 +61,10 @@ packb_f32f32f32of32_row_major_ref(float*       pack_b,
     if (n_partial_pieces > 0) {
         float*       pack_b_rem = (pack_b + (n_full_pieces_loop_limit * KC));
         const float* b_rem      = (b + n_full_pieces_loop_limit);
-        for (md_t kr = 0; kr < KC; kr++) {
+        for (iter_t kr = 0; kr < KC; kr++) {
             const float* inp0  = (b_rem + (ldb * kr));
             float*       outp0 = (pack_b_rem + (kr * NR));
-            for (md_t i = 0; i < n_partial_pieces; i++)
+            for (iter_t i = 0; i < n_partial_pieces; i++)
                 *outp0++ = *inp0++;
         }
     }
@@ -81,16 +81,16 @@ packb_nr_f32f32f32of32_col_major_ref(float*       pack_b_buffer,
                                      const md_t   KC,
                                      const md_t   n0_partial_rem)
 {
-    for (md_t i = 0; i < n0_partial_rem; i++) {
+    for (iter_t i = 0; i < n0_partial_rem; i++) {
         const float* inp  = (b + (ldb * i));
         float*       outp = pack_b_buffer + i;
-        for (md_t j = 0; j < KC; j++) {
+        for (iter_t j = 0; j < KC; j++) {
             *(outp + (j * NR)) = *inp++;
         }
     }
-    for (md_t i = n0_partial_rem; i < NR; i++) {
+    for (iter_t i = n0_partial_rem; i < NR; i++) {
         float* outp = pack_b_buffer + i;
-        for (md_t j = 0; j < KC; j++) {
+        for (iter_t j = 0; j < KC; j++) {
             *(outp + (j * NR)) = 0;
         }
     }
@@ -110,7 +110,7 @@ packb_f32f32f32of32_col_major_ref(float*       pack_b_buffer,
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;
     md_t n_partial_pieces         = NC % NR;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_f32f32f32of32_col_major_ref(pack_b_buffer + (jc * KC),
                                              b + (jc * ldb), NR, ldb, KC, NR);
     }

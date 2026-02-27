@@ -92,7 +92,7 @@ LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_5x64)
     __m512 acc_30, acc_31, acc_32, acc_33;
     __m512 acc_40, acc_41, acc_42, acc_43;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+4].
@@ -2238,7 +2238,7 @@ LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_4x64)
                                       0x0F0E0D0C0B0A0908, 0x0706050403020100,
                                       0x0F0E0D0C0B0A0908, 0x0706050403020100,
                                       0x0F0E0D0C0B0A0908, 0x0706050403020100);
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         // Broadcast a[0,kr:kr+4].
         a_int32_0 =
@@ -4057,7 +4057,7 @@ LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_3x64)
                                       0x0F0E0D0C0B0A0908, 0x0706050403020100,
                                       0x0F0E0D0C0B0A0908, 0x0706050403020100);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b0 = _mm512_shuffle_epi8(b0, dsmask);
         // Broadcast a[0,kr:kr+4].
@@ -5547,7 +5547,7 @@ LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_2x64)
                                       0x0F0E0D0C0B0A0908, 0x0706050403020100,
                                       0x0F0E0D0C0B0A0908, 0x0706050403020100);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b0 = _mm512_shuffle_epi8(b0, dsmask);
         // Broadcast a[0,kr:kr+4].
@@ -6694,7 +6694,7 @@ LPGEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_1x64)
 
     __m512 acc_00, acc_01, acc_02, acc_03;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr]

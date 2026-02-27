@@ -44,7 +44,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7;
     __m512 zmm8, zmm9, zmm10, zmm11, zmm12, zmm13, zmm14, zmm15;
@@ -63,7 +63,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -1580,7 +1580,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7;
     __m512 zmm8, zmm9, zmm10, zmm11, zmm12, zmm13, zmm14, zmm15;
@@ -1597,7 +1597,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -2866,7 +2866,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7;
     __m512 zmm8, zmm9, zmm10, zmm11, zmm12, zmm13, zmm14, zmm15;
@@ -2882,7 +2882,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -3920,7 +3920,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7;
     __m512 zmm8, zmm9, zmm10, zmm11, zmm12, zmm13, zmm14, zmm15;
@@ -3934,7 +3934,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -4735,7 +4735,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6, zmm7;
     __m512 zmm8, zmm9, zmm10, zmm11;
@@ -4747,7 +4747,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64)
     float* bbuf = (float*)b;
     float* cbuf = (float*)c;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -5308,7 +5308,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6;
     __m512 zmm8, zmm9, zmm10, zmm12, zmm13, zmm14;
@@ -5326,7 +5326,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -6574,7 +6574,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6;
     __m512 zmm8, zmm9, zmm10, zmm12, zmm13, zmm14;
@@ -6590,7 +6590,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -7642,7 +7642,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6;
     __m512 zmm8, zmm9, zmm10, zmm12, zmm13, zmm14;
@@ -7658,7 +7658,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -8513,7 +8513,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6;
     __m512 zmm8, zmm9, zmm10, zmm12, zmm13, zmm14, zmm16, zmm17;
@@ -8527,7 +8527,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -9197,7 +9197,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6;
     __m512 zmm8, zmm9, zmm10, zmm12;
@@ -9210,7 +9210,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48)
     float* bbuf = (float*)b;
     float* cbuf = (float*)c;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -9694,7 +9694,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm9, zmm12, zmm13;
@@ -9711,7 +9711,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -10727,7 +10727,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm9, zmm12, zmm13;
@@ -10742,7 +10742,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -11605,7 +11605,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm9, zmm12, zmm13;
@@ -11620,7 +11620,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -12344,7 +12344,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm9, zmm12, zmm13;
@@ -12357,7 +12357,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -12911,7 +12911,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm9, zmm12, zmm13;
@@ -12923,7 +12923,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32)
     float* bbuf = (float*)b;
     float* cbuf = (float*)c;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf);      // load 0-15 values from current row
         zmm1 = _mm512_loadu_ps(bbuf + 16); // load 16-31 values from current row
@@ -13336,7 +13336,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -13352,7 +13352,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x16)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
 
@@ -14100,7 +14100,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -14114,7 +14114,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x16)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
 
@@ -14763,7 +14763,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -14778,7 +14778,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x16)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
 
@@ -15329,7 +15329,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -15342,7 +15342,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x16)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
 
@@ -15793,7 +15793,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8;
@@ -15806,7 +15806,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x16)
     float* cbuf  = (float*)c;
     float* _cbuf = NULL;
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
 
@@ -16151,7 +16151,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5xlt16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -16169,7 +16169,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5xlt16)
 
     __mmask16 mask16 = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_maskz_loadu_ps(mask16,
                                      bbuf); // load 0-15 values from current row
@@ -16939,7 +16939,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4xlt16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -16955,7 +16955,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4xlt16)
 
     __mmask16 mask16 = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_maskz_loadu_ps(mask16,
                                      bbuf); // load 0-15 values from current row
@@ -17622,7 +17622,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3xlt16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -17639,7 +17639,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3xlt16)
 
     __mmask16 mask16 = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_maskz_loadu_ps(mask16,
                                      bbuf); // load 0-15 values from current row
@@ -18204,7 +18204,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2xlt16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8, zmm12;
@@ -18219,7 +18219,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2xlt16)
 
     __mmask16 mask16 = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_maskz_loadu_ps(mask16,
                                      bbuf); // load 0-15 values from current row
@@ -18678,7 +18678,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1xlt16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
     __m512 zmm0, zmm1, zmm2, zmm3, zmm4, zmm5;
     __m512 zmm8;
@@ -18693,7 +18693,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1xlt16)
 
     __mmask16 mask16 = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 32 elements from row0 of B*/
         zmm0 = _mm512_maskz_loadu_ps(mask16,
                                      bbuf); // load 0-15 values from current row

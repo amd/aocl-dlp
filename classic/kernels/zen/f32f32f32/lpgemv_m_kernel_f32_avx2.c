@@ -112,12 +112,12 @@ lpgemv_m_one_f32f32f32of32_avx2_LT16(const md_t            n0,
     _mm_prefetch((c_use + 0 * rs_c), _MM_HINT_T0);
     _mm_prefetch((c_use + 8 * rs_c), _MM_HINT_T0);
 
-    for (md_t pc = 0; pc < k; pc += KC) {
-        md_t     kc0      = dlp_min((k - pc), KC);
-        uint64_t k_iter   = kc0 / 4;
-        uint64_t k_rem    = kc0 % 4;
-        md_t     ps_b_use = 0;
-        md_t     rs_b_use = NR;
+    for (iter_t pc = 0; pc < k; pc += KC) {
+        md_t   kc0      = dlp_min((k - pc), KC);
+        iter_t k_iter   = kc0 / 4;
+        iter_t k_rem    = kc0 % 4;
+        md_t   ps_b_use = 0;
+        md_t   rs_b_use = NR;
 
         // No parallelization in k dim, k always starts at 0.
         if (mtag_b == REORDERED || mtag_b == PACK) {
@@ -137,7 +137,7 @@ lpgemv_m_one_f32f32f32of32_avx2_LT16(const md_t            n0,
 
         b_use = b_use + jr * ps_b_use;
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             _mm_prefetch((b_use + 4 * rs_b_use), _MM_HINT_T0);
             _mm_prefetch((b_use + 5 * rs_b_use), _MM_HINT_T0);
             _mm_prefetch((b_use + 6 * rs_b_use), _MM_HINT_T0);
@@ -180,7 +180,7 @@ lpgemv_m_one_f32f32f32of32_avx2_LT16(const md_t            n0,
             a_use += 4; // move a pointer to next col
         }
 
-        for (md_t kr = 0; kr < k_rem; kr++) {
+        for (iter_t kr = 0; kr < k_rem; kr++) {
             // Load 16 elements from a row of B
             ymm0 = _mm256_maskload_ps(b_use, k1);
             ymm1 = _mm256_maskload_ps(b_use + 8, k2);
@@ -609,7 +609,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
     float*       c_use = NULL;
 
     lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
-    for (md_t jr = 0; jr < n0; jr += NR) {
+    for (iter_t jr = 0; jr < n0; jr += NR) {
         md_t nr0 = dlp_min((n0 - jr), NR);
         c_use    = c + jr;
 
@@ -634,12 +634,12 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         _mm_prefetch((c_use + 0 * rs_c), _MM_HINT_T0);
         _mm_prefetch((c_use + 8 * rs_c), _MM_HINT_T0);
 
-        for (md_t pc = 0; pc < k; pc += KC) {
-            md_t     kc0      = dlp_min((k - pc), KC);
-            uint64_t k_iter   = kc0 / 4;
-            uint64_t k_rem    = kc0 % 4;
-            md_t     ps_b_use = 0;
-            md_t     rs_b_use = NR;
+        for (iter_t pc = 0; pc < k; pc += KC) {
+            md_t   kc0      = dlp_min((k - pc), KC);
+            iter_t k_iter   = kc0 / 4;
+            iter_t k_rem    = kc0 % 4;
+            md_t   ps_b_use = 0;
+            md_t   rs_b_use = NR;
 
             // No parallelization in k dim, k always starts at 0.
             if (mtag_b == REORDERED || mtag_b == PACK) {
@@ -658,7 +658,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
             a_use = a + pc;
             b_use = b_use + jr * ps_b_use;
 
-            for (md_t k = 0; k < k_iter; k++) {
+            for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                 _mm_prefetch((b_use + 4 * rs_b_use), _MM_HINT_T0);
                 _mm_prefetch((b_use + 5 * rs_b_use), _MM_HINT_T0);
                 _mm_prefetch((b_use + 6 * rs_b_use), _MM_HINT_T0);
@@ -699,7 +699,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 a_use += 4; // move a pointer to next col
             }
 
-            for (md_t kr = 0; kr < k_rem; kr++) {
+            for (iter_t kr = 0; kr < k_rem; kr++) {
                 // Load 16 elements from a row of B
                 ymm0 = _mm256_loadu_ps(b_use);
                 ymm1 = _mm256_loadu_ps(b_use + 8);

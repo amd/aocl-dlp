@@ -250,8 +250,8 @@ _lpgemm_cntx_init_func_map()
         md_t num_N_vars = (LPGEMM_BF16_NR / NUM_F32_ELEMS_PER_ZMM) + 1;
 
         jit_kernels_generated = TRUE;
-        for (md_t m = 0; m < LPGEMM_BF16_MR; m++) {
-            for (md_t n = 0; n < num_N_vars; n++) {
+        for (iter_t m = 0; m < LPGEMM_BF16_MR; m++) {
+            for (iter_t n = 0; n < num_N_vars; n++) {
                 inputs.MR            = (m == 0) ? LPGEMM_BF16_MR : m;
                 inputs.NR            = n * 16;
                 inputs.m_loop        = (m == 0) ? TRUE : FALSE;
@@ -549,7 +549,7 @@ lpgemm_mod_block_size_s16(md_t m, md_t n, md_t k, md_t* MC, md_t* NC, md_t* KC)
     const md_t range[4] = { 1024, 512, 256, 128 };
 
     if (n < *NC) {
-        for (md_t i = 0; i < 4; ++i) {
+        for (iter_t i = 0; i < 4; ++i) {
             if (n <= range[i]) {
                 *NC = range[i];
             }
@@ -557,7 +557,7 @@ lpgemm_mod_block_size_s16(md_t m, md_t n, md_t k, md_t* MC, md_t* NC, md_t* KC)
     }
 
     if (k < *KC) {
-        for (md_t i = 0; i < 4; ++i) {
+        for (iter_t i = 0; i < 4; ++i) {
             if (k <= range[i]) {
                 *KC = range[i];
             }

@@ -227,8 +227,8 @@ namespace dlp { namespace testing { namespace utils {
         MatrixLayout src_layout = src.getLayout();
         bool         transposed = src.isTransposed();
 
-        for (md_t i = 0; i < src_rows; ++i) {
-            for (md_t j = 0; j < src_cols; ++j) {
+        for (iter_t i = 0; i < src_rows; ++i) {
+            for (iter_t j = 0; j < src_cols; ++j) {
                 size_t src_idx, dst_idx;
 
                 // Calculate source index based on layout and transposition
@@ -277,8 +277,8 @@ namespace dlp { namespace testing { namespace utils {
         md_t         dst_ld     = dst.getLeadingDimension();
         MatrixLayout dst_layout = dst.getLayout();
 
-        for (md_t i = 0; i < dst_rows; ++i) {
-            for (md_t j = 0; j < dst_cols; ++j) {
+        for (iter_t i = 0; i < dst_rows; ++i) {
+            for (iter_t j = 0; j < dst_cols; ++j) {
                 size_t src_idx, dst_idx;
 
                 // Calculate source index based on source layout

@@ -52,7 +52,7 @@ packb_nr48_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         const bfloat16* inp0 = (b + (ldb * (kr + 0)));
         const bfloat16* inp1 = (b + (ldb * (kr + 1)));
         const bfloat16* inp2 = (b + (ldb * (kr + 0)) + NR2);
@@ -61,7 +61,7 @@ packb_nr48_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16* outp0 = (pack_b + ((kr_new + 0) * NR1));
         bfloat16* outp1 = (pack_b + ((kr_new + 1) * NR1));
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0++ = *inp0++;
             *outp0++ = *inp1++;
             *outp1++ = *inp2++;
@@ -76,7 +76,7 @@ packb_nr48_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         outp0 = (pack_b + ((kr_new + 2) * NR1));
         outp1 = (pack_b + ((kr_new + 2) * NR1 + NR2));
 
-        for (md_t i = 0; i < 8; i++) {
+        for (iter_t i = 0; i < 8; i++) {
             *outp0++ = *inp0++;
             *outp0++ = *inp1++;
             *outp1++ = *inp2++;
@@ -92,7 +92,7 @@ packb_nr48_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16*       outp0 = (pack_b + ((kr_new + 0) * NR1));
         bfloat16*       outp1 = (pack_b + ((kr_new + 1) * NR1));
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0++ = *inp0++;
             *outp0++ = 0;
             *outp1++ = *inp2++;
@@ -105,7 +105,7 @@ packb_nr48_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         outp0 = (pack_b + ((kr_new + 2) * NR1));
         outp1 = (pack_b + ((kr_new + 2) * NR1 + NR2));
 
-        for (md_t i = 0; i < 8; i++) {
+        for (iter_t i = 0; i < 8; i++) {
             *outp0++ = *inp0++;
             *outp0++ = 0;
             *outp1++ = *inp2++;
@@ -129,7 +129,7 @@ packb_nr32_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         const bfloat16* inp0 = (b + (ldb * (kr + 0)));
         const bfloat16* inp1 = (b + (ldb * (kr + 1)));
         const bfloat16* inp2 = (b + (ldb * (kr + 0)) + NR2);
@@ -138,7 +138,7 @@ packb_nr32_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16* outp0 = (pack_b + ((kr_new + 0) * NR));
         bfloat16* outp1 = (pack_b + ((kr_new + 1) * NR));
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0++ = *inp0++;
             *outp0++ = *inp1++;
             *outp1++ = *inp2++;
@@ -154,7 +154,7 @@ packb_nr32_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16*       outp0 = (pack_b + ((kr_new + 0) * NR));
         bfloat16*       outp1 = (pack_b + ((kr_new + 1) * NR));
 
-        for (md_t i = 0; i < 16; i++) {
+        for (iter_t i = 0; i < 16; i++) {
             *outp0++ = *inp0++;
             *outp0++ = 0;
             *outp1++ = *inp2++;
@@ -177,7 +177,7 @@ packb_nr16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         const bfloat16* inp0 = (b + (ldb * (kr + 0)));
         const bfloat16* inp1 = (b + (ldb * (kr + 1)));
         const bfloat16* inp2 = (b + (ldb * (kr + 0)) + NRBY2);
@@ -186,7 +186,7 @@ packb_nr16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16* outp0 = (pack_b + ((kr_new + 0) * NR));
         bfloat16* outp1 = (pack_b + ((kr_new + 1) * NR));
 
-        for (md_t i = 0; i < NRBY2; i++) {
+        for (iter_t i = 0; i < NRBY2; i++) {
             *outp0++ = *inp0++;
             *outp0++ = *inp1++;
             *outp1++ = *inp2++;
@@ -202,7 +202,7 @@ packb_nr16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16*       outp0 = (pack_b + ((kr_new + 0) * NR));
         bfloat16*       outp1 = (pack_b + ((kr_new + 1) * NR));
 
-        for (md_t i = 0; i < NRBY2; i++) {
+        for (iter_t i = 0; i < NRBY2; i++) {
             *outp0++ = *inp0++;
             *outp0++ = 0;
             *outp1++ = *inp2++;
@@ -228,12 +228,12 @@ packb_nrlt16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
     bfloat16 buf0[NR];
     bfloat16 buf1[NR];
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         memcpy(buf0, (b + (ldb * (kr + 0))),
                (n0_partial_rem * sizeof(bfloat16)));
         memcpy(buf1, (b + (ldb * (kr + 1))),
                (n0_partial_rem * sizeof(bfloat16)));
-        for (md_t i = n0_partial_rem; i < 16; i++) {
+        for (iter_t i = n0_partial_rem; i < 16; i++) {
             buf0[i] = 0;
             buf1[i] = 0;
         }
@@ -246,7 +246,7 @@ packb_nrlt16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16* outp0 = (pack_b + ((kr_new + 0) * NR));
         bfloat16* outp1 = (pack_b + ((kr_new + 1) * NR));
 
-        for (md_t i = 0; i < NRBY2; i++) {
+        for (iter_t i = 0; i < NRBY2; i++) {
             *outp0++ = *inp0++;
             *outp0++ = *inp1++;
             *outp1++ = *inp2++;
@@ -259,7 +259,7 @@ packb_nrlt16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
     if (k_partial_pieces > 0) {
         memcpy(buf0, (b + (ldb * (k_full_pieces + 0))),
                (n0_partial_rem * sizeof(bfloat16)));
-        for (md_t i = n0_partial_rem; i < 16; i++) {
+        for (iter_t i = n0_partial_rem; i < 16; i++) {
             buf0[i] = 0;
         }
 
@@ -269,7 +269,7 @@ packb_nrlt16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         bfloat16* outp0 = (pack_b + ((kr_new + 0) * NR));
         bfloat16* outp1 = (pack_b + ((kr_new + 1) * NR));
 
-        for (md_t i = 0; i < NRBY2; i++) {
+        for (iter_t i = 0; i < NRBY2; i++) {
             *outp0++ = *inp0++;
             *outp0++ = 0;
             *outp1++ = *inp2++;
@@ -304,8 +304,8 @@ packb_nr64_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
         KC_updated += (2 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
             const bfloat16* inp0 = (b + (ldb * (kr + 0)) + jc);
             const bfloat16* inp1 = (b + (ldb * (kr + 0)) + jc + 32);
             const bfloat16* inp2 = (b + (ldb * (kr + 1)) + jc);
@@ -315,7 +315,7 @@ packb_nr64_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
             bfloat16* outp0 = (pack_b + (jc * KC_updated) + ((kr + 0) * NR));
             bfloat16* outp1 = (pack_b + (jc * KC_updated) + ((kr + 1) * NR));
 
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 *outp0++ = *inp0++;
                 *outp0++ = *inp2++;
                 *outp1++ = *inp1++;
@@ -333,7 +333,7 @@ packb_nr64_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
                 (pack_b + (jc * KC_updated) + ((k_full_pieces + 0) * NR));
             bfloat16* outp1 =
                 (pack_b + (jc * KC_updated) + ((k_full_pieces + 1) * NR));
-            for (md_t i = 0; i < 32; i++) {
+            for (iter_t i = 0; i < 32; i++) {
                 *outp0++ = *inp0++;
                 *outp0++ = 0;
                 *outp1++ = *inp1++;
@@ -395,13 +395,13 @@ packb_nr_mult_16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     // Used for permuting the mm512i elements for use in dpbf16_ps instruction.
     md_t kr = 0;
     for (kr = 0; (kr + 31) < KC; kr += 32) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -410,13 +410,13 @@ packb_nr_mult_16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 15) < KC; kr += 16) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 8; j++) {
+                for (iter_t j = 0; j < 8; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -425,13 +425,13 @@ packb_nr_mult_16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 7) < KC; kr += 8) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 4; j++) {
+                for (iter_t j = 0; j < 4; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -440,13 +440,13 @@ packb_nr_mult_16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 3) < KC; kr += 4) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 2; j++) {
+                for (iter_t j = 0; j < 2; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -455,13 +455,13 @@ packb_nr_mult_16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 1) < KC; kr += 2) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 1; j++) {
+                for (iter_t j = 0; j < 1; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -470,13 +470,13 @@ packb_nr_mult_16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; kr < KC; kr += 1) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < 16; i++) {
+            for (iter_t i = 0; i < 16; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 1; j++) {
+                for (iter_t j = 0; j < 1; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = 0;
                 }
@@ -496,13 +496,13 @@ packb_nrlt16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
 
     md_t kr = 0;
     for (kr = 0; (kr + 31) < KC; kr += 32) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < n0_partial_rem; i++) {
+            for (iter_t i = 0; i < n0_partial_rem; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 16; j++) {
+                for (iter_t j = 0; j < 16; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -511,13 +511,13 @@ packb_nrlt16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 15) < KC; kr += 16) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < n0_partial_rem; i++) {
+            for (iter_t i = 0; i < n0_partial_rem; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 8; j++) {
+                for (iter_t j = 0; j < 8; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -526,13 +526,13 @@ packb_nrlt16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 7) < KC; kr += 8) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < n0_partial_rem; i++) {
+            for (iter_t i = 0; i < n0_partial_rem; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 4; j++) {
+                for (iter_t j = 0; j < 4; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -541,13 +541,13 @@ packb_nrlt16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 3) < KC; kr += 4) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < n0_partial_rem; i++) {
+            for (iter_t i = 0; i < n0_partial_rem; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 2; j++) {
+                for (iter_t j = 0; j < 2; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -556,13 +556,13 @@ packb_nrlt16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; (kr + 1) < KC; kr += 2) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < n0_partial_rem; i++) {
+            for (iter_t i = 0; i < n0_partial_rem; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 1; j++) {
+                for (iter_t j = 0; j < 1; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = *inp++;
                 }
@@ -571,13 +571,13 @@ packb_nrlt16_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
     }
 
     for (; kr < KC; kr += 1) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             const bfloat16* inp;
             bfloat16*       outp;
-            for (md_t i = 0; i < n0_partial_rem; i++) {
+            for (iter_t i = 0; i < n0_partial_rem; i++) {
                 inp  = (b + (ldb * (jr + i)) + kr);
                 outp = pack_b_buffer + (jr * 2) + (kr * NR) + i * 2;
-                for (md_t j = 0; j < 1; j++) {
+                for (iter_t j = 0; j < 1; j++) {
                     *(outp + (j * 2 * NR))       = *inp++;
                     *(outp + ((j * 2 * NR) + 1)) = 0;
                 }
@@ -608,7 +608,7 @@ packb_nr64_bf16bf16f32of32_col_major_ref(bfloat16*       pack_b_buffer,
         KC_updated += (2 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_mult_16_bf16bf16f32of32_col_major_ref(
             pack_b_buffer + (jc * KC_updated), b + (jc * ldb), 64, ldb, KC);
     }

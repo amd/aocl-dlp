@@ -165,7 +165,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
         }
     }
 
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0         = dlp_min((jc_end - jc), NC);
         md_t nc0_updated = make_multiple_of_n(nc0, 16);
 
@@ -214,7 +214,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
             }
         }
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             float beta0 = (pc == 0) ? beta : 1;
             md_t  kc0   = dlp_min((k - pc), KC);
 
@@ -314,7 +314,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
                 b_use = pack_b_buffer_bf16;
             }
 
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 // Only per thread C matrix is stored in temp buffer, so both
@@ -351,7 +351,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
                     a_block_stride = rs_a_use;
                 }
 
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     // Post ops meta attributes.

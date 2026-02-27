@@ -76,7 +76,7 @@ unreorderb_nr64_s8s8s32os32_reference(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -87,7 +87,7 @@ unreorderb_nr64_s8s8s32os32_reference(lpgemm_obj_t*  b,
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // k needs to be a multiple of 4 so that it can be used with
@@ -142,7 +142,7 @@ reorderb_nr64_s8s8s32o32(lpgemm_obj_t*  b,
         (int32_t*)(b_reorder->storage.aligned_buffer
                    + (sizeof(int8_t) * n_updated * k_updated));
 
-    for (md_t idx = 0; idx < n_updated; idx++) {
+    for (iter_t idx = 0; idx < n_updated; idx++) {
         *(pack_b_column_sum + idx) = 0;
     }
 
@@ -164,7 +164,7 @@ reorderb_nr64_s8s8s32o32(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -175,7 +175,7 @@ reorderb_nr64_s8s8s32o32(lpgemm_obj_t*  b,
                 jc, n, NC, get_packb_s8s8s32o32_min_NR(), &jc_cur_loop,
                 &jc_cur_loop_rem, &nc0, &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // kc0 needs to be a multiple of 4 so that it can be used with
@@ -281,7 +281,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
         (int32_t*)(b_reorder->storage.aligned_buffer
                    + (sizeof(int8_t) * n_updated * k_updated));
 
-    for (md_t idx = 0; idx < num_groups * n_updated; idx++) {
+    for (iter_t idx = 0; idx < num_groups * n_updated; idx++) {
         *(pack_b_column_sum + idx) = 0;
     }
 
@@ -303,7 +303,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -314,7 +314,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
                 jc, n, NC, get_packb_s8s8s32o32_min_NR(), &jc_cur_loop,
                 &jc_cur_loop_rem, &nc0, &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 md_t group_start = pc / group_size;
@@ -339,7 +339,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
                 // this, we are calling kernel with blocks of group_size x NR,
                 // so that we can take care of the pointer movement across the
                 // reorder buffer in the framework itself.
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     int8_t*  b_dst_jr  = b_dst_pc + jr * kc0_updated;
@@ -354,7 +354,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
 
                         if (nr_mult_16 > 0) {
                             // group loop
-                            for (md_t group = group_start; group <= group_end;
+                            for (iter_t group = group_start; group <= group_end;
                                  group++) {
                                 md_t k_start = dlp_max(group * group_size, pc);
                                 md_t k_end =
@@ -379,7 +379,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
                         if (nr0_rem > 0) {
                             md_t nr0_updated = 16;
                             // group loop
-                            for (md_t group = group_start; group <= group_end;
+                            for (iter_t group = group_start; group <= group_end;
                                  group++) {
                                 md_t k_start = dlp_max(group * group_size, pc);
                                 md_t k_end =
@@ -402,7 +402,7 @@ reorderb_nr64_s8s8s32o32_sym_quant(lpgemm_obj_t*  b,
 
                     md_t nr0_updated = NR;
                     // nr0 == NR
-                    for (md_t group = group_start; group <= group_end;
+                    for (iter_t group = group_start; group <= group_end;
                          group++) {
                         md_t k_start = dlp_max(group * group_size, pc);
                         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
@@ -443,7 +443,7 @@ reordera_mr6_s8s8s32o32(lpgemm_obj_t*  a,
     md_t k = a->width;
     md_t m = a->length;
 
-    for (md_t pc = 0; pc < k; pc += KC) {
+    for (iter_t pc = 0; pc < k; pc += KC) {
         md_t kc0 = dlp_min((k - pc), KC);
 
         // kc0 needs to be a multiple of 4 so that it can be used with
@@ -452,7 +452,7 @@ reordera_mr6_s8s8s32o32(lpgemm_obj_t*  a,
         // used for packed/reordered buffers needs to be updated.
         md_t kc0_updated = make_multiple_of_n(kc0, 4);
 
-        for (md_t ic = 0; ic < m; ic += MC) {
+        for (iter_t ic = 0; ic < m; ic += MC) {
             md_t mc0 = dlp_min((m - ic), MC);
 
             ((packa_s32_s8)lcntx->packa_fun_ptr)(

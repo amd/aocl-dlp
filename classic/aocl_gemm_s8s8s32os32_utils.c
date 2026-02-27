@@ -254,7 +254,7 @@ aocl_reorder_s8s8s32os32(const char      order,
 
         *pack_b_column_sum = 0;
 
-        for (md_t k0 = 0; k0 < k; k0++) {
+        for (iter_t k0 = 0; k0 < k; k0++) {
             reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
             *pack_b_column_sum += reorder_buf_addr[k0];
         }
@@ -359,10 +359,10 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
 
         // NOTE We're working under the assumption that group_size is a factor
         // of k.
-        for (md_t k0 = 0; k0 < k; k0 += group_size) {
+        for (iter_t k0 = 0; k0 < k; k0 += group_size) {
             // Initialize the current column sum to 0.
             *pack_b_column_sum = 0;
-            for (md_t group = 0; group < group_size; group++) {
+            for (iter_t group = 0; group < group_size; group++) {
                 reorder_buf_addr[k0 + group] =
                     input_buf_addr[(k0 + group) * rs_b];
                 *pack_b_column_sum += reorder_buf_addr[k0 + group];
@@ -445,7 +445,7 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(int8_t)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 output_buf_addr[k0 * rs_b] = reorder_buf_addr[k0];
             }
         }

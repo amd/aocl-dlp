@@ -35,7 +35,7 @@
 #define CVT_BF16_F32_SHIFT_AVX2_lt8(reg, k_left, ic, kr)                       \
     {                                                                          \
         int16_t data_feeder[8] = { 0 };                                        \
-        for (md_t i = 0; i < k_left; i++) {                                    \
+        for (iter_t i = 0; i < k_left; i++) {                                  \
             data_feeder[i] = *(a + (ic * rs_a) + (kr * cs_a) + i);             \
         }                                                                      \
         reg = CVT_BF16_F32_SHIFT_AVX2(                                         \
@@ -339,7 +339,7 @@ cvt_bf16_f32_row_major(float*          cvt_buffer,
 #define LOAD_1BF16_ELEMENT(a_ptr, kr, reg)                                     \
     {                                                                          \
         bfloat16 buff[8] = { 0 };                                              \
-        for (md_t i = 0; i < 1; i++)                                           \
+        for (iter_t i = 0; i < 1; i++)                                         \
             buff[i] = *(a_ptr + (kr * cs_a) + i);                              \
         reg = CVT_BF16_F32_SHIFT_AVX2(                                         \
             (__m128i)_mm_loadu_si128((const __m128i*)buff));                   \

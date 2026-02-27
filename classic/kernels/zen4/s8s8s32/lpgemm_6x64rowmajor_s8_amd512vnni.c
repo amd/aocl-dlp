@@ -125,7 +125,7 @@ LPGEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
     uint8_t cvt_uint8 = 128;
     __m512i vec_uint8 = _mm512_set1_epi8(cvt_uint8);
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         __m512 acc_00, acc_01, acc_02, acc_03;
         __m512 acc_10, acc_11, acc_12, acc_13;
         __m512 acc_20, acc_21, acc_22, acc_23;
@@ -164,7 +164,7 @@ LPGEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
         __m512i c_int32_5p2 = _mm512_setzero_epi32();
         __m512i c_int32_5p3 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // The instructions are arranged in a mixed way to reduce data
             // chain dependencies.
 

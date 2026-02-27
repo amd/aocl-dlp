@@ -120,7 +120,7 @@ packsclb_nr48_bf16u4f32of32(bfloat16*          packb_bf16,
     b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
 
@@ -189,7 +189,7 @@ packsclb_nr48_bf16u4f32of32(bfloat16*          packb_bf16,
         md_t k_full_pieces_per_group     = k_full_piece_blks_per_group * 2;
         md_t k_partial_pieces            = kg0 % 2;
 
-        for (md_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
+        for (iter_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
             ymm0 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (kr * NR) / 2));
 
@@ -318,7 +318,7 @@ packsclb_nr32_bf16u4f32of32(bfloat16*          packb_bf16,
     b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
 
@@ -377,7 +377,7 @@ packsclb_nr32_bf16u4f32of32(bfloat16*          packb_bf16,
         md_t k_full_pieces_per_group     = k_full_piece_blks_per_group * 2;
         md_t k_partial_pieces            = kg0 % 2;
 
-        for (md_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
+        for (iter_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
             ymm0 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (kr * NR) / 2));
 
@@ -479,7 +479,7 @@ packsclb_nr16_bf16u4f32of32(bfloat16*          packb_bf16,
     b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
 
@@ -529,7 +529,7 @@ packsclb_nr16_bf16u4f32of32(bfloat16*          packb_bf16,
         md_t k_full_pieces_per_group     = k_full_piece_blks_per_group * 2;
         md_t k_partial_pieces            = kg0 % 2;
 
-        for (md_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
+        for (iter_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
             ymm0 = _mm256_maskz_loadu_epi8(
                 0xFFFF, (__m256i const*)(b_group + (kr * NR) / 2));
 
@@ -628,7 +628,7 @@ packsclb_nrlt16_bf16u4f32of32(bfloat16*          packb_bf16,
     b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         /* offset if pre_op_len == 'n' */
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
 
@@ -679,7 +679,7 @@ packsclb_nrlt16_bf16u4f32of32(bfloat16*          packb_bf16,
         md_t k_full_pieces_per_group     = k_full_piece_blks_per_group * 2;
         md_t k_partial_pieces            = kg0 % 2;
 
-        for (md_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
+        for (iter_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
             ymm0 = _mm256_maskz_loadu_epi8(
                 lmask, (__m256i const*)(b_group + (kr * NR) / 2));
 
@@ -792,11 +792,11 @@ packsclb_nr64_bf16u4f32of32(bfloat16*          packb_bf16,
     md_t KC_updated = KC;
     KC_updated += (KC_updated & 0x1);
 
-    for (md_t jr = 0; jr < n_full_pieces_loop_limit; jr += NR) {
+    for (iter_t jr = 0; jr < n_full_pieces_loop_limit; jr += NR) {
         b_group     = (uint8_t*)b;
         packb_group = packb_bf16;
 
-        for (md_t group = group_start; group <= group_end; group++) {
+        for (iter_t group = group_start; group <= group_end; group++) {
             /* offset if pre_op_len == 'n' */
             pre_op_off =
                 (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
@@ -881,7 +881,7 @@ packsclb_nr64_bf16u4f32of32(bfloat16*          packb_bf16,
             md_t k_partial_pieces            = kg0 % 2;
             md_t k_full_pieces_per_group     = k_full_piece_blks_per_group * 2;
 
-            for (md_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
+            for (iter_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
                 // Int4 array has to be accessed like byte array, but with
                 // half the elements traversed in the byte array.
 
@@ -1092,7 +1092,7 @@ packsclb_nr1_bf16u4f32of32(bfloat16*          packb_bf16,
     b_group     = (uint8_t*)b;
     packb_group = packb_bf16;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         pre_op_off = (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
 
         /* load zero_point values */
@@ -1140,7 +1140,7 @@ packsclb_nr1_bf16u4f32of32(bfloat16*          packb_bf16,
         md_t k_full_pieces_per_group     = k_full_piece_blks_per_group * 2;
         md_t k_partial_pieces            = kg0 % 2;
 
-        for (md_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
+        for (iter_t kr = 0; kr < k_full_pieces_per_group; kr += 2) {
             ymm0 = _mm256_maskz_loadu_epi8(
                 lmask, (__m256i const*)(b_group + (kr * NR) / 2));
 

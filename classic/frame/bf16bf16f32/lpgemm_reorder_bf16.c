@@ -83,7 +83,7 @@ reorderb_nr64_bf16bf16f32of32_reference(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -94,7 +94,7 @@ reorderb_nr64_bf16bf16f32of32_reference(lpgemm_obj_t*  b,
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // k needs to be a multiple of 2 so that it can be used with
@@ -199,7 +199,7 @@ unreorderb_nr64_bf16bf16f32of32_reference(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -210,7 +210,7 @@ unreorderb_nr64_bf16bf16f32of32_reference(lpgemm_obj_t*  b,
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // k needs to be a multiple of 2 so that it can be used with
@@ -281,7 +281,7 @@ reorderb_nr64_bf16bf16f32of32(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -292,7 +292,7 @@ reorderb_nr64_bf16bf16f32of32(lpgemm_obj_t*  b,
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // k needs to be a multiple of 2 so that it can be used with
@@ -397,7 +397,7 @@ unreorderb_nr64_bf16bf16f32of32(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -408,7 +408,7 @@ unreorderb_nr64_bf16bf16f32of32(lpgemm_obj_t*  b,
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // k needs to be a multiple of 2 so that it can be used with
@@ -480,7 +480,7 @@ reorderb_nr64_bf16s4f32of32(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -491,7 +491,7 @@ reorderb_nr64_bf16s4f32of32(lpgemm_obj_t*  b,
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // k needs to be a multiple of 2 so that it can be used with
@@ -603,7 +603,7 @@ reorderb_mxp_nr64_f32obf16(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -614,7 +614,7 @@ reorderb_mxp_nr64_f32obf16(lpgemm_obj_t*  b,
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // k needs to be a multiple of 2 so that it can be used with

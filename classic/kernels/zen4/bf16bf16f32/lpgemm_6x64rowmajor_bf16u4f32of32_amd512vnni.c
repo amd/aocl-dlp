@@ -176,7 +176,7 @@ LPGEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
                                 0x6F2F6E2E6D2D6C2C, 0x6B2B6A2A69296828,
                                 0x6727662665256424, 0x6323622261216020);
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
         __m512 c_float_0p1 = _mm512_setzero_ps();
@@ -218,7 +218,7 @@ LPGEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
          * correct dequant. */
         md_t pre_op_sf_off = 0;
         md_t pre_op_zp_off = 0;
-        for (md_t group = group_start; group <= group_end; group++) {
+        for (iter_t group = group_start; group <= group_end; group++) {
             md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
             md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                    pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -306,7 +306,7 @@ LPGEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
             zero_point0 =
                 _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
-            for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+            for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
                 // Broadcast a[0,kr:kr+2]
                 a_bf16_0 = (__m512bh)_mm512_set1_epi32(
                     *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));

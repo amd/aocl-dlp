@@ -207,8 +207,8 @@ packb_nr64_u8s8s32o32_row_major(int8_t*       pack_b_buffer,
     CREATE_CVT_INT4_INT8_PERM_IDX_64ELEM_ODD_LD(conv_shift_arr);
     __m512i conv_shift = _mm512_loadu_epi64(conv_shift_arr);
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             if (int4_upscale == FALSE) {
@@ -547,7 +547,7 @@ packb_nr48_u8s8s32o32_row_major(int8_t*       pack_b_buffer,
     __m128i conv_shift_16 =
         _mm_maskz_loadu_epi64(_cvtu32_mask8(0X000000FF), conv_shift_arr_16);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         if (int4_upscale == FALSE) {
             // Rearrange for vpdpbusd, read 4 rows from B with 32 elements in
             // each row.
@@ -970,7 +970,7 @@ packb_nr32_u8s8s32o32_row_major(int8_t*       pack_b_buffer,
     __m256i conv_shift_32 =
         _mm256_maskz_loadu_epi64(_cvtu32_mask8(0X000000FF), conv_shift_arr_32);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         if (int4_upscale == FALSE) {
             // Rearrange for vpdpbusd, read 4 rows from B with 32 elements in
             // each row.
@@ -1217,7 +1217,7 @@ packb_nr16_u8s8s32o32_row_major(int8_t*       pack_b_buffer,
     __m128i conv_shift_16 =
         _mm_maskz_loadu_epi64(_cvtu32_mask8(0X000000FF), conv_shift_arr_16);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         if (int4_upscale == FALSE) {
             // Rearrange for vpdpbusd, read 4 rows from B with next 16 elements
             // in each row.
@@ -1474,7 +1474,7 @@ packb_nrlt16_u8s8s32o32_row_major(int8_t*       pack_b_buffer,
     __m128i conv_shift_16 =
         _mm_maskz_loadu_epi64(_cvtu32_mask8(0X000000FF), conv_shift_arr_16);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         if (int4_upscale == FALSE) {
             // Rearrange for vpdpbusd, read 4 rows from B with next 16 elements
             // in each row.
@@ -1684,7 +1684,7 @@ packb_nr64_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
         KC_updated += (4 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_mult_16_u8s8s32o32_col_major(pack_b_buffer + (jc * KC_updated),
                                               b + (jc * ldb), 64, ldb, KC);
     }
@@ -1751,7 +1751,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
 
     md_t kr = 0;
     for (kr = 0; (kr + 63) < KC; kr += 64) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             LOAD_16_COLS_AVX512
@@ -1797,7 +1797,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 31) < KC; kr += 32) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             //  Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             //  each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0xFFFFFFFF)
@@ -1827,7 +1827,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 15) < KC; kr += 16) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0xFFFF)
@@ -1849,7 +1849,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 7) < KC; kr += 8) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0xFF)
@@ -1867,7 +1867,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 3) < KC; kr += 4) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0x0F)
@@ -1883,7 +1883,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 2) < KC; kr += 3) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0x07)
@@ -1899,7 +1899,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 1) < KC; kr += 2) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0x03)
@@ -1915,7 +1915,7 @@ packb_nr_mult_16_u8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; kr < KC; kr += 1) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0x01)

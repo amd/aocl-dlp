@@ -926,10 +926,13 @@ jitU8S8VNNI_GEMVN1<KType>::rearrangeY_rowStored_S32(int mSize)
                 case 3:
                     vpbroadcastd(Zmm(tmpBaseIdx + 2),
                                  ptr[regTmpYptr + regRsC * 2]);
+                    [[fallthrough]];
                 case 2:
                     vpbroadcastd(Zmm(tmpBaseIdx + 1), ptr[regTmpYptr + regRsC]);
+                    [[fallthrough]];
                 case 1:
                     vpbroadcastd(Zmm(tmpBaseIdx), ptr[regTmpYptr]);
+                    [[fallthrough]];
                 case 0:
                     break;
             }
@@ -1000,11 +1003,14 @@ jitU8S8VNNI_GEMVN1<KType>::rearrangeY_rowStored_U8(int mSize)
                 case 3:
                     vpbroadcastb(Xmm(tmpBaseIdx + 2),
                                  ptr[regTmpYptr + 2 * regTmp1]);
+                    [[fallthrough]];
                 case 2:
                     vpbroadcastb(Xmm(tmpBaseIdx + 1),
                                  ptr[regTmpYptr + regTmp1]);
+                    [[fallthrough]];
                 case 1:
                     vpbroadcastb(Xmm(tmpBaseIdx), ptr[regTmpYptr]);
+                    [[fallthrough]];
                 case 0:
                     break;
             }
@@ -1077,11 +1083,14 @@ jitU8S8VNNI_GEMVN1<KType>::rearrangeY_rowStored_F32(int mSize)
                 case 3:
                     vbroadcastss(Zmm(tmpBaseIdx + 2),
                                  ptr[regTmpYptr + regTmp1 * 2]);
+                    [[fallthrough]];
                 case 2:
                     vbroadcastss(Zmm(tmpBaseIdx + 1),
                                  ptr[regTmpYptr + regTmp1]);
+                    [[fallthrough]];
                 case 1:
                     vbroadcastss(Zmm(tmpBaseIdx), ptr[regTmpYptr]);
+                    [[fallthrough]];
                 case 0:
                     break;
             }

@@ -87,6 +87,11 @@ typedef uint32_t msz_t;
 
 typedef int64_t md_t;
 
+// iter_t: Type for loop iteration variables that iterate over dimensions.
+// Using int64_t ensures compatibility with md_t (dimension type) and avoids
+// sign-compare warnings when comparing with dimension values.
+typedef int64_t iter_t;
+
 typedef void* opaq_fp_t;
 
 typedef enum

@@ -102,7 +102,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
     md_t mr0     = MR;
     md_t mr0_use = MR;
 
-    for (md_t ir = 0; ir < m0; ir += mr0_use) {
+    for (iter_t ir = 0; ir < m0; ir += mr0_use) {
         mr0     = dlp_min((m0 - ir), MR);
         mr0_use = dlp_min((m0 - ir), MR);
 
@@ -132,12 +132,13 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         if (mr0 == MR) // Primary kernel (mr0 = MR = 16)
         {
-            md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
+            md_t group_start =
+                (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
             md_t group_end =
-                (grp_post_ops_attr.grp_post_op_k + k - 1) / group_size;
+                ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1) / group_size;
             md_t num_groups = group_end - group_start + 1;
 
-            for (md_t group = group_start; group <= group_end; ++group) {
+            for (iter_t group = group_start; group <= group_end; ++group) {
                 // Zero the accumulator registers.
                 ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
                 ZERO_ACC_ZMM_4_REG(zmm12, zmm13, zmm14, zmm15)
@@ -148,13 +149,14 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 a_group = a_use + (group * group_size * cs_a);
 
                 md_t k_start = dlp_max(group * group_size,
-                                       grp_post_ops_attr.grp_post_op_k);
-                md_t k_end   = dlp_min(((group + 1) * group_size - 1),
-                                       grp_post_ops_attr.grp_post_op_k + k - 1);
+                                       (md_t)grp_post_ops_attr.grp_post_op_k);
+                md_t k_end =
+                    dlp_min(((group + 1) * group_size - 1),
+                            (md_t)grp_post_ops_attr.grp_post_op_k + k - 1);
 
-                md_t kg0    = k_end - k_start + 1;
-                md_t k_iter = kg0 / 64;
-                md_t k_rem  = kg0 % 64;
+                md_t   kg0    = k_end - k_start + 1;
+                iter_t k_iter = kg0 / 64;
+                iter_t k_rem  = kg0 % 64;
 
                 // Update load mask for fringe case.
                 if (k_rem) {
@@ -162,7 +164,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 }
 
                 // Dot product kernel
-                for (md_t k = 0; k < k_iter; k++) {
+                for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                     zmm6 = _mm512_loadu_si512(b_use);
                     b_use += 64;
 
@@ -292,7 +294,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // TODO
                     // Devise an optimal approach to load Scale Factor of A.
                     bfloat16 a_sf[16];
-                    for (md_t i = 0; i < 16; ++i) {
+                    for (iter_t i = 0; i < 16; ++i) {
                         a_sf[i] = *(a_scale_ptr + i * num_groups);
                     }
 
@@ -315,7 +317,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // TODO
                     // Devise an optimal approach to load Scale Factor of A.
                     float a_sf[16];
-                    for (md_t i = 0; i < 16; ++i) {
+                    for (iter_t i = 0; i < 16; ++i) {
                         a_sf[i] = *(a_scale_ptr + i * num_groups);
                     }
 
@@ -348,12 +350,13 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 mr0_use = 8;
                 k2      = (0xFFFF >> (MR - mr0_use));
 
-                md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-                md_t group_end =
-                    (grp_post_ops_attr.grp_post_op_k + k - 1) / group_size;
+                md_t group_start =
+                    (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+                md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
+                                 / group_size;
                 md_t num_groups = group_end - group_start + 1;
 
-                for (md_t group = group_start; group <= group_end; ++group) {
+                for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
                     ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
                     ZERO_ACC_ZMM_4_REG(zmm12, zmm13, zmm14, zmm15)
@@ -363,15 +366,16 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
                     a_group = a_use_fringe + (group * group_size * cs_a);
 
-                    md_t k_start = dlp_max(group * group_size,
-                                           grp_post_ops_attr.grp_post_op_k);
+                    md_t k_start =
+                        dlp_max(group * group_size,
+                                (md_t)grp_post_ops_attr.grp_post_op_k);
                     md_t k_end =
                         dlp_min(((group + 1) * group_size - 1),
-                                grp_post_ops_attr.grp_post_op_k + k - 1);
+                                (md_t)grp_post_ops_attr.grp_post_op_k + k - 1);
 
-                    md_t kg0    = k_end - k_start + 1;
-                    md_t k_iter = kg0 / 64;
-                    md_t k_rem  = kg0 % 64;
+                    md_t   kg0    = k_end - k_start + 1;
+                    iter_t k_iter = kg0 / 64;
+                    iter_t k_rem  = kg0 % 64;
 
                     // Update load mask for fringe case.
                     if (k_rem) {
@@ -379,7 +383,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     }
 
                     // Dot product kernel
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         zmm6 = _mm512_loadu_si512(b_use);
                         b_use += 64;
 
@@ -477,7 +481,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[8];
-                        for (md_t i = 0; i < 8; ++i) {
+                        for (iter_t i = 0; i < 8; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -499,7 +503,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[8];
-                        for (md_t i = 0; i < 8; ++i) {
+                        for (iter_t i = 0; i < 8; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -525,12 +529,13 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 mr0_use = 4;
                 k2      = (0xFFFF >> (MR - mr0_use));
 
-                md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-                md_t group_end =
-                    (grp_post_ops_attr.grp_post_op_k + k - 1) / group_size;
+                md_t group_start =
+                    (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+                md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
+                                 / group_size;
                 md_t num_groups = group_end - group_start + 1;
 
-                for (md_t group = group_start; group <= group_end; ++group) {
+                for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
                     ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
                     ZERO_ACC_ZMM_4_REG(zmm12, zmm13, zmm14, zmm15)
@@ -540,15 +545,16 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
                     a_group = a_use_fringe + (group * group_size * cs_a);
 
-                    md_t k_start = dlp_max(group * group_size,
-                                           grp_post_ops_attr.grp_post_op_k);
+                    md_t k_start =
+                        dlp_max(group * group_size,
+                                (md_t)grp_post_ops_attr.grp_post_op_k);
                     md_t k_end =
                         dlp_min(((group + 1) * group_size - 1),
-                                grp_post_ops_attr.grp_post_op_k + k - 1);
+                                (md_t)grp_post_ops_attr.grp_post_op_k + k - 1);
 
-                    md_t kg0    = k_end - k_start + 1;
-                    md_t k_iter = kg0 / 64;
-                    md_t k_rem  = kg0 % 64;
+                    md_t   kg0    = k_end - k_start + 1;
+                    iter_t k_iter = kg0 / 64;
+                    iter_t k_rem  = kg0 % 64;
 
                     // Update load mask for fringe case.
                     if (k_rem) {
@@ -556,7 +562,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     }
 
                     // Dot product kernel
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         zmm6 = _mm512_loadu_si512(b_use);
                         b_use += 64;
 
@@ -630,7 +636,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[4];
-                        for (md_t i = 0; i < 4; ++i) {
+                        for (iter_t i = 0; i < 4; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -651,7 +657,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[4];
-                        for (md_t i = 0; i < 4; ++i) {
+                        for (iter_t i = 0; i < 4; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -677,12 +683,13 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 mr0_use = 2;
                 k2      = (0xFFFF >> (MR - mr0_use));
 
-                md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-                md_t group_end =
-                    (grp_post_ops_attr.grp_post_op_k + k - 1) / group_size;
+                md_t group_start =
+                    (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+                md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
+                                 / group_size;
                 md_t num_groups = group_end - group_start + 1;
 
-                for (md_t group = group_start; group <= group_end; ++group) {
+                for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
                     ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
                     ZERO_ACC_ZMM_4_REG(zmm12, zmm13, zmm14, zmm15)
@@ -692,15 +699,16 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
                     a_group = a_use_fringe + (group * group_size * cs_a);
 
-                    md_t k_start = dlp_max(group * group_size,
-                                           grp_post_ops_attr.grp_post_op_k);
+                    md_t k_start =
+                        dlp_max(group * group_size,
+                                (md_t)grp_post_ops_attr.grp_post_op_k);
                     md_t k_end =
                         dlp_min(((group + 1) * group_size - 1),
-                                grp_post_ops_attr.grp_post_op_k + k - 1);
+                                (md_t)grp_post_ops_attr.grp_post_op_k + k - 1);
 
-                    md_t kg0    = k_end - k_start + 1;
-                    md_t k_iter = kg0 / 64;
-                    md_t k_rem  = kg0 % 64;
+                    md_t   kg0    = k_end - k_start + 1;
+                    iter_t k_iter = kg0 / 64;
+                    iter_t k_rem  = kg0 % 64;
 
                     // Update load mask for fringe case.
                     if (k_rem) {
@@ -708,7 +716,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     }
 
                     // Dot product kernel
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         // Load 0-63 in b[k+0 - k+63]
                         zmm6 = _mm512_loadu_si512(b_use);
 
@@ -787,7 +795,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[2];
-                        for (md_t i = 0; i < 2; ++i) {
+                        for (iter_t i = 0; i < 2; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -808,7 +816,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[2];
-                        for (md_t i = 0; i < 2; ++i) {
+                        for (iter_t i = 0; i < 2; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -834,12 +842,13 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 mr0_use = 1;
                 k2      = (0xFFFF >> (MR - mr0_use));
 
-                md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-                md_t group_end =
-                    (grp_post_ops_attr.grp_post_op_k + k - 1) / group_size;
+                md_t group_start =
+                    (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+                md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
+                                 / group_size;
                 md_t num_groups = group_end - group_start + 1;
 
-                for (md_t group = group_start; group <= group_end; ++group) {
+                for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
                     ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
                     ZERO_ACC_ZMM_4_REG(zmm12, zmm13, zmm14, zmm15)
@@ -849,15 +858,16 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
                     a_group = a_use_fringe + (group * group_size * cs_a);
 
-                    md_t k_start = dlp_max(group * group_size,
-                                           grp_post_ops_attr.grp_post_op_k);
+                    md_t k_start =
+                        dlp_max(group * group_size,
+                                (md_t)grp_post_ops_attr.grp_post_op_k);
                     md_t k_end =
                         dlp_min(((group + 1) * group_size - 1),
-                                grp_post_ops_attr.grp_post_op_k + k - 1);
+                                (md_t)grp_post_ops_attr.grp_post_op_k + k - 1);
 
-                    md_t kg0    = k_end - k_start + 1;
-                    md_t k_iter = kg0 / 64;
-                    md_t k_rem  = kg0 % 64;
+                    md_t   kg0    = k_end - k_start + 1;
+                    iter_t k_iter = kg0 / 64;
+                    iter_t k_rem  = kg0 % 64;
 
                     // Update load mask for fringe case.
                     if (k_rem) {
@@ -865,7 +875,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     }
 
                     // Dot product kernel
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         // Load 0-63 in b[k+0 - k+63]
                         zmm6  = _mm512_loadu_si512(b_use);
                         zmm0  = _mm512_loadu_si512(a_group);
@@ -933,7 +943,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[1];
-                        for (md_t i = 0; i < 1; ++i) {
+                        for (iter_t i = 0; i < 1; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -954,7 +964,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[1];
-                        for (md_t i = 0; i < 1; ++i) {
+                        for (iter_t i = 0; i < 1; ++i) {
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
@@ -996,7 +1006,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 } else {
                     if (post_ops_attr.c_stor_type == DLP_BF16) {
                         bfloat16 ctemp[16];
-                        for (md_t i = 0; i < mr0; i++) {
+                        for (iter_t i = 0; i < mr0; i++) {
                             ctemp[i] = *((bfloat16*)post_ops_attr.buf_downscale
                                          + (post_ops_attr.rs_c_downscale
                                             * (post_ops_attr.post_op_c_i + i)));
@@ -1016,7 +1026,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                                                 selector1, selector2)
                 } else {
                     float ctemp[16];
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         ctemp[i] = c_use[i * rs_c];
                     }
                     selector1 = _mm512_loadu_ps(ctemp);
@@ -1197,7 +1207,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 bfloat16 ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1215,7 +1225,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 int8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1234,7 +1244,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 uint8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1253,7 +1263,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 float ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1302,7 +1312,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 bfloat16 ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1323,7 +1333,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 int8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1345,7 +1355,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 uint8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1366,7 +1376,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 float ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -1437,7 +1447,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     _mm512_mask_cvtsepi32_storeu_epi8(
                         ctemp, k2, _mm512_cvtps_epi32(acc_8));
 
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         *((int8_t*)post_ops_attr.buf_downscale
                           + (post_ops_attr.rs_c_downscale
                              * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
@@ -1450,7 +1460,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         _mm512_cvtps_epu32(
                             _mm512_max_ps(acc_8, _mm512_set1_ps(0))));
 
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         *((uint8_t*)post_ops_attr.buf_downscale
                           + (post_ops_attr.rs_c_downscale
                              * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
@@ -1460,7 +1470,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
                     CVT_STORE_F32_BF16_MASK_AVX2(acc_8, k2, ctemp);
 
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         *((bfloat16*)post_ops_attr.buf_downscale
                           + (post_ops_attr.rs_c_downscale
                              * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
@@ -1475,7 +1485,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 // element by element into output buffer at strides
                 float ctemp[16];
                 _mm512_mask_storeu_ps(ctemp, k2, acc_8);
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     c_use[i * rs_c] = ctemp[i];
                 }
             }

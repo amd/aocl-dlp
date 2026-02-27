@@ -98,7 +98,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -147,7 +147,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5xlt16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 lmask, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -1047,7 +1047,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -1096,7 +1096,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4xlt16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 lmask, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -1875,7 +1875,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -1924,7 +1924,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3xlt16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 lmask, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -2587,7 +2587,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2xlt16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -2636,7 +2636,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2xlt16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 lmask, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -3188,7 +3188,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1xlt16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -3237,7 +3237,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1xlt16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 lmask, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -3672,7 +3672,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -3714,7 +3714,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -4593,7 +4593,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -4635,7 +4635,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -5409,7 +5409,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -5451,7 +5451,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -6098,7 +6098,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -6140,7 +6140,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -6669,7 +6669,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x16)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -6711,7 +6711,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x16)
             scale1 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -7139,7 +7139,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -7190,7 +7190,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x32)
             scale3 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -8385,7 +8385,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -8436,7 +8436,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x32)
             scale3 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -9456,7 +9456,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x32)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -9506,7 +9506,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x32)
             scale3 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -10349,7 +10349,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x32)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -10400,7 +10400,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x32)
             scale3 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -11063,7 +11063,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x32)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -11114,7 +11114,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x32)
             scale3 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -11651,7 +11651,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -11712,7 +11712,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x48)
             scale5 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -13206,7 +13206,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -13267,7 +13267,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x48)
             scale5 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -14530,7 +14530,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -14591,7 +14591,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x48)
             scale5 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -15627,7 +15627,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x48)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -15688,7 +15688,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x48)
             scale5 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -16504,7 +16504,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x48)
     bfloat16* a_group = (bfloat16*)a;
     int8_t*   b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -16565,7 +16565,7 @@ LPGEMM_MN_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x48)
             scale5 = scale0;
         }
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 =
                 _mm256_loadu_si256((__m256i const*)(b_group + (rs_b * kr) / 2));
 

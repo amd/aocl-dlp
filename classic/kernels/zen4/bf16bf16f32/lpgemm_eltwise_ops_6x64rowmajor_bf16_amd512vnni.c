@@ -94,12 +94,12 @@ LPGEMM_ELTWISE_OPS_KERNEL(bfloat16, float, bf16of32_6x64)
     __m512 selector3 = _mm512_setzero_ps();
     __m512 selector4 = _mm512_setzero_ps();
 
-    uint64_t orig_post_op_c_j = post_ops_attr.post_op_c_j;
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    md_t orig_post_op_c_j = post_ops_attr.post_op_c_j;
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         __mmask16 k0 = 0xFFFF, k1 = 0xFFFF, k2 = 0xFFFF, k3 = 0xFFFF;
 
         md_t NR_L = NR;
-        for (md_t jr = 0; jr < n0; jr += NR_L) {
+        for (iter_t jr = 0; jr < n0; jr += NR_L) {
             md_t n_left = n0 - jr;
             NR_L        = dlp_min(NR_L, (n_left >> 4) << 4);
             if (NR_L == 0) {

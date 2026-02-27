@@ -457,7 +457,7 @@ configToGroups(
 
         // Support group_size=0 for empty groups (valid test case)
         // Only create matrices if group_size > 0
-        for (md_t mat_idx = 0; mat_idx < group_size; ++mat_idx) {
+        for (iter_t mat_idx = 0; mat_idx < group_size; ++mat_idx) {
             // Calculate matrix dimensions based on transpose flags
             md_t a_rows = transA ? group.k : group.m;
             md_t a_cols = transA ? group.m : group.k;

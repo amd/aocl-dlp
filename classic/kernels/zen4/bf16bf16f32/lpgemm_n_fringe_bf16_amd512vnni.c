@@ -68,7 +68,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6xlt16)
         value = 0;
     }
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
 
@@ -82,7 +82,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6xlt16)
 
         __m512 c_float_5p0 = _mm512_setzero_ps();
 
-        for (md_t kr = 0; kr < k_full_pieces - value; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces - value; kr += 1) {
             // Load 2 rows with 16 extended elements each from B to 1 ZMM
             // registers. It is to be noted that the B matrix is packed for use
             // in bf16 instructions and each load to ZMM register will have 2
@@ -151,7 +151,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6xlt16)
 
         _mm_prefetch(c + (rs_c * (ir + 5)) + (0 * 16), _MM_HINT_T1);
 
-        for (md_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
             // Load 2 rows with 16 extended elements each from B to 1 ZMM
             // registers. It is to be noted that the B matrix is packed for use
             // in bf16 instructions and each load to ZMM register will have 2
@@ -1227,7 +1227,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x16)
         value = 0;
     }
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
 
@@ -1241,7 +1241,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x16)
 
         __m512 c_float_5p0 = _mm512_setzero_ps();
 
-        for (md_t kr = 0; kr < k_full_pieces - value; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces - value; kr += 1) {
             // Load 2 rows with 16 elements each from B to 1 ZMM registers. It
             // is to be noted that the B matrix is packed for use in bf16
             // instructions and each load to ZMM register will have 2 elements
@@ -1310,7 +1310,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x16)
 
         _mm_prefetch(c + (rs_c * (ir + 5)) + (0 * 16), _MM_HINT_T1);
 
-        for (md_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
             // Load 2 rows with 16 elements each from B to 1 ZMM registers. It
             // is to be noted that the B matrix is packed for use in bf16
             // instructions and each load to ZMM register will have 2 elements
@@ -2339,7 +2339,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x32)
         value = 0;
     }
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
         __m512 c_float_0p1 = _mm512_setzero_ps();
@@ -2359,7 +2359,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x32)
         __m512 c_float_5p0 = _mm512_setzero_ps();
         __m512 c_float_5p1 = _mm512_setzero_ps();
 
-        for (md_t kr = 0; kr < k_full_pieces - value; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces - value; kr += 1) {
             // Load 2 rows with 32 elements each from B to 2 ZMM registers. It
             // is to be noted that the B matrix is packed for use in bf16
             // instructions and each load to ZMM register will have 2 elements
@@ -2441,7 +2441,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x32)
         _mm_prefetch(c + (rs_c * (ir + 5)) + (0 * 16), _MM_HINT_T1);
         _mm_prefetch(c + (rs_c * (ir + 5)) + (1 * 16), _MM_HINT_T1);
 
-        for (md_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
             // Load 2 rows with 32 elements each from B to 2 ZMM registers. It
             // is to be noted that the B matrix is packed for use in bf16
             // instructions and each load to ZMM register will have 2 elements
@@ -3848,7 +3848,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x48)
         value = 0;
     }
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
         __m512 c_float_0p1 = _mm512_setzero_ps();
@@ -3874,7 +3874,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x48)
         __m512 c_float_5p1 = _mm512_setzero_ps();
         __m512 c_float_5p2 = _mm512_setzero_ps();
 
-        for (md_t kr = 0; kr < k_full_pieces - value; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces - value; kr += 1) {
 
             // Load 2 rows with 48 elements each from B to 3 ZMM registers. It
             // is to be noted that the B matrix is packed for use in bf16
@@ -3970,7 +3970,7 @@ LPGEMM_N_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x48)
         _mm_prefetch(c + (rs_c * (ir + 5)) + (1 * 16), _MM_HINT_T1);
         _mm_prefetch(c + (rs_c * (ir + 5)) + (2 * 16), _MM_HINT_T1);
 
-        for (md_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
 
             // Load 2 rows with 48 elements each from B to 3 ZMM registers. It
             // is to be noted that the B matrix is packed for use in bf16

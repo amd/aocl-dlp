@@ -168,7 +168,7 @@ packb_nr64_s8s8s32os32_row_major(int8_t*       pack_b_buffer_s8s8s32o32,
     __m512i a01;
     __m512i c01;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         // load the temp buffer to compute column sum of B matrix
         sum1 = _mm512_loadu_si512(pack_b_column_sum + jc);
         sum2 = _mm512_loadu_si512(pack_b_column_sum + 16 + jc);
@@ -176,7 +176,7 @@ packb_nr64_s8s8s32os32_row_major(int8_t*       pack_b_buffer_s8s8s32o32,
         sum3 = _mm512_loadu_si512(pack_b_column_sum + 32 + jc);
         sum4 = _mm512_loadu_si512(pack_b_column_sum + 48 + jc);
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             a0 = _mm512_loadu_si512(b + (ldb * (kr + 0)) + jc);
@@ -549,7 +549,7 @@ packb_nr48_s8s8s32os32_row_major(int8_t*       pack_b_buffer_s8s8s32o32,
     sum2 = _mm512_loadu_si512(pack_b_column_sum + 16);
     sum3 = _mm512_loadu_si512(pack_b_column_sum + 32);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         // Rearrange for vpdpbusd, read 4 rows from B with 32 elements in each
         // row.
         a0_32 = _mm256_maskz_loadu_epi8(0xFFFFFFFF, b + (ldb * (kr + 0)));
@@ -867,7 +867,7 @@ packb_nr32_s8s8s32os32_row_major(int8_t*       pack_b_buffer_s8s8s32o32,
         pack_b_column_sum
         + 16); // offset 16- as 16 int32 elements fit in 1 zmm register
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         // Rearrange for vpdpbusd, read 4 rows from B with 32 elements in each
         // row.
         a0_32 = _mm256_maskz_loadu_epi8(0xFFFFFFFF, b + (ldb * (kr + 0)));
@@ -1085,7 +1085,7 @@ packb_nr16_s8s8s32os32_row_major(int8_t*       pack_b_buffer_s8s8s32o32,
     // load the temp buffer to compute column sum of B matrix
     sum1 = _mm512_loadu_si512(pack_b_column_sum);
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         // Rearrange for vpdpbusd, read 4 rows from B with next 16 elements in
         // each row.
         a0_16 = _mm_maskz_loadu_epi8(0xFFFF, b + (ldb * (kr + 0)));
@@ -1228,7 +1228,7 @@ packb_nrlt16_s8s8s32os32_row_major(int8_t*       pack_b_buffer_s8s8s32o32,
 
     __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_partial_rem));
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 4) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 4) {
         // Rearrange for vpdpbusd, read 4 rows from B with next 16 elements in
         // each row.
         a0_16 = _mm_maskz_loadu_epi8(load_mask, b + (ldb * (kr + 0)));
@@ -1474,7 +1474,7 @@ packb_nr64_s8s8s32os32_col_major(int8_t*       pack_b_buffer,
         KC_updated += (4 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_mult_16_s8s8s32o32_col_major(pack_b_buffer + (jc * KC_updated),
                                               pack_b_column_sum + jc,
                                               b + (jc * ldb), 64, ldb, KC);
@@ -1532,7 +1532,7 @@ packb_nr64_s8s8s32os32_col_major(int8_t*       pack_b_buffer,
 // convert them into 32 bit and add to reduce to 16 elements based on K size.
 
 #define SUM_16_COLS_AVX512_K64                                                 \
-    for (md_t i = 0; i < 16; i++) {                                            \
+    for (iter_t i = 0; i < 16; i++) {                                          \
         __m512i sum0, sum1;                                                    \
         sum0 = _mm512_add_epi32(                                               \
             _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(a_reg[i], 0)),      \
@@ -1545,7 +1545,7 @@ packb_nr64_s8s8s32os32_col_major(int8_t*       pack_b_buffer,
     }
 
 #define SUM_16_COLS_AVX512_K32                                                 \
-    for (md_t i = 0; i < 16; i++) {                                            \
+    for (iter_t i = 0; i < 16; i++) {                                          \
         sum[i + jr] = _mm512_add_epi32(                                        \
             sum[i + jr],                                                       \
             _mm512_add_epi32(                                                  \
@@ -1555,7 +1555,7 @@ packb_nr64_s8s8s32os32_col_major(int8_t*       pack_b_buffer,
     }
 
 #define SUM_16_COLS_AVX512_K16                                                 \
-    for (md_t i = 0; i < 16; i++) {                                            \
+    for (iter_t i = 0; i < 16; i++) {                                          \
         sum[i + jr] = _mm512_add_epi32(                                        \
             sum[i + jr],                                                       \
             _mm512_cvtepi8_epi32(_mm512_extracti32x4_epi32(a_reg[i], 0)));     \
@@ -1582,13 +1582,13 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     __m512i sum[64];
     __m512i mul_128 = _mm512_set1_epi32(7);
 
-    for (md_t i = 0; i < 64; i++) {
+    for (iter_t i = 0; i < 64; i++) {
         sum[i] = _mm512_setzero_si512();
     }
 
     md_t kr = 0;
     for (kr = 0; (kr + 63) < KC; kr += 64) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             //  Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             //  each row.
             LOAD_16_COLS_AVX512
@@ -1635,7 +1635,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 31) < KC; kr += 32) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             //  Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             //  each row.
             MASK_LOAD_16_COLS_AVX512(0xFFFFFFFF)
@@ -1666,7 +1666,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 15) < KC; kr += 16) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0xFFFF)
@@ -1689,7 +1689,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 7) < KC; kr += 8) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0xFF)
@@ -1708,7 +1708,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 3) < KC; kr += 4) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512((__mmask64)0x0F)
@@ -1725,7 +1725,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 2) < KC; kr += 3) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             //  Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             //  each row.
             MASK_LOAD_16_COLS_AVX512(0x07)
@@ -1742,7 +1742,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; (kr + 1) < KC; kr += 2) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512(0x03)
@@ -1759,7 +1759,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     }
 
     for (; kr < KC; kr += 1) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for vpdpbusd, read 4 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512(0x01)
@@ -1777,7 +1777,7 @@ packb_nr_mult_16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
 
     // sum/reduce 16 int32 values into one final sum as int.
     // insert 16 columns into one 512 bit and store into pack_b_column_sum
-    for (md_t jr = 0; jr < NR; jr += 16) {
+    for (iter_t jr = 0; jr < NR; jr += 16) {
         __m512i sum0, sum1;
         sum0 = _mm512_set_epi32(_mm512_reduce_add_epi32(sum[jr + 15]),
                                 _mm512_reduce_add_epi32(sum[jr + 14]),
@@ -1825,7 +1825,7 @@ packb_nrlt16_s8s8s32o32_col_major(int8_t*       pack_b_buffer,
     __m512i sum[16];
     __m512i mul_128 = _mm512_set1_epi32(7);
 
-    for (md_t i = 0; i < 16; i++) {
+    for (iter_t i = 0; i < 16; i++) {
         sum[i] = _mm512_setzero_si512();
     }
 

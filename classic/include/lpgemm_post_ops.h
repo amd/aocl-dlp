@@ -69,15 +69,15 @@ typedef struct lpgemm_grp_post_op_attr_t
 // Used as an internal structure
 typedef struct lpgemm_group_post_op_t
 {
-    uint64_t                       group_size;
+    md_t                           group_size;
     void*                          a_scale_factor;
-    uint64_t                       a_scale_factor_len;
+    md_t                           a_scale_factor_len;
     void*                          a_zp;
-    uint64_t                       a_zp_len;
+    md_t                           a_zp_len;
     void*                          b_scale_factor;
-    uint64_t                       b_scale_factor_len;
+    md_t                           b_scale_factor_len;
     void*                          b_zp;
-    uint64_t                       b_zp_len;
+    md_t                           b_zp_len;
     DLP_TYPE                       sf_stor_type;
     DLP_TYPE                       zp_stor_type;
     struct lpgemm_group_post_op_t* next;
@@ -85,15 +85,15 @@ typedef struct lpgemm_group_post_op_t
 
 typedef struct lpgemm_pre_op_attr_t
 {
-    void*    scale_factor;
-    uint64_t scale_factor_len;
-    uint64_t scale_factor_type;
-    void*    zero_point;
-    uint64_t zero_point_len;
-    uint64_t pre_op_b_i;
-    uint64_t pre_op_b_j;
-    uint64_t group_size;
-    uint64_t pre_op_ld;
+    void* scale_factor;
+    md_t  scale_factor_len;
+    md_t  scale_factor_type;
+    void* zero_point;
+    md_t  zero_point_len;
+    md_t  pre_op_b_i;
+    md_t  pre_op_b_j;
+    md_t  group_size;
+    md_t  pre_op_ld;
 } lpgemm_pre_op_attr;
 
 dlp_clsc_err_t

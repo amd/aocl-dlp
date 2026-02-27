@@ -577,11 +577,14 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
                     case 3:
                         vpbroadcastb(Xbyak::Xmm(tmpBaseIdx + 2),
                                      ptr[regTmpYptr + 2 * regTmp1]);
+                        [[fallthrough]];
                     case 2:
                         vpbroadcastb(Xbyak::Xmm(tmpBaseIdx + 1),
                                      ptr[regTmpYptr + regTmp1]);
+                        [[fallthrough]];
                     case 1:
                         vpbroadcastb(Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr]);
+                        [[fallthrough]];
                     case 0:
                         break;
                 }
@@ -651,11 +654,14 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
                     case 3:
                         vpbroadcastb(Xbyak::Xmm(tmpBaseIdx + 2),
                                      ptr[regTmpYptr + 2 * regTmp1]);
+                        [[fallthrough]];
                     case 2:
                         vpbroadcastb(Xbyak::Xmm(tmpBaseIdx + 1),
                                      ptr[regTmpYptr + regTmp1]);
+                        [[fallthrough]];
                     case 1:
                         vpbroadcastb(Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr]);
+                        [[fallthrough]];
                     case 0:
                         break;
                 }
@@ -769,11 +775,14 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
                     case 3:
                         vbroadcastss(RegType(tmpBaseIdx + 2),
                                      ptr[regTmpYptr + regTmp1 * 2]);
+                        [[fallthrough]];
                     case 2:
                         vbroadcastss(RegType(tmpBaseIdx + 1),
                                      ptr[regTmpYptr + regTmp1]);
+                        [[fallthrough]];
                     case 1:
                         vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
+                        [[fallthrough]];
                     case 0:
                         break;
                 }
@@ -838,11 +847,14 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
                     case 3:
                         vpbroadcastd(RegType(tmpBaseIdx + 2),
                                      ptr[regTmpYptr + regRsC * 2]);
+                        [[fallthrough]];
                     case 2:
                         vpbroadcastd(RegType(tmpBaseIdx + 1),
                                      ptr[regTmpYptr + regRsC]);
+                        [[fallthrough]];
                     case 1:
                         vpbroadcastd(RegType(tmpBaseIdx), ptr[regTmpYptr]);
+                        [[fallthrough]];
                     case 0:
                         break;
                 }

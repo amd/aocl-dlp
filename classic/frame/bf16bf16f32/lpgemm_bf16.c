@@ -113,7 +113,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
                     dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
             }
 
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_b_buffer_bf16[k0] = b[k0 * rs_b];
             }
 
@@ -129,7 +129,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
         thread_ic.work_id = thread->tid;
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-        for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+        for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
             md_t            mc0          = dlp_min((ic_end - ic), MC);
             const bfloat16* a_use        = a + ic * rs_a;
             c_use                        = c + ic * rs_c;
@@ -209,7 +209,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
             a_use = pack_a_buffer_bf16;
         }
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc * cs_c;
 
@@ -239,7 +239,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
                         dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
                 }
 
-                for (md_t pc = 0; pc < k; pc += KC) {
+                for (iter_t pc = 0; pc < k; pc += KC) {
                     md_t kc0 = dlp_min((k - pc), KC);
 
                     md_t kc0_updated = kc0;
@@ -372,7 +372,7 @@ LPGEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
 
         md_t jc_cur_loop     = jc;
@@ -418,7 +418,7 @@ LPGEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
             rs_c_use = nc0;
         }
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             float beta0 = (pc == 0) ? beta : 1;
             md_t  kc0   = dlp_min((k - pc), KC);
 
@@ -511,7 +511,7 @@ LPGEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                 lpgemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
             }
 
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 // Only per thread C matrix is stored in temp buffer, so both
@@ -548,7 +548,7 @@ LPGEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                     a_block_stride = rs_a_use;
                 }
 
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     // Post ops meta attributes.
@@ -772,7 +772,7 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
         thread_ic.work_id = thread->tid;
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-        for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+        for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
             md_t mc0 = dlp_min((ic_end - ic), MC);
 
             c_use                        = c + ic * rs_c;
@@ -868,7 +868,7 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 
         a_use = cvt_a_buffer_bf16_f32;
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc;
 
@@ -885,7 +885,7 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                     &nc0, &n_sub_updated);
             }
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 md_t kc0_updated = kc0;
@@ -1049,7 +1049,7 @@ LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
 
         md_t jc_cur_loop     = jc;
@@ -1095,7 +1095,7 @@ LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
             rs_c_use = nc0;
         }
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             float beta0 = (pc == 0) ? beta : 1;
             md_t  kc0   = dlp_min((k - pc), KC);
 
@@ -1225,7 +1225,7 @@ LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                 b_use = b_unreorder;
             }
 
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 // Only per thread C matrix is stored in temp buffer, so both
@@ -1256,7 +1256,7 @@ LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                 a_block_stride = f32_MR * kc0;
 
                 /*The NR loop should use the DLP_F32 kernel dimesnions*/
-                for (md_t jr = 0; jr < nc0; jr += f32_NR) {
+                for (iter_t jr = 0; jr < nc0; jr += f32_NR) {
                     md_t nr0 = dlp_min((nc0 - jr), f32_NR);
 
                     // Post ops meta attributes.

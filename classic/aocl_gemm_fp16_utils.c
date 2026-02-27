@@ -155,7 +155,7 @@ aocl_reorder_f16f16f16of16(const char      order,
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(float16)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
             }
         }
@@ -240,7 +240,7 @@ aocl_unreorder_f16f16f16of16(const char      order,
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(float16)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 output_buf_addr[k0 * rs_b] = reorder_buf_addr[k0];
             }
         }

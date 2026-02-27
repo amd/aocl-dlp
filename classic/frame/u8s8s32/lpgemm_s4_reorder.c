@@ -87,7 +87,7 @@ reorderb_nr64_u8s4s32o32(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -98,7 +98,7 @@ reorderb_nr64_u8s4s32o32(lpgemm_obj_t*  b,
                 jc, n, NC, get_packb_u8s8s32o32_min_NR(), &jc_cur_loop,
                 &jc_cur_loop_rem, &nc0, &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // kc0 needs to be a multiple of 4 so that it can be used with

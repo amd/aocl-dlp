@@ -130,7 +130,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
             pack_b_buffer_fp16 =
                 dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
 
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_b_buffer_fp16[k0] = b[k0 * rs_b];
             }
 
@@ -147,7 +147,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
         /* IC loop */
-        for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+        for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
             md_t           mc0           = dlp_min((ic_end - ic), MC);
             const float16* a_ic          = a + ic * rs_a;
             c_use                        = c + ic * rs_c;
@@ -226,7 +226,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
         post_ops_attr.is_last_k   = TRUE;
 
         /* JC loop */
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc * cs_c;
 
@@ -260,7 +260,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
                 }
 
                 /* Pack all KC blocks for this JC panel */
-                for (md_t pc = 0; pc < k; pc += KC) {
+                for (iter_t pc = 0; pc < k; pc += KC) {
                     md_t kc0 = dlp_min((k - pc), KC);
 
                     ((pack_fp16)lcntx->packb_fun_ptr)(
@@ -374,7 +374,7 @@ LPGEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
     /* JC loop: iterate over N in NC blocks */
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
 
         md_t jc_cur_loop     = jc;
@@ -391,7 +391,7 @@ LPGEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
         rs_c_use = rs_c;
 
         /* PC loop: iterate over K in KC blocks */
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             float16 beta0 = (pc == 0) ? beta : one_fp16;
             md_t    kc0   = dlp_min((k - pc), KC);
 
@@ -473,7 +473,7 @@ LPGEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
             }
 
             /* IC loop: iterate over M in MC blocks */
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 c_use_ic = c_use_jc + (rs_c_use * ic);
@@ -520,7 +520,7 @@ LPGEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                  *   (128 for full panels, or smaller for partial panels)
                  * For UNPACKED: rs_b_use = rs_b (user's ldb)
                  */
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     post_ops_attr.post_op_c_i = ic;

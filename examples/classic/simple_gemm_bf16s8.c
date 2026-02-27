@@ -114,9 +114,9 @@ compute_per_row_quant_params(bfloat16* matrix,
 {
     printf("Computing per-row quantization parameters:\n");
 
-    for (md_t i = 0; i < rows; i++) {
+    for (iter_t i = 0; i < rows; i++) {
         float min_val = INFINITY, max_val = -INFINITY;
-        for (md_t j = 0; j < cols; j++) {
+        for (iter_t j = 0; j < cols; j++) {
             uint32_t float_bits = ((uint32_t)matrix[i * ld + j]) << 16;
             float    val;
             memcpy(&val, &float_bits, sizeof(float));

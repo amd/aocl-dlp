@@ -38,7 +38,7 @@
 
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m_rd)
 {
-    uint64_t n_left = n0 % NR; // n0 is expected to be n0<=NR
+    md_t n_left = n0 % NR; // n0 is expected to be n0<=NR
 
     static void* post_ops_labels[] = {
         &&POST_OPS_6x64F_DISABLE,    &&POST_OPS_BIAS_6x64F,
@@ -146,20 +146,20 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m_rd)
         return;
     }
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    md_t k_iter64 = k0 / 64;
+    md_t k_left64 = k0 % 64;
+    md_t k_iter32 = k_left64 / 32;
+    md_t k_left32 = k_left64 % 32;
+    md_t k_iter16 = k_left32 / 16;
+    md_t k_left16 = k_left32 % 16;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     if (m_iter == 0)
         goto consider_edge_cases;
@@ -174,10 +174,10 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m_rd)
     __m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8, xmm9;
 
     // Save c_j index for restoring later.
-    uint64_t post_op_c_j_save = post_ops_attr.post_op_c_j;
+    md_t post_op_c_j_save = post_ops_attr.post_op_c_j;
 
     // Save c_i index for restoring later.
-    uint64_t post_op_c_i_save = post_ops_attr.post_op_c_i;
+    md_t post_op_c_i_save = post_ops_attr.post_op_c_i;
 
     md_t jj, ii;
     for (jj = 0; jj < 64; jj += 4) // LOOP_6x64J
@@ -215,8 +215,8 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m_rd)
             ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
             ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
 
-            for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-                for (md_t unroll = 0; unroll < 4; ++unroll) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+                for (iter_t unroll = 0; unroll < 4; ++unroll) {
                     zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                     zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                     zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -261,8 +261,8 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m_rd)
                 }
             }
 
-            for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-                for (md_t unroll = 0; unroll < 2; ++unroll) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+                for (iter_t unroll = 0; unroll < 2; ++unroll) {
                     zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                     zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                     zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -307,7 +307,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m_rd)
                 }
             }
 
-            for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -1483,20 +1483,20 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x48m_rd)
         &&POST_OPS_SIGMOID_6x48F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    md_t k_iter64 = k0 / 64;
+    md_t k_left64 = k0 % 64;
+    md_t k_iter32 = k_left64 / 32;
+    md_t k_left32 = k_left64 % 32;
+    md_t k_iter16 = k_left32 / 16;
+    md_t k_left16 = k_left32 % 16;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     if (m_iter == 0)
         goto consider_edge_cases;
@@ -1511,10 +1511,10 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x48m_rd)
     __m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8, xmm9;
 
     // Save c_j index for restoring later.
-    uint64_t post_op_c_j_save = post_ops_attr.post_op_c_j;
+    md_t post_op_c_j_save = post_ops_attr.post_op_c_j;
 
     // Save c_i index for restoring later.
-    uint64_t post_op_c_i_save = post_ops_attr.post_op_c_i;
+    md_t post_op_c_i_save = post_ops_attr.post_op_c_i;
 
     md_t jj, ii;
     for (jj = 0; jj < 48; jj += 4) // LOOP_6x48J
@@ -1552,8 +1552,8 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x48m_rd)
             ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
             ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
 
-            for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-                for (md_t unroll = 0; unroll < 4; ++unroll) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+                for (iter_t unroll = 0; unroll < 4; ++unroll) {
                     zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                     zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                     zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -1598,8 +1598,8 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x48m_rd)
                 }
             }
 
-            for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-                for (md_t unroll = 0; unroll < 2; ++unroll) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+                for (iter_t unroll = 0; unroll < 2; ++unroll) {
                     zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                     zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                     zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -1644,7 +1644,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x48m_rd)
                 }
             }
 
-            for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -2823,20 +2823,20 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x32m_rd)
         &&POST_OPS_SIGMOID_6x32F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    md_t k_iter64 = k0 / 64;
+    md_t k_left64 = k0 % 64;
+    md_t k_iter32 = k_left64 / 32;
+    md_t k_left32 = k_left64 % 32;
+    md_t k_iter16 = k_left32 / 16;
+    md_t k_left16 = k_left32 % 16;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     if (m_iter == 0)
         goto consider_edge_cases;
@@ -2851,10 +2851,10 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x32m_rd)
     __m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5, xmm6, xmm7, xmm8, xmm9;
 
     // Save c_j index for restoring later.
-    uint64_t post_op_c_j_save = post_ops_attr.post_op_c_j;
+    md_t post_op_c_j_save = post_ops_attr.post_op_c_j;
 
     // Save c_i index for restoring later.
-    uint64_t post_op_c_i_save = post_ops_attr.post_op_c_i;
+    md_t post_op_c_i_save = post_ops_attr.post_op_c_i;
 
     md_t jj, ii;
     for (jj = 0; jj < 32; jj += 4) // LOOP_6x32J
@@ -2892,8 +2892,8 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x32m_rd)
             ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
             ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
 
-            for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-                for (md_t unroll = 0; unroll < 4; ++unroll) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+                for (iter_t unroll = 0; unroll < 4; ++unroll) {
                     zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                     zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                     zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -2938,8 +2938,8 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x32m_rd)
                 }
             }
 
-            for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-                for (md_t unroll = 0; unroll < 2; ++unroll) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+                for (iter_t unroll = 0; unroll < 2; ++unroll) {
                     zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                     zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                     zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -2984,7 +2984,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x32m_rd)
                 }
             }
 
-            for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+            for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);

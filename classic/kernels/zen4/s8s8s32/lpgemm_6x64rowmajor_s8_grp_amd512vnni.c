@@ -130,7 +130,7 @@ LPGEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
     uint8_t cvt_uint8 = 128;
     __m512i vec_uint8 = _mm512_set1_epi8(cvt_uint8);
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         __m512 acc_00 = _mm512_setzero_ps();
         __m512 acc_01 = _mm512_setzero_ps();
         __m512 acc_02 = _mm512_setzero_ps();
@@ -161,18 +161,19 @@ LPGEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
         __m512 acc_52 = _mm512_setzero_ps();
         __m512 acc_53 = _mm512_setzero_ps();
 
-        md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
+        md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
         md_t group_end =
-            (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+            ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
         int8_t* a_group = (int8_t*)a;
         int8_t* b_group = (int8_t*)b;
 
-        for (md_t group = group_start; group <= group_end; group++) {
-            md_t k_start =
-                dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
-            md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                                 grp_post_ops_attr.grp_post_op_k + k0 - 1);
+        for (iter_t group = group_start; group <= group_end; group++) {
+            md_t k_start = dlp_max(group * group_size,
+                                   (md_t)grp_post_ops_attr.grp_post_op_k);
+            md_t k_end =
+                dlp_min(((group + 1) * group_size - 1),
+                        (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
             md_t kg0              = k_end - k_start + 1;
             md_t k_full_pieces    = kg0 / 4;
@@ -209,7 +210,7 @@ LPGEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
             __m512i c_int32_5p2 = _mm512_setzero_epi32();
             __m512i c_int32_5p3 = _mm512_setzero_epi32();
 
-            for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+            for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
                 // The instructions are arranged in a mixed way to reduce data
                 // chain dependencies.
 

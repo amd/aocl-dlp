@@ -160,8 +160,8 @@ packb_mxp_nr64_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
         KC_updated += (2 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             b00 = _mm512_loadu_ps(b + (ldb * (kr + 0)) + jc);
@@ -323,7 +323,7 @@ packb_mxp_nr48_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with 32 elements in each
         // row.
         b00 = _mm512_loadu_ps(b + (ldb * (kr + 0)));
@@ -425,7 +425,7 @@ packb_mxp_nr32_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with 32 elements in each
         // row.
         b00 = _mm512_loadu_ps(b + (ldb * (kr + 0)));
@@ -484,7 +484,7 @@ packb_mxp_nr16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with 16 elements in each
         // row.
         b00 = _mm512_loadu_ps(b + (ldb * (kr + 0)));
@@ -784,7 +784,7 @@ packb_mxp_nr64_f32obf16_col_major(bfloat16*    pack_b_buffer,
         KC_updated += (2 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_mxp_nr_mult_16_f32obf16_col_major(
             pack_b_buffer + (jc * KC_updated), b + (jc * ldb), 64, ldb, KC);
     }
@@ -850,7 +850,7 @@ packb_mxp_nr_mult_16_f32obf16_col_major(bfloat16*    pack_b_buffer,
 
     md_t kr = 0;
     for (kr = 0; (kr + 31) < KC; kr += 32) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             LOAD_16_COLS_AVX512
@@ -896,7 +896,7 @@ packb_mxp_nr_mult_16_f32obf16_col_major(bfloat16*    pack_b_buffer,
     }
 
     for (; (kr + 15) < KC; kr += 16) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             LOAD_16_COLS_AVX512
@@ -926,7 +926,7 @@ packb_mxp_nr_mult_16_f32obf16_col_major(bfloat16*    pack_b_buffer,
     }
 
     for (; (kr + 7) < KC; kr += 8) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512(0xFF)
@@ -948,7 +948,7 @@ packb_mxp_nr_mult_16_f32obf16_col_major(bfloat16*    pack_b_buffer,
     }
 
     for (; (kr + 3) < KC; kr += 4) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512(0x0F)
@@ -966,7 +966,7 @@ packb_mxp_nr_mult_16_f32obf16_col_major(bfloat16*    pack_b_buffer,
     }
 
     for (; (kr + 1) < KC; kr += 2) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512(0x03)
@@ -982,7 +982,7 @@ packb_mxp_nr_mult_16_f32obf16_col_major(bfloat16*    pack_b_buffer,
     }
 
     for (; kr < KC; kr += 1) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             MASK_LOAD_16_COLS_AVX512(0x01)

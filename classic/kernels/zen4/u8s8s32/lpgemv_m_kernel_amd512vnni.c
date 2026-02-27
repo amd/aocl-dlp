@@ -49,7 +49,7 @@ LPGEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
     lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
 
-    for (md_t jr = 0; jr < n0; jr += NR) {
+    for (iter_t jr = 0; jr < n0; jr += NR) {
         NR = dlp_min(64, ((n0 - jr) / 16) * 16);
 
         if (NR == 0)
@@ -90,14 +90,14 @@ LPGEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
         ZERO_ACC_ZMM_4_REG(zmm16, zmm17, zmm18, zmm19);
         ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23);
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             md_t kc0 = dlp_min((k - pc), KC);
 
             md_t k_full_pieces    = kc0 / 4;
             md_t k_partial_pieces = kc0 % 4;
 
-            md_t k_iter = kc0 / 16;
-            md_t k_rem  = k_full_pieces % 4;
+            iter_t k_iter = kc0 / 16;
+            iter_t k_rem  = k_full_pieces % 4;
 
             md_t kc0_updated = kc0;
 
@@ -110,7 +110,7 @@ LPGEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
             a_use = a + pc;
 
-            for (md_t kr = 0; kr < k_iter; kr++) {
+            for (iter_t kr = 0; kr < k_iter; kr++) {
                 // load first 4x64 tile from row 0-3
                 zmm0 = _mm512_maskz_loadu_epi16(k5, b_use);
                 zmm1 = _mm512_maskz_loadu_epi16(k5, b_use + rs_b);
@@ -168,7 +168,7 @@ LPGEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 b_use += (4 * rs_b);
                 a_use += 4 * cs_a; // move a pointer to next col
             }
-            for (md_t kr = 0; kr < k_rem; kr++) {
+            for (iter_t kr = 0; kr < k_rem; kr++) {
                 // load first 4x64 tile from row 0-3
                 zmm0 = _mm512_maskz_loadu_epi16(k5, b_use);
                 zmm1 = _mm512_maskz_loadu_epi16(k6, b_use + cs_b);

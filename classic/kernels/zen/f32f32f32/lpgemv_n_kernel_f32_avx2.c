@@ -98,11 +98,11 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
     // MR comes from framework, we need to set it based on the underlying
     // hardware configuration.
-    for (md_t mr = 0; mr < m0; mr += MR) {
+    for (iter_t mr = 0; mr < m0; mr += MR) {
         md_t mr0 = dlp_min(m0 - mr, MR);
 
-        md_t k_iter = k / 8;
-        md_t k_rem  = k % 8;
+        iter_t k_iter = k / 8;
+        iter_t k_rem  = k % 8;
 
         __m256i store_mask = _mm256_loadu_si256((__m256i*)mask[mr0]);
         __m256i k_rem_mask = _mm256_loadu_si256((__m256i*)mask[k_rem]);
@@ -117,7 +117,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         c_use = c + mr * rs_c;
 
         if (mr0 == MR) {
-            for (md_t k = 0; k < k_iter; k++) {
+            for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                 ymm7 = _mm256_loadu_ps(b_use);
                 b_use += 8; // move b pointer to next 8 elements
 
@@ -179,7 +179,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
             // Dot product for mfringe 4
             if (mr0_use >= 4) {
-                for (md_t k = 0; k < k_iter; k++) {
+                for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                     ymm7 = _mm256_loadu_ps(b_use);
                     b_use += 8; // move b pointer to next 8 elements
 
@@ -223,7 +223,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
             // Dot product for  <= 3
             if (mr0_use) {
                 if (mr0_use >= 2) {
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         ymm7 = _mm256_loadu_ps(b_use);
                         b_use += 8; // move b pointer to next 8 elements
 
@@ -253,7 +253,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                     b_use        = b;
                 }
                 if (mr0_use == 1) {
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         ymm7 = _mm256_loadu_ps(b_use);
                         b_use += 8; // move b pointer to next 8 elements
 
@@ -312,7 +312,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
             } else {
                 if (post_ops_attr.buf_downscale != NULL) {
                     bfloat16 ctemp[16] = { 0 };
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         ctemp[i] = *((bfloat16*)post_ops_attr.buf_downscale
                                      + (post_ops_attr.rs_c_downscale
                                         * (post_ops_attr.post_op_c_i + i)));
@@ -324,7 +324,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 } else {
                     // load c into ymm0
                     float ctemp[8] = { 0 };
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         ctemp[i] = _cbuf[i * rs_c];
                     }
                     ymm0 = _mm256_loadu_ps(ctemp);
@@ -489,7 +489,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
             __m128i   _mask  = _mm_loadu_si128((__m128i*)mask[mr0]);
 
             bfloat16 ctemp[16];
-            for (md_t i = 0; i < mr0; i++) {
+            for (iter_t i = 0; i < mr0; i++) {
                 ctemp[i] = *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
             }
             selector1 = (__m256)(_mm256_sllv_epi32(
@@ -509,7 +509,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
             } else {
                 float ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -550,7 +550,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
             bfloat16* matptr = (bfloat16*)post_ops_list_temp->op_args1;
 
             bfloat16 ctemp[16];
-            for (md_t i = 0; i < mr0; i++) {
+            for (iter_t i = 0; i < mr0; i++) {
                 ctemp[i] = *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
             }
             selector1 = (__m256)(_mm256_sllv_epi32(
@@ -568,7 +568,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 ymm8      = _mm256_mul_ps(selector1, ymm8);
             } else {
                 float ctemp[8];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -629,7 +629,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 // store c from ymm0
                 float ctemp[8];
                 _mm256_storeu_ps(ctemp, ymm8);
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     c_use[i * rs_c] = ctemp[i];
                 }
             }

@@ -84,8 +84,8 @@ packb_nr16_f32f32f32of32_row_major(float*       pack_b_buffer,
     md_t n_full_pieces_loop_limit = (NC / NR) * NR;
     md_t n_partial_pieces         = NC % NR;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < KC; kr += 1) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < KC; kr += 1) {
             a0 = _mm256_loadu_ps(b + (jc + 0) + (ldb * kr));
             b0 = _mm256_loadu_ps(b + (jc + 8) + (ldb * kr));
 
@@ -95,7 +95,7 @@ packb_nr16_f32f32f32of32_row_major(float*       pack_b_buffer,
         }
     }
     if (n_partial_pieces > 0) {
-        for (md_t kr = 0; kr < KC; kr += 1) {
+        for (iter_t kr = 0; kr < KC; kr += 1) {
             // No point in vectorizing fringe case since n_fringe is expected
             // to be laid out contiguously in pack buffer as nr_fringe*KC
             // instead of 8*KC + 4*KC + .., etc.
@@ -273,10 +273,11 @@ packb_nr16_f32f32f32of32_col_major(float*       pack_b_buffer,
     md_t k_full_pieces_loop_limit = (KC / k_reg_size) * k_reg_size;
     md_t k_partial_pieces         = KC % k_reg_size;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t jr = jc; jr < jc + NR; jr += n_sub_blk_wdth) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t jr = jc; jr < jc + NR; jr += n_sub_blk_wdth) {
             md_t jr_offset = jr % NR;
-            for (md_t kr = 0; kr < k_full_pieces_loop_limit; kr += k_reg_size) {
+            for (iter_t kr = 0; kr < k_full_pieces_loop_limit;
+                 kr += k_reg_size) {
                 LOAD_PS_8x8();
                 UNPACK_PS_8x8();
                 UNPACK_PD_8x8();
@@ -297,13 +298,14 @@ packb_nr16_f32f32f32of32_col_major(float*       pack_b_buffer,
 
     if (n_partial_pieces > 0) {
         md_t jc = n_full_pieces_loop_limit;
-        for (md_t jr = n_full_pieces_loop_limit; jr < NC;
+        for (iter_t jr = n_full_pieces_loop_limit; jr < NC;
              jr += n_sub_blk_wdth) {
             md_t jr_offset = jr % NR;
             md_t jr_elems  = ((NC - jr) >= n_sub_blk_wdth) ? n_sub_blk_wdth
                                                            : (NC - jr);
 
-            for (md_t kr = 0; kr < k_full_pieces_loop_limit; kr += k_reg_size) {
+            for (iter_t kr = 0; kr < k_full_pieces_loop_limit;
+                 kr += k_reg_size) {
                 N_FRINGE_LOAD_PS_8x8();
                 UNPACK_PS_8x8();
                 UNPACK_PD_8x8();

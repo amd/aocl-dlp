@@ -47,10 +47,10 @@ packb_nr_f16f16f16of16_row_major_ref(float16*       pack_b,
                                      const md_t     KC)
 {
     // K-MAJOR packing: pack each k-row with NR elements contiguous
-    for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t kr = 0; kr < KC; kr++) {
         const float16* inp0  = (b + (ldb * kr));
         float16*       outp0 = (pack_b + (kr * NR));
-        for (md_t i = 0; i < NR; i++)
+        for (iter_t i = 0; i < NR; i++)
             *outp0++ = *inp0++;
     }
 }
@@ -64,13 +64,13 @@ packb_nrlt32_f16f16f16of16_row_major_ref(float16*       pack_b,
 {
     md_t NR = 32; // Pad to 32 (one ZMM register)
     // K-MAJOR packing with zero-padding for fringe
-    for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t kr = 0; kr < KC; kr++) {
         const float16* inp0  = (b + (ldb * kr));
         float16*       outp0 = (pack_b + (kr * NR));
-        for (md_t i = 0; i < n0_partial_rem; i++)
+        for (iter_t i = 0; i < n0_partial_rem; i++)
             *outp0++ = *inp0++;
         // Zero-pad remainder to NR=32
-        for (md_t i = n0_partial_rem; i < NR; i++)
+        for (iter_t i = n0_partial_rem; i < NR; i++)
             *outp0++ = 0;
     }
 }
@@ -90,7 +90,7 @@ packb_f16f16f16of16_row_major_ref(float16*       pack_b,
     md_t n_partial_pieces         = NC % NR;
 
     // K-MAJOR packing: pack full NR-width chunks
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_f16f16f16of16_row_major_ref((pack_b + (jc * KC)), (b + jc), NR,
                                              ldb, KC);
     }
@@ -151,17 +151,17 @@ packb_nr_f16f16f16of16_col_major_ref(float16*       pack_b_buffer,
 {
     // K-MAJOR packing: n-outer loop (cache-friendly for col-major input)
     // Match F32 implementation for optimal cache behavior
-    for (md_t i = 0; i < n0_partial_rem; i++) {
+    for (iter_t i = 0; i < n0_partial_rem; i++) {
         const float16* inp  = (b + (ldb * i));   // Column i start
         float16*       outp = pack_b_buffer + i; // Output position i
-        for (md_t j = 0; j < KC; j++) {
+        for (iter_t j = 0; j < KC; j++) {
             *(outp + (j * NR)) = *inp++; // Sequential read within column
         }
     }
     // Zero-pad remainder columns
-    for (md_t i = n0_partial_rem; i < NR; i++) {
+    for (iter_t i = n0_partial_rem; i < NR; i++) {
         float16* outp = pack_b_buffer + i;
-        for (md_t j = 0; j < KC; j++) {
+        for (iter_t j = 0; j < KC; j++) {
             *(outp + (j * NR)) = 0;
         }
     }
@@ -182,7 +182,7 @@ packb_f16f16f16of16_col_major_ref(float16*       pack_b_buffer,
     md_t n_partial_pieces         = NC % NR;
 
     // Pack full NR-width chunks
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_f16f16f16of16_col_major_ref(pack_b_buffer + (jc * KC),
                                              b + (jc * ldb), NR, ldb, KC, NR);
     }
@@ -265,11 +265,11 @@ unpackb_nr_f16f16f16of16_ref(float16*       b,
                              const md_t     n0_actual)
 {
     // Reverse of K-MAJOR packing: packed[k*NR+n] → output B[k][n]
-    for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t kr = 0; kr < KC; kr++) {
         const float16* inp  = unpack_b_buffer + (kr * NR);
         float16*       outp = b + (rs_b * kr);
 
-        for (md_t i = 0; i < n0_actual; i++) {
+        for (iter_t i = 0; i < n0_actual; i++) {
             *outp = *inp++;
             outp += cs_b;
         }
@@ -290,7 +290,7 @@ unpackb_f16f16f16of16_reference(float16*   b,
     md_t n_partial_pieces         = NC % NR;
 
     // Unpack full NR-width chunks
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         unpackb_nr_f16f16f16of16_ref(b + (cs_b * jc),
                                      unpack_b_buffer + (jc * KC), NR, rs_b,
                                      cs_b, KC, NR);

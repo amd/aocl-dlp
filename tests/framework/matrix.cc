@@ -2009,8 +2009,8 @@ Matrix::formatNumericMatrix(std::ostream&  os,
 
     const T* data = reinterpret_cast<const T*>(m_data);
 
-    for (md_t i = 0; i < rows_to_print; ++i) {
-        for (md_t j = 0; j < cols_to_print; ++j) {
+    for (iter_t i = 0; i < rows_to_print; ++i) {
+        for (iter_t j = 0; j < cols_to_print; ++j) {
             size_t idx = i * m_leadingDim + j;
 
             if constexpr (std::is_floating_point_v<T>) {
@@ -2051,8 +2051,8 @@ Matrix::formatMatrixBF16(std::ostream& os, VerbosityLevel verbosity_level) const
 
     const bfloat16* data = reinterpret_cast<const bfloat16*>(m_data);
 
-    for (md_t i = 0; i < rows_to_print; ++i) {
-        for (md_t j = 0; j < cols_to_print; ++j) {
+    for (iter_t i = 0; i < rows_to_print; ++i) {
+        for (iter_t j = 0; j < cols_to_print; ++j) {
             size_t idx    = i * m_leadingDim + j;
             float f32_val = bf16_to_f32(data[idx]); // Reuse existing conversion
             os << std::setw(10) << std::fixed << std::setprecision(4)
@@ -2081,8 +2081,8 @@ Matrix::formatMatrix4Bit(std::ostream& os, VerbosityLevel verbosity_level) const
 
     const uint8_t* data = m_data;
 
-    for (md_t i = 0; i < rows_to_print; ++i) {
-        for (md_t j = 0; j < cols_to_print; ++j) {
+    for (iter_t i = 0; i < rows_to_print; ++i) {
+        for (iter_t j = 0; j < cols_to_print; ++j) {
             // Unpack 4-bit value
             size_t elem_idx   = i * m_leadingDim + j;
             size_t byte_idx   = elem_idx / 2;

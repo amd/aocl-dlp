@@ -481,10 +481,10 @@ initialize_memory(multi_instance_gemm_f32_args_t* args, int num_instances)
 
 // Only supporting row major for this example.
 #define ZERO_INIT_AND_DEFINE_ARGS(var_name)                                    \
-    multi_instance_gemm_f32_args_t var_name = { 'R',  NULL, NULL, NULL,        \
-                                                NULL, NULL, NULL, NULL,        \
-                                                NULL, NULL, NULL, NULL,        \
-                                                NULL, NULL, NULL, 0 };
+    multi_instance_gemm_f32_args_t var_name = { 'R',  NULL, NULL, NULL, NULL,  \
+                                                NULL, NULL, NULL, NULL, NULL,  \
+                                                NULL, NULL, NULL, NULL, NULL,  \
+                                                NULL, NULL, 0 };
 
 void
 parse_cmd_line_args(int   argc,

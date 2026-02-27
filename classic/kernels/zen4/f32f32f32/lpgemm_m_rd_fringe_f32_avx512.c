@@ -45,17 +45,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
         &&POST_OPS_SIGMOID_5x64F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -100,8 +100,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
         xmm8 = _mm_setzero_ps();
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -141,8 +141,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -182,7 +182,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -1172,17 +1172,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
         &&POST_OPS_SIGMOID_4x64F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -1224,8 +1224,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -1260,8 +1260,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -1296,7 +1296,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -2131,17 +2131,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
         &&POST_OPS_SIGMOID_3x64F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -2181,8 +2181,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_3_REG(xmm4, xmm5, xmm6)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -2212,8 +2212,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -2243,7 +2243,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -2929,17 +2929,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
         &&POST_OPS_SIGMOID_2x64F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -2980,8 +2980,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -3006,8 +3006,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -3032,7 +3032,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -3578,17 +3578,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
         &&POST_OPS_SIGMOID_1x64F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -3625,8 +3625,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         xmm4 = _mm_setzero_ps();
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
                 zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -3646,8 +3646,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
                 zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -3667,7 +3667,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
             zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -4074,17 +4074,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
         &&POST_OPS_SIGMOID_5x48F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -4129,8 +4129,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
         xmm8 = _mm_setzero_ps();
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -4170,8 +4170,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -4211,7 +4211,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -5201,17 +5201,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
         &&POST_OPS_SIGMOID_4x48F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -5253,8 +5253,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -5289,8 +5289,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -5325,7 +5325,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -6160,17 +6160,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
         &&POST_OPS_SIGMOID_3x48F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -6210,8 +6210,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_3_REG(xmm4, xmm5, xmm6)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -6241,8 +6241,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -6272,7 +6272,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -6958,17 +6958,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
         &&POST_OPS_SIGMOID_2x48F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -7009,8 +7009,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -7035,8 +7035,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -7061,7 +7061,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -7607,17 +7607,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
         &&POST_OPS_SIGMOID_1x48F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -7654,8 +7654,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         xmm4 = _mm_setzero_ps();
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
                 zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -7675,8 +7675,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
                 zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -7696,7 +7696,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
             zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -8103,17 +8103,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
         &&POST_OPS_SIGMOID_5x32F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -8158,8 +8158,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
         xmm8 = _mm_setzero_ps();
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -8199,8 +8199,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -8240,7 +8240,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -9230,17 +9230,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
         &&POST_OPS_SIGMOID_4x32F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -9282,8 +9282,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -9318,8 +9318,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -9354,7 +9354,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -10189,17 +10189,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
         &&POST_OPS_SIGMOID_3x32F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -10239,8 +10239,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_3_REG(xmm4, xmm5, xmm6)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -10270,8 +10270,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
                 zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -10301,7 +10301,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
             zmm2 = _mm512_loadu_ps(a_temp + 2 * rs_a0);
@@ -10987,17 +10987,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
         &&POST_OPS_SIGMOID_2x32F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -11038,8 +11038,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -11064,8 +11064,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
                 zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -11090,7 +11090,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
             zmm1 = _mm512_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -11636,17 +11636,17 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
         &&POST_OPS_SIGMOID_1x64F
     };
 
-    uint64_t k_iter64 = k0 / 64;
-    uint64_t k_left64 = k0 % 64;
-    uint64_t k_iter32 = k_left64 / 32;
-    uint64_t k_left32 = k_left64 % 32;
-    uint64_t k_iter16 = k_left32 / 16;
-    uint64_t k_left16 = k_left32 % 16;
+    iter_t k_iter64 = k0 / 64;
+    md_t   k_left64 = k0 % 64;
+    iter_t k_iter32 = k_left64 / 32;
+    md_t   k_left32 = k_left64 % 32;
+    iter_t k_iter16 = k_left32 / 16;
+    md_t   k_left16 = k_left32 % 16;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -11683,8 +11683,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         xmm4 = _mm_setzero_ps();
 
-        for (md_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter64; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
                 zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -11704,8 +11704,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 2; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 2; ++unroll) {
                 zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
                 zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);
@@ -11725,7 +11725,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter16; ++k_iterator) {
             zmm0 = _mm512_loadu_ps(a_temp + 0 * rs_a0);
 
             zmm6 = _mm512_loadu_ps(b_temp + 0 * cs_b0);

@@ -142,7 +142,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
     md_t pre_op_sf_off = 0;
     md_t pre_op_zp_off = 0;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -227,7 +227,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
         zero_point0 =
             _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = (__m512bh)_mm512_set1_epi32(
                 *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
@@ -2091,7 +2091,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
     md_t pre_op_sf_off = 0;
     md_t pre_op_zp_off = 0;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
 
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
@@ -2177,7 +2177,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
         zero_point0 =
             _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = (__m512bh)_mm512_set1_epi32(
                 *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
@@ -3749,7 +3749,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
     md_t pre_op_sf_off = 0;
     md_t pre_op_zp_off = 0;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
 
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
@@ -3835,7 +3835,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
         zero_point0 =
             _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = (__m512bh)_mm512_set1_epi32(
                 *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
@@ -5126,7 +5126,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
     md_t pre_op_sf_off = 0;
     md_t pre_op_zp_off = 0;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
 
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
@@ -5212,7 +5212,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
         zero_point0 =
             _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
             a_bf16_0 = (__m512bh)_mm512_set1_epi32(
                 *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
@@ -6218,7 +6218,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
     md_t pre_op_sf_off = 0;
     md_t pre_op_zp_off = 0;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
 
         md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
         md_t k_end   = dlp_min(((group + 1) * group_size - 1),
@@ -6304,7 +6304,7 @@ LPGEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
         zero_point0 =
             _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr]
             __m512bh a_bf16_0 = (__m512bh)_mm512_set1_epi32(
                 *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));

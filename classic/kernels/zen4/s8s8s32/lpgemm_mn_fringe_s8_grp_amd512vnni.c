@@ -65,17 +65,18 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
     __m512 acc_40 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -92,7 +93,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
         __m512i c_int32_4p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -1270,17 +1271,18 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
     __m512 acc_30 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -1295,7 +1297,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
         __m512i c_int32_3p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -2308,17 +2310,18 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
     __m512 acc_20 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -2331,7 +2334,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
         __m512i c_int32_2p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -3192,17 +3195,18 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
     __m512 acc_10 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -3213,7 +3217,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
 
         __m512i c_int32_1p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -3919,17 +3923,18 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
     // Registers to use for accumulating C.
     __m512 acc_00 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -3938,7 +3943,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
         // Registers to use for accumulating C.
         __m512i c_int32_0p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -4493,17 +4498,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x16_sym_quant)
 
     __m512 acc_40 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -4520,7 +4526,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x16_sym_quant)
 
         __m512i c_int32_4p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -5655,17 +5661,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x16_sym_quant)
 
     __m512 acc_30 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -5680,7 +5687,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x16_sym_quant)
 
         __m512i c_int32_3p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -6660,17 +6667,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x16_sym_quant)
 
     __m512 acc_20 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -6683,7 +6691,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x16_sym_quant)
 
         __m512i c_int32_2p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -7516,17 +7524,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x16_sym_quant)
 
     __m512 acc_10 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -7537,7 +7546,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x16_sym_quant)
 
         __m512i c_int32_1p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -8215,17 +8224,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x16_sym_quant)
     // Registers to use for accumulating C.
     __m512 acc_00 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -8234,7 +8244,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x16_sym_quant)
         // Registers to use for accumulating C.
         __m512i c_int32_0p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -8787,17 +8797,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x32_sym_quant)
     __m512 acc_40 = _mm512_setzero_ps();
     __m512 acc_41 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -8819,7 +8830,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x32_sym_quant)
         __m512i c_int32_4p0 = _mm512_setzero_epi32();
         __m512i c_int32_4p1 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
 
@@ -10216,17 +10227,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x32_sym_quant)
     __m512 acc_30 = _mm512_setzero_ps();
     __m512 acc_31 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -10245,7 +10257,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x32_sym_quant)
         __m512i c_int32_3p0 = _mm512_setzero_epi32();
         __m512i c_int32_3p1 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
 
@@ -11444,17 +11456,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x32_sym_quant)
     __m512 acc_20 = _mm512_setzero_ps();
     __m512 acc_21 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -11470,7 +11483,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x32_sym_quant)
         __m512i c_int32_2p0 = _mm512_setzero_epi32();
         __m512i c_int32_2p1 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
 
@@ -12480,17 +12493,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x32_sym_quant)
     __m512 acc_10 = _mm512_setzero_ps();
     __m512 acc_11 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -12503,7 +12517,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x32_sym_quant)
         __m512i c_int32_1p0 = _mm512_setzero_epi32();
         __m512i c_int32_1p1 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
 
@@ -13314,17 +13328,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x32_sym_quant)
     __m512 acc_00 = _mm512_setzero_ps();
     __m512 acc_01 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -13334,7 +13349,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x32_sym_quant)
         __m512i c_int32_0p0 = _mm512_setzero_epi32();
         __m512i c_int32_0p1 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
 
@@ -13981,17 +13996,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x48_sym_quant)
     __m512 acc_41 = _mm512_setzero_ps();
     __m512 acc_42 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -14018,7 +14034,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x48_sym_quant)
         __m512i c_int32_4p1 = _mm512_setzero_epi32();
         __m512i c_int32_4p2 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
             b2 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 2));
@@ -15769,17 +15785,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x48_sym_quant)
     __m512 acc_31 = _mm512_setzero_ps();
     __m512 acc_32 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -15802,7 +15819,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x48_sym_quant)
         __m512i c_int32_3p1 = _mm512_setzero_epi32();
         __m512i c_int32_3p2 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
             b2 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 2));
@@ -17290,17 +17307,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x48_sym_quant)
     __m512 acc_21 = _mm512_setzero_ps();
     __m512 acc_22 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -17319,7 +17337,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x48_sym_quant)
         __m512i c_int32_2p1 = _mm512_setzero_epi32();
         __m512i c_int32_2p2 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
             b2 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 2));
@@ -18554,17 +18572,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x48_sym_quant)
     __m512 acc_11 = _mm512_setzero_ps();
     __m512 acc_12 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -18579,7 +18598,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x48_sym_quant)
         __m512i c_int32_1p1 = _mm512_setzero_epi32();
         __m512i c_int32_1p2 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
             b2 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 2));
@@ -19557,17 +19576,18 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x48_sym_quant)
     __m512 acc_01 = _mm512_setzero_ps();
     __m512 acc_02 = _mm512_setzero_ps();
 
-    md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
-    md_t group_end   = (grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
+    md_t group_start = (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
+    md_t group_end =
+        ((md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1) / group_size;
 
     int8_t* a_group = (int8_t*)a;
     int8_t* b_group = (int8_t*)b;
 
-    for (md_t group = group_start; group <= group_end; group++) {
+    for (iter_t group = group_start; group <= group_end; group++) {
         md_t k_start =
-            dlp_max(group * group_size, grp_post_ops_attr.grp_post_op_k);
+            dlp_max(group * group_size, (md_t)grp_post_ops_attr.grp_post_op_k);
         md_t k_end = dlp_min(((group + 1) * group_size - 1),
-                             grp_post_ops_attr.grp_post_op_k + k0 - 1);
+                             (md_t)grp_post_ops_attr.grp_post_op_k + k0 - 1);
 
         md_t kg0              = k_end - k_start + 1;
         md_t k_full_pieces    = kg0 / 4;
@@ -19578,7 +19598,7 @@ LPGEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x48_sym_quant)
         __m512i c_int32_0p1 = _mm512_setzero_epi32();
         __m512i c_int32_0p2 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 0));
             b1 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 1));
             b2 = _mm512_loadu_si512(b_group + (rs_b * kr) + (cs_b * 2));

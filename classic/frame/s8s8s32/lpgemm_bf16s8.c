@@ -136,7 +136,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
 
             *pack_b_column_sum = 0;
 
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_b_buffer_s8s8s32os32[k0] = b[k0 * rs_b];
                 *pack_b_column_sum += pack_b_buffer_s8s8s32os32[k0];
             }
@@ -159,7 +159,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
         thread_ic.work_id = thread->tid;
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-        for (md_t ic = ic_start; ic < ic_end; ic += MR) {
+        for (iter_t ic = ic_start; ic < ic_end; ic += MR) {
             md_t mc0 = dlp_min((ic_end - ic), MR);
 
             c_use = c + ic * rs_c;
@@ -237,7 +237,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
 
         a_use = quant_a_buffer_s8;
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc;
 
@@ -274,11 +274,11 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
                     (int32_t*)(pack_b_buffer_s8s8s32os32
                                + (sizeof(int8_t) * nc0_updated * k_updated));
 
-                for (md_t idx = 0; idx < nc0; idx++) {
+                for (iter_t idx = 0; idx < nc0; idx++) {
                     *(pack_b_column_sum + idx) = 0;
                 }
 
-                for (md_t pc = 0; pc < k; pc += KC) {
+                for (iter_t pc = 0; pc < k; pc += KC) {
                     md_t kc0 = dlp_min((k - pc), KC);
 
                     ((packb_s32_s8)lcntx->packb_fun_ptr)(
@@ -490,7 +490,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC); // Actual width of current panel
 
         md_t jc_cur_loop     = jc;
@@ -541,7 +541,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
         // zero-point.
         int32_t* pack_b_column_sum = NULL;
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             int32_t beta0 = (pc == 0) ? beta : 1;
             md_t kc0 = dlp_min((k - pc), KC); // Actual depth of current panel
 
@@ -618,8 +618,8 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
                     if ((jc_packb_end > jc_packb_start)
                         && (jc_packb_start < (jc + nc0))) {
                         if (pc == 0) {
-                            for (md_t idx = jc_packb_start; idx < jc_packb_end;
-                                 idx++) {
+                            for (iter_t idx = jc_packb_start;
+                                 idx < jc_packb_end; idx++) {
                                 *(pack_b_column_sum + idx) = 0;
                             }
                         }
@@ -667,7 +667,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
                               __FILE__, __LINE__);
                 return;
             }
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 // Only per thread C matrix is stored in temp buffer, so both
@@ -709,7 +709,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
                 // Reset B column sum offset for new IC iteration.
                 post_ops_attr.b_sum_offset = 0;
 
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 =
                         dlp_min((nc0 - jr), NR); // Actual width of micro-tile
 

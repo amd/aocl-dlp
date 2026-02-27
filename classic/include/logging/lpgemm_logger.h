@@ -106,7 +106,7 @@ batch_lpgemm_write_logger_gemm_fn(FILE*            fd,
             char post_ops_str[2048] = { 0 };                                   \
                                                                                \
             fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);         \
-            for (md_t i = 0; i < group_count; i++) {                           \
+            for (iter_t i = 0; i < group_count; i++) {                         \
                 lpgemm_get_pre_ops_str(metadata[i], pre_ops_str);              \
                 lpgemm_get_post_ops_str(metadata[i], post_ops_str);            \
                 fprintf(fd,                                                    \

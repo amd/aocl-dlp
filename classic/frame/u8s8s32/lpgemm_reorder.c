@@ -81,7 +81,7 @@ reorderb_nr64_u8s8s32o32(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -92,7 +92,7 @@ reorderb_nr64_u8s8s32o32(lpgemm_obj_t*  b,
                 jc, n, NC, get_packb_u8s8s32o32_min_NR(), &jc_cur_loop,
                 &jc_cur_loop_rem, &nc0, &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // kc0 needs to be a multiple of 4 so that it can be used with
@@ -170,7 +170,7 @@ reordera_mr6_u8s8s32o32(lpgemm_obj_t*  a,
     md_t k = a->width;
     md_t m = a->length;
 
-    for (md_t pc = 0; pc < k; pc += KC) {
+    for (iter_t pc = 0; pc < k; pc += KC) {
         md_t kc0 = dlp_min((k - pc), KC);
 
         // kc0 needs to be a multiple of 4 so that it can be used with
@@ -179,7 +179,7 @@ reordera_mr6_u8s8s32o32(lpgemm_obj_t*  a,
         // used for packed/reordered buffers needs to be updated.
         md_t kc0_updated = make_multiple_of_n(kc0, 4);
 
-        for (md_t ic = 0; ic < m; ic += MC) {
+        for (iter_t ic = 0; ic < m; ic += MC) {
             md_t mc0 = dlp_min((m - ic), MC);
 
             ((packa_s32)lcntx->packa_fun_ptr)(

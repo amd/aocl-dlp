@@ -177,8 +177,8 @@ reorderTyped(const Matrix& in,
 
     // Copy data with proper layout handling using templated helper
     auto copyMatrix = [&](auto getSrcIndex, auto getDstIndex) {
-        for (md_t i = 0; i < input_rows; ++i) {
-            for (md_t j = 0; j < input_cols; ++j) {
+        for (iter_t i = 0; i < input_rows; ++i) {
+            for (iter_t j = 0; j < input_cols; ++j) {
                 auto src_idx = getSrcIndex(i, j, src_ld);
                 auto dst_idx = getDstIndex(i, j, dst_ld);
 
@@ -1654,8 +1654,8 @@ UalRef::copyAndConvertToS32(const Matrix& src, Matrix& dst_s32)
     MatrixLayout src_layout     = src.getLayout();
     bool         src_transposed = src.isTransposed();
 
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             // Calculate source index accounting for layout and transposition
             size_t src_idx;
             if (src_transposed) {
@@ -1695,8 +1695,8 @@ UalRef::convertS32MatrixToTarget(const Matrix& src_s32,
     MatrixLayout dst_layout     = dst.getLayout();
     bool         dst_transposed = dst.isTransposed();
 
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             // Source: simple row-major
             size_t src_idx = static_cast<size_t>(i) * src_ld + j;
 
@@ -1735,8 +1735,8 @@ UalRef::copyAndConvertToF32(const Matrix& src, Matrix& dst_f32)
     MatrixLayout dst_layout     = dst_f32.getLayout();
     bool         src_transposed = src.isTransposed();
 
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             // Calculate source index accounting for layout and transposition
             size_t src_idx;
             if (src_transposed) {
@@ -1778,8 +1778,8 @@ UalRef::convertF32MatrixToTarget(const Matrix& src_f32,
     MatrixLayout dst_layout = dst.getLayout();
     bool         dst_transposed = dst.isTransposed();
 
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             // Calculate source index based on source layout
             size_t src_idx = (src_layout == MatrixLayout::ROW_MAJOR)
                                  ? (static_cast<size_t>(i) * src_ld + j)
@@ -1820,8 +1820,8 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
 
         // Apply operation element by element with proper leading dimension
         // handling
-        for (md_t i = 0; i < rows; ++i) {
-            for (md_t j = 0; j < cols; ++j) {
+        for (iter_t i = 0; i < rows; ++i) {
+            for (iter_t j = 0; j < cols; ++j) {
                 size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                                  ? (static_cast<size_t>(i) * ld + j)
                                  : (static_cast<size_t>(j) * ld + i);
@@ -1848,8 +1848,8 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
     }
 
     // Apply operation in float with proper indexing
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             size_t idx      = static_cast<size_t>(i) * ld + j;
             float  temp_val = temp_data[idx];
             operation(&temp_val, 1);
@@ -1893,8 +1893,8 @@ UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
         md_t   ld   = matrix.getLeadingDimension();
 
         // Apply PReLU element by element with proper leading dimension handling
-        for (md_t i = 0; i < rows; ++i) {
-            for (md_t j = 0; j < cols; ++j) {
+        for (iter_t i = 0; i < rows; ++i) {
+            for (iter_t j = 0; j < cols; ++j) {
                 size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                                  ? (static_cast<size_t>(i) * ld + j)
                                  : (static_cast<size_t>(j) * ld + i);
@@ -2071,7 +2071,7 @@ UalRef::applyScale(Matrix&       matrix,
     md_t scale_size = scaleFactor->getRows() * scaleFactor->getCols();
     std::unique_ptr<float[]> scale_data(new float[scale_size]);
 
-    for (md_t i = 0; i < scale_size; ++i) {
+    for (iter_t i = 0; i < scale_size; ++i) {
         scale_data[i] = dlp::testing::utils::convertTo<float>(
             scaleFactor->getData(), scaleFactor->getMatrixType(), i);
     }
@@ -2082,7 +2082,7 @@ UalRef::applyScale(Matrix&       matrix,
     if (has_zero_point) {
         zp_size = zeroPoint->getRows() * zeroPoint->getCols();
         zp_data.reset(new float[zp_size]);
-        for (md_t i = 0; i < zp_size; ++i) {
+        for (iter_t i = 0; i < zp_size; ++i) {
             zp_data[i] = dlp::testing::utils::convertTo<float>(
                 zeroPoint->getData(), zeroPoint->getMatrixType(), i);
         }
@@ -2093,8 +2093,8 @@ UalRef::applyScale(Matrix&       matrix,
         float* data = reinterpret_cast<float*>(matrix.getData());
 
         // Per-channel assumed along N (columns)
-        for (md_t i = 0; i < rows; ++i) {
-            for (md_t j = 0; j < cols; ++j) {
+        for (iter_t i = 0; i < rows; ++i) {
+            for (iter_t j = 0; j < cols; ++j) {
                 float  scale = scale_data[j % scale_size];
                 float  zp    = has_zero_point ? zp_data[j % zp_size] : 0.0f;
                 size_t idx   = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
@@ -2119,8 +2119,8 @@ UalRef::applyScale(Matrix&       matrix,
     }
 
     // Apply per-channel scaling in float
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             float  scale   = scale_data[j % scale_size];
             float  zp      = has_zero_point ? zp_data[j % zp_size] : 0.0f;
             size_t idx     = static_cast<size_t>(i) * temp_ld + j;
@@ -2143,7 +2143,7 @@ UalRef::applyBias(Matrix&       matrix,
 
     // Convert bias to float array
     std::unique_ptr<float[]> bias_data(new float[bias_size]);
-    for (md_t i = 0; i < bias_size; ++i) {
+    for (iter_t i = 0; i < bias_size; ++i) {
         bias_data[i] = dlp::testing::utils::convertTo<float>(
             bias.getData(), bias.getMatrixType(), i);
     }
@@ -2170,7 +2170,7 @@ UalRef::applyBias(Matrix&       matrix,
                     zeroPoint->getData(), zeroPoint->getMatrixType(), 0);
             }
             // Dequantize: bias = (bias - zp) * scale
-            for (md_t i = 0; i < bias_size; ++i) {
+            for (iter_t i = 0; i < bias_size; ++i) {
                 bias_data[i] = (bias_data[i] - zp) * scale;
             }
         } else {
@@ -2183,7 +2183,7 @@ UalRef::applyBias(Matrix&       matrix,
             if (scaleFactor) {
                 scale_size = scaleFactor->getRows() * scaleFactor->getCols();
                 scale_data.reset(new float[scale_size]);
-                for (md_t i = 0; i < scale_size; ++i) {
+                for (iter_t i = 0; i < scale_size; ++i) {
                     scale_data[i] = dlp::testing::utils::convertTo<float>(
                         scaleFactor->getData(), scaleFactor->getMatrixType(),
                         i);
@@ -2192,14 +2192,14 @@ UalRef::applyBias(Matrix&       matrix,
             if (zeroPoint) {
                 zp_size = zeroPoint->getRows() * zeroPoint->getCols();
                 zp_data.reset(new float[zp_size]);
-                for (md_t i = 0; i < zp_size; ++i) {
+                for (iter_t i = 0; i < zp_size; ++i) {
                     zp_data[i] = dlp::testing::utils::convertTo<float>(
                         zeroPoint->getData(), zeroPoint->getMatrixType(), i);
                 }
             }
 
             // Dequantize per-channel: bias = (bias - zp) * scale
-            for (md_t i = 0; i < bias_size; ++i) {
+            for (iter_t i = 0; i < bias_size; ++i) {
                 float scale  = scaleFactor ? scale_data[i % scale_size] : 1.0f;
                 float zp     = zeroPoint ? zp_data[i % zp_size] : 0.0f;
                 bias_data[i] = (bias_data[i] - zp) * scale;
@@ -2215,8 +2215,8 @@ UalRef::applyBias(Matrix&       matrix,
         md_t   ld   = matrix.getLeadingDimension();
 
         // Apply bias to each row/column depending on bias size
-        for (md_t i = 0; i < rows; ++i) {
-            for (md_t j = 0; j < cols; ++j) {
+        for (iter_t i = 0; i < rows; ++i) {
+            for (iter_t j = 0; j < cols; ++j) {
                 size_t idx = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                                  ? (static_cast<size_t>(i) * ld + j)
                                  : (static_cast<size_t>(j) * ld + i);
@@ -2242,8 +2242,8 @@ UalRef::applyBias(Matrix&       matrix,
     }
 
     // Apply bias in float
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             size_t idx      = static_cast<size_t>(i) * ld + j;
             size_t bias_idx = j % bias_size; // Broadcast bias
             temp_data[idx] += bias_data[bias_idx];
@@ -2279,8 +2279,8 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
         md_t add_matrix_ld = addMatrix.getLeadingDimension();
 
         // Apply matrix addition with proper leading dimension handling
-        for (md_t i = 0; i < rows; ++i) {
-            for (md_t j = 0; j < cols; ++j) {
+        for (iter_t i = 0; i < rows; ++i) {
+            for (iter_t j = 0; j < cols; ++j) {
                 size_t matrix_idx =
                     (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                         ? (static_cast<size_t>(i) * matrix_ld + j)
@@ -2313,8 +2313,8 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
     }
 
     // Apply matrix addition in float with proper indexing
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             size_t idx = static_cast<size_t>(i) * ld + j;
             temp_matrix[idx] += temp_add[idx] * scale;
         }
@@ -2349,8 +2349,8 @@ UalRef::applyMatrixMul(Matrix&       matrix,
         md_t mul_matrix_ld = mulMatrix.getLeadingDimension();
 
         // Apply matrix multiplication with proper leading dimension handling
-        for (md_t i = 0; i < rows; ++i) {
-            for (md_t j = 0; j < cols; ++j) {
+        for (iter_t i = 0; i < rows; ++i) {
+            for (iter_t j = 0; j < cols; ++j) {
                 size_t matrix_idx =
                     (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                         ? (static_cast<size_t>(i) * matrix_ld + j)
@@ -2383,8 +2383,8 @@ UalRef::applyMatrixMul(Matrix&       matrix,
     }
 
     // Apply element-wise multiplication in float with proper indexing
-    for (md_t i = 0; i < rows; ++i) {
-        for (md_t j = 0; j < cols; ++j) {
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < cols; ++j) {
             size_t idx = static_cast<size_t>(i) * ld + j;
             temp_matrix[idx] *= temp_mul[idx] * scale;
         }

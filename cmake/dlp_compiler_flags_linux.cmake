@@ -32,6 +32,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/dlp_compiler_flags_common.cmake)
 
 # Architecture-specific flags defined for convenience
 set(DLP_GENERIC_FLAGS -Wall
+                      -Wextra
                       -Wno-unused
                       -fPIC
 )

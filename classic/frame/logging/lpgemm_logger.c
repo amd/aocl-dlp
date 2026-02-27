@@ -111,7 +111,7 @@ lpgemm_get_pre_ops_str(dlp_metadata_t* metadata, char* ops_str)
     strcpy(ops_str + ops_str_len, delim_str);
     ops_str_len += delim_str_len;
 
-    for (md_t i = 0; i < pre_ops->seq_length; ++i) {
+    for (iter_t i = 0; i < pre_ops->seq_length; ++i) {
         LPGEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, "scale=");
         if ((pre_ops->b_scl) != NULL) {
             if ((pre_ops->b_scl + i)->scale_factor_len == 1) {
@@ -155,7 +155,7 @@ lpgemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str)
     md_t   s_i           = 0; // Multiple sum/scale supported.
     char*  delim_str     = "#";
     size_t delim_str_len = strlen(delim_str);
-    for (md_t i = 0; i < metadata->seq_length; ++i) {
+    for (iter_t i = 0; i < metadata->seq_length; ++i) {
         // Dispatcher code
         switch (*(metadata->seq_vector + i)) {
             case ELTWISE: {
@@ -293,7 +293,7 @@ batch_lpgemm_write_logger_gemm_fn(FILE*            fd,
         char post_ops_str[2048] = { 0 };
 
         fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);
-        for (md_t i = 0; i < group_count; i++) {
+        for (iter_t i = 0; i < group_count; i++) {
             lpgemm_get_pre_ops_str(metadata[i], pre_ops_str);
             lpgemm_get_post_ops_str(metadata[i], post_ops_str);
             fprintf(fd,

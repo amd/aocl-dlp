@@ -288,7 +288,7 @@ LPGEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
         value = 0;
     }
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
         __m512 c_float_0p1 = _mm512_setzero_ps();
@@ -320,7 +320,7 @@ LPGEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
         __m512 c_float_5p2 = _mm512_setzero_ps();
         __m512 c_float_5p3 = _mm512_setzero_ps();
 
-        for (md_t kr = 0; kr < k_full_pieces - value; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces - value; kr += 1) {
             // The instructions are arranged in a mixed way to reduce data
             // chain dependencies.
 
@@ -432,7 +432,7 @@ LPGEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
         _mm_prefetch(c + (rs_c * (ir + 5)) + (2 * 16), _MM_HINT_T1);
         _mm_prefetch(c + (rs_c * (ir + 5)) + (3 * 16), _MM_HINT_T1);
 
-        for (md_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = k_full_pieces - value; kr < k_full_pieces; kr += 1) {
             // The instructions are arranged in a mixed way to reduce data
             // chain dependencies.
 

@@ -1561,7 +1561,7 @@ kernelOpsGeneratorX86<KType>::zeroPointColMajorImpl()
         RegType bcstReg = popAndGetScratchReg();
         broadcastAndConvertScalar<T>(bcstReg,
                                      jit_->ptr[regTmp3 + i * sizeof(T)]);
-        for (md_t j = 0; j < numRegsPerRow; j++) {
+        for (iter_t j = 0; j < numRegsPerRow; j++) {
             jit_->vaddps(RegType(cRegStartIdx + i * numRegsPerRow + j),
                          RegType(cRegStartIdx + i * numRegsPerRow + j),
                          bcstReg);
@@ -2558,7 +2558,7 @@ kernelOpsGeneratorX86<KType>::store_reg_in_stack(md_t reg_start_idx,
                                                  md_t num_regs)
 {
     jit_->sub(jit_->rsp, (num_regs * RegBytes));
-    for (md_t idx = 0; idx < num_regs; idx++) {
+    for (iter_t idx = 0; idx < num_regs; idx++) {
         jit_->vmovups(jit_->ptr[jit_->rsp + idx * RegBytes],
                       RegType(reg_start_idx + idx));
     }
@@ -2569,7 +2569,7 @@ void
 kernelOpsGeneratorX86<KType>::get_reg_from_stack(md_t reg_start_idx,
                                                  md_t num_regs)
 {
-    for (md_t idx = 0; idx < num_regs; idx++) {
+    for (iter_t idx = 0; idx < num_regs; idx++) {
         jit_->vmovups(RegType(reg_start_idx + idx),
                       jit_->ptr[jit_->rsp + idx * RegBytes]);
     }
@@ -2594,7 +2594,7 @@ kernelOpsGeneratorX86<KType>::apply_post_ops_in_high_reg_pressure(
                                            : cRegStartIdx;
 
     // operate on non-pushed regs
-    for (md_t reg = post_op_start; reg < numRegs; reg++) {
+    for (iter_t reg = post_op_start; reg < numRegs; reg++) {
         op_fn(reg);
     }
 
@@ -2607,16 +2607,16 @@ kernelOpsGeneratorX86<KType>::apply_post_ops_in_high_reg_pressure(
     get_reg_from_stack(cRegStartIdx, num_push_regs);
     store_reg_in_stack(numRegs - num_push_regs, num_push_regs);
 
-    for (md_t reg = 0; reg < num_push_regs; reg++) {
+    for (iter_t reg = 0; reg < num_push_regs; reg++) {
         jit_->vmovups(RegType(numRegs - num_push_regs + reg),
                       RegType(cRegStartIdx + reg));
     }
 
-    for (md_t reg = 0; reg < num_push_regs; reg++) {
+    for (iter_t reg = 0; reg < num_push_regs; reg++) {
         op_fn(numRegs - num_push_regs + reg);
     }
 
-    for (md_t reg = 0; reg < num_push_regs; reg++) {
+    for (iter_t reg = 0; reg < num_push_regs; reg++) {
         jit_->vmovups(RegType(cRegStartIdx + reg),
                       RegType(numRegs - num_push_regs + reg));
     }

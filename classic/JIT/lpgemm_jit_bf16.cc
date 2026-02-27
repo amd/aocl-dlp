@@ -58,7 +58,7 @@ dlp_lpgemm_jit::store_zmms_in_stack(md_t reg_start_idx,
                                     md_t num_regs,
                                     md_t stack_off)
 {
-    for (md_t idx = 0; idx < num_regs; idx++) {
+    for (iter_t idx = 0; idx < num_regs; idx++) {
         vmovups(ptr[rsp + zmm_stack_top + stack_off + idx * 64],
                 Zmm(reg_start_idx + idx));
     }
@@ -69,7 +69,7 @@ dlp_lpgemm_jit::get_zmms_from_stack(md_t reg_start_idx,
                                     md_t num_regs,
                                     md_t stack_off)
 {
-    for (md_t idx = 0; idx < num_regs; idx++) {
+    for (iter_t idx = 0; idx < num_regs; idx++) {
         vmovups(Zmm(reg_start_idx + idx),
                 ptr[rsp + zmm_stack_top + stack_off + idx * 64]);
     }
@@ -83,7 +83,7 @@ void
 dlp_lpgemm_jit::reg_init(md_t m_dim, md_t n_dim)
 {
     vxorps(Zmm(fma_start_idx), Zmm(fma_start_idx));
-    for (md_t m = fma_start_idx + 1; m < 32; m++) {
+    for (iter_t m = fma_start_idx + 1; m < 32; m++) {
         vmovaps(Zmm(m), Zmm(fma_start_idx));
     }
 }
@@ -101,7 +101,7 @@ dlp_lpgemm_jit::kernel_unroll(md_t m_dim, md_t n_dim)
     vpbroadcastd(Zmm(bcst_start_idx), ptr[rax]);
 
     // load elements of B matrix into registers
-    for (md_t n = 0; n < num_full_loads; n++)
+    for (iter_t n = 0; n < num_full_loads; n++)
         vmovdqu16(Zmm(load_start_idx + n), ptr[rbx + n * 64]);
 
     // In case of last load with fringe part, use mask
@@ -111,7 +111,7 @@ dlp_lpgemm_jit::kernel_unroll(md_t m_dim, md_t n_dim)
 
     add(rbx, r10);
 
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         // broadcast elements of A matrix.
         // Using 2 ZMM registers for broadcast.
         if (m < (m_dim - 1)) {
@@ -143,7 +143,7 @@ dlp_lpgemm_jit::kernel_unroll(md_t m_dim, md_t n_dim)
             cnt++;
         }
         // Generate FMA instructions.
-        for (md_t n = 0; n < num_loads; n++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
 
             vdpbf16ps(Zmm(reg_num), Zmm(bcst_start_idx + m % 2),
@@ -162,7 +162,7 @@ dlp_lpgemm_jit::kernel_unroll(md_t m_dim, md_t n_dim)
     vpbroadcastd(Zmm(bcst_start_idx), ptr[rax]);
 
     // load elements of B matrix into registers
-    for (md_t n = 0; n < num_full_loads; n++)
+    for (iter_t n = 0; n < num_full_loads; n++)
         vmovdqu16(Zmm(load_start_idx + n), ptr[rbx + n * 64]);
 
     // In case of last load with fringe part, use mask
@@ -172,7 +172,7 @@ dlp_lpgemm_jit::kernel_unroll(md_t m_dim, md_t n_dim)
 
     add(rbx, r10);
 
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         // broadcast elements of A matrix.
         // Using 2 ZMM registers for broadcast.
         if (m < (m_dim - 1)) {
@@ -201,7 +201,7 @@ dlp_lpgemm_jit::kernel_unroll(md_t m_dim, md_t n_dim)
             add(rax, r9);
 
         // Generate FMA instructions.
-        for (md_t n = 0; n < num_loads; n++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
 
             vdpbf16ps(Zmm(reg_num), Zmm(bcst_start_idx + m % 2),
@@ -221,7 +221,7 @@ dlp_lpgemm_jit::k_fringe_loop(md_t m_dim, md_t n_dim)
     vpbroadcastw(Zmm(bcst_start_idx), ptr[rax]);
 
     // load elements of B matrix into registers
-    for (md_t n = 0; n < num_full_loads; n++)
+    for (iter_t n = 0; n < num_full_loads; n++)
         vmovdqu16(Zmm(load_start_idx + n), ptr[rbx + n * 64]);
 
     // In case of last load with fringe part, use mask
@@ -229,7 +229,7 @@ dlp_lpgemm_jit::k_fringe_loop(md_t m_dim, md_t n_dim)
         vmovdqu16(Zmm(load_start_idx + num_full_loads) | k3 | T_z,
                   ptr[rbx + num_full_loads * 64]);
 
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         if (m < (m_dim - 1)) {
             // broadcast elements of A matrix.
             // Using 2 ZMM registers for broadcast.
@@ -254,7 +254,7 @@ dlp_lpgemm_jit::k_fringe_loop(md_t m_dim, md_t n_dim)
         }
 
         // Generate FMA instructions.
-        for (md_t n = 0; n < num_loads; n++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
 
             vdpbf16ps(Zmm(reg_num), Zmm(bcst_start_idx + m % 2),
@@ -267,7 +267,7 @@ dlp_lpgemm_jit::k_fringe_loop(md_t m_dim, md_t n_dim)
 void
 dlp_lpgemm_jit::scale_alpha(md_t m_dim, md_t n_dim)
 {
-    for (md_t reg_num = fma_start_idx; reg_num < 32; reg_num++)
+    for (iter_t reg_num = fma_start_idx; reg_num < 32; reg_num++)
         vmulps(Zmm(reg_num), Zmm(alpha_reg), Zmm(reg_num));
 }
 
@@ -276,11 +276,11 @@ void
 dlp_lpgemm_jit::f32_f32_beta_op(md_t m_dim, md_t n_dim)
 {
     md_t reg_num;
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         if (m > 0)
             add(rcx, rdi);
 
-        for (md_t n = 0; n < num_full_loads; n++) {
+        for (iter_t n = 0; n < num_full_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
 
             vmovups(Zmm(load_start_idx + n), ptr[rcx + n * 64]);
@@ -326,8 +326,8 @@ dlp_lpgemm_jit::bf16_f32_beta_op(md_t m_dim, md_t n_dim)
 
     add(rcx, rsi);
 
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_full_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
 
             // convert from 16 bit elements to 32 bit elements
@@ -378,7 +378,7 @@ dlp_lpgemm_jit::clip_f32(md_t m_dim, md_t n_dim)
     mov(rbx, ptr[rdx + offsetof(lpgemm_post_op, op_args3)]);
     vbroadcastss(Zmm(max_reg), ptr[rbx]);
 
-    for (md_t m = fma_start_idx; m < 32; m++) {
+    for (iter_t m = fma_start_idx; m < 32; m++) {
         vmaxps(Zmm(m), Zmm(m), Zmm(min_reg));
         vminps(Zmm(m), Zmm(m), Zmm(max_reg));
     }
@@ -413,8 +413,8 @@ dlp_lpgemm_jit::bf16_f32_matrix_add(md_t m_dim, md_t n_dim)
 
     add(rcx, rsi);
 
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_full_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
 
             // convert from 16 bit elements to 32 bit elements
@@ -477,8 +477,8 @@ dlp_lpgemm_jit::f32_f32_matrix_add(md_t m_dim, md_t n_dim)
 
     add(rcx, rsi);
 
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_full_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vmovups(Zmm(load_start_idx + n), ptr[rcx + n * 64]);
             vaddps(Zmm(reg_num), Zmm(reg_num), Zmm(load_start_idx + n));
@@ -510,7 +510,7 @@ dlp_lpgemm_jit::bias_row_major(md_t m_dim, md_t n_dim)
     // postops_c_j *= sizeof(float)
     lea(rbx, ptr[rbx * 4]);
     add(rax, rbx);
-    for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t n = 0; n < num_full_loads; n++) {
         vmovups(Zmm(load_start_idx + n), ptr[rax + n * 64]);
     }
     if (n_rem) {
@@ -523,7 +523,7 @@ dlp_lpgemm_jit::bias_row_major(md_t m_dim, md_t n_dim)
     // postops_c_j *= sizeof(bfloat16)
     lea(rbx, ptr[rbx * 2]);
     add(rax, rbx);
-    for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t n = 0; n < num_full_loads; n++) {
         // convert from 16 bit elements to 32 bit elements
         vpmovsxwd(Zmm(load_start_idx + n), ptr[rax + n * 32]);
 
@@ -545,8 +545,8 @@ dlp_lpgemm_jit::bias_row_major(md_t m_dim, md_t n_dim)
     }
     L("POST_BIAS_BF16_ROW_MAJOR");
 
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vaddps(Zmm(reg_num), Zmm(reg_num), Zmm(load_start_idx + n));
         }
@@ -569,9 +569,9 @@ dlp_lpgemm_jit::bias_col_major(md_t m_dim, md_t n_dim)
     // postops_c_i *= sizeof(float)
     lea(rbx, ptr[rbx * 4]);
     add(rax, rbx);
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         vbroadcastss(Zmm(alpha_reg), ptr[rax + m * 4]);
-        for (md_t n = 0; n < num_loads; n++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vaddps(Zmm(reg_num), Zmm(reg_num), Zmm(alpha_reg));
         }
@@ -582,7 +582,7 @@ dlp_lpgemm_jit::bias_col_major(md_t m_dim, md_t n_dim)
     // postops_c_i *= sizeof(bfloat16)
     lea(rbx, ptr[rbx * 2]);
     add(rax, rbx);
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         vpbroadcastw(Zmm(alpha_reg), ptr[rax + m * 4]);
 
         // convert from 16 bit elements to 32 bit elements
@@ -591,7 +591,7 @@ dlp_lpgemm_jit::bias_col_major(md_t m_dim, md_t n_dim)
         // Shift left by 16 bits
         vpslld(Zmm(alpha_reg), Zmm(alpha_reg), 0x10);
 
-        for (md_t n = 0; n < num_loads; n++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vaddps(Zmm(reg_num), Zmm(reg_num), Zmm(alpha_reg));
         }
@@ -606,7 +606,7 @@ dlp_lpgemm_jit::relu(md_t m_dim, md_t n_dim)
 
     vpxorq(Zmm(scratch_reg), Zmm(scratch_reg), Zmm(scratch_reg));
 
-    for (md_t m = fma_start_idx; m < 32; m++) {
+    for (iter_t m = fma_start_idx; m < 32; m++) {
         vmaxps(Zmm(m), Zmm(m), Zmm(scratch_reg));
     }
 }
@@ -621,7 +621,7 @@ dlp_lpgemm_jit::relu_scale(md_t m_dim, md_t n_dim)
     vbroadcastss(Zmm(scale_factor), ptr[rax]);
     vpxorq(Zmm(zero_reg), Zmm(zero_reg), Zmm(zero_reg));
 
-    for (md_t m = fma_start_idx; m < 32; m++) {
+    for (iter_t m = fma_start_idx; m < 32; m++) {
         vcmpps(k5, Zmm(m), Zmm(zero_reg), 0x02);
         vmulps(Zmm(m) | k5, Zmm(m), Zmm(scale_factor));
     }
@@ -646,7 +646,7 @@ dlp_lpgemm_jit::downscale_row_major(md_t m_dim, md_t n_dim)
     // post_op_c_j *= sizeof( float )
     lea(rbx, ptr[rbx * 4]);
     add(rax, rbx);
-    for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t n = 0; n < num_full_loads; n++) {
         vmovups(Zmm(sf_reg + n), ptr[rax + n * 64]);
     }
     if (n_rem) {
@@ -659,7 +659,7 @@ dlp_lpgemm_jit::downscale_row_major(md_t m_dim, md_t n_dim)
     // Broadcast the scale_factor value. When scale-factor length == 1,
     // even though different registers are used to hold the scalar value
     // all those registers would contain the same value.
-    for (md_t n = 0; n < num_full_loads; n++)
+    for (iter_t n = 0; n < num_full_loads; n++)
         vbroadcastss(Zmm(sf_reg + n), ptr[rax]);
 
     if (n_rem) {
@@ -681,7 +681,7 @@ dlp_lpgemm_jit::downscale_row_major(md_t m_dim, md_t n_dim)
     lea(rbx, ptr[rbx * 2]);
     add(rax, rbx);
     // If zero_point > 1
-    for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t n = 0; n < num_full_loads; n++) {
         // Convert from 16 bit elements to 32 bit elements
         vpmovsxwd(Zmm(zp_reg + n), ptr[rax + n * 32]);
 
@@ -703,7 +703,7 @@ dlp_lpgemm_jit::downscale_row_major(md_t m_dim, md_t n_dim)
     jmp("POST_SCALAR_ZP");
 
     L("DOWNSCALE_ROW_MAJOR_ZP_EQ1");
-    for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t n = 0; n < num_full_loads; n++) {
         vpbroadcastw(Ymm(zp_reg + n), ptr[rax]);
         // Convert from 16 bit elements to 32 bit elements
         vpmovsxwd(Zmm(zp_reg + n), Ymm(zp_reg + n));
@@ -725,8 +725,8 @@ dlp_lpgemm_jit::downscale_row_major(md_t m_dim, md_t n_dim)
     }
 
     L("POST_SCALAR_ZP");
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vmulps(Zmm(reg_num), Zmm(reg_num), Zmm(sf_reg + n));
             vaddps(Zmm(reg_num), Zmm(reg_num), Zmm(zp_reg + n));
@@ -752,7 +752,7 @@ dlp_lpgemm_jit::downscale_col_major(md_t m_dim, md_t n_dim)
     // post_op_c_i *= sizeof( float )
     lea(rbx, ptr[rbx * 4]);
     add(rax, rbx);
-    for (md_t m = 0; m < m_dim; m++)
+    for (iter_t m = 0; m < m_dim; m++)
         vbroadcastss(Zmm(load_start_idx + m), ptr[rax + m * 4]);
 
     jmp("DOWNSCALE_COL_SCALE_FACTOR");
@@ -761,14 +761,14 @@ dlp_lpgemm_jit::downscale_col_major(md_t m_dim, md_t n_dim)
     // Broadcast the scale_factor value. When scale-factor length == 1,
     // even though different registers are used to hold the scalar value
     // all those registers would contain the same value.
-    for (md_t m = 0; m < m_dim; m++)
+    for (iter_t m = 0; m < m_dim; m++)
         vbroadcastss(Zmm(load_start_idx + m), ptr[rax]);
 
     L("DOWNSCALE_COL_SCALE_FACTOR");
     // Calculate the scale factor value with the broadcasted scale factor
     // values.
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vmulps(Zmm(reg_num), Zmm(reg_num), Zmm(load_start_idx + m));
         }
@@ -788,7 +788,7 @@ dlp_lpgemm_jit::downscale_col_major(md_t m_dim, md_t n_dim)
     // post_op_c_i *= sizeof( bfloat16 )
     lea(rbx, ptr[rbx * 2]);
     add(rax, rbx);
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         // broadcast the bf16 elements from the downscale buffer using mask.
         vpbroadcastw(Ymm(load_start_idx + m), ptr[rax + m * 2]);
 
@@ -802,7 +802,7 @@ dlp_lpgemm_jit::downscale_col_major(md_t m_dim, md_t n_dim)
     jmp("DOWNSCALE_COL_ZERO_POINT");
 
     L("DOWNSCALE_COL_MAJOR_ZP_EQ1");
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         // Broadcast the bf16 elements from the downscale buffer
         vpbroadcastw(Ymm(load_start_idx + m), ptr[rax]);
 
@@ -814,8 +814,8 @@ dlp_lpgemm_jit::downscale_col_major(md_t m_dim, md_t n_dim)
     }
 
     L("DOWNSCALE_COL_ZERO_POINT");
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vaddps(Zmm(reg_num), Zmm(reg_num), Zmm(load_start_idx + m));
         }
@@ -837,7 +837,7 @@ dlp_lpgemm_jit::apply_post_ops_in_high_reg_pressure(
                                            : fma_start_idx;
 
     // operate on non-pushed regs
-    for (md_t reg = post_op_start; reg < 32; reg++) {
+    for (iter_t reg = post_op_start; reg < 32; reg++) {
         op_fn(reg);
     }
 
@@ -847,11 +847,11 @@ dlp_lpgemm_jit::apply_post_ops_in_high_reg_pressure(
     store_zmms_in_stack(32 - num_push_regs, num_push_regs, num_push_regs * 64);
     get_zmms_from_stack(32 - num_push_regs, num_push_regs, 0);
 
-    for (md_t reg = 0; reg < num_push_regs; reg++) {
+    for (iter_t reg = 0; reg < num_push_regs; reg++) {
         op_fn(32 - num_push_regs + reg);
     }
 
-    for (md_t reg = 0; reg < num_push_regs; reg++)
+    for (iter_t reg = 0; reg < num_push_regs; reg++)
         vmovups(Zmm(fma_start_idx + reg), Zmm(32 - num_push_regs + reg));
 
     get_zmms_from_stack(32 - num_push_regs, num_push_regs, num_push_regs * 64);
@@ -1179,11 +1179,11 @@ void
 dlp_lpgemm_jit::store_f32(md_t m_dim, md_t n_dim)
 {
     md_t reg_num;
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         if (m > 0)
             add(rcx, rdi);
 
-        for (md_t n = 0; n < num_full_loads; n++) {
+        for (iter_t n = 0; n < num_full_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             vmovups(ptr[rcx + n * 64], Zmm(reg_num));
         }
@@ -1215,8 +1215,8 @@ dlp_lpgemm_jit::cvt_store_f32_bf16_mask(md_t m_dim, md_t n_dim)
     lea(rsi, ptr[rsi + rbx * 2]);
     add(rcx, rsi);
 
-    for (md_t m = 0; m < m_dim; m++) {
-        for (md_t n = 0; n < num_full_loads; n++) {
+    for (iter_t m = 0; m < m_dim; m++) {
+        for (iter_t n = 0; n < num_full_loads; n++) {
             reg_num = fma_start_idx + (m * num_loads) + n;
             // convert from 32 bit elements to 16 bit elements
             vcvtneps2bf16(Ymm(reg_num), Zmm(reg_num));
@@ -1363,10 +1363,10 @@ dlp_lpgemm_jit::initialize_params(lpgemm_jit_inputs_t* params)
 void
 dlp_lpgemm_jit::prefetchC(md_t m_dim, md_t n_dim)
 {
-    for (md_t m = 0; m < m_dim; m++) {
+    for (iter_t m = 0; m < m_dim; m++) {
         if (m > 0)
             add(rcx, rdi);
-        for (md_t n = 0; n < num_loads; n++) {
+        for (iter_t n = 0; n < num_loads; n++) {
             prefetcht1(ptr[rcx + n * 64]);
         }
     }

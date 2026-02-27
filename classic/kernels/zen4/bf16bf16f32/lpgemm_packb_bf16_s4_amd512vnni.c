@@ -177,8 +177,8 @@ packb_nr64_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     __m512i r_hi;
     __m512i s4_out;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
             // Int4 array has to be accessed like byte array, but with
             // half the elements traversed in the byte array.
             h_a0 = _mm256_maskz_loadu_epi8(
@@ -401,7 +401,7 @@ packb_nr48_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     __m256i r_hi_32;
     __m256i s4_out_32;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // First 32 columns.
         h_a0_32 = _mm_maskz_loadu_epi8(
             hmask_32, b + ((rs_b * (kr + 0)) / incr_adj_factor));
@@ -576,7 +576,7 @@ packb_nr32_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     __m256i r_hi_32;
     __m256i s4_out_32;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         h_a0_32 = _mm_maskz_loadu_epi8(
             hmask_32, b + ((rs_b * (kr + 0)) / incr_adj_factor));
         CVT_INT4_TO_INT8_32ELEM_MULTISHIFT(h_a0_32, a0_32, shift_idx_32,
@@ -691,7 +691,7 @@ packb_nr16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     __m128i r_hi_16;
     __m128i s4_out_16;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         h_a0_16 = _mm_maskz_loadu_epi8(hmask_16, b + ((rs_b * (kr + 0)) / 2));
         CVT_INT4_TO_INT8_16ELEM_MULTISHIFT(h_a0_16, a0_16, shift_idx_16,
                                            sign_comp_16, signed_upscale);
@@ -821,7 +821,7 @@ packb_nrlt16_bf16s4f32of32_row_major(int8_t*          pack_b_buffer,
     __m128i r_hi_16;
     __m128i s4_out_16;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         h_a0_16 = _mm_maskz_loadu_epi8(hmask_16, b + ((rs_b * (kr + 0)) / 2));
         CVT_INT4_TO_INT8_16ELEM_MULTISHIFT(h_a0_16, a0_16, shift_idx_16,
                                            sign_comp_16, signed_upscale);
@@ -1205,7 +1205,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
     if (is_odd_stride == FALSE) {
 
         for (kr = 0; (kr + 63) < KC; kr += 64) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2(0xFFFFFFFF)
@@ -1321,7 +1321,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 31) < KC; kr += 32) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2(0x0000FFFF)
@@ -1386,7 +1386,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 15) < KC; kr += 16) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2(0x000000FF)
@@ -1427,7 +1427,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 7) < KC; kr += 8) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2(0x0F)
@@ -1456,7 +1456,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 3) < KC; kr += 4) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2(0x03)
@@ -1476,7 +1476,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 1) < KC; kr += 2) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2(0x01)
@@ -1493,7 +1493,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; kr < KC; kr += 1) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Single k column: only low nibble valid per row; clear high
                  * nibbles. */
                 MASK_LOAD_16_COLS_AVX2_LAST_4BITS(0x01)
@@ -1513,7 +1513,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
 
     } else {
         for (; (kr + 31) < KC; kr += 32) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2_ODD(0x0000FFFF, 0x0001FFFF)
@@ -1575,7 +1575,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 15) < KC; kr += 16) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2_ODD(0x00000000000000FF,
@@ -1614,7 +1614,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 7) < KC; kr += 8) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2_ODD(0x000000000000000F,
@@ -1641,7 +1641,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 3) < KC; kr += 4) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2_ODD(0x0000000000000003,
@@ -1662,7 +1662,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         }
 
         for (; (kr + 1) < KC; kr += 2) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2_ODD(0x0000000000000001,
@@ -1679,7 +1679,7 @@ packb_nr_mult_16_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
             }
         }
         for (; kr < KC; kr += 1) {
-            for (md_t jr = 0; jr < NR; jr += 16) {
+            for (iter_t jr = 0; jr < NR; jr += 16) {
                 /* Rearrange for dpbf16_ps, read 16 cols
                 from B with 64 elements in each row.*/
                 MASK_LOAD_16_COLS_AVX2_LAST_4BITS(0x01)
@@ -2266,7 +2266,7 @@ packb_nr64_bf16s4f32of32_col_major(int8_t*          pack_b_buffer,
         KC_updated += (2 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_mult_16_bf16s4f32of32_col_major(
             (pack_b_buffer + ((jc * KC_updated) / 2)), (b + (jc * ldb) / 2), 64,
             ldb, KC, mtag);

@@ -44,7 +44,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -70,7 +70,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x16)
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         ymm1 = _mm256_loadu_ps(bbuf + 8);
@@ -1032,7 +1032,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -1054,7 +1054,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x16)
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         ymm1 = _mm256_loadu_ps(bbuf + 8);
@@ -1867,7 +1867,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -1889,7 +1889,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x16)
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         ymm1 = _mm256_loadu_ps(bbuf + 8);
@@ -2558,7 +2558,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x16)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -2576,7 +2576,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x16)
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         ymm1 = _mm256_loadu_ps(bbuf + 8);
@@ -3103,7 +3103,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x16)
     fflush(stdout);
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -3120,7 +3120,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x16)
     /*_mm_prefetch((MR X NR) from C*/
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         ymm1 = _mm256_loadu_ps(bbuf + 8);
@@ -3515,7 +3515,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -3538,7 +3538,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x8)
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -4245,7 +4245,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -4265,7 +4265,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x8)
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -4872,7 +4872,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -4891,7 +4891,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x8)
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -5406,7 +5406,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -5424,7 +5424,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x8)
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -5841,7 +5841,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -5857,7 +5857,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x8)
     /*_mm_prefetch((MR X NR) from C*/
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -6178,7 +6178,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x4)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -6201,7 +6201,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x4)
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -6878,7 +6878,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x4)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -6898,7 +6898,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x4)
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -7481,7 +7481,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x4)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -7500,7 +7500,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x4)
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -7994,7 +7994,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x4)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -8013,7 +8013,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x4)
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -8421,7 +8421,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x4)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -8436,7 +8436,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x4)
     /*_mm_prefetch((MR X NR) from C*/
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_loadu_ps(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -8747,7 +8747,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x2)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -8770,7 +8770,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x2)
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = (__m128)_mm_load_sd((const double*)bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -9450,7 +9450,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x2)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -9470,7 +9470,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x2)
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = (__m128)_mm_load_sd((const double*)bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -10054,7 +10054,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x2)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -10073,7 +10073,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x2)
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = (__m128)_mm_load_sd((const double*)bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -10566,7 +10566,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x2)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -10585,7 +10585,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x2)
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = (__m128)_mm_load_sd((const double*)bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -10990,7 +10990,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x2)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -11005,7 +11005,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x2)
     /*_mm_prefetch((MR X NR) from C*/
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = (__m128)_mm_load_sd((const double*)bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -11317,7 +11317,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x1)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -11340,7 +11340,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_5x1)
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_load_ss(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -12019,7 +12019,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x1)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -12039,7 +12039,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_4x1)
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_load_ss(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -12625,7 +12625,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x1)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -12644,7 +12644,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_3x1)
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 2 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_load_ss(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -13136,7 +13136,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x1)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf  = (float*)a;
     float* bbuf  = (float*)b;
@@ -13155,7 +13155,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_2x1)
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
     _mm_prefetch((cbuf + 1 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_load_ss(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -13561,7 +13561,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x1)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     float* abuf = (float*)a;
     float* bbuf = (float*)b;
@@ -13576,7 +13576,7 @@ LPGEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_1x1)
     /*_mm_prefetch((MR X NR) from C*/
     _mm_prefetch((cbuf + 0 * rs_c), _MM_HINT_T0);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         xmm0 = _mm_load_ss(bbuf);
         bbuf += rs_b; // move b pointer to next row
@@ -13898,7 +13898,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_5xlt8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -13923,7 +13923,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_5xlt8)
 
     __m256i ymm_mask = _mm256_loadu_si256((__m256i*)mask[n0_rem]);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_maskload_ps(bbuf, ymm_mask);
         bbuf += rs_b; // move b pointer to next row
@@ -14638,7 +14638,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_4xlt8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -14660,7 +14660,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_4xlt8)
 
     __m256i ymm_mask = _mm256_loadu_si256((__m256i*)mask[n0_rem]);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_maskload_ps(bbuf, ymm_mask);
         bbuf += rs_b; // move b pointer to next row
@@ -15280,7 +15280,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_3xlt8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -15302,7 +15302,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_3xlt8)
 
     __m256i ymm_mask = _mm256_loadu_si256((__m256i*)mask[n0_rem]);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_maskload_ps(bbuf, ymm_mask);
         bbuf += rs_b; // move b pointer to next row
@@ -15830,7 +15830,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_2xlt8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -15850,7 +15850,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_2xlt8)
 
     __m256i ymm_mask = _mm256_loadu_si256((__m256i*)mask[n0_rem]);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_maskload_ps(bbuf, ymm_mask);
         bbuf += rs_b; // move b pointer to next row
@@ -16281,7 +16281,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_1xlt8)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
     /*Declare the registers*/
     __m256 ymm0, ymm1, ymm2, ymm3;
@@ -16300,7 +16300,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_1xlt8)
 
     __m256i ymm_mask = _mm256_loadu_si256((__m256i*)mask[n0_rem]);
 
-    for (md_t k = 0; k < k_iter; k++) {
+    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
         /*Load 16 elements from row0 of B*/
         ymm0 = _mm256_maskload_ps(bbuf, ymm_mask);
         bbuf += rs_b; // move b pointer to next row

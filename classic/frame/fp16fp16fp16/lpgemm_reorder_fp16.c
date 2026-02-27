@@ -77,7 +77,7 @@ reorderb_nr128_f16f16f16of16(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -93,7 +93,7 @@ reorderb_nr128_f16f16f16of16(lpgemm_obj_t*  b,
             // Pack KC blocks for this NC panel
             // Note: No JR loop - packer handles subdivision internally (matches
             // BF16/INT8)
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // Offset calculation matches BF16/INT8 exactly:
@@ -163,7 +163,7 @@ unreorderb_nr128_f16f16f16of16(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -178,7 +178,7 @@ unreorderb_nr128_f16f16f16of16(lpgemm_obj_t*  b,
             // Unpack KC blocks for this NC panel
             // Note: No JR loop - unpacker handles subdivision internally
             // (matches BF16/INT8)
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // Offset calculation matches BF16/INT8 exactly:

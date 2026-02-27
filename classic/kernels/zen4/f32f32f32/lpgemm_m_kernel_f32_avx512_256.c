@@ -49,10 +49,10 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_256_6x32m)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = (md_t)k0;
 
-    uint64_t m_iter = (uint64_t)m0 / 6;
-    uint64_t m_left = (uint64_t)m0 % 6;
+    iter_t m_iter = (md_t)m0 / 6;
+    md_t   m_left = (md_t)m0 % 6;
 
     if (m_iter == 0) {
         goto consider_edge_cases;
@@ -69,7 +69,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_256_6x32m)
     __m256 ymm28, ymm29, ymm30, ymm31;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_YMM_4_REG(ymm8, ymm9, ymm10, ymm11);
         ZERO_ACC_YMM_4_REG(ymm12, ymm13, ymm14, ymm15);
@@ -93,7 +93,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_256_6x32m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 16 elements from row0 of B*/
             ymm0 = _mm256_loadu_ps(bbuf);
             ymm1 = _mm256_loadu_ps(bbuf + 8);
@@ -1243,7 +1243,7 @@ consider_edge_cases:
 
 LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_256_6x64m)
 {
-    uint64_t n_left = n0 % NR; // n0 is expected to be n0<=NR
+    md_t n_left = n0 % NR; // n0 is expected to be n0<=NR
     // First check whether this is a edge case in the n dimension.
     // If so, dispatch other 6x?m kernels, as needed.
     if (n_left) {
@@ -1321,7 +1321,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_256_6x64m)
     }
 
     // md_t post_op_c_i_copy = post_ops_attr.post_op_c_i;
-    for (md_t jj = 0; jj < n0; jj += 32) {
+    for (iter_t jj = 0; jj < n0; jj += 32) {
         md_t nr_cur = 32;
         // post_ops_attr.post_op_c_i = post_op_c_i_copy;
         lpgemm_rowvar_f32f32f32of32_avx512_256_6x32m(

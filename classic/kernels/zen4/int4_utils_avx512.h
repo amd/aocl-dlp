@@ -195,7 +195,7 @@
                                                                                \
     /* Set the sign extension bits on an int8_t size basis, this will then be  \
      * OR with output to get the signed outputs. */                            \
-    hi_bits_512 = _mm512_add_epi8(hi_bits_512, _mm512_set1_epi8(0xF8));        \
+    hi_bits_512 = _mm512_add_epi8(hi_bits_512, _mm512_set1_epi8((char)0xF8));  \
                                                                                \
     output = _mm512_or_epi32(output, hi_bits_512);
 
@@ -212,7 +212,7 @@
                                                                                \
     /* Set the sign extension bits on an int8_t size basis, this will then be  \
      * OR with output to get the signed outputs. */                            \
-    hi_bits_256 = _mm256_add_epi8(hi_bits_256, _mm256_set1_epi8(0xF8));        \
+    hi_bits_256 = _mm256_add_epi8(hi_bits_256, _mm256_set1_epi8((char)0xF8));  \
                                                                                \
     output = _mm256_or_epi32(output, hi_bits_256);
 
@@ -229,7 +229,7 @@
                                                                                \
     /* Set the sign extension bits on an int8_t size basis, this will then be  \
      * OR with output to get the signed outputs. */                            \
-    hi_bits_128 = _mm_add_epi8(hi_bits_128, _mm_set1_epi8(0xF8));              \
+    hi_bits_128 = _mm_add_epi8(hi_bits_128, _mm_set1_epi8((char)0xF8));        \
                                                                                \
     output = _mm_or_epi32(output, hi_bits_128);
 

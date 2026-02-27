@@ -162,8 +162,8 @@ packb_nr128_f16f16f16of16_row_major_kernel(float16*       pack_b_buffer,
     __m512i a0, a1, a2, a3;
 
     /* Pack full NR=128 panels (4 ZMM loads per k-row) */
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < KC; kr++) {
             /* Load 128 FP16 elements (4x ZMM registers, 32 elements each) */
             a0 = _mm512_loadu_si512(b + (ldb * kr) + jc);
             a1 = _mm512_loadu_si512(b + (ldb * kr) + jc + 32);
@@ -236,7 +236,7 @@ packb_nr96_f16f16f16of16_row_major_kernel(float16*       pack_b_buffer,
 
     __m512i a0, a1, a2;
 
-    for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t kr = 0; kr < KC; kr++) {
         /* Load 96 FP16 elements: 3x ZMM (32 each) */
         a0 = _mm512_loadu_si512(b + (ldb * kr));
         a1 = _mm512_loadu_si512(b + (ldb * kr) + 32);
@@ -262,7 +262,7 @@ packb_nr64_f16f16f16of16_row_major_kernel(float16*       pack_b_buffer,
 
     __m512i a0, a1;
 
-    for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t kr = 0; kr < KC; kr++) {
         /* Load 64 FP16 elements (2x ZMM registers, 32 elements each) */
         a0 = _mm512_loadu_si512(b + (ldb * kr));
         a1 = _mm512_loadu_si512(b + (ldb * kr) + 32);
@@ -286,7 +286,7 @@ packb_nr32_f16f16f16of16_row_major_kernel(float16*       pack_b_buffer,
 
     __m512i a0;
 
-    for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t kr = 0; kr < KC; kr++) {
         /* Load 32 FP16 elements (1x ZMM register) */
         a0 = _mm512_loadu_si512(b + (ldb * kr));
 
@@ -313,7 +313,7 @@ packb_nrlt32_f16f16f16of16_row_major_kernel(float16*       pack_b_buffer,
     /* Create mask for partial load (n0_partial_rem elements) */
     __mmask32 load_mask = (__mmask32)((1ULL << n0_partial_rem) - 1);
 
-    for (md_t kr = 0; kr < KC; kr++) {
+    for (iter_t kr = 0; kr < KC; kr++) {
         /* Masked load of partial elements (rest are zero) */
         a0 = _mm512_maskz_loadu_epi16(load_mask, b + (ldb * kr));
 
@@ -722,7 +722,7 @@ packb_nr128_f16f16f16of16_col_major_kernel(float16*       pack_b_buffer,
     md_t n_partial_pieces         = NC % NR;
 
     /* Pack full NR=128 panels (process 32 columns at a time) */
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         packb_nr_mult_32_f16f16f16of16_col_major(pack_b_buffer + (jc * KC),
                                                  b + (jc * ldb), 128, ldb, KC);
     }
@@ -795,7 +795,7 @@ packb_nr_mult_32_f16f16f16of16_col_major(float16*       pack_b_buffer,
 
     /* Main loop: Process 32 k-elements at a time (32x32 transpose) */
     for (kr = 0; (kr + 31) < KC; kr += 32) {
-        for (md_t jr = 0; jr < NR; jr += 32) {
+        for (iter_t jr = 0; jr < NR; jr += 32) {
             /* Load 32 columns, each with 32 FP16 elements */
             LOAD_32_COLS_FP16_AVX512(b + (jr * ldb), ldb, kr);
 
@@ -815,7 +815,7 @@ packb_nr_mult_32_f16f16f16of16_col_major(float16*       pack_b_buffer,
 
     /* K=16 fringe */
     for (; (kr + 15) < KC; kr += 16) {
-        for (md_t jr = 0; jr < NR; jr += 32) {
+        for (iter_t jr = 0; jr < NR; jr += 32) {
             /* Masked load: only 16 k-elements per column (lower 16 bits) */
             MASK_LOAD_32_COLS_FP16_AVX512(b + (jr * ldb), ldb, kr, 0xFFFF);
 
@@ -851,7 +851,7 @@ packb_nr_mult_32_f16f16f16of16_col_major(float16*       pack_b_buffer,
 
     /* K=8 fringe */
     for (; (kr + 7) < KC; kr += 8) {
-        for (md_t jr = 0; jr < NR; jr += 32) {
+        for (iter_t jr = 0; jr < NR; jr += 32) {
             /* Masked load: only 8 k-elements per column */
             MASK_LOAD_32_COLS_FP16_AVX512(b + (jr * ldb), ldb, kr, 0xFF);
 
@@ -872,7 +872,7 @@ packb_nr_mult_32_f16f16f16of16_col_major(float16*       pack_b_buffer,
 
     /* K=4 fringe */
     for (; (kr + 3) < KC; kr += 4) {
-        for (md_t jr = 0; jr < NR; jr += 32) {
+        for (iter_t jr = 0; jr < NR; jr += 32) {
             /* Masked load: only 4 k-elements per column */
             MASK_LOAD_32_COLS_FP16_AVX512(b + (jr * ldb), ldb, kr, 0xF);
 
@@ -889,7 +889,7 @@ packb_nr_mult_32_f16f16f16of16_col_major(float16*       pack_b_buffer,
 
     /* K=2 fringe */
     for (; (kr + 1) < KC; kr += 2) {
-        for (md_t jr = 0; jr < NR; jr += 32) {
+        for (iter_t jr = 0; jr < NR; jr += 32) {
             /* Masked load: only 2 k-elements per column */
             MASK_LOAD_32_COLS_FP16_AVX512(b + (jr * ldb), ldb, kr, 0x3);
 
@@ -904,7 +904,7 @@ packb_nr_mult_32_f16f16f16of16_col_major(float16*       pack_b_buffer,
 
     /* K=1 fringe */
     for (; kr < KC; kr += 1) {
-        for (md_t jr = 0; jr < NR; jr += 32) {
+        for (iter_t jr = 0; jr < NR; jr += 32) {
             /* Masked load: only 1 k-element per column */
             MASK_LOAD_32_COLS_FP16_AVX512(b + (jr * ldb), ldb, kr, 0x1);
 
@@ -920,20 +920,20 @@ packb_nr_mult_32_f16f16f16of16_col_major(float16*       pack_b_buffer,
  * Loads 32 k-elements per active column.
  */
 #define LOAD_N_PARTIAL_COLS_FP16_AVX512(b, ldb, kr, n_count)                   \
-    for (md_t _jr = 0; _jr < n_count; _jr++) {                                 \
+    for (iter_t _jr = 0; _jr < n_count; _jr++) {                               \
         a_reg[_jr] = _mm512_loadu_si512(b + (ldb * _jr) + kr);                 \
     }                                                                          \
-    for (md_t _jr = n_count; _jr < 32; _jr++) {                                \
+    for (iter_t _jr = n_count; _jr < 32; _jr++) {                              \
         a_reg[_jr] = _mm512_setzero_si512();                                   \
     }
 
 /* Masked load for N-fringe columns with K-mask (for K-fringe within N-fringe)
  */
 #define MASK_LOAD_N_PARTIAL_COLS_FP16_AVX512(b, ldb, kr, n_count, k_mask)      \
-    for (md_t _jr = 0; _jr < n_count; _jr++) {                                 \
+    for (iter_t _jr = 0; _jr < n_count; _jr++) {                               \
         a_reg[_jr] = _mm512_maskz_loadu_epi16(k_mask, b + (ldb * _jr) + kr);   \
     }                                                                          \
-    for (md_t _jr = n_count; _jr < 32; _jr++) {                                \
+    for (iter_t _jr = n_count; _jr < 32; _jr++) {                              \
         a_reg[_jr] = _mm512_setzero_si512();                                   \
     }
 

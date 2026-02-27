@@ -1887,8 +1887,8 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
         kernelCodeBlocks.resize(numKernelVariants);
 
-        for (md_t mr_var = 0; mr_var < numMRVariants; mr_var++) {
-            for (md_t nr_var = 0; nr_var < numNRVariants; nr_var++) {
+        for (iter_t mr_var = 0; mr_var < numMRVariants; mr_var++) {
+            for (iter_t nr_var = 0; nr_var < numNRVariants; nr_var++) {
                 int variant_idx = mr_var * numNRVariants + nr_var;
 
                 // Set parameters for this specific kernel variant

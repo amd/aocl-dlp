@@ -216,7 +216,8 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
     out.post_ops.reserve(groups.size());
 
     for (const auto& group : groups) {
-        for (md_t i = 0; i < static_cast<md_t>(group.A_matrices.size()); ++i) {
+        for (iter_t i = 0; i < static_cast<md_t>(group.A_matrices.size());
+             ++i) {
             out.a_ptrs.push_back(static_cast<const void*>(
                 group.A_matrices[i].getMatrixData().getMatrixPtr()));
             out.b_ptrs.push_back(static_cast<const void*>(

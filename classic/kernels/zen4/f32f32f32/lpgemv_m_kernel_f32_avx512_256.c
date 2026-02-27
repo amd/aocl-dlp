@@ -71,7 +71,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         _mm256_set_epi32(-1, -1, -1, -1, -1, -1, -1, -1), // 8 elements
     };
 
-    for (md_t jr = 0; jr < n0; jr += NR) {
+    for (iter_t jr = 0; jr < n0; jr += NR) {
         md_t nr0 = dlp_min((n0 - jr), NR);
         c_use    = c + jr;
 
@@ -134,12 +134,12 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         _mm_prefetch((c_use + 48 * rs_c), _MM_HINT_T0);
         _mm_prefetch((c_use + 56 * rs_c), _MM_HINT_T0);
 
-        for (md_t pc = 0; pc < k; pc += KC) {
-            md_t     kc0      = dlp_min((k - pc), KC);
-            uint64_t k_iter   = kc0 / 2;
-            uint64_t k_rem    = kc0 % 2;
-            md_t     ps_b_use = 0;
-            md_t     rs_b_use = NR;
+        for (iter_t pc = 0; pc < k; pc += KC) {
+            md_t   kc0      = dlp_min((k - pc), KC);
+            iter_t k_iter   = kc0 / 2;
+            iter_t k_rem    = kc0 % 2;
+            md_t   ps_b_use = 0;
+            md_t   rs_b_use = NR;
             // No parallelization in k dim, k always starts at 0.
             if (mtag_b == REORDERED || mtag_b == PACK) {
                 // In multi-threaded scenarios, an extra offset into a given
@@ -157,7 +157,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
             a_use = a + pc;
             b_use = b_use + jr * ps_b_use;
 
-            for (md_t k = 0; k < k_iter; k++) {
+            for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                 _mm_prefetch((b_use + 2 * rs_b_use), _MM_HINT_T0);
                 // Using mask loads to avoid writing fringe kernels
 
@@ -220,7 +220,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
                 a_use += 2; // move a pointer to next col
             } // kloop
 
-            for (md_t kr = 0; kr < k_rem; kr++) {
+            for (iter_t kr = 0; kr < k_rem; kr++) {
                 // Load 64 elements from a row of B
                 ymm0 = _mm256_maskload_ps(b_use, k1);
                 ymm1 = _mm256_maskload_ps(b_use + 8, k2);

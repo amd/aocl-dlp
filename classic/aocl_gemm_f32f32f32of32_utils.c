@@ -171,7 +171,7 @@ aocl_reorder_f32f32f32of32(const char      order,
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(float)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
             }
         }
@@ -196,7 +196,7 @@ aocl_reorder_f32f32f32of32(const char      order,
         // gets multiple of NR columns.
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -207,7 +207,7 @@ aocl_reorder_f32f32f32of32(const char      order,
                 jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // The offsets are calculated in such a way that it resembles
@@ -334,7 +334,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(float)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
             }
         }
@@ -359,7 +359,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
         // gets multiple of NR columns.
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -370,7 +370,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
                 jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 // The offsets are calculated in such a way that it resembles
@@ -458,7 +458,7 @@ unreorderb_nr64_f32f32f32of32_reference(lpgemm_obj_t*  b,
         md_t jc_start, jc_end;
         dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
 
             md_t jc_cur_loop     = jc;
@@ -469,7 +469,7 @@ unreorderb_nr64_f32f32f32of32_reference(lpgemm_obj_t*  b,
                 jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
-            for (md_t pc = 0; pc < k; pc += KC) {
+            for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
                 unpackb_f32f32f32of32_reference(
@@ -533,7 +533,7 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(float)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 output_buf_addr[k0 * rs_b] = reorder_buf_addr[k0];
             }
         }

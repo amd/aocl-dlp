@@ -85,8 +85,8 @@ packb_nr64_f32f32f32of32_row_major(float*       pack_b_buffer,
     md_t n_full_pieces_loop_limit = (NC / NR) * NR;
     md_t n_partial_pieces         = NC % NR;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < KC; kr += 1) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < KC; kr += 1) {
             a0 = _mm512_loadu_ps(b + (ldb * kr) + (jc + 0));
             b0 = _mm512_loadu_ps(b + (ldb * kr) + (jc + 16));
             c0 = _mm512_loadu_ps(b + (ldb * kr) + (jc + 32));
@@ -127,7 +127,7 @@ packb_nr64_f32f32f32of32_row_major(float*       pack_b_buffer,
             lmask_0 = _cvtu32_mask16(0xFFFF >> (16 - n0_partial_rem));
         }
 
-        for (md_t kr = 0; kr < KC; kr += 1) {
+        for (iter_t kr = 0; kr < KC; kr += 1) {
             a0 = _mm512_maskz_loadu_ps(
                 lmask_0, b + (ldb * kr) + (n_full_pieces_loop_limit + 0));
             b0 = _mm512_maskz_loadu_ps(
@@ -451,11 +451,12 @@ packb_nr64_f32f32f32of32_col_major(float*       pack_b_buffer,
     __m512i selector2_1 =
         _mm512_setr_epi64(0x4, 0x5, 0x6, 0x7, 0xC, 0xD, 0xE, 0xF);
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t jr = jc; jr < jc + NR; jr += n_sub_blk_wdth) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t jr = jc; jr < jc + NR; jr += n_sub_blk_wdth) {
             md_t      jr_offset = jr % NR;
             __mmask16 msk       = _cvtu32_mask16(0xFFFF);
-            for (md_t kr = 0; kr < k_full_pieces_loop_limit; kr += k_reg_size) {
+            for (iter_t kr = 0; kr < k_full_pieces_loop_limit;
+                 kr += k_reg_size) {
                 MASK_LOAD_PS_16x16(msk);
                 UNPACK_PS_16x16();
                 UNPACK_PD_16x16();
@@ -487,7 +488,7 @@ packb_nr64_f32f32f32of32_col_major(float*       pack_b_buffer,
 
     if (n_partial_pieces > 0) {
         md_t jc = n_full_pieces_loop_limit;
-        for (md_t jr = n_full_pieces_loop_limit; jr < NC;
+        for (iter_t jr = n_full_pieces_loop_limit; jr < NC;
              jr += n_sub_blk_wdth) {
             md_t      jr_offset = jr % NR;
             __mmask16 msk_n_arr[16];
@@ -501,7 +502,8 @@ packb_nr64_f32f32f32of32_col_major(float*       pack_b_buffer,
                 msk_n_arr[i] = _cvtu32_mask16(0x0);
             }
 
-            for (md_t kr = 0; kr < k_full_pieces_loop_limit; kr += k_reg_size) {
+            for (iter_t kr = 0; kr < k_full_pieces_loop_limit;
+                 kr += k_reg_size) {
                 MASK_ARR_LOAD_PS_16x16(msk_n_arr);
                 UNPACK_PS_16x16();
                 UNPACK_PD_16x16();

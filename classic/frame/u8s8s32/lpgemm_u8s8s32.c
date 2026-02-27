@@ -115,7 +115,7 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
                     dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
             }
 
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_b_buffer[k0] = b[k0 * rs_b];
             }
 
@@ -130,7 +130,7 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
         thread_ic.work_id = thread->tid;
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-        for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+        for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
             md_t           mc0           = dlp_min((ic_end - ic), MC);
             const uint8_t* a_use         = a + ic * rs_a;
             c_use                        = c + ic * rs_c;
@@ -208,7 +208,7 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
             a_use = pack_a_buffer;
         }
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc;
 
@@ -235,7 +235,7 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
                         dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
                 }
 
-                for (md_t pc = 0; pc < k; pc += KC) {
+                for (iter_t pc = 0; pc < k; pc += KC) {
                     md_t kc0 = dlp_min((k - pc), KC);
 
                     ((packb_s32)lcntx->packb_fun_ptr)(
@@ -377,7 +377,7 @@ LPGEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
 
         md_t jc_cur_loop     = jc;
@@ -423,7 +423,7 @@ LPGEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
             rs_c_use = nc0;
         }
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             int32_t beta0 = (pc == 0) ? beta : 1;
             md_t    kc0   = dlp_min((k - pc), KC);
 
@@ -514,7 +514,7 @@ LPGEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
                 return;
             }
 
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 // Only per thread C matrix is stored in temp buffer, so both
@@ -565,7 +565,7 @@ LPGEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
                     a_block_stride = rs_a;
                 }
 
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     // Post ops meta attributes.

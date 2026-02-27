@@ -118,7 +118,7 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
         return DLP_CLSC_SUCCESS;
     }
 
-    for (md_t i = 0; i < metadata->seq_length; ++i) {
+    for (iter_t i = 0; i < metadata->seq_length; ++i) {
         md_t group_size = metadata->group_size;
         if ((group_size == 0) || (group_size > k)) {
             return DLP_CLSC_INVALID_GROUP_DIMENSION;
@@ -237,7 +237,7 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
                                                // pre ops permitted.
     }
 
-    for (md_t i = 0; i < pre_op_unparsed->seq_length; ++i) {
+    for (iter_t i = 0; i < pre_op_unparsed->seq_length; ++i) {
         md_t group_size = pre_op_unparsed->group_size;
         if ((group_size == 0) || (group_size > k)) {
             return DLP_CLSC_INVALID_GROUP_DIMENSION;
@@ -475,7 +475,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
     md_t b_i   = 0; // Multiple bias supported.
     md_t m_i   = 0; // Multiple matrix add supported.
     md_t mul_i = 0; // Multiple matrix mul supported.
-    for (md_t i = post_op_offset; i < metadata->seq_length + post_op_offset;
+    for (iter_t i = post_op_offset; i < metadata->seq_length + post_op_offset;
          ++i) {
         // Dispatcher code
         switch (*(metadata->seq_vector + i - post_op_offset)) {

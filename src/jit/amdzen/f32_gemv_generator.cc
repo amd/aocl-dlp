@@ -680,6 +680,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                                     ptr[regTmpYptr + regTmp2 * 2], 1);
                             vbroadcastss(RegType(tmpBaseIdx + 2),
                                          Xbyak::Xmm(tmpBaseIdx + 2));
+                            [[fallthrough]];
                         case 2:
                             vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
                                    Xbyak::Xmm(tmpBaseIdx + 1),
@@ -689,6 +690,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                                     ptr[regTmpYptr + regTmp2], 1);
                             vbroadcastss(RegType(tmpBaseIdx + 1),
                                          Xbyak::Xmm(tmpBaseIdx + 1));
+                            [[fallthrough]];
                         case 1:
                             vxorps(Xbyak::Xmm(tmpBaseIdx),
                                    Xbyak::Xmm(tmpBaseIdx),
@@ -697,6 +699,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                                     Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr], 1);
                             vbroadcastss(RegType(tmpBaseIdx),
                                          Xbyak::Xmm(tmpBaseIdx));
+                            [[fallthrough]];
                         case 0:
                             break;
                     }
@@ -793,6 +796,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                                     ptr[regTmpYptr + regTmp2 * 2], 1);
                             vbroadcastss(RegType(tmpBaseIdx + 2),
                                          Xbyak::Xmm(tmpBaseIdx + 2));
+                            [[fallthrough]];
                         case 2:
                             vxorps(Xbyak::Xmm(tmpBaseIdx + 1),
                                    Xbyak::Xmm(tmpBaseIdx + 1),
@@ -802,6 +806,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                                     ptr[regTmpYptr + regTmp2], 1);
                             vbroadcastss(RegType(tmpBaseIdx + 1),
                                          Xbyak::Xmm(tmpBaseIdx + 1));
+                            [[fallthrough]];
                         case 1:
                             vxorps(Xbyak::Xmm(tmpBaseIdx),
                                    Xbyak::Xmm(tmpBaseIdx),
@@ -810,6 +815,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                                     Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr], 1);
                             vbroadcastss(RegType(tmpBaseIdx),
                                          Xbyak::Xmm(tmpBaseIdx));
+                            [[fallthrough]];
                         case 0:
                             break;
                     }
@@ -878,11 +884,14 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                 case 3:
                     vbroadcastss(RegType(tmpBaseIdx + 2),
                                  ptr[regTmpYptr + regRsC * 2]);
+                    [[fallthrough]];
                 case 2:
                     vbroadcastss(RegType(tmpBaseIdx + 1),
                                  ptr[regTmpYptr + regRsC]);
+                    [[fallthrough]];
                 case 1:
                     vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
+                    [[fallthrough]];
                 case 0:
                     break;
             }

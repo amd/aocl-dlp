@@ -49,7 +49,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32)
     float*              c_use         = NULL;
     lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
 
-    for (md_t jr = 0; jr < n0; jr += NR) {
+    for (iter_t jr = 0; jr < n0; jr += NR) {
         md_t nr0     = dlp_min((n0 - jr), NR);
         c_use        = c + jr;
         __mmask16 k1 = 0xFFFF, k2 = 0xFFFF, k3 = 0xFFFF, k4 = 0xFFFF;
@@ -93,12 +93,12 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32)
         _mm_prefetch((c_use + 32 * rs_c), _MM_HINT_T0);
         _mm_prefetch((c_use + 64 * rs_c), _MM_HINT_T0);
 
-        for (md_t pc = 0; pc < k; pc += KC) {
-            md_t     kc0      = dlp_min((k - pc), KC);
-            uint64_t k_iter   = kc0 / 4;
-            uint64_t k_rem    = kc0 % 4;
-            md_t     ps_b_use = 0;
-            md_t     rs_b_use = NR;
+        for (iter_t pc = 0; pc < k; pc += KC) {
+            md_t   kc0      = dlp_min((k - pc), KC);
+            iter_t k_iter   = kc0 / 4;
+            iter_t k_rem    = kc0 % 4;
+            md_t   ps_b_use = 0;
+            md_t   rs_b_use = NR;
             // No parallelization in k dim, k always starts at 0.
             if (mtag_b == REORDERED || mtag_b == PACK) {
                 // In multi-threaded scenarios, an extra offset into a given
@@ -116,7 +116,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32)
             a_use = a + pc;
             b_use = b_use + jr * ps_b_use;
 
-            for (md_t k = 0; k < k_iter; k++) {
+            for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                 _mm_prefetch((b_use + 4 * rs_b_use), _MM_HINT_T0);
                 // Using mask loads to avoid writing fringe kernels
 
@@ -178,7 +178,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32)
                 a_use += 4; // move a pointer to next col
             } // kloop
 
-            for (md_t kr = 0; kr < k_rem; kr++) {
+            for (iter_t kr = 0; kr < k_rem; kr++) {
                 // Load 64 elements from a row of B
                 zmm0 = _mm512_maskz_loadu_ps(k1, b_use);
                 zmm1 = _mm512_maskz_loadu_ps(k2, b_use + 16);

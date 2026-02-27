@@ -54,7 +54,7 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
 
     lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
 
-    for (md_t jr = 0; jr < n0; jr += NR) {
+    for (iter_t jr = 0; jr < n0; jr += NR) {
 
         float* c_use = c + jr * cs_c;
 
@@ -99,7 +99,7 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
         ZERO_ACC_ZMM_4_REG(zmm16, zmm17, zmm18, zmm19);
         ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23);
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             md_t kc0 = dlp_min((k - pc), KC);
 
             // kc0 needs to be a multiple of 2 so that it can be
@@ -110,8 +110,8 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
             md_t kc0_updated = kc0;
             kc0_updated += (kc0_updated & 0x1);
 
-            uint64_t k_iter = kc0 / 8;
-            uint64_t k_rem  = (kc0 / 2) % 4;
+            iter_t k_iter = kc0 / 8;
+            iter_t k_rem  = (kc0 / 2) % 4;
 
             // No parallelization in k dim, k always starts at 0.
 
@@ -124,7 +124,7 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
 
             a_use = a + pc;
 
-            for (md_t k = 0; k < k_iter; k++) {
+            for (iter_t k_i = 0; k_i < k_iter; k_i++) {
 
                 // load first 4x32 tile from row 0-3
                 zmm0 = (__m512bh)_mm512_maskz_loadu_epi16(k5, b_use);
@@ -190,7 +190,7 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
                 a_use += 4 * cs_a; // move a pointer to next col
             }
 
-            for (md_t kr = 0; kr < k_rem; kr++) {
+            for (iter_t kr = 0; kr < k_rem; kr++) {
                 // load 128 elements from a row of B
                 zmm0 = (__m512bh)_mm512_maskz_loadu_epi16(k5, b_use);
                 zmm1 = (__m512bh)_mm512_maskz_loadu_epi16(k6, b_use + cs_b);

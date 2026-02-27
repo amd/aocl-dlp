@@ -201,7 +201,7 @@ LPGEMV(float, float, float, f32f32f32of32)
                     dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
             }
 
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_b_buffer_f32f32f32of32[k0] = b[k0 * rs_b];
             }
 
@@ -218,7 +218,7 @@ LPGEMV(float, float, float, f32f32f32of32)
         thread_ic.work_id = thread->tid;
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-        for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+        for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
             md_t mc0                  = dlp_min((ic_end - ic), MC);
             a_use                     = a + ic * rs_a;
             c_use                     = c + ic * rs_c;
@@ -302,7 +302,7 @@ LPGEMV(float, float, float, f32f32f32of32)
         }
         post_ops_attr.post_op_c_i = 0;
 
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
             c_use    = c + jc * cs_c;
 
@@ -335,7 +335,7 @@ LPGEMV(float, float, float, f32f32f32of32)
                         dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
                 }
 
-                for (md_t pc = 0; pc < k; pc += KC) {
+                for (iter_t pc = 0; pc < k; pc += KC) {
                     md_t kc0 = dlp_min((k - pc), KC);
 
                     // Set the strides for pack buffer.
@@ -494,7 +494,7 @@ LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
         should_pack_A = FALSE;
     }
 
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
         c_use_jc = c + jc * cs_c_use;
 
@@ -508,7 +508,7 @@ LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                 &n_sub_updated);
         }
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             float beta0 = (pc == 0) ? beta : one_local;
             md_t  kc0   = dlp_min((k - pc), KC);
 
@@ -602,7 +602,7 @@ LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                 ps_b_use = cs_b_use;
             }
 
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
                 c_use_ic = c_use_jc + (rs_c * ic);
 
@@ -640,7 +640,7 @@ LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                     ps_a_use = MR * rs_a;
                 }
 
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     // Post ops meta attributes.

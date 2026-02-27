@@ -53,7 +53,7 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
     md_t group_size = grp_post_ops_attr.group_size;
 
-    for (md_t jr = 0; jr < n0; jr += NR) {
+    for (iter_t jr = 0; jr < n0; jr += NR) {
         NR = dlp_min(64, ((n0 - jr) / 16) * 16);
 
         if (NR == 0)
@@ -88,7 +88,7 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         f32_acc2 = _mm512_setzero_ps();
         f32_acc3 = _mm512_setzero_ps();
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             grp_post_ops_attr.grp_post_op_k = pc;
             md_t kc0                        = dlp_min((k - pc), KC);
 
@@ -98,26 +98,28 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
             __m512i zmm22, zmm23, zmm24, zmm25, zmm26, zmm27, zmm28;
             __m512i zmm29, zmm30, zmm31;
 
-            md_t group_start = grp_post_ops_attr.grp_post_op_k / group_size;
+            md_t group_start =
+                (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
             md_t group_end =
-                (grp_post_ops_attr.grp_post_op_k + kc0 - 1) / group_size;
+                ((md_t)grp_post_ops_attr.grp_post_op_k + kc0 - 1) / group_size;
             md_t num_groups = group_end - group_start + 1;
 
             b_pc = b + (n_sub_updated * pc) + (jr * num_groups * group_size);
 
             md_t g_id = 0;
-            for (md_t group = group_start; group <= group_end; group++) {
+            for (iter_t group = group_start; group <= group_end; group++) {
                 md_t k_start = dlp_max(group * group_size,
-                                       grp_post_ops_attr.grp_post_op_k);
-                md_t k_end   = dlp_min(((group + 1) * group_size - 1),
-                                       grp_post_ops_attr.grp_post_op_k + kc0 - 1);
+                                       (md_t)grp_post_ops_attr.grp_post_op_k);
+                md_t k_end =
+                    dlp_min(((group + 1) * group_size - 1),
+                            (md_t)grp_post_ops_attr.grp_post_op_k + kc0 - 1);
 
                 md_t kg0 = k_end - k_start + 1; // k dimension for the group
                 md_t k_full_pieces    = kg0 / 4;
                 md_t k_partial_pieces = kg0 % 4;
 
-                md_t k_iter = kg0 / 16;
-                md_t k_rem  = k_full_pieces % 4;
+                iter_t k_iter = kg0 / 16;
+                iter_t k_rem  = k_full_pieces % 4;
 
                 md_t kg0_updated = kg0;
                 if (k_partial_pieces > 0) {
@@ -137,7 +139,7 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 uint8_t cvt_uint8 = 128;
                 __m512i vec_uint8 = _mm512_set1_epi8(cvt_uint8);
 
-                for (md_t kr = 0; kr < k_iter; kr++) {
+                for (iter_t kr = 0; kr < k_iter; kr++) {
                     // load first 4x64 tile from row 0-3
                     zmm0 = _mm512_maskz_loadu_epi16(k5, b_use);
                     zmm1 = _mm512_maskz_loadu_epi16(k5, b_use + rs_b);
@@ -201,7 +203,7 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     a_use += 4 * cs_a; // move a pointer to next col
                 } // kr loop
 
-                for (md_t kr = 0; kr < k_rem; kr++) {
+                for (iter_t kr = 0; kr < k_rem; kr++) {
                     // load first 4x64 tile from row 0-3
                     zmm0 = _mm512_maskz_loadu_epi16(k5, b_use);
                     zmm1 = _mm512_maskz_loadu_epi16(k6, b_use + cs_b);

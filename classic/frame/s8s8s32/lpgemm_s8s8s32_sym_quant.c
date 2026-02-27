@@ -137,7 +137,7 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
         grp_post_ops_attr.grp_post_op_k = 0;
-        for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+        for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
             grp_post_ops_attr.grp_post_op_i = ic;
 
             md_t mc0 = dlp_min((ic_end - ic), MC);
@@ -217,7 +217,7 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         }
 
         grp_post_ops_attr.grp_post_op_k = 0;
-        for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             grp_post_ops_attr.grp_post_op_j = jc;
 
             md_t nc0 = dlp_min((jc_end - jc), NC);
@@ -412,7 +412,7 @@ LPGEMM_5LOOP_UNIFIED(
     md_t ic_start, ic_end;
     dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
 
-    for (md_t jc = jc_start; jc < jc_end; jc += NC) {
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
 
         md_t jc_cur_loop     = jc;
@@ -460,7 +460,7 @@ LPGEMM_5LOOP_UNIFIED(
 
         int32_t* pack_b_column_sum = NULL;
 
-        for (md_t pc = 0; pc < k; pc += KC) {
+        for (iter_t pc = 0; pc < k; pc += KC) {
             int32_t beta0 = (pc == 0) ? beta : 1;
             md_t    kc0   = dlp_min((k - pc), KC);
 
@@ -545,9 +545,9 @@ LPGEMM_5LOOP_UNIFIED(
                     && (jc_packb_start < (jc + nc0))) {
                     md_t nc0_pack = jc_packb_end - jc_packb_start;
                     if (pc == 0) {
-                        for (md_t group = 0; group < total_groups; group++) {
-                            for (md_t idx = jc_packb_start; idx < jc_packb_end;
-                                 idx++) {
+                        for (iter_t group = 0; group < total_groups; group++) {
+                            for (iter_t idx = jc_packb_start;
+                                 idx < jc_packb_end; idx++) {
                                 *(pack_b_column_sum + (group * nc0_updated)
                                   + idx) = 0;
                             }
@@ -562,7 +562,7 @@ LPGEMM_5LOOP_UNIFIED(
                     // group_size x NR, so that we can take care of the pointer
                     // movement across the reorder buffer in the framework
                     // itself.
-                    for (md_t jr = 0; jr < nc0_pack; jr += NR) {
+                    for (iter_t jr = 0; jr < nc0_pack; jr += NR) {
                         md_t nr0 = dlp_min((nc0_pack - jr), NR);
 
                         int8_t* b_dst_jr =
@@ -580,7 +580,7 @@ LPGEMM_5LOOP_UNIFIED(
 
                             if (nr_mult_16 > 0) {
                                 // group loop
-                                for (md_t group = group_start;
+                                for (iter_t group = group_start;
                                      group <= group_end; group++) {
                                     md_t k_start =
                                         dlp_max(group * group_size, pc);
@@ -605,7 +605,7 @@ LPGEMM_5LOOP_UNIFIED(
                             if (nr0_rem > 0) {
                                 md_t nr0_updated = 16;
                                 // group loop
-                                for (md_t group = group_start;
+                                for (iter_t group = group_start;
                                      group <= group_end; group++) {
                                     md_t k_start =
                                         dlp_max(group * group_size, pc);
@@ -629,7 +629,7 @@ LPGEMM_5LOOP_UNIFIED(
 
                         md_t nr0_updated = NR;
                         // nr0 == NR
-                        for (md_t group = group_start; group <= group_end;
+                        for (iter_t group = group_start; group <= group_end;
                              group++) {
                             md_t k_start = dlp_max(group * group_size, pc);
                             md_t k_end = dlp_min(((group + 1) * group_size - 1),
@@ -678,7 +678,7 @@ LPGEMM_5LOOP_UNIFIED(
                 return;
             }
 
-            for (md_t ic = ic_start; ic < ic_end; ic += MC) {
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
                 grp_post_ops_attr.grp_post_op_i = ic;
@@ -727,7 +727,7 @@ LPGEMM_5LOOP_UNIFIED(
 
                 post_ops_attr.b_sum_offset = 0;
 
-                for (md_t jr = 0; jr < nc0; jr += NR) {
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
                     md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     // Post ops meta attributes.

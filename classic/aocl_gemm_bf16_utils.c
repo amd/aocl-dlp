@@ -85,7 +85,7 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(bfloat16)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
             }
         }
@@ -161,7 +161,7 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(bfloat16)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 output_buf_addr[k0 * rs_b] = reorder_buf_addr[k0];
             }
         }
@@ -331,7 +331,7 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(bfloat16)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
             }
         }
@@ -423,12 +423,12 @@ aocl_reorder_f32obf16(const char      order,
 #if (defined(DLP_KERNELS_ZEN4))
     if (n == 1) {
         if (rs_b == 1) {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 memcpy(&reorder_buf_addr[k0], (char*)(&input_buf_addr[k0]) + 2,
                        sizeof(bfloat16));
             }
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 memcpy(&reorder_buf_addr[k0],
                        (char*)(&input_buf_addr[k0 * rs_b]) + 2,
                        sizeof(bfloat16));
@@ -515,7 +515,7 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(bfloat16)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 output_buf_addr[k0 * rs_b] = reorder_buf_addr[k0];
             }
         }

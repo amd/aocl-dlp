@@ -86,7 +86,7 @@ LPGEMM_M_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_5x64)
     __m512 c_float_4p2 = _mm512_setzero_ps();
     __m512 c_float_4p3 = _mm512_setzero_ps();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+2].
@@ -1849,7 +1849,7 @@ LPGEMM_M_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_4x64)
     __m512 c_float_3p2 = _mm512_setzero_ps();
     __m512 c_float_3p3 = _mm512_setzero_ps();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+2].
@@ -3323,7 +3323,7 @@ LPGEMM_M_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_3x64)
     __m512 c_float_2p2 = _mm512_setzero_ps();
     __m512 c_float_2p3 = _mm512_setzero_ps();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+2].
@@ -4513,7 +4513,7 @@ LPGEMM_M_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_2x64)
     __m512 c_float_1p2 = _mm512_setzero_ps();
     __m512 c_float_1p3 = _mm512_setzero_ps();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+2].
@@ -5414,7 +5414,7 @@ LPGEMM_M_FRINGE_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_1x64)
     __m512 c_float_0p2 = _mm512_setzero_ps();
     __m512 c_float_0p3 = _mm512_setzero_ps();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         __m512bh b0 =
             (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0));
 

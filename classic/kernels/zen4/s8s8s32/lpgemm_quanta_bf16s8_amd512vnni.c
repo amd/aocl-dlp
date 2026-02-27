@@ -283,7 +283,7 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
     __m512 sf[MR];    // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings.
-    for (md_t i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         sf[i] = _mm512_setzero_ps();
     }
 
@@ -559,7 +559,7 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
     md_t zp_idx = 0; // Index into zero_point array (adjusted by ic_offset)
 
     // Initialize to avoid uninitialized register warnings.
-    for (md_t i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         sf[i] = _mm512_setzero_ps();
         zp[i] = _mm512_setzero_ps();
     }
@@ -959,7 +959,7 @@ quant_a_sym_bf16s8_col_major(int8_t*         quant_a_buffer,
     __m512 sf[MR]; // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings
-    for (md_t i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         a_reg[i] = _mm512_setzero_ps();
         sf[i]    = _mm512_setzero_ps();
     }
@@ -1371,7 +1371,7 @@ quant_a_asym_bf16s8_col_major(int8_t*         quant_a_buffer,
     __m512 sf[MR], zp[MR]; // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings
-    for (md_t i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         a_reg[i] = _mm512_setzero_ps();
         sf[i]    = _mm512_setzero_ps();
         zp[i]    = _mm512_setzero_ps();

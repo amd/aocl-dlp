@@ -54,7 +54,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x16m)
         &&POST_OPS_SIGMOID_6x16F
     };
 
-    uint64_t n_left = n0 % NR; // n0 is expected to be n0<=NR
+    md_t n_left = n0 % NR; // n0 is expected to be n0<=NR
     // First check whether this is a edge case in the n dimension.
     // If so, dispatch other 6x?m kernels, as needed.
     if (n_left) {
@@ -110,10 +110,10 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x16m)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = (uint64_t)m0 / 6;
-    uint64_t m_left = (uint64_t)m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     if (m_iter == 0) {
         goto consider_edge_cases;
@@ -126,7 +126,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x16m)
     __m256 ymm12, ymm13, ymm14, ymm15;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_YMM_4_REG(ymm4, ymm5, ymm6, ymm7);
         ZERO_ACC_YMM_4_REG(ymm8, ymm9, ymm10, ymm11);
@@ -147,7 +147,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x16m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 16 elements from row0 of B*/
             ymm0 = _mm256_loadu_ps(bbuf);
             ymm1 = _mm256_loadu_ps(bbuf + 8);
@@ -1317,10 +1317,10 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x8m)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = (uint64_t)m0 / 6;
-    uint64_t m_left = (uint64_t)m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     if (m_iter == 0) {
         goto consider_edge_cases;
@@ -1332,7 +1332,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x8m)
     __m256 ymm12, ymm13, ymm14, ymm15;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_YMM_4_REG(ymm4, ymm6, ymm8, ymm10);
         ZERO_ACC_YMM_4_REG(ymm12, ymm13, ymm14, ymm15);
@@ -1352,7 +1352,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x8m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 8 elements from row0 of B*/
             ymm0 = _mm256_loadu_ps(bbuf);
             bbuf += rs_b; // move b pointer to next row
@@ -2207,10 +2207,10 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x4m)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = (uint64_t)m0 / 6;
-    uint64_t m_left = (uint64_t)m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     if (m_iter == 0) {
         goto consider_edge_cases;
@@ -2222,7 +2222,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x4m)
     __m128 xmm8, xmm9;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
         ZERO_ACC_XMM_4_REG(xmm8, xmm9, xmm0, xmm1)
@@ -2242,7 +2242,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x4m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 4 elements from row0 of B*/
             xmm0 = _mm_loadu_ps(bbuf);
             bbuf += rs_b; // move b pointer to next row
@@ -3083,10 +3083,10 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x2m)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = (uint64_t)m0 / 6;
-    uint64_t m_left = (uint64_t)m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     if (m_iter == 0) {
         goto consider_edge_cases;
@@ -3098,7 +3098,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x2m)
     __m128 xmm8, xmm9;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
         ZERO_ACC_XMM_4_REG(xmm8, xmm9, xmm0, xmm1)
@@ -3118,7 +3118,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x2m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 2 elements from row0 of B*/
             xmm0 = (__m128)_mm_load_sd((const double*)bbuf);
             bbuf += rs_b; // move b pointer to next row
@@ -3959,10 +3959,10 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x1m)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = (uint64_t)m0 / 6;
-    uint64_t m_left = (uint64_t)m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     if (m_iter == 0) {
         goto consider_edge_cases;
@@ -3974,7 +3974,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x1m)
     __m128 xmm8, xmm9;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_XMM_4_REG(xmm4, xmm5, xmm6, xmm7)
         ZERO_ACC_XMM_4_REG(xmm8, xmm9, xmm0, xmm1)
@@ -3994,7 +3994,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x1m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 1 elements from row0 of B*/
             xmm0 = _mm_load_ss(bbuf);
             bbuf += rs_b; // move b pointer to next row
@@ -4847,10 +4847,10 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_6xlt8m)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = (uint64_t)k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = (uint64_t)m0 / 6;
-    uint64_t m_left = (uint64_t)m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     if (m_iter == 0) {
         goto consider_edge_cases;
@@ -4863,7 +4863,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_6xlt8m)
 
     __m256i ymm_mask = _mm256_loadu_si256((__m256i*)mask[n0_rem]);
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_YMM_4_REG(ymm4, ymm6, ymm8, ymm10);
         ZERO_ACC_YMM_2_REG(ymm12, ymm14);
@@ -4883,7 +4883,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_6xlt8m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 8 elements from row0 of B*/
             ymm0 = _mm256_maskload_ps(bbuf, ymm_mask);
             bbuf += rs_b; // move b pointer to next row

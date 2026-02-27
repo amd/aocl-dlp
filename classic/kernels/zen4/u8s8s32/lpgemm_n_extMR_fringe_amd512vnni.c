@@ -76,7 +76,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_12xlt16)
     __m512i a_int32_10 = _mm512_setzero_epi32();
     __m512i a_int32_11 = _mm512_setzero_epi32();
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         _mm_prefetch(b, _MM_HINT_T0);
         _mm_prefetch(a + (MR * ps_a) + (0 * 16), _MM_HINT_T1);
 
@@ -105,7 +105,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_12xlt16)
 
         __m512i c_int32_11p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Load 4 rows with 16 extended elements each from B to 1 ZMM
             // registers. It is to be noted that the B matrix is packed for use
             // in vnni instructions and each load to ZMM register will have 4
@@ -2380,7 +2380,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_12x16)
     __m512i a_int32_10 = _mm512_setzero_epi32();
     __m512i a_int32_11 = _mm512_setzero_epi32();
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         _mm_prefetch(b, _MM_HINT_T0);
         _mm_prefetch(a + (MR * ps_a) + (0 * 16), _MM_HINT_T1);
 
@@ -2409,7 +2409,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_12x16)
 
         __m512i c_int32_11p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Load 4 rows with 16 elements each from B to 1 ZMM registers. It
             // is to be noted that the B matrix is packed for use in vnni
             // instructions and each load to ZMM register will have 4 elements
@@ -4644,7 +4644,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_9x32)
     __m512i selector1;
     __m512i selector2;
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         _mm_prefetch(b, _MM_HINT_T0);
         _mm_prefetch(a + (MR * ps_a) + (0 * 16), _MM_HINT_T1);
 
@@ -4676,7 +4676,7 @@ LPGEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_9x32)
         __m512i c_int32_8p0 = _mm512_setzero_epi32();
         __m512i c_int32_8p1 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Load 4 rows with 32 elements each from B to 2 ZMM registers. It
             // is to be noted that the B matrix is packed for use in vnni
             // instructions and each load to ZMM register will have 4 elements

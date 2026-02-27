@@ -78,7 +78,7 @@ LPGEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_5x64)
     __mmask16 k0 = 0xFFFF, k1 = 0xFFFF, k2 = 0xFFFF, k3 = 0xFFFF;
 
     md_t NR_L = NR;
-    for (md_t jr = 0; jr < n0; jr += NR_L) {
+    for (iter_t jr = 0; jr < n0; jr += NR_L) {
         md_t n_left = n0 - jr;
         NR_L        = dlp_min(NR_L, (n_left >> 4) << 4);
         if (NR_L == 0) {
@@ -2114,7 +2114,7 @@ LPGEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_4x64)
     __mmask16 k0 = 0xFFFF, k1 = 0xFFFF, k2 = 0xFFFF, k3 = 0xFFFF;
 
     md_t NR_L = NR;
-    for (md_t jr = 0; jr < n0; jr += NR_L) {
+    for (iter_t jr = 0; jr < n0; jr += NR_L) {
         md_t n_left = n0 - jr;
         NR_L        = dlp_min(NR_L, (n_left >> 4) << 4);
         if (NR_L == 0) {
@@ -3821,7 +3821,7 @@ LPGEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_3x64)
     __mmask16 k0 = 0xFFFF, k1 = 0xFFFF, k2 = 0xFFFF, k3 = 0xFFFF;
 
     md_t NR_L = NR;
-    for (md_t jr = 0; jr < n0; jr += NR_L) {
+    for (iter_t jr = 0; jr < n0; jr += NR_L) {
         md_t n_left = n0 - jr;
         NR_L        = dlp_min(NR_L, (n_left >> 4) << 4);
         if (NR_L == 0) {
@@ -5220,7 +5220,7 @@ LPGEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_2x64)
     __mmask16 k0 = 0xFFFF, k1 = 0xFFFF, k2 = 0xFFFF, k3 = 0xFFFF;
 
     md_t NR_L = NR;
-    for (md_t jr = 0; jr < n0; jr += NR_L) {
+    for (iter_t jr = 0; jr < n0; jr += NR_L) {
         md_t n_left = n0 - jr;
         NR_L        = dlp_min(NR_L, (n_left >> 4) << 4);
         if (NR_L == 0) {
@@ -6311,7 +6311,7 @@ LPGEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_1x64)
     __mmask16 k0 = 0xFFFF, k1 = 0xFFFF, k2 = 0xFFFF, k3 = 0xFFFF;
 
     md_t NR_L = NR;
-    for (md_t jr = 0; jr < n0; jr += NR_L) {
+    for (iter_t jr = 0; jr < n0; jr += NR_L) {
         md_t n_left = n0 - jr;
         NR_L        = dlp_min(NR_L, (n_left >> 4) << 4);
         if (NR_L == 0) {

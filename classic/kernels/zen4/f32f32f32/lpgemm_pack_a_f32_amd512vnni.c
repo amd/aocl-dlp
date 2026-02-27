@@ -1045,7 +1045,7 @@ packa_f32f32f32of32_row_major_avx512(float*       pack_a_buf,
     __m256 last_piece;
 
     __mmask16 mmask[6];
-    for (md_t ic = 0; ic < MC; ic += MR) {
+    for (iter_t ic = 0; ic < MC; ic += MR) {
         if (ic == m_full_pieces_loop_limit) {
             for (int ii = 0; ii < m_partial_pieces; ++ii) {
                 mmask[ii] = _cvtu32_mask16(0xFFFF);
@@ -1058,7 +1058,7 @@ packa_f32f32f32of32_row_major_avx512(float*       pack_a_buf,
                 mmask[ii] = _cvtu32_mask16(0xFFFF);
             }
         }
-        for (md_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
+        for (iter_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
             a0 = _mm512_maskz_loadu_ps(mmask[0], a + (lda * (ic + 0)) + kr);
             b0 = _mm512_maskz_loadu_ps(mmask[1], a + (lda * (ic + 1)) + kr);
             c0 = _mm512_maskz_loadu_ps(mmask[2], a + (lda * (ic + 2)) + kr);
@@ -1144,7 +1144,7 @@ packa_f32f32f32of32_col_major_avx512(float*       pack_a_buf,
 
     __mmask16 mmask[16];
 
-    for (md_t ic = 0; ic < MC; ic += MR) {
+    for (iter_t ic = 0; ic < MC; ic += MR) {
         if (ic == m_full_pieces_loop_limit) {
             for (int ii = 0; ii < 16; ++ii) {
                 mmask[ii] = _cvtu32_mask16(0x3F >> (MR - m_partial_pieces));
@@ -1157,7 +1157,7 @@ packa_f32f32f32of32_col_major_avx512(float*       pack_a_buf,
                 mmask[ii] = _cvtu32_mask16(0x3F);
             }
         }
-        for (md_t kr = 0; kr < KC; kr += KR_NDIM) {
+        for (iter_t kr = 0; kr < KC; kr += KR_NDIM) {
             if (kr == kr_full_pieces_loop_limit) {
                 for (int ii = kr_partial_pieces; ii < 16; ++ii) {
                     mmask[ii] = _cvtu32_mask16(0x0);

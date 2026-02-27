@@ -147,9 +147,9 @@ TEST_F(BenchConfigHashTest, NoCollisionsForCommonConfigs)
     std::vector<GemmBenchConfig> configs;
 
     // Generate several common configurations
-    for (md_t m : { 64, 128, 256, 512 }) {
-        for (md_t n : { 64, 128, 256, 512 }) {
-            for (md_t k : { 64, 128, 256, 512 }) {
+    for (iter_t m : { 64, 128, 256, 512 }) {
+        for (iter_t n : { 64, 128, 256, 512 }) {
+            for (iter_t k : { 64, 128, 256, 512 }) {
                 GemmBenchConfig config = createDefaultConfig();
                 config.m               = m;
                 config.n               = n;

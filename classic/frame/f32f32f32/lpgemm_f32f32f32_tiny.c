@@ -176,7 +176,7 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
             pack_b_buffer_f32f32f32of32 =
                 (float*)dlp_malloc_page_aligned(mem_b_size_req, &err);
 
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_b_buffer_f32f32f32of32[k0] = b[k0 * rs_b];
             }
 
@@ -243,7 +243,7 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
             msz_t mem_a_size_req = sizeof(float) * k;
             pack_a_buffer_f32f32f32of32 =
                 (float*)dlp_malloc_page_aligned(mem_a_size_req, &err);
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 pack_a_buffer_f32f32f32of32[k0] = a[k0 * cs_a];
             }
             a_use    = pack_a_buffer_f32f32f32of32;
@@ -423,7 +423,7 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
         ps_a_use = MR * rs_a;
     }
 
-    for (md_t jr = 0; jr < n; jr += NR) {
+    for (iter_t jr = 0; jr < n; jr += NR) {
         md_t nr0 = dlp_min((n - jr), NR);
 
         // Post ops meta attributes.

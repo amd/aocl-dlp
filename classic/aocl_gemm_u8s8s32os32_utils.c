@@ -164,7 +164,7 @@ aocl_reorder_u8s8s32os32(const char      order,
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(int8_t)));
         } else {
-            for (md_t k0 = 0; k0 < k; k0++) {
+            for (iter_t k0 = 0; k0 < k; k0++) {
                 reorder_buf_addr[k0] = input_buf_addr[k0 * rs_b];
             }
         }

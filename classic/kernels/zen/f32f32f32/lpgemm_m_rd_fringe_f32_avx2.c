@@ -54,15 +54,15 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x16_rd)
         _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1) // 7 elements
     };
 
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     __m256 ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm7, ymm8, ymm10, ymm11, ymm13,
         ymm14;
@@ -94,8 +94,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x16_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
                 ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -120,7 +120,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x16_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -622,15 +622,15 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x16_rd)
         _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1) // 7 elements
     };
 
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     __m256 ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm7, ymm8, ymm10, ymm11, ymm13,
         ymm14;
@@ -662,8 +662,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x16_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
                 ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -688,7 +688,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x16_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -1098,15 +1098,15 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x8_rd)
         _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1) // 7 elements
     };
 
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     __m256 ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm7, ymm8, ymm10, ymm11, ymm13,
         ymm14;
@@ -1138,8 +1138,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x8_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
                 ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -1164,7 +1164,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x8_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -1666,15 +1666,15 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x8_rd)
         _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1) // 7 elements
     };
 
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     __m256 ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm7, ymm8, ymm10, ymm11, ymm13,
         ymm14;
@@ -1706,8 +1706,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x8_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
                 ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -1732,7 +1732,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x8_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -2142,15 +2142,15 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x4_rd)
         _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1) // 7 elements
     };
 
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     __m256 ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm7, ymm8, ymm10, ymm11, ymm13,
         ymm14;
@@ -2182,8 +2182,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x4_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
                 ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -2208,7 +2208,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x4_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -2710,15 +2710,15 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x4_rd)
         _mm256_set_epi32(0, -1, -1, -1, -1, -1, -1, -1) // 7 elements
     };
 
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
-    uint64_t cs_c0 = cs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
+    md_t cs_c0 = cs_c;
 
     __m256 ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm7, ymm8, ymm10, ymm11, ymm13,
         ymm14;
@@ -2750,8 +2750,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x4_rd)
         ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
         ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-        for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-            for (md_t unroll = 0; unroll < 4; ++unroll) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+            for (iter_t unroll = 0; unroll < 4; ++unroll) {
                 ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
                 ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -2776,7 +2776,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x4_rd)
             }
         }
 
-        for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+        for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -3190,14 +3190,14 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x2_rd)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
 
     __m256 ymm0, ymm1, ymm3, ymm4, ymm5, ymm7, ymm8;
     __m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5;
@@ -3220,8 +3220,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x2_rd)
     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
     ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-    for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-        for (md_t unroll = 0; unroll < 4; ++unroll) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+        for (iter_t unroll = 0; unroll < 4; ++unroll) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -3238,7 +3238,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x2_rd)
         }
     }
 
-    for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
         ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
         ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -3698,14 +3698,14 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x2_rd)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
 
     __m256 ymm0, ymm3, ymm4, ymm7;
     __m128 xmm0, xmm1, xmm2, xmm3, xmm4;
@@ -3727,8 +3727,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x2_rd)
     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
     xmm4 = _mm_setzero_ps();
 
-    for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-        for (md_t unroll = 0; unroll < 4; ++unroll) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+        for (iter_t unroll = 0; unroll < 4; ++unroll) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
 
             ymm3 = _mm256_loadu_ps(b_temp + 0 * cs_b0);
@@ -3742,7 +3742,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x2_rd)
         }
     }
 
-    for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
         ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
 
         ymm3 = _mm256_loadu_ps(b_temp + 0 * cs_b0);
@@ -4101,14 +4101,14 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x1_rd)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
 
     __m256 ymm0, ymm1, ymm3, ymm4, ymm5;
     __m128 xmm0, xmm1, xmm2, xmm3, xmm4, xmm5;
@@ -4131,8 +4131,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x1_rd)
     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
     ZERO_ACC_XMM_2_REG(xmm4, xmm5)
 
-    for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-        for (md_t unroll = 0; unroll < 4; ++unroll) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+        for (iter_t unroll = 0; unroll < 4; ++unroll) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
             ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -4145,7 +4145,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x1_rd)
         }
     }
 
-    for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
         ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
         ymm1 = _mm256_loadu_ps(a_temp + 1 * rs_a0);
 
@@ -4595,14 +4595,14 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x1_rd)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter32 = k0 / 32;
-    uint64_t k_left32 = k0 % 32;
-    uint64_t k_iter8  = k_left32 / 8;
-    uint64_t k_left1  = k_left32 % 8;
+    iter_t k_iter32 = k0 / 32;
+    md_t   k_left32 = k0 % 32;
+    iter_t k_iter8  = k_left32 / 8;
+    md_t   k_left1  = k_left32 % 8;
 
-    uint64_t rs_a0 = rs_a;
-    uint64_t cs_b0 = cs_b;
-    uint64_t rs_c0 = rs_c;
+    md_t rs_a0 = rs_a;
+    md_t cs_b0 = cs_b;
+    md_t rs_c0 = rs_c;
 
     __m256 ymm0, ymm1, ymm3, ymm4;
     __m128 xmm0, xmm1, xmm2, xmm3, xmm4;
@@ -4624,8 +4624,8 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x1_rd)
     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
     xmm4 = _mm_setzero_ps();
 
-    for (md_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
-        for (md_t unroll = 0; unroll < 4; ++unroll) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter32; ++k_iterator) {
+        for (iter_t unroll = 0; unroll < 4; ++unroll) {
             ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
 
             ymm3 = _mm256_loadu_ps(b_temp + 0 * cs_b0);
@@ -4636,7 +4636,7 @@ LPGEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x1_rd)
         }
     }
 
-    for (md_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
+    for (iter_t k_iterator = 0; k_iterator < k_iter8; ++k_iterator) {
         ymm0 = _mm256_loadu_ps(a_temp + 0 * rs_a0);
 
         ymm3 = _mm256_loadu_ps(b_temp + 0 * cs_b0);

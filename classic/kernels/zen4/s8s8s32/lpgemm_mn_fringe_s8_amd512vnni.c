@@ -62,7 +62,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_5xlt16)
 
         __m512i c_int32_4p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -1256,7 +1256,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_4xlt16)
 
         __m512i c_int32_3p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -2283,7 +2283,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_3xlt16)
 
         __m512i c_int32_2p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -3143,7 +3143,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_2xlt16)
 
         __m512i c_int32_1p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -3836,7 +3836,7 @@ LPGEMM_MN_LT_NR0_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_1xlt16)
         // Registers to use for accumulating C.
         __m512i c_int32_0p0 = _mm512_setzero_epi32();
 
-        for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
             // Broadcast a[0,kr:kr+4].
@@ -4371,7 +4371,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_5x16)
 
     __m512i c_int32_4p0 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+4].
@@ -5499,7 +5499,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_4x16)
 
     __m512i c_int32_3p0 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+4].
@@ -6471,7 +6471,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_3x16)
 
     __m512i c_int32_2p0 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+4].
@@ -7287,7 +7287,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_2x16)
 
     __m512i c_int32_1p0 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+4].
@@ -7948,7 +7948,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_1x16)
     // Registers to use for accumulating C.
     __m512i c_int32_0p0 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         __m512i b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
 
         // Broadcast a[0,kr:kr+4].
@@ -8474,7 +8474,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_5x32)
     __m512i c_int32_4p0 = _mm512_setzero_epi32();
     __m512i c_int32_4p1 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
 
@@ -9888,7 +9888,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_4x32)
     __m512i c_int32_3p0 = _mm512_setzero_epi32();
     __m512i c_int32_3p1 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
 
@@ -11099,7 +11099,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_3x32)
     __m512i c_int32_2p0 = _mm512_setzero_epi32();
     __m512i c_int32_2p1 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
 
@@ -12106,7 +12106,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_2x32)
     __m512i c_int32_1p0 = _mm512_setzero_epi32();
     __m512i c_int32_1p1 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
 
@@ -12909,7 +12909,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_1x32)
     __m512i c_int32_0p0 = _mm512_setzero_epi32();
     __m512i c_int32_0p1 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
 
@@ -13533,7 +13533,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_5x48)
     __m512i c_int32_4p1 = _mm512_setzero_epi32();
     __m512i c_int32_4p2 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
         b2 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 2));
@@ -15325,7 +15325,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_4x48)
     __m512i c_int32_3p1 = _mm512_setzero_epi32();
     __m512i c_int32_3p2 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
         b2 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 2));
@@ -16845,7 +16845,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_3x48)
     __m512i c_int32_2p1 = _mm512_setzero_epi32();
     __m512i c_int32_2p2 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
         b2 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 2));
@@ -18092,7 +18092,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_2x48)
     __m512i c_int32_1p1 = _mm512_setzero_epi32();
     __m512i c_int32_1p2 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
         b2 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 2));
@@ -19072,7 +19072,7 @@ LPGEMM_MN_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_1x48)
     __m512i c_int32_0p1 = _mm512_setzero_epi32();
     __m512i c_int32_0p2 = _mm512_setzero_epi32();
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
         b0 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 0));
         b1 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 1));
         b2 = _mm512_loadu_si512(b + (rs_b * kr) + (cs_b * 2));

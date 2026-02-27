@@ -167,7 +167,7 @@ unpackb_nr48_bf16_f32_row_major(const bfloat16* b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         /*Read first rows from B with 32 elements in each row.*/
         LOAD_AND_CONVERT_NR32_BF16_NR32_AVX2(kr_new)
         SHUFFLE_F32_ELEMENTS_NR32_AVX2
@@ -266,7 +266,7 @@ unpackb_nr32_bf16_f32_row_major(const bfloat16* b,
 
     __m256 a_reg[8], b_reg[8];
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         /*Read two rows from B with 32 elements each.*/
         LOAD_AND_CONVERT_NR32_BF16_NR32_AVX2(kr)
         SHUFFLE_F32_ELEMENTS_NR32_AVX2
@@ -321,7 +321,7 @@ unpackb_nr16_bf16_f32_row_major(const bfloat16* b,
     md_t k_full_pieces      = k_full_pieces_blks * 2;
     md_t k_partial_pieces   = KC % 2;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Read 2-rows with 16 elements in each row
         LOAD_AND_CONVERT_BF16_NR16_AVX2(kr)
         SHUFFLE_F32_ELEMENTS_NR16_AVX2
@@ -383,7 +383,7 @@ unpackb_nrlt16_bf16_f32_row_major(const bfloat16* b,
     md_t k_full_pieces      = k_full_pieces_blks * 2;
     md_t k_partial_pieces   = KC % 2;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         LOAD_AND_CONVERT_BF16_NR16_AVX2(kr)
         SHUFFLE_F32_ELEMENTS_NR16_AVX2
         PERMUTE_NR16_ELEMENTS_AVX2
@@ -446,8 +446,8 @@ unpackb_nr64_bf16_f32_row_major(const bfloat16* b,
     /*Since there are only 16 registers, we do the NR=64 in blocks of 32*/
     __m256 a_reg[8], b_reg[8];
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
             // Load 2-rows with 64 elements each.
             LOAD_AND_CONVERT_FIRST32_NR64_BF16_NR32_AVX2(kr)
             SHUFFLE_F32_ELEMENTS_NR32_AVX2

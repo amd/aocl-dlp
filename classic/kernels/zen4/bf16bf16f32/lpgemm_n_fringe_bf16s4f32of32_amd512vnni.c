@@ -85,7 +85,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
 
     __mmask16 lmask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
 
@@ -104,7 +104,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
 
         bfloat16* a_group = (bfloat16*)a;
         int8_t*   b_group = (int8_t*)b;
-        for (md_t group = group_start; group <= group_end; group++) {
+        for (iter_t group = group_start; group <= group_end; group++) {
             md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
             md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                    pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -156,7 +156,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6xlt16m)
                 scale1 = scale0;
             }
 
-            for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+            for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
                 b0_s4 = _mm256_maskz_loadu_epi8(
                     lmask, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -1260,7 +1260,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x16m)
         _mm512_set_epi32(0x1F, 0x0F, 0x1E, 0x0E, 0x1D, 0x0D, 0x1C, 0x0C, 0x1B,
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
 
@@ -1282,7 +1282,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x16m)
 
         md_t pre_op_sf_off = 0;
 
-        for (md_t group = group_start; group <= group_end; group++) {
+        for (iter_t group = group_start; group <= group_end; group++) {
 
             md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
             md_t k_end   = dlp_min(((group + 1) * group_size - 1),
@@ -1327,7 +1327,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x16m)
                 scale1 = scale0;
             }
 
-            for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+            for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
                 b0_s4 = _mm256_maskz_loadu_epi8(
                     0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
 
@@ -2388,7 +2388,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x32m)
         _mm512_set_epi32(0x1F, 0x0F, 0x1E, 0x0E, 0x1D, 0x0D, 0x1C, 0x0C, 0x1B,
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
         __m512 c_float_0p1 = _mm512_setzero_ps();
@@ -2413,7 +2413,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x32m)
 
         bfloat16* a_group = (bfloat16*)a;
         int8_t*   b_group = (int8_t*)b;
-        for (md_t group = group_start; group <= group_end; group++) {
+        for (iter_t group = group_start; group <= group_end; group++) {
             md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
             md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                    pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -2467,7 +2467,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x32m)
                 scale2 = scale0;
                 scale3 = scale0;
             }
-            for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+            for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
                 b0_s4 = _mm256_loadu_si256(
                     (__m256i const*)(b_group + (rs_b * kr) / 2));
 
@@ -3927,7 +3927,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
                                 0x6F2F6E2E6D2D6C2C, 0x6B2B6A2A69296828,
                                 0x6727662665256424, 0x6323622261216020);
 
-    for (md_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
+    for (iter_t ir = 0; ir < m_full_pieces_loop_limit; ir += MR) {
         // Registers to use for accumulating C.
         __m512 c_float_0p0 = _mm512_setzero_ps();
         __m512 c_float_0p1 = _mm512_setzero_ps();
@@ -3958,7 +3958,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
 
         bfloat16* a_group = (bfloat16*)a;
         int8_t*   b_group = (int8_t*)b;
-        for (md_t group = group_start; group <= group_end; group++) {
+        for (iter_t group = group_start; group <= group_end; group++) {
             md_t k_start = dlp_max(group * group_size, pre_ops_attr.pre_op_b_i);
             md_t k_end   = dlp_min(((group + 1) * group_size - 1),
                                    pre_ops_attr.pre_op_b_i + k0 - 1);
@@ -4020,7 +4020,7 @@ LPGEMM_N_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_6x48m)
                 scale4 = scale0;
                 scale5 = scale0;
             }
-            for (md_t kr = 0; kr < k_full_pieces; kr += 1) {
+            for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
 
                 b0_s4 = _mm256_loadu_si256(
                     (__m256i const*)(b_group + (rs_b * kr) / 2));

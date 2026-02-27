@@ -84,10 +84,10 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
     lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
 
-    for (md_t ir = 0; ir < m0; ir += MR) {
-        md_t mr0    = dlp_min((m0 - ir), MR);
-        md_t k_iter = k / 64;
-        md_t k_rem  = k & 0x3F;
+    for (iter_t ir = 0; ir < m0; ir += MR) {
+        md_t   mr0    = dlp_min((m0 - ir), MR);
+        iter_t k_iter = k / 64;
+        iter_t k_rem  = k & 0x3F;
 
         // Create load mask for k fringe
         __mmask64 k1 = 0xFFFFFFFFFFFFFFFF;
@@ -124,7 +124,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         if (mr0 == MR) {
             // Dot product kernel
-            for (md_t k = 0; k < k_iter; k++) {
+            for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                 zmm6 = _mm512_loadu_si512(b_use);
                 b_use += 64;
 
@@ -215,7 +215,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
             // Dot product for mfringe 8
             if (mr0_use >= 8) {
                 // Dot product kernel for mr0 == 8
-                for (md_t k = 0; k < k_iter; k++) {
+                for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                     // Load 0-63 in b[k+0 - k+31]
                     zmm6 = _mm512_loadu_si512(b_use);
                     // move b pointer to next 64 elements
@@ -276,7 +276,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
             // Dot product for mfringe 4
             if (mr0_use >= 4) {
                 // Dot product kernel for mr0 == 8
-                for (md_t k = 0; k < k_iter; k++) {
+                for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                     // Load 0-63 in b[k+0 - k+63]
                     zmm6 = _mm512_loadu_si512(b_use);
 
@@ -324,7 +324,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
             if (mr0_use) {
                 // Dot product for m = 2
                 if (mr0_use >= 2) {
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         // Load 0-63 in b[k+0 - k+63]
                         zmm6 = _mm512_loadu_si512(b_use);
 
@@ -353,7 +353,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
                 // Dot product for m = 2
                 if (mr0_use == 1) {
-                    for (md_t k = 0; k < k_iter; k++) {
+                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
                         // Load 0-63 in b[k+0 - k+63]
                         zmm6  = _mm512_loadu_si512(b_use);
                         zmm0  = _mm512_loadu_si512(a_use);
@@ -416,7 +416,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 } else {
                     if (post_ops_attr.c_stor_type == DLP_S8) {
                         int8_t ctemp[16];
-                        for (md_t i = 0; i < mr0; i++) {
+                        for (iter_t i = 0; i < mr0; i++) {
                             ctemp[i] = *((int8_t*)post_ops_attr.buf_downscale
                                          + (post_ops_attr.rs_c_downscale
                                             * (post_ops_attr.post_op_c_i + i)));
@@ -425,7 +425,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                             _mm_maskz_loadu_epi8(0xFFFF, ctemp));
                     } else if (post_ops_attr.c_stor_type == DLP_U8) {
                         uint8_t ctemp[16];
-                        for (md_t i = 0; i < mr0; i++) {
+                        for (iter_t i = 0; i < mr0; i++) {
                             ctemp[i] = *((uint8_t*)post_ops_attr.buf_downscale
                                          + (post_ops_attr.rs_c_downscale
                                             * (post_ops_attr.post_op_c_i + i)));
@@ -434,7 +434,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                             _mm_maskz_loadu_epi8(0xFFFF, ctemp));
                     } else if (post_ops_attr.c_stor_type == DLP_BF16) {
                         bfloat16 ctemp[16];
-                        for (md_t i = 0; i < mr0; i++) {
+                        for (iter_t i = 0; i < mr0; i++) {
                             ctemp[i] = *((bfloat16*)post_ops_attr.buf_downscale
                                          + (post_ops_attr.rs_c_downscale
                                             * (post_ops_attr.post_op_c_i + i)));
@@ -446,7 +446,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                                 _mm512_set1_epi32(16)));
                     } else if (post_ops_attr.c_stor_type == DLP_F32) {
                         float ctemp[16];
-                        for (md_t i = 0; i < mr0; i++) {
+                        for (iter_t i = 0; i < mr0; i++) {
                             ctemp[i] = *((float*)post_ops_attr.buf_downscale
                                          + (post_ops_attr.rs_c_downscale
                                             * (post_ops_attr.post_op_c_i + i)));
@@ -462,7 +462,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                                                 selector1, selector2)
                 } else {
                     int32_t ctemp[16];
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         ctemp[i] = c_use[i * rs_c];
                     }
                     selector1 = _mm512_loadu_epi32(ctemp);
@@ -638,7 +638,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 bfloat16 ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -656,7 +656,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 float ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -672,7 +672,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 int8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -691,7 +691,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 uint8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -710,7 +710,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 acc_8 = _mm512_add_ps(t0, acc_8);
             } else {
                 int32_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -761,7 +761,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 bfloat16 ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -781,7 +781,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 float ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -800,7 +800,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 int8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -822,7 +822,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 uint8_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -844,7 +844,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
             } else {
                 int32_t ctemp[16];
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
@@ -915,7 +915,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     _mm512_mask_cvtsepi32_storeu_epi8(
                         ctemp, k2, _mm512_cvtps_epi32(acc_8));
 
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         *((int8_t*)post_ops_attr.buf_downscale
                           + (post_ops_attr.rs_c_downscale
                              * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
@@ -928,7 +928,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                         _mm512_cvtps_epu32(
                             _mm512_max_ps(acc_8, _mm512_set1_ps(0))));
 
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         *((uint8_t*)post_ops_attr.buf_downscale
                           + (post_ops_attr.rs_c_downscale
                              * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
@@ -938,7 +938,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
                     CVT_STORE_F32_BF16_MASK_AVX2(acc_8, k2, ctemp);
 
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         *((bfloat16*)post_ops_attr.buf_downscale
                           + (post_ops_attr.rs_c_downscale
                              * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
@@ -948,7 +948,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
                     _mm512_mask_storeu_ps(ctemp, k2, acc_8);
 
-                    for (md_t i = 0; i < mr0; i++) {
+                    for (iter_t i = 0; i < mr0; i++) {
                         *((float*)post_ops_attr.buf_downscale
                           + (post_ops_attr.rs_c_downscale
                              * (post_ops_attr.post_op_c_i + i))) = ctemp[i];
@@ -963,7 +963,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                 // element by element into output buffer at strides
                 int32_t ctemp[16];
                 _mm512_mask_storeu_epi32(ctemp, k2, _mm512_cvtps_epi32(acc_8));
-                for (md_t i = 0; i < mr0; i++) {
+                for (iter_t i = 0; i < mr0; i++) {
                     c_use[i * rs_c] = ctemp[i];
                 }
             }

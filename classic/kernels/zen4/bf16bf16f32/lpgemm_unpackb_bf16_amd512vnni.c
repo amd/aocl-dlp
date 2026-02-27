@@ -58,7 +58,7 @@ unpackb_nr48_bf16bf16f32of32_row_major(const bfloat16* b,
 
     md_t kr_new = 0;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // First 2x32 elements
         a0 = _mm512_loadu_si512(b + ((kr_new + 0) * NR1));
         b0 = _mm512_loadu_si512(b + ((kr_new + 1) * NR1));
@@ -125,7 +125,7 @@ unpackb_nr32_bf16bf16f32of32_row_major(const bfloat16* b,
     __m512i a0, c0;
     __m512i a01;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in each
         // row.
         a0 = _mm512_loadu_si512(b + ((kr + 0) * NR));
@@ -175,7 +175,7 @@ unpackb_nr16_bf16bf16f32of32_row_major(const bfloat16* b,
     md_t k_full_pieces      = k_full_pieces_blks * 2;
     md_t k_partial_pieces   = KC % 2;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with 16 elements in each
         // row.
         a0 = _mm512_loadu_si512(b + ((kr + 0) * NR));
@@ -229,7 +229,7 @@ unpackb_nrlt16_bf16bf16f32of32_row_major(const bfloat16* b,
     md_t k_full_pieces      = k_full_pieces_blks * 2;
     md_t k_partial_pieces   = KC % 2;
 
-    for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with 16 elements in each
         // row.
         a0 = _mm512_loadu_si512(b + ((kr + 0) * NR));
@@ -292,8 +292,8 @@ unpackb_nr64_bf16bf16f32of32_row_major(const bfloat16* b,
     __m512i a0, b0, c0, d0;
     __m512i a01, c01;
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
-        for (md_t kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+        for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             a0 = _mm512_loadu_si512(b + (jc * KC_updated) + ((kr + 0) * NR));
@@ -699,7 +699,7 @@ unpackb_nr_mult_16_bf16bf16f32of32_col_major(const bfloat16* b,
 
     md_t kr = 0;
     for (kr = 0; (kr + 31) < KC; kr += 32) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             a_reg[0]  = _mm512_loadu_si512(b + (jr * 2) + ((kr + 0) * NR));
             a_reg[1]  = _mm512_loadu_si512(b + (jr * 2) + ((kr + 2) * NR));
             a_reg[2]  = _mm512_loadu_si512(b + (jr * 2) + ((kr + 4) * NR));
@@ -725,7 +725,7 @@ unpackb_nr_mult_16_bf16bf16f32of32_col_major(const bfloat16* b,
     }
 
     for (; (kr + 15) < KC; kr += 16) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
 
@@ -746,7 +746,7 @@ unpackb_nr_mult_16_bf16bf16f32of32_col_major(const bfloat16* b,
     }
 
     for (; (kr + 7) < KC; kr += 8) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
 
@@ -763,7 +763,7 @@ unpackb_nr_mult_16_bf16bf16f32of32_col_major(const bfloat16* b,
     }
 
     for (; (kr + 3) < KC; kr += 4) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             a_reg[0] = _mm512_loadu_si512(b + (jr * 2) + ((kr + 0) * NR));
@@ -777,7 +777,7 @@ unpackb_nr_mult_16_bf16bf16f32of32_col_major(const bfloat16* b,
     }
 
     for (; (kr + 1) < KC; kr += 2) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             a_reg[0] = _mm512_loadu_si512(b + (jr * 2) + ((kr + 0) * NR));
@@ -790,7 +790,7 @@ unpackb_nr_mult_16_bf16bf16f32of32_col_major(const bfloat16* b,
     }
 
     for (; kr < KC; kr += 1) {
-        for (md_t jr = 0; jr < NR; jr += 16) {
+        for (iter_t jr = 0; jr < NR; jr += 16) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
             a_reg[0] = _mm512_loadu_si512(b + (jr * 2) + ((kr + 0) * NR));
@@ -823,7 +823,7 @@ unpackb_nr64_bf16bf16f32of32_col_major(const bfloat16* b,
         KC_updated += (2 - k_partial_pieces);
     }
 
-    for (md_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
+    for (iter_t jc = 0; jc < n_full_pieces_loop_limit; jc += NR) {
         unpackb_nr_mult_16_bf16bf16f32of32_col_major(
             b + (jc * KC_updated), unpack_b_buffer + (jc * ldb), 64, KC, ldb);
     }

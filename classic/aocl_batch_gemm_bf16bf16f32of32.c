@@ -68,7 +68,7 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
                       __FILE__, __LINE__);
-        for (md_t gc_i = 0; gc_i < group_count; gc_i++) {
+        for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
         }
         goto err_hndl;
@@ -82,7 +82,7 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
         dlp_print_msg(" Could not generate bf16bf16f32of32 "
                       " kernels using JIT.",
                       __FILE__, __LINE__);
-        for (md_t gc_i = 0; gc_i < group_count; gc_i++) {
+        for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
         }
         goto err_hndl;
@@ -94,7 +94,7 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
 
-    for (md_t gc_i = 0; gc_i < group_count; gc_i++) {
+    for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
 
@@ -338,7 +338,7 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
                       __FILE__, __LINE__);
-        for (md_t gc_i = 0; gc_i < group_count; gc_i++) {
+        for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
         }
         goto err_hndl;
@@ -352,7 +352,7 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
         dlp_print_msg(" Could not generate bf16bf16f32of32 "
                       " kernels using JIT.",
                       __FILE__, __LINE__);
-        for (md_t gc_i = 0; gc_i < group_count; gc_i++) {
+        for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
         }
         goto err_hndl;
@@ -364,7 +364,7 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
 
-    for (md_t gc_i = 0; gc_i < group_count; gc_i++) {
+    for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
 

@@ -986,7 +986,7 @@ lpgemm_modify_tid_on_distr_type(md_t*               tid,
         if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
             cur_lpgemm_comms = malloc(jc_ways * sizeof(dlp_task_comm_t));      \
         }                                                                      \
-        for (md_t i = 0; i < jc_ways; ++i) {                                   \
+        for (iter_t i = 0; i < jc_ways; ++i) {                                 \
             dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
         }                                                                      \
                                                                                \
@@ -1114,7 +1114,7 @@ GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
             cur_lpgemm_comms = malloc(jc_ways * n_gemms_in_parallel            \
                                       * sizeof(dlp_task_comm_t));              \
         }                                                                      \
-        for (md_t i = 0; i < n_gemms_in_parallel * jc_ways; i++) {             \
+        for (iter_t i = 0; i < n_gemms_in_parallel * jc_ways; i++) {           \
             dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
         }                                                                      \
                                                                                \
@@ -1148,7 +1148,7 @@ GEN_LPGEMM_OPENMP_DECORATOR_UNIFIED(
             dlp_thread_task_range(&thrinfo, group_size, 1, FALSE, &gemm_start, \
                                   &gemm_end);                                  \
                                                                                \
-            for (md_t i = gemm_start; i < gemm_end; i++) {                     \
+            for (iter_t i = gemm_start; i < gemm_end; i++) {                   \
                 if (HAS_MC_LOGIC) {                                            \
                     if ((m[i] / ic_ways) > MC) {                               \
                         mtag_b[i] = PACK_KC;                                   \
@@ -1290,7 +1290,7 @@ lpgemm_eltwise_ops_f32of32_get_threading(md_t*                      n_threads,
         if (jc_ways > DLP_NUM_STATIC_COMMS) {                                  \
             cur_lpgemm_comms = malloc(jc_ways * sizeof(dlp_task_comm_t));      \
         }                                                                      \
-        for (md_t i = 0; i < jc_ways; ++i) {                                   \
+        for (iter_t i = 0; i < jc_ways; ++i) {                                 \
             dlp_task_comm_init(ic_ways, &cur_lpgemm_comms[i]);                 \
         }                                                                      \
                                                                                \
@@ -1451,7 +1451,7 @@ GEN_LPGEMM_DECORATOR_UNIFIED(
         thread.jc_ways   = jc_ways;                                            \
         thread.comm      = cur_lpgemm_comm;                                    \
                                                                                \
-        for (md_t i = 0; i < group_size; i++) {                                \
+        for (iter_t i = 0; i < group_size; i++) {                              \
             lpgemm_rowvar_##LPGEMM_SFX(                                        \
                 *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b, *cs_b,   \
                 *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, rntm_g, &thread,     \

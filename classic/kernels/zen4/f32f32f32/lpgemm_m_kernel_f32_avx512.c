@@ -54,7 +54,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
         &&POST_OPS_SIGMOID_6x64F
     };
 
-    uint64_t n_left = n0 % 64; // n0 is expected to be n0<=NR
+    md_t n_left = n0 % 64; // n0 is expected to be n0<=NR
 
     // First check whether this is a edge case in the n dimension.
     // If so, dispatch other 12x?m kernels, as needed.
@@ -118,10 +118,10 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
 
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     // Query the panel stride of A and convert it to units of bytes.
     if (m_iter == 0) {
@@ -134,7 +134,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
     __m512 zmm24, zmm25, zmm26, zmm27, zmm28, zmm29, zmm30, zmm31;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11);
         ZERO_ACC_ZMM_4_REG(zmm12, zmm13, zmm14, zmm15);
@@ -160,7 +160,7 @@ LPGEMM_MAIN_KERN(float, float, float, f32f32f32of32_avx512_6x64m)
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 5 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 32 elements from row0 of B*/
             zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
             zmm1 = _mm512_loadu_ps(bbuf
@@ -1977,10 +1977,10 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     // Query the panel stride of A and convert it to units of bytes.
     if (m_iter == 0) {
@@ -1993,7 +1993,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
     __m512 zmm24, zmm25, zmm26, zmm28, zmm29, zmm30, zmm31;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm12);
         ZERO_ACC_ZMM_4_REG(zmm13, zmm14, zmm16, zmm17);
@@ -2017,7 +2017,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x48m)
         _mm_prefetch((cbuf + 3 * rs_c), _MM_HINT_T0);
         _mm_prefetch((cbuf + 4 * rs_c), _MM_HINT_T0);
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 32 elements from row0 of B*/
             zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
             zmm1 = _mm512_loadu_ps(bbuf
@@ -3478,10 +3478,10 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     // Query the panel stride of A and convert it to units of bytes.
     if (m_iter == 0) {
@@ -3494,7 +3494,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
     __m512 zmm24, zmm25, zmm28, zmm29;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm12, zmm13);
         ZERO_ACC_ZMM_4_REG(zmm16, zmm17, zmm20, zmm21);
@@ -3509,7 +3509,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x32m)
         bbuf = (float*)b; // Same KCxNR is used across different MRxKC in MCxKC
         cbuf = (float*)c + m * MR * rs_c; // Move to next MRXNR in output
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 32 elements from row0 of B*/
             zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
             zmm1 = _mm512_loadu_ps(bbuf
@@ -4727,10 +4727,10 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x16m)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     // Query the panel stride of A and convert it to units of bytes.
     if (m_iter == 0) {
@@ -4741,7 +4741,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x16m)
     __m512 zmm6, zmm8, zmm12, zmm16, zmm20, zmm24, zmm28;
 
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_ZMM_4_REG(zmm8, zmm12, zmm16, zmm20);
         ZERO_ACC_ZMM_2_REG(zmm24, zmm28);
@@ -4755,7 +4755,7 @@ LPGEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6x16m)
         bbuf = (float*)b; // Same KCxNR is used across different MRxKC in MCxKC
         cbuf = (float*)c + m * MR * rs_c; // Move to next MRXNR in output
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 32 elements from row0 of B*/
             zmm0 = _mm512_loadu_ps(bbuf); // load 0-15 values from current row
 
@@ -5624,10 +5624,10 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6xlt16m)
     };
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
-    uint64_t k_iter = k0;
+    iter_t k_iter = k0;
 
-    uint64_t m_iter = m0 / 6;
-    uint64_t m_left = m0 % 6;
+    iter_t m_iter = m0 / 6;
+    md_t   m_left = m0 % 6;
 
     // Query the panel stride of A and convert it to units of bytes.
     if (m_iter == 0) {
@@ -5639,7 +5639,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6xlt16m)
 
     __mmask16 mask16 = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
     /*Produce MRxNR outputs */
-    for (md_t m = 0; m < m_iter; m++) {
+    for (iter_t m = 0; m < m_iter; m++) {
         /* zero the accumulator registers */
         ZERO_ACC_ZMM_4_REG(zmm8, zmm12, zmm16, zmm20);
         ZERO_ACC_ZMM_2_REG(zmm24, zmm28);
@@ -5653,7 +5653,7 @@ LPGEMM_N_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_6xlt16m)
         bbuf = (float*)b; // Same KCxNR is used across different MRxKC in MCxKC
         cbuf = (float*)c + m * MR * rs_c; // Move to next MRXNR in output
 
-        for (md_t k = 0; k < k_iter; k++) {
+        for (iter_t k_i = 0; k_i < k_iter; k_i++) {
             /*Load 32 elements from row0 of B*/
             zmm0 = _mm512_maskz_loadu_ps(
                 mask16, bbuf); // load 0-15 values from current row
