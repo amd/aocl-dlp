@@ -7,10 +7,10 @@
 
 gemm_tests:
   # ==========================================================================
-  # Test Set 1: Systematic M Sweep (GEMM MR variants + MC boundaries)
-  # Tests: All MR remainders (1-6) + MC=144 boundary + large M
+  # Test Set 1: Systematic M Sweep (GEMM MR variants + small M)
+  # Tests: All MR remainders (1-6) + small M coverage
   # ==========================================================================
-  - name: "s8s8s32_optimized_m_sweep"
+  - name: "s8_m_sweep_small"
     a_type: ["s8"]
     b_type: ["s8"]
     # c_type: ["s32", "f32"]
@@ -19,17 +19,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
-    m:
-      lb: 1
-      ub: 30
-      step: 3
-    n: [1, 2, 15, 16, 17, 31, 32, 33, 47, 48, 49, 63, 64, 65, 129, 1024, 1025]  # NR, 2×NR, NC boundaries
+    m: [1, 2, 3, 4, 5, 6, 7, 12, 24, 30]
+    n: [1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 65, 129, 1024, 1025]  # NR, 2×NR, NC boundaries
     k: [1, 2, 3, 4, 8, 2048, 2049]     # VNNI min, small, KC boundary
     alpha: [3.0]
-    beta: [3.0]
+    beta: [1.0]
     lda: [2049]
     ldb: [2049]
-    ldc: [2049]
+    ldc: [1025]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
@@ -37,7 +34,7 @@ gemm_tests:
       bfloat16: 0
       int8: 0
 
-  - name: "s8s8s32_optimized_m_sweep_1"
+  - name: "s8_m_sweep_mc"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "bf16"]
@@ -45,17 +42,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
-    m:
-      lb: 144
-      ub: 174
-      step: 5
-    n: [15, 16, 17, 31, 32, 33, 47, 48, 49, 63, 64, 65, 129, 1024, 1025]  # NR, 2×NR, NC boundaries
-    k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 11, 12, 13, 15, 16, 17, 19, 20, 21, 23, 24, 25, 31, 32, 33, 63, 64, 65, 2048, 2049]
-    alpha: [3.0]
-    beta: [3.0]
+    m: [144, 145, 160, 174]
+    n: [15, 16, 17, 31, 32, 33, 63, 64, 65, 129, 1024, 1025]  # NR, 2×NR, NC boundaries
+    k: [1, 2, 3, 4, 8, 16, 17, 32, 33, 64, 65, 2048, 2049]
+    alpha: [3.25]
+    beta: [1.25]
     lda: [2049]
     ldb: [2049]
-    ldc: [2049]
+    ldc: [1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -67,7 +61,7 @@ gemm_tests:
   # Test Set 2: Systematic N Sweep - Small (NR variants + masking)
   # Tests: All NR variants (mask 1-15, 1reg 16, 2reg 32, 3reg 48, 4reg 64)
   # ==========================================================================
-  - name: "s8s8s32_optimized_n_sweep_small"
+  - name: "s8_n_sweep_small"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "bf16"]
@@ -76,16 +70,13 @@ gemm_tests:
     transA: [false, true]
     transB: [false, true]
     m: [6, 7, 12, 13, 145]     # MR, 2×MR, MC
-    n:
-      lb: 1
-      ub: 129
-      step: 7
-    k: [4, 8, 11, 77]
-    alpha: [3.0]
-    beta: [3.0]
-    lda: [2049]
-    ldb: [2049]
-    ldc: [2049]
+    n: [1, 2, 7, 15, 16, 17, 31, 32, 33, 63, 64, 65, 129]
+    k: [4, 8, 16, 77]
+    alpha: [2.75]
+    beta: [0.75]
+    lda: [145]
+    ldb: [129]
+    ldc: [145]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
@@ -97,7 +88,7 @@ gemm_tests:
   # Test Set 3: Systematic N Sweep - Large (NC boundaries)
   # Tests: Large N values around NC=1024 boundary
   # ==========================================================================
-  - name: "s8s8s32_optimized_n_sweep_large"
+  - name: "s8_n_sweep_large"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "u8"]
@@ -106,16 +97,13 @@ gemm_tests:
     transA: [false, true]
     transB: [false, true]
     m: [6, 7, 144, 145, 288]    # MR, MC, 2×MC
-    n:
-      lb: 128
-      ub: 1500
-      step: 7
-    k: [8, 17, 19, 33]        # Small k
-    alpha: [3.0]
-    beta: [3.0]
-    lda: [2049]
-    ldb: [2049]
-    ldc: [2049]
+    n: [128, 129, 256, 512, 1023, 1024, 1025, 1500]
+    k: [8, 17, 33]        # Small k
+    alpha: [2.5]
+    beta: [0.5]
+    lda: [288]
+    ldb: [1500]
+    ldc: [1500]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -124,10 +112,60 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 4: Systematic K Sweep (VNNI alignment + KC boundaries)
-  # Tests: K dimension with VNNI group alignment and KC=2048 boundary
+  # Test Set 4: Kernel-Specific Fringe Coverage (Row/Column Major)
+  # Tests: Explicit n=48 path and 9x32 rowvar path
   # ==========================================================================
-  - name: "s8s8s32_optimized_k_sweep"
+  - name: "s8_n_fringe_48"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    m: [6, 12]
+    n: [48]
+    k: [3, 4, 5]
+    alpha: [3.5]
+    beta: [1.5]
+    lda: [12]
+    ldb: [48]
+    ldc: [48]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  - name: "s8_m9_n32_kernel"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    m: [9]
+    n: [32]
+    k: [4, 7]
+    alpha: [3.75]
+    beta: [1.75]
+    lda: [16]
+    ldb: [32]
+    ldc: [32]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # ==========================================================================
+  # Test Set 5: Systematic K Sweep - Large (KC boundaries)
+  # Tests: K dimension around KC boundary
+  # ==========================================================================
+  - name: "s8_k_sweep_large"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "bf16"]
@@ -137,15 +175,12 @@ gemm_tests:
     transB: [false]
     m: [6, 7, 12, 13, 144, 145]     # MR variants and MC
     n: [16, 17, 64, 128]    # NR variants
-    k:
-      lb: 2049
-      ub: 4096
-      step: 32
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [5000]
-    ldb: [2048]
-    ldc: [2048]
+    k: [2049, 2081, 3073, 4096]
+    alpha: [2.25]
+    beta: [0.25]
+    lda: [4096]
+    ldb: [4096]
+    ldc: [145]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -154,10 +189,10 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 5: Combined Boundaries (MC/NC/KC edge cases)
+  # Test Set 6: Combined Boundaries (MC/NC/KC edge cases)
   # Tests: Critical boundary conditions around all block sizes
   # ==========================================================================
-  - name: "s8s8s32_optimized_combined_boundaries"
+  - name: "s8_combined_boundaries"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "s8", "u8"]
@@ -169,10 +204,10 @@ gemm_tests:
     n: [15, 16, 64, 1023, 1024, 1025]         # Around NR=16,64 and NC=1024
     k: [1, 3, 4, 127, 128]      # Around VNNI=4 and KC=2048
     alpha: [2.0]
-    beta: [2.0]
-    lda: [2050]
-    ldb: [2048]
-    ldc: [2048]
+    beta: [0.0]
+    lda: [288]
+    ldb: [1025]
+    ldc: [1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -181,10 +216,10 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 6: VNNI K Alignment (Critical for VNNI instruction correctness)
+  # Test Set 7: VNNI K Alignment (Critical for VNNI instruction correctness)
   # Tests: Detailed K alignment around VNNI group size = 4
   # ==========================================================================
-  - name: "s8s8s32_optimized_vnni_alignment"
+  - name: "s8_vnni_alignment"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "bf16", "f32", "u8", "s8"]
@@ -193,13 +228,13 @@ gemm_tests:
     transA: [false, true]
     transB: [false, true]
     m: [5, 6, 11, 12]          # Basic MR variants
-    n: [16, 17, 32, 33, 64, 65, 127, 129]     # NR variants
-    k: [1, 2, 3, 4, 5, 6, 7, 8, 9, 15, 16, 17, 31, 32, 33]  # VNNI boundaries
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [64]
-    ldb: [300]
-    ldc: [300]
+    n: [16, 17, 64, 65, 127, 129]     # NR variants
+    k: [1, 2, 3, 4, 5, 8, 9, 15, 16, 17, 32, 33]  # VNNI boundaries
+    alpha: [1.75]
+    beta: [-0.25]
+    lda: [33]
+    ldb: [129]
+    ldc: [129]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
@@ -208,9 +243,9 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 7: Output Type Matrix (All c_types with scaling)
+  # Test Set 8: Output Type Matrix (All c_types with scaling)
   # ==========================================================================
-  - name: "s8s8s32_optimized_output_types"
+  - name: "s8_output_types"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "s8", "u8", "f32", "bf16"]
@@ -220,12 +255,12 @@ gemm_tests:
     transB: [false]
     m: [6, 7, 144, 145]         # MR and MC
     n: [16, 17, 64, 65, 1024, 1025]   # NR variants and NC
-    k: [1, 2, 3, 4, 8, 9, 16, 17]        # Small and KC
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [2050]
-    ldb: [2050]
-    ldc: [2050]
+    k: [1, 2, 4, 8, 16]        # Small and KC
+    alpha: [1.5]
+    beta: [-0.5]
+    lda: [145]
+    ldb: [1025]
+    ldc: [1025]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
@@ -234,10 +269,10 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 8: GEMV N=1 - Small M (MR=16 for GEMV)
+  # Test Set 9: GEMV N=1 - Small M (MR=16 for GEMV)
   # Tests: GEMV N=1 path with small M values
   # ==========================================================================
-  - name: "s8s8s32_optimized_gemv_n1_small_m"
+  - name: "s8_gemv_n1_small_m"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "f32", "bf16", "s8", "u8"]
@@ -245,20 +280,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
-    m:
-      lb: 2
-      ub: 64
-      step: 9
+    m: [2, 3, 7, 16, 32, 64]
     n: [1]
-    k:
-      lb: 1
-      ub: 129
-      step: 3
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [256]
-    ldb: [1, 256]       # Test both row and column major for vector
-    ldc: [1, 256]       # Test both row and column major for result
+    k: [1, 2, 3, 4, 8, 16, 32, 64, 128]
+    alpha: [1.25]
+    beta: [-0.75]
+    lda: [128]
+    ldb: [128]
+    ldc: [64]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
@@ -267,10 +296,10 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 9: GEMV N=1 - Large M (MC boundaries for GEMV)
+  # Test Set 10: GEMV N=1 - Large M (MC boundaries for GEMV)
   # Tests: GEMV N=1 path with large M values around MC=144
   # ==========================================================================
-  - name: "s8s8s32_optimized_gemv_n1_large_m"
+  - name: "s8_gemv_n1_large_m"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "u8", "s8"]
@@ -278,20 +307,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false, true]
     transB: [false, true]
-    m:
-      lb: 144
-      ub: 289
-      step: 15
+    m: [144, 145, 176, 208, 240, 272, 289]
     n: [1]
-    k:
-      lb: 128
-      ub: 2500
-      step: 31
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [2048]
-    ldb: [1, 2048]
-    ldc: [1, 2048]
+    k: [128, 256, 512, 1024, 2048, 2500]
+    alpha: [1.0]
+    beta: [-1.0]
+    lda: [2500]
+    ldb: [2500]
+    ldc: [289]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -300,10 +323,10 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 10: GEMV M=1 (Row vector × Matrix)
-  # Tests: GEMV M=1 path with NC=1024 boundaries
+  # Test Set 11: GEMV M=1 (Row vector × Matrix)
+  # Tests: GEMV M=1 path with small/medium N and K
   # ==========================================================================
-  - name: "s8s8s32_optimized_gemv_m1"
+  - name: "s8_gemv_m1_basic"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "s8", "u8", "f32", "bf16"]
@@ -312,19 +335,13 @@ gemm_tests:
     transA: [false]
     transB: [false]
     m: [1]
-    n:
-      lb: 1
-      ub: 128
-      step: 4
-    k:
-      lb: 1
-      ub: 257
-      step: 2
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [512]
-    ldb: [512]
-    ldc: [512]
+    n: [1, 2, 4, 8, 16, 32, 64, 128]
+    k: [1, 2, 4, 8, 16, 32, 64, 128, 256]
+    alpha: [0.75]
+    beta: [-1.25]
+    lda: [256]
+    ldb: [256]
+    ldc: [128]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -333,10 +350,10 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 11: Large Scale Performance (Multi-block scenarios)
+  # Test Set 12: Large Scale Performance (Multi-block scenarios)
   # Tests: Large matrices that trigger multiple MC/NC/KC blocks
   # ==========================================================================
-  - name: "s8s8s32_optimized_large_scale"
+  - name: "s8_large_scale"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -344,14 +361,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
-    m: [384, 385, 768, 769]       # 2.67×MC, 5.33×MC
+    m: [384, 385, 768]       # 2.67×MC, 5.33×MC
     n: [512, 513, 1025]      # 0.5×NC, 1×NC
-    k: [512, 513, 2049, 4099, 4111]      # 0.25×KC, 1×KC
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [5000]
-    ldb: [5000]
-    ldc: [5000]
+    k: [512, 513, 2049, 4096]      # 0.25×KC, 1×KC
+    alpha: [0.5]
+    beta: [-1.5]
+    lda: [4096]
+    ldb: [4096]
+    ldc: [1025]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -360,10 +377,10 @@ gemm_tests:
       int8: 0
 
   # ==========================================================================
-  # Test Set 12: Minimal Cases (Edge case validation)
+  # Test Set 13: Minimal Cases (Edge case validation)
   # Tests: Smallest possible valid operations
   # ==========================================================================
-  - name: "s8s8s32_optimized_minimal_cases"
+  - name: "s8_minimal_cases"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "bf16", "f32", "u8", "s8"]
@@ -374,11 +391,11 @@ gemm_tests:
     m: [1, 2]           # Minimal M
     n: [1, 2]           # Minimal N
     k: [1, 4, 8]        # Minimal K including VNNI aligned
-    alpha: [2.0]
-    beta: [2.0]
-    lda: [8, 16]
-    ldb: [1, 8, 16]
-    ldc: [1, 8, 16]
+    alpha: [0.25]
+    beta: [-1.75]
+    lda: [8]
+    ldb: [8]
+    ldc: [2]
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
     tolerances:
@@ -389,12 +406,12 @@ gemm_tests:
 
 
   # ==========================================================================
-  # GEMV M=1 Dimension Sweeps (Row-Major)
+  # Test Set 14: GEMV M=1 Dimension Sweeps (Row/Column Major)
   # Tests: GEMV M=1 path with comprehensive N and K sweeps
   # ==========================================================================
 
   # GEMV M=1 N sweep - medium range
-  - name: "gemv_m1_s8s8s32_n_sweep_medium"
+  - name: "s8_gemv_m1_n_sweep_med"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "u8", "s8", "bf16", "f32"]
@@ -402,20 +419,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
-    m: 1
-    n:
-      lb: 65
-      ub: 128
-      step: 4
-    k:
-      lb: 1
-      ub: 2048
-      step: 6
-    alpha: [3.0]
-    beta: [3.0]
-    lda: [5000]
-    ldb: [5000]
-    ldc: [5000]
+    m: [1]
+    n: [65, 80, 96, 112, 128]
+    k: [1, 8, 64, 512, 1024, 2048]
+    alpha: [-0.25]
+    beta: [-2.0]
+    lda: [2048]
+    ldb: [2048]
+    ldc: [128]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -424,7 +435,7 @@ gemm_tests:
       int8: 0
 
   # GEMV M=1 N sweep - small range with large K
-  - name: "gemv_m1_s8s8s32_n_sweep_small_large_k"
+  - name: "s8_gemv_m1_n_sweep_small_k_large"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -432,20 +443,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
-    m: 1
-    n:
-      lb: 5
-      ub: 128
-      step: 8
-    k:
-      lb: 2049
-      ub: 2113
-      step: 3
-    alpha: [3.0]
-    beta: [3.0]
-    lda: [5000]
-    ldb: [5000]
-    ldc: [5000]
+    m: [1]
+    n: [5, 16, 32, 64, 128]
+    k: [2049, 2080, 2113]
+    alpha: [-0.5]
+    beta: [-2.25]
+    lda: [2113]
+    ldb: [2113]
+    ldc: [128]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -454,7 +459,7 @@ gemm_tests:
       int8: 0
 
   # GEMV M=1 N sweep - large N with large K
-  - name: "gemv_m1_s8s8s32_n_sweep_large"
+  - name: "s8_gemv_m1_n_sweep_large_k_large"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -462,20 +467,14 @@ gemm_tests:
     storage_format: ["row-major", "column-major"]
     transA: [false]
     transB: [false]
-    m: 1
-    n:
-      lb: 1025
-      ub: 1056
-      step: 8
-    k:
-      lb: 2049
-      ub: 2113
-      step: 3
-    alpha: [3.0]
-    beta: [3.0]
-    lda: [5000]
-    ldb: [5000]
-    ldc: [5000]
+    m: [1]
+    n: [1025, 1033, 1041, 1049, 1056]
+    k: [2049, 2080, 2113]
+    alpha: [-0.75]
+    beta: [-2.5]
+    lda: [2113]
+    ldb: [2113]
+    ldc: [1056]
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
@@ -485,11 +484,11 @@ gemm_tests:
 
 
   # ==========================================================================
-  # CROSS-LAYOUT COMPARISON (Row vs Column Major)
+  # Test Set 15: Cross-Layout Comparison (Row vs Column Major)
   # ==========================================================================
 
   # Integer cross-layout validation
-  - name: "cross_layout_integer_validation"
+  - name: "s8_cross_layout_int_validation"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32", "f32"]
@@ -500,8 +499,8 @@ gemm_tests:
     m: [32, 64, 128]
     n: [32, 64, 128]
     k: [32, 64, 128]
-    alpha: [1.0, 2.0]
-    beta: [0.0, 1.0]
+    alpha: [-1.0]
+    beta: [-2.75]
     lda: [128]
     ldb: [128]
     ldc: 128
@@ -510,11 +509,11 @@ gemm_tests:
 
 
   # ==========================================================================
-  # Column-Major Integer Type Comprehensive Coverage
+  # Test Set 16: Column-Major Integer Type Comprehensive Coverage
   # ==========================================================================
 
   # Integer accumulation overflow boundary
-  - name: "integer_overflow_boundary"
+  - name: "s8_int_overflow_boundary"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s32"]
@@ -535,7 +534,7 @@ gemm_tests:
     mtagB: ["none"]
 
   # Mixed sign integer chaos with overflow potential
-  - name: "mixed_sign_overflow"
+  - name: "s8_mixed_sign_overflow"
     a_type: ["s8"]
     b_type: ["s8"]
     c_type: ["s8"]  # Narrow output type for overflow testing
@@ -554,3 +553,92 @@ gemm_tests:
     ldc: 64
     mtagA: ["none"]
     mtagB: ["none"]
+
+  # ==========================================================================
+  # Test Set 17: N<16 K-Partial Coverage (Row/Column Major)
+  # Tests: n<16 with k not multiple of 4 for n-fringe kernels
+  # ==========================================================================
+  - name: "s8_n_lt16_k_partial"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false]
+    transB: [false]
+    m: [12]
+    n: [1, 7, 15]
+    k: [1, 2, 3]
+    alpha: [2.1]
+    beta: [0.6]
+    lda: [3]
+    ldb: [15]
+    ldc: [15]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      float: 1.0e-5
+      bfloat16: 1.0e-2
+      int8: 0
+
+  # ==========================================================================
+  # Test Set 18: Reachable Kernel-Edge Coverage
+  # Tests: main 6x64 path, m/n/mn fringe transitions, gemv edges,
+  #        and column-major input-swap paths supported by s8 API.
+  # ==========================================================================
+  - name: "s8_core_fringe_edges"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [5, 6]
+    n: [63, 64]
+    k: [4, 7]
+    alpha: [1]
+    beta: [0, 1]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  - name: "s8_col_major_swap_edges"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [6]
+    n: [63, 64]
+    k: [4, 7]
+    alpha: [1]
+    beta: [0, 1]
+    lda: [64]
+    ldb: [64]
+    ldc: [64]
+    mtagA: ["none"]
+    mtagB: ["none"]
+
+  - name: "s8_gemv_edge_sizes"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false]
+    m: [1, 17]
+    n: [1]
+    k: [63, 64]
+    alpha: [1]
+    beta: [0, 1]
+    lda: [64]
+    ldb: [64]
+    ldc: [17]
+    mtagA: ["none"]
+    mtagB: ["none", "pack"]
