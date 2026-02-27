@@ -58,10 +58,24 @@ function(dlp_define_core_options)
     option(DLP_THREADING_MODEL "Threading model to use" "none")
     dlp_parse_threading_model(${DLP_THREADING_MODEL})
 
+    # Kernel Dispatch Table configuration
+    set(DLP_KDT_TABLE_SIZE "16" CACHE STRING "Kernel Dispatch Table hash table size (default: 16)")
+    set(DLP_KDT_CHAIN_SIZE "128" CACHE STRING "Kernel Dispatch Table chain size per hash bucket (default: 128)")
+
+    # Validate KDT parameters
+    if(NOT DLP_KDT_TABLE_SIZE MATCHES "^[1-9][0-9]*$" OR DLP_KDT_TABLE_SIZE LESS 1)
+        message(FATAL_ERROR "DLP_KDT_TABLE_SIZE must be a positive integer, got: ${DLP_KDT_TABLE_SIZE}")
+    endif()
+    if(NOT DLP_KDT_CHAIN_SIZE MATCHES "^[1-9][0-9]*$" OR DLP_KDT_CHAIN_SIZE LESS 1)
+        message(FATAL_ERROR "DLP_KDT_CHAIN_SIZE must be a positive integer, got: ${DLP_KDT_CHAIN_SIZE}")
+    endif()
+
     # Propagate variables back to the caller
     set(DLP_ENABLE_LOGGING ${DLP_ENABLE_LOGGING} PARENT_SCOPE)
     set(DLP_ENABLE_JIT_DEBUGGING ${DLP_ENABLE_JIT_DEBUGGING} PARENT_SCOPE)
     set(DLP_THREADING_MODEL ${DLP_THREADING_MODEL} PARENT_SCOPE)
     set(DLP_ENABLE_OPENMP ${DLP_ENABLE_OPENMP} PARENT_SCOPE)
     set(DLP_ENABLE_PTHREAD ${DLP_ENABLE_PTHREAD} PARENT_SCOPE)
+    set(DLP_KDT_TABLE_SIZE ${DLP_KDT_TABLE_SIZE} PARENT_SCOPE)
+    set(DLP_KDT_CHAIN_SIZE ${DLP_KDT_CHAIN_SIZE} PARENT_SCOPE)
 endfunction()

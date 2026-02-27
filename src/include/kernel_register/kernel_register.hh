@@ -32,6 +32,7 @@
 #include <set>
 #include <string>
 
+#include "aocl_dlp_config.h"
 #include "cpu_utils/cpu_features.hh"
 #include "kernel_register/kernel_dispatch_table.hh"
 #include "kernel_register/kernel_register_traits.hh"
@@ -495,16 +496,22 @@ class kernelRegister
     }
 };
 
-constexpr inline std::size_t dlpKernelRegisterTableNumBuckets = 200;
-constexpr inline std::size_t dlpKernelRegisterTableChainSize  = 50;
+// DLP_KDT_TABLE_SIZE and DLP_KDT_CHAIN_SIZE are set to 16 and 128 by default,
+// respectively.
+constexpr inline std::size_t dlpKernelRegisterTableNumBuckets =
+    DLP_KDT_TABLE_SIZE;
+constexpr inline std::size_t dlpKernelRegisterTableChainSize =
+    DLP_KDT_CHAIN_SIZE;
 
 /**
  * @brief Default kernel register type for DLP framework
  *
  * Pre-configured kernelRegister using ThreadSafeChainedDispatchTable with
- * optimized parameters for typical DLP workloads (200 buckets × 50 chain size).
+ * optimized default parameters for typical DLP workloads (16 buckets × 128
+ * chain size).
  *
- * MEMORY: ~256-512MB total depending on max_kernel_datatypes
+ * MEMORY: ~256-512MB total depending on max_kernel_datatypes based on an upper
+ *         bound of 1024 buckets x 512 chains.
  * PERFORMANCE: Optimized for 1000+ kernels with <5% collision rate
  */
 using dlpKernelRegister = kernelRegister<

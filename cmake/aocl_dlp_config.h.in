@@ -18,6 +18,10 @@
 #cmakedefine DLP_ENABLE_OPENMP
 #cmakedefine DLP_ENABLE_PTHREAD
 
+// Kernel Dispatch Table configuration
+#define DLP_KDT_TABLE_SIZE @DLP_KDT_TABLE_SIZE@
+#define DLP_KDT_CHAIN_SIZE @DLP_KDT_CHAIN_SIZE@
+
 // Operating System
 #cmakedefine01 DLP_OS_UNIX
 #cmakedefine01 DLP_OS_LINUX

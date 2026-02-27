@@ -69,7 +69,7 @@ using voidFunctorPtr = void*;
  * @tparam CHAIN_SIZE Number of consecutive slots per hash bucket (affects cache
  * behavior)
  */
-template<std::size_t TABLE_SIZE = 1000, std::size_t CHAIN_SIZE = 20>
+template<std::size_t TABLE_SIZE = 16, std::size_t CHAIN_SIZE = 128>
 class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
 {
   public:

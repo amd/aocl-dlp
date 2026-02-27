@@ -59,6 +59,11 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 |                               |              |                                                                    |
 | **Build Target Options**      |              |                                                                    |
 | DLP_EXAMPLES_LINK_STATIC      | ON           | Link examples with static AOCL-DLP library for better performance |
+|                               |              |                                                                    |
+| **Kernel Dispatch Table**     |              |                                                                    |
+| DLP_KDT_TABLE_SIZE            | 16           | Set table size for the Kernel Dispatch Table                       |
+| DLP_KDT_CHAIN_SIZE            | 128          | Set table chain size for the Kernel Dispatch Table                 |
+
 
 **Note:**
 - Options can be set via `-D<option>=<value>` when invoking `cmake`.
@@ -189,6 +194,14 @@ cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo ..
 
 # Coverage build (for code coverage analysis)
 cmake -DCMAKE_BUILD_TYPE=Coverage ..
+```
+
+### Configuring Kernel Dispatch Table Size
+
+By default, the Kernel Dispatch Table (KDT) is configured with 16 buckets and 128 chains for optimal memory usage and quick kernel queries. If necessary, it can be manually configured as below:
+
+```bash
+cmake -DDLP_KDT_TABLE_SIZE=<number_of_buckets> -DDLP_KDT_CHAIN_SIZE=<number_of_chains> ..
 ```
 
 ## Benchmarking
