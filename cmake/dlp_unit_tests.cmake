@@ -24,32 +24,33 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# Get all source files in the amdzen directory recursively, excluding unit tests
-dlp_glob_sources_recursive(AMDZEN_JIT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR})
-list(FILTER AMDZEN_JIT_SOURCES EXCLUDE REGEX ".*/unit_tests/.*")
+function (add_unit_tests_paths)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/src/jit/amdzen/unit_tests)
+endfunction()
 
-# Create object library for AMD Zen JIT code
-add_library(aocl_dlp_jit_amdzen OBJECT ${AMDZEN_JIT_SOURCES})
+# Function to add unit tests from a directory
+# Parameters:
+#   INCLUDE_DIRS - List of include directories for the tests
+#   DEPENDS - List of dependencies (libraries) for the tests (e.g aocl_dlp_classic/aocl_dlp_plus)
+function (dlp_add_unit_tests)
+    set(options "")
+    set(oneValueArgs "")
+    set(multiValueArgs INCLUDE_DIRS DEPENDS)
+    cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
-# Enable position-independent code for the object library
-set_property(TARGET aocl_dlp_jit_amdzen PROPERTY POSITION_INDEPENDENT_CODE ON)
+    # Collect test source files from current directory
+    dlp_glob_sources(OUTPUT TEST_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
 
-# Apply global compiler flags (generic, release/debug, etc.)
-dlp_set_global_compile_flags(aocl_dlp_jit_amdzen)
+    # Add each test file as a separate test
+    foreach(test_source ${TEST_SOURCES})
+        get_filename_component(test_name ${test_source} NAME_WE)
 
-# Apply JIT-specific flags (includes -mcmodel=medium for x86)
-dlp_set_jit_flags(aocl_dlp_jit_amdzen)
-
-# Set include directories - inherit from parent
-target_include_directories(aocl_dlp_jit_amdzen PRIVATE
-    ${DLP_PLUS_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../xbyak  # Access to xbyak headers
-)
-
-# Propagate any JIT-specific definitions if needed
-if(DLP_ENABLE_JIT_DEBUGGING)
-    target_compile_definitions(aocl_dlp_jit_amdzen PRIVATE DLP_JIT_DEBUG=1)
-endif()
-
-# Optional: Log what we're building
-message(STATUS "Building AMD Zen JIT object library (aocl_dlp_jit_amdzen)")
+        dlp_add_test(
+            NAME ${test_name}
+            SOURCES ${test_source}
+            INCLUDE_DIRS ${ARG_INCLUDE_DIRS}
+            DEPENDS ${ARG_DEPENDS}
+        )
+        dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
+    endforeach()
+endfunction()

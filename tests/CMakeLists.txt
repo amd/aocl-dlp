@@ -30,9 +30,6 @@ set(TEST_INCLUDE_DIRS
     ${CMAKE_CURRENT_BINARY_DIR}/classic
 )
 
-# Fetch gtest
-fetch_gtest()
-
 # Fetch yaml-cpp for test configuration
 fetch_yaml_cpp()
 

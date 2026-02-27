@@ -24,32 +24,7 @@
 # EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #
 
-# Get all source files in the amdzen directory recursively, excluding unit tests
-dlp_glob_sources_recursive(AMDZEN_JIT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR})
-list(FILTER AMDZEN_JIT_SOURCES EXCLUDE REGEX ".*/unit_tests/.*")
-
-# Create object library for AMD Zen JIT code
-add_library(aocl_dlp_jit_amdzen OBJECT ${AMDZEN_JIT_SOURCES})
-
-# Enable position-independent code for the object library
-set_property(TARGET aocl_dlp_jit_amdzen PROPERTY POSITION_INDEPENDENT_CODE ON)
-
-# Apply global compiler flags (generic, release/debug, etc.)
-dlp_set_global_compile_flags(aocl_dlp_jit_amdzen)
-
-# Apply JIT-specific flags (includes -mcmodel=medium for x86)
-dlp_set_jit_flags(aocl_dlp_jit_amdzen)
-
-# Set include directories - inherit from parent
-target_include_directories(aocl_dlp_jit_amdzen PRIVATE
-    ${DLP_PLUS_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../xbyak  # Access to xbyak headers
+# Use the reusable function to add unit tests
+dlp_add_unit_tests(
+    INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/include
 )
-
-# Propagate any JIT-specific definitions if needed
-if(DLP_ENABLE_JIT_DEBUGGING)
-    target_compile_definitions(aocl_dlp_jit_amdzen PRIVATE DLP_JIT_DEBUG=1)
-endif()
-
-# Optional: Log what we're building
-message(STATUS "Building AMD Zen JIT object library (aocl_dlp_jit_amdzen)")

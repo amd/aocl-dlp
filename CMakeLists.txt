@@ -50,6 +50,7 @@ include(cmake/dlp_testing.cmake)
 include(cmake/dlp_benchmark.cmake)
 include(cmake/dlp_sanitizers.cmake)
 include(cmake/dlp_pgo.cmake)
+include(cmake/dlp_unit_tests.cmake)
 
 # OS specific CMake modules goes here
 if(UNIX)
@@ -196,7 +197,9 @@ dlp_install_package_config()
 if(BUILD_TESTING)
     message(STATUS "Enabling testing")
     enable_testing()
+    fetch_gtest()
     add_subdirectory(tests)
+    add_unit_tests_paths()
 endif()
 
 # Add benchmarking
