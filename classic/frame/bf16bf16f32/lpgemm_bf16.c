@@ -153,7 +153,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
             }
             // Call lpgemv_n_one kernel
             if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
                                    (bfloat16*)a_use, rs_a_use, cs_a_use, 1,
                                    (bfloat16*)b_use, rs_b_use, cs_b_use, 0, 0,
                                    c_use, rs_c, cs_c, (void*)&alpha,
@@ -260,7 +260,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
 
             if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                 dlp_execute_kernel(
-                    lcntx->dlp_kernel_hndl, 1, nc0, k, (bfloat16*)a_use,
+                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (bfloat16*)a_use,
                     rs_a_use, cs_a_use, 1, (bfloat16*)b_use, rs_b_use, cs_b_use,
                     n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
                     (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
@@ -559,7 +559,7 @@ LPGEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                     // Reorder/Packed B, Reorder/Packed/Unpacked A call.
                     if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                         dlp_execute_kernel(
-                            lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
                             (int16_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
                             (int16_t*)(b_use + (jr * kc0_updated)), rs_b_use,
                             cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
@@ -798,7 +798,7 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
             a_use = cvt_a_buffer_bf16_f32;
 
             if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
                                    (float*)a_use, rs_a_use, cs_a_use, 1,
                                    (float*)b_use, rs_b_use, cs_b_use, 0, 0,
                                    c_use, rs_c, cs_c, (void*)&alpha,
@@ -937,8 +937,8 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 
             if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                 dlp_execute_kernel(
-                    lcntx->dlp_kernel_hndl, 1, nc0, k, (float*)a_use, rs_a_use,
-                    cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use,
+                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float*)a_use,
+                    rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use,
                     n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
                     (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
             } else {
@@ -1267,7 +1267,7 @@ LPGEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                     /*To support AVX2, the DLP_F32 kernels are called.*/
                     if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                         dlp_execute_kernel(
-                            lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
                             (float*)a_use, rs_a_use, cs_a_use, a_block_stride,
                             (float*)(b_use + jr), rs_b_use, cs_b_use, 0, 0,
                             (c_use_ic + jr), rs_c_use, 1, (void*)&alpha,

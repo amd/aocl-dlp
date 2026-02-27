@@ -119,7 +119,7 @@ LPGEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         }
         // Call lpgemv_n_one kernel
         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(lcntx->dlp_kernel_hndl, m, 1, k,
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, 1, k,
                                (bfloat16*)a_use, rs_a_use, cs_a_use, 1,
                                (bfloat16*)b_use, rs_b_use, cs_b_use, 0, 0, c,
                                rs_c, cs_c, (void*)&alpha, (void*)&beta,
@@ -264,7 +264,7 @@ LPGEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         // Reorder/Packed B, Reorder/Packed/Unpacked A call.
         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
             dlp_execute_kernel(
-                lcntx->dlp_kernel_hndl, m, nr0, k, (int16_t*)a_use, rs_a_use,
+                &(lcntx->dlp_kernel_hndl), m, nr0, k, (int16_t*)a_use, rs_a_use,
                 cs_a_use, a_block_stride, (int16_t*)(b_use + (jr * k0_updated)),
                 rs_b_use, cs_b_use, 0, 0, (c + jr), rs_c_use, 1, (void*)&alpha,
                 (void*)&beta, post_op_list, post_ops_attr);

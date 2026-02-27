@@ -119,38 +119,37 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
     }
 
     for (md_t i = 0; i < metadata->seq_length; ++i) {
-        /* group_size that is non-multiple of 4 is supported only when
-         * group_size == k */
         md_t group_size = metadata->group_size;
-        if ((group_size == 0) || (group_size > k) || (group_size == k))
-            group_size = k;
-        else if (metadata->group_size % 4 > 0)
-            return DLP_CLSC_FAILURE;
+        if ((group_size == 0) || (group_size > k)) {
+            return DLP_CLSC_INVALID_GROUP_DIMENSION;
+        } else if (metadata->group_size % 4 > 0) {
+            return DLP_CLSC_INVALID_GROUP_DIMENSION;
+        }
 
         if (metadata->a_zp != NULL) {
             /* check for validity of pre-ops */
             if (((metadata->a_zp)->zero_point_len > 0)
                 && ((metadata->a_zp)->zero_point == NULL))
-                return DLP_CLSC_FAILURE;
+                return DLP_CLSC_NULL_POINTER;
         }
 
         if (metadata->a_scl != NULL) {
             if (((metadata->a_scl)->scale_factor_len > 0)
                 && ((metadata->a_scl)->scale_factor == NULL))
-                return DLP_CLSC_FAILURE;
+                return DLP_CLSC_NULL_POINTER;
         }
 
         if (metadata->b_zp != NULL) {
             /* check for validity of pre-ops */
             if (((metadata->b_zp)->zero_point_len > 0)
                 && ((metadata->b_zp)->zero_point == NULL))
-                return DLP_CLSC_FAILURE;
+                return DLP_CLSC_NULL_POINTER;
         }
 
         if (metadata->b_scl != NULL) {
             if (((metadata->b_scl)->scale_factor_len > 0)
                 && ((metadata->b_scl)->scale_factor == NULL))
-                return DLP_CLSC_FAILURE;
+                return DLP_CLSC_NULL_POINTER;
         }
 
         if ((metadata->a_scl != NULL) && (metadata->b_scl != NULL)
@@ -158,7 +157,7 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
                 != ((metadata->b_scl)->scale_factor_type))) {
             dlp_print_msg(" A and B scale factor type mismatch. Exiting..",
                           __FILE__, __LINE__);
-            return DLP_CLSC_FAILURE;
+            return DLP_CLSC_TYPE_MISMATCH;
         }
 
         // Not supporting zero-point for now.
@@ -166,7 +165,7 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
         // metadata->b_zp )->zero_point_type ) )
         // {
         // 	dlp_print_msg(" A and B zero point type mismatch. Exiting..",
-        // __FILE__, __LINE__ ); 	return DLP_CLSC_FAILURE;
+        // __FILE__, __LINE__ ); 	return DLP_CLSC_TYPE_MISMATCH;
         // }
 
         DLP_TYPE tmp_zp_stor_type =
@@ -239,25 +238,24 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
     }
 
     for (md_t i = 0; i < pre_op_unparsed->seq_length; ++i) {
-
-        /* odd group_size is supported only when group_size == k */
         md_t group_size = pre_op_unparsed->group_size;
-        if ((group_size == 0) || (group_size > k) || (group_size == k))
-            group_size = k;
-        else if (pre_op_unparsed->group_size % 2 == 1)
-            return DLP_CLSC_FAILURE;
+        if ((group_size == 0) || (group_size > k)) {
+            return DLP_CLSC_INVALID_GROUP_DIMENSION;
+        } else if (pre_op_unparsed->group_size % 2 == 1) {
+            return DLP_CLSC_INVALID_GROUP_DIMENSION;
+        }
 
         if (pre_op_unparsed->b_zp != NULL) {
             /* check for validity of pre-ops */
             if (((pre_op_unparsed->b_zp)->zero_point_len > 0)
                 && ((pre_op_unparsed->b_zp)->zero_point == NULL))
-                return DLP_CLSC_FAILURE;
+                return DLP_CLSC_NULL_POINTER;
         }
 
         if (pre_op_unparsed->b_scl != NULL) {
             if (((pre_op_unparsed->b_scl)->scale_factor_len > 0)
                 && ((pre_op_unparsed->b_scl)->scale_factor == NULL))
-                return DLP_CLSC_FAILURE;
+                return DLP_CLSC_NULL_POINTER;
         }
         lpgemm_set_pre_ops_node_params(
             pre_op_list, group_size,
@@ -384,7 +382,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
             dlp_print_msg(
                 " a_post_quant exists but a_pre_quant is NULL. Exiting..",
                 __FILE__, __LINE__);
-            return DLP_CLSC_FAILURE;
+            return DLP_CLSC_NULL_POINTER;
         }
 
         // --- Step 2: Validate scale factor ---
@@ -576,6 +574,24 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                               (metadata->bias + b_i)->zp->zero_point_type)
                         : DLP_INVALID;
 
+                if (((metadata->bias + b_i)->sf
+                     && (metadata->bias + b_i)->sf->scale_factor_len > 0)
+                    && ((metadata->bias + b_i)->sf->scale_factor == NULL)) {
+                    dlp_print_msg(
+                        " BIAS scale_factor is NULL but length > 0. Exiting..",
+                        __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
+
+                if (((metadata->bias + b_i)->zp
+                     && (metadata->bias + b_i)->zp->zero_point_len > 0)
+                    && ((metadata->bias + b_i)->zp->zero_point == NULL)) {
+                    dlp_print_msg(
+                        " BIAS zero_point is NULL but length > 0. Exiting..",
+                        __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
+
                 lpgemm_set_node_params(
                     (post_op_list + i), POST_OPS_BIAS,
                     (metadata->bias + b_i)->bias, meta_arg,
@@ -680,6 +696,16 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                                             ->sf->scale_factor_type)
                         : DLP_INVALID;
 
+                if (((metadata->matrix_add + m_i)->sf
+                     && (metadata->matrix_add + m_i)->sf->scale_factor_len > 0)
+                    && ((metadata->matrix_add + m_i)->sf->scale_factor
+                        == NULL)) {
+                    dlp_print_msg(" MATRIX_ADD scale_factor is NULL but length "
+                                  "> 0. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
+
                 lpgemm_set_node_params(
                     (post_op_list + i), POST_OPS_MATRIX_ADD,
                     (metadata->matrix_add + m_i)->matrix, meta_arg,
@@ -711,6 +737,17 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                         ? get_stor_type((metadata->matrix_mul + mul_i)
                                             ->sf->scale_factor_type)
                         : DLP_INVALID;
+
+                if (((metadata->matrix_mul + mul_i)->sf
+                     && (metadata->matrix_mul + mul_i)->sf->scale_factor_len
+                            > 0)
+                    && ((metadata->matrix_mul + mul_i)->sf->scale_factor
+                        == NULL)) {
+                    dlp_print_msg(" MATRIX_MUL scale_factor is NULL but length "
+                                  "> 0. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
 
                 lpgemm_set_node_params(
                     (post_op_list + i), POST_OPS_MATRIX_MUL,

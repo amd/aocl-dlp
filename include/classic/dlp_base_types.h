@@ -66,8 +66,11 @@
 #if defined(__GNUC__) || defined(__clang__) || defined(__ICC)                  \
     || defined(__IBMC__)
 #define DLP_CLASSIC_THREAD_LOCAL __thread
+#elif defined(_MSC_VER)
+#define DLP_CLASSIC_THREAD_LOCAL __declspec(thread)
 #else
 #define DLP_CLASSIC_THREAD_LOCAL
+#error "Thread-local storage not supported on this compiler"
 #endif
 
 #ifdef DLP_CLASSIC_ARCH_64

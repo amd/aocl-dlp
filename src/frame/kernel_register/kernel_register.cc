@@ -30,6 +30,10 @@
 
 namespace dlp::kernel_frame {
 
+// Thread-local Tier 2 fallback storage for when kernel overflow occurs in
+// global ThreadSafeChainedDispatchTable after it is full.
+thread_local ThreadLocalFallbackKernelStorage tlsTier2KernelStorage;
+
 std::mutex         storedKernelWatcher::mtx;
 std::vector<void*> storedKernelWatcher::valueSink;
 std::set<void*>    storedKernelWatcher::valueSet;

@@ -171,7 +171,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
             }
 
             /* Call GEMV n=1 kernel - JIT only, no intrinsic fallback */
-            dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
                                (float16*)a_ic, rs_a_use, cs_a_use, 1,
                                (float16*)b_use, rs_b_use, cs_b_use, 0, 0, c_use,
                                rs_c, cs_c, (void*)&alpha, (void*)&beta,
@@ -286,7 +286,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
              * JIT only - no intrinsic fallback
              */
             dlp_execute_kernel(
-                lcntx->dlp_kernel_hndl, 1, nc0, k, (float16*)a_use, rs_a_use,
+                &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float16*)a_use, rs_a_use,
                 cs_a_use, 1, (float16*)b_use, rs_b_use, cs_b_use, n_sub_updated,
                 jc_cur_loop_rem, c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
                 post_op_list, post_ops_attr);
@@ -529,11 +529,11 @@ LPGEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                     const float16* b_jr = b_use + (jr * ps_b_use);
 
                     dlp_execute_kernel(
-                        lcntx->dlp_kernel_hndl, mc0, nr0, kc0, (float16*)a_use,
-                        rs_a_use, cs_a_use, ps_a_use, (float16*)b_jr, rs_b_use,
-                        cs_b_use, 0, 0, (float16*)c_use_ic + jr, rs_c_use, 1,
-                        (void*)&alpha, (void*)&beta0, post_op_list,
-                        post_ops_attr);
+                        &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
+                        (float16*)a_use, rs_a_use, cs_a_use, ps_a_use,
+                        (float16*)b_jr, rs_b_use, cs_b_use, 0, 0,
+                        (float16*)c_use_ic + jr, rs_c_use, 1, (void*)&alpha,
+                        (void*)&beta0, post_op_list, post_ops_attr);
                 }
             }
         }

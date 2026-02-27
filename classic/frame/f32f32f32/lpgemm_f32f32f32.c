@@ -240,7 +240,7 @@ LPGEMV(float, float, float, f32f32f32of32)
             }
 
             if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
                                    (float*)a_use, rs_a_use, cs_a_use, 1,
                                    (float*)b_use, rs_b_use, cs_b_use, 0, 0,
                                    c_use, rs_c, cs_c, (void*)&alpha,
@@ -358,8 +358,8 @@ LPGEMV(float, float, float, f32f32f32of32)
             // Call kernel
             if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                 dlp_execute_kernel(
-                    lcntx->dlp_kernel_hndl, 1, nc0, k, (float*)a_use, rs_a_use,
-                    cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use,
+                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float*)a_use,
+                    rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use,
                     n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
                     (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
             } else {
@@ -651,7 +651,7 @@ LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                     // Call the micro-kernel
                     if ((lcntx->dlp_kernel_hndl.kernel_base != NULL)) {
                         dlp_execute_kernel(
-                            lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
                             (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
                             (float*)(b_use + (jr * ps_b_use)), rs_b_use,
                             cs_b_use, 0, 0, (c_use_ic + jr * cs_c_use), rs_c,

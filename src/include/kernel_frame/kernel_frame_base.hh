@@ -32,6 +32,7 @@
 #include <memory>
 #include <vector>
 
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "classic/aocl_bf16_type.h"
 #include "classic/dlp_base_types.h"
 #include "utils/type_utils.hh"

@@ -199,10 +199,10 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
         post_ops_attr.post_op_c_j = 0;
 
         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(lcntx->dlp_kernel_hndl, m, 1, k, (float*)a_use,
-                               rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use,
-                               cs_b_use, 0, 0, c, rs_c, cs_c, (void*)&alpha,
-                               (void*)&beta, post_op_list, post_ops_attr);
+            dlp_execute_kernel(
+                &(lcntx->dlp_kernel_hndl), m, 1, k, (float*)a_use, rs_a_use,
+                cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use, 0, 0, c, rs_c,
+                cs_c, (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
         } else {
             ker_fp(m, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
                    cs_b_use, mtag_b, c, rs_c, cs_c, alpha, beta, MR, k,
@@ -281,11 +281,11 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
         post_ops_attr.post_op_c_j = 0;
 
         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(lcntx->dlp_kernel_hndl, 1, n, k, (float*)a_use,
-                               rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use,
-                               cs_b_use, n_sub_updated, jc_loop_rem, c, rs_c,
-                               cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-                               post_ops_attr);
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), 1, n, k,
+                               (float*)a_use, rs_a_use, cs_a_use, 1,
+                               (float*)b_use, rs_b_use, cs_b_use, n_sub_updated,
+                               jc_loop_rem, c, rs_c, cs_c, (void*)&alpha,
+                               (void*)&beta, post_op_list, post_ops_attr);
         } else {
             (ker_fp)(n, k, (float*)a_use, rs_a_use, cs_a_use, mtag_a,
                      (float*)b_use, rs_b_use, cs_b_use, mtag_b, c, rs_c, cs_c,
@@ -376,7 +376,7 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
     // In this case, k=1 JIT kernel should not be invoked.
     if ((k == 1) && ((cs_b == 1))
         && (lcntx->dlp_kernel_hndl.kernel_base != NULL)) {
-        dlp_execute_kernel(lcntx->dlp_kernel_hndl, m, n, k, (float*)a, rs_a,
+        dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, n, k, (float*)a, rs_a,
                            cs_a, MR * rs_a, (float*)b, rs_b, cs_b, 0, 0, c,
                            rs_c, cs_c, (void*)&alpha, (void*)&beta,
                            post_op_list, post_ops_attr);
@@ -433,7 +433,7 @@ LPGEMM_TINY(float, float, float, f32f32f32of32)
 
         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
             dlp_execute_kernel(
-                lcntx->dlp_kernel_hndl, m, nr0, k, (float*)a_use, rs_a_use,
+                &(lcntx->dlp_kernel_hndl), m, nr0, k, (float*)a_use, rs_a_use,
                 cs_a_use, ps_a_use, (float*)(b_use + (jr * ps_b_use)), rs_b_use,
                 cs_b_use, 0, 0, (c + jr * cs_c_use), rs_c, cs_c_use,
                 (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);

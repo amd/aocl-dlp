@@ -35,6 +35,7 @@
 #include "aocl_dlp_config.h"
 #include "cpu_utils/cpu_features.hh"
 #include "kernel_register/kernel_dispatch_table.hh"
+#include "kernel_register/kernel_fallback_storage.hh"
 #include "kernel_register/kernel_register_traits.hh"
 #include "kernels/kernel_base.hh"
 #include "utils/macro_utils.hh"
@@ -170,6 +171,10 @@ using kernelBaseRef = utils::ptrWrapper<kernels::kernelBase,
                                         kernels::kernelParams,
                                         kernels::kernelError>;
 
+// Forward declare thread-local tier 2 storage
+// Actual definition in kernel_register.cc
+extern thread_local ThreadLocalFallbackKernelStorage tlsTier2KernelStorage;
+
 /**
  * @brief Singleton registry for micro-kernels with thread-safe dispatch
  *
@@ -245,6 +250,12 @@ class kernelRegister
     // 2D array of dispatch tables: vecKDTs[routine_type][datatype]
     std::vector<std::vector<KERN_DISPATCH_TABLE>> vecKDTs;
 
+    // This is usually called in the slow path, so both the tier 1 and tier
+    // 2 insertion logic is fused together in this function. The same wont
+    // be the case for getKernel since get operation is expected to be in
+    // the fast path. There will be a getKernel and a getKernelFallback where
+    // getKernel will only look at tier 1 and getKernelFallback will look at
+    // only tier 2.
     template<typename HASH_KEY_GETTER,
              typename KEY_COMPARATOR,
              typename KEY_TYPE,
@@ -278,22 +289,38 @@ class kernelRegister
         // This boolean will be used to track if the kernel was inserted
         // at least once, and if not to free the kernel pointer. Insertion
         // in atleast one kernel table will ensure its cleaned up properly.
-        bool isInsertedAtleastOnce = false;
-        auto routineIdx            = utils::getUnderlyingValueOfEnum(kType);
+        bool isInsertedAtleastOnceTier1 = false;
+        bool isInsertedAtleastOnceTier2 = false;
+        auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
         for (auto ele : kDTypes) {
-            auto idx    = utils::getUnderlyingValueOfEnum(ele);
-            auto retPtr = vecKDTs[routineIdx][idx]
-                              .template insert<HASH_KEY_GETTER, KEY_COMPARATOR,
-                                               KEY_TYPE, VALUE_WATCHER>(kI, kB);
-            if (retPtr != nullptr) {
-                isInsertedAtleastOnce = true;
+            auto idx = utils::getUnderlyingValueOfEnum(ele);
+            auto retPtr =
+                vecKDTs[routineIdx][idx]
+                    .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
+                                     VALUE_WATCHER, kernels::kernelBase>(kI,
+                                                                         kB);
+
+            // If insertion in tier 1 dispatch table fails, attempt to insert in
+            // tier 2 fallback storage. The kernel is guaranteed to be inserted
+            // in at least one of the two tiers.
+            if (!retPtr) {
+                retPtr = tlsTier2KernelStorage.insertAndGet(kB, kType, ele);
+                if (retPtr) {
+                    isInsertedAtleastOnceTier2 = true;
+                }
+            } else {
+                isInsertedAtleastOnceTier1 = true;
             }
         }
 
-        if (!isInsertedAtleastOnce) {
+        if (!isInsertedAtleastOnceTier1 && !isInsertedAtleastOnceTier2) {
             // NOTE: The std::default_delete in std::unique_ptr maps to delete.
             delete kB;
             return kernelFrameError::failure;
+        } else if (isInsertedAtleastOnceTier1 && isInsertedAtleastOnceTier2) {
+            // The tier 1 table is already tracking the kernel, so we ask
+            // tier2 storage to not track the kernel pointer.
+            tlsTier2KernelStorage.donotTrackKernelPtr(kB);
         }
 
         return kernelFrameError::success;
@@ -329,13 +356,17 @@ class kernelRegister
         auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
         auto idx        = utils::getUnderlyingValueOfEnum(kDtype);
 
-        // Safe to cast the voidFunctorPtr to kernelBase* because it is
-        // guaranteed that kernelBase* was typecasted to voidFunctorPtr in
-        // insert operation.
-        auto kernPtr = reinterpret_cast<kernels::kernelBase*>(
+        auto kernPtr =
             vecKDTs[routineIdx][idx]
                 .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                                 VALUE_WATCHER>(kI, kB));
+                                 VALUE_WATCHER, kernels::kernelBase>(kI, kB);
+
+        // If insertion in tier 1 dispatch table fails, attempt to insert in
+        // tier 2 fallback storage. The kernel is guaranteed to be inserted
+        // in at least one of the two tiers.
+        if (!kernPtr) {
+            kernPtr = tlsTier2KernelStorage.insertAndGet(kB, kType, kDtype);
+        }
 
         if (!kernPtr) {
             // NOTE: The std::default_delete in std::unique_ptr maps to delete.
@@ -356,19 +387,20 @@ class kernelRegister
         auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
         auto dtypeIdx   = utils::getUnderlyingValueOfEnum(kDtype);
 
-        // Safe to cast the voidFunctorPtr to kernelBase* because it is
-        // guaranteed that kernelBase* was typecasted to voidFunctorPtr in
-        // insert operation.
-        auto kB = reinterpret_cast<kernels::kernelBase*>(
-            vecKDTs[routineIdx][dtypeIdx]
-                .template query<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE>(kI));
+        auto kB = vecKDTs[routineIdx][dtypeIdx]
+                      .template query<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
+                                      kernels::kernelBase>(kI);
 
-        // Cannot throw an exception here because this function is called by the
-        // user and its not necessary to have the kernel inserted by the time
-        // query is called.
-        if (!kB) {
-            return kernelBaseRef(nullptr);
-        }
+        return kernelBaseRef(kB);
+    }
+
+    template<typename KEY_COMPARATOR, typename KEY_TYPE>
+    [[nodiscard]] kernelBaseRef getKernelFallback(KEY_TYPE*         kI,
+                                                  kernelRoutineType kType,
+                                                  kernelDatatype    kDtype)
+    {
+        auto kB = tlsTier2KernelStorage.query<KEY_COMPARATOR, KEY_TYPE>(
+            kType, kDtype, kI);
 
         return kernelBaseRef(kB);
     }
@@ -458,6 +490,28 @@ class kernelRegister
                                               kernelDatatype kDtype)
     {
         return getKernel<gemmHashKeyGetter, gemmKeyComparator, kernelInfo>(
+            kI, kernelRoutineType::gemm, kDtype);
+    }
+
+    /**
+     * @brief Retrieves reference to registered GEMM kernel in the fallback
+     * or tier 2 storage.
+     *
+     * Looks up previously registered kernel by kernelInfo and datatype.
+     * Returns reference to kernel pointer ready for execution.
+     *
+     * THREAD SAFETY: Thread-safe since the underlying fallback storage is
+     * thread-local and does not require synchronization for access.
+     *
+     * @param kI Pointer to kernelInfo describing required kernel parameters
+     * @param kDtype Datatype for kernel lookup
+     * @return Function pointer to kernel execution function, or nullptr if not
+     * found
+     */
+    [[nodiscard]] kernelBaseRef getGemmKernelFallback(kernelInfo*    kI,
+                                                      kernelDatatype kDtype)
+    {
+        return getKernelFallback<gemmKeyComparator, kernelInfo>(
             kI, kernelRoutineType::gemm, kDtype);
     }
 

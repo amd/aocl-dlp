@@ -153,6 +153,14 @@ static dlp::kernel_frame::kernelBaseRef
 dlp_generate_jit_kernel(dlp::kernel_frame::kernelInfo& fastKI,
                         kernelDatatype                 kDType)
 {
+    // First check if the kernel is already present in the fallback table
+    // in kernel register.
+    auto fallKernPtr =
+        dlpKernelRegisterInstance().getGemmKernelFallback(&fastKI, kDType);
+    if (fallKernPtr) {
+        return fallKernPtr;
+    }
+
     auto jitGen = dlpJitGeneratorRegisterInstance().getGemmJitGenerator(kDType);
     auto kB =
         std::make_unique<jitKernelAdapter>(fastKI, std::move(jitGen), true);
@@ -163,22 +171,25 @@ dlp_generate_jit_kernel(dlp::kernel_frame::kernelInfo& fastKI,
         dlpKernelRegisterInstance().registerEmptyGemmKernel(fastKI, kDType);
     } else {
         // Generate datatype-specific kernel name for proper registry
-        // management
+        // management.
         std::string kernelName = get_kernel_family_name(kDType);
         auto        retVal     = dlpKernelRegisterInstance().registerGemmKernel(
             std::move(kB), std::move(kernelName));
         if (retVal != kernelFrameError::success) {
-            // TODO: Failure to register most probably means the kernel
-            // table is full. Fall back to dlp classic for now. Need to
-            // add a mechanism to ensure further kernel registration for
-            // kDType wont happen. Replacement of kernels in table can also
-            // be considered at a later point.
-            std::cerr << "JIT kernel registration failed for datatype: "
-                      << static_cast<int>(kDType) << std::endl;
+            std::cerr << "Kernel table insertion failed for datatype: "
+                      << static_cast<int>(kDType) << ". Fatal Error."
+                      << std::endl;
         }
     }
 
-    return dlpKernelRegisterInstance().getGemmKernel(&fastKI, kDType);
+    auto kernPtr = dlpKernelRegisterInstance().getGemmKernel(&fastKI, kDType);
+    if (kernPtr.isValid()) {
+        return kernPtr;
+    } else {
+        // The fallback is guaranteed to work at this point.
+        return dlpKernelRegisterInstance().getGemmKernelFallback(&fastKI,
+                                                                 kDType);
+    }
 }
 
 // Do NOT add likely/unlikely hints or __builtin_expect to the if-conditions
@@ -214,6 +225,10 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
                              md_t               c_downscale,
                              dlp_kernel_hndl_t* kernel_hndl)
 {
+    if (!kernel_hndl) {
+        return;
+    }
+
     kernelDatatype kDType = getKernelDatatype(k_dtype);
     if (kDType == kernelDatatype::invalid) {
         kernel_hndl->kernel_base = nullptr;
@@ -259,7 +274,7 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
 __attribute__((always_inline))
 #endif
 void
-dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
+dlp_execute_kernel(dlp_kernel_hndl_t*  kernel_hndl,
                    md_t                m,
                    md_t                n,
                    md_t                k,
@@ -280,9 +295,13 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                    lpgemm_post_op*     post_ops_list,
                    lpgemm_post_op_attr post_ops_attr)
 {
+    if (!kernel_hndl || !kernel_hndl->kernel_base) {
+        return;
+    }
+
     // Dont use new/delete and malloc/free calls here, since they are lock
     // based and will result in performance degradation.
-    if (kernel_hndl.mr == 1) {
+    if (kernel_hndl->mr == 1) {
         gemvM1Params gemvM1ParamsIn{ A,
                                      B,
                                      C,
@@ -300,15 +319,15 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                                      beta,
                                      post_ops_list,
                                      post_ops_attr };
-        kernelBase*  kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
+        kernelBase*  kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
         kB->operator()(std::addressof(gemvM1ParamsIn));
-    } else if (kernel_hndl.nr == 1) {
+    } else if (kernel_hndl->nr == 1) {
         gemvN1Params gemvN1ParamsIn{
             A,    B,    C,    m,     k,    rs_a,          cs_a,         rs_b,
             cs_b, rs_c, cs_c, alpha, beta, post_ops_list, post_ops_attr
         };
 
-        kernelBase* kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
+        kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
         kB->operator()(std::addressof(gemvN1ParamsIn));
     } else {
         gemmParams gemmParamsIn{ A,
@@ -329,7 +348,7 @@ dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
                                  post_ops_list,
                                  post_ops_attr };
 
-        kernelBase* kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
+        kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
         kB->operator()(std::addressof(gemmParamsIn));
     }
 

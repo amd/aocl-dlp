@@ -41,6 +41,7 @@ template<typename T,
          typename KEY_COMPARATOR,
          typename KEY_TYPE,
          typename VALUE_REPLACER,
+         typename VALUE_TYPE,
          typename = void>
 struct has_insert_method : std::false_type
 {};
@@ -49,18 +50,21 @@ template<typename T,
          typename HASH_KEY_GETTER,
          typename KEY_COMPARATOR,
          typename KEY_TYPE,
-         typename VALUE_REPLACER>
+         typename VALUE_REPLACER,
+         typename VALUE_TYPE>
 struct has_insert_method<
     T,
     HASH_KEY_GETTER,
     KEY_COMPARATOR,
     KEY_TYPE,
     VALUE_REPLACER,
+    VALUE_TYPE,
     std::void_t<decltype(std::declval<T>()
                              .template insert<HASH_KEY_GETTER,
                                               KEY_COMPARATOR,
                                               KEY_TYPE,
-                                              VALUE_REPLACER>(
+                                              VALUE_REPLACER,
+                                              VALUE_TYPE>(
                                  std::declval<KEY_TYPE*>(),
                                  std::declval<voidFunctorPtr>()))>>
     : std::true_type
@@ -71,6 +75,7 @@ template<typename T,
          typename HASH_KEY_GETTER,
          typename KEY_COMPARATOR,
          typename KEY_TYPE,
+         typename VALUE_TYPE,
          typename = void>
 struct has_query_method : std::false_type
 {};
@@ -78,16 +83,20 @@ struct has_query_method : std::false_type
 template<typename T,
          typename HASH_KEY_GETTER,
          typename KEY_COMPARATOR,
-         typename KEY_TYPE>
+         typename KEY_TYPE,
+         typename VALUE_TYPE>
 struct has_query_method<
     T,
     HASH_KEY_GETTER,
     KEY_COMPARATOR,
     KEY_TYPE,
-    std::void_t<
-        decltype(std::declval<T>()
-                     .template query<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE>(
-                         std::declval<KEY_TYPE*>()))>> : std::true_type
+    VALUE_TYPE,
+    std::void_t<decltype(std::declval<T>()
+                             .template query<HASH_KEY_GETTER,
+                                             KEY_COMPARATOR,
+                                             KEY_TYPE,
+                                             VALUE_TYPE>(
+                                 std::declval<KEY_TYPE*>()))>> : std::true_type
 {};
 
 // Detects: T.getValues<VALUE_TYPE>()
@@ -121,24 +130,29 @@ template<typename T,
          typename HASH_KEY_GETTER,
          typename KEY_COMPARATOR,
          typename KEY_TYPE,
-         typename VALUE_REPLACER>
-using insert_return_type = decltype(std::declval<T>()
-                                        .template insert<HASH_KEY_GETTER,
-                                                         KEY_COMPARATOR,
-                                                         KEY_TYPE,
-                                                         VALUE_REPLACER>(
-                                            std::declval<KEY_TYPE*>(),
-                                            std::declval<voidFunctorPtr>()));
+         typename VALUE_REPLACER,
+         typename VALUE_TYPE>
+using insert_return_type =
+    decltype(std::declval<T>()
+                 .template insert<HASH_KEY_GETTER,
+                                  KEY_COMPARATOR,
+                                  KEY_TYPE,
+                                  VALUE_REPLACER,
+                                  VALUE_TYPE>(std::declval<KEY_TYPE*>(),
+                                              std::declval<voidFunctorPtr>()));
 
 // Extract return type of query() method
 template<typename T,
          typename HASH_KEY_GETTER,
          typename KEY_COMPARATOR,
-         typename KEY_TYPE>
+         typename KEY_TYPE,
+         typename VALUE_TYPE>
 using query_return_type =
     decltype(std::declval<T>()
-                 .template query<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE>(
-                     std::declval<KEY_TYPE*>()));
+                 .template query<HASH_KEY_GETTER,
+                                 KEY_COMPARATOR,
+                                 KEY_TYPE,
+                                 VALUE_TYPE>(std::declval<KEY_TYPE*>()));
 
 // Extract return type of getValues() method
 template<typename T, typename VALUE_TYPE>
@@ -165,9 +179,10 @@ hasDispatchTableInterface_v()
     // Step 1: Check if all required methods exist
     constexpr bool has_insert =
         has_insert_method<T, HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                          VALUE_REPLACER>::value;
+                          VALUE_REPLACER, VALUE_TYPE>::value;
     constexpr bool has_query =
-        has_query_method<T, HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE>::value;
+        has_query_method<T, HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
+                         VALUE_TYPE>::value;
     constexpr bool has_getValues = has_getValues_method<T, VALUE_TYPE>::value;
     constexpr bool has_getKeys   = has_getKeys_method<T, KEY_TYPE>::value;
 
@@ -178,11 +193,12 @@ hasDispatchTableInterface_v()
         // Step 2: Check return types (only if all methods exist)
         constexpr bool correct_insert_return = std::is_same_v<
             insert_return_type<T, HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                               VALUE_REPLACER>,
-            voidFunctorPtr>;
-        constexpr bool correct_query_return = std::is_same_v<
-            query_return_type<T, HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE>,
-            voidFunctorPtr>;
+                               VALUE_REPLACER, VALUE_TYPE>,
+            VALUE_TYPE*>;
+        constexpr bool correct_query_return =
+            std::is_same_v<query_return_type<T, HASH_KEY_GETTER, KEY_COMPARATOR,
+                                             KEY_TYPE, VALUE_TYPE>,
+                           VALUE_TYPE*>;
         constexpr bool correct_getValues_return =
             std::is_same_v<getValues_return_type<T, VALUE_TYPE>,
                            std::vector<VALUE_TYPE*>>;

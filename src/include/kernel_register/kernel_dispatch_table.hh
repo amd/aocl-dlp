@@ -138,8 +138,9 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
     template<typename HASH_KEY_GETTER,
              typename KEY_COMPARATOR,
              typename KEY_TYPE,
-             typename VALUE_WATCHER>
-    voidFunctorPtr insert(KEY_TYPE* key, voidFunctorPtr value)
+             typename VALUE_WATCHER,
+             typename VALUE_TYPE = void>
+    VALUE_TYPE* insert(KEY_TYPE* key, voidFunctorPtr value)
     {
         if ((!key) || (!value)) {
             return nullptr;
@@ -202,7 +203,7 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                     // table[i].value, backup table or the VALUE_WATCHER. So
                     // the value can be safely returned to the caller in this
                     // instance of insert call.
-                    return value;
+                    return reinterpret_cast<VALUE_TYPE*>(value);
                 }
             }
         }
@@ -236,7 +237,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                     // It is guaranteed table[i].value.load = value here.
                     // This is because we are inside a lock and all the
                     // stores to table[i].value are serialized.
-                    return table[i].value.load(std::memory_order_relaxed);
+                    return reinterpret_cast<VALUE_TYPE*>(
+                        table[i].value.load(std::memory_order_relaxed));
                 }
             } else {
                 // The first non-occupied slot is found, so we need to add the
@@ -246,7 +248,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                 // This will synchronize with the acquire operation in the query
                 // path.
                 table[i].isOccupied.store(true, std::memory_order_release);
-                return table[i].value;
+                return reinterpret_cast<VALUE_TYPE*>(
+                    table[i].value.load(std::memory_order_relaxed));
             }
         }
 
@@ -262,7 +265,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                         backupTable[i].value.store(value,
                                                    std::memory_order_relaxed);
                     }
-                    return backupTable[i].value.load(std::memory_order_relaxed);
+                    return reinterpret_cast<VALUE_TYPE*>(
+                        backupTable[i].value.load(std::memory_order_relaxed));
                 }
             } else {
                 VALUE_WATCHER{}(value);
@@ -271,7 +275,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                 // query path.
                 backupTable[i].isOccupied.store(true,
                                                 std::memory_order_release);
-                return backupTable[i].value;
+                return reinterpret_cast<VALUE_TYPE*>(
+                    backupTable[i].value.load(std::memory_order_relaxed));
             }
         }
 
@@ -305,8 +310,9 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
      */
     template<typename HASH_KEY_GETTER,
              typename KEY_COMPARATOR,
-             typename KEY_TYPE>
-    voidFunctorPtr query(KEY_TYPE* key) const
+             typename KEY_TYPE,
+             typename VALUE_TYPE = void>
+    VALUE_TYPE* query(KEY_TYPE* key) const
     {
         if (!key) {
             return nullptr;
@@ -321,7 +327,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
             // path.
             if (table[i].isOccupied.load(std::memory_order_acquire)) {
                 if (KEY_COMPARATOR{}(table[i].key, key)) {
-                    return table[i].value.load(std::memory_order_relaxed);
+                    return reinterpret_cast<VALUE_TYPE*>(
+                        table[i].value.load(std::memory_order_relaxed));
                 }
             }
         }
@@ -329,7 +336,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
         for (std::size_t i = 0; i < TABLE_SIZE; ++i) {
             if (backupTable[i].isOccupied.load(std::memory_order_acquire)) {
                 if (KEY_COMPARATOR{}(backupTable[i].key, key)) {
-                    return backupTable[i].value.load(std::memory_order_relaxed);
+                    return reinterpret_cast<VALUE_TYPE*>(
+                        backupTable[i].value.load(std::memory_order_relaxed));
                 }
             }
         }

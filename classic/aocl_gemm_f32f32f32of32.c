@@ -462,49 +462,11 @@ aocl_gemm_f32f32f32of32(const char      order,
         (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
         lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32, &lcntx_l.dlp_kernel_hndl);
 
-    // if kernel_hndl is NULL and cs_c!=1, then we need to induce transpose
-    // and set mtag of both matrices to PACK.
-    if ((lcntx_l.dlp_kernel_hndl.kernel_base == NULL) && (cs_c_use != 1)) {
-        if (order == 'r') {
-            // copy the original values
-            m_use     = m;
-            n_use     = n;
-            a_use     = a;
-            b_use     = b;
-            rs_a_use  = rs_a;
-            cs_a_use  = cs_a;
-            rs_b_use  = rs_b;
-            cs_b_use  = cs_b;
-            rs_c_use  = rs_c;
-            cs_c_use  = cs_c;
-            order_use = order;
-        } else { // order == 'c'
-            // induce transpose
-            m_use     = n;
-            n_use     = m;
-            a_use     = b;
-            b_use     = a;
-            rs_a_use  = rs_b;
-            cs_a_use  = cs_b;
-            rs_b_use  = rs_a;
-            cs_b_use  = cs_a;
-            rs_c_use  = rs_c;
-            cs_c_use  = cs_c;
-            order_use = order;
-        }
-
-        // setting both the matrices to PACK
-        mtag_a_use = PACK;
-        mtag_b_use = PACK;
-
-        // re-translate the post-ops list based on the new values
-        err = lpgemm_translate_to_post_ops_list(
-            metadata, post_op_list, (void*)c_use, (void*)(&order_use), m, n);
-
-        if (err != DLP_CLSC_SUCCESS) {
-            DLP_METADATA_SET_ERROR(metadata, err);
-            goto err_hndl;
-        }
+    // Invalid handle means that the jit kernel generation has failed. Do not
+    // attempt to execute the kernel, and return an error instead.
+    if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
     }
 
     if (is_single_thread(&rntm_g) == TRUE) {

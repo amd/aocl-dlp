@@ -223,13 +223,18 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         // All the g_sz inputs in a given group will have the same matrix
         // dimensions/attributes. Therefore the DE and Jit generation in
         // DLP Plus can proceed with any 1 input from this group.
-        if (g_sz > 0) {
-            dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_U8S8S32OS32, order[gc_i], mtag_a, mtag_b, m_local,
-                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
-                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
-                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S32,
-                &lcntx_l.dlp_kernel_hndl);
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_U8S8S32OS32, order[gc_i], mtag_a, mtag_b, m_local,
+            n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+            (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S32,
+            &lcntx_l.dlp_kernel_hndl);
+
+        // Invalid handle means that the jit kernel generation has failed. Do
+        // not attempt to execute the kernel, and return an error instead.
+        if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
@@ -440,13 +445,18 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         // All the g_sz inputs in a given group will have the same matrix
         // dimensions/attributes. Therefore the DE and Jit generation in
         // DLP Plus can proceed with any 1 input from this group.
-        if (g_sz > 0) {
-            dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_U8S8S32OS8, order[gc_i], mtag_a, mtag_b, m_local,
-                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
-                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
-                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S8,
-                &lcntx_l.dlp_kernel_hndl);
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_U8S8S32OS8, order[gc_i], mtag_a, mtag_b, m_local,
+            n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+            (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S8,
+            &lcntx_l.dlp_kernel_hndl);
+
+        // Invalid handle means that the jit kernel generation has failed. Do
+        // not attempt to execute the kernel, and return an error instead.
+        if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
@@ -658,13 +668,18 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         // All the g_sz inputs in a given group will have the same matrix
         // dimensions/attributes. Therefore the DE and Jit generation in
         // DLP Plus can proceed with any 1 input from this group.
-        if (g_sz > 0) {
-            dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_U8S8S32OF32, order[gc_i], mtag_a, mtag_b, m_local,
-                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
-                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
-                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
-                &lcntx_l.dlp_kernel_hndl);
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_U8S8S32OF32, order[gc_i], mtag_a, mtag_b, m_local,
+            n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+            (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
+            &lcntx_l.dlp_kernel_hndl);
+
+        // Invalid handle means that the jit kernel generation has failed. Do
+        // not attempt to execute the kernel, and return an error instead.
+        if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
@@ -869,13 +884,18 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         // All the g_sz inputs in a given group will have the same matrix
         // dimensions/attributes. Therefore the DE and Jit generation in
         // DLP Plus can proceed with any 1 input from this group.
-        if (g_sz > 0) {
-            dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_U8S8S32OBF16, order[gc_i], mtag_a, mtag_b, m_local,
-                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
-                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
-                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
-                &lcntx_l.dlp_kernel_hndl);
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_U8S8S32OBF16, order[gc_i], mtag_a, mtag_b, m_local,
+            n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+            (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
+            &lcntx_l.dlp_kernel_hndl);
+
+        // Invalid handle means that the jit kernel generation has failed. Do
+        // not attempt to execute the kernel, and return an error instead.
+        if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
@@ -1086,13 +1106,18 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         // All the g_sz inputs in a given group will have the same matrix
         // dimensions/attributes. Therefore the DE and Jit generation in
         // DLP Plus can proceed with any 1 input from this group.
-        if (g_sz > 0) {
-            dlp_init_and_get_kernel_hndl(
-                DLP_KERNEL_U8S8S32OU8, order[gc_i], mtag_a, mtag_b, m_local,
-                n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
-                (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
-                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_U8,
-                &lcntx_l.dlp_kernel_hndl);
+        dlp_init_and_get_kernel_hndl(
+            DLP_KERNEL_U8S8S32OU8, order[gc_i], mtag_a, mtag_b, m_local,
+            n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+            (void*)&alpha[gc_i], (void*)&beta[gc_i], post_op_list,
+            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_U8,
+            &lcntx_l.dlp_kernel_hndl);
+
+        // Invalid handle means that the jit kernel generation has failed. Do
+        // not attempt to execute the kernel, and return an error instead.
+        if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
         }
 
         // Create ops bundle for standard GEMM (post-ops only)

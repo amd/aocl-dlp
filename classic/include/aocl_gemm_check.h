@@ -242,7 +242,7 @@
         AOCL_ERROR_CHECK(op_str, arg_pos, err_no);                             \
     }
 
-#define AOCL_BATCH_GEMM_CHECK(op_str, order, transa, transb, group_count,      \
+#define AOCL_BATCH_GEMM_CHECK(op_str, order, transa, transb, group_count_idx,  \
                               group_size, m, n, k, a, lda, mtag_a, b, ldb,     \
                               mtag_b, c, ldc, err_no)                          \
     {                                                                          \
@@ -316,7 +316,7 @@
         } else if (col_stored && (ldc < m)) {                                  \
             arg_pos = 17;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
-        } else if (group_count < 0 || group_size < 0) {                        \
+        } else if (group_count_idx < 0 || group_size <= 0) {                   \
             arg_pos = 18;                                                      \
             err_no  = DLP_CLSC_INVALID_GROUP_DIMENSION;                        \
         }                                                                      \

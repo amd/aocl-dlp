@@ -339,6 +339,13 @@ aocl_gemm_bf16bf16f32of32(const char      order,
         (void*)&alpha, (void*)&beta, post_op_list, mr_hint, nr_hint, kc_hint,
         DLP_F32, &lcntx_l.dlp_kernel_hndl);
 
+    // Invalid handle means that the jit kernel generation has failed. Do not
+    // attempt to execute the kernel, and return an error instead.
+    if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
+
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
     /* While AOCL_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that supports
      * DLP_BF16/VNNI with only the ISA check the exeution could enter tiny path

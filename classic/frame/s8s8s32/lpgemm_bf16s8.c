@@ -188,7 +188,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
             rs_a_use = k;
             cs_a_use = 4;
 
-            dlp_execute_kernel(lcntx->dlp_kernel_hndl, mc0, 1, k,
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
                                (int8_t*)a_use, rs_a_use, cs_a_use, 1,
                                (int8_t*)(b_use), rs_b_use, cs_b_use, 0, 0,
                                c_use, rs_c, 1, (void*)&alpha, (void*)&beta,
@@ -297,7 +297,7 @@ LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
             post_ops_attr.b_sum_offset   = 0;
 
             dlp_execute_kernel(
-                lcntx->dlp_kernel_hndl, 1, nc0, k, (int8_t*)a_use, rs_a_use,
+                &(lcntx->dlp_kernel_hndl), 1, nc0, k, (int8_t*)a_use, rs_a_use,
                 cs_a_use, 1, (int8_t*)b_use, rs_b_use, cs_b_use, n_sub_updated,
                 jc_cur_loop_rem, c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
                 post_op_list, post_ops_attr);
@@ -724,8 +724,8 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
                     // (e.g., bias addition, ReLU activation, downscaling)
                     // during the final K step.
                     dlp_execute_kernel(
-                        lcntx->dlp_kernel_hndl, mc0, nr0, kc0, (int8_t*)a_use,
-                        rs_a_use, cs_a_use, a_block_stride,
+                        &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
+                        (int8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
                         (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
                         cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
                         (void*)&alpha, (void*)&beta0, post_op_list,

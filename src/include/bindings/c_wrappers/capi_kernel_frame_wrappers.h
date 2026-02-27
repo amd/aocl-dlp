@@ -156,7 +156,7 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
                              dlp_kernel_hndl_t* kernel_hndl);
 
 void
-dlp_execute_kernel(dlp_kernel_hndl_t   kernel_hndl,
+dlp_execute_kernel(dlp_kernel_hndl_t*  kernel_hndl,
                    md_t                m,
                    md_t                n,
                    md_t                k,

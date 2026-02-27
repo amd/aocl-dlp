@@ -181,6 +181,13 @@ aocl_gemm_u8s8s32of32(const char      order,
         lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
         &lcntx_l.dlp_kernel_hndl);
 
+    // Invalid handle means that the jit kernel generation has failed. Do not
+    // attempt to execute the kernel, and return an error instead.
+    if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
+
     lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP

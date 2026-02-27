@@ -381,7 +381,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
 
                         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                             dlp_execute_kernel(
-                                lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                                &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
                                 (bfloat16*)a_use, rs_a_use, cs_a_use,
                                 a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
                                 cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
@@ -400,7 +400,7 @@ LPGEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
 
                         if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
                             dlp_execute_kernel(
-                                lcntx->dlp_kernel_hndl, mc0, nr0, kc0,
+                                &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
                                 (bfloat16*)a_use, rs_a_use, cs_a_use,
                                 a_block_stride, (bfloat16*)b_use_jr, rs_b_use,
                                 cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
