@@ -29,6 +29,7 @@
 #pragma once
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
+#include "utils/float16_types.hh"
 
 namespace amdzen::traits {
 
@@ -64,6 +65,20 @@ struct kernel_types<dlp::kernel_frame::kernelDatatype::s8s8s32os32>
     using cType        = int32_t;
     using accumType    = int32_t;
     using kernelOpType = int32_t;
+};
+
+// FP16 kernel_types specialization - native FP16 accumulation only
+template<>
+struct kernel_types<dlp::kernel_frame::kernelDatatype::f16f16f16of16>
+{
+    using aType        = dlp::float16;
+    using bType        = dlp::float16;
+    using cType        = dlp::float16;
+    using accumType    = dlp::float16; // Native FP16 accumulation
+    using kernelOpType = dlp::float16;
+
+    static constexpr int elemSize    = 2;  // bytes per FP16 element
+    static constexpr int elemsPerZmm = 32; // 64 bytes / 2 = 32 FP16 per ZMM
 };
 
 /**

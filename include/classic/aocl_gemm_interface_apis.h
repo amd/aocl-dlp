@@ -30,12 +30,13 @@
 #define AOCL_GEMM_INTERFACE_H
 
 #include "classic/aocl_bf16_type.h"
+#include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
 #include "classic/dlp_base_types.h"
 
 /**
- * @brief Returns the size of the buffer (in bytes) required for the reordered
- * matrix.
+ * @brief Returns the size of the buffer (in bytes) required for the
+ * reordered matrix.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
@@ -87,10 +88,17 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
                                         const md_t      k,
                                         const md_t      n,
                                         dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT msz_t
+aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
+                                        const char      trans,
+                                        const char      mat_type,
+                                        const md_t      k,
+                                        const md_t      n,
+                                        dlp_metadata_t* metadata);
 
 /**
- * @brief Returns the size of the buffer (in bytes) required for the reordered
- * matrix with symmetric quantization.
+ * @brief Returns the size of the buffer (in bytes) required for the
+ * reordered matrix with symmetric quantization.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
@@ -205,10 +213,20 @@ aocl_reorder_bf16s4f32of32(const char      order,
                            const md_t      n,
                            const md_t      ldb,
                            dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+aocl_reorder_f16f16f16of16(const char      order,
+                           const char      trans,
+                           const char      mat_type,
+                           const float16*  input_buf_addr,
+                           float16*        reorder_buf_addr,
+                           const md_t      k,
+                           const md_t      n,
+                           const md_t      ldb,
+                           dlp_metadata_t* metadata);
 
 /**
- * @brief Performs reordering of the input matrix for symmetric quantization.
- * Expanded from AOCL_GEMM_REORDER_SYM_QUANT macro.
+ * @brief Performs reordering of the input matrix for symmetric
+ * quantization. Expanded from AOCL_GEMM_REORDER_SYM_QUANT macro.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
@@ -234,8 +252,8 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
                                    dlp_metadata_t*      metadata);
 
 /**
- * @brief Performs reordering of the input matrix for mixed precision LPGEMM.
- * Expanded from AOCL_GEMM_REORDER_MXP macro.
+ * @brief Performs reordering of the input matrix for mixed precision
+ * LPGEMM. Expanded from AOCL_GEMM_REORDER_MXP macro.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
@@ -307,6 +325,15 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
                                      const md_t      n,
                                      const md_t      ldb,
                                      dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+aocl_unreorder_f16f16f16of16(const char      order,
+                             const char      mat_type,
+                             const float16*  reorder_buf_addr,
+                             float16*        output_buf_addr,
+                             const md_t      k,
+                             const md_t      n,
+                             const md_t      ldb,
+                             dlp_metadata_t* metadata);
 
 /**
  * @brief GEMM (General Matrix Multiplication) with support for fused
@@ -726,6 +753,50 @@ aocl_gemm_bf16s8s32obf16(const char      order,
                          const md_t      ldc,
                          dlp_metadata_t* metadata);
 
+/**
+ * @brief FP16×FP16 GEMM with native FP16 accumulation and FP16 output
+ *
+ * Uses native FP16 FMA operations for both accumulation and output.
+ * Provides maximum performance but with lower precision than F32
+ * accumulation.
+ *
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] transa Transpose option for matrix A.
+ * @param[in] transb Transpose option for matrix B.
+ * @param[in] m Row dimensions.
+ * @param[in] n Column dimensions.
+ * @param[in] k Inner dimensions.
+ * @param[in] alpha Scalar multiplier for the product of matrices A and B.
+ * @param[in] a Pointer to matrix A (FP16).
+ * @param[in] lda Leading dimension of matrix A.
+ * @param[in] mem_format_a Memory format of matrix A.
+ * @param[in] b Pointer to matrix B (FP16).
+ * @param[in] ldb Leading dimension of matrix B.
+ * @param[in] mem_format_b Memory format of matrix B.
+ * @param[in] beta Scalar multiplier for matrix C.
+ * @param[in/out] c Pointer to matrix C (FP16 output).
+ * @param[in] ldc Leading dimension of matrix C.
+ * @param[in] metadata Pointer to post-operation structures.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_gemm_f16f16f16of16(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const float     alpha,
+                        const float16*  a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const float16*  b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const float     beta,
+                        float16*        c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata);
+
 /// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16s8s32os32(const char      order,
@@ -952,8 +1023,8 @@ aocl_gemm_f32f32f32of32(const char      order,
  * @param[in] m Array of row dimensions for each matrix in the batch.
  * @param[in] n Array of column dimensions for each matrix in the batch.
  * @param[in] k Array of inner dimensions for each matrix in the batch.
- * @param[in] alpha Array of scalar multipliers for the product of matrices A
- * and B.
+ * @param[in] alpha Array of scalar multipliers for the product of matrices
+ * A and B.
  * @param[in] a Array of pointers to A matrices.
  * @param[in] lda Array of leading dimensions for A matrices.
  * @param[in] b Array of pointers to B matrices.

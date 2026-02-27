@@ -30,6 +30,7 @@
 #define LPGEMM_KERN_INTF_H
 
 #include "classic/aocl_bf16_type.h"
+#include "classic/aocl_fp16_type.h"
 #include "lpgemm_post_ops.h"
 
 // Disable DLP_BF16 kernel in cases where compilers support other avx 512
@@ -551,6 +552,7 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256);
 LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32);
 LPGEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32);
 LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
+LPGEMV_M_EQ1_KERN(float16, float16, float16, f16f16f16of16);
 
 #define LPGEMV_M_EQ1_KERN2(A_type, B_type, C_type, LP_SFX)                     \
     void lpgemv_m_one_##LP_SFX(                                                \
@@ -579,6 +581,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256);
 LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32);
 LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32);
 LPGEMV_N_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
+LPGEMV_N_EQ1_KERN(float16, float16, float16, f16f16f16of16);
 
 #define LPGEMV_N_EQ1_KERN2(A_type, B_type, C_type, LP_SFX)                     \
     void lpgemv_n_one_##LP_SFX(                                                \
@@ -591,5 +594,11 @@ LPGEMV_N_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
         lpgemm_post_op_attr* post_op_attr)
 
 LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
+
+/* ==========================================================================
+ * F16F16F16OF16 GEMM kernels removed - JIT handles FP16 GEMM
+ * GEMV kernels (lpgemv_m_one_f16f16f16of16, lpgemv_n_one_f16f16f16of16)
+ * are still available and declared above.
+ * ========================================================================== */
 
 #endif // LPGEMM_KERN_INTF_H

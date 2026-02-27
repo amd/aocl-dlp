@@ -35,6 +35,7 @@
 #include "de_input.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 #include "utils/ctype_utils.hh"
+#include "utils/float16_types.hh"
 
 namespace dlp::de {
 
@@ -80,6 +81,29 @@ class gemmDEBackendUtils
         return std::make_pair(alphaScalingType, betaScalingType);
     }
 
+    DLP_ALWAYS_INLINE
+    static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
+    getScalingTypesFP16(void* alpha, void* beta, md_t k, md_t kc_hint)
+    {
+        uint16_t alpha_val = *(static_cast<uint16_t*>(alpha));
+
+        kernel_frame::scalingType alphaScalingType =
+            kernel_frame::scalingType::generic;
+        if (alpha_val == FP16_ONE) {
+            alphaScalingType = kernel_frame::scalingType::one;
+        } else if (alpha_val == FP16_ZERO) {
+            alphaScalingType = kernel_frame::scalingType::zero;
+        }
+
+        kernel_frame::scalingType betaScalingType =
+            kernel_frame::scalingType::generic;
+        if ((*(static_cast<uint16_t*>(beta)) == FP16_ZERO) && (k <= kc_hint)) {
+            betaScalingType = kernel_frame::scalingType::zero;
+        }
+
+        return std::make_pair(alphaScalingType, betaScalingType);
+    }
+
   public:
     template<typename T>
     DLP_ALWAYS_INLINE static std::pair<kernel_frame::scalingType,
@@ -92,6 +116,9 @@ class gemmDEBackendUtils
         } else if constexpr (std::is_same_v<int32_t, T>) {
             return gemmDEBackendUtils::getScalingTypesInt32(alpha, beta, k,
                                                             kc_hint);
+        } else if constexpr (std::is_same_v<dlp::float16, T>) {
+            return gemmDEBackendUtils::getScalingTypesFP16(alpha, beta, k,
+                                                           kc_hint);
         }
 
         return std::make_pair(kernel_frame::scalingType::generic,

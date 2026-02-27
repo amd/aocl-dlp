@@ -42,6 +42,7 @@ archConfigManager::archConfigManager()
     setIsAvx512Supported();
     setIsAvx512VnniSupported();
     setIsAvx512Bf16Supported();
+    setIsAvx512Fp16Supported();
     setFpDatapathWidth();
     setIsZen5();
     setIsZen4();
@@ -79,6 +80,12 @@ bool
 archConfigManager::isAvx512Bf16SupportedByArch() const noexcept
 {
     return isAvx512Bf16Supported;
+}
+
+bool
+archConfigManager::isAvx512Fp16SupportedByArch() const noexcept
+{
+    return isAvx512Fp16Supported;
 }
 
 std::uint32_t
@@ -175,6 +182,25 @@ archConfigManager::setIsAvx512Bf16Supported()
             dlp::cpu_utils::isaFeature::avx512vl,
             dlp::cpu_utils::isaFeature::avx512vnni,
             dlp::cpu_utils::isaFeature::avx512bf16
+        };
+        return dlp::cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeatures);
+    }();
+}
+
+void
+archConfigManager::setIsAvx512Fp16Supported()
+{
+    isAvx512Fp16Supported = [&]() -> bool {
+        std::vector<dlp::cpu_utils::isaFeature> reqFeatures{
+            dlp::cpu_utils::isaFeature::avx,
+            dlp::cpu_utils::isaFeature::fma3,
+            dlp::cpu_utils::isaFeature::avx2,
+            dlp::cpu_utils::isaFeature::avx512f,
+            dlp::cpu_utils::isaFeature::avx512dq,
+            dlp::cpu_utils::isaFeature::avx512cd,
+            dlp::cpu_utils::isaFeature::avx512bw,
+            dlp::cpu_utils::isaFeature::avx512vl,
+            dlp::cpu_utils::isaFeature::avx512fp16
         };
         return dlp::cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeatures);
     }();

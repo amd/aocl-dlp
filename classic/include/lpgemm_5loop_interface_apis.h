@@ -12,7 +12,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
@@ -30,6 +30,7 @@
 #define LPGEMM_5LOOP_INTF_H
 
 #include "classic/aocl_bf16_type.h"
+#include "classic/aocl_fp16_type.h"
 #include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
@@ -76,6 +77,10 @@ LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */);
 LPGEMM_5LOOP_UNIFIED(bfloat16, bfloat16, float, float, bf16bf16f32of32,
                      /* mutable */);
 LPGEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
+                     /* mutable */);
+
+// FP16 variant
+LPGEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                      /* mutable */);
 
 // MP variant (const rs_b/cs_b/mtag_b)
@@ -140,6 +145,7 @@ LPGEMV(float, float, float, f32f32f32of32);
 LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32);
 LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32);
 LPGEMV(int8_t, int8_t, int32_t, s8s8s32os32);
+LPGEMV(float16, float16, float16, f16f16f16of16);
 
 #define LPGEMV_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)                    \
     void lpgemv_rowvar_f32_fallback_##LP_SFX(                                  \

@@ -31,6 +31,11 @@ set(CLASSIC_INCLUDES ${CLASSIC_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR}/include ${K
 # DLP Plus dependencies.
 set(CLASSIC_INCLUDES ${CLASSIC_INCLUDES} ${PROJECT_SOURCE_DIR}/src/include)
 
+# FP16 code always compiles - it uses uint16_t and standard AVX-512 intrinsics.
+# Runtime CPU detection determines if FP16 operations can execute.
+# The -mavx512fp16 compiler flag (GCC 12+) is handled in dlp_compiler_flags_linux.cmake
+# as an optional optimization flag added to znver4_extra_flags when available.
+
 # Add the frame subdirectory
 add_subdirectory(frame)
 add_subdirectory(JIT)
@@ -62,6 +67,7 @@ endif()
 if(DLP_ENABLE_LOGGING)
     target_compile_definitions(aocl_dlp_classic PRIVATE AOCL_LPGEMM_LOGGER_SUPPORT=1)
 endif()
+
 
 set(CLASSIC_TARGETS
     aocl_dlp_classic

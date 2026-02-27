@@ -92,6 +92,12 @@ class archConfigManager
     bool isAvx512Bf16SupportedByArch() const noexcept;
 
     /**
+     * @brief Check if AVX512 FP16 (IEEE Float16) instructions are supported
+     * @return true if AVX512_FP16 is supported, false otherwise
+     */
+    bool isAvx512Fp16SupportedByArch() const noexcept;
+
+    /**
      * @brief Get the floating-point/SIMD execution datapath width
      * @return Datapath width value (128, 256, or 512 bits typically)
      */
@@ -140,6 +146,7 @@ class archConfigManager
     void             setIsAvx512Supported();
     void             setIsAvx512VnniSupported();
     void             setIsAvx512Bf16Supported();
+    void             setIsAvx512Fp16Supported();
     void             setFpDatapathWidth();
     void             setIsZen5();
     void             setIsZen4();
@@ -151,6 +158,7 @@ class archConfigManager
     bool             isAvx512Supported;
     bool             isAvx512VnniSupported;
     bool             isAvx512Bf16Supported;
+    bool             isAvx512Fp16Supported;
     uint32_t         fpDatapathWidth;
     bool             isZen5;
     bool             isZen4;

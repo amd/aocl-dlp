@@ -54,6 +54,7 @@ enum class isaFeature : uint32_t
     avx512vl,
     avx512vnni,
     avx512bf16,
+    avx512fp16,
     avx512vbmi,
     avxvnni,
     avx512vp2intersect,

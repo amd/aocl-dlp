@@ -54,9 +54,13 @@ typedef enum
     S8S8S16OS16     = 5, // int8_t - A, int8_t - B, int16_t - C
     U8S4S32OS32     = 6, // Only used for reordering int4_t B matrix.
     BF16S4F32OF32   = 7, // Only used for reordering int4_t B matrix.
-    F32OBF16 = 8 // Only used for reordering input float matrix to bf16 reorder
+    F32OBF16 = 8, // Only used for reordering input float matrix to bf16 reorder
+    FP16FP16F32OF32 =
+        9, // float16 - A, float16 - B, float - C (FP32 accumulator)
+    F16F16F16OF16 =
+        10 // float16 - A, float16 - B, float16 - C (FP16 accumulator)
 } AOCL_OPERATION_TYPE;
-#define AOCL_OPERATION_TYPE_LEN 9
+#define AOCL_OPERATION_TYPE_LEN 11
 
 typedef enum
 {

@@ -89,7 +89,11 @@ dlp_cpuid_is_avx512vnni_supported(void);
 bool
 dlp_cpuid_is_avx512bf16_supported(void);
 
-// API to get FP/SIMD execition datapath width.
+// API to check if AVX512_fp16 is supported or not on the current platform.
+bool
+dlp_cpuid_is_avx512fp16_supported(void);
+
+// API to get FP/SIMD execution datapath width.
 uint32_t
 dlp_cpuid_query_fp_datapath(void);
 

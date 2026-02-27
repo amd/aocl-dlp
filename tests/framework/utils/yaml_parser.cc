@@ -56,6 +56,8 @@ namespace dlp { namespace testing { namespace utils {
                 return MatrixType::f32;
             if (str == "bf16")
                 return MatrixType::bf16;
+            if (str == "fp16")
+                return MatrixType::fp16;
             if (str == "s8" || str == "int8")
                 return MatrixType::s8;
             if (str == "s16" || str == "int16")

@@ -46,6 +46,7 @@
 #include <vector>
 
 #include "aocl_dlp.h" // IWYU pragma: keep
+#include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
 #include "classic/dlp_errors.h"
 
@@ -172,6 +173,12 @@ UalDlp::reorder(const Matrix& in,
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
                 effective_cols, &meta);
         }
+    } else if (in.getMatrixType() == MatrixType::fp16) {
+        // For fp16, use the f16f16f16of16 reorder function
+        alloc_bytes = aocl_get_reorder_buf_size_f16f16f16of16(
+            in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+            in.isTransposed() ? 't' : 'n', 'B', effective_rows, effective_cols,
+            &meta);
     } else if (in.getMatrixType() == MatrixType::s4) {
         // For s4, bf16s4 with f32 accumulation
         // Note: s4 is used with bf16 A matrix and f32 accumulation
@@ -251,6 +258,15 @@ UalDlp::reorder(const Matrix& in,
                 reinterpret_cast<const int8_t*>(
                     in.getMatrixData().getMatrixPtr()),
                 reinterpret_cast<int8_t*>(out.getMatrixData().getMatrixPtr()),
+                effective_rows, effective_cols, in.getLeadingDimension(),
+                &meta);
+            break;
+        case MatrixType::fp16:
+            aocl_reorder_f16f16f16of16(
+                layout, in.isTransposed() ? 't' : 'n', 'B',
+                reinterpret_cast<const float16*>(
+                    in.getMatrixData().getMatrixPtr()),
+                reinterpret_cast<float16*>(out.getMatrixData().getMatrixPtr()),
                 effective_rows, effective_cols, in.getLeadingDimension(),
                 &meta);
             break;
@@ -583,6 +599,26 @@ UalDlp::gemm(const Matrix&                      A,
                 B.getLeadingDimension(), memFormatB, beta_s32,
                 reinterpret_cast<bfloat16*>(C.getMatrixData().getMatrixPtr()),
                 C.getLeadingDimension(), aocl_postops.get());
+            break;
+        }
+
+        case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::fp16,
+                          MatrixType::fp16>(): {
+            // Native FP16 GEMM with FP16 accumulation (f16f16f16of16)
+            // Runtime ISA check handled by JIT kernel
+            float alpha_f32 = static_cast<float>(alpha);
+            float beta_f32  = static_cast<float>(beta);
+
+            aocl_gemm_f16f16f16of16(
+                layoutA, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
+                reinterpret_cast<float16*>(A.getMatrixData().getMatrixPtr()),
+                A.getLeadingDimension(), memFormatA,
+                reinterpret_cast<float16*>(B.getMatrixData().getMatrixPtr()),
+                B.getLeadingDimension(), memFormatB, beta_f32,
+                reinterpret_cast<float16*>(C.getMatrixData().getMatrixPtr()),
+                C.getLeadingDimension(), aocl_postops.get());
+
             break;
         }
 
@@ -2015,6 +2051,23 @@ UalDlp::gemm(md_t         m,
                 reinterpret_cast<float*>(matA), matA_leadingDim, memFormatA,
                 reinterpret_cast<int8_t*>(matB), matB_leadingDim, memFormatB,
                 beta_s32, reinterpret_cast<uint8_t*>(matC), matC_leadingDim,
+                err_code.get());
+
+            break;
+        }
+
+        case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::fp16,
+                          MatrixType::fp16>(): {
+            // Native FP16 GEMM with FP16 accumulation (f16f16f16of16)
+            // Runtime ISA check handled by JIT kernel
+            float alpha_f32 = static_cast<float>(alpha);
+            float beta_f32  = static_cast<float>(beta);
+
+            aocl_gemm_f16f16f16of16(
+                layoutA, transA, transB, m, n, k, alpha_f32,
+                reinterpret_cast<float16*>(matA), matA_leadingDim, memFormatA,
+                reinterpret_cast<float16*>(matB), matB_leadingDim, memFormatB,
+                beta_f32, reinterpret_cast<float16*>(matC), matC_leadingDim,
                 err_code.get());
 
             break;

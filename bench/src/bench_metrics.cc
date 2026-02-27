@@ -45,6 +45,7 @@ BenchmarkMetrics::getMatrixTypeSize(MatrixType type)
         case MatrixType::u16:
         case MatrixType::s16:
         case MatrixType::bf16:
+        case MatrixType::fp16:
             return 2;
         case MatrixType::u32:
         case MatrixType::s32:

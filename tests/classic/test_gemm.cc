@@ -1081,7 +1081,6 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         UALError test_status =
             ual_test_->gemm(A, B, C, config_.acc_type, config_.postops_dlp,
                             config_.alpha, config_.beta);
-
         if (test_status == UALError::UAL_NOT_SUPPORTED) {
             GTEST_SKIP()
                 << "UAL under test GEMM not supported for this configuration";

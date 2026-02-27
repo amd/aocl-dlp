@@ -34,12 +34,15 @@
 #include "f32_gemm_generator.hh"
 #include "f32_gemm_rd_generator.hh"
 #include "f32_gemv_generator.hh"
+#include "fp16_gemm_generator.hh"
+#include "fp16_gemv_generator.hh"
 #include "jit_register/jit_register.hh"
 #include "s8_gemm_generator.hh"
 #include "s8_gemv_generator.hh"
 #include "traits.hh"
 #include "u8s8_gemm_generator.hh"
 #include "u8s8_gemv_generator.hh"
+#include "utils/float16_types.hh"
 
 namespace amdzen::gen {
 
@@ -2687,9 +2690,479 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
     return dlp::kernels::kernelError::success;
 }
 
+// FP16 JIT Generator
+jitAmdZenFP16::jitAmdZenFP16()
+    : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f16f16f16of16 })
+    , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512fp16 })
+    , kType(utils::kernelInstrType::none)
+    , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
+{
+    // Add additional required ISA features
+    mIsaFeaturesRequired.push_back(dlp::cpu_utils::isaFeature::avx512f);
+    mIsaFeaturesRequired.push_back(dlp::cpu_utils::isaFeature::avx512bw);
+}
+
+jitAmdZenFP16::~jitAmdZenFP16()
+{
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
+    }
+}
+
+int
+jitAmdZenFP16::getProcessBlockSize() const
+{
+    switch (kType) {
+        case utils::kernelInstrType::avx512_zmm_32_reg:
+            return NR; // Process full NR (128) elements at once
+
+        default:
+            return 0; // Invalid/unsupported kernel type
+    }
+}
+
+void
+jitAmdZenFP16::setGeneratorKernelMetaInfo(
+    dlp::kernel_frame::kernelInstrPreference kInstPref)
+{
+    kType = utils::kernelInstrType::none;
+    switch (kInstPref) {
+        case dlp::kernel_frame::kernelInstrPreference::avx512_zmm_favour: {
+            kType = utils::kernelInstrType::avx512_zmm_32_reg;
+            // For FP16: 32 elements per ZMM (64 bytes / 2 bytes per FP16)
+            numElemsPerReg = FP16_PER_ZMM; // 32
+            break;
+        }
+        default:
+            break;
+    }
+}
+
+dlp::jit::jitGeneratorError
+jitAmdZenFP16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+{
+    dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
+
+    MR              = (jI.kI).mr;
+    NR              = (jI.kI).nr;
+    KC              = (jI.kI).kc;
+    K_UNROLL        = (jI.kI).k_unroll;
+    PREFETCH_C_DIST = (jI.kI).prefetch_c_dist;
+    c_downscale     = (jI.kI).c_downscale;
+    mtag_b          = (jI.kI).mtag_b; // Store memory tag for B matrix
+
+    // Set kernel type based on instruction preference
+    setGeneratorKernelMetaInfo(jI.kI.kInstPref);
+
+    if (kType == utils::kernelInstrType::none) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    }
+
+    int processBlockSize = getProcessBlockSize();
+
+    if (MR == 1) {
+        // FP16 GEMV M=1: y = x * B (1 x K vector * K x N matrix = 1 x N vector)
+        // Generate NR kernels, each handling specific n_left fringe case
+        numKernelVariants = NR;
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        utils::gemvM1GeneratorParams params(
+            c_downscale, NR, 0, KC, K_UNROLL, mtag_b, true, true, true, true,
+            dlp::kernel_frame::storageFormat::rowMajor,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        params.NR         = NR;
+        params.N_LEFT     = 0;
+        params.KC         = KC;
+        params.K_SUB_ITER = K_UNROLL;
+        params.nloop      = true;
+        params.kloop      = true;
+        params.nfringe    = false;
+        params.kfringe    = true;
+
+        for (int i = 0; i < NR; ++i) {
+            params.N_LEFT  = i;
+            params.nfringe = (i != 0);
+
+            std::unique_ptr<Xbyak::CodeGenerator> gen;
+            switch (kType) {
+                case utils::kernelInstrType::avx512_zmm_32_reg: {
+                    auto g = std::make_unique<jitFP16GEMVM1<
+                        utils::kernelInstrType::avx512_zmm_32_reg>>(
+                        Xbyak::AutoGrow, utils::JIT_KERNEL_SIZE);
+                    err = g->generateKernel(params);
+                    gen = std::move(g);
+                    break;
+                }
+                default:
+                    err = dlp::jit::jitGeneratorError::error;
+                    break;
+            }
+
+            if (err != dlp::jit::jitGeneratorError::success) {
+                goto cleanup;
+            }
+            gen->ready();
+            kernelCodeBlocks[i] =
+                const_cast<void*>(static_cast<const void*>(gen->getCode()));
+            codeGenerators.push_back(std::move(gen));
+
+            int n_left_suf = (i != 0) ? i : params.NR;
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+                kernelCodeBlocks[i], utils::JIT_KERNEL_SIZE,
+                "jit_fp16_gemv_m1_kernel", 1, n_left_suf, false, i);
+        }
+
+    } else if (NR == 1) {
+        // FP16 GEMV N=1: y = A * x (M x K matrix * K x 1 vector = M x 1 vector)
+        // Generate MR * 4 kernels for different m_left, storage format, mloop
+        // combinations
+        numKernelVariants = MR * 4;
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        utils::gemvN1GeneratorParams params(
+            MR, 0, c_downscale, false, false, false, false,
+            dlp::kernel_frame::storageFormat::rowMajor,
+            (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        params.MR      = MR;
+        params.mloop   = true;
+        params.kloop   = true;
+        params.mfringe = false;
+        params.kfringe = true;
+
+        for (int m_left = 0; m_left < MR; ++m_left) {
+            params.M_LEFT  = m_left;
+            params.mfringe = (m_left != 0);
+
+            for (int j = 0; j < 4; ++j) {
+                // Kernel indexing:
+                // 0: row-stored, without mloop
+                // 1: row-stored, with mloop
+                // 2: col-stored, without mloop
+                // 3: col-stored, with mloop
+                params.mloop = ((j == 1) || (j == 3));
+                params.yFormat =
+                    ((j / 2) == 0) ? dlp::kernel_frame::storageFormat::rowMajor
+                                   : dlp::kernel_frame::storageFormat::colMajor;
+
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
+                switch (kType) {
+                    case utils::kernelInstrType::avx512_zmm_32_reg: {
+                        auto g = std::make_unique<jitFP16GEMVN1<
+                            utils::kernelInstrType::avx512_zmm_32_reg>>(
+                            Xbyak::AutoGrow, utils::JIT_KERNEL_SIZE);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
+                        break;
+                    }
+                    default:
+                        err = dlp::jit::jitGeneratorError::error;
+                        break;
+                }
+
+                if (err != dlp::jit::jitGeneratorError::success) {
+                    goto cleanup;
+                }
+                gen->ready();
+                kernelCodeBlocks[m_left * 4 + j] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
+
+                int m_left_suf = (m_left != 0) ? m_left : params.MR;
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+                    kernelCodeBlocks[m_left * 4 + j], utils::JIT_KERNEL_SIZE,
+                    "jit_fp16_gemv_n1_kernel", m_left_suf, j, false,
+                    m_left * 4 + j);
+            }
+        }
+
+    } else {
+        // Generate GEMM kernels (MR > 1, NR > 1)
+        // For FP16: numElemsPerReg = 32, so NR=128 means 4 registers
+        numNRVariants     = (processBlockSize / numElemsPerReg) + 1;
+        numMRVariants     = MR;
+        numKernelVariants = numMRVariants * numNRVariants;
+
+        kernelCodeBlocks.resize(numKernelVariants);
+
+        // Initialize generator params
+        utils::generatorParams params(
+            0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
+            false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+
+        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+        }
+
+        // Generate all kernels for the given MR and NR
+        for (int mr = 0; mr < numMRVariants; mr++) {
+            for (int nr = 0; nr < numNRVariants; nr++) {
+                params.MR          = (mr == 0) ? MR : mr;
+                params.mLoop       = (mr == 0);
+                params.NR          = nr * numElemsPerReg;
+                params.useMask     = (nr == 0);
+                params.numMaskRegs = (params.useMask) ? 1 : 0;
+
+                std::unique_ptr<Xbyak::CodeGenerator> gen;
+                switch (kType) {
+                    case utils::kernelInstrType::avx512_zmm_32_reg: {
+                        auto g = std::make_unique<jitFP16_GEMM<
+                            utils::kernelInstrType::avx512_zmm_32_reg>>(
+                            Xbyak::AutoGrow, utils::JIT_KERNEL_SIZE);
+                        err = g->generateKernel(params);
+                        gen = std::move(g);
+                        break;
+                    }
+                    default:
+                        err = dlp::jit::jitGeneratorError::error;
+                        break;
+                }
+
+                if (err != dlp::jit::jitGeneratorError::success) {
+                    goto cleanup;
+                }
+                gen->ready();
+                kernelCodeBlocks[mr * numNRVariants + nr] =
+                    const_cast<void*>(static_cast<const void*>(gen->getCode()));
+                codeGenerators.push_back(std::move(gen));
+
+                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+                    kernelCodeBlocks[mr * numNRVariants + nr],
+                    utils::JIT_KERNEL_SIZE, "jit_fp16_gemm_kernel", params.MR,
+                    params.NR, params.useMask, mr * numNRVariants + nr);
+            }
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+
+cleanup:
+    codeGenerators.clear();
+    for (auto& block : kernelCodeBlocks) {
+        block = nullptr;
+    }
+    return err;
+}
+
+dlp::kernels::kernelError
+jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
+{
+    // FP16 GEMV M=1 execution
+    if (MR == 1) {
+        auto params = static_cast<dlp::kernels::gemvM1Params*>(_params);
+
+        params->n_iter = params->n / NR;
+        params->n_left = params->n % NR;
+        params->k_iter = params->k / KC;
+        params->k_left = params->k % KC;
+
+        params->k_iter_sub_iter = KC / K_UNROLL;
+        params->k_iter_sub_left = KC % K_UNROLL;
+        params->k_left_sub_iter = (params->k_left) / K_UNROLL;
+        params->k_left_sub_left = (params->k_left) % K_UNROLL;
+
+        int partial_elements = params->n_left % numElemsPerReg;
+        if (params->n_left > 0) {
+            // Use nmask_fp16_avx512 for FP16 (32-bit mask for 32 elements per
+            // ZMM). When partial_elements == 0, n_left is a multiple of
+            // numElemsPerReg and we want a full mask (all elements active),
+            // while also avoiding undefined behavior from shifting by 32.
+            if (partial_elements == 0) {
+                params->nmask_fp16_avx512 = 0xFFFFFFFFu;
+            } else {
+                params->nmask_fp16_avx512 =
+                    0xFFFFFFFFu >> (numElemsPerReg - partial_elements);
+            }
+        }
+
+        // Deploy the associated kernel based on n_left
+        int kernel_idx = static_cast<int>(params->n_left);
+
+        utils::jit_gemv_m1_kernel kernel =
+            reinterpret_cast<utils::jit_gemv_m1_kernel>(
+                kernelCodeBlocks[kernel_idx]);
+        kernel(params);
+
+        // Update post_op_c_j by the total n processed in this kernel call
+        (params->kernelOpsAttr).post_op_c_j += params->n;
+
+        return dlp::kernels::kernelError::success;
+    }
+
+    // FP16 GEMV N=1 execution
+    if (NR == 1) {
+        auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);
+
+        params->m_iter = params->m / MR;
+        params->m_left = params->m % MR;
+        params->k_iter = params->k / numElemsPerReg;
+        params->k_left = params->k % numElemsPerReg;
+
+        // Set masks for FP16 (32-bit masks for 32 elements per ZMM)
+        // Use kmask_avx512 for k-dimension mask (32-bit for 32 FP16 elements)
+        if (params->k_left == 0) {
+            params->kmask_fp16_avx512 = 0xFFFFFFFFu;
+        } else {
+            params->kmask_fp16_avx512 =
+                0xFFFFFFFFu >> (numElemsPerReg - params->k_left);
+        }
+        params->mmask_avx512 = 0xFFFF >> (MR - params->m_left);
+
+        int is_m_loop     = ((params->m) >= MR);
+        int is_col_stored = ((params->rsC) == 1);
+
+        // Kernel index: m_left * 4 + is_col_stored * 2 + is_m_loop
+        int kernel_idx = params->m_left * 4 + is_col_stored * 2 + is_m_loop;
+
+        utils::jit_gemv_n1_kernel kernel =
+            reinterpret_cast<utils::jit_gemv_n1_kernel>(
+                kernelCodeBlocks[kernel_idx]);
+        kernel(params);
+
+        return dlp::kernels::kernelError::success;
+    }
+
+    // FP16 GEMM execution (MR > 1, NR > 1)
+    auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+
+    int processBlockSize = getProcessBlockSize();
+    int mFullPieces      = params->m / MR;
+    int mPartialPieces   = params->m % MR;
+
+    params->kIterBP = params->k / K_UNROLL;
+    params->kLeft   = params->k % K_UNROLL;
+
+    dlp::float16* aPtr = static_cast<dlp::float16*>(params->a);
+    dlp::float16* bPtr = static_cast<dlp::float16*>(params->b);
+    dlp::float16* cPtr = static_cast<dlp::float16*>(params->c);
+    dlp::float16* c_jr = cPtr;
+
+    int  rsB            = params->rsB;
+    md_t n              = params->n;
+    md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+
+    int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+    int nFullpieces = nBlockSize / numElemsPerReg;
+    int nRemainder  = nBlockSize % numElemsPerReg;
+
+    // Process complete registers first (if any)
+    if (nFullpieces > 0) {
+        int elementsToProcess = nFullpieces * numElemsPerReg;
+
+        params->a = aPtr;
+        params->c = c_jr;
+        params->n = elementsToProcess;
+
+        // Update B stride for FP16 packing (only for packed B)
+        if (mtag_b == PACK || mtag_b == REORDERED) {
+            params->rsB = (nFullpieces * rsB) / (NR / numElemsPerReg);
+        }
+        // For UNPACKED B, rsB stays as original value
+
+        int kernel_n_idx = nFullpieces;
+        if (params->m >= MR) {
+            params->mIter = mFullPieces;
+            int m_idx     = 0;
+
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+            // psA already contains MR * rs_a, so don't multiply by MR again
+            (params->a) =
+                (dlp::float16*)(params->a) + mFullPieces * params->psA;
+            (params->c) =
+                (dlp::float16*)(params->c) + MR * mFullPieces * params->rsC;
+        }
+
+        if (mPartialPieces) {
+            int m_idx = mPartialPieces;
+
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+        }
+
+        // Update B pointer for next block
+        // For packed B: advance by elementsToProcess * k (NR×K block layout)
+        // For unpacked B (row-major): advance by elementsToProcess (next
+        // columns)
+        if (mtag_b == PACK || mtag_b == REORDERED) {
+            params->b =
+                (dlp::float16*)(params->b) + elementsToProcess * params->k;
+        } else {
+            params->b = (dlp::float16*)(params->b) + elementsToProcess;
+        }
+        c_jr                                = c_jr + elementsToProcess;
+        (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
+        (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
+        n -= elementsToProcess;
+    }
+
+    // Process remainder with mask (if any)
+    if (nRemainder > 0) {
+        params->a = aPtr;
+        params->c = c_jr;
+        params->n = nRemainder;
+
+        // Update B stride for FP16 packing (only for packed B)
+        if (mtag_b == PACK || mtag_b == REORDERED) {
+            params->rsB = rsB / (NR / numElemsPerReg);
+        }
+        // For UNPACKED B, rsB stays as original value
+
+        // Set mask for FP16 elements (32-bit mask for 32 elements per ZMM)
+        uint32_t fp16Mask = 0xFFFFFFFF >> (numElemsPerReg - nRemainder);
+        params->maskFP16  = fp16Mask;
+
+        int kernel_n_idx = 0; // Use mask kernel
+        if (params->m >= MR) {
+            params->mIter = mFullPieces;
+            int m_idx     = 0;
+
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+            // psA already contains MR * rs_a, so don't multiply by MR again
+            (params->a) =
+                (dlp::float16*)(params->a) + mFullPieces * params->psA;
+            (params->c) =
+                (dlp::float16*)(params->c) + MR * mFullPieces * params->rsC;
+        }
+
+        if (mPartialPieces) {
+            int m_idx = mPartialPieces;
+
+            utils::jit_kernel kernel = reinterpret_cast<utils::jit_kernel>(
+                kernelCodeBlocks[m_idx * numNRVariants + kernel_n_idx]);
+
+            DLP_JIT_DEBUG_HELPER_BREAK(reinterpret_cast<void*>(kernel));
+            kernel(params);
+        }
+    }
+
+    return dlp::kernels::kernelError::success;
+}
+
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenFP32, "dlp_amdzen_jit");
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenBF16, "dlp_amdzen_jit");
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenU8S8, "dlp_amdzen_jit");
 DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenS8, "dlp_amdzen_s8_jit");
+DLP_REGISTER_STATIC_GEMM_JIT_GENERATOR(jitAmdZenFP16, "dlp_amdzen_fp16_jit");
 
 } // namespace amdzen::gen

@@ -33,6 +33,7 @@
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
 #include "kernels/kernel_base.hh"
+#include "traits.hh"
 
 namespace amdzen::gen {
 
@@ -374,4 +375,75 @@ class jitAmdZenS8 : public dlp::jit::jitGeneratorBase
         return std::make_unique<jitAmdZenS8>();
     }
 };
+
+/**
+ * @brief JIT generator for FP16 GEMM operations using AVX-512-FP16
+ *
+ * This class generates optimized FP16 GEMM kernels at runtime using
+ * native AVX-512-FP16 instructions (vfmadd231ph, vmulph, etc.).
+ * Supports MR=6, NR=128 blocking with 32 FP16 elements per ZMM register.
+ */
+class jitAmdZenFP16 : public dlp::jit::jitGeneratorBase
+{
+    std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
+    std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
+    AOCL_MEMORY_TAG mtag_b; // Memory tag for B matrix
+
+    using FP16Types = amdzen::traits::kernel_types<
+        dlp::kernel_frame::kernelDatatype::f16f16f16of16>;
+    static constexpr int FP16_ELEM_SIZE = FP16Types::elemSize;
+    static constexpr int FP16_PER_ZMM   = FP16Types::elemsPerZmm;
+
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+  public:
+    md_t               MR, NR, KC;
+    md_t               numMRVariants, numNRVariants;
+    md_t               numKernelVariants;
+    md_t               K_UNROLL, PREFETCH_C_DIST;
+    md_t               c_downscale;
+    std::vector<void*> kernelCodeBlocks;
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
+
+    jitAmdZenFP16();
+    ~jitAmdZenFP16();
+    jitAmdZenFP16(const jitAmdZenFP16&)            = delete;
+    jitAmdZenFP16& operator=(const jitAmdZenFP16&) = delete;
+    jitAmdZenFP16(jitAmdZenFP16&&)                 = delete;
+    jitAmdZenFP16& operator=(jitAmdZenFP16&&)      = delete;
+
+    int getProcessBlockSize() const;
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+    dlp::jit::jitGeneratorError operator()(
+        const dlp::jit::jitGeneratorContext& jI) override
+    {
+        return generateAllKernels(jI);
+    }
+
+    std::vector<dlp::kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override
+    {
+        return mKernelDatatypes;
+    }
+
+    std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override
+    {
+        return mIsaFeaturesRequired;
+    }
+
+    dlp::kernels::kernelError executeKernel(
+        dlp::kernels::kernelParams* _params) override;
+
+    std::unique_ptr<jitGeneratorBase> clone() override
+    {
+        return std::make_unique<jitAmdZenFP16>();
+    }
+};
+
 } // namespace amdzen::gen

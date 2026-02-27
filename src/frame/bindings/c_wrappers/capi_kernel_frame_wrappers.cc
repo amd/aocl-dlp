@@ -73,6 +73,8 @@ get_kernel_family_name(kernelDatatype kDtype)
             return "dlp_s8s8s32os8_jit_kernel";
         case kernelDatatype::s8s8s32ou8:
             return "dlp_s8s8s32ou8_jit_kernel";
+        case kernelDatatype::f16f16f16of16:
+            return "dlp_f16f16f16of16_jit_kernel";
         default:
             return "dlp_unknown_jit_kernel";
     }
@@ -102,6 +104,12 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype  kDType,
     if (kDType == dlp::kernel_frame::kernelDatatype::f32f32f32of32) {
         return dlp::de::decisionEngineInstance()
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmF32DEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale, kernelRoutineType::gemm, kDType);
+    } else if (kDType == dlp::kernel_frame::kernelDatatype::f16f16f16of16) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmKernelInfoForInputFastPath<dlp::de::gemmFP16DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
                 c_downscale, kernelRoutineType::gemm, kDType);

@@ -704,6 +704,8 @@ DlpOperation::getStorageType(dlp::testing::framework::MatrixType type)
     switch (type) {
         case dlp::testing::framework::MatrixType::f32:
             return DLP_F32;
+        case dlp::testing::framework::MatrixType::fp16:
+            return DLP_F16;
         case dlp::testing::framework::MatrixType::bf16:
             return DLP_BF16;
         case dlp::testing::framework::MatrixType::s8:

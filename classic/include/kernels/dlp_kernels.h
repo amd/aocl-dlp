@@ -32,6 +32,7 @@
 #include "gemm_utils/lpgemm_utils.h"
 #include "kernels/bf16bf16f32/lpgemm_pack_bf16.h"
 #include "kernels/f32f32f32/lpgemm_pack_f32.h"
+#include "kernels/fp16fp16fp16/lpgemm_pack_fp16.h"
 #include "kernels/lpgemm_eltwise_ops_kernels.h"
 #include "kernels/lpgemm_kernels.h"
 #include "kernels/lpgemm_utils_kernels.h"

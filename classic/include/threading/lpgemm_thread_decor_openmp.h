@@ -12,7 +12,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
@@ -30,6 +30,7 @@
 #define LPGEMM_THREAD_DECOR_OPENMP_H
 
 #include "classic/aocl_bf16_type.h"
+#include "classic/aocl_fp16_type.h"
 #include "lpgemm_ops_bundle.h"
 #include "lpgemm_post_ops.h"
 #include "lpgemm_types.h"
@@ -59,6 +60,10 @@ GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
 GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(float, float, float, float, f32f32f32of32)
 GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
     int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
+
+// FP16 variant
+GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
+    float16, float16, float16, float16, f16f16f16of16)
 
 // MP, GRP, Q variants (mutable mtag_b)
 GEN_LPGEMM_OPENMP_DECORATOR_FN_DECL(
@@ -130,6 +135,9 @@ GEN_LPGEMM_DECORATOR_FN_DECL(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32)
 GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, bfloat16, float, float, bf16bf16f32of32)
 GEN_LPGEMM_DECORATOR_FN_DECL(float, float, float, float, f32f32f32of32)
 GEN_LPGEMM_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
+
+// FP16 variant
+GEN_LPGEMM_DECORATOR_FN_DECL(float16, float16, float16, float16, f16f16f16of16)
 
 // MP, GRP, Q variants (mutable mtag_b)
 GEN_LPGEMM_DECORATOR_FN_DECL(bfloat16, int8_t, float, float, bf16s4f32of32)

@@ -102,11 +102,23 @@ function(dlp_check_znver_support)
     # znver3 specific features over znver2
     set(znver3_extra_flags "-mavx2;-mfma;-mvaes")
 
+    # Check for optional AVX512-FP16 support (GCC 12+ required)
+    dlp_check_compiler_flag("-mavx512fp16" _avx512fp16_supported)
+
     # znver4 specific features over znver3
     set(znver4_extra_flags "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vl;-mavx512ifma;-mavx512vbmi;-mavx512vbmi2;-mavx512vnni;-mavx512bf16;-mvaes")
+    if(_avx512fp16_supported)
+        list(APPEND znver4_extra_flags "-mavx512fp16")
+    endif()
+
+    # Check for optional AVX10 support (GCC 14+ required)
+    dlp_check_compiler_flag("-mavx10.1-256" _avx10_supported)
 
     # znver5 placeholder (update when specifications are available)
-    set(znver5_extra_flags "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vl;-mavx512ifma;-mavx512vbmi;-mavx512vbmi2;-mavx512vnni;-mavx512bf16;-mvaes;-mavx10.1-256;-mavx10.1-512")
+    set(znver5_extra_flags "-mavx512f;-mavx512bw;-mavx512dq;-mavx512vl;-mavx512ifma;-mavx512vbmi;-mavx512vbmi2;-mavx512vnni;-mavx512bf16;-mvaes")
+    if(_avx10_supported)
+        list(APPEND znver5_extra_flags "-mavx10.1-256;-mavx10.1-512")
+    endif()
 
     # Create a map of znver targets to their flags (primary or fallback)
     # This will be used to get the optimal flags for each ZnVer target

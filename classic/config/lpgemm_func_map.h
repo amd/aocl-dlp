@@ -44,7 +44,8 @@
     KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_avx512_6x64m)            \
     KMACRO(BF16BF16F32OF32, lpgemm_rowvar_bf16bf16f32of32_6x64)                \
     KMACRO(BF16S4F32OF32, lpgemm_rowvar_bf16bf16f32of32_6x64)                  \
-    KMACRO(S8S8S32OS32, lpgemm_rowvar_s8s8s32os32_6x64)
+    KMACRO(S8S8S32OS32, lpgemm_rowvar_s8s8s32os32_6x64)                        \
+    KMACRO(F16F16F16OF16, NULL) /* JIT handles FP16 GEMM */
 
 #define LPGEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX512_256                \
     KMACRO(F32F32F32OF32, lpgemm_rowvar_f32f32f32of32_avx512_256_6x64m)
@@ -59,7 +60,8 @@
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)                     \
     PAMACRO(BF16BF16F32OF32, packa_mr16_bf16bf16f32of32)                       \
     PAMACRO(BF16S4F32OF32, packa_mr16_bf16bf16f32of32)                         \
-    PAMACRO(S8S8S32OS32, packa_u8s8s32os32)
+    PAMACRO(S8S8S32OS32, packa_u8s8s32os32)                                    \
+    PAMACRO(F16F16F16OF16, packa_mr32_f16f16f16of16)
 
 #define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX512_256               \
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)
@@ -71,6 +73,7 @@
     PBMACRO(U8S8S32OS32, packb_nr64_u8s8s32o32)                                \
     PBMACRO(F32F32F32OF32, packb_nr64_f32f32f32of32)                           \
     PBMACRO(BF16BF16F32OF32, packb_nr64_bf16bf16f32of32)                       \
+    PBMACRO(F16F16F16OF16, packb_nr128_f16f16f16of16)                          \
     PBMACRO(S8S8S32OS32, packb_nr64_s8s8s32os32)                               \
     PBMACRO(U8S4S32OS32, packb_nr64_u8s4s32o32)                                \
     PBMACRO(BF16S4F32OF32, packb_nr64_bf16s4f32of32)
@@ -85,7 +88,8 @@
     PBMXPMACRO(F32OBF16, packb_mxp_nr64_f32obf16)
 
 #define LPGEMM_UNPACKB_FUNC_MAP_AVX512_VNNI_BF16                               \
-    UBMACRO(BF16BF16F32OF32, unpackb_nr64_bf16bf16f32of32)
+    UBMACRO(BF16BF16F32OF32, unpackb_nr64_bf16bf16f32of32)                     \
+    UBMACRO(F16F16F16OF16, unpackb_nr128_f16f16f16of16)
 
 #define LPGEMM_PACKSCLB_FUNC_MAP_AVX512_VNNI_BF16                              \
     PBSMACRO(U8S8S32OS32, NULL)                                                \
@@ -122,7 +126,8 @@
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)                     \
     PAMACRO(BF16BF16F32OF32, packa_mr16_bf16bf16f32of32)                       \
     PAMACRO(BF16S4F32OF32, packa_mr16_bf16bf16f32of32)                         \
-    PAMACRO(S8S8S32OS32, packa_u8s8s32os32)
+    PAMACRO(S8S8S32OS32, packa_u8s8s32os32)                                    \
+    PAMACRO(F16F16F16OF16, packa_mr32_f16f16f16of16)
 
 #define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256                    \
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)
@@ -137,6 +142,7 @@
     PBMACRO(U8S8S32OS32, packb_nr64_u8s8s32o32)                                \
     PBMACRO(F32F32F32OF32, packb_nr64_f32f32f32of32)                           \
     PBMACRO(BF16BF16F32OF32, packb_nr64_bf16bf16f32of32)                       \
+    PBMACRO(F16F16F16OF16, packb_nr128_f16f16f16of16)                          \
     PBMACRO(S8S8S32OS32, packb_nr64_s8s8s32os32)                               \
     PBMACRO(U8S4S32OS32, packb_nr64_u8s4s32o32)                                \
     PBSMACRO(BF16S4F32OF32, packb_nr64_bf16s4f32of32)
@@ -171,7 +177,8 @@
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)                     \
     PAMACRO(BF16BF16F32OF32, packa_mr16_bf16bf16f32of32)                       \
     PAMACRO(BF16S4F32OF32, packa_mr16_bf16bf16f32of32)                         \
-    PAMACRO(S8S8S32OS32, packa_u8s8s32os32)
+    PAMACRO(S8S8S32OS32, packa_u8s8s32os32)                                    \
+    PAMACRO(F16F16F16OF16, packa_mr32_f16f16f16of16)
 
 #define LPGEMM_PACKA_FUNC_UPD_MAP_AVX512_TO_AVX512_256                         \
     PAMACRO(F32F32F32OF32, packa_mr6_f32f32f32of32_avx512)
@@ -183,6 +190,7 @@
     PBMACRO(U8S8S32OS32, packb_nr64_u8s8s32o32)                                \
     PBMACRO(F32F32F32OF32, packb_nr64_f32f32f32of32)                           \
     PBMACRO(BF16BF16F32OF32, NULL)                                             \
+    PBMACRO(F16F16F16OF16, packb_nr128_f16f16f16of16)                          \
     PBMACRO(S8S8S32OS32, packb_nr64_s8s8s32os32)                               \
     PBMACRO(U8S4S32OS32, packb_nr64_u8s4s32o32)                                \
     PBMACRO(BF16S4F32OF32, NULL)                                               \
@@ -221,6 +229,7 @@
     PBMACRO(U8S8S32OS32, NULL)                                                 \
     PBMACRO(F32F32F32OF32, packb_nr16_f32f32f32of32)                           \
     PBMACRO(BF16BF16F32OF32, NULL)                                             \
+    PBMACRO(F16F16F16OF16, packb_nr128_f16f16f16of16)                          \
     KMACRO(BF16S4F32OF32, NULL)                                                \
     PBMACRO(S8S8S32OS32, NULL)                                                 \
     PBMACRO(U8S4S32OS32, NULL)                                                 \

@@ -4,8 +4,8 @@ AOCL-DLP is a library designed to provide optimized deep learning primitives for
 
 ## Features of AOCL-DLP
 
-- **Highly Optimized GEMM Operations**: Implements high-performance matrix multiplication operations targeting AMD CPUs with specialized instruction sets (AVX2, AVX512, AVX512_VNNI, AVX512_BF16)
-- **Multiple Data Type Support**: Works with various precision formats for efficient model training and inference
+- **Highly Optimized GEMM Operations**: Implements high-performance matrix multiplication operations targeting AMD CPUs with specialized instruction sets (AVX2, AVX512, AVX512_VNNI, AVX512_BF16, AVX512_FP16)
+- **Multiple Data Type Support**: Works with various precision formats including FP32, FP16, BF16, INT8, INT4 for efficient model training and inference
 - **Pre-operations and Post-operations**: Includes comprehensive support for operations common in deep learning workloads
 - **Batch GEMM Support**: Optimized for handling multiple GEMM operations simultaneously
 - **Symmetric Quantization Support**: Provides specialized routines for symmetric quantization
@@ -18,6 +18,7 @@ AOCL-DLP provides support for various data type combinations for GEMM operations
 | Input A    | Input B    | Output C   | Accumulator | Function Suffix     |
 |------------|------------|------------|-------------|---------------------|
 | float      | float      | float      | float       | f32f32f32of32       |
+| float16    | float16    | float16    | float16     | f16f16f16of16       |
 | bfloat16   | bfloat16   | float      | float       | bf16bf16f32of32     |
 | bfloat16   | bfloat16   | bfloat16   | float       | bf16bf16f32obf16    |
 | bfloat16   | int8_t     | float      | float       | bf16s4f32of32       |

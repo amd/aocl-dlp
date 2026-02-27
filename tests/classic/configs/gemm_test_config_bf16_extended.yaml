@@ -163,7 +163,7 @@ gemm_tests:
     transB: [false]
     m: [1, 6, 216, 288]
     n: [256]
-    k: [ 2048]
+    k: [2048]
     alpha: [3.0]
     beta: [0.0, 1.0]
     mtagA: ["none"]

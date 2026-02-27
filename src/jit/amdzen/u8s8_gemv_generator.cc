@@ -1638,7 +1638,7 @@ jitU8S8VNNI_GEMVM1<KType>::computeKxnfringe()
         }
         if (n_left) {
             vmovdqu32(Zmm(bBaseIdx + n_iter) | mask_regs[0] | T_z,
-                      ptr[regTmpYptr + j * 64]);
+                      ptr[regTmpYptr + j * RegBytes]);
             vpdpbusd(Zmm(accumBaseIdx + K_SUB_ITER * n_iter + j),
                      Zmm(xBaseIdx + j), Zmm(bBaseIdx + n_iter));
         }
@@ -1751,9 +1751,9 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
     // Moving regTmpYptr to the nLeft Panel
 
     mov(regTmpYptr, regBptr);
-    // In case of N_LEFT < 16, the nLeft panel pointer is the only Panel to
-    // process
-    if (N_LEFT > 16) {
+    // In case of N_LEFT < nElemsPerReg, the nLeft panel pointer is the only
+    // Panel to process
+    if (N_LEFT > nElemsPerReg) {
         mov(regTmp2, regRsB);
         shr(regTmp2, 2);
         imul(regTmp2, regPsB);
@@ -1774,7 +1774,7 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         // Update the pointers for next k iteration
         lea(regXptr, ptr[regXptr + K_SUB_ITER * 4]); // 4 VNNI groups * 4 bytes
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
-        lea(regTmpYptr, ptr[regTmpYptr + 64 * K_SUB_ITER]);
+        lea(regTmpYptr, ptr[regTmpYptr + RegBytes * K_SUB_ITER]);
 
         dec(regKSubIter);
         jnz(sub_loop_kc_main_loop_start, T_NEAR);
@@ -1792,8 +1792,8 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         // Update the pointers for next k iteration
         lea(regXptr, ptr[regXptr + 4]); // 1 VNNI group = 4 bytes
         lea(regBptr, ptr[regBptr + regRsB]);
-        lea(regTmpYptr,
-            ptr[regTmpYptr + 64]); // For the nleft, rowStride will always be 16
+        // For the nleft, rowStride is RegBytes (1 ZMM)
+        lea(regTmpYptr, ptr[regTmpYptr + RegBytes]);
 
         dec(regKSubIter);
         jnz(sub_loop_kc_fringe_loop_start, T_NEAR);
@@ -1815,7 +1815,7 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         // Update the pointers for next k iteration
         lea(regXptr, ptr[regXptr + K_SUB_ITER * 4]);
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
-        lea(regTmpYptr, ptr[regTmpYptr + 64 * K_SUB_ITER]);
+        lea(regTmpYptr, ptr[regTmpYptr + RegBytes * K_SUB_ITER]);
 
         dec(regKSubIter);
         jnz(sub_loop_kf_main_loop_start, T_NEAR);
@@ -1841,8 +1841,8 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         L(".CONTINUE_K_FRINGE");
         lea(regXptr, ptr[regXptr + 4]);
         lea(regBptr, ptr[regBptr + regRsB]);
-        lea(regTmpYptr,
-            ptr[regTmpYptr + 64]); // For the nleft, rowStride will always be 16
+        // For the nleft, rowStride is RegBytes (1 ZMM)
+        lea(regTmpYptr, ptr[regTmpYptr + RegBytes]);
 
         dec(regKSubIter);
         jnz(sub_loop_kf_fringe_loop_start, T_NEAR);
@@ -2840,12 +2840,18 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
             // The RowStride needs to be adjusted based on the N_LEFT since the
             // packing ensures the N_LEFT panel to be padded
-            if (N_LEFT < 32)
-                mov(regRsB, 64);
-            else if (N_LEFT < 48)
-                mov(regRsB, 128);
-            else if (N_LEFT < 64)
-                mov(regRsB, 192);
+            // Calculate rsB based on how many full ZMMs fit in N_LEFT
+            // Each ZMM holds nElemsPerReg elements (16 int32)
+            // rsB = number_of_full_ZMMs * RegBytes (or at least 1 ZMM for
+            // fringe)
+            int numFullZmms = N_LEFT / nElemsPerReg;
+            if (numFullZmms == 0) {
+                // N_LEFT < nElemsPerReg: only secondary panel, rsB = 1 ZMM
+                mov(regRsB, RegBytes);
+            } else {
+                // rsB = numFullZmms * RegBytes
+                mov(regRsB, numFullZmms * RegBytes);
+            }
 
             L(label_n_fringe_start);
             // Zero out accumulator registers for this n iteration

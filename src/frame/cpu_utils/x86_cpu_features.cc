@@ -56,7 +56,8 @@ enum x86_bit_positions : uint32_t
     avx512vnni_bit_pos         = (1u << 11), // cpuid[eax=7,ecx=0]    :ecx[11]
     movdiri_bit_pos            = (1u << 27), // cpuid[eax=7,ecx=0]    :ecx[27]
     movdir64b_bit_pos          = (1u << 28), // cpuid[eax=7,ecx=0]    :ecx[28]
-    avx512vp2intersect_bit_pos = (1u << 8),  // cpuid[eax=7,ecx=0] :edx[8]
+    avx512vp2intersect_bit_pos = (1u << 8),  // cpuid[eax=7,ecx=0]    :edx[8]
+    avx512fp16_bit_pos         = (1u << 23), // cpuid[eax=7,ecx=0]    :edx[23]
     avxvnni_bit_pos            = (1u << 4),  // cpuid[eax=7,ecx=1]    :eax[4]
     avx512bf16_bit_pos         = (1u << 5),  // cpuid[eax=7,ecx=1]    :eax[5]
     xgetbv_bit_pos     = (1u << 26) | (1u << 27), // cpuid[eax=1] :ecx[27:26]
@@ -148,6 +149,11 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
         if (dlp_cpuid_has_features(edx, avx512vp2intersect_bit_pos)) {
             featureMap[utils::getUnderlyingValueOfEnum(
                 isaFeature::avx512vp2intersect)] = 1;
+        }
+
+        if (dlp_cpuid_has_features(edx, avx512fp16_bit_pos)) {
+            featureMap[utils::getUnderlyingValueOfEnum(
+                isaFeature::avx512fp16)] = 1;
         }
 
         // This is actually a macro that modifies the last four operands,

@@ -25,8 +25,13 @@
 #
 
 # CMake file for Zen4 kernels
+
 # Get all source files in the zen4 directory recursively
 dlp_glob_sources_recursive(ZEN4_SOURCES ${CMAKE_CURRENT_SOURCE_DIR})
+
+# Note: FP16 kernel sources (pack/reorder) are always compiled - they use
+# portable uint16_t type and standard AVX-512 integer intrinsics (not FP16-specific).
+# JIT handles native FP16 compute instructions at runtime.
 
 # Create the zen4 kernel object library
 add_library(dlp_kernel_zen4 OBJECT ${ZEN4_SOURCES})
@@ -36,6 +41,7 @@ set(ZEN4_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/bf16bf16f32
     ${CMAKE_CURRENT_SOURCE_DIR}/f32f32f32
+    ${CMAKE_CURRENT_SOURCE_DIR}/fp16fp16fp16
     ${CMAKE_CURRENT_SOURCE_DIR}/s8s8s32
     ${CMAKE_CURRENT_SOURCE_DIR}/u8s8s32
 )

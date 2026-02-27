@@ -67,6 +67,7 @@ namespace testing {
             s32,    ///< Signed 32-bit integer
             f32,    ///< 32-bit floating point
             bf16,   ///< Brain floating point 16-bit
+            fp16,   ///< IEEE 754 half-precision 16-bit
         };
 
         /**
@@ -98,6 +99,8 @@ namespace testing {
                     return os << "f32";
                 case MatrixType::bf16:
                     return os << "bf16";
+                case MatrixType::fp16:
+                    return os << "fp16";
                 default:
                     return os << "unknown";
             }
@@ -189,6 +192,7 @@ namespace testing {
                     case MatrixType::u16:
                     case MatrixType::s16:
                     case MatrixType::bf16:
+                    case MatrixType::fp16:
                         return 2;
                     case MatrixType::u32:
                     case MatrixType::s32:

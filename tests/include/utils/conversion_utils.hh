@@ -29,6 +29,7 @@
 #define DLP_TESTING_UTILS_CONVERSION_UTILS_HH
 
 #include "classic/aocl_bf16_type.h"
+#include "classic/aocl_fp16_type.h"
 
 namespace dlp { namespace testing { namespace utils {
 
@@ -66,6 +67,46 @@ namespace dlp { namespace testing { namespace utils {
      * @return bfloat16 The corresponding bfloat16 value
      */
     bfloat16 f32_to_bf16_vcvtneps2bf16(float f32_val);
+
+    /**
+     * @brief Convert float16 to float32
+     *
+     * Converts an FP16 (IEEE 754 half-precision) value to a float32 value.
+     * This conversion is lossless - all FP16 values can be exactly
+     * represented in FP32.
+     *
+     * @param fp16_val The float16 value to convert
+     * @return float The corresponding float32 value
+     */
+    float fp16_to_f32(float16 fp16_val);
+
+    /**
+     * @brief Convert float32 to float16 with round-to-nearest-even
+     *
+     * Converts a float32 value to FP16 (IEEE 754 half-precision) using
+     * round-to-nearest-even rounding. This conversion is lossy and may
+     * overflow to infinity or underflow to zero.
+     *
+     * FP16 range: ±6.10×10⁻⁵ to ±65504
+     * Values outside this range will overflow to ±Inf or underflow to zero.
+     *
+     * @param f32_val The float32 value to convert
+     * @return float16 The corresponding float16 value
+     */
+    float16 f32_to_fp16(float f32_val);
+
+    /**
+     * @brief Convert float32 to float16 using VCVTPS2PH algorithm
+     *
+     * This function implements the conversion from float32 to float16
+     * following the VCVTPS2PH instruction semantics (F16C extension).
+     * Includes proper handling for zero, subnormals, infinities, NaNs,
+     * and normal numbers with IEEE 754 compliant rounding.
+     *
+     * @param f32_val The float32 value to convert
+     * @return float16 The corresponding float16 value
+     */
+    float16 f32_to_fp16_vcvtps2ph(float f32_val);
 
 }}} // namespace dlp::testing::utils
 

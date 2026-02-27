@@ -36,6 +36,7 @@
 #include "de_backend_utils.hh"
 #include "de_input.hh"
 #include "kernel_frame/kernel_frame_base.hh"
+#include "utils/float16_types.hh"
 
 namespace dlp::de {
 
@@ -883,6 +884,146 @@ class gemmS8DEBackend : public iDEBackend
                 return INVALID_KERNEL_INFO;
             }
         }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+};
+
+class gemmFP16DEBackend : public iDEBackend
+{
+    bool                                isAvx512;
+    bool                                isAvx512FP16;
+    kernel_frame::kernelInstrPreference eKernelInstPref;
+    bool                                canGenerateKernelInfo;
+
+    DLP_ALWAYS_INLINE constexpr md_t getPrefetchDistance()
+    {
+        // Setting prefetch distance for FP16, can be tuned per architecture
+        constexpr md_t prefetch_c_dist = 0;
+        return prefetch_c_dist;
+    }
+
+  public:
+    gemmFP16DEBackend();
+    ~gemmFP16DEBackend()                                   = default;
+    gemmFP16DEBackend(const gemmFP16DEBackend&)            = delete;
+    gemmFP16DEBackend(gemmFP16DEBackend&&)                 = delete;
+    gemmFP16DEBackend& operator=(const gemmFP16DEBackend&) = delete;
+    gemmFP16DEBackend& operator=(gemmFP16DEBackend&&)      = delete;
+
+    std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
+        iDEInput* in) override;
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        // FP16 uses float16 for alpha/beta scaling
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<dlp::float16>(alpha, beta, k,
+                                                              kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        if (n == 1) {
+            // GEMV N=1: y = A * x (M x K matrix * K x 1 vector)
+            // MR = 16 for FP16 (16 rows processed at once)
+            mr       = 16;
+            nr       = 1;
+            k_unroll = 1;
+        } else if (m == 1) {
+            // GEMV M=1: y = x * B (1 x K vector * K x N matrix)
+            // NR = 128 for FP16 (4 ZMMs of 32 FP16 elements each)
+            mr       = 1;
+            nr       = 128;
+            k_unroll = 4;
+        } else {
+            return INVALID_KERNEL_INFO;
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_MEMORY_TAG                   mtag_a,
+        AOCL_MEMORY_TAG                   mtag_b,
+        lpgemm_post_op*                   metadata,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale,
+        [[maybe_unused]] bool rerouted_from_other_backend) override final
+    {
+        if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        // FP16 uses float16 for alpha/beta scaling
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<dlp::float16>(alpha, beta, k,
+                                                              kc_hint);
+
+        md_t mr              = mr_hint;
+        md_t nr              = nr_hint;
+        md_t k_unroll        = 1;
+        md_t kc              = kc_hint;
+        md_t prefetch_c_dist = getPrefetchDistance();
+        bool anyKOpsOrder    = false;
+
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,

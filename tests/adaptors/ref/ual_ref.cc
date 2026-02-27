@@ -305,6 +305,10 @@ UalRef::reorder(const Matrix& in,
             success = reorderTyped<bfloat16>(in, out, input_rows, input_cols,
                                              layout, transposed);
             break;
+        case MatrixType::fp16:
+            success = reorderTyped<float16>(in, out, input_rows, input_cols,
+                                            layout, transposed);
+            break;
         case MatrixType::u8:
             success = reorderTyped<uint8_t>(in, out, input_rows, input_cols,
                                             layout, transposed);
@@ -579,6 +583,32 @@ UalRef::gemm(const Matrix& A,
             dlp::testing::utils::copyToMatrix<float>(
                 reinterpret_cast<const float*>(tempC_f32.getData()),
                 tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
+
+            return true;
+        }
+
+        case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::fp16,
+                          MatrixType::fp16>(): {
+            // Native FP16 accumulation (accumulator type is fp16, not f32!)
+            // Use proper f32_to_fp16 conversion instead of static_cast
+            // static_cast<float16>(double) would truncate to uint16, NOT
+            // convert to fp16!
+            float16 alpha_fp16 =
+                dlp::testing::utils::f32_to_fp16(static_cast<float>(alpha));
+            float16 beta_fp16 =
+                dlp::testing::utils::f32_to_fp16(static_cast<float>(beta));
+
+            dlp::testing::classic::ref::aocl_gemm_f16f16f16of16_ref(
+                layoutA, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), alpha_fp16,
+                reinterpret_cast<const float16*>(
+                    A.getMatrixData().getMatrixPtr()),
+                static_cast<int>(A.getLeadingDimension()),
+                reinterpret_cast<const float16*>(
+                    B.getMatrixData().getMatrixPtr()),
+                static_cast<int>(B.getLeadingDimension()), beta_fp16,
+                reinterpret_cast<float16*>(C.getMatrixData().getMatrixPtr()),
+                static_cast<int>(C.getLeadingDimension()), nullptr);
 
             return true;
         }

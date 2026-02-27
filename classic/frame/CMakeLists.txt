@@ -27,6 +27,9 @@
 # Get all source files in the frame directory recursively
 dlp_glob_sources_recursive(FRAME_SOURCES ${CMAKE_CURRENT_SOURCE_DIR})
 
+# Note: FP16 frame sources are always compiled - they use portable uint16_t type
+# and standard AVX-512 integer intrinsics. JIT handles FP16 compute at runtime.
+
 # Output the found sources (optional, for debugging)
 # message(STATUS "Frame sources: ${FRAME_SOURCES}")
 

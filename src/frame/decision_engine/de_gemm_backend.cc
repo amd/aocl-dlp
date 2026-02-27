@@ -551,4 +551,63 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             break;
     }
 }
+gemmFP16DEBackend::gemmFP16DEBackend()
+    : isAvx512(false)
+    , isAvx512FP16(false)
+    , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
+    , canGenerateKernelInfo(true)
+{
+    // Check for AVX512-FP16 support (required for FP16 JIT kernels)
+    isAvx512FP16 = cpu_utils::cpuFeaturesInstance().hasFeature(
+        cpu_utils::isaFeature::avx512fp16);
+
+    isAvx512 =
+        arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
+
+    // FP16 JIT requires AVX512-FP16 support
+    if (!isAvx512 || !isAvx512FP16) {
+        canGenerateKernelInfo = false;
+    } else {
+        // Set to AVX512 ZMM preference for FP16
+        eKernelInstPref =
+            kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+    }
+}
+
+std::optional<kernel_frame::kernelInfo>
+gemmFP16DEBackend::getKernelInfoForInput(iDEInput* in)
+{
+    auto gemmIn = static_cast<gemmDEInput*>(in);
+    if (gemmIn == nullptr) {
+        return std::nullopt;
+    }
+
+    if (!canGenerateKernelInfo) {
+        return std::nullopt;
+    }
+
+    kernel_frame::kernelInfo kI;
+    if (gemmIn->m == 1 || gemmIn->n == 1) {
+        kI = getGemvKernelInfoForInputFastPath(
+            gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
+            gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
+            gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
+            gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
+    } else {
+        kI = getGemmKernelInfoForInputFastPath(
+            gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
+            gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
+            gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
+            gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
+    }
+
+    if ((kI.mr <= 0) || (kI.nr <= 0)) {
+        return std::nullopt;
+    } else {
+        return std::make_optional(kI);
+    }
+}
+
 } // namespace dlp::de

@@ -936,6 +936,8 @@ MicroTest::matrixTypeToString(MatrixType type) const
             return "f32";
         case MatrixType::bf16:
             return "bf16";
+        case MatrixType::fp16:
+            return "fp16";
         case MatrixType::s8:
             return "s8";
         case MatrixType::u8:
@@ -964,6 +966,8 @@ MicroTest::stringToMatrixType(const std::string& str) const
         return MatrixType::f32;
     if (str == "bf16")
         return MatrixType::bf16;
+    if (str == "fp16")
+        return MatrixType::fp16;
     if (str == "s8" || str == "int8")
         return MatrixType::s8;
     if (str == "u8" || str == "uint8")

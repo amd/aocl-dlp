@@ -69,6 +69,7 @@ dlp_create_test_object_library(
     INCLUDE_DIRS ${TEST_INCLUDE_DIRS}
 )
 
+
 #
 # Add each test executable
 # Tests now link with pre-compiled object libraries instead of recompiling shared code

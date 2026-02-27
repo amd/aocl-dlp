@@ -125,6 +125,11 @@ class decisionEngine
         auto s8s8s32of32DtIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelDatatype::s8s8s32of32);
         backends[kTypeIdx][s8s8s32of32DtIdx] = new gemmS8DEBackend;
+
+        // Register FP16 decision engine
+        auto f16f16f16of16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::f16f16f16of16);
+        backends[kTypeIdx][f16f16f16of16DtIdx] = new gemmFP16DEBackend;
     }
 
     decisionEngine()

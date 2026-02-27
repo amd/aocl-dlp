@@ -27,6 +27,7 @@
  */
 
 #include "classic/aocl_bf16_type.h"
+#include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
 #include "classic/dlp_base_types.h"
 #include "framework/types.hh"
@@ -46,6 +47,23 @@ aocl_gemm_f32f32f32of32_ref(const char      order,
                             int             ldb,
                             float           beta,
                             float*          C,
+                            int             ldc,
+                            dlp_metadata_t* post_ops);
+
+void
+aocl_gemm_f16f16f16of16_ref(const char      order,
+                            const char      transa,
+                            const char      transb,
+                            const md_t      m,
+                            const md_t      n,
+                            const md_t      k,
+                            float16         alpha,
+                            const float16*  A,
+                            int             lda,
+                            const float16*  B,
+                            int             ldb,
+                            float16         beta,
+                            float16*        C,
                             int             ldc,
                             dlp_metadata_t* post_ops);
 
