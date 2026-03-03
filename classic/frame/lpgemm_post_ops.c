@@ -239,7 +239,14 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
 
     for (iter_t i = 0; i < pre_op_unparsed->seq_length; ++i) {
         md_t group_size = pre_op_unparsed->group_size;
-        if ((group_size == 0) || (group_size > k)) {
+
+        // WOQ and similar pre-ops may pass group_size 0 to mean "default"
+        // (one group over full k).
+        if (group_size == 0) {
+            group_size = k;
+        }
+
+        if (group_size > k) {
             return DLP_CLSC_INVALID_GROUP_DIMENSION;
         } else if (pre_op_unparsed->group_size % 2 == 1) {
             return DLP_CLSC_INVALID_GROUP_DIMENSION;
@@ -470,16 +477,22 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
         return DLP_CLSC_NULL_POINTER;
     }
 
-    md_t e_i   = 0; // Multiple eltwise supported.
-    md_t s_i   = 0; // Multiple sum/scale supported.
-    md_t b_i   = 0; // Multiple bias supported.
-    md_t m_i   = 0; // Multiple matrix add supported.
-    md_t mul_i = 0; // Multiple matrix mul supported.
+    md_t        e_i         = 0; // Multiple eltwise supported.
+    md_t        s_i         = 0; // Multiple sum/scale supported.
+    md_t        b_i         = 0; // Multiple bias supported.
+    md_t        m_i         = 0; // Multiple matrix add supported.
+    md_t        mul_i       = 0; // Multiple matrix mul supported.
+    static md_t zero_zp_len = 0;
     for (iter_t i = post_op_offset; i < metadata->seq_length + post_op_offset;
          ++i) {
         // Dispatcher code
         switch (*(metadata->seq_vector + i - post_op_offset)) {
             case ELTWISE: {
+                if (metadata->eltwise == NULL) {
+                    dlp_print_msg(" Post_op.eltwise is NULL. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
                 LPGEMM_POST_OP_CODE tmp_code      = POST_OPS_DISABLE;
                 DLP_TYPE            tmp_stor_type = DLP_INVALID;
                 // Eltwise algo dispatcher.
@@ -553,9 +566,15 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                 e_i += 1;
             } break;
             case BIAS: {
-                if ((metadata->bias + b_i)->bias == NULL) {
+                if (metadata->bias == NULL) {
                     dlp_print_msg(" Post_op.bias is NULL. Exiting..", __FILE__,
                                   __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
+                if ((metadata->bias + b_i)->bias == NULL) {
+                    dlp_print_msg(
+                        " Post_op.bias array pointer is NULL. Exiting..",
+                        __FILE__, __LINE__);
                     return DLP_CLSC_NULL_POINTER;
                 }
 
@@ -613,6 +632,11 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                 b_i += 1;
             } break;
             case SCALE: {
+                if (metadata->scale == NULL) {
+                    dlp_print_msg(" Post_op.scale is NULL. Exiting..", __FILE__,
+                                  __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
                 if (((metadata->scale + s_i)->sf
                      && (metadata->scale + s_i)->sf->scale_factor_len > 0)
                     && ((metadata->scale + s_i)->sf->scale_factor == NULL)) {
@@ -660,7 +684,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                 md_t* zero_point_len_ptr =
                     (metadata->scale + s_i)->zp
                         ? &((metadata->scale + s_i)->zp->zero_point_len)
-                        : NULL;
+                        : &zero_zp_len;
 
                 lpgemm_set_node_params(
                     (post_op_list + i), POST_OPS_DOWNSCALE,
@@ -679,6 +703,11 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                 s_i += 1;
             } break;
             case MATRIX_ADD: {
+                if (metadata->matrix_add == NULL) {
+                    dlp_print_msg(" Post_op.matrix_add is NULL. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
                 if (((metadata->matrix_add + m_i)->matrix == NULL)
                     || ((metadata->matrix_add + m_i)->ldm <= 0)) {
                     dlp_print_msg(
@@ -721,6 +750,11 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                 m_i += 1;
             } break;
             case MATRIX_MUL: {
+                if (metadata->matrix_mul == NULL) {
+                    dlp_print_msg(" Post_op.matrix_mul is NULL. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_NULL_POINTER;
+                }
                 if (((metadata->matrix_mul + mul_i)->matrix == NULL)
                     || ((metadata->matrix_mul + mul_i)->ldm <= 0)) {
                     dlp_print_msg(

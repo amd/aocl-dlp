@@ -108,6 +108,25 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
             goto err_hndl;
         }
 
+        // Add early returns for NULL pointers.
+        if (metadata[gc_i] == NULL || metadata[gc_i]->pre_ops == NULL
+            || metadata[gc_i]->pre_ops->b_scl == NULL) {
+            dlp_print_msg(
+                "Required parameters for symmetric woq missing. Exiting..",
+                __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
+            goto err_hndl;
+        }
+
+        // Note: b_zp is not required for this kernel.
+        if (metadata[gc_i]->pre_ops->b_zp != NULL) {
+            dlp_print_msg(" zero-point is not required, asymmetric woq not "
+                          "supported. Exiting..",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+            goto err_hndl;
+        }
+
         md_t rs_a;
         md_t cs_a;
 
@@ -317,6 +336,25 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
+            goto err_hndl;
+        }
+
+        // Add early returns for NULL pointers.
+        if (metadata[gc_i] == NULL || metadata[gc_i]->pre_ops == NULL
+            || metadata[gc_i]->pre_ops->b_scl == NULL) {
+            dlp_print_msg(
+                "Required parameters for symmetric woq missing. Exiting..",
+                __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
+            goto err_hndl;
+        }
+
+        // Note: b_zp is not required for this kernel.
+        if (metadata[gc_i]->pre_ops->b_zp != NULL) {
+            dlp_print_msg(" zero-point is not required, asymmetric woq not "
+                          "supported. Exiting..",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
             goto err_hndl;
         }
 

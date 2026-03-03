@@ -173,6 +173,18 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         mtag_b = PACK;
     }
 
+    // Add early returns for NULL group quantization parameters.
+    if (metadata == NULL || metadata->post_op_grp == NULL
+        || metadata->post_op_grp->a_scl == NULL
+        || metadata->post_op_grp->b_scl == NULL) {
+        dlp_print_msg(
+            "Required parameters for symmetric quantized GEMM missing."
+            " Exiting..",
+            __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
+        goto err_hndl;
+    }
+
     // convert group-level post-op struct to linked list format.
     lpgemm_group_post_op grp_post_op_list[AOCL_MAX_POST_OPS];
     dlp_clsc_err_t       err = lpgemm_translate_to_group_postops_list(

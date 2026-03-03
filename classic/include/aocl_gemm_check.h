@@ -29,7 +29,24 @@
 #ifndef AOCL_GEMM_CHECK_H
 #define AOCL_GEMM_CHECK_H
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "classic/dlp_errors.h"
+
+/*
+ * Maximum allowed value for any single GEMM dimension (m, n, k).
+ * Set to INT32_MAX so that any pairwise product (m*k, k*n, m*n)
+ * is guaranteed to fit in int64_t without overflow, and internal
+ * buffer-size computations remain safe.
+ */
+#define DLP_MAX_GEMM_DIM ((int64_t)INT32_MAX)
+
+/* Maximum allowed group size. Set to INT32_MAX so that group_size can be
+ * safely used in loop bounds and indexed operations that assume 32-bit
+ * indices, without risking overflow when promoted to int64_t.
+ */
+#define DLP_MAX_GROUP_SIZE ((int64_t)INT32_MAX)
 
 #define AOCL_ERROR_CHECK(op_str, arg_pos, err_no)                              \
     if (arg_pos != 0) {                                                        \
@@ -193,17 +210,17 @@
                    && (transb != 'T')) {                                       \
             arg_pos = 3;                                                       \
             err_no  = DLP_CLSC_INVALID_TRANSPOSE;                              \
-        } else if (m <= 0) {                                                   \
+        } else if ((m <= 0) || (m > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 4;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (n <= 0) {                                                   \
+        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 5;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (k <= 0) {                                                   \
+        } else if ((k <= 0) || (k > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 6;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
         } else if (a == NULL) {                                                \
-            arg_pos = 8;                                                       \
+            arg_pos = 7;                                                       \
             err_no  = DLP_CLSC_NULL_POINTER;                                   \
         } else if (row_stored && ((nota && (lda < k)) || (ta && (lda < m)))) { \
             arg_pos = 9;                                                       \
@@ -272,17 +289,17 @@
                    && (transb != 'T')) {                                       \
             arg_pos = 3;                                                       \
             err_no  = DLP_CLSC_INVALID_TRANSPOSE;                              \
-        } else if (m <= 0) {                                                   \
+        } else if ((m <= 0) || (m > DLP_MAX_GEMM_DIM)) {                       \
+            arg_pos = 4;                                                       \
+            err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
+        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 5;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (n <= 0) {                                                   \
+        } else if ((k <= 0) || (k > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 6;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (k <= 0) {                                                   \
-            arg_pos = 7;                                                       \
-            err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
         } else if (a == NULL) {                                                \
-            arg_pos = 9;                                                       \
+            arg_pos = 8;                                                       \
             err_no  = DLP_CLSC_NULL_POINTER;                                   \
         } else if (row_stored && ((nota && (lda < k)) || (ta && (lda < m)))) { \
             arg_pos = 10;                                                      \
@@ -316,11 +333,14 @@
         } else if (col_stored && (ldc < m)) {                                  \
             arg_pos = 17;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
-        } else if (group_count_idx < 0 || group_size <= 0) {                   \
-            arg_pos = 18;                                                      \
+        } else if ((group_size <= 0) || (group_size > DLP_MAX_GROUP_SIZE)) {   \
+            arg_pos = 16;                                                      \
+            err_no  = DLP_CLSC_INVALID_GROUP_DIMENSION;                        \
+        } else if ((group_count_idx < 0)                                       \
+                   || (group_count_idx > DLP_MAX_GROUP_SIZE)) {                \
+            arg_pos = 15;                                                      \
             err_no  = DLP_CLSC_INVALID_GROUP_DIMENSION;                        \
         }                                                                      \
-                                                                               \
         AOCL_ERROR_CHECK(op_str, arg_pos, err_no);                             \
     }
 

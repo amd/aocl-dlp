@@ -469,10 +469,14 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
                 (post_op->scale_factor_len > 1) ? true : false;
             metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
                 static_cast<DLP_TYPE>(post_op->zp_stor_type));
-            metaData->scalarZeroPointRequired =
-                (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true : false;
-            metaData->vectorZeroPointRequired =
-                (*(static_cast<md_t*>(post_op->op_args3)) > 1) ? true : false;
+            if (post_op->op_args3 != nullptr) {
+                metaData->scalarZeroPointRequired =
+                    (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true
+                                                                    : false;
+                metaData->vectorZeroPointRequired =
+                    (*(static_cast<md_t*>(post_op->op_args3)) > 1) ? true
+                                                                   : false;
+            }
             break;
         }
         case POST_OPS_MATRIX_ADD: {
@@ -537,10 +541,14 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             // Extract zero-point data type
             metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
                 static_cast<DLP_TYPE>(post_op->zp_stor_type));
-            metaData->scalarZeroPointRequired =
-                (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true : false;
-            metaData->vectorZeroPointRequired =
-                (*(static_cast<md_t*>(post_op->op_args3)) > 1) ? true : false;
+            if (post_op->op_args3 != nullptr) {
+                metaData->scalarZeroPointRequired =
+                    (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true
+                                                                    : false;
+                metaData->vectorZeroPointRequired =
+                    (*(static_cast<md_t*>(post_op->op_args3)) > 1) ? true
+                                                                   : false;
+            }
             break;
         }
         case POST_OPS_DISABLE:
