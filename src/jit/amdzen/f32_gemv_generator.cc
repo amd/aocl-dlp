@@ -1684,7 +1684,7 @@ jitF32GEMVM1<KType>::allocateRegisters()
     xReg     = K_SUB_ITER;
     bReg     = NR / simdWidth;
     accumReg = (NR / simdWidth) * K_SUB_ITER;
-    tmpReg   = yReg;
+    tmpReg   = (c_downscale < DLP_F32) ? yReg : 0;
     maskReg  = 0; // Set this only when AVX512 codepath is disabled.
 
     // Direct addressing mode on FMA instructions are avoided here, since
@@ -1697,16 +1697,16 @@ jitF32GEMVM1<KType>::allocateRegisters()
     xBaseIdx     = accumBaseIdx - xReg;
     yBaseIdx     = numRegs - yReg;
     bBaseIdx     = xBaseIdx - bReg;
-    tmpBaseIdx   = bBaseIdx - tmpReg;
-    maskBaseIdx = tmpBaseIdx; // Set this only when AVX512 codepath is disabled.
+    tmpBaseIdx   = 0;
 
     if (!Traits::hasMaskSupport) { // Native mask register-file is not supported
                                    // by the architecture.
-        maskReg     = 1;
-        maskBaseIdx = maskBaseIdx - maskReg;
+        maskReg = 1;
     }
 
-    if (maskBaseIdx < 0) {
+    maskBaseIdx = bBaseIdx - maskReg;
+
+    if (maskBaseIdx < tmpBaseIdx + tmpReg) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
