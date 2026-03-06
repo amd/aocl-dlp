@@ -32,12 +32,12 @@
 #include <memory>
 
 #include "jit/jit_generator_base.hh"
-#include "jit/xbyak/xbyak.h"
-#include "jit/xbyak/xbyak_util.h"
 #include "jit_generator_utils.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 #include "kernels/kernel_base.hh"
 #include "x86_kernel_ops_generator.hh"
+#include "xbyak/xbyak.h"
+#include "xbyak/xbyak_util.h"
 
 namespace amdzen::gen {
 

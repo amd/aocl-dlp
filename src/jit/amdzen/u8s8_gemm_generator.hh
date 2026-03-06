@@ -29,11 +29,11 @@
 #pragma once
 
 #include "jit/jit_generator_base.hh"
-#include "jit/xbyak/xbyak.h"
 #include "jit_generator_utils.hh"
 #include "kernel_ops_handler.hh"
 #include "kernels/kernel_base.hh"
 #include "traits.hh"
+#include "xbyak/xbyak.h"
 
 namespace amdzen::gen {
 

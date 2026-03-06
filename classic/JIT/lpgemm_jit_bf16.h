@@ -29,9 +29,9 @@
 #ifndef JIT_BF16_H
 #define JIT_BF16_H
 
+#include "xbyak/xbyak.h"
 #include <cstring>
 #include <functional>
-#include <jit/xbyak/xbyak.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>

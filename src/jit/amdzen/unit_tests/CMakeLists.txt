@@ -26,5 +26,5 @@
 
 # Use the reusable function to add unit tests
 dlp_add_unit_tests(
-    INCLUDE_DIRS ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/src/include
+    INCLUDE_DIRS ${DLP_SOURCE_DIR}/src ${DLP_SOURCE_DIR}/src/include ${DLP_SOURCE_DIR}/third_party
 )

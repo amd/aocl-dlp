@@ -509,7 +509,7 @@ TransposeGenerator<KType>::generateNleftLocal(int j)
         jit_->kmovb(regTmpHalf, fringeMask[j]);
         jit_->popcnt(regNleftLocal, regTmpHalf);
     } else {
-        jit_->mov(regNleftLocal, regNleft);
+        jit_->mov(regNleftLocal, Xbyak::Reg32(regNleft.getIdx()));
     }
 }
 
@@ -1052,7 +1052,7 @@ TransposeGenerator<KType>::storeColumns_variableCount(const int* reg_idx,
 
     for (int i = 0; i < numCols; i++) {
         // Check if we've stored enough columns
-        jit_->cmp(regTmp2, regNleftLocal);
+        jit_->cmp(Xbyak::Reg32(regTmp2.getIdx()), regNleftLocal);
         jit_->jge(done, jit_->T_NEAR);
 
         // Perform the store operation

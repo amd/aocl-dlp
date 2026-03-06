@@ -38,7 +38,7 @@
 #endif
 
 #include "jit/jit_generator_base.hh"
-#include "jit/xbyak/xbyak.h"
+#include "xbyak/xbyak.h"
 
 // Error handling macro to reduce repetitive code
 #define RETURN_IF_ERROR(expr)                                                  \

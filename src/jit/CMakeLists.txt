@@ -34,5 +34,5 @@ add_subdirectory(amdzen)
 # Export include directories to parent scope
 set(DLP_PLUS_INCLUDES ${DLP_PLUS_INCLUDES}
     ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/xbyak
+    ${DLP_SOURCE_DIR}/third_party  # xbyak headers
     PARENT_SCOPE)

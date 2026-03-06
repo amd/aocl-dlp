@@ -31,8 +31,8 @@
 #include <type_traits>
 
 #include "jit/jit_generator_base.hh"
-#include "jit/xbyak/xbyak.h"
 #include "kernel_frame/kernel_frame_base.hh"
+#include "xbyak/xbyak.h"
 
 namespace amdzen::gen {
 

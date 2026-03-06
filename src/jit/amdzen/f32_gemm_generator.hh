@@ -32,11 +32,11 @@
 #include <vector>
 
 #include "jit/jit_generator_base.hh"
-#include "jit/xbyak/xbyak.h"
 #include "jit_generator_utils.hh"
 #include "kernel_ops_handler.hh"
 #include "kernels/kernel_base.hh"
 #include "traits.hh"
+#include "xbyak/xbyak.h"
 
 // To indicate the generation of kernel with IR loop outside and JR loop inside
 // within the microkernel for k=1 case. This loop order performs better since it

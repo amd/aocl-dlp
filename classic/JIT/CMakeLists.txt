@@ -27,7 +27,7 @@
 # Get all source files in the frame directory recursively
 dlp_glob_sources_recursive(JIT_SOURCES ${CMAKE_CURRENT_SOURCE_DIR})
 
-set(CLASSIC_INCLUDES ${CLASSIC_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/xbyak PARENT_SCOPE)
+set(CLASSIC_INCLUDES ${CLASSIC_INCLUDES} ${CMAKE_CURRENT_SOURCE_DIR} ${DLP_SOURCE_DIR}/third_party PARENT_SCOPE)
 
 # Output the found sources (optional, for debugging)
 # message(STATUS "JIT sources: ${JIT_SOURCES}")

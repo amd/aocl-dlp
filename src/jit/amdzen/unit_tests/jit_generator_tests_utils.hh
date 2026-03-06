@@ -40,8 +40,8 @@
 #include "jit/amdzen/s8_gemv_generator.hh"
 #include "jit/amdzen/u8s8_gemm_generator.hh"
 #include "jit/amdzen/u8s8_gemv_generator.hh"
-#include "jit/xbyak/xbyak.h"
 #include "kernel_frame/kernel_frame_base.hh"
+#include "xbyak/xbyak.h"
 #include <chrono>
 #include <csignal>
 #include <cstring>

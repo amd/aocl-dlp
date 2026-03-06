@@ -43,7 +43,7 @@ dlp_set_jit_flags(aocl_dlp_jit_amdzen)
 # Set include directories - inherit from parent
 target_include_directories(aocl_dlp_jit_amdzen PRIVATE
     ${DLP_PLUS_INCLUDES}
-    ${CMAKE_CURRENT_SOURCE_DIR}/../xbyak  # Access to xbyak headers
+    ${DLP_SOURCE_DIR}/third_party  # Access to xbyak headers
 )
 
 # Propagate any JIT-specific definitions if needed
