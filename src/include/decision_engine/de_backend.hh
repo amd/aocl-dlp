@@ -369,14 +369,19 @@ class gemmF32DEBackend : public iDEBackend
         // other backend.
         //
         // RD kernel threshold: RD avoids B packing (cost ~ n*k*sizeof(float)).
-        // RD is beneficial when packing overhead exceeds computation benefit.
-        // - Very small m (<=6) with k<=64: avoids lt16 kernel optimizations
-        // - Small n (<=8) with k>=32: packing overhead dominates
-        // - Small m with larger k: row-wise computation favors RD
+        // RD is beneficial when:
+        // - k-dominated: k >= m*8 ensures packing cost outweighs compute
+        // benefit
+        // - Narrow B (n<=8) with sufficient k: B matrix width is small
+        // - Tight fringe n: n % 16 in [1-8] causes RV vectorization
+        // inefficiency
+        //   (just above 16-boundary), bounded by n<=72 and k>=64
+        // - Very small m (<=6): RD wins broadly for n<=72
         if (!hasPostOps && !(rerouted_from_other_backend)
-            && ((m <= 6 && k <= 64) || (n <= 8 && k >= 32)
-                || (m <= 12 && k >= 128) || (m <= 24 && k >= 256)
-                || (m <= 64 && k >= 512))
+            && ((k >= m * 8) || (n <= 8 && k >= 32)
+                || (n % 16 != 0 && n % 16 <= 8 && n <= 72 && k >= 64
+                    && (n <= 48 || m <= 32))
+                || (m <= 6 && n <= 72))
             && (cs_b != 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)) {
             invokeRD = true;
             k_unroll = 4; // equal to intrinsics kernel. To be tuned later.
