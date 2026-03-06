@@ -32,7 +32,7 @@
 #include "classic/dlp_base_types.h"
 
 #define AOCL_MAX_POST_OPS 8
-#define AOCL_MAX_PRE_OPS  1
+#define AOCL_MAX_PRE_OPS  2
 
 /**
  * @brief Enumeration of element-wise algorithm types supported in

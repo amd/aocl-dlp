@@ -118,14 +118,20 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
         return DLP_CLSC_SUCCESS;
     }
 
-    for (iter_t i = 0; i < metadata->seq_length; ++i) {
-        md_t group_size = metadata->group_size;
-        if ((group_size == 0) || (group_size > k)) {
-            return DLP_CLSC_INVALID_GROUP_DIMENSION;
-        } else if (metadata->group_size % 4 > 0) {
-            return DLP_CLSC_INVALID_GROUP_DIMENSION;
-        }
+    md_t group_size = metadata->group_size;
 
+    // Group ops may pass group_size 0 to mean "default"
+    // (one group over full k).
+    if (group_size == 0) {
+        group_size = k;
+    }
+    if ((group_size > k) || (group_size < 0)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    } else if ((group_size != k) && (group_size % 4 != 0)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    for (iter_t i = 0; i < metadata->seq_length; ++i) {
         if (metadata->a_zp != NULL) {
             /* check for validity of pre-ops */
             if (((metadata->a_zp)->zero_point_len > 0)
@@ -181,7 +187,7 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
         }
 
         lpgemm_set_group_post_ops_node_params(
-            post_op_list, group_size,
+            (post_op_list + i), group_size,
             // A zero-point
             (metadata->a_zp == NULL) ? NULL : (metadata->a_zp)->zero_point,
             // A scale factor
@@ -200,7 +206,7 @@ lpgemm_translate_to_group_postops_list(dlp_group_post_op*    metadata,
             (metadata->b_scl == NULL) ? 0 : (metadata->b_scl)->scale_factor_len,
             tmp_sf_stor_type, tmp_zp_stor_type);
 
-        // Simulating linked link using an array.
+        // Simulating linked list using an array.
         if (i < (metadata->seq_length - 1)) {
             (post_op_list + i)->next = (post_op_list + i + 1);
         }
@@ -217,7 +223,6 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
                                  md_t           k)
 {
     (void)(m); // Unused for now, potential to be used later.
-    (void)(k); // Unused for now, potential to be used later.
 
     if ((pre_op_unparsed == NULL) || (pre_op_unparsed->seq_length <= 0)) {
         lpgemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
@@ -226,7 +231,7 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
         return DLP_CLSC_SUCCESS;
     }
 
-    if ((pre_op_unparsed->seq_length > AOCL_MAX_POST_OPS)) {
+    if ((pre_op_unparsed->seq_length > AOCL_MAX_PRE_OPS)) {
         lpgemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
                                        DLP_INVALID);
 
@@ -237,21 +242,21 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
                                                // pre ops permitted.
     }
 
+    md_t group_size = pre_op_unparsed->group_size;
+
+    // WOQ and similar pre-ops may pass group_size 0 to mean "default"
+    // (one group over full k).
+    if (group_size == 0) {
+        group_size = k;
+    }
+
+    if ((group_size > k) || (group_size < 0)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    } else if ((group_size != k) && (group_size % 2 != 0)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
     for (iter_t i = 0; i < pre_op_unparsed->seq_length; ++i) {
-        md_t group_size = pre_op_unparsed->group_size;
-
-        // WOQ and similar pre-ops may pass group_size 0 to mean "default"
-        // (one group over full k).
-        if (group_size == 0) {
-            group_size = k;
-        }
-
-        if (group_size > k) {
-            return DLP_CLSC_INVALID_GROUP_DIMENSION;
-        } else if (pre_op_unparsed->group_size % 2 == 1) {
-            return DLP_CLSC_INVALID_GROUP_DIMENSION;
-        }
-
         if (pre_op_unparsed->b_zp != NULL) {
             /* check for validity of pre-ops */
             if (((pre_op_unparsed->b_zp)->zero_point_len > 0)
@@ -265,7 +270,7 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
                 return DLP_CLSC_NULL_POINTER;
         }
         lpgemm_set_pre_ops_node_params(
-            pre_op_list, group_size,
+            (pre_op_list + i), group_size,
             (pre_op_unparsed->b_zp == NULL)
                 ? NULL
                 : (pre_op_unparsed->b_zp)->zero_point,
@@ -284,7 +289,7 @@ lpgemm_translate_to_pre_ops_list(dlp_pre_op*    pre_op_unparsed,
                        ? DLP_BF16
                        : DLP_F32));
 
-        // Simulating linked link using an array.
+        // Simulating linked list using an array.
         if (i < (pre_op_unparsed->seq_length - 1)) {
             (pre_op_list + i)->next = (pre_op_list + i + 1);
         }
@@ -357,7 +362,7 @@ lpgemm_translate_to_post_ops_list(dlp_metadata_t* metadata,
                                NULL, 0, NULL, 0, DLP_INVALID, DLP_INVALID,
                                DLP_INVALID);
 
-        dlp_print_msg(" Max supported post-ops is 5, supplied input post-ops"
+        dlp_print_msg(" Max supported post-ops is 8, supplied input post-ops"
                       " are more. Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_UNEXPECTED_VECTOR_DIM; // Error, seq length exceeds max
