@@ -363,26 +363,40 @@ function(dlp_set_jit_flags target)
     endif()
 endfunction()
 
-# Function to setup atomic support for 16-byte atomic structs
-# This is required for lock-free atomic operations on structures used in multi-threaded inference
+# Function to setup atomic support for C11 _Atomic and C++ std::atomic operations.
+# GCC (and GCC-runtime-based compilers) may emit calls to __atomic_* symbols in
+# libatomic rather than inlining them, especially for C11 atomic_load_explicit /
+# atomic_store_explicit on _Atomic int64_t at lower optimization levels.
 function(dlp_setup_atomic_support)
-    # GCC/Clang require libatomic for 16-byte atomic operations
-    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        # Find libatomic library
-        find_library(ATOMIC_LIBRARY NAMES atomic)
+    # Compilers that use GCC's libatomic runtime:
+    #  GNU       - GCC
+    #  Clang     - Clang/AOCC (uses GCC runtime on Linux)
+    #  IntelLLVM - Intel oneAPI icx/icpx (LLVM-based, uses GCC runtime)
+    # Compilers that do NOT need libatomic:
+    #  Intel     - Intel Classic icc/icpc (bundles its own atomic runtime via libirc)
+    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|IntelLLVM")
+        find_library(ATOMIC_LIBRARY NAMES atomic
+            HINTS
+                ${CMAKE_C_IMPLICIT_LINK_DIRECTORIES}
+                ${CMAKE_CXX_IMPLICIT_LINK_DIRECTORIES}
+                ENV LIBRARY_PATH
+        )
 
         if(ATOMIC_LIBRARY)
             target_link_libraries(${PROJECT_NAME} PRIVATE ${ATOMIC_LIBRARY})
             target_link_libraries(${PROJECT_NAME}_static PRIVATE ${ATOMIC_LIBRARY})
             message(STATUS "Linking with libatomic: ${ATOMIC_LIBRARY}")
         else()
-            # Try to link anyway (might be built-in on some platforms)
-            target_link_libraries(${PROJECT_NAME} PRIVATE atomic)
-            target_link_libraries(${PROJECT_NAME}_static PRIVATE atomic)
-            message(STATUS "Linking with libatomic (assuming available)")
+            message(FATAL_ERROR "libatomic is required but was not found. "
+                "Ensure libatomic is installed (e.g., 'gcc-toolset-N-libatomic-devel' on RHEL, "
+                "'libatomic1' on Debian/Ubuntu). If using a GCC toolset, verify that "
+                "LIBRARY_PATH includes the toolset library directory.")
         endif()
+    elseif(CMAKE_C_COMPILER_ID MATCHES "Intel")
+        # Intel Classic (icc/icpc) bundles atomic support in libirc
+        message(STATUS "Intel Classic compiler: atomic support provided by libirc")
     else()
-        message(STATUS "Atomic support: compiler-specific handling required")
+        message(WARNING "Unknown compiler '${CMAKE_C_COMPILER_ID}': atomic support may require manual configuration")
     endif()
 endfunction()
 
