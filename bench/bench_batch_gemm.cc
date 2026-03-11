@@ -97,7 +97,7 @@ configToGroups(const BatchGemmBenchConfig& config)
     size_t num_groups = config.group_sizes.empty() ? 1
                                                    : config.group_sizes.size();
 
-    for (size_t g = 0; g < num_groups; ++g) {
+    for (std::size_t g = 0; g < num_groups; ++g) {
         BatchGroup group;
 
         // Get dimensions for this group (scalar values broadcast to all groups)
@@ -130,7 +130,7 @@ configToGroups(const BatchGemmBenchConfig& config)
                                                        : config.group_sizes[g];
 
         // Create matrices for this group
-        for (size_t i = 0; i < group_size; ++i) {
+        for (std::size_t i = 0; i < group_size; ++i) {
             bool transA = config.transAs.empty() ? config.transA
                                                  : (config.transAs.size() == 1
                                                         ? config.transAs[0]
@@ -209,7 +209,7 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
 
         // Calculate total operations for GFLOPS
         total_flops_ = 0;
-        for (size_t g = 0; g < groups_.size(); ++g) {
+        for (std::size_t g = 0; g < groups_.size(); ++g) {
             md_t   m                 = groups_[g].m;
             md_t   n                 = groups_[g].n;
             md_t   k                 = groups_[g].k;
@@ -224,7 +224,7 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
     void run(benchmark::State& state)
     {
         // WARMUP: 5 iterations to stabilize CPU/cache
-        for (int i = 0; i < 5; ++i) {
+        for (iter_t i = 0; i < 5; ++i) {
             UALError status = this->batch_gemm(prepared_args_);
             if (status != UALError::UAL_SUCCESS) {
                 state.SkipWithError("Warmup batch_gemm failed");

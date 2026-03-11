@@ -125,7 +125,7 @@ jitFP16_GEMM<KType>::initializeAccumulators(utils::generatorParams& params)
         vpxord(RegType(cRegIdx), RegType(cRegIdx), RegType(cRegIdx));
     }
 
-    for (int i = 1; i < cReg; i++) {
+    for (iter_t i = 1; i < cReg; i++) {
         vmovdqa32(RegType(cRegIdx + i), RegType(cRegIdx));
     }
 }
@@ -184,7 +184,7 @@ dlp::jit::jitGeneratorError
 jitFP16_GEMM<KType>::loadBValues()
 {
     // Load B matrix values using vmovdqu16 for FP16
-    for (int i = 0; i < bFullReg; i++) {
+    for (iter_t i = 0; i < bFullReg; i++) {
         if constexpr (Traits::isAVX512) {
             vmovdqu16(RegType(bRegIdx + i), ptr[regBptr + i * RegBytes]);
         }
@@ -220,8 +220,8 @@ dlp::jit::jitGeneratorError
 jitFP16_GEMM<KType>::storeResultFP16()
 {
     // Store FP16 accumulator results using vmovdqu16
-    for (int i = 0; i < MR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < MR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             vmovdqu16(ptr[regTmpCptr + j * RegBytes],
                       RegType(cRegIdx + i * bReg + j));
         }
@@ -249,7 +249,7 @@ jitFP16_GEMM<KType>::scaleAlpha()
     vpbroadcastw(RegType(alphaRegIdx), ptr[regTmp1]);
 
     // Scale all accumulator registers with alpha using vmulph
-    for (int i = 0; i < cReg; i++) {
+    for (iter_t i = 0; i < cReg; i++) {
         vmulph(Zmm(cRegIdx + i), Zmm(cRegIdx + i), Zmm(alphaRegIdx));
     }
     return dlp::jit::jitGeneratorError::success;
@@ -267,8 +267,8 @@ jitFP16_GEMM<KType>::scaleBeta()
     mov(regTmpCptr, regCPtr);
 
     // Load existing C values, scale by beta, and add to accumulators
-    for (int i = 0; i < MR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < MR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             // Load existing C values
             vmovdqu16(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
             // Scale by beta using vmulph
@@ -384,12 +384,12 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16_GEMM<KType>::broadcastAFMAwithB(bool isKRemainder)
 {
-    for (int i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         // Broadcast 16-bit FP16 A element to all lanes using vpbroadcastw
         vpbroadcastw(RegType(aRegIdx), ptr[regTmpAptr]);
 
         // FMA: C += A * B using vfmadd231ph (native FP16 FMA)
-        for (int j = 0; j < bReg; j++) {
+        for (iter_t j = 0; j < bReg; j++) {
             vfmadd231ph(RegType(cRegIdx + i * bReg + j), RegType(aRegIdx),
                         RegType(bRegIdx + j));
         }
@@ -406,7 +406,7 @@ dlp::jit::jitGeneratorError
 jitFP16_GEMM<KType>::kUnroll(int unroll, bool isKRemainder)
 {
     // Unroll the FP16 kernel loop
-    for (int p = 0; p < unroll; p++) {
+    for (iter_t p = 0; p < unroll; p++) {
         // Save A pointer
         mov(regTmp1, regTmpAptr);
 

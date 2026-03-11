@@ -118,7 +118,7 @@ jitU8S8VNNI_GEMM<KType>::initializeAccumulators(utils::generatorParams& params)
         vpxord(RegType(cRegIdx), RegType(cRegIdx), RegType(cRegIdx));
     }
 
-    for (int i = 1; i < cReg; i++) {
+    for (iter_t i = 1; i < cReg; i++) {
         vmovdqa32(RegType(cRegIdx + i), RegType(cRegIdx));
     }
 }
@@ -175,7 +175,7 @@ jitU8S8VNNI_GEMM<KType>::loadBValues()
 {
 
     // Load B matrix values (int8 in VNNI format)
-    for (int i = 0; i < bFullReg; i++) {
+    for (iter_t i = 0; i < bFullReg; i++) {
         // Add memory alignment check for AVX-512 (64-byte alignment preferred)
         if constexpr (Traits::isAVX512) {
             vmovdqu32(RegType(bRegIdx + i), ptr[regBptr + i * RegBytes]);
@@ -250,8 +250,8 @@ jitU8S8VNNI_GEMM<KType>::storeResultS32()
 {
     // Store int32 accumulator results
     // Handle both S32 and F32 accumulators (F32 when post-ops are present)
-    for (int i = 0; i < MR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < MR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             if (accumulatorsAreF32) {
                 // F32 accumulators (after post-ops) - convert to S32 before
                 // storing
@@ -291,8 +291,8 @@ jitU8S8VNNI_GEMM<KType>::storeResultS8()
     if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
         // Store int8 results with signed saturation
         updateCBufferPointers();
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 if (accumulatorsAreF32) {
                     // F32 accumulators (after post-ops) - convert F32→S32 then
                     // saturate to S8
@@ -337,8 +337,8 @@ jitU8S8VNNI_GEMM<KType>::storeResultU8()
         mov(regKIter, 255);
         vpbroadcastd(Zmm(aRegIdx + 2), regKIter.cvt32()); // 255
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 if (accumulatorsAreF32) {
                     // F32 accumulators (after post-ops) - convert F32→S32 then
                     // clamp to U8
@@ -388,8 +388,8 @@ jitU8S8VNNI_GEMM<KType>::storeResultF32()
         updateCBufferPointers();
 
         // Store float32 results
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 if (accumulatorsAreF32) {
                     // F32 accumulators (after post-ops) - direct store
                     vmovups(ptr[regTmpCptr + j * RegBytes],
@@ -428,8 +428,8 @@ jitU8S8VNNI_GEMM<KType>::storeResultBF16()
         // Store bfloat16 results
         updateCBufferPointers();
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 // Handle both S32 and F32 accumulators
                 if (accumulatorsAreF32) {
                     // F32 accumulators (after post-ops) - direct F32→BF16
@@ -506,7 +506,7 @@ jitU8S8VNNI_GEMM<KType>::scaleAlpha()
     vpbroadcastd(Zmm(alphaRegIdx), ptr[regTmp1]);
 
     // Scale all accumulator registers with alpha
-    for (int i = 0; i < cReg; i++) {
+    for (iter_t i = 0; i < cReg; i++) {
         vpmulld(Zmm(cRegIdx + i), Zmm(cRegIdx + i), Zmm(alphaRegIdx));
     }
     return dlp::jit::jitGeneratorError::success;
@@ -569,8 +569,8 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
 
         updateCBufferPointers();
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vmovdqu8(Xmm(bRegIdx + j), ptr[regTmpCptr + j * 16]);
                 vpmovzxbd(Zmm(bRegIdx + j), Xmm(bRegIdx + j));
                 // vpdpbusd(Zmm(cRegIdx + i * bReg + j), Zmm(bRegIdx + j),
@@ -610,8 +610,8 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
 
         updateCBufferPointers();
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vmovdqu8(Xmm(bRegIdx + j), ptr[regTmpCptr + j * 16]);
                 vpmovsxbd(Zmm(bRegIdx + j), Xmm(bRegIdx + j));
                 vpmulld(Zmm(bRegIdx + j), Zmm(bRegIdx + j), Zmm(betaRegIdx));
@@ -642,8 +642,8 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
 
         updateCBufferPointers();
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vcvtps2dq(Zmm(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
                 vpmulld(Zmm(bRegIdx + j), Zmm(bRegIdx + j), Zmm(betaRegIdx));
                 vpaddd(Zmm(cRegIdx + i * bReg + j), Zmm(cRegIdx + i * bReg + j),
@@ -673,8 +673,8 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
 
         updateCBufferPointers();
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vmovdqu16(Xbyak::Ymm(bRegIdx + j), ptr[regTmpCptr + j * 32]);
                 vpmovsxwd(Xbyak::Zmm(bRegIdx + j), Xbyak::Ymm(bRegIdx + j));
                 vpslld(Xbyak::Zmm(bRegIdx + j), Xbyak::Zmm(bRegIdx + j), 16);
@@ -705,8 +705,8 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
     }
 
     // Scale existing C values and accumulate
-    for (int i = 0; i < MR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < MR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             vmovdqu32(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
             vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
                     RegType(betaRegIdx));
@@ -760,7 +760,7 @@ jitU8S8VNNI_GEMM<KType>::generatePostOps(utils::generatorParams& params)
     if (!params.kernelOps.empty()) {
         // Convert S32 accumulators to F32 for post-ops compatibility
         // Post-ops module expects F32 accumulators for all operations
-        for (int i = 0; i < cReg; i++) {
+        for (iter_t i = 0; i < cReg; i++) {
             vcvtdq2ps(Zmm(cRegIdx + i), Zmm(cRegIdx + i));
         }
 
@@ -847,10 +847,10 @@ jitU8S8VNNI_GEMM<KType>::generateConstantData()
                 nop(16 - remain);
         }
         L(label_bf16_round_bias);
-        for (int i = 0; i < 16; i++)
+        for (iter_t i = 0; i < 16; i++)
             dd(0x00007FFF);
         L(label_bf16_lsb_mask);
-        for (int i = 0; i < 16; i++)
+        for (iter_t i = 0; i < 16; i++)
             dd(0x00000001);
     }
 }
@@ -894,7 +894,7 @@ dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::broadcastAVNNIwithB(bool isVNNIrem)
 {
 
-    for (int i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         if (isVNNIrem) {
 
             // Masked load with zero-extension: load kLeft bytes, zero the rest
@@ -907,7 +907,7 @@ jitU8S8VNNI_GEMM<KType>::broadcastAVNNIwithB(bool isVNNIrem)
             vpbroadcastd(RegType(aRegIdx), ptr[regTmpAptr]);
         }
 
-        for (int j = 0; j < bReg; j++) {
+        for (iter_t j = 0; j < bReg; j++) {
             // VNNI dot product: u8 * s8 -> s32 accumulate
             if constexpr (Traits::isAVX512
                           || KType == utils::kernelInstrType::avx2_ymm_16_reg) {
@@ -925,7 +925,7 @@ dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::kUnroll(int unroll, bool isVNNIrem)
 {
     // Unroll the VNNI kernel loop
-    for (int p = 0; p < unroll; p++) {
+    for (iter_t p = 0; p < unroll; p++) {
         // Save A pointer
         mov(regTmp1, regTmpAptr);
 

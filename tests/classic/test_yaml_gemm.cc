@@ -626,7 +626,7 @@ TEST(YamlParserTest, YamlFileConsistencyCheck)
                                            "yaml_test_config_range_list.yaml" };
 
     // Test each file can be parsed successfully
-    for (size_t i = 0; i < gemmConfigFiles.size(); ++i) {
+    for (std::size_t i = 0; i < gemmConfigFiles.size(); ++i) {
         try {
             YamlParser parser(gemmConfigFiles[i], "yaml_test");
 
@@ -1468,7 +1468,7 @@ TEST_F(YamlParserFillValueTest, FillRandomWithCustomParams)
     float  max_val  = data[0];
     bool   has_data = false;
 
-    for (size_t i = 0; i < 10000; ++i) {
+    for (iter_t i = 0; i < 10000; ++i) {
         if (data[i] < min_val)
             min_val = data[i];
         if (data[i] > max_val)
@@ -1504,7 +1504,7 @@ TEST_F(YamlParserFillValueTest, ForceIntDistributionF32)
     size_t       size = 20 * 20;
 
     // Verify all values are integers
-    for (size_t i = 0; i < size; ++i) {
+    for (std::size_t i = 0; i < size; ++i) {
         float val = data[i];
         EXPECT_FLOAT_EQ(val, std::floor(val))
             << "Expected integer value at index " << i << ", got " << val;
@@ -1524,7 +1524,7 @@ TEST_F(YamlParserFillValueTest, ForceIntDistributionBF16)
     size_t          size = 15 * 15;
 
     // Verify all values are integers (when converted to float)
-    for (size_t i = 0; i < size; ++i) {
+    for (std::size_t i = 0; i < size; ++i) {
         float val = dlp::testing::utils::bf16_to_f32(data[i]);
         EXPECT_FLOAT_EQ(val, std::floor(val))
             << "Expected integer value at index " << i << ", got " << val;
@@ -1545,7 +1545,7 @@ TEST_F(YamlParserFillValueTest, ForceIntDistributionFalseF32)
     // With a large enough sample, we should find at least some non-integer
     // values
     bool found_fractional = false;
-    for (size_t i = 0; i < size; ++i) {
+    for (std::size_t i = 0; i < size; ++i) {
         float val = data[i];
         EXPECT_GE(val, -2.5);
         EXPECT_LE(val, 2.5);
@@ -1873,7 +1873,7 @@ TEST(YamlParserTest, SingleGroupBatchGemmCartesian)
         size_t testCount = std::min(size_t(5), totalCombinations);
         std::cout << "\nFirst " << testCount << " combinations:" << std::endl;
 
-        for (size_t i = 0; i < testCount; ++i) {
+        for (std::size_t i = 0; i < testCount; ++i) {
             md_t m  = microTest.getM();
             md_t n  = microTest.getN();
             md_t k  = microTest.getK();
@@ -1915,7 +1915,7 @@ TEST(YamlParserTest, MultiGroupBatchGemmSimple)
         YamlParser parser(filepath, "batch_gemm_tests");
 
         // Skip to a multi-group test (test index 3: MultiGroup_MixedSizes_F32)
-        for (int i = 0; i < 3; ++i) {
+        for (iter_t i = 0; i < 3; ++i) {
             parser.next();
         }
 
@@ -2032,7 +2032,7 @@ TEST(YamlParserTest, GroupSizeSimpleProductPairing)
         YamlParser parser(filepath, "batch_gemm_tests");
 
         // Skip to multi-group test (test index 3)
-        for (int i = 0; i < 3; ++i) {
+        for (iter_t i = 0; i < 3; ++i) {
             parser.next();
         }
 
@@ -2165,7 +2165,7 @@ TEST(YamlParserTest, AllBatchGemmConfigurationsValid)
             << "Should have at least one test configuration";
 
         // Iterate through all test configurations
-        for (size_t i = 0; i < testCount; ++i) {
+        for (std::size_t i = 0; i < testCount; ++i) {
             const MicroTest& microTest = parser.getMicroTest();
 
             std::cout << "\nTest " << (i + 1) << std::endl;
@@ -2235,7 +2235,7 @@ TEST(YamlParserTest, MultiGroupCartesianValidation)
             << "Should have valid batch GEMM configurations";
 
         // Verify that multi-group tests use simple product
-        for (size_t i = 0; i < testCount; ++i) {
+        for (std::size_t i = 0; i < testCount; ++i) {
             const MicroTest& microTestRef = parser.getMicroTest();
             MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
 
@@ -2277,7 +2277,7 @@ TEST(YamlParserTest, ScalarBroadcastInMultiGroup)
         YamlParser parser(filepath, "batch_gemm_tests");
 
         // Skip to multi-group test (test index 3)
-        for (int i = 0; i < 3; ++i) {
+        for (iter_t i = 0; i < 3; ++i) {
             parser.next();
         }
 
@@ -2337,7 +2337,7 @@ TEST(YamlParserTest, GroupSizeConsistency)
         YamlParser parser(filepath, "batch_gemm_tests");
 
         // Skip to multi-group test (test index 3)
-        for (int i = 0; i < 3; ++i) {
+        for (iter_t i = 0; i < 3; ++i) {
             parser.next();
         }
 
@@ -2378,7 +2378,7 @@ TEST(YamlParserTest, GroupSizeConsistency)
         bool has_different_m  = false;
         bool has_different_gs = false;
 
-        for (size_t i = 1; i < group_count; ++i) {
+        for (std::size_t i = 1; i < group_count; ++i) {
             if (all_m[i] != all_m[0])
                 has_different_m = true;
             if (all_gs[i] != all_gs[0])
@@ -2416,7 +2416,7 @@ TEST(YamlParserTest, ToleranceWithBatchGemm)
         bool found_with_tolerance    = false;
         bool found_without_tolerance = false;
 
-        for (size_t i = 0; i < testCount; ++i) {
+        for (std::size_t i = 0; i < testCount; ++i) {
             const MicroTest& microTest = parser.getMicroTest();
 
             if (microTest.hasTolerances()) {
@@ -2464,7 +2464,7 @@ TEST(YamlParserTest, MatrixTagsWithBatchGemm)
         // Iterate through all configurations
         size_t testCount = parser.getMicroTestCount();
 
-        for (size_t i = 0; i < testCount; ++i) {
+        for (std::size_t i = 0; i < testCount; ++i) {
             const MicroTest& microTest = parser.getMicroTest();
 
             // Verify all matrix tag parameters are accessible
@@ -2510,7 +2510,7 @@ TEST(YamlParserTest, LeadingDimensionsWithBatchGemm)
 
         size_t testCount = parser.getMicroTestCount();
 
-        for (size_t i = 0; i < testCount; ++i) {
+        for (std::size_t i = 0; i < testCount; ++i) {
             const MicroTest& microTestRef = parser.getMicroTest();
             MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
 
@@ -2582,7 +2582,7 @@ TEST(YamlParserTest, BatchGemmWithAllMatrixTypes)
 
         size_t testCount = parser.getMicroTestCount();
 
-        for (size_t i = 0; i < testCount; ++i) {
+        for (std::size_t i = 0; i < testCount; ++i) {
             const MicroTest& microTest = parser.getMicroTest();
 
             // Verify all matrix types are accessible
@@ -2630,7 +2630,7 @@ TEST(YamlParserTest, BatchGemmWithPostOps)
 
         std::cout << "\n=== Batch GEMM PostOps Test ===" << std::endl;
 
-        for (size_t i = 0; i < microTestCount; ++i) {
+        for (std::size_t i = 0; i < microTestCount; ++i) {
             const MicroTest& microTest = parser.getMicroTest();
 
             // Check if PostOps are available by attempting to get them
@@ -2694,7 +2694,7 @@ TEST(YamlParserTest, BatchGemmPostOpsConsistency)
         std::cout << "\n=== Batch GEMM PostOps Consistency Test ==="
                   << std::endl;
 
-        for (size_t i = 0; i < microTestCount; ++i) {
+        for (std::size_t i = 0; i < microTestCount; ++i) {
             const MicroTest& microTestRef = parser.getMicroTest();
             MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
 
@@ -2713,7 +2713,7 @@ TEST(YamlParserTest, BatchGemmPostOpsConsistency)
             // Check that PostOps are available across multiple iterations
             size_t iterations = std::min(microTest.getSize(), size_t(3));
 
-            for (size_t j = 0; j < iterations; ++j) {
+            for (std::size_t j = 0; j < iterations; ++j) {
                 auto postops_dlp =
                     microTest.getPostOp(dlp::testing::framework::UALType::DLP);
 
@@ -2758,7 +2758,7 @@ TEST(YamlParserTest, BatchGemmPostOpsWithGroupSizes)
         size_t single_group_postops = 0;
         size_t multi_group_postops  = 0;
 
-        for (size_t i = 0; i < microTestCount; ++i) {
+        for (std::size_t i = 0; i < microTestCount; ++i) {
             const MicroTest& microTest = parser.getMicroTest();
 
             auto postops =
@@ -2911,7 +2911,7 @@ TEST_F(BatchGemmFrameworkTest, GroupSizeSimpleProduct)
     YamlParser parser(filepath, "batch_gemm_tests");
 
     // Skip to multi-group test (test index 3 = 4th test)
-    for (int i = 0; i < 3; ++i) {
+    for (iter_t i = 0; i < 3; ++i) {
         parser.next();
     }
 
@@ -2988,7 +2988,7 @@ TEST_F(BatchGemmFrameworkTest, SizeCalculationWithGroupSize)
         YamlParser parser(filepath, "batch_gemm_tests");
 
         // Skip to multi-group test (test index 3 = 4th test)
-        for (int i = 0; i < 3; ++i) {
+        for (iter_t i = 0; i < 3; ++i) {
             parser.next();
         }
 
@@ -3018,7 +3018,7 @@ TEST_F(BatchGemmFrameworkTest, GroupSizeWithDifferentTypes)
     // Iterate through all test configurations
     size_t testCount = parser.getMicroTestCount();
 
-    for (size_t i = 0; i < testCount; ++i) {
+    for (std::size_t i = 0; i < testCount; ++i) {
         const MicroTest& microTest = parser.getMicroTest();
 
         // Verify group_size is accessible regardless of matrix types
@@ -3091,7 +3091,7 @@ TEST_F(BatchGemmFrameworkTest, GroupSizeEdgeCases)
     bool   found_single_group = false;
     bool   found_large_group  = false;
 
-    for (size_t i = 0; i < testCount; ++i) {
+    for (std::size_t i = 0; i < testCount; ++i) {
         const MicroTest& microTest = parser.getMicroTest();
         md_t             gs        = microTest.getGroupSize();
 
@@ -3161,7 +3161,7 @@ TEST_F(BatchGemmFrameworkTest, PostOpsWithGroupSize)
 
     std::cout << "\n=== PostOps + GroupSize Framework Test ===" << std::endl;
 
-    for (size_t i = 0; i < microTestCount; ++i) {
+    for (std::size_t i = 0; i < microTestCount; ++i) {
         const MicroTest& microTest = parser.getMicroTest();
 
         auto postops = microTest.getPostOp(UALType::DLP);
@@ -3212,7 +3212,7 @@ TEST_F(BatchGemmFrameworkTest, PostOpsWithVariousGroupConfigurations)
     bool found_single_group_with_postops = false;
     bool found_multi_group_with_postops  = false;
 
-    for (size_t i = 0; i < microTestCount; ++i) {
+    for (std::size_t i = 0; i < microTestCount; ++i) {
         const MicroTest& microTestRef = parser.getMicroTest();
         MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
 

@@ -27,6 +27,7 @@
  */
 
 #pragma once
+#include "classic/dlp_base_types.h"
 
 #include "framework/types.hh"
 #include <filesystem>
@@ -116,7 +117,7 @@ class ArgParser
      */
     bool hasFlag(const std::string& flag) const
     {
-        for (int i = 1; i < argc_; ++i) {
+        for (iter_t i = 1; i < argc_; ++i) {
             if (argv_[i] == flag) {
                 return true;
             }
@@ -133,7 +134,7 @@ class ArgParser
     std::string getFlagValue(const std::string& flag,
                              const std::string& default_value = "") const
     {
-        for (int i = 1; i < argc_ - 1; ++i) {
+        for (iter_t i = 1; i < argc_ - 1; ++i) {
             if (argv_[i] == flag) {
                 return std::string(argv_[i + 1]);
             }
@@ -149,7 +150,7 @@ class ArgParser
     {
         std::vector<std::string> positional;
 
-        for (int i = 1; i < argc_; ++i) {
+        for (iter_t i = 1; i < argc_; ++i) {
             std::string arg = argv_[i];
 
             // Skip flags and their values
@@ -250,14 +251,15 @@ class ArgParser
     {
         int level = 0;
 
-        for (int i = 1; i < argc_; ++i) {
+        for (iter_t i = 1; i < argc_; ++i) {
             std::string arg = argv_[i];
 
             // Count consecutive v's in -vv, -vvv, etc.
             if (arg.length() >= 2 && arg[0] == '-' && arg[1] == 'v') {
                 // Count v's after the first one
                 size_t v_count = 0;
-                for (size_t j = 1; j < arg.length() && arg[j] == 'v'; ++j) {
+                for (std::size_t j = 1; j < arg.length() && arg[j] == 'v';
+                     ++j) {
                     v_count++;
                 }
                 level = std::max(level, static_cast<int>(v_count));
@@ -357,7 +359,7 @@ class ArgParser
         new_argv.push_back(argv[0]); // Keep program name
 
         // Copy only non-custom arguments
-        for (int i = 1; i < argc; ++i) {
+        for (iter_t i = 1; i < argc; ++i) {
             std::string arg = argv[i];
 
             // Skip our custom flags and their values
@@ -400,7 +402,7 @@ class ArgParser
   private:
     void parseArguments()
     {
-        for (int i = 1; i < argc_; ++i) {
+        for (iter_t i = 1; i < argc_; ++i) {
             std::string arg = argv_[i];
 
             // Handle YAML file specification

@@ -151,8 +151,8 @@ lpgemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str)
     }
 
     size_t ops_str_len   = 0;
-    md_t   e_i           = 0; // Multiple eltwise supported.
-    md_t   s_i           = 0; // Multiple sum/scale supported.
+    iter_t e_i           = 0; // Multiple eltwise supported.
+    iter_t s_i           = 0; // Multiple sum/scale supported.
     char*  delim_str     = "#";
     size_t delim_str_len = strlen(delim_str);
     for (iter_t i = 0; i < metadata->seq_length; ++i) {

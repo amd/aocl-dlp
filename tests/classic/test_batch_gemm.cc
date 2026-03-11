@@ -139,7 +139,7 @@ makeF32Group(md_t         m,
     group.alpha = alpha;
     group.beta  = beta;
 
-    for (size_t i = 0; i < matrix_count; ++i) {
+    for (std::size_t i = 0; i < matrix_count; ++i) {
         md_t a_rows = transA ? k : m;
         md_t a_cols = transA ? m : k;
         md_t b_rows = transB ? n : k;
@@ -179,13 +179,13 @@ compareGroupResults(const std::vector<BatchGroup>& lhs,
                     const std::vector<BatchGroup>& rhs)
 {
     ASSERT_EQ(lhs.size(), rhs.size());
-    for (size_t g = 0; g < lhs.size(); ++g) {
+    for (std::size_t g = 0; g < lhs.size(); ++g) {
         const auto& lhs_group = lhs[g];
         const auto& rhs_group = rhs[g];
 
         ASSERT_EQ(lhs_group.C_matrices.size(), rhs_group.C_matrices.size());
 
-        for (size_t i = 0; i < lhs_group.C_matrices.size(); ++i) {
+        for (std::size_t i = 0; i < lhs_group.C_matrices.size(); ++i) {
             lhs_group.C_matrices[i].setK(lhs_group.k);
             rhs_group.C_matrices[i].setK(rhs_group.k);
 
@@ -226,7 +226,7 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
 
         size_t total_configs = 0;
 
-        for (size_t i = 0; i < microTestCount; ++i) {
+        for (std::size_t i = 0; i < microTestCount; ++i) {
             MicroTest& microTest          = parser.getMicroTest();
             YieldType  yield_type         = microTest.getYieldType();
             size_t     total_combinations = microTest.getSize();
@@ -439,7 +439,7 @@ configToGroups(
     std::vector<BatchGroup> groups;
     groups.reserve(config.getGroupCount());
 
-    for (size_t g = 0; g < config.getGroupCount(); ++g) {
+    for (std::size_t g = 0; g < config.getGroupCount(); ++g) {
         BatchGroup group;
 
         // Set group dimensions
@@ -536,7 +536,7 @@ check_valid_batch_params(const BatchGemmTestConfig& config)
 {
     // Validate each group's parameters following AOCL_BATCH_GEMM_CHECK macro
     // logic
-    for (size_t g = 0; g < config.getGroupCount(); ++g) {
+    for (std::size_t g = 0; g < config.getGroupCount(); ++g) {
         md_t m          = config.m_values[g];
         md_t n          = config.n_values[g];
         md_t k          = config.k_values[g];
@@ -777,13 +777,13 @@ TEST(BatchGemmTest, GlobalPostOpsBasic)
 
     // Compare results (with PostOps tolerance)
     ASSERT_EQ(dlp_groups.size(), ref_groups.size());
-    for (size_t g = 0; g < dlp_groups.size(); ++g) {
+    for (std::size_t g = 0; g < dlp_groups.size(); ++g) {
         const auto& dlp_group = dlp_groups[g];
         const auto& ref_group = ref_groups[g];
 
         ASSERT_EQ(dlp_group.C_matrices.size(), ref_group.C_matrices.size());
 
-        for (size_t i = 0; i < dlp_group.C_matrices.size(); ++i) {
+        for (std::size_t i = 0; i < dlp_group.C_matrices.size(); ++i) {
             dlp_group.C_matrices[i].setK(dlp_group.k);
             ref_group.C_matrices[i].setK(ref_group.k);
 
@@ -860,13 +860,13 @@ TEST(BatchGemmTest, GlobalPostOpsMultipleGroups)
 
     // Compare results with higher tolerance for PostOps
     ASSERT_EQ(dlp_groups.size(), ref_groups.size());
-    for (size_t g = 0; g < dlp_groups.size(); ++g) {
+    for (std::size_t g = 0; g < dlp_groups.size(); ++g) {
         const auto& dlp_group = dlp_groups[g];
         const auto& ref_group = ref_groups[g];
 
         ASSERT_EQ(dlp_group.C_matrices.size(), ref_group.C_matrices.size());
 
-        for (size_t i = 0; i < dlp_group.C_matrices.size(); ++i) {
+        for (std::size_t i = 0; i < dlp_group.C_matrices.size(); ++i) {
             dlp_group.C_matrices[i].setK(dlp_group.k);
             ref_group.C_matrices[i].setK(ref_group.k);
 
@@ -959,7 +959,7 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
                 ASSERT_EQ(dlp_groups.size(), ref_groups.size())
                     << "Group count mismatch for test: " << config.name;
 
-                for (size_t g = 0; g < dlp_groups.size(); ++g) {
+                for (std::size_t g = 0; g < dlp_groups.size(); ++g) {
                     const auto& dlp_group = dlp_groups[g];
                     const auto& ref_group = ref_groups[g];
 
@@ -968,7 +968,8 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
                         << "Matrix count mismatch in group " << g
                         << " for test: " << config.name;
 
-                    for (size_t i = 0; i < dlp_group.C_matrices.size(); ++i) {
+                    for (std::size_t i = 0; i < dlp_group.C_matrices.size();
+                         ++i) {
                         // Set k dimension for comparison (needed for certain
                         // matrix formats)
                         dlp_group.C_matrices[i].setK(dlp_group.k);

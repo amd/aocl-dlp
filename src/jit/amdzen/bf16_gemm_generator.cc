@@ -124,7 +124,7 @@ dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::loadBValuesBF16()
 {
     // Load BF16 values from B matrix
-    for (int i = 0; i < bReg; i++) {
+    for (iter_t i = 0; i < bReg; i++) {
         // Load 32 BF16 elements (64 bytes) into ZMM register
         vmovdqu16(RegType(bRegIdx + i), ptr[regBptr + i * RegBytes]);
     }
@@ -135,14 +135,14 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::BroadcastABF16withB(bool isRemainder)
 {
-    for (int i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         if (isRemainder) {
             vpbroadcastw(RegType(aRegIdx), ptr[regTmpAptr]);
         } else {
             vpbroadcastd(RegType(aRegIdx), ptr[regTmpAptr]);
         }
         add(regTmpAptr, regRsA);
-        for (int j = 0; j < bReg; j++) {
+        for (iter_t j = 0; j < bReg; j++) {
             vdpbf16ps(RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j),
                       RegType(aRegIdx));
         }
@@ -158,7 +158,7 @@ jitGEMMBF16<KType>::kLoopCompute(bool isRemainder, int kUnroll)
 
     // Unroll the kernel loop for BF16 VNNI
     // Save A pointer
-    for (int i = 0; i < kUnroll; i++) {
+    for (iter_t i = 0; i < kUnroll; i++) {
         mov(regTmp1, regTmpAptr);
 
         // Load B registers with BF16 data
@@ -202,7 +202,7 @@ jitGEMMBF16<KType>::regInit()
 {
     // Initialize F32 accumulator registers to zero
     vxorps(RegType(cRegIdx), RegType(cRegIdx), RegType(cRegIdx));
-    for (int i = 1; i < cReg; i++) {
+    for (iter_t i = 1; i < cReg; i++) {
         vmovaps(RegType(cRegIdx + i), RegType(cRegIdx));
     }
 }
@@ -230,7 +230,7 @@ jitGEMMBF16<KType>::scaleAlpha()
     int alphaRegIdx = aRegIdx;
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, alpha)]);
     vbroadcastss(RegType(alphaRegIdx), ptr[regTmp1]);
-    for (int i = 0; i < cReg; i++) {
+    for (iter_t i = 0; i < cReg; i++) {
         vmulps(RegType(cRegIdx + i), RegType(cRegIdx + i),
                RegType(alphaRegIdx));
     }
@@ -291,8 +291,8 @@ jitGEMMBF16<KType>::scaleBeta()
         vpbroadcastd(Xbyak::Zmm(aRegIdx + 1),
                      ptr[rsp + 0]); // Broadcast from memory
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vmovdqu16(Xbyak::Ymm(bRegIdx + j), ptr[regTmpCptr + j * 32]);
                 vpmovsxwd(Xbyak::Zmm(bRegIdx + j), Xbyak::Ymm(bRegIdx + j));
                 vpsllvd(Xbyak::Zmm(bRegIdx + j), Xbyak::Zmm(bRegIdx + j),
@@ -320,8 +320,8 @@ jitGEMMBF16<KType>::scaleBeta()
         jmp("BETAOP_END", T_NEAR);
         L("BETAOP");
     }
-    for (int i = 0; i < MR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < MR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             vmovups(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
             vfmadd231ps(RegType(cRegIdx + i * bReg + j), RegType(betaRegIdx),
                         RegType(bRegIdx + j));
@@ -376,8 +376,8 @@ jitGEMMBF16<KType>::storeResult()
         imul(regKIter, regTmp1);
         add(regTmpCptr, regKIter);
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vcvtneps2bf16(Xbyak::Ymm(bRegIdx + j),
                               Xbyak::Zmm(cRegIdx + i * bReg + j));
                 vmovdqu16(ptr[regTmpCptr + j * halfRegBytes],
@@ -396,8 +396,8 @@ jitGEMMBF16<KType>::storeResult()
         jmp("STOREOP_END", T_NEAR);
         L("STOREOP");
     }
-    for (int i = 0; i < MR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < MR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             // Regular store
             vmovups(ptr[regTmpCptr + j * RegBytes],
                     RegType(cRegIdx + i * bReg + j));
@@ -418,8 +418,8 @@ jitGEMMBF16<KType>::prefetchC()
 {
     mov(regTmpCptr, regCPtr);
     if ((PREFETCH_C_DIST > 0)) {
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 prefetcht0(ptr[regTmpCptr + j * RegBytes]);
             }
             add(regTmpCptr, regRsC);
@@ -550,7 +550,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::loadMask()
 {
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 

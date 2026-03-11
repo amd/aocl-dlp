@@ -186,7 +186,7 @@ class OptimizedGemmBenchmark : public ConcreteUAL
     void runWithoutPostOps(benchmark::State& state)
     {
         // WARMUP: 5 iterations to stabilize CPU/cache
-        for (int i = 0; i < 5; ++i) {
+        for (iter_t i = 0; i < 5; ++i) {
             this->gemm(m_, n_, k_, a_ptr_, a_type_, layout_, transA_,
                        memFormatA_, lda_, b_ptr_, b_type_, layout_, transB_,
                        memFormatB_, ldb_, c_ptr_, c_type_, layout_, false, ldc_,
@@ -220,7 +220,7 @@ class OptimizedGemmBenchmark : public ConcreteUAL
     void runWithPostOps(benchmark::State& state)
     {
         // WARMUP: 5 iterations to stabilize CPU/cache
-        for (int i = 0; i < 5; ++i) {
+        for (iter_t i = 0; i < 5; ++i) {
             this->gemm(A_, B_, C_, acc_type_, post_ops_, alpha_, beta_);
         }
 

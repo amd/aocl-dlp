@@ -66,7 +66,7 @@ cvt_bf16_f32_gemv_row_major(float*          cvt_buffer,
     // Process 8 elements at a time
     for (m0 = 0; (m0 + 8) < MC; m0 += 8) {
         bfloat16 buff[8] = { 0 };
-        for (int i = 0; i < 8; i++)
+        for (iter_t i = 0; i < 8; i++)
             buff[i] = (*(a + (m0 + i) * rs_a));
         a_reg = CVT_BF16_F32_SHIFT_AVX2(
             (__m128i)_mm_loadu_si128((const __m128i*)(buff)));
@@ -76,7 +76,7 @@ cvt_bf16_f32_gemv_row_major(float*          cvt_buffer,
     // Handle remaining elements (< 8)
     if (m0 < MC) {
         bfloat16 buff[8] = { 0 };
-        for (int i = 0; i < (MC - m0); i++)
+        for (iter_t i = 0; i < (MC - m0); i++)
             buff[i] = (*(a + (m0 + i) * rs_a));
         a_reg = CVT_BF16_F32_SHIFT_AVX2(
             (__m128i)_mm_loadu_si128((const __m128i*)(buff)));

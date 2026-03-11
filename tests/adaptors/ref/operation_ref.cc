@@ -302,7 +302,7 @@ RefOperation::buildSequenceVector()
     // For reference implementation, we don't need to build a sequence vector
     // like DLP does, but we can log the sequence for debugging
 
-    for (size_t i = 0; i < m_operation_params.size(); ++i) {
+    for (std::size_t i = 0; i < m_operation_params.size(); ++i) {
         const auto& param = m_operation_params[i];
         std::string opName;
 

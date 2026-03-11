@@ -27,6 +27,7 @@
  */
 
 #pragma once
+#include "classic/dlp_base_types.h"
 
 #include "framework/iterator.hh"
 #include "framework/product.hh"
@@ -162,7 +163,7 @@ class CartesianProduct
     void advance_to_next()
     {
         // Try to increment iterators from right to left
-        for (int i = static_cast<int>(m_iterators.size()) - 1; i >= 0; i--) {
+        for (iter_t i = static_cast<int>(m_iterators.size()) - 1; i >= 0; i--) {
             if (m_iterators[i].has_next()) {
                 m_iterators[i].increment();
                 return; // Successfully advanced

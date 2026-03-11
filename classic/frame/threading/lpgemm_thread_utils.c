@@ -101,7 +101,7 @@ lpgemm_detect_thread_topo()
     // but tid 8-15 could be on core 96-103. So just checking for increasing
     // core id for corresponding tid wont get accurate core group load.
     // GOMP_CPU_AFFINITY however assigns cores sequentially.
-    for (int ii = 0; ii < nt_max; ++ii) {
+    for (iter_t ii = 0; ii < nt_max; ++ii) {
         lpgemm_thread_attrs.tid_core_grp_id_list[ii] = -1;
         // Identify the core(s) in which thread would be bound
         // In case the thread was never spawned, this code-section is skipped.
@@ -110,7 +110,7 @@ lpgemm_detect_thread_topo()
             int st_core_grp_id =
                 (thread_core_bind_list[ii][1] % num_procs) / core_grp_size;
             lpgemm_thread_attrs.tid_core_grp_id_list[ii] = st_core_grp_id;
-            for (int jj = 1; jj < thread_core_bind_list[ii][0]; ++jj) {
+            for (iter_t jj = 1; jj < thread_core_bind_list[ii][0]; ++jj) {
                 int cur_core_grp_id =
                     (thread_core_bind_list[ii][jj + 1] % num_procs)
                     / core_grp_size;
@@ -155,7 +155,7 @@ lpgemm_detect_thread_topo()
         int cur_core_grp_id = lpgemm_thread_attrs.tid_core_grp_id_list[0];
         tid_cnt_for_core_grps[cur_core_grp_id] += 1;
 
-        for (int ii = 1; ii < nt_max; ++ii) {
+        for (iter_t ii = 1; ii < nt_max; ++ii) {
             if (lpgemm_thread_attrs.tid_core_grp_id_list[ii]
                 == cur_core_grp_id) {
                 adj_tid_cnt_for_core_grps[cur_core_grp_id] += 1;
@@ -166,7 +166,7 @@ lpgemm_detect_thread_topo()
                                       .tid_core_grp_id_list[ii]] += 1;
         }
 
-        for (int ii = 0; ii < num_core_grps; ++ii) {
+        for (iter_t ii = 0; ii < num_core_grps; ++ii) {
             if (adj_tid_cnt_for_core_grps[ii] >= core_grp_loaded_thres) {
                 core_grp_adj_tid_thres_cnt += 1;
                 core_grp_adj_tid_cnt += 1;
@@ -193,7 +193,7 @@ err_handle:
     free(adj_tid_cnt_for_core_grps);
 
     if (thread_core_bind_list != NULL) {
-        for (int ii = 0; ii < nt_max; ++ii) {
+        for (iter_t ii = 0; ii < nt_max; ++ii) {
             free(thread_core_bind_list[ii]);
         }
     }

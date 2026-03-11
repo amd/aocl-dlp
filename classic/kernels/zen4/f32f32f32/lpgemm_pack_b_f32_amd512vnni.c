@@ -475,10 +475,10 @@ packb_nr64_f32f32f32of32_col_major(float*       pack_b_buffer,
                 PERMUTE_R2_16x16(selector1_1, selector2_1);
 
                 __mmask16 msk_arr[16];
-                for (int i = 0; i < k_partial_pieces; ++i) {
+                for (iter_t i = 0; i < k_partial_pieces; ++i) {
                     msk_arr[i] = _cvtu32_mask16(0xFFFF);
                 }
-                for (int i = k_partial_pieces; i < 16; ++i) {
+                for (iter_t i = k_partial_pieces; i < 16; ++i) {
                     msk_arr[i] = _cvtu32_mask16(0x0);
                 }
                 MASK_STORE_PS_16x16(msk_arr);
@@ -495,10 +495,10 @@ packb_nr64_f32f32f32of32_col_major(float*       pack_b_buffer,
 
             md_t jr_elems = ((NC - jr) >= n_sub_blk_wdth) ? n_sub_blk_wdth
                                                           : (NC - jr);
-            for (int i = 0; i < jr_elems; ++i) {
+            for (iter_t i = 0; i < jr_elems; ++i) {
                 msk_n_arr[i] = _cvtu32_mask16(0xFFFF);
             }
-            for (int i = jr_elems; i < n_sub_blk_wdth; ++i) {
+            for (iter_t i = jr_elems; i < n_sub_blk_wdth; ++i) {
                 msk_n_arr[i] = _cvtu32_mask16(0x0);
             }
 
@@ -512,11 +512,11 @@ packb_nr64_f32f32f32of32_col_major(float*       pack_b_buffer,
                 STORE_PS_16x16();
             }
             if (k_partial_pieces > 0) {
-                for (int i = 0; i < jr_elems; ++i) {
+                for (iter_t i = 0; i < jr_elems; ++i) {
                     msk_n_arr[i] = _cvtu32_mask16(
                         0xFFFF & (0xFFFF >> (k_reg_size - k_partial_pieces)));
                 }
-                for (int i = jr_elems; i < n_sub_blk_wdth; ++i) {
+                for (iter_t i = jr_elems; i < n_sub_blk_wdth; ++i) {
                     msk_n_arr[i] = _cvtu32_mask16(0x0);
                 }
                 md_t kr = k_full_pieces_loop_limit;
@@ -528,10 +528,10 @@ packb_nr64_f32f32f32of32_col_major(float*       pack_b_buffer,
                 PERMUTE_R2_16x16(selector1_1, selector2_1);
 
                 __mmask16 msk_arr[16];
-                for (int i = 0; i < k_partial_pieces; ++i) {
+                for (iter_t i = 0; i < k_partial_pieces; ++i) {
                     msk_arr[i] = _cvtu32_mask16(0xFFFF);
                 }
-                for (int i = k_partial_pieces; i < 16; ++i) {
+                for (iter_t i = k_partial_pieces; i < 16; ++i) {
                     msk_arr[i] = _cvtu32_mask16(0x0);
                 }
                 MASK_STORE_PS_16x16(msk_arr);

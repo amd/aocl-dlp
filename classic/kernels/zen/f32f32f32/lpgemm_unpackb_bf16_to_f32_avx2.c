@@ -599,7 +599,7 @@ unpackb_nr64_bf16_f32_gemv(const bfloat16* b,
     md_t k_left = (KC - k0);
     if (k_left > 0) {
         bfloat16 buff[8] = { 0 };
-        for (int i = 0; i < k_left; i++)
+        for (iter_t i = 0; i < k_left; i++)
             buff[i] = (*(b + (k0 + i)));
 
         a_reg = CVT_BF16_F32_SHIFT_AVX2(

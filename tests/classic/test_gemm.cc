@@ -506,7 +506,7 @@ extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
 
     if (!op_names.empty()) {
         postops_desc << "_PostOps";
-        for (size_t i = 0; i < op_names.size(); ++i) {
+        for (std::size_t i = 0; i < op_names.size(); ++i) {
             postops_desc << "_" << op_names[i];
         }
     }
@@ -620,7 +620,7 @@ loadTestConfigurations(const std::string& yaml_file)
 
         size_t microTestCount = parser.getMicroTestCount();
 
-        for (size_t i = 0; i < microTestCount; ++i) {
+        for (std::size_t i = 0; i < microTestCount; ++i) {
             MicroTest& microTest          = parser.getMicroTest();
             size_t     total_combinations = microTest.getSize();
             size_t     test_count =
@@ -630,7 +630,7 @@ loadTestConfigurations(const std::string& yaml_file)
                       << " out of " << total_combinations
                       << " total combinations" << std::endl;
 
-            for (size_t j = 0; j < test_count; ++j) {
+            for (std::size_t j = 0; j < test_count; ++j) {
                 // Get the current test set name from YAML (e.g.,
                 // "bf16_mr_variants")
                 std::string currentTestName = parser.getCurrentTestName();

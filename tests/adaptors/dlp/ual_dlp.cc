@@ -891,7 +891,7 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
         groups.size());
     std::vector<dlp_metadata_t*> metadata(groups.size());
 
-    for (size_t i = 0; i < groups.size(); ++i) {
+    for (std::size_t i = 0; i < groups.size(); ++i) {
         if (groups[i].postOps
             && groups[i].postOps->getUALType() == UALType::DLP) {
             // Extract existing metadata from postops
@@ -916,8 +916,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::f32>(): {
             std::vector<float> alpha_f32(prepared.group_count);
             std::vector<float> beta_f32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_f32[i] = static_cast<float>(prepared.alpha[i]);
                 beta_f32[i]  = static_cast<float>(prepared.beta[i]);
             }
@@ -946,8 +946,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::f32>(): {
             std::vector<float> alpha_f32(prepared.group_count);
             std::vector<float> beta_f32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_f32[i] = static_cast<float>(prepared.alpha[i]);
                 beta_f32[i]  = static_cast<float>(prepared.beta[i]);
             }
@@ -976,8 +976,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::f32>(): {
             std::vector<float> alpha_f32(prepared.group_count);
             std::vector<float> beta_f32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_f32[i] = static_cast<float>(prepared.alpha[i]);
                 beta_f32[i]  = static_cast<float>(prepared.beta[i]);
             }
@@ -1006,8 +1006,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1036,8 +1036,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1066,8 +1066,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1096,8 +1096,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1126,8 +1126,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1156,8 +1156,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1186,8 +1186,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1216,8 +1216,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1246,8 +1246,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1276,8 +1276,8 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                           MatrixType::s32>(): {
             std::vector<int32_t> alpha_s32(prepared.group_count);
             std::vector<int32_t> beta_s32(prepared.group_count);
-            for (size_t i = 0; i < static_cast<size_t>(prepared.group_count);
-                 ++i) {
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
                 alpha_s32[i] = static_cast<int32_t>(prepared.alpha[i]);
                 beta_s32[i]  = static_cast<int32_t>(prepared.beta[i]);
             }
@@ -1307,7 +1307,7 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
     }
 
     // Check metadata for errors (e.g., ISA not supported)
-    for (size_t i = 0; i < metadata.size(); ++i) {
+    for (std::size_t i = 0; i < metadata.size(); ++i) {
         if (metadata[i] != nullptr) {
             if (metadata[i]->error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
                 return UALError::UAL_NOT_SUPPORTED;
@@ -1327,7 +1327,7 @@ UalDlp::batch_prepare_metadata(PreparedBatchGemmArgs& args)
     args.backend_metadata.resize(args.group_count);
     args.backend_metadata_storage.reserve(args.group_count);
 
-    for (size_t i = 0; i < static_cast<size_t>(args.group_count); ++i) {
+    for (std::size_t i = 0; i < static_cast<size_t>(args.group_count); ++i) {
         std::shared_ptr<IOperation> postOp = nullptr;
         if (i < args.post_ops.size()) {
             postOp = args.post_ops[i];
@@ -1367,7 +1367,8 @@ UalDlp::batch_prepare_metadata(PreparedBatchGemmArgs& args)
     if (needs_f32) {
         args.alpha_f32.resize(args.group_count);
         args.beta_f32.resize(args.group_count);
-        for (size_t i = 0; i < static_cast<size_t>(args.group_count); ++i) {
+        for (std::size_t i = 0; i < static_cast<size_t>(args.group_count);
+             ++i) {
             args.alpha_f32[i] = static_cast<float>(args.alpha[i]);
             args.beta_f32[i]  = static_cast<float>(args.beta[i]);
         }
@@ -1376,7 +1377,8 @@ UalDlp::batch_prepare_metadata(PreparedBatchGemmArgs& args)
     if (needs_s32) {
         args.alpha_s32.resize(args.group_count);
         args.beta_s32.resize(args.group_count);
-        for (size_t i = 0; i < static_cast<size_t>(args.group_count); ++i) {
+        for (std::size_t i = 0; i < static_cast<size_t>(args.group_count);
+             ++i) {
             args.alpha_s32[i] = static_cast<int32_t>(args.alpha[i]);
             args.beta_s32[i]  = static_cast<int32_t>(args.beta[i]);
         }
@@ -1728,7 +1730,8 @@ UalDlp::batch_gemm(const PreparedBatchGemmArgs& prepared)
     }
 
     // Error checking
-    for (size_t i = 0; i < static_cast<size_t>(prepared.group_count); ++i) {
+    for (std::size_t i = 0; i < static_cast<size_t>(prepared.group_count);
+         ++i) {
         if (metadata[i]->error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
             return UALError::UAL_NOT_SUPPORTED;
         }

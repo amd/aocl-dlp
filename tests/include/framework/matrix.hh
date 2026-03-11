@@ -633,7 +633,7 @@ namespace dlp { namespace testing { namespace framework {
             size_t cols = data[0].size();
 
             // Validate that all rows have the same number of columns
-            for (size_t i = 1; i < rows; ++i) {
+            for (std::size_t i = 1; i < rows; ++i) {
                 if (data[i].size() != cols) {
                     throw std::invalid_argument(
                         "All rows must have the same number of columns");
@@ -644,8 +644,8 @@ namespace dlp { namespace testing { namespace framework {
 
             // Write data row by row
             md_t leadingDim = matrix.getLeadingDimension();
-            for (size_t i = 0; i < rows; ++i) {
-                for (size_t j = 0; j < cols; ++j) {
+            for (std::size_t i = 0; i < rows; ++i) {
+                for (std::size_t j = 0; j < cols; ++j) {
                     size_t flatIndex;
                     if (layout == MatrixLayout::ROW_MAJOR) {
                         flatIndex = i * leadingDim + j;
@@ -716,14 +716,14 @@ namespace dlp { namespace testing { namespace framework {
             switch (targetType) {
                 case MatrixType::f32: {
                     float* data = reinterpret_cast<float*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         data[startIndex + i] = static_cast<float>(source[i]);
                     }
                     break;
                 }
                 case MatrixType::bf16: {
                     uint16_t* data = reinterpret_cast<uint16_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         float floatVal = static_cast<float>(source[i]);
                         // Convert float to DLP_BF16 by truncating mantissa
                         // Use union to avoid strict-aliasing issues
@@ -740,42 +740,42 @@ namespace dlp { namespace testing { namespace framework {
                 }
                 case MatrixType::s32: {
                     int32_t* data = reinterpret_cast<int32_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         data[startIndex + i] = static_cast<int32_t>(source[i]);
                     }
                     break;
                 }
                 case MatrixType::u32: {
                     uint32_t* data = reinterpret_cast<uint32_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         data[startIndex + i] = static_cast<uint32_t>(source[i]);
                     }
                     break;
                 }
                 case MatrixType::s16: {
                     int16_t* data = reinterpret_cast<int16_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         data[startIndex + i] = static_cast<int16_t>(source[i]);
                     }
                     break;
                 }
                 case MatrixType::u16: {
                     uint16_t* data = reinterpret_cast<uint16_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         data[startIndex + i] = static_cast<uint16_t>(source[i]);
                     }
                     break;
                 }
                 case MatrixType::s8: {
                     int8_t* data = reinterpret_cast<int8_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         data[startIndex + i] = static_cast<int8_t>(source[i]);
                     }
                     break;
                 }
                 case MatrixType::u8: {
                     uint8_t* data = reinterpret_cast<uint8_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         data[startIndex + i] = static_cast<uint8_t>(source[i]);
                     }
                     break;
@@ -784,7 +784,7 @@ namespace dlp { namespace testing { namespace framework {
                 case MatrixType::u4: {
                     // Handle packed 4-bit types
                     uint8_t* data = reinterpret_cast<uint8_t*>(targetData);
-                    for (size_t i = 0; i < count; ++i) {
+                    for (std::size_t i = 0; i < count; ++i) {
                         size_t  packedIndex = (startIndex + i) / 2;
                         size_t  bitOffset   = ((startIndex + i) % 2) * 4;
                         uint8_t value4bit =

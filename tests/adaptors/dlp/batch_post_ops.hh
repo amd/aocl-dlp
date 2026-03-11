@@ -39,7 +39,7 @@ extract_dlp_metadata(const std::vector<BatchGroup>& groups,
 {
     metadata.assign(groups.size(), nullptr);
 
-    for (size_t idx = 0; idx < groups.size(); ++idx) {
+    for (std::size_t idx = 0; idx < groups.size(); ++idx) {
         const auto& group = groups[idx];
         if (!group.postOps) {
             continue;

@@ -136,7 +136,7 @@ struct BatchGroup
             return false;
         }
 
-        for (size_t i = 0; i < count; ++i) {
+        for (std::size_t i = 0; i < count; ++i) {
             const Matrix& A = A_matrices[i];
             const Matrix& B = B_matrices[i];
             const Matrix& C = C_matrices[i];

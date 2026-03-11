@@ -547,7 +547,7 @@ packb_mxp_nrlt16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
     md_t kr_new = 0;
 
     __mmask16 mask = (0XFFFF >> (16 - n0_partial_rem));
-    for (int kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with 16 elements in each
         // row.
         b00 = _mm512_maskz_loadu_ps(mask, (b + (ldb * (kr + 0))));

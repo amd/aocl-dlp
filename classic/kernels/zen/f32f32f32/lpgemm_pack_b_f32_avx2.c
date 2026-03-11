@@ -152,20 +152,20 @@ packb_nr16_f32f32f32of32_row_major(float*       pack_b_buffer,
     a_reg[7] = _mm256_loadu_ps(buf7);
 
 #define N_FRINGE_LOAD_PS_8x8()                                                 \
-    for (int i = 0; i < jr_elems; ++i) {                                       \
+    for (iter_t i = 0; i < jr_elems; ++i) {                                    \
         a_reg[i] = _mm256_loadu_ps(b + (ldb * (jr + i)) + (kr));               \
     }                                                                          \
-    for (int i = jr_elems; i < n_sub_blk_wdth; ++i) {                          \
+    for (iter_t i = jr_elems; i < n_sub_blk_wdth; ++i) {                       \
         a_reg[i] = _mm256_setzero_ps();                                        \
     }
 
 #define KN_FRINGE_MEMCPY_LOAD_PS_8x8()                                         \
-    for (int i = 0; i < jr_elems; ++i) {                                       \
+    for (iter_t i = 0; i < jr_elems; ++i) {                                    \
         memcpy(buf0, b + (ldb * (jr + i)) + (kr),                              \
                k_partial_pieces * sizeof(float));                              \
         a_reg[i] = _mm256_loadu_ps(buf0);                                      \
     }                                                                          \
-    for (int i = jr_elems; i < n_sub_blk_wdth; ++i) {                          \
+    for (iter_t i = jr_elems; i < n_sub_blk_wdth; ++i) {                       \
         a_reg[i] = _mm256_setzero_ps();                                        \
     }
 
@@ -236,7 +236,7 @@ packb_nr16_f32f32f32of32_row_major(float*       pack_b_buffer,
     a_reg[5] = b_reg[5];                                                       \
     a_reg[6] = b_reg[3];                                                       \
     a_reg[7] = b_reg[7];                                                       \
-    for (int i = 0; i < k_partial_pieces; ++i) {                               \
+    for (iter_t i = 0; i < k_partial_pieces; ++i) {                            \
         _mm256_storeu_ps(pack_b_buffer + (jc * KC) + ((kr + i) * NR)           \
                              + jr_offset,                                      \
                          a_reg[i]);                                            \

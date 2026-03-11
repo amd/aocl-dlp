@@ -171,7 +171,7 @@ jitGEMMF32RD<KType>::allocateMaskRegisters()
     // generator. If this logic changes, we need to change the logic in
     // post-ops module as well. This mask is used to generate masked
     // instructions in post-ops module and store module.
-    for (int i = 0; i < numMaskRegs; i++) {
+    for (iter_t i = 0; i < numMaskRegs; i++) {
         fringeMask[i] = Opmask(i + 1);
     }
 
@@ -237,17 +237,17 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32RD<KType>::generateKrLoop(int unrollFactor, bool isKFringe)
 {
-    for (int unroll = 0; unroll < unrollFactor; unroll++) {
+    for (iter_t unroll = 0; unroll < unrollFactor; unroll++) {
         // load MR rows of A
         loadMRrowsOfA(isKFringe);
 
-        for (int unrollB = 0; unrollB < nSubBlockSize; unrollB++) {
+        for (iter_t unrollB = 0; unrollB < nSubBlockSize; unrollB++) {
             // load column from B
             loadRegF32Values(
                 bRegIdx,
                 ptr[regTmpBptr + ((unrollB == 3) ? regCsB3 : unrollB * regCsB)],
                 isKFringe);
-            for (int row = 0; row < MR; row++) {
+            for (iter_t row = 0; row < MR; row++) {
                 // fma with A values
                 vfmadd231ps(RegType(accumRegIdx + unrollB * MR + row),
                             RegType(aRegIdx + row), RegType(bRegIdx));
@@ -453,7 +453,7 @@ jitGEMMF32RD<KType>::alphaScale()
     Xbyak::Reg64 alphaReg    = regTmp1;
     mov(alphaReg, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, alpha)]);
     vbroadcastss(Xmm(alphaRegIdx), ptr[alphaReg]);
-    for (int i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         vmulps(Xmm(cRegIdx + i), Xmm(cRegIdx + i), Xmm(alphaRegIdx));
     }
     return dlp::jit::jitGeneratorError::success;
@@ -502,7 +502,7 @@ void
 jitGEMMF32RD<KType>::loadMRrowsOfA(bool isFringe)
 {
     mov(regTmp1, regTmpAptr);
-    for (int row = 0; row < MR; row++) {
+    for (iter_t row = 0; row < MR; row++) {
         loadRegF32Values(aRegIdx + row, ptr[regTmp1], isFringe);
         add(regTmp1, regRsA);
     }
@@ -526,7 +526,7 @@ void
 jitGEMMF32RD<KType>::regInit()
 {
     vxorps(RegType(bRegIdx), RegType(bRegIdx), RegType(bRegIdx));
-    for (int i = bRegIdx + 1; i < numRegs; i++) {
+    for (iter_t i = bRegIdx + 1; i < numRegs; i++) {
         vmovaps(RegType(i), RegType(bRegIdx));
     }
 }
@@ -540,7 +540,7 @@ jitGEMMF32RD<KType>::reduceToXmm(int offset, int tmpIdx, int blockSize)
     }
 
     // Zero out the temporary registers we'll need
-    for (int i = 0; i < nElemsPerXmm; i++) {
+    for (iter_t i = 0; i < nElemsPerXmm; i++) {
         vxorps(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
                Xbyak::Ymm(tmpIdx + i));
     }
@@ -549,7 +549,7 @@ jitGEMMF32RD<KType>::reduceToXmm(int offset, int tmpIdx, int blockSize)
     // This extact + add logic is specific to AVX512 ISA, when using ZMM
     // registers. In case of using YMM registers, just move it onto temporary
     // registers.
-    for (int i = 0; i < blockSize; i++) {
+    for (iter_t i = 0; i < blockSize; i++) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             // Extract upper 256-bits to temp YMM
             vextractf32x8(Xbyak::Ymm(tmpIdx + i),
@@ -597,7 +597,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32RD<KType>::reduceAccumulation()
 {
-    for (int i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         RETURN_IF_ERROR(reduceToXmm(i, bRegIdx, nSubBlockSize));
     }
     return dlp::jit::jitGeneratorError::success;
@@ -622,7 +622,7 @@ jitGEMMF32RD<KType>::betaScale()
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
     vbroadcastss(Xmm(betaRegIdx), ptr[regTmp1]);
 
-    for (int i = 0; i < MR; i++) {
+    for (iter_t i = 0; i < MR; i++) {
         loadRegF32Xmm(aRegIdx + i, ptr[regTmpCptr]);
         vfmadd231ps(Xmm(cRegIdx + i), Xmm(aRegIdx + i), Xmm(betaRegIdx));
         add(regTmpCptr, regRsC);
@@ -692,7 +692,7 @@ jitGEMMF32RD<KType>::storeResults(bool fuseBetaWithStore)
         vucomiss(Xmm(betaRegIdx), Xmm(scratchRegIdx));
         je(l_store_bz, T_NEAR);
 
-        for (int i = 0; i < MR; i++) {
+        for (iter_t i = 0; i < MR; i++) {
             loadRegF32Xmm(aRegIdx + i, ptr[regTmpCptr]);
             vfmadd231ps(Xmm(cRegIdx + i), Xmm(aRegIdx + i), Xmm(betaRegIdx));
             storeF32Xmm(cRegIdx + i, ptr[regTmpCptr]);
@@ -701,14 +701,14 @@ jitGEMMF32RD<KType>::storeResults(bool fuseBetaWithStore)
         jmp(l_post_store_bz, T_NEAR);
 
         L(l_store_bz);
-        for (int i = 0; i < MR; i++) {
+        for (iter_t i = 0; i < MR; i++) {
             storeF32Xmm(cRegIdx + i, ptr[regTmpCptr]);
             add(regTmpCptr, regRsC);
         }
 
         L(l_post_store_bz);
     } else {
-        for (int i = 0; i < MR; i++) {
+        for (iter_t i = 0; i < MR; i++) {
             storeF32Xmm(cRegIdx + i, ptr[regTmpCptr]);
             add(regTmpCptr, regRsC);
         }

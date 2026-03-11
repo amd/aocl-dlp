@@ -188,7 +188,7 @@ packa_f32f32f32of32_row_major_avx2(float*       pack_a_buf,
             }
             kr += kr_partial_pieces_4;
             if (kr_partial_pieces_rem > 0) {
-                for (int ii = 0; ii < kr_partial_pieces_rem; ++ii) {
+                for (iter_t ii = 0; ii < kr_partial_pieces_rem; ++ii) {
                     *(pack_a_buf + (ic * KC) + ((kr + ii) * MR) + 0) =
                         *(a + (lda * (ic + 0)) + (kr + ii));
                     *(pack_a_buf + (ic * KC) + ((kr + ii) * MR) + 1) =
@@ -209,10 +209,10 @@ packa_f32f32f32of32_row_major_avx2(float*       pack_a_buf,
         md_t   ic = m_full_pieces_loop_limit;
         __m256 temp_a_reg[6];
         for (iter_t kr = 0; kr < kr_full_pieces_loop_limit; kr += KR_NDIM) {
-            for (int ii = 0; ii < m_partial_pieces; ++ii) {
+            for (iter_t ii = 0; ii < m_partial_pieces; ++ii) {
                 temp_a_reg[ii] = _mm256_loadu_ps(a + (lda * (ic + ii)) + kr);
             }
-            for (int ii = m_partial_pieces; ii < MR; ++ii) {
+            for (iter_t ii = m_partial_pieces; ii < MR; ++ii) {
                 temp_a_reg[ii] = _mm256_setzero_ps();
             }
             a01 = temp_a_reg[0];
@@ -232,11 +232,11 @@ packa_f32f32f32of32_row_major_avx2(float*       pack_a_buf,
             md_t kr = kr_full_pieces_loop_limit;
             if (kr_partial_pieces_4 > 0) {
                 __m128 temp_a_reg_128[6] = { 0 };
-                for (int ii = 0; ii < m_partial_pieces; ++ii) {
+                for (iter_t ii = 0; ii < m_partial_pieces; ++ii) {
                     temp_a_reg_128[ii] =
                         _mm_loadu_ps(a + (lda * (ic + ii)) + kr);
                 }
-                for (int ii = m_partial_pieces; ii < MR; ++ii) {
+                for (iter_t ii = m_partial_pieces; ii < MR; ++ii) {
                     temp_a_reg_128[ii] = _mm_setzero_ps();
                 }
                 __m128 a01_128 = temp_a_reg_128[0];
@@ -250,8 +250,8 @@ packa_f32f32f32of32_row_major_avx2(float*       pack_a_buf,
             }
             kr += kr_partial_pieces_4;
             if (kr_partial_pieces_rem > 0) {
-                for (int ii = 0; ii < kr_partial_pieces_rem; ++ii) {
-                    for (int jj = 0; jj < m_partial_pieces; ++jj) {
+                for (iter_t ii = 0; ii < kr_partial_pieces_rem; ++ii) {
+                    for (iter_t jj = 0; jj < m_partial_pieces; ++jj) {
                         *(pack_a_buf + (ic * KC) + ((kr + ii) * MR) + jj) =
                             *(a + (lda * (ic + jj)) + (kr + ii));
                     }

@@ -509,7 +509,7 @@ packb_nrlt16_bf16bf16f32of32_row_major(bfloat16* pack_b_buffer_bf16bf16f32of32,
 
     __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_partial_rem));
 
-    for (int kr = 0; kr < k_full_pieces; kr += 2) {
+    for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         // Rearrange for dpbf16_ps, read 2 rows from B with next 16 elements in
         // each row.
         a0 = _mm256_maskz_loadu_epi16(load_mask, b + (ldb * (kr + 0)));

@@ -168,7 +168,7 @@ jitF32GEMVN1<KType>::regInit(int baseIdx, int numRegs)
 {
     // Zero out accumulation registers
     vxorps(RegType(baseIdx), RegType(baseIdx), RegType(baseIdx));
-    for (int i = 1; i < numRegs; i++) {
+    for (iter_t i = 1; i < numRegs; i++) {
         vmovaps(RegType(baseIdx + i), RegType(baseIdx));
     }
 }
@@ -264,9 +264,9 @@ jitF32GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
     int mLeft = mSize % 4;
     xor_(regTmp1, regTmp1);
     regInit(tmpBaseIdx, tmpReg);
-    for (int i = 0; i < mSize / 4; i++) {
+    for (iter_t i = 0; i < mSize / 4; i++) {
 
-        for (int j = 0; j < 4; j++) {
+        for (iter_t j = 0; j < 4; j++) {
             RETURN_IF_ERROR((loadAValues(j, isFringe)));
             RETURN_IF_ERROR((computeFMA(j, i * 4 + j)));
 
@@ -276,7 +276,7 @@ jitF32GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
         // add(regTmp1, regRsA);
     }
 
-    for (int j = 0; j < mLeft; j++) {
+    for (iter_t j = 0; j < mLeft; j++) {
         RETURN_IF_ERROR((loadAValues(j, isFringe)));
         RETURN_IF_ERROR((computeFMA(j, (mSize / 4) * 4 + j)));
         add(regTmp1, regRsA);
@@ -295,7 +295,7 @@ jitF32GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
     }
 
     // Zero out the temporary registers we'll need
-    for (int i = 0; i < 4; i++) {
+    for (iter_t i = 0; i < 4; i++) {
         vxorps(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
                Xbyak::Ymm(tmpIdx + i));
     }
@@ -304,7 +304,7 @@ jitF32GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
     // This extact + add logic is specific to AVX512 ISA, when using ZMM
     // registers. In case of using YMM registers, just move it onto temporary
     // registers.
-    for (int i = 0; i < blockSize; i++) {
+    for (iter_t i = 0; i < blockSize; i++) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             // Extract upper 256-bits to temp YMM
             vextractf32x8(Xbyak::Ymm(tmpIdx + i), Xbyak::Zmm(startIdx + i), 1);
@@ -347,12 +347,12 @@ dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::reduceAccumulation(int mSize)
 {
     // Process mSize registers in blocks of the simdWidth
-    for (int i = 0; i < mSize; i += simdWidth) {
+    for (iter_t i = 0; i < mSize; i += simdWidth) {
         // Number of registers to process in this ZMM block
         int blockSize = (mSize - i) < simdWidth ? (mSize - i) : simdWidth;
 
         // Process this block in groups of 4 registers
-        for (int j = 0; j < blockSize; j += 4) {
+        for (iter_t j = 0; j < blockSize; j += 4) {
             int subBlockSize = (blockSize - j) < 4 ? (blockSize - j) : 4;
 
             // Reduce 4 (or fewer) ZMMs to one XMM
@@ -384,7 +384,7 @@ jitF32GEMVN1<KType>::scaleAccumulationWithAlpha(int mSize)
 {
     mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, alpha)]);
     vbroadcastss(RegType(tmpBaseIdx), ptr[regKIter]);
-    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+    for (iter_t i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
         vmulps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                RegType(tmpBaseIdx));
     }
@@ -443,7 +443,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
 
         if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
             // Store complete SIMD-width chunks
-            for (int i = 0; i < mSize / simdWidth; i += 1) {
+            for (iter_t i = 0; i < mSize / simdWidth; i += 1) {
                 movdqu(Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr]);
                 vpmovsxwd(Xbyak::Ymm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx));
                 vpslld(Xbyak::Ymm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx), 16);
@@ -481,7 +481,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
                             Xbyak::Ymm(xBaseIdx), Xbyak::Ymm(tmpBaseIdx));
             }
         } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            for (int i = 0; i < mSize / simdWidth; i += 1) {
+            for (iter_t i = 0; i < mSize / simdWidth; i += 1) {
                 vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
                 vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
                 vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
@@ -506,7 +506,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
         L(label_betaop_col);
     }
 
-    for (int i = 0; i < mSize / simdWidth; i += 1) {
+    for (iter_t i = 0; i < mSize / simdWidth; i += 1) {
         if (betaOne) {
             vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                    ptr[regTmpYptr]);
@@ -602,7 +602,8 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         lea(regTmp3, ptr[regTmp2 + 2 * regTmp2]); // regTmp3 = stride + 2*stride
 
         if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-            for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+            for (iter_t i = 0; i < (mSize + simdWidth - 1) / simdWidth;
+                 i += 1) {
                 int blockSize  = ((mSize - i * simdWidth) < simdWidth)
                                      ? (mSize - i * simdWidth)
                                      : simdWidth;
@@ -610,7 +611,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                 int rem_block  = blockSize % 4;
                 regInit(tmpBaseIdx, tmpReg);
 
-                for (int j = 0; j < num_blocks; j += 1) {
+                for (iter_t j = 0; j < num_blocks; j += 1) {
                     // Load 4 BF16 values and convert to F32 by placing in upper
                     // 16 bits
                     vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
@@ -728,7 +729,8 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             // Similar logic for AVX512_ZMM - simplified version for BF16
             // loading
-            for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+            for (iter_t i = 0; i < (mSize + simdWidth - 1) / simdWidth;
+                 i += 1) {
                 int blockSize  = ((mSize - i * simdWidth) < simdWidth)
                                      ? (mSize - i * simdWidth)
                                      : simdWidth;
@@ -736,7 +738,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                 int rem_block  = blockSize % 4;
                 regInit(tmpBaseIdx, tmpReg);
 
-                for (int j = 0; j < num_blocks; j += 1) {
+                for (iter_t j = 0; j < num_blocks; j += 1) {
                     // Load 4 BF16 values and convert to F32 by placing in upper
                     // 16 bits
                     vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
@@ -851,14 +853,14 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
     // F32 path (original code)
     // Store offsets for Y, using it's row-stride
     lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = rsC + 2*rsC
-    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
+    for (iter_t i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
         int blockSize  = (mSize - i * simdWidth) < simdWidth
                              ? (mSize - i * simdWidth)
                              : simdWidth;
         int num_blocks = blockSize / 4;
         int rem_block  = blockSize % 4;
         regInit(tmpBaseIdx, tmpReg);
-        for (int j = 0; j < num_blocks; j += 1) {
+        for (iter_t j = 0; j < num_blocks; j += 1) {
             vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
             vbroadcastss(RegType(tmpBaseIdx + 1), ptr[regTmpYptr + regRsC]);
             vbroadcastss(RegType(tmpBaseIdx + 2), ptr[regTmpYptr + 2 * regRsC]);
@@ -1086,7 +1088,7 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
 
         if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
             // Store complete SIMD-width chunks
-            for (int i = 0; i < mSize / simdWidth; i += 1) {
+            for (iter_t i = 0; i < mSize / simdWidth; i += 1) {
                 RETURN_IF_ERROR(convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
                                                  accumBaseIdx + i));
 
@@ -1129,7 +1131,7 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
             }
         } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             // Store complete SIMD-width chunks
-            for (int i = 0; i < mSize / simdWidth; i += 1) {
+            for (iter_t i = 0; i < mSize / simdWidth; i += 1) {
                 RETURN_IF_ERROR(convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
                                                  accumBaseIdx + i));
 
@@ -1153,7 +1155,7 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
         L(label_storeop_col);
     }
 
-    for (int i = 0; i < mSize / simdWidth; i += 1) {
+    for (iter_t i = 0; i < mSize / simdWidth; i += 1) {
         vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + i));
         lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(float)]);
     }
@@ -1178,14 +1180,14 @@ dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
 {
     inLocalLabel();
-    for (int i = 0; i < (mSize + simdWidth - 1) / simdWidth; i++) {
+    for (iter_t i = 0; i < (mSize + simdWidth - 1) / simdWidth; i++) {
         int elements_in_reg = (i < mSize / simdWidth) ? simdWidth
                                                       : (mSize % simdWidth);
         if (elements_in_reg == 0)
             break;
 
         // Extract 4 chunks of 128-bits (4 floats each) from the ZMM
-        for (int j = 0; j < elements_in_reg; j += 4) {
+        for (iter_t j = 0; j < elements_in_reg; j += 4) {
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 vextractf128(Xbyak::Xmm(tmpBaseIdx + j / 4),
                              RegType(accumBaseIdx + i), j / 4);
@@ -1242,14 +1244,14 @@ jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
                 return dlp::jit::jitGeneratorError::notSupported;
             } else {
                 // Common code for AVX2 and AVX512_ZMM
-                for (int j = 0; j < (elements_in_reg + 3) / 4; j++) {
+                for (iter_t j = 0; j < (elements_in_reg + 3) / 4; j++) {
                     RETURN_IF_ERROR(convertF32toBF16(
                         cvtBaseIdx, (cvtBaseIdx + 1 + j), tmpBaseIdx + j));
                 }
 
                 // Now store each extracted value to its proper row-strided
                 // location
-                for (int j = 0; j < elements_in_reg; j++) {
+                for (iter_t j = 0; j < elements_in_reg; j++) {
                     int tmp_reg = j / 4; // Which temp register has our value
                     int pos_in_reg =
                         j % 4; // Position within that temp register
@@ -1267,7 +1269,7 @@ jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
         }
 
         // Now store each extracted value to its proper row-strided location
-        for (int j = 0; j < elements_in_reg; j++) {
+        for (iter_t j = 0; j < elements_in_reg; j++) {
             int tmp_reg    = j / 4; // Which temp register has our value
             int pos_in_reg = j % 4; // Position within that temp register
 
@@ -1311,7 +1313,7 @@ dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::loadMasks()
 {
     // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 
@@ -1717,7 +1719,7 @@ template<utils::kernelInstrType KType>
 void
 jitF32GEMVM1<KType>::regInit(int baseIdx, int numRegs)
 {
-    for (int i = 0; i < numRegs; i++) {
+    for (iter_t i = 0; i < numRegs; i++) {
         vxorps(RegType(baseIdx + i), RegType(baseIdx + i),
                RegType(baseIdx + i));
     }
@@ -1747,7 +1749,7 @@ dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::loadMasks()
 {
     // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 
@@ -1801,14 +1803,14 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::computeKxnfringe()
 {
-    for (int j = 0; j < K_SUB_ITER; j++) {
+    for (iter_t j = 0; j < K_SUB_ITER; j++) {
         vbroadcastss(RegType(xBaseIdx + j), ptr[regXptr + j * sizeof(float)]);
     }
 
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
-    for (int j = 0; j < K_SUB_ITER; j++) {
-        for (int i = 0; i < n_iter; i++) {
+    for (iter_t j = 0; j < K_SUB_ITER; j++) {
+        for (iter_t i = 0; i < n_iter; i++) {
             vmovups(RegType(bBaseIdx + i),
                     ptr[regTmp2 + i * simdWidth * sizeof(float)]);
             vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
@@ -1830,12 +1832,12 @@ jitF32GEMVM1<KType>::computeKxNR(bool nMask)
 {
     mov(regTmp2, regBptr);
     if (!nMask) {
-        for (int i = 0; i < K_SUB_ITER; i += 1) {
+        for (iter_t i = 0; i < K_SUB_ITER; i += 1) {
             vbroadcastss(RegType(xBaseIdx + i),
                          ptr[regXptr + i * sizeof(float)]);
         }
-        for (int j = 0; j < K_SUB_ITER; j += 1) {
-            for (int i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t j = 0; j < K_SUB_ITER; j += 1) {
+            for (iter_t i = 0; i < NR / simdWidth; i += 1) {
                 vmovups(RegType(bBaseIdx + i),
                         ptr[regTmp2 + i * simdWidth * sizeof(float)]);
                 vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i + j),
@@ -1858,7 +1860,7 @@ jitF32GEMVM1<KType>::compute1xnfringe()
 
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * simdWidth * sizeof(float)]);
         vmovups(RegType(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
@@ -1883,7 +1885,7 @@ jitF32GEMVM1<KType>::compute1xNR(bool nMask)
     if (!nMask) {
         vbroadcastss(RegType(xBaseIdx), ptr[regXptr]);
 
-        for (int i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t i = 0; i < NR / simdWidth; i += 1) {
             vmovups(RegType(bBaseIdx + i),
                     ptr[regTmp2 + i * simdWidth * sizeof(float)]);
             vfmadd231ps(RegType(accumBaseIdx + K_SUB_ITER * i),
@@ -1994,8 +1996,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::finalAccumulate()
 {
-    for (int i = 0; i < NR / simdWidth; i += 1) {
-        for (int j = 1; j < K_SUB_ITER; j += 1) {
+    for (iter_t i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t j = 1; j < K_SUB_ITER; j += 1) {
             vaddps(RegType(accumBaseIdx + K_SUB_ITER * i),
                    RegType(accumBaseIdx + K_SUB_ITER * i),
                    RegType(accumBaseIdx + K_SUB_ITER * i + j));
@@ -2015,7 +2017,7 @@ jitF32GEMVM1<KType>::scaleWithAlpha()
         mov(regKSubIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, alpha)]);
         vbroadcastss(RegType(xBaseIdx), ptr[regKSubIter]);
-        for (int i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t i = 0; i < NR / simdWidth; i += 1) {
             vmulps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
                    RegType(accumBaseIdx + i));
         }
@@ -2073,7 +2075,7 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
 
         if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
             // Store complete SIMD-width chunks
-            for (int i = 0; i < n_iter; i += 1) {
+            for (iter_t i = 0; i < n_iter; i += 1) {
                 movdqu(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
                 vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
                 vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
@@ -2111,7 +2113,7 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
                             RegType(tmpBaseIdx));
             }
         } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            for (int i = 0; i < n_iter; i += 1) {
+            for (iter_t i = 0; i < n_iter; i += 1) {
                 vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
                 vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
                 vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
@@ -2137,7 +2139,7 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
     }
 
     if (!isBetaOne) {
-        for (int i = 0; i < n_iter; i++) {
+        for (iter_t i = 0; i < n_iter; i++) {
             vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
                         ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
         }
@@ -2156,7 +2158,7 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
             }
         }
     } else {
-        for (int i = 0; i < n_iter; i++) {
+        for (iter_t i = 0; i < n_iter; i++) {
             vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                    ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
         }
@@ -2258,7 +2260,7 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                 if constexpr (KType
                               == utils::kernelInstrType::avx2_ymm_16_reg) {
                     // Store complete SIMD-width chunks
-                    for (int i = 0; i < NR / simdWidth; i += 1) {
+                    for (iter_t i = 0; i < NR / simdWidth; i += 1) {
                         movdqu(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
                         vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
                         vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
@@ -2269,7 +2271,7 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                     }
                 } else if (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                     // Store complete SIMD-width chunks
-                    for (int i = 0; i < NR / simdWidth; i += 1) {
+                    for (iter_t i = 0; i < NR / simdWidth; i += 1) {
                         vmovdqu16(halfRegType(tmpBaseIdx), ptr[regTmpYptr]);
                         vpmovsxwd(RegType(tmpBaseIdx), halfRegType(tmpBaseIdx));
                         vpslld(RegType(tmpBaseIdx), RegType(tmpBaseIdx), 16);
@@ -2288,13 +2290,13 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
             }
 
             if (!isBetaOne) {
-                for (int i = 0; i < NR / simdWidth; i += 1) {
+                for (iter_t i = 0; i < NR / simdWidth; i += 1) {
                     vfmadd231ps(
                         RegType(accumBaseIdx + i), RegType(xBaseIdx),
                         ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
                 }
             } else {
-                for (int i = 0; i < NR / simdWidth; i += 1) {
+                for (iter_t i = 0; i < NR / simdWidth; i += 1) {
                     vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                            ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
                 }
@@ -2442,7 +2444,7 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
         add(regTmpYptr, regKIter);
 
         // Convert F32 to BF16 for all variants
-        for (int i = 0; i < n_iter; i += 1) {
+        for (iter_t i = 0; i < n_iter; i += 1) {
             RETURN_IF_ERROR(
                 convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1, accumBaseIdx + i));
 
@@ -2502,7 +2504,7 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
         L(label_store_fringe);
     }
 
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
                 RegType(accumBaseIdx + i));
     }
@@ -2576,7 +2578,7 @@ jitF32GEMVM1<KType>::storeYValues(bool nMask)
             add(regTmpYptr, regKIter);
 
             // Store complete SIMD-width chunks
-            for (int i = 0; i < NR / simdWidth; i += 1) {
+            for (iter_t i = 0; i < NR / simdWidth; i += 1) {
 
                 RETURN_IF_ERROR(convertF32toBF16(tmpBaseIdx, tmpBaseIdx + 1,
                                                  accumBaseIdx + i));
@@ -2601,7 +2603,7 @@ jitF32GEMVM1<KType>::storeYValues(bool nMask)
             L(label_store);
         }
 
-        for (int i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t i = 0; i < NR / simdWidth; i += 1) {
             vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
                     RegType(accumBaseIdx + i));
         }
@@ -2653,7 +2655,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         // Y prefetch, before the k-loop
         if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
-            for (int i = 0; i < NR / simdWidth; i++) {
+            for (iter_t i = 0; i < NR / simdWidth; i++) {
                 prefetcht0(ptr[regYptr + i * simdWidth * sizeof(float)]);
             }
         }

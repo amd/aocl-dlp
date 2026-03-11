@@ -27,6 +27,7 @@
  */
 
 // Custom Headers
+#include "classic/dlp_base_types.h"
 #include "framework/cartesian_product.hh"
 #include "framework/range.hh"
 #include "framework/simple_product.hh"
@@ -398,7 +399,7 @@ TEST(CartesianProductTest, MixedTypesRangeAndVector)
     EXPECT_FLOAT_EQ(std::any_cast<float>(result2[1]), 2.2f);
 
     // Skip ahead and test some middle combinations
-    for (int i = 0; i < 8; i++) {
+    for (iter_t i = 0; i < 8; i++) {
         cp.next(); // Skip to get to (1, 10.0f) then (2, 1.1f)
     }
 
@@ -407,7 +408,7 @@ TEST(CartesianProductTest, MixedTypesRangeAndVector)
     EXPECT_FLOAT_EQ(std::any_cast<float>(result11[1]), 1.1f);
 
     // Skip to near the end
-    for (int i = 0; i < 88; i++) {
+    for (iter_t i = 0; i < 88; i++) {
         cp.next(); // Skip to get near the end
     }
 
@@ -442,7 +443,7 @@ TEST(SimpleProductTest, MixedTypesRangeAndVector)
     // Test all 10 combinations - pairs values sequentially
     std::vector<float> expected_floats = { 1.1f, 2.2f, 3.3f, 4.4f, 5.5f,
                                            6.6f, 7.7f, 8.8f, 9.9f, 10.0f };
-    for (int i = 1; i <= 10; i++) {
+    for (iter_t i = 1; i <= 10; i++) {
         auto result = sp.next();
         EXPECT_EQ(std::any_cast<int>(result[0]), i);
         EXPECT_FLOAT_EQ(std::any_cast<float>(result[1]),
@@ -475,7 +476,7 @@ TEST(SimpleProductTest, MixedTypesUnequalSizes)
 
     // Test all 5 combinations (limited by the smaller range)
     std::vector<float> expected_floats = { 1.1f, 2.2f, 3.3f, 4.4f, 5.5f };
-    for (int i = 1; i <= 5; i++) {
+    for (iter_t i = 1; i <= 5; i++) {
         auto result = sp.next();
         EXPECT_EQ(std::any_cast<int>(result[0]), i);
         EXPECT_FLOAT_EQ(std::any_cast<float>(result[1]),
@@ -688,8 +689,8 @@ TEST_F(MatrixReorderTest, ReorderWithoutTranspose)
 
     // Fill with known values for testing
     float* data = reinterpret_cast<float*>(input.getData());
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 4; j++) {
+    for (iter_t i = 0; i < 3; i++) {
+        for (iter_t j = 0; j < 4; j++) {
             data[i * 6 + j] =
                 i * 10.0f
                 + j; // Row 0: 0,1,2,3  Row 1: 10,11,12,13  Row 2: 20,21,22,23
@@ -737,8 +738,8 @@ TEST_F(MatrixReorderTest, ReorderWithTranspose)
     // Since it's marked as transposed, logical matrix is 4x3, but physical
     // storage is 3x4
     float* data = reinterpret_cast<float*>(input.getData());
-    for (int i = 0; i < 3; i++) {
-        for (int j = 0; j < 4; j++) {
+    for (iter_t i = 0; i < 3; i++) {
+        for (iter_t j = 0; j < 4; j++) {
             data[i * 5 + j] = i * 10.0f + j; // Physical: Row 0: 0,1,2,3  Row 1:
                                              // 10,11,12,13  Row 2: 20,21,22,23
         }
@@ -1298,7 +1299,7 @@ TEST_F(ArgParserTest, ParseTestArgsFiltersUALArguments)
 
     // Make a copy since parseTestArgs modifies argc/argv
     std::vector<char*> argv_vec;
-    for (int i = 0; i < original_argc; ++i) {
+    for (iter_t i = 0; i < original_argc; ++i) {
         argv_vec.push_back(const_cast<char*>(original_argv[i]));
     }
 
@@ -1780,7 +1781,7 @@ TEST_F(PreparedBatchGemmTest, PrepareMetadataF32SingleGroup)
     groups[0].alpha = 1.0;
     groups[0].beta  = 0.0;
 
-    for (int i = 0; i < 2; ++i) {
+    for (iter_t i = 0; i < 2; ++i) {
         Matrix A(64, 64, MatrixType::f32, MatrixLayout::ROW_MAJOR, 64, false);
         Matrix B(64, 64, MatrixType::f32, MatrixLayout::ROW_MAJOR, 64, false);
         Matrix C(64, 64, MatrixType::f32, MatrixLayout::ROW_MAJOR, 64, false);
@@ -1827,7 +1828,7 @@ TEST_F(PreparedBatchGemmTest, PrepareMetadataS8SingleGroup)
     groups[0].alpha = 2.0;
     groups[0].beta  = 1.0;
 
-    for (int i = 0; i < 2; ++i) {
+    for (iter_t i = 0; i < 2; ++i) {
         Matrix A(64, 64, MatrixType::s8, MatrixLayout::ROW_MAJOR, 64, false);
         Matrix B(64, 64, MatrixType::s8, MatrixLayout::ROW_MAJOR, 64, false);
         Matrix C(64, 64, MatrixType::s32, MatrixLayout::ROW_MAJOR, 64, false);
@@ -1874,7 +1875,7 @@ TEST_F(PreparedBatchGemmTest, OptimizedBatchGemmF32)
     groups[0].alpha = 1.5;
     groups[0].beta  = 0.5;
 
-    for (int i = 0; i < 2; ++i) {
+    for (iter_t i = 0; i < 2; ++i) {
         Matrix A(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
         Matrix B(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
         Matrix C(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
@@ -1910,7 +1911,7 @@ TEST_F(PreparedBatchGemmTest, PrepareMetadataMultiGroup)
     // Create 3 groups with different alpha/beta
     std::vector<BatchGroup> groups(3);
 
-    for (size_t g = 0; g < 3; ++g) {
+    for (iter_t g = 0; g < 3; ++g) {
         groups[g].m     = 16;
         groups[g].n     = 16;
         groups[g].k     = 16;
@@ -1941,14 +1942,14 @@ TEST_F(PreparedBatchGemmTest, PrepareMetadataMultiGroup)
     ASSERT_EQ(prepared.alpha_f32.size(), 3);
     ASSERT_EQ(prepared.beta_f32.size(), 3);
 
-    for (size_t g = 0; g < 3; ++g) {
+    for (iter_t g = 0; g < 3; ++g) {
         EXPECT_FLOAT_EQ(prepared.alpha_f32[g], static_cast<float>(1.0 + g));
         EXPECT_FLOAT_EQ(prepared.beta_f32[g], static_cast<float>(0.5 * g));
     }
 
     // Verify metadata populated for all groups
     EXPECT_EQ(prepared.backend_metadata.size(), 3);
-    for (size_t g = 0; g < 3; ++g) {
+    for (iter_t g = 0; g < 3; ++g) {
         EXPECT_NE(prepared.backend_metadata[g], nullptr);
     }
 }
@@ -2008,7 +2009,7 @@ TEST_F(PreparedBatchGemmTest, PrepareArgsMismatchedMatrixCounts)
     groups[0].beta  = 0.0;
 
     // Add 2 A matrices but only 1 B and C matrix
-    for (int i = 0; i < 2; ++i) {
+    for (iter_t i = 0; i < 2; ++i) {
         Matrix A(32, 32, MatrixType::f32, MatrixLayout::ROW_MAJOR, 32, false);
         A.fillRandom(42 + i);
         groups[0].A_matrices.push_back(std::move(A));

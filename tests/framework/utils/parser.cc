@@ -767,7 +767,7 @@ MicroTest::createOperationParam(
         if (sf_len == "m") {
             std::vector<float> pre_quant_sf_data(getM());
             std::vector<float> post_quant_sf_data(getM());
-            for (size_t i = 0; i < pre_quant_sf_data.size(); ++i) {
+            for (std::size_t i = 0; i < pre_quant_sf_data.size(); ++i) {
                 // Generate random scale values between 0.1 and 10
                 pre_quant_sf_data[i]  = dist(gen);
                 post_quant_sf_data[i] = 1.0f / dist(gen);
@@ -814,7 +814,7 @@ MicroTest::createOperationParam(
         if (has_zp) {
             if (zp_len == "m") {
                 std::vector<float> zp_data(getM());
-                for (size_t idx = 0; idx < zp_data.size(); ++idx) {
+                for (std::size_t idx = 0; idx < zp_data.size(); ++idx) {
                     // Generate random zero point values between 1 and 20
                     zp_data[idx] = dist(gen);
                 }
@@ -867,7 +867,7 @@ MicroTest::createOperationParam(
         std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
         if (sf_len == "n") {
             std::vector<float> sf_data(getN());
-            for (size_t i = 0; i < sf_data.size(); ++i) {
+            for (std::size_t i = 0; i < sf_data.size(); ++i) {
                 sf_data[i] = dist(gen);
             }
             sf_matrix = Matrix::fromVector(sf_data, sf_type);
@@ -907,7 +907,7 @@ MicroTest::createOperationParam(
         if (has_zp) {
             if (zp_len == "n") {
                 std::vector<float> zp_data(getN());
-                for (size_t i = 0; i < zp_data.size(); ++i) {
+                for (std::size_t i = 0; i < zp_data.size(); ++i) {
                     zp_data[i] = dist(gen);
                 }
                 zp_matrix = Matrix::fromVector(zp_data, zp_type);
@@ -1014,7 +1014,7 @@ FillPatternConfig::generatePattern() const
             size_t num_steps = static_cast<size_t>(std::ceil(range / step)) + 1;
             num_steps        = std::min(num_steps, MAX_PATTERN_SIZE);
 
-            for (size_t i = 0; i < num_steps; ++i) {
+            for (std::size_t i = 0; i < num_steps; ++i) {
                 double x   = i * step;
                 double val = std::fmod(x + offset, range) + lb;
                 if (i == num_steps - 1) {
@@ -1031,7 +1031,7 @@ FillPatternConfig::generatePattern() const
             size_t num_steps = static_cast<size_t>(std::ceil((ub - lb) / step));
             num_steps        = std::min(num_steps, MAX_PATTERN_SIZE);
 
-            for (size_t i = 0; i < num_steps; ++i) {
+            for (std::size_t i = 0; i < num_steps; ++i) {
                 double x = lb + i * step;
                 result.push_back(x * multiplier + offset);
             }
@@ -1044,7 +1044,7 @@ FillPatternConfig::generatePattern() const
             size_t num_steps = static_cast<size_t>(std::ceil((ub - lb) / step));
             num_steps        = std::min(num_steps, MAX_PATTERN_SIZE);
 
-            for (size_t i = 0; i < num_steps; ++i) {
+            for (std::size_t i = 0; i < num_steps; ++i) {
                 result.push_back(lb + i * step);
             }
             break;
@@ -1120,7 +1120,7 @@ operator<<(std::ostream& os, const FillPatternConfig& cfg)
 
     if (cfg.type == PatternType::Static) {
         os << ", values=[";
-        for (size_t i = 0; i < cfg.values.size(); ++i) {
+        for (std::size_t i = 0; i < cfg.values.size(); ++i) {
             if (i > 0)
                 os << ", ";
             os << cfg.values[i];

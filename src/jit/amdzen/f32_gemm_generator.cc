@@ -129,7 +129,7 @@ jitGEMMF32<KType>::loadMasks()
 {
     if (useMask) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            for (int ii = 0; ii < numMaskRegs; ++ii) {
+            for (iter_t ii = 0; ii < numMaskRegs; ++ii) {
                 kmovw(fringeMask[ii],
                       ptr[stackPtr
                           + offsetof(dlp::kernels::gemmParams, maskF32[0])
@@ -154,7 +154,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::loadBValues()
 {
-    for (int i = 0; i < bFullReg; i++) {
+    for (iter_t i = 0; i < bFullReg; i++) {
         vmovups(RegType(bRegIdx + i), ptr[regBptr + i * RegBytes]);
     }
     if (bMaskReg > 0) {
@@ -163,7 +163,7 @@ jitGEMMF32<KType>::loadBValues()
                        ptr[regBptr + bFullReg * RegBytes]);
         } else {
             // For AVX512_zmm and _ymm, mask instruction is same.
-            for (int ii = bFullReg; ii < bReg; ++ii) {
+            for (iter_t ii = bFullReg; ii < bReg; ++ii) {
                 vmovups(RegType(bRegIdx + ii) | fringeMask[ii - bFullReg],
                         ptr[regBptr + ii * RegBytes]);
             }
@@ -177,7 +177,7 @@ dlp::jit::jitGeneratorError
 jitGEMMF32<KType>::BroadcastAFMAwithB()
 {
 
-    for (int i = 0; i < currentMR; i++) {
+    for (iter_t i = 0; i < currentMR; i++) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             // Fusing broadcast with fma when there is no reuse of A values
             if (bReg == 1) {
@@ -202,7 +202,7 @@ jitGEMMF32<KType>::BroadcastAFMAwithB()
             } else {
                 vbroadcastss(RegType(aRegIdx), ptr[regTmpAptr]);
                 add(regTmpAptr, regRsA);
-                for (int j = 0; j < bReg; j++) {
+                for (iter_t j = 0; j < bReg; j++) {
                     vfmadd231ps(RegType(cRegIdx + i * bReg + j),
                                 RegType(bRegIdx + j), RegType(aRegIdx));
                 }
@@ -210,7 +210,7 @@ jitGEMMF32<KType>::BroadcastAFMAwithB()
         } else {
             vbroadcastss(RegType(aRegIdx), ptr[regTmpAptr]);
             add(regTmpAptr, regRsA);
-            for (int j = 0; j < bReg; j++) {
+            for (iter_t j = 0; j < bReg; j++) {
                 vfmadd231ps(RegType(cRegIdx + i * bReg + j),
                             RegType(bRegIdx + j), RegType(aRegIdx));
             }
@@ -231,7 +231,7 @@ jitGEMMF32<KType>::kernelUnroll(int unroll)
     }
 
     // Unroll the kernel loop
-    for (int p = 0; p < unroll; p++) {
+    for (iter_t p = 0; p < unroll; p++) {
         // copy A ptr to another register
         mov(regTmp1, regTmpAptr);
         // load B regs
@@ -282,7 +282,7 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
 {
 
     std::queue<int> scratch_reg_queue;
-    for (int i = 0; i < cRegIdx; i++) {
+    for (iter_t i = 0; i < cRegIdx; i++) {
         scratch_reg_queue.push(i);
     }
 
@@ -323,9 +323,9 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
     int scratchReg2 = scratch_reg_queue.front();
     scratch_reg_queue.pop();
 
-    for (int i = 0; i < currentMR; i++) {
+    for (iter_t i = 0; i < currentMR; i++) {
         mov(regTmp2, regTmpCptr);
-        for (int j = 0; j < bFullReg; j++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             resetMasks(false, 0);
             vextractf32x8(halfRegType(scratchReg2),
                           RegType(cRegIdx + i * bReg + j), 1);
@@ -337,7 +337,7 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
             lea(regTmp2, ptr[regTmp2 + regTmp1]);
         }
         if (bMaskReg > 0) {
-            for (int idx = 0; idx < numMaskRegs; idx++) {
+            for (iter_t idx = 0; idx < numMaskRegs; idx++) {
                 resetMasks(true, idx);
                 vextractf32x8(halfRegType(scratchReg2),
                               RegType(cRegIdx + i * bReg + bFullReg), 1);
@@ -471,8 +471,8 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         je(".storeResultRowMajorBZ", T_NEAR);
 
         // beta is non-zero, fuse with store
-        for (int i = 0; i < currentMR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < currentMR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 // Regular store
                 vmovups(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
                 vfmadd231ps(RegType(cRegIdx + i * bReg + j),
@@ -491,7 +491,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
                                Ymm(maskRegIdx),
                                Ymm(cRegIdx + i * bReg + bFullReg));
                 } else {
-                    for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                    for (iter_t maskI = bFullReg; maskI < bReg; ++maskI) {
                         vmovups(RegType(bRegIdx + maskI)
                                     | fringeMask[maskI - bFullReg],
                                 ptr[regTmpCptr + maskI * RegBytes]);
@@ -552,8 +552,8 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         // For AVX2: 8 F32 elements → 16 bytes BF16 output (Xmm)
         int nElemsPerReg = RegBytes / sizeof(float);
 
-        for (int i = 0; i < currentMR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < currentMR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 RETURN_IF_ERROR(convertF32toBF16(scratch1, scratch2,
                                                  cRegIdx + i * bReg + j));
                 // Store the BF16 result (in halfRegType(scratch2))
@@ -611,7 +611,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
                     // AVX512_ZMM/AVX512_YMM: Store BF16 output directly to
                     // memory with mask AVX512_ZMM: 32 bytes (16×BF16) from Ymm
                     // AVX512_YMM: 16 bytes (8×BF16) from Xmm
-                    for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                    for (iter_t maskI = bFullReg; maskI < bReg; ++maskI) {
                         RETURN_IF_ERROR(convertF32toBF16(
                             scratch1, scratch2, cRegIdx + i * bReg + maskI));
                         vmovdqu16(ptr[regTmpCptr + maskI * halfRegBytes]
@@ -629,8 +629,8 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         L(".storeResultF32ToBF16");
     }
 
-    for (int i = 0; i < currentMR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < currentMR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             // Regular store
             vmovups(ptr[regTmpCptr + j * RegBytes],
                     RegType(cRegIdx + i * bReg + j));
@@ -640,7 +640,7 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
                 vmaskmovps(ptr[regTmpCptr + bFullReg * RegBytes],
                            Ymm(maskRegIdx), Ymm(cRegIdx + i * bReg + bFullReg));
             } else {
-                for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                for (iter_t maskI = bFullReg; maskI < bReg; ++maskI) {
                     vmovups(ptr[regTmpCptr + maskI * RegBytes]
                                 | fringeMask[maskI - bFullReg],
                             RegType(cRegIdx + i * bReg + maskI));
@@ -680,7 +680,7 @@ void
 jitGEMMF32<KType>::regInit()
 {
     vxorps(RegType(cRegIdx), RegType(cRegIdx), RegType(cRegIdx));
-    for (int i = 1; i < cReg; i++) {
+    for (iter_t i = 1; i < cReg; i++) {
         vmovaps(RegType(cRegIdx + i), RegType(cRegIdx));
     }
 }
@@ -732,7 +732,7 @@ jitGEMMF32<KType>::scaleAlpha()
     Xbyak::Reg64 alphaReg    = regTmp1;
     mov(alphaReg, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, alpha)]);
     vbroadcastss(RegType(alphaRegIdx), ptr[alphaReg]);
-    for (int i = 0; i < cReg; i++) {
+    for (iter_t i = 0; i < cReg; i++) {
         vmulps(RegType(cRegIdx + i), RegType(cRegIdx + i),
                RegType(alphaRegIdx));
     }
@@ -812,7 +812,7 @@ jitGEMMF32<KType>::allocateMaskRegisters()
     // modules to ensure handshake between GEMM and post-ops/transpose
     // generator. If this logic changes, we need to change the logic in
     // post-ops/transpose generator module as well.
-    for (int i = 0; i < numMaskRegs; i++) {
+    for (iter_t i = 0; i < numMaskRegs; i++) {
         fringeMask[i] = Opmask(i + 1);
     }
 
@@ -864,7 +864,7 @@ jitGEMMF32<KType>::scaleBetaColumnMajor()
     }
 
     std::queue<int> scratch_reg_queue;
-    for (int i = 0; i < cRegIdx; i++) {
+    for (iter_t i = 0; i < cRegIdx; i++) {
         scratch_reg_queue.push(i);
     }
 
@@ -912,9 +912,9 @@ jitGEMMF32<KType>::scaleBetaColumnMajor()
     int scratchReg2 = scratch_reg_queue.front();
     scratch_reg_queue.pop();
 
-    for (int i = 0; i < currentMR; i++) {
+    for (iter_t i = 0; i < currentMR; i++) {
         mov(regTmp2, regTmpCptr);
-        for (int j = 0; j < bFullReg; j++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             resetMasks(false, 0);
 
             vgatherqps(halfRegType(scratchReg1) | mask0,
@@ -939,7 +939,7 @@ jitGEMMF32<KType>::scaleBetaColumnMajor()
             lea(regTmp2, ptr[regTmp2 + regTmp1]);
         }
         if (bMaskReg > 0) {
-            for (int idx = 0; idx < numMaskRegs; idx++) {
+            for (iter_t idx = 0; idx < numMaskRegs; idx++) {
                 resetMasks(true, idx);
                 vgatherqps(halfRegType(scratchReg1) | mask0,
                            ptr[regTmp2 + RegType(offsets1RegIdx) * 1]);
@@ -1056,8 +1056,8 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         int nElemsPerReg   = RegBytes / sizeof(float);
         int bf16InputBytes = nElemsPerReg * sizeof(int16_t);
 
-        for (int i = 0; i < currentMR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < currentMR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 // Load BF16 values from buf_downscale and convert to F32
                 // Stack layout [rsp+16] contains shift value 16 for conversion
                 // AVX2: Load Xmm (16 bytes = 8×BF16), expand to Ymm (8×F32)
@@ -1133,7 +1133,7 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
                     // AVX512_YMM/ZMM: Load fringe BF16 elements directly from
                     // buf_downscale with mask Load BF16 data, sign-extend to
                     // 32-bit, shift left by 16, then apply beta
-                    for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                    for (iter_t maskI = bFullReg; maskI < bReg; ++maskI) {
                         vmovdqu16(halfRegType(bRegIdx + maskI)
                                       | fringeMask[maskI - bFullReg],
                                   ptr[regTmpCptr + maskI * halfRegBytes]);
@@ -1156,8 +1156,8 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         L(".betaOp");
     }
 
-    for (int i = 0; i < currentMR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < currentMR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             vmovups(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
             vfmadd231ps(RegType(cRegIdx + i * bReg + j), RegType(betaRegIdx),
                         RegType(bRegIdx + j));
@@ -1171,7 +1171,7 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
                 vfmadd231ps(Ymm(cRegIdx + i * bReg + bFullReg),
                             Ymm(bRegIdx + bFullReg), Ymm(betaRegIdx));
             } else {
-                for (int maskI = bFullReg; maskI < bReg; ++maskI) {
+                for (iter_t maskI = bFullReg; maskI < bReg; ++maskI) {
                     vmovups(RegType(bRegIdx + maskI)
                                 | fringeMask[maskI - bFullReg],
                             ptr[regTmpCptr + maskI * RegBytes]);
@@ -1575,7 +1575,7 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
         push(regTmp1);
 
         // Generate all MR variants for this NR variant
-        for (int mr = MR; mr > 0; mr--) {
+        for (iter_t mr = MR; mr > 0; mr--) {
 
             L(m_labels_k1[currentNRIdx][mr - 1]);
 
@@ -1633,7 +1633,7 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
                 je(done_mVariants[currentNRIdx], T_NEAR);
 
                 // Jump to appropriate label based on mLeft value
-                for (int mr = MR - 1; mr > 0; mr--) {
+                for (iter_t mr = MR - 1; mr > 0; mr--) {
                     cmp(regMiter, mr);
                     je(m_labels_k1[currentNRIdx][mr - 1],
                        T_NEAR); // Use 2D indexing: [NR][MR]
@@ -1773,7 +1773,7 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
     NIterLoop.resize(numMRVariants);
 
     // Generate all MR variants for this NR variant
-    for (int mr = MR; mr > 0; mr--) {
+    for (iter_t mr = MR; mr > 0; mr--) {
 
         // Initialize the label vectors for the current NR variant
         label_store_result_k1[mr - 1].resize(numNRVariants);
@@ -1952,7 +1952,7 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
             je(done_k1, T_NEAR);
 
             // Jump to appropriate label based on mLeft value
-            for (int mr_idx = MR - 1; mr_idx > 0; mr_idx--) {
+            for (iter_t mr_idx = MR - 1; mr_idx > 0; mr_idx--) {
                 cmp(regMiter, mr_idx);
                 je(m_labels_k1[mr_idx - 1],
                    T_NEAR); // Use 2D indexing: [NR][MR]

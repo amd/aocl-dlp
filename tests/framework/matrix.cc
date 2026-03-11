@@ -708,7 +708,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
             const float* data2 = reinterpret_cast<const float*>(other.m_data);
             elementCount       = m_dataSizeBytes / sizeof(float);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 float val1 = data1[i];
                 float val2 = data2[i];
 
@@ -836,7 +836,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const bfloat16*>(other.m_data);
             elementCount = m_dataSizeBytes / sizeof(bfloat16);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 bfloat16 bf16_val1 = data1[i];
                 bfloat16 bf16_val2 = data2[i];
 
@@ -968,7 +968,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const float16*>(other.m_data);
             elementCount = m_dataSizeBytes / sizeof(float16);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 float16 fp16_val1 = data1[i];
                 float16 fp16_val2 = data2[i];
 
@@ -1100,7 +1100,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const int32_t*>(other.m_data);
             elementCount = m_dataSizeBytes / sizeof(int32_t);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 if (data1[i] != data2[i]) {
                     result.equal = false;
 
@@ -1141,7 +1141,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const uint32_t*>(other.m_data);
             elementCount = m_dataSizeBytes / sizeof(uint32_t);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 if (data1[i] != data2[i]) {
                     result.equal = false;
 
@@ -1182,7 +1182,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const int16_t*>(other.m_data);
             elementCount = m_dataSizeBytes / sizeof(int16_t);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 if (data1[i] != data2[i]) {
                     result.equal = false;
 
@@ -1223,7 +1223,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const uint16_t*>(other.m_data);
             elementCount = m_dataSizeBytes / sizeof(uint16_t);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 if (data1[i] != data2[i]) {
                     result.equal = false;
 
@@ -1263,7 +1263,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
             const int8_t* data2 = reinterpret_cast<const int8_t*>(other.m_data);
             elementCount        = m_dataSizeBytes / sizeof(int8_t);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 if (data1[i] != data2[i]) {
                     result.equal = false;
 
@@ -1304,7 +1304,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const uint8_t*>(other.m_data);
             elementCount = m_dataSizeBytes / sizeof(uint8_t);
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 if (data1[i] != data2[i]) {
                     result.equal = false;
 
@@ -1347,7 +1347,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 reinterpret_cast<const uint8_t*>(other.m_data);
             elementCount = m_dataSizeBytes;
 
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 if (data1[i] != data2[i]) {
                     result.equal = false;
 
@@ -1515,7 +1515,7 @@ Matrix::fillRandom(unsigned int       seed,
                 double                          stddev = (ub - lb) / 6.0;
                 std::normal_distribution<float> dis(static_cast<float>(mean),
                                                     static_cast<float>(stddev));
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = dis(gen);
                 }
             } else if (force_int_distribution) {
@@ -1523,13 +1523,13 @@ Matrix::fillRandom(unsigned int       seed,
                 int lb_i = static_cast<int>(std::floor(lb));
                 int ub_i = static_cast<int>(std::floor(ub));
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = static_cast<float>(dis(gen));
                 }
             } else {
                 std::uniform_real_distribution<float> dis(
                     static_cast<float>(lb), static_cast<float>(ub));
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = dis(gen);
                 }
             }
@@ -1545,7 +1545,7 @@ Matrix::fillRandom(unsigned int       seed,
                 double                          stddev = (ub - lb) / 6.0;
                 std::normal_distribution<float> dis(static_cast<float>(mean),
                                                     static_cast<float>(stddev));
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = f32_to_bf16(dis(gen));
                 }
             } else if (force_int_distribution) {
@@ -1553,13 +1553,13 @@ Matrix::fillRandom(unsigned int       seed,
                 int lb_i = static_cast<int>(std::floor(lb));
                 int ub_i = static_cast<int>(std::floor(ub));
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = f32_to_bf16(static_cast<float>(dis(gen)));
                 }
             } else {
                 std::uniform_real_distribution<float> dis(
                     static_cast<float>(lb), static_cast<float>(ub));
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = f32_to_bf16(dis(gen));
                 }
             }
@@ -1579,20 +1579,20 @@ Matrix::fillRandom(unsigned int       seed,
                 double stddev = (safe_ub - safe_lb) / 6.0;
                 std::normal_distribution<float> dis(static_cast<float>(mean),
                                                     static_cast<float>(stddev));
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = f32_to_fp16(dis(gen));
                 }
             } else if (force_int_distribution) {
                 int lb_i = static_cast<int>(std::floor(safe_lb));
                 int ub_i = static_cast<int>(std::floor(safe_ub));
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = f32_to_fp16(static_cast<float>(dis(gen)));
                 }
             } else {
                 std::uniform_real_distribution<float> dis(
                     static_cast<float>(safe_lb), static_cast<float>(safe_ub));
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = f32_to_fp16(dis(gen));
                 }
             }
@@ -1608,14 +1608,14 @@ Matrix::fillRandom(unsigned int       seed,
                 double                           mean   = (lb + ub) / 2.0;
                 double                           stddev = (ub - lb) / 6.0;
                 std::normal_distribution<double> dis(mean, stddev);
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                     double val = dis(gen);
                     data[i]    = static_cast<uint8_t>(
                         std::max(0.0, std::min(255.0, val)));
                 }
             } else {
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                     data[i] = static_cast<uint8_t>(dis(gen));
                 }
             }
@@ -1631,14 +1631,14 @@ Matrix::fillRandom(unsigned int       seed,
                 double                           mean   = (lb + ub) / 2.0;
                 double                           stddev = (ub - lb) / 6.0;
                 std::normal_distribution<double> dis(mean, stddev);
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                     double val = dis(gen);
                     data[i]    = static_cast<int8_t>(
                         std::max(-128.0, std::min(127.0, val)));
                 }
             } else {
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                     data[i] = static_cast<int8_t>(dis(gen));
                 }
             }
@@ -1655,14 +1655,14 @@ Matrix::fillRandom(unsigned int       seed,
                 double                           mean   = (lb + ub) / 2.0;
                 double                           stddev = (ub - lb) / 6.0;
                 std::normal_distribution<double> dis(mean, stddev);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     double val = dis(gen);
                     data[i]    = static_cast<uint16_t>(
                         std::max(0.0, std::min(65535.0, val)));
                 }
             } else {
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = static_cast<uint16_t>(dis(gen));
                 }
             }
@@ -1679,14 +1679,14 @@ Matrix::fillRandom(unsigned int       seed,
                 double                           mean   = (lb + ub) / 2.0;
                 double                           stddev = (ub - lb) / 6.0;
                 std::normal_distribution<double> dis(mean, stddev);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     double val = dis(gen);
                     data[i]    = static_cast<int16_t>(
                         std::max(-32768.0, std::min(32767.0, val)));
                 }
             } else {
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = static_cast<int16_t>(dis(gen));
                 }
             }
@@ -1704,14 +1704,14 @@ Matrix::fillRandom(unsigned int       seed,
                 double                           mean   = (lb + ub) / 2.0;
                 double                           stddev = (ub - lb) / 6.0;
                 std::normal_distribution<double> dis(mean, stddev);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     double val = dis(gen);
                     data[i]    = static_cast<uint32_t>(std::max(
                         0.0, std::min(static_cast<double>(UINT32_MAX), val)));
                 }
             } else {
                 std::uniform_int_distribution<uint32_t> dis(lb_i, ub_i);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = dis(gen);
                 }
             }
@@ -1730,7 +1730,7 @@ Matrix::fillRandom(unsigned int       seed,
                 double                           mean   = (lb + ub) / 2.0;
                 double                           stddev = (ub - lb) / 6.0;
                 std::normal_distribution<double> dis(mean, stddev);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     double val = dis(gen);
                     data[i]    = static_cast<int32_t>(std::max(
                         static_cast<double>(INT32_MIN),
@@ -1738,7 +1738,7 @@ Matrix::fillRandom(unsigned int       seed,
                 }
             } else {
                 std::uniform_int_distribution<int32_t> dis(lb_i, ub_i);
-                for (size_t i = 0; i < elementCount; ++i) {
+                for (std::size_t i = 0; i < elementCount; ++i) {
                     data[i] = dis(gen);
                 }
             }
@@ -1761,7 +1761,7 @@ Matrix::fillRandom(unsigned int       seed,
                 double                           mean   = (lb + ub) / 2.0;
                 double                           stddev = (ub - lb) / 6.0;
                 std::normal_distribution<double> dis(mean, stddev);
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                     // Pack two 4-bit values per byte
                     double  val1 = dis(gen);
                     double  val2 = dis(gen);
@@ -1779,7 +1779,7 @@ Matrix::fillRandom(unsigned int       seed,
                 }
             } else {
                 std::uniform_int_distribution<int> dis(lb_i, ub_i);
-                for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+                for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                     uint8_t nibble1 = static_cast<uint8_t>(dis(gen)) & 0x0F;
                     uint8_t nibble2 = static_cast<uint8_t>(dis(gen)) & 0x0F;
                     data[i]         = nibble1 | (nibble2 << 4);
@@ -1809,7 +1809,7 @@ Matrix::fillValue(double value)
             float  fillValue    = static_cast<float>(value);
             float* data         = reinterpret_cast<float*>(m_data);
             size_t elementCount = m_dataSizeBytes / sizeof(float);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 data[i] = fillValue;
             }
             break;
@@ -1817,7 +1817,7 @@ Matrix::fillValue(double value)
         case MatrixType::u8: {
             uint8_t  fillValue = static_cast<uint8_t>(value);
             uint8_t* data      = m_data;
-            for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+            for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                 data[i] = fillValue;
             }
             break;
@@ -1825,7 +1825,7 @@ Matrix::fillValue(double value)
         case MatrixType::s8: {
             int8_t  fillValue = static_cast<int8_t>(value);
             int8_t* data      = reinterpret_cast<int8_t*>(m_data);
-            for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+            for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                 data[i] = fillValue;
             }
             break;
@@ -1833,7 +1833,8 @@ Matrix::fillValue(double value)
         case MatrixType::s32: {
             int32_t  fillValue = static_cast<int32_t>(value);
             int32_t* data      = reinterpret_cast<int32_t*>(m_data);
-            for (size_t i = 0; i < m_dataSizeBytes / sizeof(int32_t); ++i) {
+            for (std::size_t i = 0; i < m_dataSizeBytes / sizeof(int32_t);
+                 ++i) {
                 data[i] = fillValue;
             }
             break;
@@ -1844,7 +1845,7 @@ Matrix::fillValue(double value)
             bfloat16  fillValue_bfloat16 = f32_to_bf16(fillValue);
             bfloat16* data               = reinterpret_cast<bfloat16*>(m_data);
             size_t    elementCount       = m_dataSizeBytes / sizeof(bfloat16);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 data[i] = fillValue_bfloat16;
             }
             break;
@@ -1855,7 +1856,7 @@ Matrix::fillValue(double value)
             float16  fillValue_fp16 = f32_to_fp16(fillValue);
             float16* data           = reinterpret_cast<float16*>(m_data);
             size_t   elementCount   = m_dataSizeBytes / sizeof(float16);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 data[i] = fillValue_fp16;
             }
             break;
@@ -1864,7 +1865,7 @@ Matrix::fillValue(double value)
             uint16_t  fillValue    = static_cast<uint16_t>(value);
             uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
             size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 data[i] = fillValue;
             }
             break;
@@ -1873,7 +1874,7 @@ Matrix::fillValue(double value)
             int16_t  fillValue    = static_cast<int16_t>(value);
             int16_t* data         = reinterpret_cast<int16_t*>(m_data);
             size_t   elementCount = m_dataSizeBytes / sizeof(int16_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 data[i] = fillValue;
             }
             break;
@@ -1882,7 +1883,7 @@ Matrix::fillValue(double value)
             uint32_t  fillValue    = static_cast<uint32_t>(value);
             uint32_t* data         = reinterpret_cast<uint32_t*>(m_data);
             size_t    elementCount = m_dataSizeBytes / sizeof(uint32_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 data[i] = fillValue;
             }
             break;
@@ -1893,7 +1894,7 @@ Matrix::fillValue(double value)
             uint8_t* data          = m_data;
             uint8_t  fillValue4bit = static_cast<uint8_t>(value) & 0x0F;
             uint8_t  packedValue   = fillValue4bit | (fillValue4bit << 4);
-            for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+            for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                 data[i] = packedValue;
             }
             break;
@@ -2126,7 +2127,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::f32: {
             float* data         = reinterpret_cast<float*>(m_data);
             size_t elementCount = m_dataSizeBytes / sizeof(float);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 data[i] = static_cast<float>(pattern[i % pattern_size]);
             }
             break;
@@ -2134,7 +2135,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::bf16: {
             uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
             size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 float f32_val = static_cast<float>(pattern[i % pattern_size]);
                 data[i]       = f32_to_bf16(f32_val);
             }
@@ -2143,7 +2144,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::fp16: {
             uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
             size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 float f32_val = static_cast<float>(pattern[i % pattern_size]);
                 data[i]       = f32_to_fp16(f32_val);
             }
@@ -2151,7 +2152,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         }
         case MatrixType::u8: {
             uint8_t* data = m_data;
-            for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+            for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                 double val = pattern[i % pattern_size];
                 data[i]    = static_cast<uint8_t>(
                     std::max(0.0, std::min(255.0, std::round(val))));
@@ -2160,7 +2161,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         }
         case MatrixType::s8: {
             int8_t* data = reinterpret_cast<int8_t*>(m_data);
-            for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+            for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                 double val = pattern[i % pattern_size];
                 data[i]    = static_cast<int8_t>(
                     std::max(-128.0, std::min(127.0, std::round(val))));
@@ -2170,7 +2171,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::u16: {
             uint16_t* data         = reinterpret_cast<uint16_t*>(m_data);
             size_t    elementCount = m_dataSizeBytes / sizeof(uint16_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 double val = pattern[i % pattern_size];
                 data[i]    = static_cast<uint16_t>(
                     std::max(0.0, std::min(65535.0, std::round(val))));
@@ -2180,7 +2181,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::s16: {
             int16_t* data         = reinterpret_cast<int16_t*>(m_data);
             size_t   elementCount = m_dataSizeBytes / sizeof(int16_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 double val = pattern[i % pattern_size];
                 data[i]    = static_cast<int16_t>(
                     std::max(-32768.0, std::min(32767.0, std::round(val))));
@@ -2190,7 +2191,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::u32: {
             uint32_t* data         = reinterpret_cast<uint32_t*>(m_data);
             size_t    elementCount = m_dataSizeBytes / sizeof(uint32_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 double val = pattern[i % pattern_size];
                 data[i]    = static_cast<uint32_t>(
                     std::max(0.0, std::min(static_cast<double>(UINT32_MAX),
@@ -2201,7 +2202,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::s32: {
             int32_t* data         = reinterpret_cast<int32_t*>(m_data);
             size_t   elementCount = m_dataSizeBytes / sizeof(int32_t);
-            for (size_t i = 0; i < elementCount; ++i) {
+            for (std::size_t i = 0; i < elementCount; ++i) {
                 double val = pattern[i % pattern_size];
                 data[i]    = static_cast<int32_t>(std::max(
                     static_cast<double>(INT32_MIN),
@@ -2213,7 +2214,7 @@ Matrix::fillPattern(const std::vector<double>& pattern)
         case MatrixType::u4: {
             // For packed 4-bit types, pack two values per byte
             uint8_t* data = m_data;
-            for (size_t i = 0; i < m_dataSizeBytes; ++i) {
+            for (std::size_t i = 0; i < m_dataSizeBytes; ++i) {
                 // Get two pattern values for this byte
                 double val1 = pattern[(i * 2) % pattern_size];
                 double val2 = pattern[(i * 2 + 1) % pattern_size];

@@ -140,7 +140,7 @@ jitFP16GEMVM1<KType>::regInit(int baseIdx, int numRegs)
 {
     // Zero out FP16 registers using vpxord
     vpxord(Zmm(baseIdx), Zmm(baseIdx), Zmm(baseIdx));
-    for (int i = 1; i < numRegs; i++) {
+    for (iter_t i = 1; i < numRegs; i++) {
         vmovdqa32(Zmm(baseIdx + i), Zmm(baseIdx));
     }
 }
@@ -150,7 +150,7 @@ dlp::jit::jitGeneratorError
 jitFP16GEMVM1<KType>::loadMasks()
 {
     // Initialize mask register array (k1-k7)
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 
@@ -177,7 +177,7 @@ jitFP16GEMVM1<KType>::compute1xNR(bool nMask)
         // Note: Use K_SUB_ITER * i for accumulator index (matches U8S8 pattern)
         // This ensures single-K elements go to correct accumulators for
         // finalAccumulate
-        for (int i = 0; i < NR / nElemsPerReg; i++) {
+        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
             vmovdqu16(Zmm(bBaseIdx + i),
                       ptr[regTmp2 + i * nElemsPerReg * sizeof(uint16_t)]);
             vfmadd231ph(Zmm(accumBaseIdx + K_SUB_ITER * i), Zmm(xBaseIdx),
@@ -206,7 +206,7 @@ jitFP16GEMVM1<KType>::compute1xnfringe()
     // Note: Use K_SUB_ITER * i for accumulator index (matches U8S8 pattern)
     // This ensures single-K elements go to correct accumulators for
     // finalAccumulate
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         vmovdqu16(Zmm(bBaseIdx + i),
                   ptr[regTmp2 + i * nElemsPerReg * sizeof(uint16_t)]);
         vfmadd231ph(Zmm(accumBaseIdx + K_SUB_ITER * i), Zmm(xBaseIdx),
@@ -241,15 +241,15 @@ jitFP16GEMVM1<KType>::computeKxNR(bool nMask)
 
     if (!nMask) {
         // Pre-broadcast ALL K_SUB_ITER x values for better ILP
-        for (int k = 0; k < K_SUB_ITER; k++) {
+        for (iter_t k = 0; k < K_SUB_ITER; k++) {
             vpbroadcastw(Zmm(xBaseIdx + k),
                          ptr[regXptr + k * sizeof(uint16_t)]);
         }
 
         // Process K_SUB_ITER rows with pre-broadcast x values
-        for (int j = 0; j < K_SUB_ITER; j++) {
+        for (iter_t j = 0; j < K_SUB_ITER; j++) {
             // Load B row and FMA for each of 4 ZMMs
-            for (int i = 0; i < NR / nElemsPerReg; i++) {
+            for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
                 vmovdqu16(Zmm(bBaseIdx + i),
                           ptr[regTmp2 + i * nElemsPerReg * sizeof(uint16_t)]);
                 vfmadd231ph(Zmm(accumBaseIdx + K_SUB_ITER * i + j),
@@ -269,7 +269,7 @@ dlp::jit::jitGeneratorError
 jitFP16GEMVM1<KType>::computeKxnfringe()
 {
     // Pre-broadcast K_SUB_ITER x values for better ILP
-    for (int j = 0; j < K_SUB_ITER; j++) {
+    for (iter_t j = 0; j < K_SUB_ITER; j++) {
         vpbroadcastw(Zmm(xBaseIdx + j), ptr[regXptr + j * sizeof(uint16_t)]);
     }
 
@@ -279,9 +279,9 @@ jitFP16GEMVM1<KType>::computeKxnfringe()
     bool isPacked = ((mtag_b == REORDERED) || (mtag_b == PACK));
 
     // Process K_SUB_ITER rows
-    for (int k = 0; k < K_SUB_ITER; k++) {
+    for (iter_t k = 0; k < K_SUB_ITER; k++) {
         // Process primary panel (full ZMMs) from regTmp2
-        for (int i = 0; i < n_iter; i++) {
+        for (iter_t i = 0; i < n_iter; i++) {
             vmovdqu16(Zmm(bBaseIdx + i),
                       ptr[regTmp2 + i * nElemsPerReg * sizeof(uint16_t)]);
             vfmadd231ph(Zmm(accumBaseIdx + K_SUB_ITER * i + k),
@@ -443,9 +443,9 @@ jitFP16GEMVM1<KType>::finalAccumulate()
     // - regInit zeros ALL accumulators
     // - Unused accumulators stay 0, consolidating them is harmless
     // - Only storeYValues uses N_LEFT-based bounds
-    for (int i = 0; i < NR / nElemsPerReg; i++) {
+    for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
         // Sum accumulators K_SUB_ITER*i + 1..K_SUB_ITER-1 into K_SUB_ITER*i
-        for (int j = 1; j < K_SUB_ITER; j++) {
+        for (iter_t j = 1; j < K_SUB_ITER; j++) {
             vaddph(Zmm(accumBaseIdx + K_SUB_ITER * i),
                    Zmm(accumBaseIdx + K_SUB_ITER * i),
                    Zmm(accumBaseIdx + K_SUB_ITER * i + j));
@@ -476,7 +476,7 @@ jitFP16GEMVM1<KType>::scaleWithAlpha()
             // - regInit zeros ALL accumulators
             // - Unused accumulators are 0, so 0 * alpha = 0
             // - Only storeYValues uses N_LEFT-based bounds
-            for (int i = 0; i < NR / nElemsPerReg; i++) {
+            for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
                 vmulph(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
                        Zmm(xBaseIdx));
             }
@@ -520,7 +520,7 @@ jitFP16GEMVM1<KType>::scaleYWithBeta(bool nMask)
     }
 
     if (!nMask) {
-        for (int i = 0; i < NR / nElemsPerReg; i++) {
+        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
             // Load Y
             vmovdqu16(Zmm(yBaseIdx + i),
                       ptr[regTmpYptr + i * nElemsPerReg * sizeof(uint16_t)]);
@@ -559,7 +559,7 @@ jitFP16GEMVM1<KType>::scaleYWithBetaFringe()
     int n_iter = N_LEFT / nElemsPerReg;
     int n_left = N_LEFT % nElemsPerReg;
 
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         vmovdqu16(Zmm(yBaseIdx + i),
                   ptr[regTmpYptr + i * nElemsPerReg * sizeof(uint16_t)]);
 
@@ -610,7 +610,7 @@ jitFP16GEMVM1<KType>::storeYValues(bool nMask)
     mov(regTmpYptr, regYptr);
 
     if (!nMask) {
-        for (int i = 0; i < NR / nElemsPerReg; i++) {
+        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
             vmovdqu16(ptr[regTmpYptr + i * nElemsPerReg * sizeof(uint16_t)],
                       Zmm(accumBaseIdx + i));
         }
@@ -628,7 +628,7 @@ jitFP16GEMVM1<KType>::storeYValuesFringe()
     int n_iter = N_LEFT / nElemsPerReg;
     int n_left = N_LEFT % nElemsPerReg;
 
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         vmovdqu16(ptr[regTmpYptr + i * nElemsPerReg * sizeof(uint16_t)],
                   Zmm(accumBaseIdx + i));
     }
@@ -1065,7 +1065,7 @@ void
 jitFP16GEMVN1<KType>::regInit(int baseIdx, int numRegs)
 {
     vpxord(Zmm(baseIdx), Zmm(baseIdx), Zmm(baseIdx));
-    for (int i = 1; i < numRegs; i++) {
+    for (iter_t i = 1; i < numRegs; i++) {
         vmovdqa32(Zmm(baseIdx + i), Zmm(baseIdx));
     }
 }
@@ -1074,7 +1074,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16GEMVN1<KType>::loadMasks()
 {
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 
@@ -1105,8 +1105,8 @@ jitFP16GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
     regInit(tmpBaseIdx, tmpReg);
 
     // Process rows in groups of 4 for better ILP (following F32/U8S8 pattern)
-    for (int i = 0; i < mSize / 4; i++) {
-        for (int j = 0; j < 4; j++) {
+    for (iter_t i = 0; i < mSize / 4; i++) {
+        for (iter_t j = 0; j < 4; j++) {
             // Load A[row][k:k+32] as a VECTOR (32 FP16 elements)
             if (isFringe) {
                 vmovdqu16(Zmm(tmpBaseIdx + j) | mask_regs[0] | T_z,
@@ -1122,7 +1122,7 @@ jitFP16GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
     }
 
     // Handle remaining rows (mSize % 4)
-    for (int j = 0; j < mLeft; j++) {
+    for (iter_t j = 0; j < mLeft; j++) {
         if (isFringe) {
             vmovdqu16(Zmm(tmpBaseIdx + j) | mask_regs[0] | T_z,
                       ptr[regTmpAptr + regTmp1]);
@@ -1177,7 +1177,7 @@ dlp::jit::jitGeneratorError
 jitFP16GEMVN1<KType>::reduceAccumulation(int mSize)
 {
     // Reduce each accumulator to a single FP16 scalar
-    for (int i = 0; i < mSize; i++) {
+    for (iter_t i = 0; i < mSize; i++) {
         RETURN_IF_ERROR(reduceAccToScalar(accumBaseIdx + i, tmpBaseIdx));
     }
 
@@ -1193,7 +1193,7 @@ jitFP16GEMVN1<KType>::scaleAlpha(int mSize)
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, alpha)]);
         vpbroadcastw(Zmm(tmpBaseIdx + 1), ptr[regKIter]);
 
-        for (int i = 0; i < mSize; i++) {
+        for (iter_t i = 0; i < mSize; i++) {
             vmulph(Xmm(accumBaseIdx + i), Xmm(accumBaseIdx + i),
                    Xmm(tmpBaseIdx + 1));
         }
@@ -1216,7 +1216,7 @@ jitFP16GEMVN1<KType>::scaleYWithBeta_FP16(int mSize, bool isRowStored)
 
     if (isRowStored) {
         // Load Y elements scattered in row-major format
-        for (int i = 0; i < mSize; i++) {
+        for (iter_t i = 0; i < mSize; i++) {
             mov(regTmp1, i);
             imul(regTmp1, regRsC);
 
@@ -1232,7 +1232,7 @@ jitFP16GEMVN1<KType>::scaleYWithBeta_FP16(int mSize, bool isRowStored)
         }
     } else {
         // Column-major: Y elements are contiguous
-        for (int i = 0; i < mSize; i++) {
+        for (iter_t i = 0; i < mSize; i++) {
             vpbroadcastw(Xmm(yBaseIdx), ptr[regTmpYptr + i * sizeof(uint16_t)]);
 
             if (isBetaOne) {
@@ -1265,7 +1265,7 @@ dlp::jit::jitGeneratorError
 jitFP16GEMVN1<KType>::storeY_rowStored_FP16(int mSize)
 {
     // Store each scalar result to row-major Y
-    for (int i = 0; i < mSize; i++) {
+    for (iter_t i = 0; i < mSize; i++) {
         mov(regTmp1, i);
         imul(regTmp1, regRsC);
         // Extract lowest 16 bits and store
@@ -1280,7 +1280,7 @@ dlp::jit::jitGeneratorError
 jitFP16GEMVN1<KType>::storeY_colStored_FP16(int mSize)
 {
     // Store each scalar result to column-major Y (contiguous)
-    for (int i = 0; i < mSize; i++) {
+    for (iter_t i = 0; i < mSize; i++) {
         vpextrw(ptr[regTmpYptr + i * sizeof(uint16_t)], Xmm(accumBaseIdx + i),
                 0);
     }

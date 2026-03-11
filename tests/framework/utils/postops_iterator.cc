@@ -115,19 +115,19 @@ PostOpsIterator::generateCombinations()
     if (!m_cartesian_enabled) {
         // Simple mode: apply all operations in the specified order
         std::vector<size_t> sequence;
-        for (size_t i = 0; i < n; i++) {
+        for (std::size_t i = 0; i < n; i++) {
             sequence.push_back(i);
         }
         temp_op_combinations.push_back(sequence);
     } else {
         // Cartesian mode: generate all possible subsets and their permutations
-        for (size_t subset_size = 0; subset_size <= n; subset_size++) {
+        for (std::size_t subset_size = 0; subset_size <= n; subset_size++) {
             std::vector<bool> selector(n, false);
             std::fill(selector.end() - subset_size, selector.end(), true);
 
             do {
                 std::vector<size_t> subset;
-                for (size_t i = 0; i < n; i++) {
+                for (std::size_t i = 0; i < n; i++) {
                     if (selector[i]) {
                         subset.push_back(i);
                     }
@@ -194,7 +194,7 @@ PostOpsIterator::generateCombinations()
             m_combinations.push_back(op_indices);
 
             std::map<size_t, std::map<std::string, size_t>> variant_map;
-            for (size_t i = 0; i < op_indices.size(); ++i) {
+            for (std::size_t i = 0; i < op_indices.size(); ++i) {
                 std::map<std::string, size_t> param_map;
                 for (const auto& param_name : param_names_per_op[i]) {
                     param_map[param_name] = 0;
@@ -215,7 +215,7 @@ PostOpsIterator::generateCombinations()
             // For this operation combination, decode parameter indices
             std::map<size_t, std::map<std::string, size_t>> combo_variant_map;
 
-            for (size_t i = 0; i < op_indices.size(); ++i) {
+            for (std::size_t i = 0; i < op_indices.size(); ++i) {
                 size_t op_idx             = op_indices[i];
                 size_t op_param_combo_idx = op_param_indices[i];
 
@@ -229,7 +229,8 @@ PostOpsIterator::generateCombinations()
 
                 // Convert linear index to multi-dimensional indices (RIGHT TO
                 // LEFT)
-                for (int param_idx = static_cast<int>(param_names.size()) - 1;
+                for (iter_t param_idx =
+                         static_cast<int>(param_names.size()) - 1;
                      param_idx >= 0; param_idx--) {
                     size_t param_value_idx = remainder % param_sizes[param_idx];
                     param_map[param_names[param_idx]] = param_value_idx;
@@ -243,7 +244,7 @@ PostOpsIterator::generateCombinations()
 
             // Advance operation-level odometer (SIGNED INT for safety)
             bool done = true;
-            for (int op_param_idx =
+            for (iter_t op_param_idx =
                      static_cast<int>(op_param_indices.size()) - 1;
                  op_param_idx >= 0; op_param_idx--) {
                 op_param_indices[op_param_idx]++;
@@ -273,9 +274,9 @@ PostOpsIterator::generateCombinations()
     std::cout << "Generated " << m_combinations.size()
               << " PostOps combinations (with parameter variants):"
               << std::endl;
-    for (size_t i = 0; i < m_combinations.size(); i++) {
+    for (std::size_t i = 0; i < m_combinations.size(); i++) {
         std::cout << "  " << i << ": ops=[";
-        for (size_t j = 0; j < m_combinations[i].size(); j++) {
+        for (std::size_t j = 0; j < m_combinations[i].size(); j++) {
             if (j > 0)
                 std::cout << ", ";
             std::cout << m_combinations[i][j];

@@ -280,7 +280,7 @@ TEST_F(PostOpsMultipleParamsTest, CartesianModeWithMultipleParams)
         YamlParser parser(getConfigPath(), "yaml_test");
 
         // Navigate to test case 4: "cartesian_multiple_params"
-        for (int i = 0; i < 3; i++)
+        for (iter_t i = 0; i < 3; i++)
             parser.next();
         const MicroTest& microTest = parser.getMicroTest();
 
@@ -323,7 +323,7 @@ TEST_F(PostOpsMultipleParamsTest, SingleValueBackwardCompatibility)
         YamlParser parser(getConfigPath(), "yaml_test");
 
         // Navigate to test case 5: "single_value_compat"
-        for (int i = 0; i < 4; i++)
+        for (iter_t i = 0; i < 4; i++)
             parser.next();
         const MicroTest& microTest = parser.getMicroTest();
 
@@ -362,7 +362,7 @@ TEST_F(PostOpsMultipleParamsTest, MatrixAddMulMultipleParams)
         YamlParser parser(getConfigPath(), "yaml_test");
 
         // Navigate to test case 6: "matrix_ops_multiple_params"
-        for (int i = 0; i < 5; i++)
+        for (iter_t i = 0; i < 5; i++)
             parser.next();
         const MicroTest& microTest = parser.getMicroTest();
 
@@ -403,7 +403,7 @@ TEST_F(PostOpsMultipleParamsTest, AllPostOpsTypesMultipleParams)
         YamlParser parser(getConfigPath(), "yaml_test");
 
         // Navigate to test case 7: "all_postop_types"
-        for (int i = 0; i < 6; i++)
+        for (iter_t i = 0; i < 6; i++)
             parser.next();
         const MicroTest& microTest = parser.getMicroTest();
 
@@ -443,7 +443,7 @@ TEST_F(PostOpsMultipleParamsTest, EdgeCaseEmptyPostOps)
         YamlParser parser(getConfigPath(), "yaml_test");
 
         // Navigate to test case 8: "empty_postops"
-        for (int i = 0; i < 7; i++)
+        for (iter_t i = 0; i < 7; i++)
             parser.next();
         const MicroTest& microTest = parser.getMicroTest();
 

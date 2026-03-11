@@ -139,7 +139,7 @@ extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
 
     if (!op_names.empty()) {
         postops_desc << "_PostOps";
-        for (size_t i = 0; i < op_names.size(); ++i) {
+        for (std::size_t i = 0; i < op_names.size(); ++i) {
             postops_desc << "_" << op_names[i];
         }
     }
@@ -227,7 +227,7 @@ loadBenchmarkConfigs(const std::string& yaml_path)
 
         size_t microTestCount = parser.getMicroTestCount();
 
-        for (size_t i = 0; i < microTestCount; ++i) {
+        for (std::size_t i = 0; i < microTestCount; ++i) {
             MicroTest& microTest =
                 const_cast<MicroTest&>(parser.getMicroTest());
             YieldType yield_type         = microTest.getYieldType();
@@ -328,7 +328,7 @@ loadBatchGemmBenchmarkConfigs(const std::string& yaml_path)
 
         size_t microTestCount = parser.getMicroTestCount();
 
-        for (size_t i = 0; i < microTestCount; ++i) {
+        for (std::size_t i = 0; i < microTestCount; ++i) {
             MicroTest& microTest =
                 const_cast<MicroTest&>(parser.getMicroTest());
 

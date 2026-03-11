@@ -1571,7 +1571,7 @@ UalRef::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
             return UALError::UAL_FAILURE;
         }
 
-        for (size_t i = 0; i < group.A_matrices.size(); ++i) {
+        for (std::size_t i = 0; i < group.A_matrices.size(); ++i) {
             UALError status = gemm(group.A_matrices[i], group.B_matrices[i],
                                    group.C_matrices[i], accType, group.postOps,
                                    group.alpha, group.beta);
@@ -1867,7 +1867,7 @@ void
 UalRef::applyRelu(Matrix& matrix)
 {
     applyUnifiedPostOp(matrix, [](float* data, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
+        for (std::size_t i = 0; i < size; ++i) {
             data[i] = std::max(0.0f, data[i]);
         }
     });
@@ -1922,7 +1922,7 @@ UalRef::applyPrelu(Matrix& matrix, const Matrix* alpha)
 
     // Apply PReLU in float
     size_t size = rows * cols;
-    for (size_t i = 0; i < size; ++i) {
+    for (std::size_t i = 0; i < size; ++i) {
         if (temp_data[i] < 0.0f) {
             temp_data[i] *= alpha_val;
         }
@@ -1937,7 +1937,7 @@ void
 UalRef::applyGeluTanh(Matrix& matrix)
 {
     applyUnifiedPostOp(matrix, [](float* data, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
+        for (std::size_t i = 0; i < size; ++i) {
             float x = data[i];
             float tanh_arg =
                 std::sqrt(2.0f / M_PI) * (x + 0.044715f * x * x * x);
@@ -1950,7 +1950,7 @@ void
 UalRef::applyGeluErf(Matrix& matrix)
 {
     applyUnifiedPostOp(matrix, [](float* data, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
+        for (std::size_t i = 0; i < size; ++i) {
             float x = data[i];
             data[i] = 0.5f * x * (1.0f + std::erf(x / std::sqrt(2.0f)));
         }
@@ -1976,7 +1976,7 @@ UalRef::applyClip(Matrix& matrix, const Matrix* lower, const Matrix* upper)
 
     applyUnifiedPostOp(
         matrix, [lower_val, upper_val](float* data, size_t size) {
-            for (size_t i = 0; i < size; ++i) {
+            for (std::size_t i = 0; i < size; ++i) {
                 data[i] = std::max(lower_val, std::min(upper_val, data[i]));
             }
         });
@@ -2002,7 +2002,7 @@ UalRef::applySwish(Matrix& matrix, const Matrix* alpha)
     }
 
     applyUnifiedPostOp(matrix, [alpha_val](float* data, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
+        for (std::size_t i = 0; i < size; ++i) {
             float x = data[i];
             data[i] = x / (1.0f + std::exp(-(alpha_val)*x));
         }
@@ -2013,7 +2013,7 @@ void
 UalRef::applyTanh(Matrix& matrix)
 {
     applyUnifiedPostOp(matrix, [](float* data, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
+        for (std::size_t i = 0; i < size; ++i) {
             data[i] = std::tanh(data[i]);
         }
     });
@@ -2023,7 +2023,7 @@ void
 UalRef::applySigmoid(Matrix& matrix)
 {
     applyUnifiedPostOp(matrix, [](float* data, size_t size) {
-        for (size_t i = 0; i < size; ++i) {
+        for (std::size_t i = 0; i < size; ++i) {
             data[i] = 1.0f / (1.0f + std::exp(-data[i]));
         }
     });
@@ -2055,7 +2055,7 @@ UalRef::applyScale(Matrix&       matrix,
                 zeroPoint->getData(), zeroPoint->getMatrixType(), 0);
         }
         applyUnifiedPostOp(matrix, [scale, zp](float* data, size_t size) {
-            for (size_t i = 0; i < size; ++i) {
+            for (std::size_t i = 0; i < size; ++i) {
                 data[i] = data[i] * scale + zp;
             }
         });

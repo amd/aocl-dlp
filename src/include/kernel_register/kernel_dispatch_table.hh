@@ -27,6 +27,7 @@
  */
 
 #pragma once
+#include "classic/dlp_base_types.h"
 
 #include <atomic>
 #include <cstddef>

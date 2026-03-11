@@ -382,7 +382,7 @@ TransposeGenerator<KType>::TransposeGenerator(Xbyak::CodeGenerator* jit,
 {
     // Initialize scratch register pool with all registers before cRegStartIdx
     numScratchRegs = cRegStartIdx;
-    for (int i = 0; i < cRegStartIdx; i++) {
+    for (iter_t i = 0; i < cRegStartIdx; i++) {
         scratch_reg_queue.push(i);
     }
 
@@ -454,7 +454,7 @@ TransposeGenerator<KType>::setContext(
         // between GEMM and transpose generator.
         // If this logic changes, we need to change the logic in transpose
         // generator as well.
-        for (int i = 0; i < numMaskRegs; i++) {
+        for (iter_t i = 0; i < numMaskRegs; i++) {
             fringeMask[i] = Opmask(i + 1);
         }
 
@@ -534,7 +534,7 @@ TransposeGenerator<KType>::store_reg_in_stack(int num_regs,
     jit_->sub(jit_->rsp, (num_regs * RegBytes));
 
     // Store registers to stack and add them to scratch pool
-    for (int idx = 0; idx < num_regs; idx++) {
+    for (iter_t idx = 0; idx < num_regs; idx++) {
         jit_->vmovups(jit_->ptr[jit_->rsp + idx * RegBytes],
                       RegType(start_idx + idx * numNRBlocks));
         returnScratchReg(start_idx + idx * numNRBlocks);
@@ -551,7 +551,7 @@ TransposeGenerator<KType>::get_reg_from_stack(int num_regs,
     int start_idx = cRegStartIdx + nextBlockI * numNRBlocks + nextBlockJ;
 
     // Restore registers from stack and remove them from scratch pool
-    for (int idx = 0; idx < num_regs; idx++) {
+    for (iter_t idx = 0; idx < num_regs; idx++) {
         jit_->vmovups(RegType(start_idx + idx * numNRBlocks),
                       jit_->ptr[jit_->rsp + idx * RegBytes]);
         remove_from_scratch_reg_queue(start_idx + idx * numNRBlocks);
@@ -603,7 +603,7 @@ TransposeGenerator<KType>::generateTranspose(
     int numRegsToStore = MR * numNRBlocks;
 
     // Outer loop: iterate over MR dimension in blocks of numElemsPerReg
-    for (int i = 0; i < numMRBlocks; i++) {
+    for (iter_t i = 0; i < numMRBlocks; i++) {
         // Copy the output matrix pointer for this row block
         jit_->mov(regCjr, regCPtr);
 
@@ -613,7 +613,7 @@ TransposeGenerator<KType>::generateTranspose(
                                           : numElemsPerReg;
 
         // Inner loop: iterate over NR dimension in blocks of numElemsPerReg
-        for (int j = 0; j < numNRBlocks; j++) {
+        for (iter_t j = 0; j < numNRBlocks; j++) {
 
             // Set the dimensions of the current sub-block
             // Always setting NR_local to numElemsPerReg to avoid optimizations
@@ -1005,7 +1005,7 @@ TransposeGenerator<KType>::permute_r2_MRxNR(int selector1, int selector2)
     int src1, src2;
 
     // Process pairs of registers to generate output columns
-    for (int i = 0; i < numElemsPerReg; i += 2) {
+    for (iter_t i = 0; i < numElemsPerReg; i += 2) {
         calculate_r2_idx(i, &src1, &src2);
 
         // Only generate code for columns that are within NR_local
@@ -1039,7 +1039,7 @@ TransposeGenerator<KType>::storeColumns_variableCount(const int* reg_idx,
 {
     if (!variableStores) {
         // Fixed number of columns - unroll completely
-        for (int i = 0; i < numCols; i++) {
+        for (iter_t i = 0; i < numCols; i++) {
             storeOp(i, reg_idx[i], half_idx[i]);
             jit_->add(regTmp1, regCsC);
         }
@@ -1050,7 +1050,7 @@ TransposeGenerator<KType>::storeColumns_variableCount(const int* reg_idx,
     Xbyak::Label done;
     jit_->mov(regTmp2, 0); // Initialize counter
 
-    for (int i = 0; i < numCols; i++) {
+    for (iter_t i = 0; i < numCols; i++) {
         // Check if we've stored enough columns
         jit_->cmp(Xbyak::Reg32(regTmp2.getIdx()), regNleftLocal);
         jit_->jge(done, jit_->T_NEAR);
@@ -1357,7 +1357,7 @@ TransposeGenerator<KType>::store_MRxNR(bool fuseBetaWithStore)
     jit_->L(".AfterStoreColMajorMR");
 
     // Return all registers used for output to the scratch pool
-    for (int i = 0; i < numElemsPerReg; i++) {
+    for (iter_t i = 0; i < numElemsPerReg; i++) {
         returnScratchReg(curr_output[i]);
     }
 

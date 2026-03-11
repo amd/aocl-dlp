@@ -47,7 +47,7 @@ DlpOperation::~DlpOperation()
         // Clean up manually allocated memory for zero points in Scale
         // operations
         if (m_postops->scale) {
-            for (size_t i = 0; i < m_scale_ops.size(); ++i) {
+            for (std::size_t i = 0; i < m_scale_ops.size(); ++i) {
                 // Check if this is a dynamically allocated zero point
                 // (for SCALE operations where we allocated it ourselves)
                 if (m_postops->scale[i].zp
@@ -72,7 +72,7 @@ DlpOperation::~DlpOperation()
         // Clean up manually allocated memory for scale factors in MatrixAdd
         // operations
         if (m_postops->matrix_add) {
-            for (size_t i = 0; i < m_matrix_add_ops.size(); ++i) {
+            for (std::size_t i = 0; i < m_matrix_add_ops.size(); ++i) {
                 if (m_postops->matrix_add[i].sf) {
                     delete m_postops->matrix_add[i].sf;
                 }
@@ -82,7 +82,7 @@ DlpOperation::~DlpOperation()
         // Clean up manually allocated memory for scale factors in MatrixMul
         // operations
         if (m_postops->matrix_mul) {
-            for (size_t i = 0; i < m_matrix_mul_ops.size(); ++i) {
+            for (std::size_t i = 0; i < m_matrix_mul_ops.size(); ++i) {
                 if (m_postops->matrix_mul[i].sf) {
                     delete m_postops->matrix_mul[i].sf;
                 }
@@ -92,7 +92,7 @@ DlpOperation::~DlpOperation()
         // Clean up manually allocated memory for scale factors and zero points
         // in Bias operations (both are optional user features)
         if (m_postops->bias) {
-            for (size_t i = 0; i < m_bias_ops.size(); ++i) {
+            for (std::size_t i = 0; i < m_bias_ops.size(); ++i) {
                 if (m_postops->bias[i].sf) {
                     delete m_postops->bias[i].sf;
                 }
@@ -297,7 +297,7 @@ DlpOperation::convertElementWiseOperations()
     m_postops->num_eltwise = count;
 
     // Fill the array
-    for (size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const auto& param = *m_elementwise_ops[i];
 
         m_postops->eltwise[i].algo.algo_type =
@@ -343,7 +343,7 @@ DlpOperation::convertScaleOperations()
     std::memset(m_postops->scale, 0, count * sizeof(dlp_scale_t));
 
     // Fill the array
-    for (size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const auto& param = *m_scale_ops[i];
 
         // Initialize all fields to safe defaults
@@ -401,7 +401,7 @@ DlpOperation::convertBiasOperations()
     std::memset(m_postops->bias, 0, count * sizeof(dlp_post_op_bias));
 
     // Fill the array
-    for (size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const auto& param = *m_bias_ops[i];
 
         m_postops->bias[i].bias = convertMatrixToPtr(param.getBias());
@@ -445,7 +445,7 @@ DlpOperation::convertMatrixAddOperations()
                 count * sizeof(dlp_post_op_matrix_add));
 
     // Fill the array
-    for (size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const auto& param = *m_matrix_add_ops[i];
 
         // Initialize sf pointer to null
@@ -481,7 +481,7 @@ DlpOperation::convertMatrixMulOperations()
                 count * sizeof(dlp_post_op_matrix_mul));
 
     // Fill the array
-    for (size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const auto& param = *m_matrix_mul_ops[i];
 
         // Initialize sf pointer to null
@@ -529,7 +529,7 @@ DlpOperation::convertA_QuantOperations()
     }
 
     // Process each quant operation parameter (the last one overrides)
-    for (size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const auto& param = *m_a_quant_ops[i];
 
         // Scale factor assignment
@@ -600,7 +600,7 @@ DlpOperation::convertWOQOperations()
     }
 
     // Process each WOQ operation parameter (the last one overrides)
-    for (size_t i = 0; i < count; ++i) {
+    for (std::size_t i = 0; i < count; ++i) {
         const auto& param = *m_woq_ops[i];
 
         // Scale factor assignment for B matrix

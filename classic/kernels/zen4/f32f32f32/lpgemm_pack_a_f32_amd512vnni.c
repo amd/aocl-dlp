@@ -1047,14 +1047,14 @@ packa_f32f32f32of32_row_major_avx512(float*       pack_a_buf,
     __mmask16 mmask[6];
     for (iter_t ic = 0; ic < MC; ic += MR) {
         if (ic == m_full_pieces_loop_limit) {
-            for (int ii = 0; ii < m_partial_pieces; ++ii) {
+            for (iter_t ii = 0; ii < m_partial_pieces; ++ii) {
                 mmask[ii] = _cvtu32_mask16(0xFFFF);
             }
-            for (int ii = m_partial_pieces; ii < MR; ++ii) {
+            for (iter_t ii = m_partial_pieces; ii < MR; ++ii) {
                 mmask[ii] = _cvtu32_mask16(0x0);
             }
         } else {
-            for (int ii = 0; ii < MR; ++ii) {
+            for (iter_t ii = 0; ii < MR; ++ii) {
                 mmask[ii] = _cvtu32_mask16(0xFFFF);
             }
         }
@@ -1075,7 +1075,7 @@ packa_f32f32f32of32_row_major_avx512(float*       pack_a_buf,
 
             __mmask16 lmask =
                 _cvtu32_mask16(0xFFFF >> (16 - kr_partial_pieces));
-            for (int ii = 0; ii < MR; ++ii) {
+            for (iter_t ii = 0; ii < MR; ++ii) {
                 mmask[ii] = _mm512_kand(mmask[ii], lmask);
             }
 
@@ -1146,20 +1146,20 @@ packa_f32f32f32of32_col_major_avx512(float*       pack_a_buf,
 
     for (iter_t ic = 0; ic < MC; ic += MR) {
         if (ic == m_full_pieces_loop_limit) {
-            for (int ii = 0; ii < 16; ++ii) {
+            for (iter_t ii = 0; ii < 16; ++ii) {
                 mmask[ii] = _cvtu32_mask16(0x3F >> (MR - m_partial_pieces));
             }
         }
         /* Inside the kr loop, the mmask is modified. Need to reset it
          * at beginning of each ic loop iteration. */
         else {
-            for (int ii = 0; ii < 16; ++ii) {
+            for (iter_t ii = 0; ii < 16; ++ii) {
                 mmask[ii] = _cvtu32_mask16(0x3F);
             }
         }
         for (iter_t kr = 0; kr < KC; kr += KR_NDIM) {
             if (kr == kr_full_pieces_loop_limit) {
-                for (int ii = kr_partial_pieces; ii < 16; ++ii) {
+                for (iter_t ii = kr_partial_pieces; ii < 16; ++ii) {
                     mmask[ii] = _cvtu32_mask16(0x0);
                 }
             }

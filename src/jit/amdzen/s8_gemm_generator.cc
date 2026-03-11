@@ -140,7 +140,7 @@ jitGEMMS8<KType>::initializeRegisters()
     using RegType = typename Traits::RegType;
 
     vxorps(RegType(cRegIdx), RegType(cRegIdx), RegType(cRegIdx));
-    for (int i = 1; i < cReg; ++i) {
+    for (iter_t i = 1; i < cReg; ++i) {
         vmovaps(RegType(cRegIdx + i), RegType(cRegIdx));
     }
 }
@@ -150,7 +150,7 @@ dlp::jit::jitGeneratorError
 jitGEMMS8<KType>::loadBValues()
 {
     using RegType = typename Traits::RegType;
-    for (int i = 0; i < bFullReg; ++i) {
+    for (iter_t i = 0; i < bFullReg; ++i) {
         vmovdqu32(RegType(bRegIdx + i), ptr[regBptr + i * RegBytes]);
     }
 
@@ -174,7 +174,7 @@ jitGEMMS8<KType>::BroadcastAVNNIB(bool isVNNIrem)
 {
     using RegType = typename Traits::RegType;
 
-    for (int i = 0; i < MR; ++i) {
+    for (iter_t i = 0; i < MR; ++i) {
         if (isVNNIrem) {
 
             // Masked load with zero-extension: load kLeft bytes, zero the rest
@@ -189,7 +189,7 @@ jitGEMMS8<KType>::BroadcastAVNNIB(bool isVNNIrem)
 
         add(regTmpAptr, regRsA);
 
-        for (int j = 0; j < bReg; ++j) {
+        for (iter_t j = 0; j < bReg; ++j) {
             vpdpbusd(RegType(cRegIdx + i * bReg + j), RegType(aRegIdx),
                      RegType(bRegIdx + j));
         }
@@ -205,7 +205,7 @@ jitGEMMS8<KType>::kLoop(int unroll, bool isVNNIrem)
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
     // Unrolling the kernel loop
-    for (int u = 0; u < unroll; ++u) {
+    for (iter_t u = 0; u < unroll; ++u) {
         // Copy a ptr to another register
         mov(regTmp1, regTmpAptr);
 
@@ -235,7 +235,7 @@ jitGEMMS8<KType>::loadBSumValues()
 
     lea(regTmp1, ptr[regTmp1 + (regTmp3 * sizeof(int32_t))]);
 
-    for (int i = 0; i < bFullReg; ++i) {
+    for (iter_t i = 0; i < bFullReg; ++i) {
         vmovdqu8(RegType(bRegIdx + i), ptr[regTmp1 + i * RegBytes]);
     }
 
@@ -261,8 +261,8 @@ jitGEMMS8<KType>::conversionCompensation()
 
     RETURN_IF_ERROR(loadBSumValues());
 
-    for (int j = 0; j < bReg; ++j) {
-        for (int i = 0; i < MR; ++i) {
+    for (iter_t j = 0; j < bReg; ++j) {
+        for (iter_t i = 0; i < MR; ++i) {
             vpsubd(RegType(cRegIdx + i * bReg + j),
                    RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j));
         }
@@ -282,7 +282,7 @@ jitGEMMS8<KType>::scaleAlpha()
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, alpha)]);
     vpbroadcastd(RegType(alphaRegIdx), ptr[regTmp1]);
 
-    for (int i = 0; i < cReg; i++) {
+    for (iter_t i = 0; i < cReg; i++) {
         vpmulld(RegType(cRegIdx + i), RegType(cRegIdx + i),
                 RegType(alphaRegIdx));
     }
@@ -348,8 +348,8 @@ jitGEMMS8<KType>::scaleBeta()
 
         RETURN_IF_ERROR(updateCBufferPointers());
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vmovdqu8(Xbyak::Xmm(bRegIdx + j), ptr[regTmpCptr + j * 16]);
                 vpmovsxbd(RegType(bRegIdx + j), Xbyak::Xmm(bRegIdx + j));
                 vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
@@ -382,8 +382,8 @@ jitGEMMS8<KType>::scaleBeta()
 
         RETURN_IF_ERROR(updateCBufferPointers());
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vmovdqu8(Xbyak::Xmm(bRegIdx + j),
                          ptr[regTmpCptr + j * (RegBytes / 4)]);
                 vpmovzxbd(RegType(bRegIdx + j), Xbyak::Xmm(bRegIdx + j));
@@ -420,8 +420,8 @@ jitGEMMS8<KType>::scaleBeta()
 
         RETURN_IF_ERROR(updateCBufferPointers());
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vmovdqu16(Xbyak::Ymm(bRegIdx + j),
                           ptr[regTmpCptr + j * (RegBytes / 2)]);
                 vpmovsxwd(RegType(bRegIdx + j), Xbyak::Ymm(bRegIdx + j));
@@ -465,8 +465,8 @@ jitGEMMS8<KType>::scaleBeta()
 
         RETURN_IF_ERROR(updateCBufferPointers());
 
-        for (int i = 0; i < MR; i++) {
-            for (int j = 0; j < bFullReg; j++) {
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
                 vcvtps2dq(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
                 vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
                         RegType(betaRegIdx));
@@ -492,8 +492,8 @@ jitGEMMS8<KType>::scaleBeta()
         L("BETAOP");
     }
 
-    for (int i = 0; i < MR; i++) {
-        for (int j = 0; j < bFullReg; j++) {
+    for (iter_t i = 0; i < MR; i++) {
+        for (iter_t j = 0; j < bFullReg; j++) {
             vmovdqu32(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
             vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
                     RegType(betaRegIdx));
@@ -539,8 +539,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
 
         RETURN_IF_ERROR(updateCBufferPointers());
 
-        for (int i = 0; i < MR; ++i) {
-            for (int j = 0; j < bFullReg; ++j) {
+        for (iter_t i = 0; i < MR; ++i) {
+            for (iter_t j = 0; j < bFullReg; ++j) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(aRegIdx),
@@ -589,8 +589,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
         mov(regKIter, 255);
         vpbroadcastd(RegType(aRegIdx + 2), regKIter.cvt32()); // 255
 
-        for (int i = 0; i < MR; ++i) {
-            for (int j = 0; j < bFullReg; ++j) {
+        for (iter_t i = 0; i < MR; ++i) {
+            for (iter_t j = 0; j < bFullReg; ++j) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(cRegIdx + i * bReg + j),
@@ -635,8 +635,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
 
         RETURN_IF_ERROR(updateCBufferPointers());
 
-        for (int i = 0; i < MR; ++i) {
-            for (int j = 0; j < bFullReg; ++j) {
+        for (iter_t i = 0; i < MR; ++i) {
+            for (iter_t j = 0; j < bFullReg; ++j) {
                 if (!hasPostOps) {
                     // Convert accumulated S32 results to F32.
                     vcvtdq2ps(RegType(cRegIdx + i * bReg + j),
@@ -703,8 +703,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
 
         RETURN_IF_ERROR(updateCBufferPointers());
 
-        for (int i = 0; i < MR; ++i) {
-            for (int j = 0; j < bFullReg; ++j) {
+        for (iter_t i = 0; i < MR; ++i) {
+            for (iter_t j = 0; j < bFullReg; ++j) {
                 if (!hasPostOps) {
                     // Converting the accumulated result from S32 to F32.
                     vcvtdq2ps(RegType(cRegIdx + i * bReg + j),
@@ -735,9 +735,9 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
     }
 
     // Default S32 store
-    for (int i = 0; i < MR; ++i) {
+    for (iter_t i = 0; i < MR; ++i) {
         // Regular Unmasked Store
-        for (int j = 0; j < bFullReg; ++j) {
+        for (iter_t j = 0; j < bFullReg; ++j) {
             if (hasPostOps) {
                 // Convert post-ops accumulated result from F32 to S32.
                 vcvtps2dq(RegType(cRegIdx + i * bReg + j),
@@ -857,7 +857,7 @@ jitGEMMS8<KType>::generateIrLoop(utils::generatorParams& params)
     // Create and set up kernelOphandler if there are post-ops
     if (!params.kernelOps.empty()) {
         // Convert to F32 since post-ops expect accumulators in F32.
-        for (int i = 0; i < cReg; i++) {
+        for (iter_t i = 0; i < cReg; i++) {
             vcvtdq2ps(RegType(cRegIdx + i), RegType(cRegIdx + i));
         }
 

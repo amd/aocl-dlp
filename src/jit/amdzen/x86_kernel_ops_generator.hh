@@ -496,7 +496,7 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
             // Check if this register is in the destination range
             bool isDestReg = false;
-            for (int i = 0; i < count; i++) {
+            for (iter_t i = 0; i < count; i++) {
                 if (reg.getIdx() == RegType(destRegStart + i).getIdx()) {
                     isDestReg = true;
                     break;

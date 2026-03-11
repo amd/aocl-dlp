@@ -131,7 +131,7 @@ jitGEMVS8N1<KType>::regInit(int baseIdx, int numRegs)
 {
     // Zero out accumulation registers
     vxorps(RegType(baseIdx), RegType(baseIdx), RegType(baseIdx));
-    for (int i = 1; i < numRegs; ++i) {
+    for (iter_t i = 1; i < numRegs; ++i) {
         vmovaps(RegType(baseIdx + i), RegType(baseIdx));
     }
 }
@@ -189,8 +189,8 @@ jitGEMVS8N1<KType>::processMRBlock(int mSize, bool isFringe)
     xor_(regTmp1, regTmp1);
     regInit(tmpBaseIdx, tmpReg);
 
-    for (int i = 0; i < mIter; ++i) {
-        for (int j = 0; j < 4; ++j) {
+    for (iter_t i = 0; i < mIter; ++i) {
+        for (iter_t j = 0; j < 4; ++j) {
             RETURN_IF_ERROR(loadAValues(j, isFringe));
             RETURN_IF_ERROR(computeVNNI(j, ((i * 4) + j)));
 
@@ -198,7 +198,7 @@ jitGEMVS8N1<KType>::processMRBlock(int mSize, bool isFringe)
         }
     }
 
-    for (int j = 0; j < mLeft; ++j) {
+    for (iter_t j = 0; j < mLeft; ++j) {
         RETURN_IF_ERROR(loadAValues(j, isFringe));
         RETURN_IF_ERROR(computeVNNI(j, ((mIter * 4) + j)));
 
@@ -217,12 +217,12 @@ jitGEMVS8N1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
     }
 
     // Zero out temp registers
-    for (int i = 0; i < 4; ++i) {
+    for (iter_t i = 0; i < 4; ++i) {
         vxorps(RegType(tmpIdx + i), RegType(tmpIdx + i), RegType(tmpIdx + i));
     }
 
     // Extract upper 256-bits and add to lower 256-bits for each register
-    for (int i = 0; i < blockSize; ++i) {
+    for (iter_t i = 0; i < blockSize; ++i) {
         vextracti32x8(Xbyak::Ymm(tmpIdx + i), RegType(startIdx + i), 1);
         vpaddd(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
                Xbyak::Ymm(startIdx + i));
@@ -250,10 +250,10 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMVS8N1<KType>::reduceAccumulation(int mSize)
 {
-    for (int i = 0; i < mSize; i += vnniWidth) {
+    for (iter_t i = 0; i < mSize; i += vnniWidth) {
         int blockSize = ((mSize - i) < vnniWidth) ? (mSize - i) : vnniWidth;
 
-        for (int j = 0; j < blockSize; j += 4) {
+        for (iter_t j = 0; j < blockSize; j += 4) {
             int subBlockSize = ((blockSize - j) < 4) ? (blockSize - j) : 4;
             RETURN_IF_ERROR(
                 reduceToXmm((accumBaseIdx + i + j), tmpBaseIdx, subBlockSize));
@@ -282,7 +282,7 @@ jitGEMVS8N1<KType>::conversionCompensation(int mSize)
     int mLeft = mSize % vnniWidth;
 
     // Process full SIMD registers
-    for (int i = 0; i < mSize / vnniWidth; ++i) {
+    for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
         vpsubd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                RegType(xBaseIdx));
     }
@@ -303,7 +303,7 @@ jitGEMVS8N1<KType>::scaleAccByAlpha(int mSize)
     mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, alpha)]);
     vpbroadcastd(RegType(tmpBaseIdx), ptr[regKIter]);
 
-    for (int i = 0; i < (mSize + vnniWidth - 1) / vnniWidth; ++i) {
+    for (iter_t i = 0; i < (mSize + vnniWidth - 1) / vnniWidth; ++i) {
         vpmulld(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                 RegType(tmpBaseIdx));
     }
@@ -353,7 +353,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
         // Load buffer pointers for the downscaled output
         updateCBufferPointers();
 
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             vmovdqu8(Xbyak::Xmm(yBaseIdx), ptr[regTmpYptr]);
             vpmovzxbd(RegType(yBaseIdx), Xbyak::Xmm(yBaseIdx));
             if (is_unit_beta) {
@@ -387,7 +387,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
         // Load buffer pointers for the downscaled output
         updateCBufferPointers();
 
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             vmovdqu8(Xbyak::Xmm(yBaseIdx), ptr[regTmpYptr]);
             vpmovsxbd(RegType(yBaseIdx), Xbyak::Xmm(yBaseIdx));
             if (is_unit_beta) {
@@ -420,7 +420,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
         // Load buffer pointers for the downscaled output
         updateCBufferPointers();
 
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             vmovdqu16(Xbyak::Ymm(yBaseIdx), ptr[regTmpYptr]);
             vpmovsxwd(RegType(yBaseIdx), Xbyak::Ymm(yBaseIdx));
             vpslld(RegType(yBaseIdx), RegType(yBaseIdx), 16);
@@ -459,7 +459,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
         // Load buffer pointers for the downscaled output
         updateCBufferPointers();
 
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             vcvtps2dq(RegType(yBaseIdx), ptr[regTmpYptr]);
             if (is_unit_beta) {
                 vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
@@ -487,7 +487,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
             }
         }
     } else { // c_downscale == DLP_S32
-        for (int i = 0; i < (mSize / vnniWidth); ++i) {
+        for (iter_t i = 0; i < (mSize / vnniWidth); ++i) {
             if (is_unit_beta) {
                 vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                        ptr[regTmpYptr]);
@@ -539,7 +539,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
         lea(regTmp3,
             ptr[regTmp1 + 2 * regTmp1]); // regTmp3 = 3 * rs_c_downscale
 
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int blockSize  = ((mSize - vnniWidth * i) < vnniWidth)
                                  ? (mSize - vnniWidth * i)
                                  : vnniWidth;
@@ -548,7 +548,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
 
             regInit(tmpBaseIdx, tmpReg);
 
-            for (int j = 0; j < num_blocks; j++) {
+            for (iter_t j = 0; j < num_blocks; j++) {
                 vpbroadcastb(Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr]);
                 vpbroadcastb(Xbyak::Xmm(tmpBaseIdx + 1),
                              ptr[regTmpYptr + regTmp1]);
@@ -616,7 +616,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
         lea(regTmp3,
             ptr[regTmp1 + 2 * regTmp1]); // regTmp3 = 3 * rs_c_downscale
 
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int blockSize  = ((mSize - vnniWidth * i) < vnniWidth)
                                  ? (mSize - vnniWidth * i)
                                  : vnniWidth;
@@ -625,7 +625,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
 
             regInit(tmpBaseIdx, tmpReg);
 
-            for (int j = 0; j < num_blocks; j++) {
+            for (iter_t j = 0; j < num_blocks; j++) {
                 vpbroadcastb(Xbyak::Xmm(tmpBaseIdx), ptr[regTmpYptr]);
                 vpbroadcastb(Xbyak::Xmm(tmpBaseIdx + 1),
                              ptr[regTmpYptr + regTmp1]);
@@ -696,14 +696,14 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
         lea(regTmp3,
             ptr[regTmp1 + 2 * regTmp1]); // regTmp3 = 3 * rs_c_downscale
 
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int blockSize = ((mSize - vnniWidth * i) < vnniWidth)
                                 ? (mSize - vnniWidth * i)
                                 : vnniWidth;
 
             regInit(tmpBaseIdx, tmpReg);
 
-            for (int j = 0; j < blockSize; ++j) {
+            for (iter_t j = 0; j < blockSize; ++j) {
                 movsx(regKIter.cvt32(), word[regTmpYptr]);
                 int reg_idx = (j < 8) ? tmpBaseIdx : (tmpBaseIdx + 1);
                 int offset  = (j < 8) ? j : (j - 8);
@@ -736,7 +736,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
 
         lea(regTmp3, ptr[regTmp1 + 2 * regTmp1]);
 
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int blockSize = ((mSize - vnniWidth * i) < vnniWidth)
                                 ? (mSize - vnniWidth * i)
                                 : vnniWidth;
@@ -745,7 +745,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
 
             regInit(tmpBaseIdx, tmpReg);
 
-            for (int j = 0; j < n_blocks; j++) {
+            for (iter_t j = 0; j < n_blocks; j++) {
                 vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
                 vbroadcastss(RegType(tmpBaseIdx + 1),
                              ptr[regTmpYptr + regTmp1]);
@@ -813,7 +813,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
         // Store temporary pointer for 3rd row access
         lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = 3 * rsC;
 
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); i++) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); i++) {
             int blockSize  = ((mSize - vnniWidth * i) < vnniWidth)
                                  ? (mSize - vnniWidth * i)
                                  : vnniWidth;
@@ -822,7 +822,7 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
 
             regInit(tmpBaseIdx, tmpReg);
 
-            for (int j = 0; j < num_blocks; j++) {
+            for (iter_t j = 0; j < num_blocks; j++) {
                 vpbroadcastd(RegType(tmpBaseIdx), ptr[regTmpYptr]);
                 vpbroadcastd(RegType(tmpBaseIdx + 1), ptr[regTmpYptr + regRsC]);
                 vpbroadcastd(RegType(tmpBaseIdx + 2),
@@ -927,7 +927,7 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
         // Broadcast upper bound to a temp register.
         vpbroadcastd(RegType(uBoundRegIdx), regKIter.cvt32());
 
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             if (hasPostOps) {
                 // Convert post-ops accumulated result from F32 to S32.
                 vcvtps2dq(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
@@ -962,7 +962,7 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
 
         // Convert and store S32 integers into packed S8 integers using signed
         // saturation.
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             if (hasPostOps) {
                 // Convert post-ops accumulated result from F32 to S32.
                 vcvtps2dq(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
@@ -982,7 +982,7 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
         // Load buffer pointers for the downscaled output
         updateCBufferPointers();
 
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             if (!hasPostOps) {
                 // Convert accumulated S32 results to F32.
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
@@ -1034,7 +1034,7 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
         // Load buffer pointers for the downscaled output
         updateCBufferPointers();
 
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             if (!hasPostOps) {
                 // Convert from int32 to float and write to memory.
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
@@ -1051,7 +1051,7 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
                     RegType(accumBaseIdx + (mSize / vnniWidth)));
         }
     } else { // c_downscale == DLP_S32
-        for (int i = 0; i < mSize / vnniWidth; ++i) {
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             if (hasPostOps) {
                 // Convert post-ops accumulated result from F32 to S32.
                 vcvtps2dq(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
@@ -1093,7 +1093,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
         vpbroadcastd(RegType(uBoundRegIdx), regKIter.cvt32());
 
         // Process each ZMM register
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int elems_in_reg = (i < mSize / vnniWidth) ? vnniWidth
                                                        : (mSize % vnniWidth);
             if (elems_in_reg == 0)
@@ -1114,7 +1114,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
             vpmovdb(Xbyak::Xmm(tmpBaseIdx), RegType(tmpBaseIdx));
 
             // Store the clamped values to downscaled buffer.
-            for (int j = 0; j < elems_in_reg; j++) {
+            for (iter_t j = 0; j < elems_in_reg; j++) {
                 vpextrb(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx), j);
                 add(regTmpYptr, regTmp1); // Move to next row
             }
@@ -1124,7 +1124,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
         updateCBufferPointers();
 
         // Process each ZMM register
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int elems_in_reg = (i < mSize / vnniWidth) ? vnniWidth
                                                        : (mSize % vnniWidth);
             if (elems_in_reg == 0)
@@ -1139,7 +1139,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
             vpmovsdb(Xbyak::Xmm(tmpBaseIdx), RegType(accumBaseIdx + i));
 
             // Extract and store each S8 value to memory
-            for (int j = 0; j < elems_in_reg; j++) {
+            for (iter_t j = 0; j < elems_in_reg; j++) {
                 vpextrb(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx), j);
                 add(regTmpYptr, regTmp1); // Move to next row
             }
@@ -1149,7 +1149,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
         updateCBufferPointers();
 
         // Process each ZMM register
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int elems_in_reg = (i < mSize / vnniWidth) ? vnniWidth
                                                        : (mSize % vnniWidth);
             if (elems_in_reg == 0)
@@ -1176,13 +1176,13 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
 
             // Extract 2 128-bit chunks containing 8 bfloat16 elements each from
             // the 512-bit accumulator register into separate temp registers.
-            for (int j = 0; j < elems_in_reg; j += 8) {
+            for (iter_t j = 0; j < elems_in_reg; j += 8) {
                 int tmp_reg_idx = j / 8;
                 vextracti32x4(Xbyak::Xmm(tmpBaseIdx + 1 + tmp_reg_idx),
                               Xbyak::Ymm(tmpBaseIdx), tmp_reg_idx);
             }
 
-            for (int j = 0; j < elems_in_reg; j++) {
+            for (iter_t j = 0; j < elems_in_reg; j++) {
                 int tmp_reg_idx = (j / 8) + 1; // temp register index containing
                                                // required value.
                 int reg_idx = j % 8;           // position of required value
@@ -1207,7 +1207,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
         updateCBufferPointers();
 
         // Process each ZMM register
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int elems_in_reg = (i < mSize / vnniWidth) ? vnniWidth
                                                        : (mSize % vnniWidth);
             if (elems_in_reg == 0)
@@ -1220,7 +1220,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
 
             // Extract 4 128-bit chunks containing 4 int32 elements each from
             // the 512-bit accumulator register into separate temp registers.
-            for (int j = 0; j < elems_in_reg; j += 4) {
+            for (iter_t j = 0; j < elems_in_reg; j += 4) {
                 int tmp_reg_idx = j / 4;
                 vextractf32x4(Xbyak::Xmm(tmpBaseIdx + tmp_reg_idx),
                               RegType(accumBaseIdx + i), tmp_reg_idx);
@@ -1228,7 +1228,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
 
             // Store each extracted value into its appropriate position in
             // memory.
-            for (int j = 0; j < elems_in_reg; j++) {
+            for (iter_t j = 0; j < elems_in_reg; j++) {
                 int tmp_reg_idx = j / 4; // temp register index containing
                                          // required value.
                 int reg_idx = j % 4;     // position of required value within
@@ -1249,7 +1249,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
         }
     } else { // c_downscale == DLP_S32
         // Process each ZMM register
-        for (int i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
             int elems_in_reg = (i < mSize / vnniWidth) ? vnniWidth
                                                        : (mSize % vnniWidth);
             if (elems_in_reg == 0)
@@ -1262,7 +1262,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
 
             // Extract 4 128-bit chunks containing 4 int32 elements each from
             // the 512-bit accumulator register into separate temp registers.
-            for (int j = 0; j < elems_in_reg; j += 4) {
+            for (iter_t j = 0; j < elems_in_reg; j += 4) {
                 int tmp_reg_idx = j / 4;
                 vextracti32x4(Xbyak::Xmm(tmpBaseIdx + tmp_reg_idx),
                               RegType(accumBaseIdx + i), tmp_reg_idx);
@@ -1270,7 +1270,7 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
 
             // Store each extracted value into its appropriate position in
             // memory.
-            for (int j = 0; j < elems_in_reg; j++) {
+            for (iter_t j = 0; j < elems_in_reg; j++) {
                 int tmp_reg_idx = j / 4; // temp register index containing
                                          // required value.
                 int reg_idx = j % 4;     // position of required value within
@@ -1422,7 +1422,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         // Create and set up kernelOphandler if there are post-ops
         if (!params.kernelOps.empty()) {
             // Convert to F32 since post-ops expect accumulators in F32.
-            for (int i = 0; i < ((MR + vnniWidth - 1) / vnniWidth); ++i) {
+            for (iter_t i = 0; i < ((MR + vnniWidth - 1) / vnniWidth); ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 
@@ -1538,7 +1538,8 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         // Create and set up kernelOphandler if there are post-ops
         if (!params.kernelOps.empty()) {
             // Convert to F32 since post-ops expect accumulators in F32.
-            for (int i = 0; i < ((M_LEFT + vnniWidth - 1) / vnniWidth); ++i) {
+            for (iter_t i = 0; i < ((M_LEFT + vnniWidth - 1) / vnniWidth);
+                 ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 
@@ -1664,7 +1665,7 @@ jitGEMVS8M1<KType>::regInit(int baseIdx, int numRegs)
 {
     // Zero out accumulation registers
     vxorps(RegType(baseIdx), RegType(baseIdx), RegType(baseIdx));
-    for (int i = 1; i < numRegs; ++i) {
+    for (iter_t i = 1; i < numRegs; ++i) {
         vmovaps(RegType(baseIdx + i), RegType(baseIdx));
     }
 }
@@ -1691,7 +1692,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMVS8M1<KType>::computeKxNfringe()
 {
-    for (int j = 0; j < K_SUB_ITER; j++) {
+    for (iter_t j = 0; j < K_SUB_ITER; j++) {
         vpbroadcastd(RegType(xBaseIdx + j), ptr[regXptr + j * 4]);
         vpaddb(RegType(xBaseIdx + j), RegType(xBaseIdx + j),
                RegType(vec128BaseIdx));
@@ -1700,8 +1701,8 @@ jitGEMVS8M1<KType>::computeKxNfringe()
     int n_iter = N_LEFT / vnniWidth;
     int n_left = N_LEFT % vnniWidth;
 
-    for (int j = 0; j < K_SUB_ITER; j++) {
-        for (int i = 0; i < n_iter; i++) {
+    for (iter_t j = 0; j < K_SUB_ITER; j++) {
+        for (iter_t i = 0; i < n_iter; i++) {
             vmovdqu32(RegType(bBaseIdx + i),
                       ptr[regTmp2 + i * vnniWidth * sizeof(int32_t)]);
 
@@ -1727,15 +1728,15 @@ jitGEMVS8M1<KType>::computeKxNR(bool nMask)
     mov(regTmp2, regBptr);
 
     if (!nMask) {
-        for (int i = 0; i < K_SUB_ITER; ++i) {
+        for (iter_t i = 0; i < K_SUB_ITER; ++i) {
             vpbroadcastd(RegType(xBaseIdx + i), ptr[regXptr + i * 4]);
             vpaddb(RegType(xBaseIdx + i), RegType(xBaseIdx + i),
                    RegType(vec128BaseIdx));
         }
 
         int nIter = NR / vnniWidth;
-        for (int j = 0; j < K_SUB_ITER; j += 1) {
-            for (int i = 0; i < nIter; ++i) {
+        for (iter_t j = 0; j < K_SUB_ITER; j += 1) {
+            for (iter_t i = 0; i < nIter; ++i) {
                 vmovdqu32(RegType(bBaseIdx + i),
                           ptr[regTmp2 + i * vnniWidth * sizeof(int32_t)]);
                 vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * i + j),
@@ -1766,7 +1767,7 @@ jitGEMVS8M1<KType>::compute1xNfringe(bool isLastKGroup)
     int n_iter = N_LEFT / vnniWidth;
     int n_left = N_LEFT % vnniWidth;
 
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * vnniWidth * sizeof(int32_t)]);
         vmovdqu32(RegType(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
@@ -1802,7 +1803,7 @@ jitGEMVS8M1<KType>::compute1xNR(bool nMask, bool isLastKGroup)
         }
 
         int nIter = NR / vnniWidth;
-        for (int i = 0; i < nIter; ++i) {
+        for (iter_t i = 0; i < nIter; ++i) {
             vmovdqu32(RegType(bBaseIdx + i),
                       ptr[regTmp2 + i * vnniWidth * sizeof(int32_t)]);
             vpdpbusd(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
@@ -1936,8 +1937,8 @@ dlp::jit::jitGeneratorError
 jitGEMVS8M1<KType>::accumulateKSubIters()
 {
     int nIter = NR / vnniWidth;
-    for (int i = 0; i < nIter; ++i) {
-        for (int j = 1; j < K_SUB_ITER; j += 1) {
+    for (iter_t i = 0; i < nIter; ++i) {
+        for (iter_t j = 1; j < K_SUB_ITER; j += 1) {
             vpaddd(RegType(accumBaseIdx + K_SUB_ITER * i),
                    RegType(accumBaseIdx + K_SUB_ITER * i),
                    RegType(accumBaseIdx + K_SUB_ITER * i + j));
@@ -1969,7 +1970,7 @@ jitGEMVS8M1<KType>::conversionCompensation(bool isFringe)
         lea(regTmp1, ptr[regTmp1 + regTmp2 * sizeof(int32_t)]);
 
         int nIter = NR / vnniWidth;
-        for (int i = 0; i < nIter; i++) {
+        for (iter_t i = 0; i < nIter; i++) {
             vmovdqu32(RegType(xBaseIdx), ptr[regTmp1 + i * RegBytes]);
             vpsubd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                    RegType(xBaseIdx));
@@ -2008,7 +2009,7 @@ jitGEMVS8M1<KType>::conversionCompensation(bool isFringe)
     lea(regTmp1, ptr[regTmp1 + regTmp2 * sizeof(int32_t)]);
 
     int nIter = NR / vnniWidth;
-    for (int i = 0; i < nIter; i++) {
+    for (iter_t i = 0; i < nIter; i++) {
         if (i == 0) {
             vmovdqu32(RegType(xBaseIdx) | k3 | T_z,
                       ptr[regTmp1 + i * RegBytes]);
@@ -2040,7 +2041,7 @@ jitGEMVS8M1<KType>::scaleWithAlpha()
         vpbroadcastd(RegType(xBaseIdx), ptr[regKSubIter]);
 
         int nIter = NR / vnniWidth;
-        for (int i = 0; i < nIter; ++i) {
+        for (iter_t i = 0; i < nIter; ++i) {
             vpmulld(RegType(accumBaseIdx + i), RegType(xBaseIdx),
                     RegType(accumBaseIdx + i));
         }
@@ -2095,7 +2096,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 vmovdqu8(Xbyak::Xmm(yBaseIdx + i), ptr[regTmpYptr + i * 16]);
                 vpmovsxbd(RegType(yBaseIdx + i), Xbyak::Xmm(yBaseIdx + i));
 
@@ -2110,7 +2111,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 vmovdqu8(Xbyak::Xmm(yBaseIdx + i), ptr[regTmpYptr + i * 16]);
                 vpmovsxbd(RegType(yBaseIdx + i), Xbyak::Xmm(yBaseIdx + i));
 
@@ -2144,7 +2145,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 vmovdqu8(Xbyak::Xmm(yBaseIdx + i), ptr[regTmpYptr + i * 16]);
                 vpmovzxbd(RegType(yBaseIdx + i), Xbyak::Xmm(yBaseIdx + i));
 
@@ -2159,7 +2160,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 vmovdqu8(Xbyak::Xmm(yBaseIdx + i), ptr[regTmpYptr + i * 16]);
                 vpmovzxbd(RegType(yBaseIdx + i), Xbyak::Xmm(yBaseIdx + i));
 
@@ -2193,7 +2194,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 vmovdqu16(Xbyak::Ymm(yBaseIdx + i), ptr[regTmpYptr + i * 32]);
                 vpmovsxwd(RegType(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i));
                 vpslld(RegType(yBaseIdx + i), RegType(yBaseIdx + i), 16);
@@ -2210,7 +2211,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 vmovdqu16(Xbyak::Ymm(yBaseIdx + i), ptr[regTmpYptr + i * 32]);
                 vpmovsxwd(RegType(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i));
                 vpslld(RegType(yBaseIdx + i), RegType(yBaseIdx + i), 16);
@@ -2250,7 +2251,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 vcvtps2dq(RegType(yBaseIdx + i),
                           ptr[regTmpYptr + i * RegBytes]);
 
@@ -2265,7 +2266,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 vcvtps2dq(RegType(yBaseIdx + i),
                           ptr[regTmpYptr + i * RegBytes]);
 
@@ -2297,14 +2298,14 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
         if (!nMask) {
             int nIter = NR / vnniWidth;
             if (!is_unit_beta) {
-                for (int i = 0; i < nIter; i++) {
+                for (iter_t i = 0; i < nIter; i++) {
                     vpmulld(RegType(yBaseIdx + i), RegType(xBaseIdx),
                             ptr[regTmpYptr + i * vnniWidth * sizeof(int32_t)]);
                     vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                            RegType(yBaseIdx + i));
                 }
             } else {
-                for (int i = 0; i < nIter; i++) {
+                for (iter_t i = 0; i < nIter; i++) {
                     vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                            ptr[regTmpYptr + i * vnniWidth * sizeof(int32_t)]);
                 }
@@ -2314,7 +2315,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
             int n_left = N_LEFT % vnniWidth;
 
             if (!is_unit_beta) {
-                for (int i = 0; i < n_iter; i++) {
+                for (iter_t i = 0; i < n_iter; i++) {
                     vpmulld(RegType(yBaseIdx + i), RegType(xBaseIdx),
                             ptr[regTmpYptr + i * vnniWidth * sizeof(int32_t)]);
                     vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
@@ -2331,7 +2332,7 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
                            RegType(yBaseIdx + n_iter));
                 }
             } else {
-                for (int i = 0; i < n_iter; i++) {
+                for (iter_t i = 0; i < n_iter; i++) {
                     vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                            ptr[regTmpYptr + i * vnniWidth * sizeof(int32_t)]);
                 }
@@ -2358,7 +2359,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(accumBaseIdx + i),
@@ -2370,7 +2371,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(accumBaseIdx + i),
@@ -2400,7 +2401,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(accumBaseIdx + i),
@@ -2422,7 +2423,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(accumBaseIdx + i),
@@ -2455,7 +2456,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 if (!hasPostOps) {
                     // Convert intermediate result from S32 to F32.
                     vcvtdq2ps(RegType(accumBaseIdx + i),
@@ -2481,7 +2482,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 if (!hasPostOps) {
                     // Convert intermediate result from S32 to F32.
                     vcvtdq2ps(RegType(accumBaseIdx + i),
@@ -2533,7 +2534,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; i++) {
+            for (iter_t i = 0; i < nIter; i++) {
                 if (!hasPostOps) {
                     // Convert intermediate result from S32 to F32.
                     vcvtdq2ps(RegType(accumBaseIdx + i),
@@ -2546,7 +2547,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 if (!hasPostOps) {
                     // Convert intermediate result from S32 to F32.
                     vcvtdq2ps(RegType(accumBaseIdx + i),
@@ -2571,7 +2572,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
 
         if (!nMask) {
             int nIter = NR / vnniWidth;
-            for (int i = 0; i < nIter; ++i) {
+            for (iter_t i = 0; i < nIter; ++i) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(accumBaseIdx + i),
@@ -2584,7 +2585,7 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
             int n_iter = N_LEFT / vnniWidth;
             int n_left = N_LEFT % vnniWidth;
 
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 if (hasPostOps) {
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(accumBaseIdx + i),
@@ -2740,7 +2741,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Create and set up kernelOphandler if there are post-ops
         if (!params.kernelOps.empty()) {
             // Convert to F32 since post-ops expect accumulators in F32.
-            for (int i = 0; i < (NR / vnniWidth); ++i) {
+            for (iter_t i = 0; i < (NR / vnniWidth); ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 
@@ -2905,7 +2906,8 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Create and set up kernelOphandler if there are post-ops
         if (!params.kernelOps.empty()) {
             // Convert to F32 since post-ops expect accumulators in F32.
-            for (int i = 0; i < ((N_LEFT + vnniWidth - 1) / vnniWidth); ++i) {
+            for (iter_t i = 0; i < ((N_LEFT + vnniWidth - 1) / vnniWidth);
+                 ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 

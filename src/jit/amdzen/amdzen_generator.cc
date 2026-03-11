@@ -325,7 +325,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.nfringe    = false;
         params.kfringe    = true;
 
-        for (int i = 0; i < NR; i += 1) {
+        for (iter_t i = 0; i < NR; i += 1) {
             params.N_LEFT  = i;
             params.nfringe = (i != 0);
 
@@ -432,11 +432,11 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.mfringe = false;
         params.kfringe = true;
 
-        for (int m_left = 0; m_left < MR; m_left++) {
+        for (iter_t m_left = 0; m_left < MR; m_left++) {
             params.M_LEFT  = m_left;
             params.mfringe = (m_left != 0); // The first two kernels that we
                                             // generate are main kernels
-            for (int j = 0; j < 4; j++) {
+            for (iter_t j = 0; j < 4; j++) {
                 // We generate 4 kernels for each M_LEFT, and index them as
                 // follows:
                 // 0: row-stored, without mloop
@@ -601,8 +601,8 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         }
 
         // Generate all kernels for the given MR and NR
-        for (int mr = 0; mr < numMRVariants; mr++) {
-            for (int nr = 0; nr < numNRVariants; nr++) {
+        for (iter_t mr = 0; mr < numMRVariants; mr++) {
+            for (iter_t nr = 0; nr < numNRVariants; nr++) {
                 params.MR    = mr == 0 ? MR : mr;
                 params.mLoop = mr == 0;
 
@@ -725,8 +725,8 @@ jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::jitGeneratorContext& jI)
     int nElemsPerRegLog2 = amdzen::utils::int_log2(numElemsPerReg);
 
     // Generate all kernels for the given MR and NR
-    for (int mr = 0; mr < numMRVariants; mr++) {
-        for (int nr = 0; nr < numNRVariants; nr++) {
+    for (iter_t mr = 0; mr < numMRVariants; mr++) {
+        for (iter_t nr = 0; nr < numNRVariants; nr++) {
             params.MR    = mr == 0 ? MR : mr;
             params.mLoop = mr == 0;
 
@@ -806,20 +806,20 @@ jitAmdZenFP32::setMaskForGEMMLtFringe(dlp::kernels::gemmParams* params,
         // The support for creating all lt fringe kernels (lt48, lt32) is
         // only supported for avx512 when using zmm registers.
         int nRemainderRegCount = nRemainder / numElemsPerReg;
-        for (int ii = 0; ii < nRemainderRegCount; ++ii) {
+        for (iter_t ii = 0; ii < nRemainderRegCount; ++ii) {
             params->maskF32[ii] = 0xFFFF;
         }
         params->maskF32[nRemainderRegCount] =
             0xFFFF >> (numElemsPerReg
                        - (nRemainder - (nRemainderRegCount * numElemsPerReg)));
-        for (int ii = nRemainderRegCount + 1; ii < dlp::kernels::maxNumMasks;
+        for (iter_t ii = nRemainderRegCount + 1; ii < dlp::kernels::maxNumMasks;
              ++ii) {
             params->maskF32[ii] = 0x0;
         }
     } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
         params->maskF32_8[0] = 0xFF >> (numElemsPerReg - nRemainder);
     } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
-        for (int i = 0; i < 8; i++) {
+        for (iter_t i = 0; i < 8; i++) {
             params->maskArray[i] = (i < nRemainder) ? 0xFFFFFFFF : 0;
         }
     }
@@ -862,7 +862,7 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
                     break;
                 }
                 case utils::kernelInstrType::avx2_ymm_16_reg: {
-                    for (int i = 0; i < 8; i++) {
+                    for (iter_t i = 0; i < 8; i++) {
                         params->nmask_avx2[i] = (i < partial_elements) ? -1 : 0;
                     }
                     break;
@@ -910,10 +910,10 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
         } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
             int m_iter_left = (params->m_left) % numElemsPerReg;
             int k_iter_left = (params->k_left) % numElemsPerReg;
-            for (int i = 0; i < m_iter_left; i++) {
+            for (iter_t i = 0; i < m_iter_left; i++) {
                 params->mmask_avx2[i] = -1;
             }
-            for (int i = 0; i < k_iter_left; i++) {
+            for (iter_t i = 0; i < k_iter_left; i++) {
                 params->kmask_avx2[i] = -1;
             }
         }
@@ -1278,7 +1278,7 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.RS_B_N_LEFT_16   = 0;
         params.RS_B_N_LEFT_LT16 = 0;
 
-        for (int i = 0; i < NR; i += 1) {
+        for (iter_t i = 0; i < NR; i += 1) {
 
             params.N_LEFT      = i;
             params.N_LEFT_16   = (i / 16) * 16;
@@ -1345,11 +1345,11 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.mfringe = false;
         params.kfringe = true;
 
-        for (int m_left = 0; m_left < MR; m_left++) {
+        for (iter_t m_left = 0; m_left < MR; m_left++) {
             params.M_LEFT  = m_left;
             params.mfringe = (m_left != 0);
             // Generate 4 kernels for each m_left
-            for (int variant = 0; variant < 4; variant++) {
+            for (iter_t variant = 0; variant < 4; variant++) {
                 params.mloop = (variant == 1)
                                || (variant == 3); // 1,3 has mloop true
                 params.yFormat =
@@ -1413,8 +1413,8 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         }
 
         // Generate all kernels for the given MR and NR
-        for (int mr = 0; mr < numMRVariants; mr++) {
-            for (int nr = 0; nr < numNRVariants; nr++) {
+        for (iter_t mr = 0; mr < numMRVariants; mr++) {
+            for (iter_t nr = 0; nr < numNRVariants; nr++) {
                 params.MR          = (mr == 0) ? MR : mr;
                 params.mLoop       = (mr == 0);
                 params.NR          = (nr * numElemsPerReg);
@@ -1764,7 +1764,7 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.nfringe    = false;
         params.kfringe    = true;
 
-        for (int i = 0; i < NR; i++) {
+        for (iter_t i = 0; i < NR; i++) {
             params.N_LEFT  = i;
             params.nfringe = (i != 0);
 
@@ -1815,11 +1815,11 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.mfringe = false;
         params.kfringe = true;
 
-        for (int m_left = 0; m_left < MR; m_left++) {
+        for (iter_t m_left = 0; m_left < MR; m_left++) {
             params.M_LEFT  = m_left;
             params.mfringe = (m_left != 0); // The first two kernels that we
                                             // generate are main kernels
-            for (int j = 0; j < 4; j++) {
+            for (iter_t j = 0; j < 4; j++) {
                 // We generate 2 kernels for each M_LEFT, and index them as
                 // follows:
                 // 0: row-stored, without mloop
@@ -2254,7 +2254,7 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.kfringe     = true;
         params.c_downscale = c_downscale;
 
-        for (int i = 0; i < NR; ++i) {
+        for (iter_t i = 0; i < NR; ++i) {
             params.N_LEFT      = i;
             params.N_LEFT_16   = (i / 16) * 16;
             params.N_LEFT_LT16 = i % 16;
@@ -2320,11 +2320,11 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.mfringe = false;
         params.kfringe = true;
 
-        for (int m_left = 0; m_left < MR; ++m_left) {
+        for (iter_t m_left = 0; m_left < MR; ++m_left) {
             params.M_LEFT  = m_left;
             params.mfringe = (m_left != 0); // The first four kernels that we
                                             // generate are the primary kernels.
-            for (int j = 0; j < 4; ++j) {
+            for (iter_t j = 0; j < 4; ++j) {
                 // We generate 4 kernels for each M_LEFT, and index them as
                 // follows:
                 // 0: row-stored, without mloop
@@ -2393,8 +2393,8 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         }
 
         // Generate all kernels for the given MR and NR
-        for (int mr = 0; mr < numMRVariants; mr++) {
-            for (int nr = 0; nr < numNRVariants; nr++) {
+        for (iter_t mr = 0; mr < numMRVariants; mr++) {
+            for (iter_t nr = 0; nr < numNRVariants; nr++) {
                 params.MR    = mr == 0 ? MR : mr;
                 params.mLoop = mr == 0;
 
@@ -2785,7 +2785,7 @@ jitAmdZenFP16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.nfringe    = false;
         params.kfringe    = true;
 
-        for (int i = 0; i < NR; ++i) {
+        for (iter_t i = 0; i < NR; ++i) {
             params.N_LEFT  = i;
             params.nfringe = (i != 0);
 
@@ -2840,11 +2840,11 @@ jitAmdZenFP16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         params.mfringe = false;
         params.kfringe = true;
 
-        for (int m_left = 0; m_left < MR; ++m_left) {
+        for (iter_t m_left = 0; m_left < MR; ++m_left) {
             params.M_LEFT  = m_left;
             params.mfringe = (m_left != 0);
 
-            for (int j = 0; j < 4; ++j) {
+            for (iter_t j = 0; j < 4; ++j) {
                 // Kernel indexing:
                 // 0: row-stored, without mloop
                 // 1: row-stored, with mloop
@@ -2905,8 +2905,8 @@ jitAmdZenFP16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         }
 
         // Generate all kernels for the given MR and NR
-        for (int mr = 0; mr < numMRVariants; mr++) {
-            for (int nr = 0; nr < numNRVariants; nr++) {
+        for (iter_t mr = 0; mr < numMRVariants; mr++) {
+            for (iter_t nr = 0; nr < numNRVariants; nr++) {
                 params.MR          = (mr == 0) ? MR : mr;
                 params.mLoop       = (mr == 0);
                 params.NR          = nr * numElemsPerReg;

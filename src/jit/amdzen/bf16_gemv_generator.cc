@@ -165,7 +165,7 @@ jitBF16GEMVN1<KType>::loadMasks()
 {
     // Ensuring mapping only from mask_regs[0] to k7(to avoid k0 usage
     // internally)
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 
@@ -185,7 +185,7 @@ jitBF16GEMVN1<KType>::regInit(int baseIdx, int numRegs)
 {
     // Zero out vector registers
     vxorps(RegType(baseIdx), RegType(baseIdx), RegType(baseIdx));
-    for (int i = 1; i < numRegs; i++) {
+    for (iter_t i = 1; i < numRegs; i++) {
         vmovaps(RegType(baseIdx + i), RegType(baseIdx));
     }
 }
@@ -241,8 +241,8 @@ jitBF16GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
     regInit(tmpBaseIdx, tmpReg);
 
     // compute by unrolling loadA and DP in blocks of 4 rows at a time
-    for (int i = 0; i < mSize / 4; i++) {
-        for (int j = 0; j < 4; j++) {
+    for (iter_t i = 0; i < mSize / 4; i++) {
+        for (iter_t j = 0; j < 4; j++) {
             RETURN_IF_ERROR((loadAValues(j, isFringe)));
             RETURN_IF_ERROR((computeDP(j, i * 4 + j)));
 
@@ -252,7 +252,7 @@ jitBF16GEMVN1<KType>::processMRBlock(int mSize, bool isFringe)
 
     // compute by unrolling loadA and DP with left rows
     // this will used in M fringe case where mSize < MR
-    for (int j = 0; j < mLeft; j++) {
+    for (iter_t j = 0; j < mLeft; j++) {
         RETURN_IF_ERROR((loadAValues(j, isFringe)));
         RETURN_IF_ERROR((computeDP(j, (mSize / 4) * 4 + j)));
         add(regTmp1, regRsA);
@@ -271,7 +271,7 @@ jitBF16GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
     }
 
     // Zero out the temporary registers we'll need
-    for (int i = 0; i < 4; i++) {
+    for (iter_t i = 0; i < 4; i++) {
         vxorps(Xbyak::Ymm(tmpIdx + i), Xbyak::Ymm(tmpIdx + i),
                Xbyak::Ymm(tmpIdx + i));
     }
@@ -280,7 +280,7 @@ jitBF16GEMVN1<KType>::reduceToXmm(int startIdx, int tmpIdx, int blockSize)
     // This extact + add logic is specific to AVX512 ISA, when using ZMM
     // registers. In case of using YMM registers, just move it onto temporary
     // registers.
-    for (int i = 0; i < blockSize; i++) {
+    for (iter_t i = 0; i < blockSize; i++) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
             // Extract upper 256-bits to temp YMM
             vextractf32x8(Xbyak::Ymm(tmpIdx + i), Xbyak::Zmm(startIdx + i), 1);
@@ -323,12 +323,12 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::reduceAccumulation(int mSize)
 {
     // Process mSize registers in blocks of the simdWidthF32
-    for (int i = 0; i < mSize; i += simdWidthF32) {
+    for (iter_t i = 0; i < mSize; i += simdWidthF32) {
         // Number of registers to process in this ZMM block
         int blockSize = (mSize - i) < simdWidthF32 ? (mSize - i) : simdWidthF32;
 
         // Process this block in groups of 4 registers
-        for (int j = 0; j < blockSize; j += 4) {
+        for (iter_t j = 0; j < blockSize; j += 4) {
             int subBlockSize = (blockSize - j) < 4 ? (blockSize - j) : 4;
 
             // Reduce 4 (or fewer) ZMMs to one XMM
@@ -354,7 +354,7 @@ jitBF16GEMVN1<KType>::scaleAccumulationWithAlpha(int mSize)
 {
     mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, alpha)]);
     vbroadcastss(RegType(tmpBaseIdx), ptr[regKIter]);
-    for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
+    for (iter_t i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
         vmulps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                RegType(tmpBaseIdx));
     }
@@ -415,7 +415,8 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         // buffer
         lea(regTmp3, ptr[regTmp2 + 2 * regTmp2]); // regTmp3 = stride + 2*stride
 
-        for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
+        for (iter_t i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32;
+             i += 1) {
             int blockSize  = ((mSize - i * simdWidthF32) < simdWidthF32)
                                  ? (mSize - i * simdWidthF32)
                                  : simdWidthF32;
@@ -423,7 +424,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
             int rem_block  = blockSize % 4;
             regInit(tmpBaseIdx, tmpReg);
 
-            for (int j = 0; j < num_blocks; j += 1) {
+            for (iter_t j = 0; j < num_blocks; j += 1) {
                 // Load 4 BF16 values and convert to F32 by placing in upper 16
                 // bits
                 vxorps(Xbyak::Xmm(tmpBaseIdx), Xbyak::Xmm(tmpBaseIdx),
@@ -531,14 +532,14 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
     // F32 path (original code)
     // Store offsets for Y, using it's row-stride
     lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = rsC + 2*rsC
-    for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
+    for (iter_t i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
         int blockSize  = ((mSize - i * simdWidthF32) < simdWidthF32)
                              ? (mSize - i * simdWidthF32)
                              : simdWidthF32;
         int num_blocks = blockSize / 4;
         int rem_block  = blockSize % 4;
         regInit(tmpBaseIdx, tmpReg);
-        for (int j = 0; j < num_blocks; j += 1) {
+        for (iter_t j = 0; j < num_blocks; j += 1) {
             vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
             vbroadcastss(RegType(tmpBaseIdx + 1), ptr[regTmpYptr + regRsC]);
             vbroadcastss(RegType(tmpBaseIdx + 2), ptr[regTmpYptr + 2 * regRsC]);
@@ -660,7 +661,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
                      ptr[rsp + 0]); // Broadcast from memory
 
         // Store complete SIMD-width chunks
-        for (int i = 0; i < mSize / simdWidthF32; i += 1) {
+        for (iter_t i = 0; i < mSize / simdWidthF32; i += 1) {
             vmovdqu16(Xbyak::Ymm(tmpBaseIdx + 1), ptr[regTmpYptr]);
             vpmovsxwd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Ymm(tmpBaseIdx + 1));
             vpsllvd(Xbyak::Zmm(tmpBaseIdx + 1), Xbyak::Zmm(tmpBaseIdx + 1),
@@ -688,7 +689,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
         L(label_betaop_col);
     }
 
-    for (int i = 0; i < mSize / simdWidthF32; i += 1) {
+    for (iter_t i = 0; i < mSize / simdWidthF32; i += 1) {
         if (betaOne) {
             vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                    ptr[regTmpYptr]);
@@ -803,7 +804,7 @@ jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
         add(regTmpYptr, regKIter);
 
         // Store complete SIMD-width chunks
-        for (int i = 0; i < mSize / simdWidthF32; i += 1) {
+        for (iter_t i = 0; i < mSize / simdWidthF32; i += 1) {
             vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + i),
                           Xbyak::Zmm(accumBaseIdx + i));
             vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(accumBaseIdx + i));
@@ -821,7 +822,7 @@ jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
     }
 
     // Store complete SIMD-width chunks
-    for (int i = 0; i < mSize / simdWidthF32; i += 1) {
+    for (iter_t i = 0; i < mSize / simdWidthF32; i += 1) {
         vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + i));
         lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(float)]);
     }
@@ -844,7 +845,7 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
     // from 1 ZMM register vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + 0));
 
     inLocalLabel();
-    for (int i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i++) {
+    for (iter_t i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i++) {
         Xbyak::Label label_storeop_row, label_storeop_row_end;
         int          elements_in_reg =
             (i < mSize / simdWidthF32) ? simdWidthF32 : (mSize % simdWidthF32);
@@ -852,7 +853,7 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
             break;
 
         // Extract 4 chunks of 128-bits (4 floats each) from the ZMM
-        for (int j = 0; j < elements_in_reg; j += 4) {
+        for (iter_t j = 0; j < elements_in_reg; j += 4) {
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 vextractf128(Xbyak::Xmm(tmpBaseIdx + j / 4),
                              RegType(accumBaseIdx + i), j / 4);
@@ -901,13 +902,13 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
             imul(regKIter, regTmp2);
             add(regTmpYptr, regKIter);
 
-            for (int j = 0; j < (elements_in_reg + 3) / 4; j++) {
+            for (iter_t j = 0; j < (elements_in_reg + 3) / 4; j++) {
                 vcvtneps2bf16(Xbyak::Ymm(tmpBaseIdx + j),
                               Xbyak::Zmm(tmpBaseIdx + j));
             }
 
             // Now store each extracted value to its proper row-strided location
-            for (int j = 0; j < elements_in_reg; j++) {
+            for (iter_t j = 0; j < elements_in_reg; j++) {
                 int tmp_reg    = j / 4; // Which temp register has our value
                 int pos_in_reg = j % 4; // Position within that temp register
 
@@ -923,7 +924,7 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
         }
 
         // Now store each extracted value to its proper row-strided location
-        for (int j = 0; j < elements_in_reg; j++) {
+        for (iter_t j = 0; j < elements_in_reg; j++) {
             int tmp_reg    = j / 4; // Which temp register has our value
             int pos_in_reg = j % 4; // Position within that temp register
 
@@ -1314,7 +1315,7 @@ template<utils::kernelInstrType KType>
 void
 jitBF16GEMVM1<KType>::regInit(int baseIdx, int numRegs)
 {
-    for (int i = 0; i < numRegs; i++) {
+    for (iter_t i = 0; i < numRegs; i++) {
         vxorps(RegType(baseIdx + i), RegType(baseIdx + i),
                RegType(baseIdx + i));
     }
@@ -1344,7 +1345,7 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVM1<KType>::loadMasks()
 {
     // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
-    for (int i = 0; i < NUM_USABLE_MASKS; i++) {
+    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
         mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
     }
 
@@ -1369,15 +1370,15 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVM1<KType>::computeKxnfringe()
 {
-    for (int j = 0; j < K_SUB_ITER; j++) {
+    for (iter_t j = 0; j < K_SUB_ITER; j++) {
         vpbroadcastd(RegType(xBaseIdx + j),
                      ptr[regXptr + 2 * j * sizeof(bfloat16)]);
     }
 
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
-    for (int j = 0; j < K_SUB_ITER; j++) {
-        for (int i = 0; i < n_iter; i++) {
+    for (iter_t j = 0; j < K_SUB_ITER; j++) {
+        for (iter_t i = 0; i < n_iter; i++) {
             // load 32 elements of B
             vmovdqu16(RegType(bBaseIdx + i),
                       ptr[regTmp2 + i * simdWidth * sizeof(float)]);
@@ -1400,14 +1401,14 @@ jitBF16GEMVM1<KType>::computeKxNR(bool nMask)
 {
     mov(regTmp2, regBptr);
     if (!nMask) {
-        for (int i = 0; i < K_SUB_ITER; i += 1) {
+        for (iter_t i = 0; i < K_SUB_ITER; i += 1) {
             // broadcast two values of x every time
             // so 4 zmms are used broadcast 8 elements of Xptr(A)
             vpbroadcastd(RegType(xBaseIdx + i),
                          ptr[regXptr + 2 * i * sizeof(bfloat16)]);
         }
-        for (int j = 0; j < K_SUB_ITER; j += 1) {
-            for (int i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t j = 0; j < K_SUB_ITER; j += 1) {
+            for (iter_t i = 0; i < NR / simdWidth; i += 1) {
                 // load 32 elements of B
                 vmovdqu16(RegType(bBaseIdx + i),
                           ptr[regTmp2 + i * simdWidth * sizeof(float)]);
@@ -1435,7 +1436,7 @@ jitBF16GEMVM1<KType>::compute1xnfringe(bool kIsOdd)
 
     int n_iter = N_LEFT / simdWidth;
     int n_left = N_LEFT % simdWidth;
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         xor_(regTmp1, regTmp1);
         lea(regTmp1, ptr[regTmp1 + i * simdWidth * sizeof(float)]);
         vmovdqu16(RegType(bBaseIdx + i), ptr[regTmp2 + regTmp1]);
@@ -1465,7 +1466,7 @@ jitBF16GEMVM1<KType>::compute1xNR(bool kIsOdd, bool nMask)
             vpbroadcastd(RegType(xBaseIdx), ptr[regXptr]);
         }
 
-        for (int i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t i = 0; i < NR / simdWidth; i += 1) {
             vmovdqu16(RegType(bBaseIdx + i),
                       ptr[regTmp2 + i * simdWidth * sizeof(float)]);
             vdpbf16ps(RegType(accumBaseIdx + K_SUB_ITER * i), RegType(xBaseIdx),
@@ -1600,8 +1601,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVM1<KType>::finalAccumulate()
 {
-    for (int i = 0; i < NR / simdWidth; i += 1) {
-        for (int j = 1; j < K_SUB_ITER; j += 1) {
+    for (iter_t i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t j = 1; j < K_SUB_ITER; j += 1) {
             vaddps(RegType(accumBaseIdx + K_SUB_ITER * i),
                    RegType(accumBaseIdx + K_SUB_ITER * i),
                    RegType(accumBaseIdx + K_SUB_ITER * i + j));
@@ -1621,7 +1622,7 @@ jitBF16GEMVM1<KType>::scaleWithAlpha()
         mov(regKSubIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, alpha)]);
         vbroadcastss(RegType(xBaseIdx), ptr[regKSubIter]);
-        for (int i = 0; i < NR / simdWidth; i += 1) {
+        for (iter_t i = 0; i < NR / simdWidth; i += 1) {
             vmulps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
                    RegType(accumBaseIdx + i));
         }
@@ -1709,7 +1710,7 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
 
             // Store complete SIMD-width chunks
             // Store complete SIMD-width chunks
-            for (int i = 0; i < n_iter; i += 1) {
+            for (iter_t i = 0; i < n_iter; i += 1) {
                 vmovdqu16(Xbyak::Ymm(tmpBaseIdx), ptr[regTmpYptr]);
                 vpmovsxwd(Xbyak::Zmm(tmpBaseIdx), Xbyak::Ymm(tmpBaseIdx));
                 vpslld(Xbyak::Zmm(tmpBaseIdx), Xbyak::Zmm(tmpBaseIdx), 16);
@@ -1734,7 +1735,7 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
         mov(regTmpYptr, regYptr);
 
         if (!isBetaOne) {
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 vfmadd231ps(RegType(accumBaseIdx + i), RegType(xBaseIdx),
                             ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
             }
@@ -1745,7 +1746,7 @@ jitBF16GEMVM1<KType>::scaleYWithBeta(int n_size)
                     ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]);
             }
         } else {
-            for (int i = 0; i < n_iter; i++) {
+            for (iter_t i = 0; i < n_iter; i++) {
                 vaddps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
                        ptr[regTmpYptr + i * simdWidth * sizeof(float)]);
             }
@@ -1809,7 +1810,7 @@ jitBF16GEMVM1<KType>::storeYValues(int n_size)
         add(regTmpYptr, regKIter);
 
         // Store complete SIMD-width chunks
-        for (int i = 0; i < n_iter; i += 1) {
+        for (iter_t i = 0; i < n_iter; i += 1) {
             vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + i),
                           Xbyak::Zmm(accumBaseIdx + i));
             vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(accumBaseIdx + i));
@@ -1828,7 +1829,7 @@ jitBF16GEMVM1<KType>::storeYValues(int n_size)
 
     mov(regTmpYptr, regYptr);
 
-    for (int i = 0; i < n_iter; i++) {
+    for (iter_t i = 0; i < n_iter; i++) {
         vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
                 RegType(accumBaseIdx + i));
     }
@@ -1883,7 +1884,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Y prefetch, before the k-loop
         // might change if Y is of type bf16
         if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
-            for (int i = 0; i < NR / simdWidth; i++) {
+            for (iter_t i = 0; i < NR / simdWidth; i++) {
                 prefetcht0(ptr[regYptr + i * simdWidth * sizeof(float)]);
             }
         }
