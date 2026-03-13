@@ -209,7 +209,7 @@ namespace testing {
              * @param rows Number of rows
              * @param cols Number of columns
              * @param layout Memory layout
-             * @param leadingDim Leading dimension (0 for automatic)
+             * @param leadingDim Leading dimension (-1 for automatic)
              * @return Required bytes for allocation
              */
             inline size_t calculateRequiredBytes(MatrixType   type,
@@ -218,12 +218,6 @@ namespace testing {
                                                  MatrixLayout layout,
                                                  size_t       leadingDim = 0)
             {
-                // Calculate leading dimension if not specified
-                if (leadingDim == 0) {
-                    leadingDim = (layout == MatrixLayout::ROW_MAJOR) ? cols
-                                                                     : rows;
-                }
-
                 // Calculate total elements based on layout
                 size_t totalElements;
                 if (layout == MatrixLayout::ROW_MAJOR) {

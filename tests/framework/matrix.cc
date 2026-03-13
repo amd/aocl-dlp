@@ -158,24 +158,25 @@ Matrix::Matrix(md_t         rows,
     , m_dataSizeBytes(dataSizeBytes)
     , m_alignment(alignment)
     , m_layout(layout)
+    , m_leadingDim(leadingDim)
     , m_transposed(transposed)
     , m_reordered(reordered)
     , m_packed(false)
 {
-    // Calculate leading dimension if not specified
-    if (leadingDim == 0) {
+    // LD == -1 is the "not specified" sentinel; compute from dimensions.
+    if (leadingDim == -1) {
         m_leadingDim = (layout == MatrixLayout::ROW_MAJOR) ? cols : rows;
-    } else {
-        m_leadingDim = leadingDim;
     }
 
-    // Validate that provided memory is sufficient
-    size_t requiredBytes = MatrixMemory::calculateRequiredBytes(
-        type, rows, cols, layout, m_leadingDim);
+    // Validate that provided memory is sufficient (only for valid LDs)
+    if (m_leadingDim >= 0) {
+        size_t requiredBytes = MatrixMemory::calculateRequiredBytes(
+            type, rows, cols, layout, m_leadingDim);
 
-    if (dataSizeBytes < requiredBytes) {
-        throw std::invalid_argument(
-            "Provided memory size is insufficient for matrix dimensions");
+        if (dataSizeBytes < requiredBytes) {
+            throw std::invalid_argument(
+                "Provided memory size is insufficient for matrix dimensions");
+        }
     }
 }
 
@@ -200,6 +201,7 @@ Matrix::Matrix(md_t         rows,
     , m_type(type)
     , m_alignment(alignment)
     , m_layout(layout)
+    , m_leadingDim(leadingDim)
     , m_transposed(transposed)
     , m_reordered(reordered)
     , m_packed(false)
@@ -209,19 +211,23 @@ Matrix::Matrix(md_t         rows,
     md_t alloc_rows = (rows <= 0) ? 1 : rows;
     md_t alloc_cols = (cols <= 0) ? 1 : cols;
 
-    // Calculate leading dimension if not specified
-    if (leadingDim == 0) {
+    // LD == -1 is the "not specified" sentinel; compute from dimensions.
+    // Any other negative value (e.g. -2) is an intentionally invalid LD for
+    // boundary testing — keep it as-is so validation functions can reject it.
+    if (m_leadingDim == -1) {
         m_leadingDim = (layout == MatrixLayout::ROW_MAJOR) ? alloc_cols
                                                            : alloc_rows;
-    } else {
-        m_leadingDim = leadingDim;
     }
 
-    // Calculate required memory size using safe dimensions
-    m_dataSizeBytes = MatrixMemory::calculateRequiredBytes(
-        type, alloc_rows, alloc_cols, layout, m_leadingDim);
+    if (m_leadingDim >= 0) {
+        m_dataSizeBytes = MatrixMemory::calculateRequiredBytes(
+            type, alloc_rows, alloc_cols, layout, m_leadingDim);
+    } else {
+        // value to allocate just enough memory to create a valid matrix object
+        // for negative test cases
+        m_dataSizeBytes = 1;
+    }
 
-    // Allocate memory using helper method
     m_data = allocateAlignedMemory(m_dataSizeBytes, alignment);
 
     // Zero-initialize the allocated memory to avoid uninitialized values

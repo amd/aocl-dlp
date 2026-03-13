@@ -208,7 +208,7 @@ namespace dlp { namespace testing { namespace framework {
                uint8_t*     data,
                size_t       dataSizeBytes,
                MatrixLayout layout     = MatrixLayout::ROW_MAJOR,
-               md_t         leadingDim = 0,
+               md_t         leadingDim = -1,
                bool         transposed = false,
                bool         reordered  = false,
                size_t       alignment  = 0);
@@ -233,7 +233,7 @@ namespace dlp { namespace testing { namespace framework {
                md_t         cols,
                MatrixType   type,
                MatrixLayout layout     = MatrixLayout::ROW_MAJOR,
-               md_t         leadingDim = 0,
+               md_t         leadingDim = -1,
                bool         transposed = false,
                bool         reordered  = false,
                size_t       alignment  = 0);

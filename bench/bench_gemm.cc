@@ -119,6 +119,7 @@ class OptimizedGemmBenchmark : public ConcreteUAL
 
         const size_t alignment = 4096;
 
+        // Create matrices
         A_ = Matrix(a_rows, a_cols, a_type_, layout_, config.lda, transA_,
                     false, alignment);
         B_ = Matrix(b_rows, b_cols, b_type_, layout_, config.ldb, transB_,
@@ -272,6 +273,91 @@ class OptimizedGemmBenchmark : public ConcreteUAL
 using OptimizedGemmBenchmarkDlp = OptimizedGemmBenchmark<UalDlp>;
 
 // ============================================================================
+// BENCHMARK PARAMETER VALIDATION
+// ============================================================================
+
+/**
+ * @brief Validate GEMM parameters before benchmark registration
+ *
+ * Checks dimension, layout, type, and leading dimension constraints to skip
+ * invalid configurations early, avoiding unnecessary fixture allocation.
+ * Logic mirrors UalRef::checkValidGemmParams but operates directly on
+ * GemmBenchConfig without requiring Matrix objects.
+ *
+ * @param config The benchmark configuration to validate
+ * @return true if parameters are valid, false otherwise
+ */
+static bool
+checkValidGemmParams(const GemmBenchConfig& config)
+{
+    md_t m = config.m;
+    md_t n = config.n;
+    md_t k = config.k;
+
+    // Validate dimensions
+    if (m <= 0 || n <= 0 || k <= 0) {
+        return false;
+    }
+
+    bool row_stored = (config.storage_format == MatrixLayout::ROW_MAJOR);
+    bool col_stored = (config.storage_format == MatrixLayout::COLUMN_MAJOR);
+
+    bool nota = !config.transA;
+    bool notb = !config.transB;
+    bool ta   = config.transA;
+    bool tb   = config.transB;
+
+    // Physical matrix dimensions
+    md_t a_rows = ta ? k : m;
+    md_t a_cols = ta ? m : k;
+    md_t b_rows = tb ? n : k;
+    md_t b_cols = tb ? k : n;
+
+    // LD = -1 means not specified in YAML; compute from dimensions.
+    // Row-major: LD = cols, Col-major: LD = rows.
+    md_t lda = config.lda;
+    md_t ldb = config.ldb;
+    md_t ldc = config.ldc;
+
+    if (lda == -1) {
+        lda = row_stored ? a_cols : a_rows;
+    }
+    if (ldb == -1) {
+        ldb = row_stored ? b_cols : b_rows;
+    }
+    if (ldc == -1) {
+        ldc = row_stored ? n : m;
+    }
+
+    // Validate leading dimensions
+    // Matrix A leading dimension checks
+    if (row_stored && ((nota && (lda < k)) || (ta && (lda < m)))) {
+        return false;
+    }
+    if (col_stored && ((nota && (lda < m)) || (ta && (lda < k)))) {
+        return false;
+    }
+
+    // Matrix B leading dimension checks
+    if (row_stored && ((notb && (ldb < n)) || (tb && (ldb < k)))) {
+        return false;
+    }
+    if (col_stored && ((notb && (ldb < k)) || (tb && (ldb < n)))) {
+        return false;
+    }
+
+    // Matrix C leading dimension checks
+    if (row_stored && (ldc < n)) {
+        return false;
+    }
+    if (col_stored && (ldc < m)) {
+        return false;
+    }
+
+    return true;
+}
+
+// ============================================================================
 // OPTIMIZED BENCHMARK REGISTRATION
 // ============================================================================
 
@@ -295,7 +381,16 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs)
         numa_node = std::atoi(numa_env);
     }
 
+    std::cerr << "================================================"
+              << std::endl;
     for (const auto& config : configs) {
+
+        if (!checkValidGemmParams(config)) {
+            std::cerr << "Skipping Invalid Configuration : " << config.name
+                      << std::endl;
+            continue;
+        }
+
         // Create fixture ONCE per benchmark
         auto fixture =
             std::make_unique<OptimizedGemmBenchmarkDlp>(config, numa_node);
@@ -311,6 +406,8 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs)
             ->Unit(benchmark::kMillisecond)
             ->MinTime(3.0);
     }
+    std::cerr << "================================================"
+              << std::endl;
 }
 
 // ============================================================================
@@ -336,10 +433,10 @@ main(int argc, char** argv)
     std::string yaml_file = parser.getYamlFile();
     if (yaml_file.empty()) {
         yaml_file = BENCH_CONFIG_DIR "/gemm_bench_f32_basic_config.yaml";
-        std::cout << "Using default YAML configuration file: " << yaml_file
+        std::cerr << "Using default YAML configuration file: " << yaml_file
                   << std::endl;
     } else {
-        std::cout << "Using YAML configuration file: " << yaml_file
+        std::cerr << "Using YAML configuration file: " << yaml_file
                   << std::endl;
     }
 
@@ -361,27 +458,27 @@ main(int argc, char** argv)
         return 1;
     }
 
-    std::cout << "=== AOCL-DLP Benchmark ===" << std::endl;
-    std::cout << "Configuration file: " << yaml_file << std::endl;
-    std::cout << "Loaded " << configs.size() << " configurations" << std::endl;
+    std::cerr << "=== AOCL-DLP Benchmark ===" << std::endl;
+    std::cerr << "Configuration file: " << yaml_file << std::endl;
+    std::cerr << "Loaded " << configs.size() << " configurations" << std::endl;
 
 #ifdef DLP_ENABLE_OPENMP
-    std::cout << "OpenMP: Enabled" << std::endl;
-    std::cout << "  OMP_NUM_THREADS = " << omp_get_max_threads() << std::endl;
+    std::cerr << "OpenMP: Enabled" << std::endl;
+    std::cerr << "  OMP_NUM_THREADS = " << omp_get_max_threads() << std::endl;
     char* omp_proc_bind = std::getenv("OMP_PROC_BIND");
     if (omp_proc_bind) {
-        std::cout << "  OMP_PROC_BIND   = " << omp_proc_bind << std::endl;
+        std::cerr << "  OMP_PROC_BIND   = " << omp_proc_bind << std::endl;
     } else {
-        std::cout << "  OMP_PROC_BIND   = (not set)" << std::endl;
+        std::cerr << "  OMP_PROC_BIND   = (not set)" << std::endl;
     }
     char* omp_places = std::getenv("OMP_PLACES");
     if (omp_places) {
-        std::cout << "  OMP_PLACES      = " << omp_places << std::endl;
+        std::cerr << "  OMP_PLACES      = " << omp_places << std::endl;
     } else {
-        std::cout << "  OMP_PLACES      = (not set)" << std::endl;
+        std::cerr << "  OMP_PLACES      = (not set)" << std::endl;
     }
 #else
-    std::cout << "OpenMP: Disabled" << std::endl;
+    std::cerr << "OpenMP: Disabled" << std::endl;
 #endif
 
     // Register all benchmarks

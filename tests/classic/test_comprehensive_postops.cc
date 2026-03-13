@@ -256,11 +256,11 @@ TEST_F(ComprehensivePostOpsTest, PostOpsWithGemmIntegrationTest)
         std::cout << "=== PostOps GEMM Integration Test ===" << std::endl;
 
         // Create matrices for testing
-        Matrix A(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-        Matrix B(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-        Matrix C_dlp(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+        Matrix A(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        Matrix B(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        Matrix C_dlp(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
                      false);
-        Matrix C_ref(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+        Matrix C_ref(10, 10, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
                      false);
 
         // Initialize matrices
@@ -382,9 +382,9 @@ TEST_F(ComprehensivePostOpsTest, BackwardCompatibilityTest)
         std::cout << "  PostOps: CORRECTLY ABSENT" << std::endl;
 
         // Test normal GEMM operation
-        Matrix A(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-        Matrix B(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-        Matrix C(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+        Matrix A(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        Matrix B(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        Matrix C(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
         A.fillValue(0.5f);
         B.fillValue(0.2f);

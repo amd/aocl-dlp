@@ -188,129 +188,6 @@ namespace dlp { namespace testing { namespace utils {
             }
         }
 
-        /**
-         * @brief Compute the maximum minimum legal leading dimension
-         *
-         * When LDA/LDB/LDC are not specified in YAML, compute the minimum legal
-         * value that works for ALL possible parameter combinations.
-         *
-         * BLAS Specification for Leading Dimensions:
-         * Row-Major:    LDA >= k (no trans) or m (trans)
-         *               LDB >= n (no trans) or k (trans)
-         *               LDC >= n
-         * Column-Major: LDA >= m (no trans) or k (trans)
-         *               LDB >= k (no trans) or n (trans)
-         *               LDC >= m
-         *
-         * Simplified logic: For any matrix with mixed storage/transpose,
-         * the worst case is always max(dim1, dim2).
-         *
-         * @param dim1_iter Iterator for first dimension (m for A/C, k for B)
-         * @param dim2_iter Iterator for second dimension (k for A, n for B/C)
-         * @param storage_iter Iterator for storage format (row/column-major)
-         * @param trans_iter Iterator for transpose flag
-         * @param matrix_type Which matrix: 'A', 'B', or 'C'
-         * @return Maximum minimum legal leading dimension value
-         */
-        md_t computeMaxMinLegalLD(TypeErasedIterator& dim1_iter,
-                                  TypeErasedIterator& dim2_iter,
-                                  TypeErasedIterator& storage_iter,
-                                  TypeErasedIterator& trans_iter,
-                                  char                matrix_type)
-        {
-            // Find max value from each dimension iterator
-            // For scalars (size==1), just use that value
-            // For lists, iterate through to find max
-            md_t max_dim1 = 1;
-            md_t max_dim2 = 1;
-
-            size_t dim1_size = dim1_iter.size();
-            size_t dim2_size = dim2_iter.size();
-
-            // For dim1: if size is 1 or infinite (scalar with report_inf=true),
-            // just use current value Otherwise iterate through the list
-            if (dim1_size == 1
-                || dim1_size == std::numeric_limits<size_t>::max()) {
-                max_dim1 = std::any_cast<md_t>(dim1_iter.dereference());
-            } else {
-                auto   dim1_copy = dim1_iter;
-                size_t count     = 0;
-                do {
-                    md_t val = std::any_cast<md_t>(dim1_copy.dereference());
-                    max_dim1 = std::max(max_dim1, val);
-                    count++;
-                    if (count >= dim1_size || !dim1_copy.has_next())
-                        break;
-                    dim1_copy.increment();
-                } while (true);
-            }
-
-            // For dim2: if size is 1 or infinite (scalar), just use current
-            // value
-            if (dim2_size == 1
-                || dim2_size == std::numeric_limits<size_t>::max()) {
-                max_dim2 = std::any_cast<md_t>(dim2_iter.dereference());
-            } else {
-                auto   dim2_copy = dim2_iter;
-                size_t count     = 0;
-                do {
-                    md_t val = std::any_cast<md_t>(dim2_copy.dereference());
-                    max_dim2 = std::max(max_dim2, val);
-                    count++;
-                    if (count >= dim2_size || !dim2_copy.has_next())
-                        break;
-                    dim2_copy.increment();
-                } while (true);
-            }
-
-            // Check if we have both storage formats
-            bool   has_row_major = false;
-            bool   has_col_major = false;
-            size_t storage_size  = storage_iter.size();
-
-            // If size is 1 or infinite (scalar), just check current value
-            if (storage_size == 1
-                || storage_size == std::numeric_limits<size_t>::max()) {
-                MatrixLayout layout =
-                    std::any_cast<MatrixLayout>(storage_iter.dereference());
-                if (layout == MatrixLayout::ROW_MAJOR)
-                    has_row_major = true;
-                else
-                    has_col_major = true;
-            } else {
-                auto   storage_copy = storage_iter;
-                size_t count        = 0;
-                do {
-                    MatrixLayout layout =
-                        std::any_cast<MatrixLayout>(storage_copy.dereference());
-                    if (layout == MatrixLayout::ROW_MAJOR)
-                        has_row_major = true;
-                    if (layout == MatrixLayout::COLUMN_MAJOR)
-                        has_col_major = true;
-                    count++;
-                    if (count >= storage_size || !storage_copy.has_next())
-                        break;
-                    storage_copy.increment();
-                } while (true);
-            }
-
-            // For matrices A and B, if we have any variation in storage or
-            // transpose, worst case is always max(dim1, dim2)
-            if (matrix_type == 'A' || matrix_type == 'B') {
-                return std::max(max_dim1, max_dim2);
-            }
-
-            // Matrix C (never transposed): depends only on storage format
-            // Row-major: n, Column-major: m
-            if (has_row_major && has_col_major) {
-                return std::max(max_dim1, max_dim2); // max(m, n)
-            } else if (has_row_major) {
-                return max_dim2; // n
-            } else {
-                return max_dim1; // m
-            }
-        }
-
         template<typename T>
         TypeErasedIterator get_value(
             YAML::Node node,
@@ -578,48 +455,27 @@ namespace dlp { namespace testing { namespace utils {
                 iterators.lda =
                     get_value<md_t>(node["lda"], yield_type_for_parsing);
             } else {
-                // Compute minimum legal LDA based on storage format and
-                // transpose For row-major: LDA >= k (not transposed) or m
-                // (transposed) For column-major: LDA >= m (not transposed) or k
-                // (transposed)
-                md_t min_legal_lda = computeMaxMinLegalLD(
-                    iterators.m, iterators.k, iterators.storage_format,
-                    iterators.trans_a, 'A');
-                iterators.lda =
-                    ValueIterable<md_t>(min_legal_lda, report_inf).begin();
+                // LD not specified; use -1 sentinel so that 0 remains
+                // available as an explicit boundary-test value.
+                iterators.lda = ValueIterable<md_t>(-1, report_inf).begin();
             }
 
             if (node["ldb"]) {
                 iterators.ldb =
                     get_value<md_t>(node["ldb"], yield_type_for_parsing);
             } else {
-                // Compute minimum legal LDB based on storage format and
-                // transpose For row-major: LDB >= n (not transposed) or k
-                // (transposed) For column-major: LDB >= k (not transposed) or n
-                // (transposed)
-                md_t min_legal_ldb = computeMaxMinLegalLD(
-                    iterators.k, iterators.n, iterators.storage_format,
-                    iterators.trans_b, 'B');
-                iterators.ldb =
-                    ValueIterable<md_t>(min_legal_ldb, report_inf).begin();
+                // LD not specified; use -1 sentinel so that 0 remains
+                // available as an explicit boundary-test value.
+                iterators.ldb = ValueIterable<md_t>(-1, report_inf).begin();
             }
 
             if (node["ldc"]) {
                 iterators.ldc =
                     get_value<md_t>(node["ldc"], yield_type_for_parsing);
             } else {
-                // Compute minimum legal LDC based on storage format
-                // Matrix C is never transposed
-                // For row-major: LDC >= n
-                // For column-major: LDC >= m
-                // Create a dummy transpose iterator (always false for C)
-                TypeErasedIterator trans_c_dummy =
-                    ValueIterable<bool>(false, report_inf).begin();
-                md_t min_legal_ldc = computeMaxMinLegalLD(
-                    iterators.m, iterators.n, iterators.storage_format,
-                    trans_c_dummy, 'C');
-                iterators.ldc =
-                    ValueIterable<md_t>(min_legal_ldc, report_inf).begin();
+                // LD not specified; use -1 sentinel so that 0 remains
+                // available as an explicit boundary-test value.
+                iterators.ldc = ValueIterable<md_t>(-1, report_inf).begin();
             }
 
             // New MatrixTag-based parsing

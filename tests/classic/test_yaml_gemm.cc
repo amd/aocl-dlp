@@ -1085,11 +1085,47 @@ TEST(YamlParserTest, ElementwiseParametersComprehensiveTest)
 }
 
 /**
+ * @brief Helper to resolve LD sentinel value (-1 = not specified in YAML)
+ *
+ * When LD is negative or sentinel (-1), compute the minimum legal value from
+ * physical matrix dimensions, matching the logic in Matrix constructor
+ * and validation functions.
+ */
+static void
+resolveLeadingDimensions(md_t  m,
+                         md_t  n,
+                         md_t  k,
+                         bool  transA,
+                         bool  transB,
+                         bool  is_row_major,
+                         md_t& lda,
+                         md_t& ldb,
+                         md_t& ldc)
+{
+    md_t a_rows = transA ? k : m;
+    md_t a_cols = transA ? m : k;
+    md_t b_rows = transB ? n : k;
+    md_t b_cols = transB ? k : n;
+
+    if (lda == -1) {
+        lda = is_row_major ? a_cols : a_rows;
+    }
+    if (ldb == -1) {
+        ldb = is_row_major ? b_cols : b_rows;
+    }
+    if (ldc == -1) {
+        ldc = is_row_major ? n : m;
+    }
+}
+
+/**
  * @brief Test LDA/LDB/LDC default calculation correctness
  *
- * This test validates that when LDA/LDB/LDC are not specified in YAML,
- * they default to the correct minimum legal values based on storage format,
- * transpose flags, and matrix dimensions according to BLAS specification.
+ * When LDA/LDB/LDC are not specified in YAML, the parser emits -1 as a
+ * sentinel. Downstream consumers (Matrix constructor, validation functions)
+ * resolve negative values to the correct minimum legal value. This test
+ * verifies that the sentinel is emitted and that resolving it produces
+ * valid LDs.
  */
 TEST(YamlParserTest, LeadingDimensionDefaultsTest)
 {
@@ -1106,7 +1142,7 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
             << "Expected 7 test cases in LD defaults YAML file";
 
         // Test Case 1: Row-major without transpose
-        // Expected: LDA >= k=100, LDB >= n=100, LDC >= n=100
+        // Expected: parser returns ld=-1; resolved LDA >= k, LDB >= n, LDC >= n
         {
             const MicroTest& microTest = parser.getMicroTest();
             std::cout
@@ -1114,19 +1150,28 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                    "k=100)"
                 << std::endl;
 
-            md_t m   = microTest.getM();
-            md_t n   = microTest.getN();
-            md_t k   = microTest.getK();
-            md_t lda = microTest.getLDA();
-            md_t ldb = microTest.getLDB();
-            md_t ldc = microTest.getLDC();
+            md_t m      = microTest.getM();
+            md_t n      = microTest.getN();
+            md_t k      = microTest.getK();
+            md_t lda    = microTest.getLDA();
+            md_t ldb    = microTest.getLDB();
+            md_t ldc    = microTest.getLDC();
+            bool transA = microTest.getTransA();
+            bool transB = microTest.getTransB();
 
-            std::cout << "  LDA=" << lda << " (should be >= k=" << k << ")"
-                      << std::endl;
-            std::cout << "  LDB=" << ldb << " (should be >= n=" << n << ")"
-                      << std::endl;
-            std::cout << "  LDC=" << ldc << " (should be >= n=" << n << ")"
-                      << std::endl;
+            EXPECT_EQ(lda, -1) << "Unspecified LDA should be -1 sentinel";
+            EXPECT_EQ(ldb, -1) << "Unspecified LDB should be -1 sentinel";
+            EXPECT_EQ(ldc, -1) << "Unspecified LDC should be -1 sentinel";
+
+            resolveLeadingDimensions(m, n, k, transA, transB, true, lda, ldb,
+                                     ldc);
+
+            std::cout << "  Resolved LDA=" << lda << " (should be >= k=" << k
+                      << ")" << std::endl;
+            std::cout << "  Resolved LDB=" << ldb << " (should be >= n=" << n
+                      << ")" << std::endl;
+            std::cout << "  Resolved LDC=" << ldc << " (should be >= n=" << n
+                      << ")" << std::endl;
 
             EXPECT_GE(lda, k)
                 << "Row-major, not transposed A: LDA should be >= k";
@@ -1136,7 +1181,7 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
         }
 
         // Test Case 2: Row-major with transposed A
-        // Expected: LDA >= m=100, LDB >= n=100, LDC >= n=100
+        // Expected: resolved LDA >= m, LDB >= n, LDC >= n
         parser.next();
         {
             const MicroTest& microTest = parser.getMicroTest();
@@ -1145,19 +1190,20 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                    "k=1000)"
                 << std::endl;
 
-            md_t m   = microTest.getM();
-            md_t n   = microTest.getN();
-            md_t k   = microTest.getK();
-            md_t lda = microTest.getLDA();
-            md_t ldb = microTest.getLDB();
-            md_t ldc = microTest.getLDC();
+            md_t m      = microTest.getM();
+            md_t n      = microTest.getN();
+            md_t k      = microTest.getK();
+            md_t lda    = microTest.getLDA();
+            md_t ldb    = microTest.getLDB();
+            md_t ldc    = microTest.getLDC();
+            bool transA = microTest.getTransA();
+            bool transB = microTest.getTransB();
 
-            std::cout << "  LDA=" << lda << " (should be >= m=" << m << ")"
-                      << std::endl;
-            std::cout << "  LDB=" << ldb << " (should be >= n=" << n << ")"
-                      << std::endl;
-            std::cout << "  LDC=" << ldc << " (should be >= n=" << n << ")"
-                      << std::endl;
+            resolveLeadingDimensions(m, n, k, transA, transB, true, lda, ldb,
+                                     ldc);
+
+            std::cout << "  Resolved LDA=" << lda << " (should be >= m=" << m
+                      << ")" << std::endl;
 
             EXPECT_GE(lda, m) << "Row-major, transposed A: LDA should be >= m";
             EXPECT_GE(ldb, n)
@@ -1166,7 +1212,7 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
         }
 
         // Test Case 3: Row-major with transposed B
-        // Expected: LDA >= k=100, LDB >= k=100, LDC >= n=1000
+        // Expected: resolved LDA >= k, LDB >= k, LDC >= n
         parser.next();
         {
             const MicroTest& microTest = parser.getMicroTest();
@@ -1175,19 +1221,17 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                    "k=100)"
                 << std::endl;
 
-            md_t m   = microTest.getM();
-            md_t n   = microTest.getN();
-            md_t k   = microTest.getK();
-            md_t lda = microTest.getLDA();
-            md_t ldb = microTest.getLDB();
-            md_t ldc = microTest.getLDC();
+            md_t m      = microTest.getM();
+            md_t n      = microTest.getN();
+            md_t k      = microTest.getK();
+            md_t lda    = microTest.getLDA();
+            md_t ldb    = microTest.getLDB();
+            md_t ldc    = microTest.getLDC();
+            bool transA = microTest.getTransA();
+            bool transB = microTest.getTransB();
 
-            std::cout << "  LDA=" << lda << " (should be >= k=" << k << ")"
-                      << std::endl;
-            std::cout << "  LDB=" << ldb << " (should be >= k=" << k << ")"
-                      << std::endl;
-            std::cout << "  LDC=" << ldc << " (should be >= n=" << n << ")"
-                      << std::endl;
+            resolveLeadingDimensions(m, n, k, transA, transB, true, lda, ldb,
+                                     ldc);
 
             EXPECT_GE(lda, k)
                 << "Row-major, not transposed A: LDA should be >= k";
@@ -1196,7 +1240,7 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
         }
 
         // Test Case 4: Row-major with both transposed
-        // Expected: LDA >= m=500, LDB >= k=300, LDC >= n=200
+        // Expected: resolved LDA >= m, LDB >= k, LDC >= n
         parser.next();
         {
             const MicroTest& microTest = parser.getMicroTest();
@@ -1204,19 +1248,17 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                          "n=200, k=300)"
                       << std::endl;
 
-            md_t m   = microTest.getM();
-            md_t n   = microTest.getN();
-            md_t k   = microTest.getK();
-            md_t lda = microTest.getLDA();
-            md_t ldb = microTest.getLDB();
-            md_t ldc = microTest.getLDC();
+            md_t m      = microTest.getM();
+            md_t n      = microTest.getN();
+            md_t k      = microTest.getK();
+            md_t lda    = microTest.getLDA();
+            md_t ldb    = microTest.getLDB();
+            md_t ldc    = microTest.getLDC();
+            bool transA = microTest.getTransA();
+            bool transB = microTest.getTransB();
 
-            std::cout << "  LDA=" << lda << " (should be >= m=" << m << ")"
-                      << std::endl;
-            std::cout << "  LDB=" << ldb << " (should be >= k=" << k << ")"
-                      << std::endl;
-            std::cout << "  LDC=" << ldc << " (should be >= n=" << n << ")"
-                      << std::endl;
+            resolveLeadingDimensions(m, n, k, transA, transB, true, lda, ldb,
+                                     ldc);
 
             EXPECT_GE(lda, m) << "Row-major, transposed A: LDA should be >= m";
             EXPECT_GE(ldb, k) << "Row-major, transposed B: LDB should be >= k";
@@ -1224,7 +1266,7 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
         }
 
         // Test Case 5: Column-major without transpose
-        // Expected: LDA >= m=1000, LDB >= k=100, LDC >= m=1000
+        // Expected: resolved LDA >= m, LDB >= k, LDC >= m
         parser.next();
         {
             const MicroTest& microTest = parser.getMicroTest();
@@ -1232,19 +1274,17 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                          "n=100, k=100)"
                       << std::endl;
 
-            md_t m   = microTest.getM();
-            md_t n   = microTest.getN();
-            md_t k   = microTest.getK();
-            md_t lda = microTest.getLDA();
-            md_t ldb = microTest.getLDB();
-            md_t ldc = microTest.getLDC();
+            md_t m      = microTest.getM();
+            md_t n      = microTest.getN();
+            md_t k      = microTest.getK();
+            md_t lda    = microTest.getLDA();
+            md_t ldb    = microTest.getLDB();
+            md_t ldc    = microTest.getLDC();
+            bool transA = microTest.getTransA();
+            bool transB = microTest.getTransB();
 
-            std::cout << "  LDA=" << lda << " (should be >= m=" << m << ")"
-                      << std::endl;
-            std::cout << "  LDB=" << ldb << " (should be >= k=" << k << ")"
-                      << std::endl;
-            std::cout << "  LDC=" << ldc << " (should be >= m=" << m << ")"
-                      << std::endl;
+            resolveLeadingDimensions(m, n, k, transA, transB, false, lda, ldb,
+                                     ldc);
 
             EXPECT_GE(lda, m)
                 << "Column-major, not transposed A: LDA should be >= m";
@@ -1254,7 +1294,7 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
         }
 
         // Test Case 6: Column-major with transposed A
-        // Expected: LDA >= k=1000, LDB >= k=1000, LDC >= m=100
+        // Expected: resolved LDA >= k, LDB >= k, LDC >= m
         parser.next();
         {
             const MicroTest& microTest = parser.getMicroTest();
@@ -1262,19 +1302,17 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                          "n=100, k=1000)"
                       << std::endl;
 
-            md_t m   = microTest.getM();
-            md_t n   = microTest.getN();
-            md_t k   = microTest.getK();
-            md_t lda = microTest.getLDA();
-            md_t ldb = microTest.getLDB();
-            md_t ldc = microTest.getLDC();
+            md_t m      = microTest.getM();
+            md_t n      = microTest.getN();
+            md_t k      = microTest.getK();
+            md_t lda    = microTest.getLDA();
+            md_t ldb    = microTest.getLDB();
+            md_t ldc    = microTest.getLDC();
+            bool transA = microTest.getTransA();
+            bool transB = microTest.getTransB();
 
-            std::cout << "  LDA=" << lda << " (should be >= k=" << k << ")"
-                      << std::endl;
-            std::cout << "  LDB=" << ldb << " (should be >= k=" << k << ")"
-                      << std::endl;
-            std::cout << "  LDC=" << ldc << " (should be >= m=" << m << ")"
-                      << std::endl;
+            resolveLeadingDimensions(m, n, k, transA, transB, false, lda, ldb,
+                                     ldc);
 
             EXPECT_GE(lda, k)
                 << "Column-major, transposed A: LDA should be >= k";
@@ -1284,8 +1322,8 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
         }
 
         // Test Case 7: Cartesian product with mixed dimensions
-        // This verifies that the maximum minimum LD is used across all
-        // combinations
+        // With deferred LD computation, each combination gets ld=-1 from the
+        // parser. Resolve per-combination and verify the result is valid.
         parser.next();
         {
             const MicroTest& microTestRef = parser.getMicroTest();
@@ -1295,22 +1333,6 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                 << "\nTest Case 7: Cartesian product with mixed dimensions"
                 << std::endl;
 
-            // The parser should have computed the max of all minimum required
-            // LDs across all combinations For m=[10,100], n=[20,200],
-            // k=[30,300], storage=[row,col], transA=[F,T], transB=[F,T]
-            //
-            // We need to ensure that the chosen LDA/LDB/LDC work for ALL
-            // combinations The fix should have computed this correctly
-
-            md_t lda = microTest.getLDA();
-            md_t ldb = microTest.getLDB();
-            md_t ldc = microTest.getLDC();
-
-            std::cout << "  Computed LDA=" << lda << std::endl;
-            std::cout << "  Computed LDB=" << ldb << std::endl;
-            std::cout << "  Computed LDC=" << ldc << std::endl;
-
-            // Iterate through all combinations and verify LD values are valid
             size_t combinationCount = 0;
             size_t validCount       = 0;
 
@@ -1318,14 +1340,26 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                 md_t         m       = microTest.getM();
                 md_t         n       = microTest.getN();
                 md_t         k       = microTest.getK();
+                md_t         lda     = microTest.getLDA();
+                md_t         ldb     = microTest.getLDB();
+                md_t         ldc     = microTest.getLDC();
                 bool         transA  = microTest.getTransA();
                 bool         transB  = microTest.getTransB();
                 MatrixLayout storage = microTest.getStorageFormat();
 
-                // Compute minimum legal LD for this specific combination
                 bool is_row_major = (storage == MatrixLayout::ROW_MAJOR);
-                md_t min_lda, min_ldb, min_ldc;
 
+                EXPECT_EQ(lda, -1) << "Combination " << combinationCount
+                                   << ": unspecified LDA should be -1 sentinel";
+                EXPECT_EQ(ldb, -1) << "Combination " << combinationCount
+                                   << ": unspecified LDB should be -1 sentinel";
+                EXPECT_EQ(ldc, -1) << "Combination " << combinationCount
+                                   << ": unspecified LDC should be -1 sentinel";
+
+                resolveLeadingDimensions(m, n, k, transA, transB, is_row_major,
+                                         lda, ldb, ldc);
+
+                md_t min_lda, min_ldb, min_ldc;
                 if (is_row_major) {
                     min_lda = transA ? m : k;
                     min_ldb = transB ? k : n;
@@ -1336,7 +1370,6 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                     min_ldc = m;
                 }
 
-                // Verify the computed defaults are valid for this combination
                 bool valid =
                     (lda >= min_lda) && (ldb >= min_ldb) && (ldc >= min_ldc);
                 if (valid) {
@@ -1372,10 +1405,12 @@ TEST(YamlParserTest, LeadingDimensionDefaultsTest)
                 << "All combinations should have valid leading dimensions";
         }
 
-        std::cout << "\n✓ All Leading Dimension Default Tests PASSED!"
+        std::cout << "\n=== All Leading Dimension Default Tests PASSED ==="
                   << std::endl;
-        std::cout << "The fix correctly computes minimum legal LD values based "
-                     "on:"
+        std::cout << "The parser correctly emits ld=-1 sentinel when LDs are "
+                     "not specified."
+                  << std::endl;
+        std::cout << "Downstream resolution produces valid LDs based on:"
                   << std::endl;
         std::cout << "  - Storage format (row-major vs column-major)"
                   << std::endl;
@@ -2525,10 +2560,10 @@ TEST(YamlParserTest, LeadingDimensionsWithBatchGemm)
             bool         transB  = microTest.getTransB();
             MatrixLayout storage = microTest.getStorageFormat();
 
-            // Verify leading dimensions are valid
-            // When lda/ldb/ldc are not specified in YAML, they are
-            // auto-calculated to the minimum legal values by the YAML parser
+            // LD = -1 means not specified in YAML; resolve before checking
             bool is_row_major = (storage == MatrixLayout::ROW_MAJOR);
+            resolveLeadingDimensions(m, n, k, transA, transB, is_row_major, lda,
+                                     ldb, ldc);
 
             if (is_row_major) {
                 md_t min_lda = transA ? m : k;

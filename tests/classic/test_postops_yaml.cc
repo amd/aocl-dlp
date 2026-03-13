@@ -219,10 +219,10 @@ TEST_F(PostOpsYamlTest, PostOpsWithGemmTest)
         const MicroTest& microTest = parser.getMicroTest();
 
         // Create matrices for testing
-        Matrix A(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-        Matrix B(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-        Matrix C_dlp(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-        Matrix C_ref(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+        Matrix A(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        Matrix B(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        Matrix C_dlp(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        Matrix C_ref(4, 4, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
         // Initialize matrices with simple values
         A.fillValue(0.5f);

@@ -145,9 +145,9 @@ makeF32Group(md_t         m,
         md_t b_rows = transB ? n : k;
         md_t b_cols = transB ? k : n;
 
-        Matrix A(a_rows, a_cols, MatrixType::f32, layoutA, 0, transA);
-        Matrix B(b_rows, b_cols, MatrixType::f32, layoutB, 0, transB);
-        Matrix C(m, n, MatrixType::f32, layoutC, 0, false);
+        Matrix A(a_rows, a_cols, MatrixType::f32, layoutA, -1, transA);
+        Matrix B(b_rows, b_cols, MatrixType::f32, layoutB, -1, transB);
+        Matrix C(m, n, MatrixType::f32, layoutC, -1, false);
 
         A.fillRandom(static_cast<uint32_t>(42 + seed_offset + i));
         B.fillRandom(static_cast<uint32_t>(142 + seed_offset + i));
@@ -586,6 +586,24 @@ check_valid_batch_params(const BatchGemmTestConfig& config)
                 default:
                     break;
             }
+        }
+
+        // Physical matrix dimensions
+        md_t a_rows = transA ? k : m;
+        md_t a_cols = transA ? m : k;
+        md_t b_rows = transB ? n : k;
+        md_t b_cols = transB ? k : n;
+
+        // LD < 0 means not specified in YAML; compute from dimensions.
+        // Row-major: LD = cols, Col-major: LD = rows.
+        if (lda == -1) {
+            lda = row_stored ? a_cols : a_rows;
+        }
+        if (ldb == -1) {
+            ldb = row_stored ? b_cols : b_rows;
+        }
+        if (ldc == -1) {
+            ldc = row_stored ? n : m;
         }
 
         // Leading dimension checks for matrix A

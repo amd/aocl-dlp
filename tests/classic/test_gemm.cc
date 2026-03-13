@@ -243,15 +243,19 @@ check_valid_params(const GemmTestConfig& config)
     bool ta   = config.transA;  // transposed A
     bool tb   = config.transB;  // transposed B
 
+    md_t m = config.m;
+    md_t n = config.n;
+    md_t k = config.k;
+
     // Check basic dimensions - must be positive (same as macro: m <= 0, n <= 0,
     // k <= 0)
-    if (config.m <= 0) {
+    if (m <= 0) {
         return false; // info = 4 in macro
     }
-    if (config.n <= 0) {
+    if (n <= 0) {
         return false; // info = 5 in macro
     }
-    if (config.k <= 0) {
+    if (k <= 0) {
         return false; // info = 6 in macro
     }
 
@@ -278,18 +282,37 @@ check_valid_params(const GemmTestConfig& config)
         }
     }
 
+    // Physical matrix dimensions
+    md_t a_rows = ta ? k : m;
+    md_t a_cols = ta ? m : k;
+    md_t b_rows = tb ? n : k;
+    md_t b_cols = tb ? k : n;
+    // LD = -1 means not specified in YAML; compute from dimensions.
+    // Row-major: LD = cols, Col-major: LD = rows.
+    md_t lda = config.lda;
+    md_t ldb = config.ldb;
+    md_t ldc = config.ldc;
+
+    if (lda == -1) {
+        lda = row_stored ? a_cols : a_rows;
+    }
+    if (ldb == -1) {
+        ldb = row_stored ? b_cols : b_rows;
+    }
+    if (ldc == -1) {
+        ldc = row_stored ? n : m;
+    }
+
+    // Validate leading dimensions
+
     // Leading dimension checks for matrix A (info = 9 in macro)
     // Skip leading dimension checks for reordered matrices as they have custom
     // layouts
     if (!config.reorderA) {
-        if (row_stored
-            && ((nota && (config.lda < config.k))
-                || (ta && (config.lda < config.m)))) {
+        if (row_stored && ((nota && (lda < k)) || (ta && (lda < m)))) {
             return false;
         }
-        if (col_stored
-            && ((nota && (config.lda < config.m))
-                || (ta && (config.lda < config.k)))) {
+        if (col_stored && ((nota && (lda < m)) || (ta && (lda < k)))) {
             return false;
         }
     } else {
@@ -300,22 +323,18 @@ check_valid_params(const GemmTestConfig& config)
     // Skip leading dimension checks for reordered matrices as they have custom
     // layouts
     if (!config.reorderB) {
-        if (row_stored
-            && ((notb && (config.ldb < config.n))
-                || (tb && (config.ldb < config.k)))) {
+        if (row_stored && ((notb && (ldb < n)) || (tb && (ldb < k)))) {
             return false;
         }
-        if (col_stored
-            && ((notb && (config.ldb < config.k))
-                || (tb && (config.ldb < config.n)))) {
+        if (col_stored && ((notb && (ldb < k)) || (tb && (ldb < n)))) {
             return false;
         }
     } else {
         if (row_stored) {
-            if (notb && (config.ldb < config.n)) {
+            if (notb && (ldb < n)) {
                 return false;
             }
-            if (tb && (config.ldb < config.k)) {
+            if (tb && (ldb < k)) {
                 return false;
             }
         } else {
@@ -325,10 +344,10 @@ check_valid_params(const GemmTestConfig& config)
 
     // Leading dimension checks for matrix C (info = 16 in macro)
     // Matrix C is never reordered, so always check
-    if (row_stored && (config.ldc < config.n)) {
+    if (row_stored && (ldc < n)) {
         return false;
     }
-    if (col_stored && (config.ldc < config.m)) {
+    if (col_stored && (ldc < m)) {
         return false;
     }
 
@@ -1212,10 +1231,10 @@ TEST(GEMMTest, Basic)
     md_t k = 4;
 
     // Create matrices
-    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices with random values
     A.fillRandom(42); // Using fixed seed for reproducibility
@@ -1317,10 +1336,10 @@ TEST(GEMMTest, PostOpsIntegration)
     md_t k = 4;
 
     // Create matrices
-    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices with simple values for easier verification
     A.fillValue(0.5f);
@@ -1382,7 +1401,7 @@ TEST(GEMMTest, PostOpsIntegration)
     EXPECT_EQ(C_ref, C);
 
     // Test with nullptr PostOps (should behave like original gemm)
-    Matrix C_no_postops(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+    Matrix C_no_postops(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
                         false);
     C_no_postops.fillValue(0.0f);
 
@@ -1434,9 +1453,9 @@ TEST(GEMMTest, MultiplePostOpsOfSameType)
     md_t k = 4;
 
     // Create matrices
-    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices with simple values
     A.fillValue(0.5f);
@@ -1501,9 +1520,9 @@ TEST(GEMMTest, DebugMultipleOps)
     md_t k = 2;
 
     // Create matrices
-    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices with simple values
     A.fillValue(1.0f);
@@ -1547,9 +1566,9 @@ TEST(GEMMTest, IsolateSegFault)
     md_t k = 2;
 
     // Create matrices
-    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices
     A.fillValue(1.0f);
@@ -1636,14 +1655,14 @@ TEST(GEMMTest, PostOpsComprehensiveComparison)
     md_t k = 4;
 
     // Create matrices for DLP
-    Matrix A_dlp(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B_dlp(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C_dlp(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A_dlp(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B_dlp(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_dlp(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Create matrices for REF (identical to DLP)
-    Matrix A_ref(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B_ref(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A_ref(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B_ref(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices with consistent values
     A_dlp.fillValue(0.5f);
@@ -1720,9 +1739,9 @@ TEST(GEMMTest, PostOpsUALTypeValidation)
     md_t n = 2;
     md_t k = 2;
 
-    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     A.fillValue(1.0f);
     B.fillValue(1.0f);
@@ -1755,7 +1774,7 @@ TEST(GEMMTest, PostOpsUALTypeValidation)
         << "REF UAL with REF PostOps should succeed";
 
     // Test: DLP UAL with REF PostOps (should fail due to type mismatch)
-    Matrix C_mismatch1(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+    Matrix C_mismatch1(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
                        false);
     C_mismatch1.fillValue(0.0f);
     UALError dlp_with_ref_status =
@@ -1764,7 +1783,7 @@ TEST(GEMMTest, PostOpsUALTypeValidation)
         << "DLP UAL with REF PostOps should fail due to type mismatch";
 
     // Test: REF UAL with DLP PostOps (should fail due to type mismatch)
-    Matrix C_mismatch2(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, 0,
+    Matrix C_mismatch2(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
                        false);
     C_mismatch2.fillValue(0.0f);
     UALError ref_with_dlp_status =
@@ -1817,10 +1836,10 @@ TEST_F(EmptyPostOpsTest, S8_ColumnMajor_EmptyPostOps_ShouldSucceed)
 {
     // Create matrices with S8 type and column-major layout
     const md_t m = 4, n = 4, k = 4;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix C_dlp(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix C_ref(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix C_dlp(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix C_ref(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, -1, false);
 
     // Initialize matrices with simple values
     A.fillValue(2);
@@ -1874,10 +1893,10 @@ TEST_F(EmptyPostOpsTest, S8_ColumnMajor_NoPostOps_ShouldSucceed)
 {
     // Create matrices with S8 type and column-major layout
     const md_t m = 4, n = 4, k = 4;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix C_dlp(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix C_ref(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix C_dlp(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix C_ref(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, -1, false);
 
     // Initialize matrices
     A.fillValue(2);
@@ -1919,9 +1938,9 @@ TEST_F(EmptyPostOpsTest, S8_ColumnMajor_ActualPostOps_ShouldFail)
 {
     // Create matrices with S8 type and column-major layout
     const md_t m = 4, n = 4, k = 4;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix C_dlp(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix C_dlp(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, -1, false);
 
     // Initialize matrices
     A.fillValue(2);
@@ -1955,10 +1974,11 @@ TEST_F(EmptyPostOpsTest, EmptyPostOps_EquivalentTo_NullptrPostOps)
 {
     // Create matrices
     const md_t m = 8, n = 8, k = 8;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix C_empty(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, 0, false);
-    Matrix C_null(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::COLUMN_MAJOR, -1, false);
+    Matrix     C_empty(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, -1,
+                       false);
+    Matrix C_null(m, n, MatrixType::s32, MatrixLayout::COLUMN_MAJOR, -1, false);
 
     // Initialize with deterministic values
     A.fillRandom(42);
@@ -2003,10 +2023,10 @@ TEST_F(EmptyPostOpsTest, S8_RowMajor_EmptyPostOps_ShouldSucceed)
 {
     // Create matrices with S8 type and row-major layout
     const md_t m = 4, n = 4, k = 4;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     C_dlp(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     C_ref(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     C_dlp(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     C_ref(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices with simple values
     A.fillValue(2);
@@ -2061,10 +2081,10 @@ TEST_F(EmptyPostOpsTest, S8_RowMajor_NoPostOps_ShouldSucceed)
 {
     // Create matrices with S8 type and row-major layout
     const md_t m = 4, n = 4, k = 4;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     C_dlp(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     C_ref(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     C_dlp(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     C_ref(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices
     A.fillValue(2);
@@ -2107,10 +2127,10 @@ TEST_F(EmptyPostOpsTest, S8_RowMajor_ActualPostOps_ShouldSucceed)
 {
     // Create matrices with S8 type and row-major layout
     const md_t m = 4, n = 4, k = 4;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     C_dlp(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     C_ref(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     C_dlp(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     C_ref(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize matrices
     A.fillValue(2);
@@ -2165,10 +2185,10 @@ TEST_F(EmptyPostOpsTest, RowMajor_EmptyPostOps_EquivalentTo_NullptrPostOps)
 {
     // Create matrices with row-major layout
     const md_t m = 8, n = 8, k = 8;
-    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C_empty(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
-    Matrix C_null(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, 0, false);
+    Matrix     A(m, k, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix     B(k, n, MatrixType::s8, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_empty(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_null(m, n, MatrixType::s32, MatrixLayout::ROW_MAJOR, -1, false);
 
     // Initialize with deterministic values
     A.fillRandom(42);
