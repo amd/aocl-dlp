@@ -293,6 +293,17 @@ _lpgemm_cntx_init_func_map()
 #endif
     }
 
+    // FP16 is an independent ISA feature; gate its function pointers
+    // with the FP16-specific check rather than the BF16 check.
+    if (dlp_cpuid_is_avx512fp16_supported() == TRUE) {
+#ifdef DLP_KERNELS_ZEN4
+        LPGEMM_KERN_FUNC_MAP_AVX512_FP16
+        LPGEMM_PACKA_FUNC_MAP_AVX512_FP16
+        LPGEMM_PACKB_FUNC_MAP_AVX512_FP16
+        LPGEMM_UNPACKB_FUNC_MAP_AVX512_FP16
+#endif
+    }
+
     // If built with a config not supporting zen3/zen4/amdzen, error out
     // since reference kernels are not available.
     if (global_cntx_t_list[F32F32F32OF32].kern_fun_ptr == NULL) {
