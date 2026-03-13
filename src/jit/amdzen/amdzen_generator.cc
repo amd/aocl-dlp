@@ -1988,10 +1988,13 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
                 kernelCodeBlocks[kernel_idx]);
-        kernel(params);
 
-        // Update post_op_c_j by the total n processed in this kernel call
-        (params->kernelOpsAttr).post_op_c_j += params->n;
+        md_t og_post_op_c_j = (params->kernelOpsAttr).post_op_c_j;
+        kernel(params);
+        // post_op_c_j is updated inside the JIT kernel's N-loop. Reset it
+        // to the saved value and increment by the total n processed.
+        og_post_op_c_j += params->n;
+        (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
 
         return dlp::kernels::kernelError::success;
 
@@ -2527,11 +2530,13 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
                 kernelCodeBlocks[ker_idx]);
-        kernel(params);
 
-        // Update post_op_c_j by the total n processed in this kernel call
-        // (similar to GEMM pattern where post_op_c_j += elementsToProcess)
-        (params->kernelOpsAttr).post_op_c_j += params->n;
+        md_t og_post_op_c_j = (params->kernelOpsAttr).post_op_c_j;
+        kernel(params);
+        // post_op_c_j is updated inside the JIT kernel's N-loop. Reset it
+        // to the saved value and increment by the total n processed.
+        og_post_op_c_j += params->n;
+        (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
 
     } else if (NR == 1) { // S8 GEMV N=1 kernel execution
         auto params = static_cast<dlp::kernels::gemvN1Params*>(_params);

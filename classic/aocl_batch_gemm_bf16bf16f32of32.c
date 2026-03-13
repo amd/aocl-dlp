@@ -570,7 +570,7 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
             g_sz, &m_local, &n_local, &k_local, (const bfloat16**)a_local,
             &rs_a, &cs_a, &mtag_a, (const bfloat16**)b_local, &rs_b, &cs_b,
             &mtag_b, (float**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i],
-            beta[gc_i], &rntm_g, lcntx_g, &ops, DLP_BF16);
+            beta[gc_i], &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #endif
         mat_idx += g_sz;
     }

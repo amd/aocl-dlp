@@ -1329,6 +1329,20 @@ jitU8S8VNNI_GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
             lea(regTmp2, ptr[regTmp2 + MR]);
         }
 
+        // Update post_op_c_i for the next m-iteration.
+        // This ensures each iteration uses the correct offset for post-ops
+        if (c_downscale != DLP_S32 || !params.kernelOps.empty()) {
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            add(regTmp1, MR);
+            mov(ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                regTmp1);
+        }
+
         dec(regMIter);
         jnz(".MLOOP_START", T_NEAR);
     }
@@ -2248,9 +2262,6 @@ jitU8S8VNNI_GEMVM1<KType>::updateYBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
             + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
 
-    add(regTmp1, regIncN);
-
-    // Scale by data type size
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
@@ -2835,6 +2846,19 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             mov(regTmp2, NR);
             add(regIncN, regTmp2);
             lea(regYptr, ptr[regYptr + regTmp2 * sizeof(int32_t)]);
+
+            // Update post_op_c_j for the next n-iteration.
+            if (c_downscale != DLP_S32 || !params.kernelOps.empty()) {
+                mov(regTmp2,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                add(regTmp2, NR);
+                mov(ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                    regTmp2);
+            }
 
             dec(regNIter);
             jnz(label_n_loop_start, T_NEAR);

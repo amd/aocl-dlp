@@ -1459,6 +1459,19 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             lea(regTmp2, ptr[regTmp2 + MR]);
         }
 
+        // Update post_op_c_i for the next m-iteration.
+        if (c_downscale != DLP_S32 || !params.kernelOps.empty()) {
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            add(regTmp1, MR);
+            mov(ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                regTmp1);
+        }
+
         dec(regMIter);
         jnz(".MLOOP_BEGIN", T_NEAR);
     }
@@ -2062,7 +2075,6 @@ jitGEMVS8M1<KType>::updateYBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
             + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
 
-    add(regTmp1, regIncN);
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
@@ -2779,6 +2791,19 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
                 + offsetof(lpgemm_post_op_attr, b_sum_offset)],
             regTmp2);
+
+        // Update post_op_c_j for the next n-iteration
+        if (c_downscale != DLP_S32 || !params.kernelOps.empty()) {
+            mov(regTmp2,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            add(regTmp2, NR);
+            mov(ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                regTmp2);
+        }
 
         // Update pointers
         mov(regTmp2, NR);

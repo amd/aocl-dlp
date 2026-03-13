@@ -200,19 +200,18 @@ MicroTest::createOperationParam(
         // Create bias matrix based on dimension
         Matrix bias;
         if (bias_dim_str == "n") {
-            // Create bias vector with size N
-            std::vector<float> bias_data(getN(), 1.0f);
-            bias = Matrix::fromVector(bias_data, bias_type);
+            bias = Matrix(1, getN(), bias_type);
+            bias.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE, "uniform");
         } else {
             // Single bias value
-            bias = Matrix::fromValue(1.0f, bias_type);
+            bias = Matrix::fromValue(2.5f, bias_type);
         }
 
         // Start building bias operation
         BiasBuilder builder;
         builder.setBias(bias);
 
-        // Optional scale factor for dequantization
+        // Optional scale factor for BIAS - dequantization
         // Following same pattern as Scale post-op
         Matrix      scale_matrix;
         bool        has_sf   = false;
@@ -252,11 +251,16 @@ MicroTest::createOperationParam(
         }
 
         if (has_sf) {
+            bool has_explicit_sf =
+                (sf_it != config.params.end() && !sf_it->second.empty());
             if (sf_len == "n") {
-                // Per-channel: create vector of length N with scale value
-                std::vector<float> sf_data(getN(),
-                                           static_cast<float>(sf_value));
-                scale_matrix = Matrix::fromVector(sf_data, sf_type);
+                scale_matrix = Matrix(1, getN(), sf_type);
+                if (has_explicit_sf) {
+                    scale_matrix.fillValue(static_cast<double>(sf_value));
+                } else {
+                    scale_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
+                                            "uniform");
+                }
             } else {
                 // Scalar (per-tensor) - default when sf_len not specified or
                 // "1"
@@ -266,7 +270,7 @@ MicroTest::createOperationParam(
             builder.setScaleFactor(scale_matrix);
         }
 
-        // Optional zero point for dequantization
+        // Optional zero point for BIAS-dequantization
         // Following same pattern as Scale post-op
         Matrix      zero_point_matrix;
         bool        has_zp   = false;
@@ -306,11 +310,16 @@ MicroTest::createOperationParam(
         }
 
         if (has_zp) {
+            bool has_explicit_zp =
+                (zp_it != config.params.end() && !zp_it->second.empty());
             if (zp_len == "n") {
-                // Per-channel: create vector of length N with zero point value
-                std::vector<float> zp_data(getN(),
-                                           static_cast<float>(zp_value));
-                zero_point_matrix = Matrix::fromVector(zp_data, zp_type);
+                zero_point_matrix = Matrix(1, getN(), zp_type);
+                if (has_explicit_zp) {
+                    zero_point_matrix.fillValue(static_cast<double>(zp_value));
+                } else {
+                    zero_point_matrix.fillRandom(RANDOM_SEED, MIN_VALUE,
+                                                 MAX_VALUE, "uniform");
+                }
             } else {
                 // Scalar (per-tensor) - default when zp_len not specified or
                 // "1"
@@ -515,14 +524,23 @@ MicroTest::createOperationParam(
             sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
         }
 
-        if (sf_len == "n") {
-            // Per-channel: create vector of length N with scale value
-            std::vector<float> sf_data(getN(), static_cast<float>(scale_value));
-            scale_matrix = Matrix::fromVector(sf_data, scale_type);
-        } else {
-            // Scalar (per-tensor) - default when sf_len not specified or "1"
-            scale_matrix =
-                Matrix::fromValue(static_cast<float>(scale_value), scale_type);
+        {
+            bool has_explicit_sf =
+                (sf_it != config.params.end() && !sf_it->second.empty());
+            if (sf_len == "n") {
+                scale_matrix = Matrix(1, getN(), scale_type);
+                if (has_explicit_sf) {
+                    scale_matrix.fillValue(static_cast<double>(scale_value));
+                } else {
+                    scale_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
+                                            "uniform");
+                }
+            } else {
+                // Scalar (per-tensor) - default when sf_len not specified or
+                // "1"
+                scale_matrix = Matrix::fromValue(
+                    static_cast<float>(scale_value), scale_type);
+            }
         }
 
         // Optional zero-point
@@ -550,10 +568,11 @@ MicroTest::createOperationParam(
         }
         if (has_zp) {
             if (zp_len == "n") {
-                std::vector<int32_t> zp_data(getN(), 0);
-                zero_point_matrix = Matrix::fromVector(zp_data, zp_type);
+                zero_point_matrix = Matrix(1, getN(), zp_type);
+                zero_point_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
+                                             "uniform");
             } else {
-                zero_point_matrix = Matrix::fromValue(0, zp_type);
+                zero_point_matrix = Matrix::fromValue(2.0f, zp_type);
             }
         }
 
@@ -585,9 +604,8 @@ MicroTest::createOperationParam(
         // Get the storage format to match C matrix layout
         MatrixLayout layout = getStorageFormat();
 
-        std::vector<std::vector<float>> matrix_data(
-            rows, std::vector<float>(cols, 0.5f));
-        auto matrix = Matrix::fromData(matrix_data, matrix_type, layout);
+        auto matrix = Matrix(rows, cols, matrix_type, layout);
+        matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE, "uniform");
 
         // Check if scale_factor is explicitly provided (optional parameter)
         auto sf_it      = config.params.find("scale_factor");
@@ -635,14 +653,23 @@ MicroTest::createOperationParam(
             sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
         }
 
-        if (sf_len == "n") {
-            // Per-channel: create vector of length N with scale value
-            std::vector<float> sf_data(getN(), static_cast<float>(scale_value));
-            scale_matrix = Matrix::fromVector(sf_data, scale_type);
-        } else {
-            // Scalar (per-tensor) - default when sf_len not specified or "1"
-            scale_matrix =
-                Matrix::fromValue(static_cast<float>(scale_value), scale_type);
+        {
+            bool has_explicit_sf =
+                (sf_it != config.params.end() && !sf_it->second.empty());
+            if (sf_len == "n") {
+                scale_matrix = Matrix(1, getN(), scale_type);
+                if (has_explicit_sf) {
+                    scale_matrix.fillValue(static_cast<double>(scale_value));
+                } else {
+                    scale_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
+                                            "uniform");
+                }
+            } else {
+                // Scalar (per-tensor) - default when sf_len not specified or
+                // "1"
+                scale_matrix = Matrix::fromValue(
+                    static_cast<float>(scale_value), scale_type);
+            }
         }
 
         return createMatrixAdd()
@@ -671,9 +698,8 @@ MicroTest::createOperationParam(
         // Get the storage format to match C matrix layout
         MatrixLayout layout = getStorageFormat();
 
-        std::vector<std::vector<float>> matrix_data(
-            rows, std::vector<float>(cols, 1.0f));
-        auto matrix = Matrix::fromData(matrix_data, matrix_type, layout);
+        auto matrix = Matrix(rows, cols, matrix_type, layout);
+        matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE, "uniform");
 
         // Check if scale_factor is explicitly provided (optional parameter)
         auto sf_it      = config.params.find("scale_factor");
@@ -721,14 +747,23 @@ MicroTest::createOperationParam(
             sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
         }
 
-        if (sf_len == "n") {
-            // Per-channel: create vector of length N with scale value
-            std::vector<float> sf_data(getN(), static_cast<float>(scale_value));
-            scale_matrix = Matrix::fromVector(sf_data, scale_type);
-        } else {
-            // Scalar (per-tensor) - default when sf_len not specified or "1"
-            scale_matrix =
-                Matrix::fromValue(static_cast<float>(scale_value), scale_type);
+        {
+            bool has_explicit_sf =
+                (sf_it != config.params.end() && !sf_it->second.empty());
+            if (sf_len == "n") {
+                scale_matrix = Matrix(1, getN(), scale_type);
+                if (has_explicit_sf) {
+                    scale_matrix.fillValue(static_cast<double>(scale_value));
+                } else {
+                    scale_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
+                                            "uniform");
+                }
+            } else {
+                // Scalar (per-tensor) - default when sf_len not specified or
+                // "1"
+                scale_matrix = Matrix::fromValue(
+                    static_cast<float>(scale_value), scale_type);
+            }
         }
 
         return createMatrixMul()
