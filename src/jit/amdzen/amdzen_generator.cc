@@ -2024,8 +2024,8 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
         int processBlockSize = getProcessBlockSize();
         // Since JR loop is in framework, the 'n' dimension passed to this
         // function is always <= NR.
-        int mFullPieces    = params->m / MR;
-        int mPartialPieces = params->m % MR;
+        md_t mFullPieces    = params->m / MR;
+        md_t mPartialPieces = params->m % MR;
 
         params->kIterBP = params->k / vnniGroupSize;
         params->kLeft   = params->k % vnniGroupSize;
@@ -2038,20 +2038,20 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
         int32_t* cPtr           = static_cast<int32_t*>(params->c);
         int32_t* c_jr           = cPtr;
         int32_t* c_ir           = cPtr;
-        int      rsB            = params->rsB;
+        md_t     rsB            = params->rsB;
         md_t     og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
 
         md_t n = params->n;
         md_t m = params->m;
         md_t k = params->k;
 
-        int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
-        int nFullpieces = nBlockSize / numElemsPerReg;
-        int nRemainder  = nBlockSize % numElemsPerReg;
-        params->psA     = MR * params->psA;
+        md_t nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+        md_t nFullpieces = nBlockSize / numElemsPerReg;
+        md_t nRemainder  = nBlockSize % numElemsPerReg;
+        params->psA      = MR * params->psA;
         // Process complete registers first (if any)
         if (nFullpieces > 0) {
-            int elementsToProcess = nFullpieces * numElemsPerReg;
+            md_t elementsToProcess = nFullpieces * numElemsPerReg;
 
             params->a = aPtr;
             params->c = c_jr;
@@ -2062,7 +2062,7 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
             // Match the kernel generation pattern: nr_var corresponds to
             // number of registers used nr_var=0: mask kernel,
             // nr_var=1,2,3,4: 1,2,3,4 registers respectively
-            int kernel_n_idx = nFullpieces;
+            md_t kernel_n_idx = nFullpieces;
 
             if (params->m >= MR) {
                 params->mIter            = mFullPieces;
@@ -2564,8 +2564,8 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
 
         // Since JR loop is in framework, the 'n' dimension passed to this
         // function is always <= NR.
-        int mFullPieces    = params->m / MR;
-        int mPartialPieces = params->m % MR;
+        md_t mFullPieces    = params->m / MR;
+        md_t mPartialPieces = params->m % MR;
 
         // Divided by 4(=VNNI_CONST) for VNNI instruction handling.
         params->kIterBP = params->k / VNNI_CONST;
@@ -2579,7 +2579,7 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
         int32_t* cPtr = static_cast<int32_t*>(params->c);
         int32_t* c_jr = cPtr;
         int32_t* c_ir = cPtr;
-        int      rsB  = params->rsB;
+        md_t     rsB  = params->rsB;
 
         md_t n = params->n;
         md_t m = params->m;
@@ -2590,20 +2590,20 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
 
         md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
 
-        int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
-        int nFullpieces = nBlockSize / numElemsPerReg;
-        int nRemainder  = nBlockSize % numElemsPerReg;
+        md_t nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+        md_t nFullpieces = nBlockSize / numElemsPerReg;
+        md_t nRemainder  = nBlockSize % numElemsPerReg;
 
         // Process complete registers first (if any)
         if (nFullpieces > 0) {
-            int elementsToProcess = nFullpieces * numElemsPerReg;
-            params->rsB           = (nFullpieces * rsB) / VNNI_CONST;
+            md_t elementsToProcess = nFullpieces * numElemsPerReg;
+            params->rsB            = (nFullpieces * rsB) / VNNI_CONST;
 
             params->a = aPtr;
             params->c = c_jr;
             params->n = elementsToProcess;
 
-            int kernel_n_idx = nFullpieces;
+            md_t kernel_n_idx = nFullpieces;
             if (params->m >= MR) {
                 params->mIter = mFullPieces;
                 int m_idx     = 0;
@@ -2626,8 +2626,8 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
                 kernel(params);
             }
 
-            int bOffset = params->kLeft > 0 ? (VNNI_CONST - params->kLeft) : 0;
-            params->b   = (int8_t*)(params->b)
+            md_t bOffset = params->kLeft > 0 ? (VNNI_CONST - params->kLeft) : 0;
+            params->b    = (int8_t*)(params->b)
                         + elementsToProcess * (params->k + bOffset);
 
             c_jr = (int32_t*)(c_jr) + elementsToProcess;
@@ -2986,7 +2986,7 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
         }
 
         // Deploy the associated kernel based on n_left
-        int kernel_idx = static_cast<int>(params->n_left);
+        md_t kernel_idx = params->n_left;
 
         utils::jit_gemv_m1_kernel kernel =
             reinterpret_cast<utils::jit_gemv_m1_kernel>(
@@ -3035,9 +3035,9 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
     // FP16 GEMM execution (MR > 1, NR > 1)
     auto params = static_cast<dlp::kernels::gemmParams*>(_params);
 
-    int processBlockSize = getProcessBlockSize();
-    int mFullPieces      = params->m / MR;
-    int mPartialPieces   = params->m % MR;
+    int  processBlockSize = getProcessBlockSize();
+    md_t mFullPieces      = params->m / MR;
+    md_t mPartialPieces   = params->m % MR;
 
     params->kIterBP = params->k / K_UNROLL;
     params->kLeft   = params->k % K_UNROLL;
@@ -3047,17 +3047,17 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
     dlp::float16* cPtr = static_cast<dlp::float16*>(params->c);
     dlp::float16* c_jr = cPtr;
 
-    int  rsB            = params->rsB;
+    md_t rsB            = params->rsB;
     md_t n              = params->n;
     md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
 
-    int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
-    int nFullpieces = nBlockSize / numElemsPerReg;
-    int nRemainder  = nBlockSize % numElemsPerReg;
+    md_t nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+    md_t nFullpieces = nBlockSize / numElemsPerReg;
+    md_t nRemainder  = nBlockSize % numElemsPerReg;
 
     // Process complete registers first (if any)
     if (nFullpieces > 0) {
-        int elementsToProcess = nFullpieces * numElemsPerReg;
+        md_t elementsToProcess = nFullpieces * numElemsPerReg;
 
         params->a = aPtr;
         params->c = c_jr;
@@ -3069,7 +3069,7 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
         }
         // For UNPACKED B, rsB stays as original value
 
-        int kernel_n_idx = nFullpieces;
+        md_t kernel_n_idx = nFullpieces;
         if (params->m >= MR) {
             params->mIter = mFullPieces;
             int m_idx     = 0;
@@ -3097,7 +3097,7 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
         }
 
         // Update B pointer for next block
-        // For packed B: advance by elementsToProcess * k (NR×K block layout)
+        // For packed B: advance by elementsToProcess * k (NR*K block layout)
         // For unpacked B (row-major): advance by elementsToProcess (next
         // columns)
         if (mtag_b == PACK || mtag_b == REORDERED) {
@@ -3125,8 +3125,9 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
         // For UNPACKED B, rsB stays as original value
 
         // Set mask for FP16 elements (32-bit mask for 32 elements per ZMM)
-        uint32_t fp16Mask = 0xFFFFFFFF >> (numElemsPerReg - nRemainder);
-        params->maskFP16  = fp16Mask;
+        uint32_t fp16Mask =
+            0xFFFFFFFF >> (numElemsPerReg - static_cast<int>(nRemainder));
+        params->maskFP16 = fp16Mask;
 
         int kernel_n_idx = 0; // Use mask kernel
         if (params->m >= MR) {
