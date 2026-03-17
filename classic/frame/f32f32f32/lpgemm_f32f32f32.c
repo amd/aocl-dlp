@@ -490,8 +490,14 @@ LPGEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
     lpgemm_rowvar_f32 ker_ptr = (lpgemm_rowvar_f32)lcntx->kern_fun_ptr;
 
     if (invokeRD) {
+        // RD kernels require A to be row-major and B to be column-major. There
+        // are multiple ways to reach this configuration from the user input.
+        // Ex: Row-major inputs with B transpose set to true. In case of the
+        // library deciding to set mtag_b to PACK or should_pack_B to true, we
+        // should reset both to UNPACKED and FALSE respectively.
         mtag_b        = UNPACKED;
         should_pack_A = FALSE;
+        should_pack_B = FALSE;
     }
 
     for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
