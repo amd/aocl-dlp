@@ -227,15 +227,12 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated   = 0;
 
-            md_t kc0_updated = make_multiple_of_n(k, 4);
-
             if (mtag_b == REORDERED) {
                 get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
 
-                b_use = (int8_t*)(b + (jc_cur_loop * k_updated)
-                                  + (jc_cur_loop_rem * kc0_updated));
+                b_use = (int8_t*)(b + (jc_cur_loop * k_updated));
 
                 lpgemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
 
@@ -491,8 +488,7 @@ LPGEMM_5LOOP_UNIFIED(
                 md_t group_start = pc / group_size;
                 md_t group_end   = (pc + kc0 - 1) / group_size;
 
-                md_t total_groups    = (k + group_size - 1) / group_size;
-                md_t n_groups_per_kc = group_end - group_start + 1;
+                md_t total_groups = (k + group_size - 1) / group_size;
 
                 if (dlp_thread_am_ochief(&thread_ic)) {
                     // nc0 needs to be a multiple of 16 since this gives maximum
@@ -503,7 +499,7 @@ LPGEMM_5LOOP_UNIFIED(
 
                     mem_b_size_req =
                         sizeof(int8_t) * nc0_updated * kc0_updated
-                        + (n_groups_per_kc * nc0_updated * sizeof(int32_t));
+                        + (total_groups * nc0_updated * sizeof(int32_t));
 
                     if (pack_b_buffer_s8s8s32o32 == NULL) {
                         dlp_clsc_err_t ret_err;
