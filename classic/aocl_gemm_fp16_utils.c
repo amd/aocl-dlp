@@ -61,7 +61,7 @@ aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
     }
 
     // Initialize dlp_gemm context.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_BUF_SIZE_CHECK("f16f16f16of16", order, trans, mat_type, k,
@@ -120,7 +120,7 @@ aocl_reorder_f16f16f16of16(const char      order,
     }
 
     // Initialize dlp_gemm context.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_CHECK("f16f16f16of16", order, trans, mat_type,
@@ -207,7 +207,7 @@ aocl_unreorder_f16f16f16of16(const char      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_UNREORDER_CHECK("f16f16f16of16", order, mat_type, reorder_buf_addr,

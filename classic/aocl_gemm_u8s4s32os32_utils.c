@@ -54,7 +54,7 @@ aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_BUF_SIZE_CHECK("u8s4s32os32", order, trans, mat_type, k, n,
@@ -131,7 +131,7 @@ aocl_reorder_u8s4s32os32(const char      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_CHECK("u8s4s32os32", order, trans, mat_type,

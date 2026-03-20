@@ -211,7 +211,7 @@ aocl_gemm_f16f16f16of16(const char      order,
     }
 
     // Initialize dlp_gemm context.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;

@@ -76,7 +76,7 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
 #ifdef DLP_GEMM_BF16_JIT
     dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);
@@ -309,7 +309,7 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
 #ifdef DLP_GEMM_BF16_JIT
     dlp_print_msg(" WOQ is not supported by JIT kernels.", __FILE__, __LINE__);

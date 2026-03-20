@@ -35,15 +35,15 @@
 #include "dlp_gemm_types.h"
 #include "sys_utils/dlp_gemm_sys.h"
 
-#ifdef AOCL_DLP_GEMM_LOGGER_SUPPORT
+#ifdef AOCL_DLP_LOGGER_SUPPORT
 
 #define AOCL_DLP_GEMM_LOG_FILE_PRFX "aocl_gemm_log"
 #define AOCL_DLP_GEMM_LOG_FILE_EXT  ".txt"
 
 FILE*
-dlp_gemm_start_logger_fn(double* aocl_lpgemm_logger_start_time);
+dlp_gemm_start_logger_fn(double* dlp_gemm_logger_start_time);
 void
-dlp_gemm_stop_logger_fn(FILE* fd, double* aocl_lpgemm_logger_start_time);
+dlp_gemm_stop_logger_fn(FILE* fd, double* dlp_gemm_logger_start_time);
 void
 dlp_gemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str);
 void
@@ -88,11 +88,11 @@ batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
                                     dlp_metadata_t** metadata);
 
 #define DLP_GEMM_START_LOGGER()                                                \
-    double aocl_lpgemm_logger_start_time = 0;                                  \
-    FILE*  fd = dlp_gemm_start_logger_fn(&aocl_lpgemm_logger_start_time);
+    double dlp_gemm_logger_start_time = 0;                                     \
+    FILE*  fd = dlp_gemm_start_logger_fn(&dlp_gemm_logger_start_time);
 
 #define DLP_GEMM_STOP_LOGGER()                                                 \
-    dlp_gemm_stop_logger_fn(fd, &aocl_lpgemm_logger_start_time);
+    dlp_gemm_stop_logger_fn(fd, &dlp_gemm_logger_start_time);
 
 #define DLP_GEMM_WRITE_LOGGER(...)                                             \
     dlp_gemm_write_logger_gemm_fn(fd, __VA_ARGS__);

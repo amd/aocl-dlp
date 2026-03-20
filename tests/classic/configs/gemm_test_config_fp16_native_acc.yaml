@@ -1245,6 +1245,6 @@ gemm_tests:
 # Notes on FP16 Native Accumulation:
 #
 # Kernel Tile Breakdown:
-#   - Main kernel: 6x128 (lpgemm_6x128_fp16_amd512)
-#   - N-fringe: 6x96, 6x64, 6x32 (lpgemm_n_fringe_fp16_amd512)
-#   - M-fringe: 5x128, 4x128, 3x128, 2x128, 1x128 (lpgemm_m_fringe_fp16_a
+#   - Main kernel: 6x128 (dlp_gemm_6x128_fp16_amd512)
+#   - N-fringe: 6x96, 6x64, 6x32 (dlp_gemm_n_fringe_fp16_amd512)
+#   - M-fringe: 5x128, 4x128, 3x128, 2x128, 1x128 (dlp_gemm_m_fringe_fp16_a

@@ -75,7 +75,7 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;

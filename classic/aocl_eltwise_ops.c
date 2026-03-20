@@ -61,7 +61,7 @@ aocl_eltwise_ops_bf16of32_base(const char      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
     dlp_param_map_netlib_to_dlp_trans(transa, &dlp_transa);
@@ -196,7 +196,7 @@ aocl_eltwise_ops_f32of32_base(const char      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     /* Map BLAS chars to their corresponding DLP enumerated type value. */
     dlp_param_map_netlib_to_dlp_trans(transa, &dlp_transa);

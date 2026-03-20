@@ -1,6 +1,6 @@
 # Inlining Baseline for dlp_init_and_get_kernel_hndl Call Tree
-# Generated: Fri Nov  7 12:41:34 PM UTC 2025
-# Library: ./libaocl-dlp.a
+# Generated: Fri Mar 20 12:45:17 PM UTC 2026
+# Library: build/libaocl-dlp.a
 #
 # Functions below are NOT called in dlp_init_and_get_kernel_hndl (successfully inlined)
 # Note: Symbols may exist for vtable entries, but what matters is they're not CALLED
@@ -16,11 +16,16 @@ dlp::kernel_frame::dlpKernelRegister::registerGemmKernel
 dlp::kernel_frame::dlpKernelRegister::registerEmptyGemmKernel
 dlp::jit::dlpJitGeneratorRegisterInstance
 dlp::jit::jitGeneratorRegister::getGemmJitGenerator
-dlp::de::gemmBF16DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
-dlp::de::gemmF32DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
-dlp::de::gemmBF16DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
-dlp::de::gemmF32DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_MEMORY_TAG, AOCL_MEMORY_TAG, lpgemm_post_op_t*, long, long, long, long)
+dlp::de::gemmBF16DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmF32DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmFP16DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmS8DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmU8S8DEBackend::getGemmKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmBF16DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmF32DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmFP16DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmS8DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
+dlp::de::gemmU8S8DEBackend::getGemvKernelInfoForInputFastPath(dlp::kernel_frame::kernelDatatype, long, long, long, long, long, long, long, long, long, void*, void*, AOCL_DLP_MEMORY_TAG, AOCL_DLP_MEMORY_TAG, dlp_gemm_post_op_t*, long, long, long, long, bool)
 
-# Virtual Dispatch: vtable refs: 0, indirect calls: 6
-# WARNING: Forced 64-byte stack alignment present
-# Call Instructions: 269
+# Virtual Dispatch: vtable refs: 0, indirect calls: 0
+# Call Instructions: 263

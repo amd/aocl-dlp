@@ -76,7 +76,7 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
 #ifdef DLP_GEMM_BF16_JIT
     if (get_jit_kernels_generated() == FALSE) {
@@ -349,7 +349,7 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
 #ifdef DLP_GEMM_BF16_JIT
     if (get_jit_kernels_generated() == FALSE) {

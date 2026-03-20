@@ -89,7 +89,7 @@ aocl_gemm_u8s8s32obf16(const char      order,
 #endif
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;

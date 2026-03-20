@@ -472,7 +472,7 @@ dlp_gemm_cntx_init_map()
 // Set default block sizes for dlp_gemm.
 // Detect thread topology for dlp_gemm.
 void
-aocl_lpgemm_init_global_cntx()
+dlp_init_global_cntx()
 {
     dlp_pthread_once(&once_check_dlp_gemm_func_map_init,
                      dlp_gemm_cntx_init_map);

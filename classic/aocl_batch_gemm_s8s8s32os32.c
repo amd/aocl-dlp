@@ -75,7 +75,7 @@ aocl_batch_gemm_s8s8s32os32(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
@@ -357,7 +357,7 @@ aocl_batch_gemm_s8s8s32os8(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
@@ -640,7 +640,7 @@ aocl_batch_gemm_s8s8s32of32(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     md_t mat_idx = 0;
 
@@ -922,7 +922,7 @@ aocl_batch_gemm_s8s8s32obf16(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_trans_t dlp_transa;
     dlp_trans_t dlp_transb;
@@ -1202,7 +1202,7 @@ aocl_batch_gemm_s8s8s32ou8(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;

@@ -229,7 +229,7 @@ dlp_gemm_init_thread_attrs()
                      dlp_gemm_load_thread_attrs);
 }
 
-// Should be called only after aocl_lpgemm_init_global_cntx.
+// Should be called only after dlp_init_global_cntx.
 dlp_gemm_thread_attrs_t*
 dlp_gemm_get_thread_attrs()
 {

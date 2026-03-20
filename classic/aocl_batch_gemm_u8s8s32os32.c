@@ -75,7 +75,7 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
@@ -300,7 +300,7 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
@@ -524,7 +524,7 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
@@ -749,7 +749,7 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     md_t mat_idx = 0;
 
@@ -967,7 +967,7 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     md_t mat_idx = 0;
 

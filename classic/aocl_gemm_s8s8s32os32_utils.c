@@ -57,7 +57,7 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_BUF_SIZE_CHECK("s8s8s32os32", order, trans, mat_type, k, n,
@@ -130,7 +130,7 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_BUF_SIZE_CHECK("s8s8s32os32_sym_quant", order, trans,
@@ -218,7 +218,7 @@ aocl_reorder_s8s8s32os32(const char      order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_CHECK("s8s8s32os32", order, trans, mat_type,
@@ -321,7 +321,7 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_CHECK("s8s8s32os32_sym_quant", order, trans, mat_type,
@@ -416,7 +416,7 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_UNREORDER_CHECK("s8s8s32os32_reference", order, mat_type,

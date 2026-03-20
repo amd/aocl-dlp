@@ -70,7 +70,7 @@ int
 dlp_env_get_bool(const char* env_var_name, int default_value);
 
 /**
- * @brief C API wrapper for checking if AOCL_DLP_ENABLE_LPGEMM_LOGGER
+ * @brief C API wrapper for checking if AOCL_DLP_ENABLE_LOGGER
  * environment is set or not.
  * @return 1/true for enabled, 0/false otherwise.
  */

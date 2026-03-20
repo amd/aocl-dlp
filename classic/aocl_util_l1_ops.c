@@ -45,7 +45,7 @@ aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx)
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     if ((n <= 0) || (x == NULL) || (incx <= 0)) {
         return; // Error.
@@ -69,7 +69,7 @@ aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx)
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     if ((n <= 0) || (x == NULL) || (incx <= 0)) {
         return; // Error.
@@ -93,7 +93,7 @@ aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx)
     }
 
     // Set MC, NC, KC, NR, MR.
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     if ((n <= 0) || (x == NULL) || (incx <= 0)) {
         return; // Error.

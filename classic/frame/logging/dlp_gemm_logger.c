@@ -34,7 +34,7 @@
 #include "logging/dlp_gemm_logger.h"
 #include "sys_utils/dlp_gemm_sys.h"
 
-#ifdef AOCL_DLP_GEMM_LOGGER_SUPPORT
+#ifdef AOCL_DLP_LOGGER_SUPPORT
 
 bool
 dlp_gemm_is_logger_enabled()
@@ -43,7 +43,7 @@ dlp_gemm_is_logger_enabled()
 }
 
 FILE*
-dlp_gemm_start_logger_fn(double* aocl_lpgemm_logger_start_time)
+dlp_gemm_start_logger_fn(double* dlp_gemm_logger_start_time)
 {
     FILE* fd = NULL;
 
@@ -55,20 +55,20 @@ dlp_gemm_start_logger_fn(double* aocl_lpgemm_logger_start_time)
 
         fd = fopen(log_file, "a");
 
-        (*aocl_lpgemm_logger_start_time) = dlp_clock();
+        (*dlp_gemm_logger_start_time) = dlp_clock();
     }
 
     return fd;
 }
 
 void
-dlp_gemm_stop_logger_fn(FILE* fd, double* aocl_lpgemm_logger_start_time)
+dlp_gemm_stop_logger_fn(FILE* fd, double* dlp_gemm_logger_start_time)
 {
     if ((dlp_env_is_logger_enabled() == TRUE) && (fd != NULL)) {
-        double aocl_lpgemm_logger_stop_time = DBL_MAX;
-        aocl_lpgemm_logger_stop_time        = dlp_clock_min_diff(
-            aocl_lpgemm_logger_stop_time, *aocl_lpgemm_logger_start_time);
-        fprintf(fd, "time:%f \n", aocl_lpgemm_logger_stop_time);
+        double dlp_gemm_logger_stop_time = DBL_MAX;
+        dlp_gemm_logger_stop_time        = dlp_clock_min_diff(
+            dlp_gemm_logger_stop_time, *dlp_gemm_logger_start_time);
+        fprintf(fd, "time:%f \n", dlp_gemm_logger_stop_time);
         fflush(fd);
         fclose(fd);
     }

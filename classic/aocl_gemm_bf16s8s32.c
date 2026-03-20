@@ -181,7 +181,7 @@ aocl_gemm_bf16s8s32_impl(const char        order,
 
     // Initialize global context with cache-optimized block sizes (MC, NC, KC,
     // NR, MR).
-    aocl_lpgemm_init_global_cntx();
+    dlp_init_global_cntx();
 
     // Validate input parameters (dimensions, strides, pointers, etc.).
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;

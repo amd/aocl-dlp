@@ -37,7 +37,7 @@
 #define NUM_F32_ELEMS_PER_ZMM (64 / sizeof(float))
 
 void
-aocl_lpgemm_init_global_cntx();
+dlp_init_global_cntx();
 
 dlp_gemm_cntx_t*
 dlp_gemm_get_global_cntx_obj(AOCL_DLP_OPERATION_TYPE op);
