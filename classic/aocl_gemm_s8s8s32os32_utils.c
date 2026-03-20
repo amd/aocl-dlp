@@ -28,13 +28,13 @@
 
 #include <string.h>
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
 #include "classic/dlp_errors.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "lpgemm_types.h"
-#include "s8s8s32/lpgemm_reorder_s8.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "s8s8s32/dlp_gemm_reorder_s8.h"
 
 msz_t
 aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
@@ -46,7 +46,8 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform s8s8s32 gemm.",
@@ -59,14 +60,14 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_BUF_SIZE_CHECK("s8s8s32os32", order, trans, mat_type, k, n,
-                                err_no);
+    AOCL_DLP_REORDER_BUF_SIZE_CHECK("s8s8s32os32", order, trans, mat_type, k, n,
+                                    err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return 0; // Error.
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -118,7 +119,8 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform s8s8s32 gemm.",
@@ -131,14 +133,14 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_BUF_SIZE_CHECK("s8s8s32os32_sym_quant", order, trans, mat_type,
-                                k, n, err_no);
+    AOCL_DLP_REORDER_BUF_SIZE_CHECK("s8s8s32os32_sym_quant", order, trans,
+                                    mat_type, k, n, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return 0; // Error.
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -205,7 +207,8 @@ aocl_reorder_s8s8s32os32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform s8s8s32 gemm.",
@@ -218,8 +221,8 @@ aocl_reorder_s8s8s32os32(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("s8s8s32os32", order, trans, mat_type, input_buf_addr,
-                       reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("s8s8s32os32", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -240,7 +243,7 @@ aocl_reorder_s8s8s32os32(const char      order,
         return; // Error
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -267,21 +270,21 @@ aocl_reorder_s8s8s32os32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
 
     // Create dummy original b obj;
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)input_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    reorderb_nr64_s8s8s32o32(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_reorderb_nr64_s8s8s32o32(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
 void
@@ -298,7 +301,8 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform s8s8s32 gemm.",
@@ -320,8 +324,8 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("s8s8s32os32_sym_quant", order, trans, mat_type,
-                       input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("s8s8s32os32_sym_quant", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -342,7 +346,7 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
         return; // Error
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -381,22 +385,22 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
 
     // Create dummy original b obj;
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)input_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    reorderb_nr64_s8s8s32o32_sym_quant(&b, &b_reorder, &rntm_g, lcntx_g,
-                                       group_size);
+    dlp_reorderb_nr64_s8s8s32o32_sym_quant(&b, &b_reorder, &rntm_g, lcntx_g,
+                                           group_size);
 }
 
 void
@@ -415,8 +419,9 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UNREORDER_CHECK("s8s8s32os32_reference", order, mat_type,
-                         reorder_buf_addr, output_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_UNREORDER_CHECK("s8s8s32os32_reference", order, mat_type,
+                             reorder_buf_addr, output_buf_addr, k, n, ldb,
+                             err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -433,7 +438,7 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
         cs_b = ldb;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -458,19 +463,19 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = (void*)reorder_buf_addr;
 
     // Create dummy original b obj;
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)output_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    unreorderb_nr64_s8s8s32os32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_unreorderb_nr64_s8s8s32os32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
 }

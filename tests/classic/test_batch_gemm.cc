@@ -534,8 +534,8 @@ configToGroups(
 bool
 check_valid_batch_params(const BatchGemmTestConfig& config)
 {
-    // Validate each group's parameters following AOCL_BATCH_GEMM_CHECK macro
-    // logic
+    // Validate each group's parameters following AOCL_DLP_BATCH_GEMM_CHECK
+    // macro logic
     for (std::size_t g = 0; g < config.getGroupCount(); ++g) {
         md_t m          = config.m_values[g];
         md_t n          = config.n_values[g];

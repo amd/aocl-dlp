@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_LPGEMM_SIGMOID_AVX512_H
-#define AOCL_LPGEMM_SIGMOID_AVX512_H
+#ifndef AOCL_DLP_GEMM_SIGMOID_AVX512_H
+#define AOCL_DLP_GEMM_SIGMOID_AVX512_H
 
 // Sigmoid(in_reg) = 1 / (1 + exp(-1 * in_reg)).
 // in_reg is expected to contain float values.
@@ -37,4 +37,4 @@
     in_reg = _mm512_div_ps(_mm512_set1_ps(1),                                  \
                            _mm512_add_ps((__m512)ex_out, _mm512_set1_ps(1)));
 
-#endif // AOCL_LPGEMM_SIGMOID_AVX512_H
+#endif // AOCL_DLP_GEMM_SIGMOID_AVX512_H

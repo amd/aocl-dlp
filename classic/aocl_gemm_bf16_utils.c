@@ -28,12 +28,12 @@
 
 #include <string.h>
 
-#include "aocl_gemm_check.h"
-#include "bf16bf16f32/lpgemm_reorder_bf16.h"
+#include "aocl_dlp_gemm_check.h"
+#include "bf16bf16f32/dlp_gemm_reorder_bf16.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "lpgemm_types.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
 
 void
 aocl_reorder_bf16bf16f32of32_reference(const char      order,
@@ -52,8 +52,8 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("bf16bf16f32of32_reference", order, trans, mat_type,
-                       input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("bf16bf16f32of32_reference", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -72,7 +72,7 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -80,7 +80,7 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         return; // A reorder not supported.
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
+#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(bfloat16)));
@@ -97,21 +97,22 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
 
     // Create dummy original b obj;
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)input_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    reorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_reorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g,
+                                                lcntx_g);
 }
 
 void
@@ -130,8 +131,9 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UNREORDER_CHECK("bf16bf16f32of32_reference", order, mat_type,
-                         reorder_buf_addr, output_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_UNREORDER_CHECK("bf16bf16f32of32_reference", order, mat_type,
+                             reorder_buf_addr, output_buf_addr, k, n, ldb,
+                             err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -148,7 +150,7 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
         cs_b = ldb;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -156,7 +158,7 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
         return; // A reorder not supported.
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
+#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(bfloat16)));
@@ -174,21 +176,22 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
 
     // create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = (void*)reorder_buf_addr;
 
     // create dummy b obj.
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)output_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    unreorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_unreorderb_nr64_bf16bf16f32of32_reference(&b, &b_reorder, &rntm_g,
+                                                  lcntx_g);
 }
 
 msz_t
@@ -205,14 +208,14 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_BUF_SIZE_CHECK("bf16bf16f32of32", order, trans, mat_type, k, n,
-                                err_no);
+    AOCL_DLP_REORDER_BUF_SIZE_CHECK("bf16bf16f32of32", order, trans, mat_type,
+                                    k, n, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return 0; // Error.
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -225,7 +228,7 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
     // loaded; and since k_dim needs to be at least 2, having n_dim at least 16
     // should give 2x16=32 elements, enough for 1 zmm register.The padding is
     // not rounded to NR (=64), since that would result in memory wastage.
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
+#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
     md_t n_reorder;
     /*It is expected that while bf16 input is passed to AVX2 kernels,
       the unreorder/conversion of bf16->f32 is done, which expects the
@@ -265,8 +268,8 @@ aocl_reorder_bf16bf16f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx-2 or avx512_bf16 ISA is supported, lpgemm matmul only works
-    // with it.
+    // Check if avx-2 or avx512_bf16 ISA is supported, dlp_gemm matmul only
+    // works with it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
             dlp_print_msg(
@@ -288,8 +291,8 @@ aocl_reorder_bf16bf16f32of32(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("bf16bf16f32of32", order, trans, mat_type,
-                       input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("bf16bf16f32of32", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -308,7 +311,7 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -316,12 +319,12 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         return; // A reorder not supported.
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
-    /*When AOCL_ENABLE_INSTRUCTIONS=AVX2, f32 kernels would be executed for
+#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+    /*When AOCL_DLP_ENABLE_INSTRUCTIONS=AVX2, f32 kernels would be executed for
       bf16 input, for which re-ordered bf16 input is converted and unreordered
       to hold f32 values. The un-reorder/convert API considers the padded bf16
       input.*/
-    if (lpgemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
+    if (dlp_gemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
         aocl_reorder_bf16bf16f32of32_reference(order, trans, mat_type,
                                                input_buf_addr, reorder_buf_addr,
                                                k, n, ldb, metadata);
@@ -343,21 +346,21 @@ aocl_reorder_bf16bf16f32of32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
 
     // Create dummy original b obj;
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)input_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    reorderb_nr64_bf16bf16f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_reorderb_nr64_bf16bf16f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
 void
@@ -373,13 +376,14 @@ aocl_reorder_f32obf16(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-#ifdef LPGEMM_BF16_JIT
+#ifdef DLP_GEMM_BF16_JIT
     dlp_print_msg(" f32obf16 is not supported by JIT kernels.", __FILE__,
                   __LINE__);
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
     return;
 #endif
-    // Check if avx512_bf16 ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_bf16 ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
@@ -392,8 +396,8 @@ aocl_reorder_f32obf16(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("f32obf16", order, trans, mat_type, input_buf_addr,
-                       reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("f32obf16", order, trans, mat_type, input_buf_addr,
+                           reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -412,7 +416,7 @@ aocl_reorder_f32obf16(const char      order,
         cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -443,21 +447,21 @@ aocl_reorder_f32obf16(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32OBF16);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F32OBF16);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
 
     // Create dummy original b obj;
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)input_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    reorderb_mxp_nr64_f32obf16(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_reorderb_mxp_nr64_f32obf16(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
 void
@@ -472,7 +476,8 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_bf16 ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_bf16 ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
@@ -485,8 +490,9 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UNREORDER_CHECK("bf16bf16f32of32", order, mat_type, reorder_buf_addr,
-                         output_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_UNREORDER_CHECK("bf16bf16f32of32", order, mat_type,
+                             reorder_buf_addr, output_buf_addr, k, n, ldb,
+                             err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -503,14 +509,14 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
         cs_b = ldb;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         return; // A reorder not supported.
     }
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
+#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(bfloat16)));
@@ -527,21 +533,21 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
 
     // create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = (void*)reorder_buf_addr;
 
     // create dummy b obj.
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)output_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    unreorderb_nr64_bf16bf16f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_unreorderb_nr64_bf16bf16f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
 msz_t
@@ -554,7 +560,8 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_bf16 ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_bf16 ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
@@ -567,14 +574,14 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_BUF_SIZE_CHECK("bf16s4f32of32", order, trans, mat_type, k, n,
-                                err_no);
+    AOCL_DLP_REORDER_BUF_SIZE_CHECK("bf16s4f32of32", order, trans, mat_type, k,
+                                    n, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return 0; // Error.
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -621,7 +628,8 @@ aocl_reorder_bf16s4f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if avx512_bf16 ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_bf16 ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
@@ -634,8 +642,8 @@ aocl_reorder_bf16s4f32of32(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("bf16s4f32of32", order, trans, mat_type, input_buf_addr,
-                       reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("bf16s4f32of32", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -656,7 +664,7 @@ aocl_reorder_bf16s4f32of32(const char      order,
         return; // Error
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -669,14 +677,14 @@ aocl_reorder_bf16s4f32of32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16S4F32OF32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16S4F32OF32);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
 
     // Create dummy original b obj;
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)input_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
@@ -684,5 +692,5 @@ aocl_reorder_bf16s4f32of32(const char      order,
     b.length                 = k;
     b.mat_type               = input_mat_type;
 
-    reorderb_nr64_bf16s4f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_reorderb_nr64_bf16s4f32of32(&b, &b_reorder, &rntm_g, lcntx_g);
 }

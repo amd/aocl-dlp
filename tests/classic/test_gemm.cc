@@ -232,8 +232,8 @@ struct GemmTestConfig
 bool
 check_valid_params(const GemmTestConfig& config)
 {
-    // This function follows the exact logic from AOCL_GEMM_CHECK macro in
-    // aocl_gemm_check.h with additional handling for reordered matrices
+    // This function follows the exact logic from AOCL_DLP_GEMM_CHECK macro in
+    // aocl_dlp_gemm_check.h with additional handling for reordered matrices
     // (which have custom memory layouts)
     bool col_stored = (config.storage_format == MatrixLayout::COLUMN_MAJOR);
     bool row_stored = (config.storage_format == MatrixLayout::ROW_MAJOR);

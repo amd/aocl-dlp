@@ -25,16 +25,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef AOCL_LPGEMM_MATH_UTILS_AVX512_H
-#define AOCL_LPGEMM_MATH_UTILS_AVX512_H
+#ifndef AOCL_DLP_GEMM_MATH_UTILS_AVX512_H
+#define AOCL_DLP_GEMM_MATH_UTILS_AVX512_H
 
 // constants for exp function
-#define lpgemm_exp_c0 0x1.0000014439a91p0
-#define lpgemm_exp_c1 0x1.62e43170e3344p-1
-#define lpgemm_exp_c2 0x1.ebf906bc4c115p-3
-#define lpgemm_exp_c3 0x1.c6ae2bb88c0c8p-5
-#define lpgemm_exp_c4 0x1.3d1079db4ef69p-7
-#define lpgemm_exp_c5 0x1.5f8905cb0cc4ep-10
+#define dlp_gemm_exp_c0 0x1.0000014439a91p0
+#define dlp_gemm_exp_c1 0x1.62e43170e3344p-1
+#define dlp_gemm_exp_c2 0x1.ebf906bc4c115p-3
+#define dlp_gemm_exp_c3 0x1.c6ae2bb88c0c8p-5
+#define dlp_gemm_exp_c4 0x1.3d1079db4ef69p-7
+#define dlp_gemm_exp_c5 0x1.5f8905cb0cc4ep-10
 
 #define TBL_LN2       0x1.71547652b82fep+0
 #define EXPF_HUGE     0x1.8p+23
@@ -50,14 +50,14 @@
 #define POLY_EVAL_6_AVX512(r, r2, z)                                           \
     r2 = _mm512_mul_ps(r, r);                                                  \
     z  = _mm512_fmadd_ps(r2,                                                   \
-                         _mm512_fmadd_ps(r, _mm512_set1_ps(lpgemm_exp_c3),     \
-                                         _mm512_set1_ps(lpgemm_exp_c2)),       \
-                         _mm512_fmadd_ps(r, _mm512_set1_ps(lpgemm_exp_c1),     \
-                                         _mm512_set1_ps(lpgemm_exp_c0)));      \
+                         _mm512_fmadd_ps(r, _mm512_set1_ps(dlp_gemm_exp_c3),   \
+                                         _mm512_set1_ps(dlp_gemm_exp_c2)),     \
+                         _mm512_fmadd_ps(r, _mm512_set1_ps(dlp_gemm_exp_c1),   \
+                                         _mm512_set1_ps(dlp_gemm_exp_c0)));    \
     r2 = _mm512_mul_ps(r2, r2);                                                \
     r  = _mm512_fmadd_ps(r2,                                                   \
-                         _mm512_fmadd_ps(r, _mm512_set1_ps(lpgemm_exp_c5),     \
-                                         _mm512_set1_ps(lpgemm_exp_c4)),       \
+                         _mm512_fmadd_ps(r, _mm512_set1_ps(dlp_gemm_exp_c5),   \
+                                         _mm512_set1_ps(dlp_gemm_exp_c4)),     \
                          z);
 
 // Require in and out registers to be different. x : in, q : out.
@@ -178,7 +178,7 @@ asuint32(float f)
     })
 
 // ERF_AOCL Macro
-#define ERF_AOCL_AVX512(y, r)                                                  \
+#define ERF_AOCL_DLP_AVX512(y, r)                                              \
     {                                                                          \
         __m512   absr  = _mm512_abs_ps(r);                                     \
         uint32_t uxmax = asuint32(_mm512_reduce_max_ps(absr));                 \
@@ -211,4 +211,4 @@ asuint32(float f)
         }                                                                      \
     }
 
-#endif // AOCL_LPGEMM_MATH_UTILS_AVX512_H
+#endif // AOCL_DLP_GEMM_MATH_UTILS_AVX512_H

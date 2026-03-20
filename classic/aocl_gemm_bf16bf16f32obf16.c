@@ -26,20 +26,20 @@
  *
  */
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "logging/lpgemm_logger.h"
-#include "lpgemm_5loop_interface_apis.h"
-#include "lpgemm_ops_bundle.h"
-#include "lpgemm_post_ops.h"
-#include "lpgemm_types.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_5loop_interface_apis.h"
+#include "dlp_gemm_ops_bundle.h"
+#include "dlp_gemm_post_ops.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "logging/dlp_gemm_logger.h"
 #include "runtime/dlp_runtime.h"
-#include "threading/lpgemm_thread_decor_openmp.h"
+#include "threading/dlp_gemm_thread_decor_openmp.h"
 
 static inline bool
-is_tiny_input_bf16obf16(md_t m, md_t n, md_t k, lpgemm_cntx_t* lcntx)
+is_tiny_input_bf16obf16(md_t m, md_t n, md_t k, dlp_gemm_cntx_t* lcntx)
 {
     const md_t NC = lcntx->blksz.NC;
     const md_t MC = lcntx->blksz.MC;
@@ -82,15 +82,16 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
                            const md_t      ldc,
                            dlp_metadata_t* metadata)
 {
-    LPGEMM_START_LOGGER();
-    LPGEMM_WRITE_LOGGER("bf16bf16f32obf16", order, transa, transb, m, n, k,
-                        ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
-                        ((float)beta), ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    DLP_GEMM_WRITE_LOGGER("bf16bf16f32obf16", order, transa, transb, m, n, k,
+                          ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
+                          ((float)beta), ldc, metadata);
 
     DLP_METADATA_SET_ERROR(metadata,
                            DLP_CLSC_SUCCESS); // Set default error to success.
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
@@ -104,14 +105,15 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
 
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_GEMM_CHECK("bf16bf16f32obf16", order, transa, transb, m, n, k, a, lda,
-                    mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
+    AOCL_DLP_GEMM_CHECK("bf16bf16f32obf16", order, transa, transb, m, n, k, a,
+                        lda, mem_format_a, b, ldb, mem_format_b, c, ldc,
+                        err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         goto err_hndl;
     }
 
-#ifdef LPGEMM_BF16_JIT
+#ifdef DLP_GEMM_BF16_JIT
     if (get_jit_kernels_generated() == FALSE) {
         dlp_print_msg(" Could not generate bf16bf16f32obf16 "
                       " kernels using JIT.",
@@ -149,8 +151,8 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     const md_t rs_c = ldc;
     const md_t cs_c = 1;
 
-    AOCL_MEMORY_TAG mtag_a;
-    AOCL_MEMORY_TAG mtag_b;
+    AOCL_DLP_MEMORY_TAG mtag_a;
+    AOCL_DLP_MEMORY_TAG mtag_b;
 
     dlp_param_map_char_to_lpmtag(mem_format_a, &mtag_a);
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
@@ -198,8 +200,8 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     }
 
     // Convert post op struct to post op linked list format.
-    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
-    dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
+    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
         metadata, post_op_list, (void*)c, (void*)(&order), m, n);
 
     if (err != DLP_CLSC_SUCCESS) {
@@ -208,20 +210,20 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     }
 
     // Create copy variables to handle column major case
-    md_t            m_use          = m;
-    md_t            n_use          = n;
-    md_t            rs_a_use       = rs_a;
-    md_t            cs_a_use       = cs_a;
-    md_t            rs_b_use       = rs_b;
-    md_t            cs_b_use       = cs_b;
-    md_t            rs_c_use       = rs_c;
-    md_t            cs_c_use       = cs_c;
-    AOCL_MEMORY_TAG mtag_a_use     = mtag_a;
-    AOCL_MEMORY_TAG mtag_b_use     = mtag_b;
-    dlp_trans_t     dlp_transa_use = dlp_transa;
-    dlp_trans_t     dlp_transb_use = dlp_transb;
-    const bfloat16* a_use          = a;
-    const bfloat16* b_use          = b;
+    md_t                m_use          = m;
+    md_t                n_use          = n;
+    md_t                rs_a_use       = rs_a;
+    md_t                cs_a_use       = cs_a;
+    md_t                rs_b_use       = rs_b;
+    md_t                cs_b_use       = cs_b;
+    md_t                rs_c_use       = rs_c;
+    md_t                cs_c_use       = cs_c;
+    AOCL_DLP_MEMORY_TAG mtag_a_use     = mtag_a;
+    AOCL_DLP_MEMORY_TAG mtag_b_use     = mtag_b;
+    dlp_trans_t         dlp_transa_use = dlp_transa;
+    dlp_trans_t         dlp_transb_use = dlp_transb;
+    const bfloat16*     a_use          = a;
+    const bfloat16*     b_use          = b;
 
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
@@ -286,8 +288,8 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(BF16BF16F32OF32);
-    lpgemm_cntx_t  lcntx_l;
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
+    dlp_gemm_cntx_t  lcntx_l;
     // Create local copy, since each thread in a multi-instance setup
     // modified the context object.
     lcntx_l = *lcntx_g;
@@ -302,11 +304,11 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
 
     // Create copy of mtag variables to handle jit kernel generation for bf16 on
     // architectures without bf16 support.
-    AOCL_MEMORY_TAG jit_mtag_a = mtag_a_use;
-    AOCL_MEMORY_TAG jit_mtag_b = mtag_b_use;
+    AOCL_DLP_MEMORY_TAG jit_mtag_a = mtag_a_use;
+    AOCL_DLP_MEMORY_TAG jit_mtag_b = mtag_b_use;
 
     // Get the configured architecture from the context.
-    // This would be set based on the AOCL_ENABLE_INSTRUCTIONS environment
+    // This would be set based on the AOCL_DLP_ENABLE_INSTRUCTIONS environment
     // variable and/or the underlying architecture.
     dlp_arch_t arch_id = dlp_get_arch();
 
@@ -315,10 +317,11 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         || (arch_id == DLP_ARCH_ZEN)) {
         // No native BF16 support - will use F32 kernels
         // Get F32 context for proper block sizes
-        lpgemm_cntx_t* lcntx_f32 = lpgemm_get_global_cntx_obj(F32F32F32OF32);
-        mr_hint                  = lcntx_f32->blksz.MR;
-        nr_hint                  = lcntx_f32->blksz.NR;
-        kc_hint                  = lcntx_f32->blksz.KC;
+        dlp_gemm_cntx_t* lcntx_f32 =
+            dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
+        mr_hint = lcntx_f32->blksz.MR;
+        nr_hint = lcntx_f32->blksz.NR;
+        kc_hint = lcntx_f32->blksz.KC;
 
         // For m=1 case B matrix is unpacked inside the framework before
         // calling f32 kernel, same should be provided for generating JIT
@@ -344,17 +347,17 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
         goto err_hndl;
     }
 
-#if (defined(DLP_KERNELS_ZEN4) && (!defined(LPGEMM_BF16_JIT)))
-    /* While AOCL_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that supports
-     * DLP_BF16/VNNI with only the ISA check the exeution could enter tiny path
-     * and result in seg fault as the tiny path for DLP_BF16->FP32 is not
-     * available. Hence the arch_id also has to be verified here.
+#if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
+    /* While AOCL_DLP_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that
+     * supports DLP_BF16/VNNI with only the ISA check the exeution could enter
+     * tiny path and result in seg fault as the tiny path for DLP_BF16->FP32 is
+     * not available. Hence the arch_id also has to be verified here.
      */
     if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5))
         && (dlp_cpuid_is_avx512bf16_supported() == TRUE)
         && (is_tiny_input_bf16obf16(m_use, n_use, k, &lcntx_l) == TRUE)
         && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
-        lpgemm_rowvar_tiny_bf16bf16f32of32(
+        dlp_gemm_rowvar_tiny_bf16bf16f32of32(
             m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
             rs_b_use, cs_b_use, mtag_b_use, (float*)c, rs_c_use, cs_c_use,
             alpha, beta, &lcntx_l, post_op_list, DLP_BF16);
@@ -363,20 +366,20 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
 #endif
 
     // Create ops bundle for standard GEMM (post-ops only)
-    lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+    dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-    lpgemm_bf16bf16f32of32_openmp_thread_decorator(
+    dlp_gemm_bf16bf16f32of32_openmp_thread_decorator(
         m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
         cs_b_use, mtag_b_use, (float*)c, rs_c_use, cs_c_use, alpha, beta,
         &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #else
-    lpgemm_bf16bf16f32of32_thread_decorator(
+    dlp_gemm_bf16bf16f32of32_thread_decorator(
         m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
         cs_b_use, mtag_b_use, (float*)c, rs_c_use, cs_c_use, alpha, beta,
         &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #endif
 
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }

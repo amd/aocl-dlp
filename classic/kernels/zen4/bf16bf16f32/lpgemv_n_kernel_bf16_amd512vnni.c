@@ -30,7 +30,7 @@
 #include "kernels/dlp_kernels.h"
 #include "xmmintrin.h"
 
-#include "lpgemm_f32_kern_macros.h"
+#include "dlp_gemm_f32_kern_macros.h"
 
 // Zero-out the given ZMM accumulator registers
 #define ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)                             \
@@ -73,7 +73,7 @@
     xmm0 = _mm_add_ps(_mm256_extractf128_ps(ymm0, 0),                          \
                       _mm256_extractf128_ps(ymm0, 1));
 
-#ifdef LPGEMM_BF16_JIT
+#ifdef DLP_GEMM_BF16_JIT
 LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
 #else
 LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
@@ -93,7 +93,7 @@ LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
     const bfloat16* b_use = NULL;
     float*          c_use = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     for (iter_t ir = 0; ir < m0; ir += MR) {
         md_t   mr0    = dlp_min((m0 - ir), MR);
@@ -449,7 +449,7 @@ LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
         }
 
         // Post Ops
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
 
         post_ops_attr.is_last_k = TRUE;
         POST_OP_LABEL_LASTK_SAFE_JUMP
@@ -764,4 +764,4 @@ LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
     }
     }
 }
-#endif //  LPGEMM_BF16_JIT
+#endif //  DLP_GEMM_BF16_JIT

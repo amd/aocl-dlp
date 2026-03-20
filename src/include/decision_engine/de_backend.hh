@@ -49,8 +49,8 @@ static const kernel_frame::kernelInfo INVALID_KERNEL_INFO{
     0,
     kernel_frame::scalingType::generic,
     kernel_frame::scalingType::generic,
-    AOCL_MEMORY_TAG::UNPACKED,
-    AOCL_MEMORY_TAG::UNPACKED,
+    AOCL_DLP_MEMORY_TAG::UNPACKED,
+    AOCL_DLP_MEMORY_TAG::UNPACKED,
     false,
     false,
     nullptr,
@@ -80,9 +80,9 @@ class iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -102,9 +102,9 @@ class iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -146,9 +146,9 @@ class gemmF32DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -161,7 +161,7 @@ class gemmF32DEBackend : public iDEBackend
 
         // BF16 operations don't support AVX512_YMM (256-bit) kernel variants.
         // When BF16 backend reroutes to F32 backend on AVX512 machines and
-        // AOCL_ENABLE_INSTRUCTIONS is set to avx512_ymm, we must override
+        // AOCL_DLP_ENABLE_INSTRUCTIONS is set to avx512_ymm, we must override
         // the preference to avx512_zmm_favour since AVX512_YMM kernels are
         // not available for the rerouted BF16->F32 operations.
         if (rerouted_from_other_backend
@@ -186,7 +186,7 @@ class gemmF32DEBackend : public iDEBackend
         // Set the kernel instruction preference based on the CPU features.
         // NOTE : This could be overridden by the user in future
         //        Ex : Wanting to run AVX2 kernels on Zen4, based on
-        //             AOCL_ENABLE_INSTRUCTIONS
+        //             AOCL_DLP_ENABLE_INSTRUCTIONS
         kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
         // In case the environment variable was not set at all, resort to
@@ -270,9 +270,9 @@ class gemmF32DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -300,7 +300,7 @@ class gemmF32DEBackend : public iDEBackend
 
         // BF16 operations don't support AVX512_YMM (256-bit) kernel variants.
         // When BF16 backend reroutes to F32 backend on AVX512 machines and
-        // AOCL_ENABLE_INSTRUCTIONS is set to avx512_ymm, we must override
+        // AOCL_DLP_ENABLE_INSTRUCTIONS is set to avx512_ymm, we must override
         // the preference to avx512_zmm_favour since AVX512_YMM kernels are
         // not available for the rerouted BF16->F32 operations.
         if (rerouted_from_other_backend
@@ -316,7 +316,7 @@ class gemmF32DEBackend : public iDEBackend
         // Set the kernel instruction preference based on the CPU features.
         // NOTE : This could be overridden by the user in future
         //        Ex : Wanting to run AVX2 kernels on Zen4, based on
-        //             AOCL_ENABLE_INSTRUCTIONS
+        //             AOCL_DLP_ENABLE_INSTRUCTIONS
         kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
         // In case the environment variable was not set at all, resort to
@@ -436,9 +436,9 @@ class gemmBF16DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -506,9 +506,9 @@ class gemmBF16DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -595,9 +595,9 @@ class gemmU8S8DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -673,9 +673,9 @@ class gemmU8S8DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -770,9 +770,9 @@ class gemmS8DEBackend : public iDEBackend
                           md_t                              cs_c,
                           void*                             alpha,
                           void*                             beta,
-                          AOCL_MEMORY_TAG                   mtag_a,
-                          AOCL_MEMORY_TAG                   mtag_b,
-                          lpgemm_post_op*                   metadata,
+                          AOCL_DLP_MEMORY_TAG               mtag_a,
+                          AOCL_DLP_MEMORY_TAG               mtag_b,
+                          dlp_gemm_post_op*                 metadata,
                           md_t                              mr_hint,
                           md_t                              nr_hint,
                           md_t                              kc_hint,
@@ -845,9 +845,9 @@ class gemmS8DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -936,9 +936,9 @@ class gemmFP16DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,
@@ -1001,9 +1001,9 @@ class gemmFP16DEBackend : public iDEBackend
         md_t                              cs_c,
         void*                             alpha,
         void*                             beta,
-        AOCL_MEMORY_TAG                   mtag_a,
-        AOCL_MEMORY_TAG                   mtag_b,
-        lpgemm_post_op*                   metadata,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
         md_t                              mr_hint,
         md_t                              nr_hint,
         md_t                              kc_hint,

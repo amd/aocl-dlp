@@ -25,8 +25,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef AOCL_LPGEMM_GELU_DEF_AVX512_H
-#define AOCL_LPGEMM_GELU_DEF_AVX512_H
+#ifndef AOCL_DLP_GEMM_GELU_DEF_AVX512_H
+#define AOCL_DLP_GEMM_GELU_DEF_AVX512_H
 
 /* TANH GeLU (x) = 0.5* x * (1 + tanh ( 0.797884 * ( x + ( 0.044715 * x^3 ) ) )
  * )  */
@@ -48,9 +48,9 @@
 #define GELU_ERF_F32_AVX512_DEF(reg, y, r, r2)                                 \
     r = _mm512_mul_ps(reg, _mm512_set1_ps(0.70710678118654f));                 \
     y = _mm512_setzero_ps();                                                   \
-    ERF_AOCL_AVX512(y, r);                                                     \
+    ERF_AOCL_DLP_AVX512(y, r);                                                 \
     r2  = _mm512_add_ps(y, _mm512_set1_ps(1));                                 \
     r2  = _mm512_mul_ps(r2, reg);                                              \
     reg = _mm512_mul_ps(r2, _mm512_set1_ps(0.5));
 
-#endif // AOCL_LPGEMM_GELU_DEF_AVX512_H
+#endif // AOCL_DLP_GEMM_GELU_DEF_AVX512_H

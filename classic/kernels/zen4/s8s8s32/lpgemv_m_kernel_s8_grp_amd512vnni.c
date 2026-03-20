@@ -28,8 +28,8 @@
 
 #include <immintrin.h>
 
-#include "../u8s8s32/lpgemm_s32_kern_macros.h"
-#include "../u8s8s32/lpgemm_s32_memcpy_macros.h"
+#include "../u8s8s32/dlp_gemm_s32_kern_macros.h"
+#include "../u8s8s32/dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
 
 // LPGEMV M=1 kernel for handling GEMV with group symmetric quantization.
@@ -49,7 +49,7 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
     const int8_t* b_use = NULL;
     const int8_t* b_pc  = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     md_t group_size = grp_post_ops_attr.group_size;
 
@@ -390,8 +390,8 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         __m512 acc_16 = f32_acc2;
         __m512 acc_20 = f32_acc3;
 
-        post_ops_attr.is_last_k            = TRUE;
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        post_ops_attr.is_last_k              = TRUE;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
 
     POST_OPS_BIAS_6x64: {

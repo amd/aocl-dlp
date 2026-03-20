@@ -28,8 +28,8 @@
 
 #include <immintrin.h>
 
-#include "../u8s8s32/lpgemm_s32_kern_macros.h"
-#include "../u8s8s32/lpgemm_s32_memcpy_macros.h"
+#include "../u8s8s32/dlp_gemm_s32_kern_macros.h"
+#include "../u8s8s32/dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
 
 #define LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)         \
@@ -92,7 +92,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
     const int8_t* b_use   = NULL;
     float*        c_use   = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     uint8_t cvt_uint8 = 128;
     __m512i vec_uint8 = _mm512_set1_epi8(cvt_uint8);
@@ -1038,7 +1038,7 @@ LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         __m512 acc_8 = f32_acc0;
 
         // Post Ops
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
 
         post_ops_attr.is_last_k = TRUE;
         POST_OP_LABEL_LASTK_SAFE_JUMP

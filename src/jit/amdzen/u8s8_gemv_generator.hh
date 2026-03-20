@@ -409,7 +409,7 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
-    AOCL_MEMORY_TAG                  mtag_b;
+    AOCL_DLP_MEMORY_TAG              mtag_b;
 
     // Add mask register array (for AVX512)
     static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available

@@ -26,15 +26,15 @@
  *
  */
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "logging/lpgemm_logger.h"
-#include "lpgemm_5loop_interface_apis.h"
-#include "lpgemm_post_ops.h"
-#include "lpgemm_types.h"
-#include "threading/lpgemm_thread_decor_openmp.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_5loop_interface_apis.h"
+#include "dlp_gemm_post_ops.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "logging/dlp_gemm_logger.h"
+#include "threading/dlp_gemm_thread_decor_openmp.h"
 
 void
 aocl_batch_gemm_u8s8s32os32(const char*      order,
@@ -57,12 +57,13 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
                             const char*      mem_format_b,
                             dlp_metadata_t** metadata)
 {
-    LPGEMM_START_LOGGER();
-    BATCH_LPGEMM_WRITE_LOGGER("u8s8s32os32", order, transa, transb, group_count,
-                              group_size, m, n, k, alpha, lda, mem_format_a,
-                              ldb, mem_format_b, beta, ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    BATCH_DLP_GEMM_WRITE_LOGGER(
+        "u8s8s32os32", order, transa, transb, group_count, group_size, m, n, k,
+        alpha, lda, mem_format_a, ldb, mem_format_b, beta, ldc, metadata);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform u8s8s32 gemm.",
@@ -88,11 +89,11 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
-        AOCL_BATCH_GEMM_CHECK("batch_u8s8s32os32", order[gc_i], transa[gc_i],
-                              transb[gc_i], group_count, g_sz, m[gc_i], n[gc_i],
-                              k[gc_i], a[gc_i], lda[gc_i], mem_format_a[gc_i],
-                              b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
-                              ldc[gc_i], err_no);
+        AOCL_DLP_BATCH_GEMM_CHECK(
+            "batch_u8s8s32os32", order[gc_i], transa[gc_i], transb[gc_i],
+            group_count, g_sz, m[gc_i], n[gc_i], k[gc_i], a[gc_i], lda[gc_i],
+            mem_format_a[gc_i], b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
+            ldc[gc_i], err_no);
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
@@ -108,13 +109,13 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         md_t rs_c;
         md_t cs_c;
 
-        AOCL_MEMORY_TAG mtag_a;
-        AOCL_MEMORY_TAG mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_a;
+        AOCL_DLP_MEMORY_TAG mtag_b;
 
         // Convert post op struct to post op linked list format.
-        lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
+        dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
 
-        dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+        dlp_clsc_err_t err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list, (void*)c[gc_i],
             (void*)((order + gc_i)), m[gc_i], n[gc_i]);
 
@@ -212,8 +213,8 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         dlp_rntm_t rntm_g;
         dlp_rntm_init_from_global(&rntm_g);
 
-        lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
-        lpgemm_cntx_t  lcntx_l;
+        dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(U8S8S32OS32);
+        dlp_gemm_cntx_t  lcntx_l;
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         lcntx_l = *lcntx_g;
@@ -238,16 +239,17 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
-        lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+        dlp_gemm_ops_bundle_t ops =
+            DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-        batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
             &lcntx_l, &ops, DLP_S32);
 #else
-        batch_lpgemm_u8s8s32o32_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
@@ -256,7 +258,7 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }
 
 void
@@ -280,12 +282,13 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
                            const char*      mem_format_b,
                            dlp_metadata_t** metadata)
 {
-    LPGEMM_START_LOGGER();
-    BATCH_LPGEMM_WRITE_LOGGER("u8s8s32os8", order, transa, transb, group_count,
-                              group_size, m, n, k, alpha, lda, mem_format_a,
-                              ldb, mem_format_b, beta, ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    BATCH_DLP_GEMM_WRITE_LOGGER(
+        "u8s8s32os8", order, transa, transb, group_count, group_size, m, n, k,
+        alpha, lda, mem_format_a, ldb, mem_format_b, beta, ldc, metadata);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform u8s8s32 gemm.",
@@ -311,11 +314,11 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
-        AOCL_BATCH_GEMM_CHECK("batch_u8s8s32os8", order[gc_i], transa[gc_i],
-                              transb[gc_i], gc_i, g_sz, m[gc_i], n[gc_i],
-                              k[gc_i], a[gc_i], lda[gc_i], mem_format_a[gc_i],
-                              b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
-                              ldc[gc_i], err_no);
+        AOCL_DLP_BATCH_GEMM_CHECK(
+            "batch_u8s8s32os8", order[gc_i], transa[gc_i], transb[gc_i], gc_i,
+            g_sz, m[gc_i], n[gc_i], k[gc_i], a[gc_i], lda[gc_i],
+            mem_format_a[gc_i], b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
+            ldc[gc_i], err_no);
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
@@ -331,17 +334,17 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         md_t rs_c;
         md_t cs_c;
 
-        AOCL_MEMORY_TAG mtag_a;
-        AOCL_MEMORY_TAG mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_a;
+        AOCL_DLP_MEMORY_TAG mtag_b;
 
         const uint8_t** a_local;
         const int8_t**  b_local;
         md_t            m_local, n_local, k_local;
 
         // Convert post op struct to post op linked list format.
-        lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
+        dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
 
-        dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+        dlp_clsc_err_t err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list, (void*)c[gc_i],
             (void*)((order + gc_i)), m[gc_i], n[gc_i]);
 
@@ -434,8 +437,8 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         dlp_rntm_t rntm_g;
         dlp_rntm_init_from_global(&rntm_g);
 
-        lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
-        lpgemm_cntx_t  lcntx_l;
+        dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(U8S8S32OS32);
+        dlp_gemm_cntx_t  lcntx_l;
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         lcntx_l = *lcntx_g;
@@ -460,16 +463,17 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
-        lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+        dlp_gemm_ops_bundle_t ops =
+            DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-        batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
             &rntm_g, &lcntx_l, &ops, DLP_S8);
 #else
-        batch_lpgemm_u8s8s32o32_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
@@ -478,7 +482,7 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }
 
 void
@@ -502,12 +506,13 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
                             const char*      mem_format_b,
                             dlp_metadata_t** metadata)
 {
-    LPGEMM_START_LOGGER();
-    BATCH_LPGEMM_WRITE_LOGGER("u8s8s32of32", order, transa, transb, group_count,
-                              group_size, m, n, k, alpha, lda, mem_format_a,
-                              ldb, mem_format_b, beta, ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    BATCH_DLP_GEMM_WRITE_LOGGER(
+        "u8s8s32of32", order, transa, transb, group_count, group_size, m, n, k,
+        alpha, lda, mem_format_a, ldb, mem_format_b, beta, ldc, metadata);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform u8s8s32of32 gemm.",
@@ -534,11 +539,11 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         md_t g_sz = group_size[gc_i];
 
         // check for validity of params.
-        AOCL_BATCH_GEMM_CHECK("batch_u8s8s32of32", order[gc_i], transa[gc_i],
-                              transb[gc_i], gc_i, g_sz, m[gc_i], n[gc_i],
-                              k[gc_i], a[gc_i], lda[gc_i], mem_format_a[gc_i],
-                              b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
-                              ldc[gc_i], err_no);
+        AOCL_DLP_BATCH_GEMM_CHECK(
+            "batch_u8s8s32of32", order[gc_i], transa[gc_i], transb[gc_i], gc_i,
+            g_sz, m[gc_i], n[gc_i], k[gc_i], a[gc_i], lda[gc_i],
+            mem_format_a[gc_i], b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
+            ldc[gc_i], err_no);
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
@@ -554,17 +559,17 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         md_t rs_c;
         md_t cs_c;
 
-        AOCL_MEMORY_TAG mtag_a;
-        AOCL_MEMORY_TAG mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_a;
+        AOCL_DLP_MEMORY_TAG mtag_b;
 
         const uint8_t** a_local;
         const int8_t**  b_local;
         md_t            m_local, n_local, k_local;
 
         // Convert post op struct to post op linked list format.
-        lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
+        dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
 
-        dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+        dlp_clsc_err_t err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list, (void*)c[gc_i],
             (void*)((order + gc_i)), m[gc_i], n[gc_i]);
 
@@ -657,8 +662,8 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         dlp_rntm_t rntm_g;
         dlp_rntm_init_from_global(&rntm_g);
 
-        lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
-        lpgemm_cntx_t  lcntx_l;
+        dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(U8S8S32OS32);
+        dlp_gemm_cntx_t  lcntx_l;
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         lcntx_l = *lcntx_g;
@@ -683,16 +688,17 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
-        lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+        dlp_gemm_ops_bundle_t ops =
+            DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-        batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
             &rntm_g, &lcntx_l, &ops, DLP_F32);
 #else
-        batch_lpgemm_u8s8s32o32_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
@@ -701,7 +707,7 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }
 
 void
@@ -725,12 +731,13 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
                              const char*      mem_format_b,
                              dlp_metadata_t** metadata)
 {
-    LPGEMM_START_LOGGER();
-    BATCH_LPGEMM_WRITE_LOGGER(
+    DLP_GEMM_START_LOGGER();
+    BATCH_DLP_GEMM_WRITE_LOGGER(
         "u8s8s32obf16", order, transa, transb, group_count, group_size, m, n, k,
         alpha, lda, mem_format_a, ldb, mem_format_b, beta, ldc, metadata);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform u8s8s32obf16 gemm.",
@@ -755,11 +762,11 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
-        AOCL_BATCH_GEMM_CHECK("batch_u8s8s32obf16", order[gc_i], transa[gc_i],
-                              transb[gc_i], gc_i, g_sz, m[gc_i], n[gc_i],
-                              k[gc_i], a[gc_i], lda[gc_i], mem_format_a[gc_i],
-                              b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
-                              ldc[gc_i], err_no);
+        AOCL_DLP_BATCH_GEMM_CHECK(
+            "batch_u8s8s32obf16", order[gc_i], transa[gc_i], transb[gc_i], gc_i,
+            g_sz, m[gc_i], n[gc_i], k[gc_i], a[gc_i], lda[gc_i],
+            mem_format_a[gc_i], b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
+            ldc[gc_i], err_no);
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
@@ -775,8 +782,8 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         md_t rs_c;
         md_t cs_c;
 
-        AOCL_MEMORY_TAG mtag_a;
-        AOCL_MEMORY_TAG mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_a;
+        AOCL_DLP_MEMORY_TAG mtag_b;
 
         const uint8_t** a_local;
         const int8_t**  b_local;
@@ -784,9 +791,9 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         md_t m_local, n_local, k_local;
 
         // Convert post op struct to post op linked list format.
-        lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
+        dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
 
-        dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+        dlp_clsc_err_t err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list, (void*)c[gc_i],
             (void*)((order + gc_i)), m[gc_i], n[gc_i]);
 
@@ -873,8 +880,8 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         dlp_rntm_t rntm_g;
         dlp_rntm_init_from_global(&rntm_g);
 
-        lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
-        lpgemm_cntx_t  lcntx_l;
+        dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(U8S8S32OS32);
+        dlp_gemm_cntx_t  lcntx_l;
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         lcntx_l = *lcntx_g;
@@ -899,16 +906,17 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
-        lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+        dlp_gemm_ops_bundle_t ops =
+            DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-        batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
             &rntm_g, &lcntx_l, &ops, DLP_BF16);
 #else
-        batch_lpgemm_u8s8s32o32_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
@@ -917,7 +925,7 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }
 
 void
@@ -941,12 +949,13 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
                            const char*      mem_format_b,
                            dlp_metadata_t** metadata)
 {
-    LPGEMM_START_LOGGER();
-    BATCH_LPGEMM_WRITE_LOGGER("u8s8s32ou8", order, transa, transb, group_count,
-                              group_size, m, n, k, alpha, lda, mem_format_a,
-                              ldb, mem_format_b, beta, ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    BATCH_DLP_GEMM_WRITE_LOGGER(
+        "u8s8s32ou8", order, transa, transb, group_count, group_size, m, n, k,
+        alpha, lda, mem_format_a, ldb, mem_format_b, beta, ldc, metadata);
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform u8s8s32ou8 gemm.",
@@ -971,11 +980,11 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
 
         md_t g_sz = group_size[gc_i];
         // check for validity of params.
-        AOCL_BATCH_GEMM_CHECK("batch_u8s8s32ou8", order[gc_i], transa[gc_i],
-                              transb[gc_i], gc_i, g_sz, m[gc_i], n[gc_i],
-                              k[gc_i], a[gc_i], lda[gc_i], mem_format_a[gc_i],
-                              b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
-                              ldc[gc_i], err_no);
+        AOCL_DLP_BATCH_GEMM_CHECK(
+            "batch_u8s8s32ou8", order[gc_i], transa[gc_i], transb[gc_i], gc_i,
+            g_sz, m[gc_i], n[gc_i], k[gc_i], a[gc_i], lda[gc_i],
+            mem_format_a[gc_i], b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
+            ldc[gc_i], err_no);
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
@@ -991,8 +1000,8 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         md_t rs_c;
         md_t cs_c;
 
-        AOCL_MEMORY_TAG mtag_a;
-        AOCL_MEMORY_TAG mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_a;
+        AOCL_DLP_MEMORY_TAG mtag_b;
 
         const uint8_t** a_local;
         const int8_t**  b_local;
@@ -1000,9 +1009,9 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         md_t m_local, n_local, k_local;
 
         // Convert post op struct to post op linked list format.
-        lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
+        dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
 
-        dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+        dlp_clsc_err_t err = dlp_gemm_translate_to_post_ops_list(
             metadata[gc_i], post_op_list, (void*)c[gc_i],
             (void*)((order + gc_i)), m[gc_i], n[gc_i]);
 
@@ -1095,8 +1104,8 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         dlp_rntm_t rntm_g;
         dlp_rntm_init_from_global(&rntm_g);
 
-        lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(U8S8S32OS32);
-        lpgemm_cntx_t  lcntx_l;
+        dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(U8S8S32OS32);
+        dlp_gemm_cntx_t  lcntx_l;
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         lcntx_l = *lcntx_g;
@@ -1121,16 +1130,17 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         }
 
         // Create ops bundle for standard GEMM (post-ops only)
-        lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+        dlp_gemm_ops_bundle_t ops =
+            DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-        batch_lpgemm_u8s8s32o32_openmp_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_openmp_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
             &rntm_g, &lcntx_l, &ops, DLP_U8);
 #else
-        batch_lpgemm_u8s8s32o32_thread_decorator(
+        batch_dlp_gemm_u8s8s32o32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const uint8_t**)a_local, &rs_a,
             &cs_a, &mtag_a, (const int8_t**)b_local, &rs_b, &cs_b, &mtag_b,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
@@ -1139,5 +1149,5 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         mat_idx += g_sz;
     }
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }

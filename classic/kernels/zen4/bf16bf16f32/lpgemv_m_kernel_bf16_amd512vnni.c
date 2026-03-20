@@ -29,9 +29,9 @@
 #include "kernels/dlp_kernels.h"
 #include "xmmintrin.h"
 
-#include "lpgemm_f32_kern_macros.h"
+#include "dlp_gemm_f32_kern_macros.h"
 
-#ifdef LPGEMM_BF16_JIT
+#ifdef DLP_GEMM_BF16_JIT
 LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
 #else
 
@@ -52,7 +52,7 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
     const bfloat16* a_use = NULL;
     const bfloat16* b_use = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     for (iter_t jr = 0; jr < n0; jr += NR) {
 
@@ -275,8 +275,8 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
             }
         }
 
-        post_ops_attr.is_last_k            = TRUE;
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        post_ops_attr.is_last_k              = TRUE;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
 
     POST_OPS_BIAS_6x64: {
@@ -743,4 +743,4 @@ LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
     } // jr loop
 }
 
-#endif //  LPGEMM_BF16_JIT
+#endif //  DLP_GEMM_BF16_JIT

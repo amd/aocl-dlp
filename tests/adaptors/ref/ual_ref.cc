@@ -356,8 +356,8 @@ UalRef::reorder(void*        A,
 /**
  * @brief Validate GEMM parameters for correctness
  *
- * This function follows the exact logic from AOCL_GEMM_CHECK macro in
- * aocl_gemm_check.h
+ * This function follows the exact logic from AOCL_DLP_GEMM_CHECK macro in
+ * aocl_dlp_gemm_check.h
  *
  * @param A First input matrix
  * @param B Second input matrix

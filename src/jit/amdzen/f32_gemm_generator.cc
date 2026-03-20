@@ -514,14 +514,14 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         // Check for is_last_k
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(".storeResultF32ToBF16", T_NEAR);
 
         // Get buf_downscale
         mov(regTmpCptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
         // NULL check
         cmp(regTmpCptr, 0);
         je(".storeResultF32ToBF16", T_NEAR);
@@ -529,18 +529,18 @@ jitGEMMF32<KType>::storeResultRowMajor(bool fuseBetaWithStore)
         // Get post_op_c_j
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
         add(regTmpCptr, regTmp1);
 
         // Get rs_c_downscale
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
         mov(regTmp3,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         imul(regTmp3, regTmp1);
         add(regTmpCptr, regTmp3);
 
@@ -1016,14 +1016,14 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         // Check for is_first_k
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je(".betaOp", T_NEAR);
 
         // Get buf_downscale
         mov(regTmpCptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
         // NULL check
         cmp(regTmpCptr, 0);
         je(".betaOp", T_NEAR);
@@ -1031,18 +1031,18 @@ jitGEMMF32<KType>::scaleBetaRowMajor()
         // Get post_op_c_j
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
         add(regTmpCptr, regTmp1);
 
         // Get rs_c_downscale
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
         mov(regTmp3,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         imul(regTmp3, regTmp1);
         add(regTmpCptr, regTmp3);
         mov(regKIter, regTmpCptr);
@@ -1238,7 +1238,7 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     // check if is_last_k is set
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
     je(label_store_result, T_NEAR);
 
@@ -1305,10 +1305,10 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
         // two offsets at the same time is safe.
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         add(regTmp1, currentMR);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
             regTmp1);
 
         moveCPtr(regCPtr, regRsC, currentMR);
@@ -1402,7 +1402,7 @@ jitGEMMF32<KType>::generateKernelBodyK1(utils::generatorParams& params,
     // check if is_last_k is set
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
 #ifdef IR_JR_LOOP_ORDER_FOR_K1
     je(label_store_result_k1[currentMR - 1][currentNRIdx],
@@ -1571,7 +1571,7 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
         // post_op_c_i value
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         push(regTmp1);
 
         // Generate all MR variants for this NR variant
@@ -1611,11 +1611,11 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
                 mov(regTmp1,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                        + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                        + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
                 add(regTmp1, currentMR);
                 mov(ptr[stackPtr
                         + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                        + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                        + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
                     regTmp1);
 
                 moveCPtr(regCPtr, regRsC, currentMR);
@@ -1650,7 +1650,7 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
         // restore the original post_op_c_i value
         pop(regTmp1);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
             regTmp1);
 
         // move B pointer to the next NR panel
@@ -1668,10 +1668,10 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
         // update post_op_c_j value to point to next NR panel
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         add(regTmp1, currentNR);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
             regTmp1);
 
         if (isMainNRVariant) {
@@ -1798,7 +1798,7 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
         // post_op_c_j
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         push(regTmp1);
         mov(regNiter,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
@@ -1864,10 +1864,10 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
             // update post_op_c_j value to point to next NR panel
             mov(regTmp1,
                 ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
             add(regTmp1, currentNR);
             mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
                 regTmp1);
 
             if (isMainNRVariant) {
@@ -1913,7 +1913,7 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
             regNiter);
         pop(regTmp1);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
             regTmp1);
 
         if (isMainMRVariant) {
@@ -1929,10 +1929,10 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
             // adding two offsets at the same time is safe.
             mov(regTmp1,
                 ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
             add(regTmp1, currentMR);
             mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
                 regTmp1);
 
             mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);

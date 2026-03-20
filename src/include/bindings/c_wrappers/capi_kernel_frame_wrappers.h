@@ -42,7 +42,7 @@ typedef enum
     PACK_KC   = 2,
     PACK_NR   = 3,
     REORDERED = 4,
-} AOCL_MEMORY_TAG;
+} AOCL_DLP_MEMORY_TAG;
 
 // Post-ops codes.
 typedef enum
@@ -63,10 +63,10 @@ typedef enum
     POST_OPS_SUM        = 13,
     POST_OPS_ADQUANTIZE = 14,
     POST_OPS_MAX
-} LPGEMM_POST_OP_CODE;
+} DLP_GEMM_POST_OP_CODE;
 
 // Used as an internal structure.
-typedef struct lpgemm_post_op_t
+typedef struct dlp_gemm_post_op_t
 {
     uint64_t op_code;
     void*    op_args1; // zero_point, bias, sum_buff
@@ -79,11 +79,11 @@ typedef struct lpgemm_post_op_t
     uint64_t stor_type;
     uint64_t zp_stor_type;
     uint64_t sf_stor_type; // Introduced for sf store type
-    struct lpgemm_post_op_t* next;
-} lpgemm_post_op;
+    struct dlp_gemm_post_op_t* next;
+} dlp_gemm_post_op;
 
 // Used as an internal structure.
-typedef struct lpgemm_post_op_attr_t
+typedef struct dlp_gemm_post_op_attr_t
 {
     uint64_t post_op_c_i;
     uint64_t post_op_c_j;
@@ -96,7 +96,7 @@ typedef struct lpgemm_post_op_attr_t
     uint64_t b_sum_offset;
     int32_t* b_col_sum_vec;
     int16_t* b_col_sum_vec_s16;
-} lpgemm_post_op_attr;
+} dlp_gemm_post_op_attr;
 
 // Type definitions that can be used by both C and C++ code. The enum tokens
 // should follow the exact sequence as in kernelDatatype(kernel_frame_base.h).
@@ -133,49 +133,49 @@ typedef struct
 DLP_BEGIN_EXTERN_C
 
 void
-dlp_init_and_get_kernel_hndl(kernel_datatype_t  k_dtype,
-                             char               storage_format,
-                             AOCL_MEMORY_TAG    mtag_a,
-                             AOCL_MEMORY_TAG    mtag_b,
-                             md_t               m,
-                             md_t               n,
-                             md_t               k,
-                             md_t               rs_a,
-                             md_t               cs_a,
-                             md_t               rs_b,
-                             md_t               cs_b,
-                             md_t               rs_c,
-                             md_t               cs_c,
-                             void*              alpha,
-                             void*              beta,
-                             lpgemm_post_op*    metadata,
-                             md_t               mr_hint,
-                             md_t               nr_hint,
-                             md_t               kc_hint,
-                             md_t               c_downscale,
-                             dlp_kernel_hndl_t* kernel_hndl);
+dlp_init_and_get_kernel_hndl(kernel_datatype_t   k_dtype,
+                             char                storage_format,
+                             AOCL_DLP_MEMORY_TAG mtag_a,
+                             AOCL_DLP_MEMORY_TAG mtag_b,
+                             md_t                m,
+                             md_t                n,
+                             md_t                k,
+                             md_t                rs_a,
+                             md_t                cs_a,
+                             md_t                rs_b,
+                             md_t                cs_b,
+                             md_t                rs_c,
+                             md_t                cs_c,
+                             void*               alpha,
+                             void*               beta,
+                             dlp_gemm_post_op*   metadata,
+                             md_t                mr_hint,
+                             md_t                nr_hint,
+                             md_t                kc_hint,
+                             md_t                c_downscale,
+                             dlp_kernel_hndl_t*  kernel_hndl);
 
 void
-dlp_execute_kernel(dlp_kernel_hndl_t*  kernel_hndl,
-                   md_t                m,
-                   md_t                n,
-                   md_t                k,
-                   void*               A,
-                   md_t                rs_a,
-                   md_t                cs_a,
-                   md_t                ps_a,
-                   void*               B,
-                   md_t                rs_b,
-                   md_t                cs_b,
-                   md_t                n_sub_updated,
-                   md_t                jc_cur_loop_rem,
-                   void*               C,
-                   md_t                rs_c,
-                   md_t                cs_c,
-                   void*               alpha,
-                   void*               beta,
-                   lpgemm_post_op*     post_ops_list,
-                   lpgemm_post_op_attr post_ops_attr);
+dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
+                   md_t                  m,
+                   md_t                  n,
+                   md_t                  k,
+                   void*                 A,
+                   md_t                  rs_a,
+                   md_t                  cs_a,
+                   md_t                  ps_a,
+                   void*                 B,
+                   md_t                  rs_b,
+                   md_t                  cs_b,
+                   md_t                  n_sub_updated,
+                   md_t                  jc_cur_loop_rem,
+                   void*                 C,
+                   md_t                  rs_c,
+                   md_t                  cs_c,
+                   void*                 alpha,
+                   void*                 beta,
+                   dlp_gemm_post_op*     post_ops_list,
+                   dlp_gemm_post_op_attr post_ops_attr);
 
 DLP_END_EXTERN_C
 

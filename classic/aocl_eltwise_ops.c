@@ -26,14 +26,14 @@
  *
  */
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_eltwise_ops_interface_apis.h"
 #include "classic/dlp_errors.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "lpgemm_post_ops.h"
-#include "lpgemm_types.h"
-#include "threading/lpgemm_thread_decor_openmp.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_post_ops.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "threading/dlp_gemm_thread_decor_openmp.h"
 
 DLP_INLINE void
 aocl_eltwise_ops_bf16of32_base(const char      order,
@@ -51,7 +51,8 @@ aocl_eltwise_ops_bf16of32_base(const char      order,
     dlp_trans_t dlp_transa;
     dlp_trans_t dlp_transb;
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
@@ -84,8 +85,8 @@ aocl_eltwise_ops_bf16of32_base(const char      order,
     md_t cs_b = 1;
 
     // Convert post op struct to post op linked list format.
-    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
-    dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
+    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
         metadata, post_op_list, NULL, (void*)(&order), m, n);
     if (err != DLP_CLSC_SUCCESS)
         return;
@@ -95,18 +96,18 @@ aocl_eltwise_ops_bf16of32_base(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_eltwise_ops_cntx_t* lcntx_g =
-        lpgemm_eltwise_ops_get_global_cntx_obj(BF16OF32);
+    dlp_gemm_eltwise_ops_cntx_t* lcntx_g =
+        dlp_gemm_eltwise_ops_get_global_cntx_obj(BF16OF32);
 
 #ifdef DLP_ENABLE_OPENMP
 
-    lpgemm_eltwise_ops_bf16of32_openmp_thread_decorator(
+    dlp_gemm_eltwise_ops_bf16of32_openmp_thread_decorator(
         m, n, a, rs_a, cs_a, b, rs_b, cs_b, &rntm_g, lcntx_g, post_op_list,
         c_downscale);
 #else
-    lpgemm_eltwise_ops_bf16of32_thread_decorator(m, n, a, rs_a, cs_a, b, rs_b,
-                                                 cs_b, &rntm_g, lcntx_g,
-                                                 post_op_list, c_downscale);
+    dlp_gemm_eltwise_ops_bf16of32_thread_decorator(m, n, a, rs_a, cs_a, b, rs_b,
+                                                   cs_b, &rntm_g, lcntx_g,
+                                                   post_op_list, c_downscale);
 #endif
 }
 
@@ -123,8 +124,8 @@ aocl_gemm_eltwise_ops_bf16of32(const char      order,
                                dlp_metadata_t* metadata)
 {
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UTIL_ELTWISE_OPS_CHECK("bf16of32", order, transa, transb, m, n, a, lda,
-                                b, ldb, err_no);
+    AOCL_DLP_UTIL_ELTWISE_OPS_CHECK("bf16of32", order, transa, transb, m, n, a,
+                                    lda, b, ldb, err_no);
 
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
@@ -148,15 +149,15 @@ aocl_gemm_eltwise_ops_bf16obf16(const char      order,
                                 dlp_metadata_t* metadata)
 {
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UTIL_ELTWISE_OPS_CHECK("bf16obf16", order, transa, transb, m, n, a,
-                                lda, b, ldb, err_no);
+    AOCL_DLP_UTIL_ELTWISE_OPS_CHECK("bf16obf16", order, transa, transb, m, n, a,
+                                    lda, b, ldb, err_no);
 
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return;
     }
 
-#ifdef LPGEMM_BF16_JIT
+#ifdef DLP_GEMM_BF16_JIT
     dlp_print_msg("cannot perform the operation with gcc < 11.2", __FILE__,
                   __LINE__);
     return;
@@ -185,7 +186,8 @@ aocl_eltwise_ops_f32of32_base(const char      order,
     dlp_trans_t dlp_transa;
     dlp_trans_t dlp_transb;
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512bf16_supported() == FALSE) {
         dlp_print_msg(" AVX512_BF16 ISA not supported by processor, "
                       "cannot perform bf16bf16f32 gemm.",
@@ -218,8 +220,8 @@ aocl_eltwise_ops_f32of32_base(const char      order,
     md_t cs_b = 1;
 
     // Convert post op struct to post op linked list format.
-    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
-    dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
+    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
         metadata, post_op_list, NULL, (void*)(&order), m, n);
     if (err != DLP_CLSC_SUCCESS)
         return;
@@ -229,18 +231,18 @@ aocl_eltwise_ops_f32of32_base(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_eltwise_ops_cntx_t* lcntx_g =
-        lpgemm_eltwise_ops_get_global_cntx_obj(F32OF32);
+    dlp_gemm_eltwise_ops_cntx_t* lcntx_g =
+        dlp_gemm_eltwise_ops_get_global_cntx_obj(F32OF32);
 
 #ifdef DLP_ENABLE_OPENMP
 
-    lpgemm_eltwise_ops_f32of32_openmp_thread_decorator(
+    dlp_gemm_eltwise_ops_f32of32_openmp_thread_decorator(
         m, n, a, rs_a, cs_a, b, rs_b, cs_b, &rntm_g, lcntx_g, post_op_list,
         c_downscale);
 #else
-    lpgemm_eltwise_ops_f32of32_thread_decorator(m, n, a, rs_a, cs_a, b, rs_b,
-                                                cs_b, &rntm_g, lcntx_g,
-                                                post_op_list, c_downscale);
+    dlp_gemm_eltwise_ops_f32of32_thread_decorator(m, n, a, rs_a, cs_a, b, rs_b,
+                                                  cs_b, &rntm_g, lcntx_g,
+                                                  post_op_list, c_downscale);
 #endif
 }
 
@@ -257,8 +259,8 @@ aocl_gemm_eltwise_ops_f32of32(const char      order,
                               dlp_metadata_t* metadata)
 {
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UTIL_ELTWISE_OPS_CHECK("f32of32", order, transa, transb, m, n, a, lda,
-                                b, ldb, err_no);
+    AOCL_DLP_UTIL_ELTWISE_OPS_CHECK("f32of32", order, transa, transb, m, n, a,
+                                    lda, b, ldb, err_no);
 
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
@@ -282,15 +284,15 @@ aocl_gemm_eltwise_ops_f32obf16(const char      order,
                                dlp_metadata_t* metadata)
 {
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UTIL_ELTWISE_OPS_CHECK("f32obf16", order, transa, transb, m, n, a, lda,
-                                b, ldb, err_no);
+    AOCL_DLP_UTIL_ELTWISE_OPS_CHECK("f32obf16", order, transa, transb, m, n, a,
+                                    lda, b, ldb, err_no);
 
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return;
     }
 
-#ifdef LPGEMM_BF16_JIT
+#ifdef DLP_GEMM_BF16_JIT
     dlp_print_msg("cannot perform the operation with gcc < 11.2", __FILE__,
                   __LINE__);
     return;
@@ -313,8 +315,8 @@ aocl_gemm_eltwise_ops_f32os32(const char      order,
                               dlp_metadata_t* metadata)
 {
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UTIL_ELTWISE_OPS_CHECK("f32os32", order, transa, transb, m, n, a, lda,
-                                b, ldb, err_no);
+    AOCL_DLP_UTIL_ELTWISE_OPS_CHECK("f32os32", order, transa, transb, m, n, a,
+                                    lda, b, ldb, err_no);
 
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
@@ -338,8 +340,8 @@ aocl_gemm_eltwise_ops_f32os8(const char      order,
                              dlp_metadata_t* metadata)
 {
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UTIL_ELTWISE_OPS_CHECK("f32os8", order, transa, transb, m, n, a, lda,
-                                b, ldb, err_no);
+    AOCL_DLP_UTIL_ELTWISE_OPS_CHECK("f32os8", order, transa, transb, m, n, a,
+                                    lda, b, ldb, err_no);
 
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
@@ -363,8 +365,8 @@ aocl_gemm_eltwise_ops_f32ou8(const char      order,
                              dlp_metadata_t* metadata)
 {
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UTIL_ELTWISE_OPS_CHECK("f32ou8", order, transa, transb, m, n, a, lda,
-                                b, ldb, err_no);
+    AOCL_DLP_UTIL_ELTWISE_OPS_CHECK("f32ou8", order, transa, transb, m, n, a,
+                                    lda, b, ldb, err_no);
 
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);

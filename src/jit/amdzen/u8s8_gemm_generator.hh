@@ -252,7 +252,7 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     // NOTE: VNNI BUFFER HANDLING
     // =================================================================
     // Classic framework provides pre-packed VNNI buffers:
-    // - B matrix: packed by packb_nr64_u8s8s32o32_row_major()
+    // - B matrix: packed by dlp_packb_nr64_u8s8s32o32_row_major()
     // - A matrix: accessed with standard strides + VNNI broadcast
     // - All alignment requirements handled by classic packing
     // JIT generator only needs standard buffer addressing

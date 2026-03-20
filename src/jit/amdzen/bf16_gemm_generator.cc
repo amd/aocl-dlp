@@ -90,7 +90,7 @@ jitGEMMBF16<KType>::initializeParameters(bool addIrLoop)
     // post_op_c_i
     mov(regTmp2,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     if (c_downscale < DLP_F32) {
         // Broadcast the left shift offset onto a ZMM register
@@ -260,13 +260,13 @@ jitGEMMBF16<KType>::scaleBeta()
         // Check for is_first_k
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETAOP", T_NEAR);
 
         mov(regTmpCptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
         // NULL check
         cmp(regTmpCptr, 0);
@@ -274,14 +274,14 @@ jitGEMMBF16<KType>::scaleBeta()
 
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
 
         add(regTmpCptr, regTmp1);
 
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]); // BF16 stride
 
         mov(regKIter, regTmp2);
@@ -348,13 +348,13 @@ jitGEMMBF16<KType>::storeResult()
         // Check for is_last_k
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je("STOREOP", T_NEAR);
 
         mov(regTmpCptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
         // NULL check
         cmp(regTmpCptr, 0);
@@ -362,14 +362,14 @@ jitGEMMBF16<KType>::storeResult()
 
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
 
         add(regTmpCptr, regTmp1);
 
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]); // BF16 stride
 
         mov(regKIter, regTmp2);
@@ -495,7 +495,7 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
     // check if is_last_k is set
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
     je(label_store_result, T_NEAR);
 
@@ -530,7 +530,7 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
         // write back the updated post_op_c_i offset to memory since,
         // kernel-ops module reads this offset from memory.
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
             regTmp2);
 
         moveCPtr();

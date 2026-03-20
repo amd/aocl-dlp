@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_ELTWISE_OPS_INTERFACE_H
-#define AOCL_ELTWISE_OPS_INTERFACE_H
+#ifndef AOCL_DLP_ELTWISE_OPS_INTERFACE_H
+#define AOCL_DLP_ELTWISE_OPS_INTERFACE_H
 
 #include "classic/aocl_bf16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
@@ -131,4 +131,4 @@ aocl_gemm_eltwise_ops_f32ou8(const char      order,
                              const md_t      ldb,
                              dlp_metadata_t* metadata);
 
-#endif // AOCL_ELTWISE_OPS_INTERFACE_H
+#endif // AOCL_DLP_ELTWISE_OPS_INTERFACE_H

@@ -389,7 +389,7 @@ class jitAmdZenFP16 : public dlp::jit::jitGeneratorBase
     std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
     utils::kernelInstrType                         kType;
     int                                            numElemsPerReg;
-    AOCL_MEMORY_TAG mtag_b; // Memory tag for B matrix
+    AOCL_DLP_MEMORY_TAG mtag_b; // Memory tag for B matrix
 
     using FP16Types = amdzen::traits::kernel_types<
         dlp::kernel_frame::kernelDatatype::f16f16f16of16>;

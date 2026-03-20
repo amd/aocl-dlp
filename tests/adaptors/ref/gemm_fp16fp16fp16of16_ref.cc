@@ -141,7 +141,7 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
         }
     };
 
-    // K-blocking configuration - must match DLP's lpgemm_blksz_map.h
+    // K-blocking configuration - must match DLP's dlp_gemm_blksz_map.h
     // F16F16F16OF16: KC = 2048
     const md_t KC = 2048;
 

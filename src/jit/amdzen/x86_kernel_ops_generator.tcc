@@ -353,7 +353,7 @@ void
 kernelOpsGeneratorX86<KType>::advancePostOpsPtr()
 {
     jit_->mov(regkernelOpsList,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, next)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, next)]);
 }
 
 template<utils::kernelInstrType KType>
@@ -380,9 +380,9 @@ kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
     jit_->L(tables);
     jit_->db(reinterpret_cast<uint8_t*>(&gelu_consts), sizeof(gelu_consts));
     jit_->db(reinterpret_cast<uint8_t*>(&gelu_macros), sizeof(gelu_macros));
-    jit_->db(reinterpret_cast<uint8_t*>(&lpgemm_exp), sizeof(lpgemm_exp));
+    jit_->db(reinterpret_cast<uint8_t*>(&dlp_gemm_exp), sizeof(dlp_gemm_exp));
     jit_->db(reinterpret_cast<uint8_t*>(&erf_consts), sizeof(erf_consts));
-    jit_->db(reinterpret_cast<uint8_t*>(&lpgemm_erf), sizeof(lpgemm_erf));
+    jit_->db(reinterpret_cast<uint8_t*>(&dlp_gemm_erf), sizeof(dlp_gemm_erf));
     jit_->db(reinterpret_cast<uint8_t*>(&erf_f32_coeffs_hex),
              sizeof(erf_f32_coeffs_hex));
     jit_->db(reinterpret_cast<uint8_t*>(&erf_f32_constants_hex),
@@ -890,21 +890,21 @@ kernelOpsGeneratorX86<KType>::biasRowMajorImplUnified(kernelOpsMetaData& op,
     bool isGEMVN1 = (algoType_ == dlp::jit::jitAlgoType::gemv_n1);
     // regTmp1: bias pointer (op_args1)
     jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
     // regTmp2: offset index (post_op_c_j for row-major)
     jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
     // Load SF and ZP pointers (only for dequantization)
     if (hasSF) {
         jit_->mov(regTmp3, jit_->ptr[regkernelOpsList
-                                     + offsetof(lpgemm_post_op, scale_factor)]);
+                                     + offsetof(dlp_gemm_post_op, scale_factor)]);
     }
     if (hasZP) {
         jit_->mov(
             regTmp6,
-            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, bias_zp)]);
+            jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, bias_zp)]);
     }
 
     // Calculate load bytes for each datatype
@@ -921,7 +921,7 @@ kernelOpsGeneratorX86<KType>::biasRowMajorImplUnified(kernelOpsMetaData& op,
         // Reload post_op_c_j and apply SF-specific scaling
         jit_->mov(regTmp2,
                   jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(SfDt)]);
         jit_->add(regTmp3, regTmp2);
     }
@@ -931,7 +931,7 @@ kernelOpsGeneratorX86<KType>::biasRowMajorImplUnified(kernelOpsMetaData& op,
         // Reload post_op_c_j and apply ZP-specific scaling
         jit_->mov(regTmp2,
                   jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(ZpDt)]);
         jit_->add(regTmp6, regTmp2);
     }
@@ -1072,21 +1072,21 @@ kernelOpsGeneratorX86<KType>::biasColMajorImplUnified(kernelOpsMetaData& op,
     bool isGEMVN1 = (algoType_ == dlp::jit::jitAlgoType::gemv_n1);
     // regTmp1: bias pointer (op_args1)
     jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
     // regTmp2: offset index (post_op_c_i for col-major)
     jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     // Load SF and ZP pointers (only for dequantization)
     if (hasSF) {
         jit_->mov(regTmp3, jit_->ptr[regkernelOpsList
-                                     + offsetof(lpgemm_post_op, scale_factor)]);
+                                     + offsetof(dlp_gemm_post_op, scale_factor)]);
     }
     if (hasZP) {
         jit_->mov(
             regTmp6,
-            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, bias_zp)]);
+            jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, bias_zp)]);
     }
 
     // Calculate load bytes for each datatype
@@ -1103,7 +1103,7 @@ kernelOpsGeneratorX86<KType>::biasColMajorImplUnified(kernelOpsMetaData& op,
         // Reload post_op_c_i and apply SF-specific scaling
         jit_->mov(regTmp2,
                   jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(SfDt)]);
         jit_->add(regTmp3, regTmp2);
     }
@@ -1113,7 +1113,7 @@ kernelOpsGeneratorX86<KType>::biasColMajorImplUnified(kernelOpsMetaData& op,
         // Reload post_op_c_i and apply ZP-specific scaling
         jit_->mov(regTmp2,
                   jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(ZpDt)]);
         jit_->add(regTmp6, regTmp2);
     }
@@ -1261,18 +1261,18 @@ kernelOpsGeneratorX86<KType>::bias(kernelOpsMetaData& op)
         // regTmp1: bias pointer (op_args1)
         jit_->mov(
             regTmp1,
-            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+            jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
         // regTmp2: offset index (post_op_c_j for row-major, post_op_c_i for
         // col-major)
         if (op.cMatFormat == storageFormat::rowMajor) {
             jit_->mov(regTmp2,
                       jit_->ptr[regkernelOpsAttr
-                                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         } else {
             jit_->mov(regTmp2,
                       jit_->ptr[regkernelOpsAttr
-                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         }
 
         // Only dispatch on bias datatype - no SF/ZP involved
@@ -1340,7 +1340,7 @@ kernelOpsGeneratorX86<KType>::reluScaleImpl()
 
     // Address of the scale value.
     jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args2)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args2)]);
 
     // Broadcast the scale value.
     broadcastAndConvertScalar<T>(scaleReg, jit_->ptr[regTmp1]);
@@ -1412,11 +1412,11 @@ kernelOpsGeneratorX86<KType>::clip(kernelOpsMetaData& op)
 {
     // Load address of min value.
     jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args2)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args2)]);
 
     // Load address of max value.
     jit_->mov(regTmp2,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args3)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args3)]);
 
     DISPATCH_BY_DATATYPE(op.paramStorageDt, clipImpl);
     return jitGeneratorError::success;
@@ -1448,7 +1448,7 @@ kernelOpsGeneratorX86<KType>::scaleFactorRowMajorImpl()
     // we can safely assume that we will have enough registers to load
     // the NR elements of scale factor.
     jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
@@ -1481,7 +1481,7 @@ kernelOpsGeneratorX86<KType>::scaleFactorColMajorImpl()
     // since we are keeping atleast one register for broadcasting A,
     // it is safe to broadcast and apply one at a time.
     jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
@@ -1521,7 +1521,7 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::zeroPointRowMajorImpl()
 {
     jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
@@ -1552,7 +1552,7 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::zeroPointColMajorImpl()
 {
     jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
@@ -1577,7 +1577,7 @@ kernelOpsGeneratorX86<KType>::scaleFactorImpl(kernelOpsMetaData& op)
 {
     jit_->mov(
         regTmp1,
-        jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
+        jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, scale_factor)]);
 
     if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
         // ============ GEMV n=1 path ============
@@ -1598,7 +1598,7 @@ kernelOpsGeneratorX86<KType>::scaleFactorImpl(kernelOpsMetaData& op)
                 jit_->mov(
                     regTmp2,
                     jit_->ptr[regkernelOpsAttr
-                              + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                              + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
                 DISPATCH_BY_DATATYPE(op.scaleFactorDt,
                                      scaleFactorColMajorImplGEMVN1);
             }
@@ -1624,7 +1624,7 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::zeroPointImpl(kernelOpsMetaData& op)
 {
     jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
     if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
         // ============ GEMV n=1 path ============
@@ -1644,7 +1644,7 @@ kernelOpsGeneratorX86<KType>::zeroPointImpl(kernelOpsMetaData& op)
                 jit_->mov(
                     regTmp2,
                     jit_->ptr[regkernelOpsAttr
-                              + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                              + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
                 DISPATCH_BY_DATATYPE(op.zeroPointDt,
                                      zeroPointColMajorImplGEMVN1);
             }
@@ -1858,9 +1858,9 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
     scratch_reg_queue.pop();
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
     jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     int sf_reg      = -1;
     int sfLoadBytes = 0;
@@ -1880,14 +1880,14 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplMerged(matOpType      opType,
 
     // load ldm into regTmp3 and multiply with sizeof(dt)
     jit_->mov(regTmp3,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args3)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args3)]);
     // ldm is pointer, need to dereference again to get actual ldm value.
     jit_->mov(regTmp3, jit_->ptr[regTmp3]);
     jit_->lea(regTmp3, jit_->ptr[regTmp3 * sizeof(matOpDt)]);
 
     // regTmp2 = matPtr
     jit_->mov(regTmp2,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
     jit_->inLocalLabel();
 
@@ -2248,9 +2248,9 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
     }
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
     jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     // Load scale factors FIRST - use sizeof(sfDt) for offset calculation
     if (hasSF && sclType == matOpScaleType::rowVector) {
@@ -2263,10 +2263,10 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
 
     // regTmp2 = matPtr
     jit_->mov(regTmp2,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
     // regTmp3 = ldm
     jit_->mov(regTmp3,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args3)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args3)]);
     // ldm is pointer, need to dereference again to get actual ldm value.
     jit_->mov(regTmp3, jit_->ptr[regTmp3]);
     jit_->lea(regTmp3, jit_->ptr[regTmp3 * sizeof(matOpDt)]);
@@ -2278,7 +2278,7 @@ kernelOpsGeneratorX86<utils::kernelInstrType::avx2_ymm_16_reg>::
     if (hasSF && sclType == matOpScaleType::columnVector) {
         jit_->mov(regTmp6,
                   jit_->ptr[regkernelOpsAttr
-                            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         jit_->lea(regTmp6, jit_->ptr[regTmp6 * sizeof(sfDt)]);
         jit_->add(regTmp6, regTmp1);
     }
@@ -2395,9 +2395,9 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
     RegType matReg = popAndGetScratchReg();
 
     jit_->mov(regTmp7, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
     jit_->mov(regTmp6, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     // Calculate load bytes based on matrix datatype
     int matLoadBytes = getLoadBytes<matOpDt>();
@@ -2408,7 +2408,7 @@ kernelOpsGeneratorX86<KType>::matOpScaleFactorImplGEMVN1(matOpType      opType,
 
     // Get matrix operation data pointer (op_args1)
     jit_->mov(regTmp2,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
     // Add offset for post_op_c_i (starting row)
     jit_->lea(regTmp3, jit_->ptr[regTmp6 * sizeof(matOpDt)]);
@@ -2508,7 +2508,7 @@ kernelOpsGeneratorX86<KType>::matOp(kernelOpsMetaData& op, matOpType opType)
     if (hasSF) {
         jit_->mov(
             regTmp1,
-            jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
+            jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, scale_factor)]);
     }
 
     // f32 is used as a placeholder type when SF is not present; the actual value
@@ -2630,16 +2630,16 @@ kernelOpsGeneratorX86<KType>::POLY_EVAL_6()
 {
     jit_->vmulps(RegType(r2), RegType(r), RegType(r));
 
-    jit_->vbroadcastss(RegType(const1), get_constant(lpgemm_exp_off, 3));
+    jit_->vbroadcastss(RegType(const1), get_constant(dlp_gemm_exp_off, 3));
 
-    jit_->vbroadcastss(RegType(const2), get_constant(lpgemm_exp_off, 2));
+    jit_->vbroadcastss(RegType(const2), get_constant(dlp_gemm_exp_off, 2));
 
     jit_->vmovups(RegType(q), RegType(const2));
     jit_->vfmadd231ps(RegType(q), RegType(const1), RegType(r));
 
-    jit_->vbroadcastss(RegType(const1), get_constant(lpgemm_exp_off, 1));
+    jit_->vbroadcastss(RegType(const1), get_constant(dlp_gemm_exp_off, 1));
 
-    jit_->vbroadcastss(RegType(const2), get_constant(lpgemm_exp_off, 0));
+    jit_->vbroadcastss(RegType(const2), get_constant(dlp_gemm_exp_off, 0));
 
     jit_->vmovups(RegType(z), RegType(const2));
     jit_->vfmadd231ps(RegType(z), RegType(const1), RegType(r));
@@ -2648,9 +2648,9 @@ kernelOpsGeneratorX86<KType>::POLY_EVAL_6()
 
     jit_->vmulps(RegType(r2), RegType(r2), RegType(r2));
 
-    jit_->vbroadcastss(RegType(const1), get_constant(lpgemm_exp_off, 5));
+    jit_->vbroadcastss(RegType(const1), get_constant(dlp_gemm_exp_off, 5));
 
-    jit_->vbroadcastss(RegType(const2), get_constant(lpgemm_exp_off, 4));
+    jit_->vbroadcastss(RegType(const2), get_constant(dlp_gemm_exp_off, 4));
 
     jit_->vfmadd231ps(RegType(const2), RegType(const1), RegType(r));
 
@@ -2810,51 +2810,51 @@ template<utils::kernelInstrType KType>
 void
 kernelOpsGeneratorX86<KType>::POLY_EVAL_HORNER_16_0(int r)
 {
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 15));
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 14));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 15));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 14));
 
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 13));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 13));
     jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
 
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 12));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 12));
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 11));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 11));
     jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
 
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 10));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 10));
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 9));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 9));
     jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
 
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 8));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 8));
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 7));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 7));
     jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
 
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 6));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 6));
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 5));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 5));
     jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
 
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 4));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 4));
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 3));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 3));
     jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
 
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 2));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 2));
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
-    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(lpgemm_erf_off, 1));
+    jit_->vbroadcastsd(RegType(const1), get_constant_dbl(dlp_gemm_erf_off, 1));
     jit_->vfmadd231pd(RegType(const1), RegType(r), RegType(const2));
 
-    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(lpgemm_erf_off, 0));
+    jit_->vbroadcastsd(RegType(const2), get_constant_dbl(dlp_gemm_erf_off, 0));
     jit_->vfmadd231pd(RegType(const2), RegType(r), RegType(const1));
 
     jit_->vmulpd(RegType(r), RegType(const2), RegType(r));
@@ -3073,7 +3073,7 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::swishImpl()
 {
     jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args2)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args2)]);
 
     broadcastAndConvertScalar<T>(RegType(x_tanh), jit_->ptr[regTmp1]);
 
@@ -3171,7 +3171,7 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorRowMajorImpl()
 {
     // Calculate address: scale_factor_base + (post_op_c_i * sizeof(T))
     jit_->mov(regTmp2, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
     jit_->lea(regTmp2, jit_->ptr[regTmp2 * sizeof(T)]);
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp2);
@@ -3257,9 +3257,9 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointScalarImpl()
     // Load B column sums pointer and calculate address for current column block
     jit_->mov(regTmp2,
               jit_->ptr[regkernelOpsAttr
-                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+                        + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
     jit_->mov(regTmp3, jit_->ptr[regkernelOpsAttr
-            + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+            + offsetof(dlp_gemm_post_op_attr, b_sum_offset)]);
 
     jit_->lea(regTmp2, jit_->ptr[regTmp2 + regTmp3 * sizeof(int32_t)]);
 
@@ -3274,7 +3274,7 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointScalarImpl()
         jit_->vmovdqu32(RegType(scratchLoadRegIdx + i),
                         jit_->ptr[regTmp2 + i * RegBytes]);
         // Right shift by 7: compensates for left shift during B packing
-        // Refer: "classic/kernels/zen4/s8s8s32/lpgemm_packb_s8_amd512vnni.c"
+        // Refer: "classic/kernels/zen4/s8s8s32/dlp_gemm_packb_s8_amd512vnni.c"
         jit_->vpsrad(RegType(scratchLoadRegIdx + i),
                      RegType(scratchLoadRegIdx + i), 7);
         jit_->vcvtdq2ps(RegType(scratchLoadRegIdx + i),
@@ -3309,15 +3309,15 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointRowMajorImpl()
     // Load B column sums pointer and calculate address for current column block
     jit_->mov(regTmp2,
               jit_->ptr[regkernelOpsAttr
-                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+                        + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
     jit_->mov(regTmp3, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+                                 + offsetof(dlp_gemm_post_op_attr, b_sum_offset)]);
     jit_->lea(regTmp2, jit_->ptr[regTmp2 + regTmp3 * sizeof(int32_t)]);
 
     // Calculate address for zero-points: zero_point_base + (post_op_c_i *
     // sizeof(T))
     jit_->mov(regTmp4, jit_->ptr[regkernelOpsAttr
-                                 + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
     jit_->lea(regTmp4, jit_->ptr[regTmp4 * sizeof(T)]);
     jit_->lea(regTmp3, jit_->ptr[regTmp1]);
     jit_->add(regTmp3, regTmp4);
@@ -3329,7 +3329,7 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointRowMajorImpl()
         jit_->vmovdqu32(RegType(scratchLoadRegIdx + i),
                         jit_->ptr[regTmp2 + i * RegBytes]);
         // Right shift by 7: compensates for left shift during B packing
-        // Refer: "classic/kernels/zen4/s8s8s32/lpgemm_packb_s8_amd512vnni.c"
+        // Refer: "classic/kernels/zen4/s8s8s32/dlp_gemm_packb_s8_amd512vnni.c"
         jit_->vpsrad(RegType(scratchLoadRegIdx + i),
                      RegType(scratchLoadRegIdx + i), 7);
         jit_->vcvtdq2ps(RegType(scratchLoadRegIdx + i),
@@ -3374,7 +3374,7 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointScalarImplGEMVN1()
     // Load b_col_sum pointer and calculate address for current column block
     jit_->mov(regTmp2,
               jit_->ptr[regkernelOpsAttr
-                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+                        + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
     RegType bColSumReg = popAndGetScratchReg();
     // Broadcast b_col_sum
     jit_->vpbroadcastd(bColSumReg, jit_->ptr[regTmp2]);
@@ -3417,7 +3417,7 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointRowMajorImplGEMVN1()
     // b_col_sum pointer load
     jit_->mov(regTmp3,
               jit_->ptr[regkernelOpsAttr
-                        + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+                        + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
     RegType bColSumReg = popAndGetScratchReg();
     // Broadcast b_col_sum
     jit_->vpbroadcastd(bColSumReg, jit_->ptr[regTmp3]);
@@ -3452,7 +3452,7 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorImpl(kernelOpsMetaData& op)
 {
     jit_->mov(
         regTmp1,
-        jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, scale_factor)]);
+        jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, scale_factor)]);
 
     if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
         if (op.scalarScaleFactorRequired) {
@@ -3461,7 +3461,7 @@ kernelOpsGeneratorX86<KType>::aDQuantScaleFactorImpl(kernelOpsMetaData& op)
         } else if (op.cMatFormat == storageFormat::rowMajor) {
             jit_->mov(regTmp2,
                       jit_->ptr[regkernelOpsAttr
-                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
             DISPATCH_BY_DATATYPE(op.scaleFactorDt,
                                  aDQuantScaleFactorRowMajorImplGEMVN1);
         } else {
@@ -3493,7 +3493,7 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointImpl(kernelOpsMetaData& op)
     }
 
     jit_->mov(regTmp1,
-              jit_->ptr[regkernelOpsList + offsetof(lpgemm_post_op, op_args1)]);
+              jit_->ptr[regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
     if (algoType_ == dlp::jit::jitAlgoType::gemv_n1) {
         // ============ GEMV n=1 path ============
@@ -3503,7 +3503,7 @@ kernelOpsGeneratorX86<KType>::aDQuantZeroPointImpl(kernelOpsMetaData& op)
         } else if (op.cMatFormat == storageFormat::rowMajor) {
             jit_->mov(regTmp2,
                       jit_->ptr[regkernelOpsAttr
-                                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
             DISPATCH_BY_DATATYPE(op.zeroPointDt,
                                  aDQuantZeroPointRowMajorImplGEMVN1);
         } else {

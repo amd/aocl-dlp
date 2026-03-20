@@ -42,7 +42,7 @@ namespace dlp::de {
 class gemmDEBackendUtils
 {
     static void setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
-                             lpgemm_post_op*                  post_op,
+                             dlp_gemm_post_op*                post_op,
                              kernel_frame::kernelDatatype     k_dtype);
 
     DLP_ALWAYS_INLINE
@@ -135,8 +135,8 @@ class gemmDEBackendUtils
         md_t                                prefetch_c_dist,
         kernel_frame::scalingType           alphaScalingType,
         kernel_frame::scalingType           betaScalingType,
-        AOCL_MEMORY_TAG                     mtag_a,
-        AOCL_MEMORY_TAG                     mtag_b,
+        AOCL_DLP_MEMORY_TAG                 mtag_a,
+        AOCL_DLP_MEMORY_TAG                 mtag_b,
         bool                                allLtFringeKernels,
         bool                                invokeRD,
         bool                                anyKOpsOrder,
@@ -145,11 +145,11 @@ class gemmDEBackendUtils
         dlp::kernel_frame::kernelDatatype   k_dtype,
         md_t                                rs_c,
         md_t                                cs_c,
-        lpgemm_post_op*                     metadata)
+        dlp_gemm_post_op*                   metadata)
     {
         // Iterate over the post_ops list to get the number of post-ops.
-        md_t            numPostOps    = 0;
-        lpgemm_post_op* temp_post_ops = metadata;
+        md_t              numPostOps    = 0;
+        dlp_gemm_post_op* temp_post_ops = metadata;
         while ((temp_post_ops != nullptr)
                && (temp_post_ops->op_code != POST_OPS_DISABLE)) {
             temp_post_ops = temp_post_ops->next;

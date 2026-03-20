@@ -25,8 +25,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef AOCL_LPGEMM_GELU_DEF_AVX2_H
-#define AOCL_LPGEMM_GELU_DEF_AVX2_H
+#ifndef AOCL_DLP_GEMM_GELU_DEF_AVX2_H
+#define AOCL_DLP_GEMM_GELU_DEF_AVX2_H
 
 /* TANH GeLU (x) = 0.5* x * (1 + tanh ( 0.797884 * ( x + ( 0.044715 * x^3 ) ) )
  * )  */
@@ -86,4 +86,4 @@
         reg   = _mm_mul_ps(x_erf, _mm_set1_ps(0.5));                           \
     }
 
-#endif // AOCL_LPGEMM_GELU_DEF_AVX2_H
+#endif // AOCL_DLP_GEMM_GELU_DEF_AVX2_H

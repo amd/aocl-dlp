@@ -110,7 +110,7 @@ bool
 dlp_cpuid_is_similar_zen_arch();
 
 // API to get underlying architecture (also modifiable
-// via AOCL_ENABLE_INSTRUCTIONS)
+// via AOCL_DLP_ENABLE_INSTRUCTIONS)
 dlp_arch_t
 dlp_get_arch(void);
 

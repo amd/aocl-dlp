@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_GEMM_INTERFACE_H
-#define AOCL_GEMM_INTERFACE_H
+#ifndef AOCL_DLP_GEMM_INTERFACE_H
+#define AOCL_DLP_GEMM_INTERFACE_H
 
 #include "classic/aocl_bf16_type.h"
 #include "classic/aocl_fp16_type.h"
@@ -121,7 +121,7 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
 
 /**
  * @brief Performs reordering of the input matrix. Expanded from
- * AOCL_GEMM_REORDER macro.
+ * AOCL_DLP_GEMM_REORDER macro.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
@@ -226,7 +226,7 @@ aocl_reorder_f16f16f16of16(const char      order,
 
 /**
  * @brief Performs reordering of the input matrix for symmetric
- * quantization. Expanded from AOCL_GEMM_REORDER_SYM_QUANT macro.
+ * quantization. Expanded from AOCL_DLP_GEMM_REORDER_SYM_QUANT macro.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
@@ -253,7 +253,7 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
 
 /**
  * @brief Performs reordering of the input matrix for mixed precision
- * LPGEMM. Expanded from AOCL_GEMM_REORDER_MXP macro.
+ * DLP_GEMM. Expanded from AOCL_DLP_GEMM_REORDER_MXP macro.
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
@@ -1408,4 +1408,4 @@ aocl_batch_gemm_s8s8s32ou8(const char*      order,
                            const char*      mem_format_b,
                            dlp_metadata_t** metadata);
 
-#endif // AOCL_GEMM_INTERFACE_H
+#endif // AOCL_DLP_GEMM_INTERFACE_H

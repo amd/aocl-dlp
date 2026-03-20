@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_LIB_INTERFACE_H
-#define AOCL_LIB_INTERFACE_H
+#ifndef AOCL_DLP_LIB_INTERFACE_H
+#define AOCL_DLP_LIB_INTERFACE_H
 
 #include "classic/dlp_base_types.h"
 
@@ -153,4 +153,4 @@ dlp_aocl_enable_instruction_query(void);
 DLP_CLASSIC_EXPORT void
 dlp_version_query(int* major, int* minor, int* patch);
 
-#endif // AOCL_LIB_INTERFACE_H
+#endif // AOCL_DLP_LIB_INTERFACE_H

@@ -199,7 +199,7 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     int                              KC;
     int                              K_SUB_ITER;
     int                              c_downscale;
-    AOCL_MEMORY_TAG                  mtag_b;
+    AOCL_DLP_MEMORY_TAG              mtag_b;
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;

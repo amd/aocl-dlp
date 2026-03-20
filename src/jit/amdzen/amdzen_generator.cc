@@ -298,7 +298,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
     if (MR == 1) {
         // Generate kernel for GEMV(when MR == 1)
-        AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
 
         // We will be generating NR kernels, each having the main loop
         // and having the specific fringe case implemented.
@@ -1242,7 +1242,7 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     if (MR == 1) {
 
         // mtag_b is always packed by default, can be removed
-        AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
 
         // Number of F32(accumulators) elements that can fit in an avx512 zmm
         // register
@@ -1741,7 +1741,7 @@ jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         // Handle GEMV M = 1 case
         numKernelVariants = NR;
         kernelCodeBlocks.resize(numKernelVariants);
-        AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
+        AOCL_DLP_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
 
         utils::gemvM1GeneratorParams params(
             0, NR, 0, KC, K_UNROLL, mtag_b, true, true, true, true,
@@ -2232,8 +2232,8 @@ jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     int processBlockSize = getProcessBlockSize();
 
     if (MR == 1) { // S8 GEMV M=1 kernel generation
-        AOCL_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
-        numKernelVariants      = NR;
+        AOCL_DLP_MEMORY_TAG mtag_b = (jI.kI).mtag_b;
+        numKernelVariants          = NR;
         kernelCodeBlocks.resize(numKernelVariants);
 
         utils::gemvM1GeneratorParams params(

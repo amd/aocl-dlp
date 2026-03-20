@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_LPGEMM_SWISH_AVX2_H
-#define AOCL_LPGEMM_SWISH_AVX2_H
+#ifndef AOCL_DLP_GEMM_SWISH_AVX2_H
+#define AOCL_DLP_GEMM_SWISH_AVX2_H
 
 // SiLU(in_reg) = in_reg / (1 + exp(-1 * al * in_reg)).
 // in_reg and al are expected to contain float values.
@@ -45,4 +45,4 @@
     ex_out = (__m128i)_mm_add_ps((__m128)ex_out, _mm_set1_ps(1));              \
     in_reg = _mm_div_ps(in_reg, (__m128)ex_out);
 
-#endif // AOCL_LPGEMM_SWISH_AVX2_H
+#endif // AOCL_DLP_GEMM_SWISH_AVX2_H

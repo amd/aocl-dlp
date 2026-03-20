@@ -34,7 +34,7 @@
 #include "bindings/c_wrappers/capi_sys_utils.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "runtime/dlp_runtime.h"
-#include "sys_utils/lpgemm_sys.h"
+#include "sys_utils/dlp_gemm_sys.h"
 
 #ifdef DLP_ENABLE_OPENMP
 #include <omp.h>

@@ -26,13 +26,13 @@
  *
  */
 
-#ifndef AOCL_GEMM_POST_OPS_H
-#define AOCL_GEMM_POST_OPS_H
+#ifndef AOCL_DLP_GEMM_POST_OPS_H
+#define AOCL_DLP_GEMM_POST_OPS_H
 
 #include "classic/dlp_base_types.h"
 
-#define AOCL_MAX_POST_OPS 8
-#define AOCL_MAX_PRE_OPS  2
+#define AOCL_DLP_MAX_POST_OPS 8
+#define AOCL_DLP_MAX_PRE_OPS  2
 
 /**
  * @brief Enumeration of element-wise algorithm types supported in

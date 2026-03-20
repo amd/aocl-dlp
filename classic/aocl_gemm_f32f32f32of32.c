@@ -28,22 +28,22 @@
 
 #include <string.h>
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "classic/dlp_errors.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "logging/lpgemm_logger.h"
-#include "lpgemm_5loop_interface_apis.h"
-#include "lpgemm_ops_bundle.h"
-#include "lpgemm_post_ops.h"
-#include "lpgemm_types.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_5loop_interface_apis.h"
+#include "dlp_gemm_ops_bundle.h"
+#include "dlp_gemm_post_ops.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "logging/dlp_gemm_logger.h"
 #include "runtime/dlp_runtime.h"
-#include "threading/lpgemm_thread_decor_openmp.h"
+#include "threading/dlp_gemm_thread_decor_openmp.h"
 
 static inline bool
-is_tiny_input_f32(md_t m, md_t n, md_t k, lpgemm_cntx_t* lcntx)
+is_tiny_input_f32(md_t m, md_t n, md_t k, dlp_gemm_cntx_t* lcntx)
 {
     // if k == 1, then we can use the single-threaded tiny input kernel.
     // Multi-threading is not beneficial for k = 1.
@@ -94,15 +94,15 @@ aocl_gemm_f32f32f32of32(const char      order,
                         const md_t      ldc,
                         dlp_metadata_t* metadata)
 {
-    LPGEMM_START_LOGGER();
-    LPGEMM_WRITE_LOGGER("f32f32f32of32", order, transa, transb, m, n, k,
-                        ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
-                        ((float)beta), ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    DLP_GEMM_WRITE_LOGGER("f32f32f32of32", order, transa, transb, m, n, k,
+                          ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
+                          ((float)beta), ldc, metadata);
 
     DLP_METADATA_SET_ERROR(metadata,
                            DLP_CLSC_SUCCESS); // Set default error to success.
 
-    // Check if AVX2 ISA is supported, lpgemm fp32 matmul only works with it.
+    // Check if AVX2 ISA is supported, dlp_gemm fp32 matmul only works with it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, "
                       "cannot perform f32f32f32 gemm.",
@@ -111,13 +111,13 @@ aocl_gemm_f32f32f32of32(const char      order,
         goto err_hndl;
     }
 
-    // Initialize lpgemm context.
+    // Initialize dlp_gemm context.
     aocl_lpgemm_init_global_cntx();
 
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_GEMM_CHECK("f32f32f32of32", order, transa, transb, m, n, k, a, lda,
-                    mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
+    AOCL_DLP_GEMM_CHECK("f32f32f32of32", order, transa, transb, m, n, k, a, lda,
+                        mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         goto err_hndl;
@@ -154,8 +154,8 @@ aocl_gemm_f32f32f32of32(const char      order,
     const md_t rs_c = ldc;
     const md_t cs_c = 1;
 
-    AOCL_MEMORY_TAG mtag_a;
-    AOCL_MEMORY_TAG mtag_b;
+    AOCL_DLP_MEMORY_TAG mtag_a;
+    AOCL_DLP_MEMORY_TAG mtag_b;
 
     dlp_param_map_char_to_lpmtag(mem_format_a, &mtag_a);
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
@@ -179,33 +179,33 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     // Temporary variables to store/transform the input for kernel generation
     // and execution.
-    md_t            m_use = m, n_use = n, k_use = k;
-    const float*    a_use    = a;
-    const float*    b_use    = b;
-    float*          c_use    = c;
-    md_t            rs_a_use = rs_a, cs_a_use = cs_a;
-    md_t            rs_b_use = rs_b, cs_b_use = cs_b;
-    md_t            rs_c_use = rs_c, cs_c_use = cs_c;
-    AOCL_MEMORY_TAG mtag_a_use = mtag_a;
-    AOCL_MEMORY_TAG mtag_b_use = mtag_b;
-    char            order_use  = order;
+    md_t                m_use = m, n_use = n, k_use = k;
+    const float*        a_use    = a;
+    const float*        b_use    = b;
+    float*              c_use    = c;
+    md_t                rs_a_use = rs_a, cs_a_use = cs_a;
+    md_t                rs_b_use = rs_b, cs_b_use = cs_b;
+    md_t                rs_c_use = rs_c, cs_c_use = cs_c;
+    AOCL_DLP_MEMORY_TAG mtag_a_use = mtag_a;
+    AOCL_DLP_MEMORY_TAG mtag_b_use = mtag_b;
+    char                order_use  = order;
 
     // Convert post op struct to post op linked list format.
-    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
-    dlp_clsc_err_t err;
+    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
+    dlp_clsc_err_t   err;
 
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32F32F32OF32);
-    lpgemm_cntx_t  lcntx_l;
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
+    dlp_gemm_cntx_t  lcntx_l;
     // Create local copy, since each thread in a multi-instance setup
     // modified the context object.
     lcntx_l = *lcntx_g;
 
-    // By this point, global_lpgemm_enable_arch is set to the correct
+    // By this point, global_dlp_gemmenable_arch is set to the correct
     // architecture.
 
     // Induce operation transpose and/or swapped strides based on the input.
@@ -222,7 +222,7 @@ aocl_gemm_f32f32f32of32(const char      order,
 
         bool avx512_on_non_zen3 =
             dlp_cpuid_is_avx512_supported()
-            && (lpgemm_get_enabled_arch() != DLP_ARCH_ZEN3);
+            && (dlp_gemm_get_enabled_arch() != DLP_ARCH_ZEN3);
         bool has_valid_metadata =
             (metadata != NULL) && (metadata->seq_length != 0);
 
@@ -321,7 +321,7 @@ aocl_gemm_f32f32f32of32(const char      order,
             }
         }
 
-        err = lpgemm_translate_to_post_ops_list(
+        err = dlp_gemm_translate_to_post_ops_list(
             metadata, post_op_list, (void*)c_use, (void*)(&order_use), m,
             n); // To use order_reuse in future, when we support post-ops on
                 // row-major with transpose toggled.
@@ -333,7 +333,7 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     } else {
         // Create the post-ops  linked list
-        err = lpgemm_translate_to_post_ops_list(
+        err = dlp_gemm_translate_to_post_ops_list(
             metadata, post_op_list, (void*)c_use, (void*)(&order_use), m,
             n); // To use order_reuse in future, when we support post-ops on
                 // row-major with transpose toggled.
@@ -393,15 +393,15 @@ aocl_gemm_f32f32f32of32(const char      order,
         // based on storage scheme. These are used for further optimizations
         // like avoiding packing in the required cases.
 
-        md_t            m_tmp = m_use, n_tmp = n_use, k_tmp = k_use;
-        const float*    a_tmp    = a_use;
-        const float*    b_tmp    = b_use;
-        float*          c_tmp    = c_use;
-        md_t            rs_a_tmp = rs_a_use, cs_a_tmp = cs_a_use;
-        md_t            rs_b_tmp = rs_b_use, cs_b_tmp = cs_b_use;
-        md_t            rs_c_tmp = rs_c_use, cs_c_tmp = cs_c_use;
-        AOCL_MEMORY_TAG mtag_a_tmp = mtag_a_use;
-        AOCL_MEMORY_TAG mtag_b_tmp = mtag_b_use;
+        md_t                m_tmp = m_use, n_tmp = n_use, k_tmp = k_use;
+        const float*        a_tmp    = a_use;
+        const float*        b_tmp    = b_use;
+        float*              c_tmp    = c_use;
+        md_t                rs_a_tmp = rs_a_use, cs_a_tmp = cs_a_use;
+        md_t                rs_b_tmp = rs_b_use, cs_b_tmp = cs_b_use;
+        md_t                rs_c_tmp = rs_c_use, cs_c_tmp = cs_c_use;
+        AOCL_DLP_MEMORY_TAG mtag_a_tmp = mtag_a_use;
+        AOCL_DLP_MEMORY_TAG mtag_b_tmp = mtag_b_use;
 
         // This optimization is currently enabled only when post-ops are
         // disabled.
@@ -471,7 +471,7 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     if (is_single_thread(&rntm_g) == TRUE) {
         if (is_tiny_input_f32(m_use, n_use, k_use, &lcntx_l) == TRUE) {
-            lpgemm_rowvar_tiny_f32f32f32of32(
+            dlp_gemm_rowvar_tiny_f32f32f32of32(
                 m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use,
                 b_use, rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use,
                 cs_c_use, alpha, beta, &lcntx_l, post_op_list, DLP_F32);
@@ -481,20 +481,20 @@ aocl_gemm_f32f32f32of32(const char      order,
     }
 
     // Create ops bundle for standard GEMM (post-ops only)
-    lpgemm_ops_bundle_t ops = LPGEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
+    dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-    lpgemm_f32f32f32of32_openmp_thread_decorator(
+    dlp_gemm_f32f32f32of32_openmp_thread_decorator(
         m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
         rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use, cs_c_use, alpha, beta,
         &rntm_g, &lcntx_l, &ops, DLP_F32);
 #else
-    lpgemm_f32f32f32of32_thread_decorator(
+    dlp_gemm_f32f32f32of32_thread_decorator(
         m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
         rs_b_use, cs_b_use, mtag_b_use, c_use, rs_c_use, cs_c_use, alpha, beta,
         &rntm_g, &lcntx_l, &ops, DLP_F32);
 #endif
 
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }

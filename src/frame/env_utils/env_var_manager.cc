@@ -93,10 +93,10 @@ constexpr std::array<std::string_view, 4> FALSE_STRINGS = { "0", "false", "no",
 // Add all supported Environment variables here that are used by this manager
 // and need to be initialized in the constructor.
 constexpr std::array<std::string_view, 4> DLP_ENV_VAR_STRINGS = {
-    "DLP_NUM_THREADS", "DLP_IC_NT", "DLP_JC_NT", "AOCL_ENABLE_LPGEMM_LOGGER"
+    "DLP_NUM_THREADS", "DLP_IC_NT", "DLP_JC_NT", "AOCL_DLP_ENABLE_LPGEMM_LOGGER"
 };
 constexpr std::array<std::string_view, 1> DLP_ARCH_ENV_VAR_STRINGS = {
-    "AOCL_ENABLE_INSTRUCTIONS"
+    "AOCL_DLP_ENABLE_INSTRUCTIONS"
 };
 
 EnvironmentVariableManager::EnvironmentVariableManager()

@@ -279,7 +279,7 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
         // restore the value of post_op_c_i before starting the IR loop
         mov(regTmp1, ptr[rsp]);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
             regTmp1);
 
         mov(regMiter,
@@ -367,7 +367,7 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
     // check if is_last_k is set
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
     je(label_store_result, T_NEAR);
 
@@ -431,10 +431,10 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
         // two offsets at the same time is safe.
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         add(regTmp1, MR);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
             regTmp1);
 
         // decrement m_iter
@@ -731,7 +731,7 @@ jitGEMMF32RD<KType>::generateJrLoop(utils::generatorParams& params)
     // so that it can be restored before every Ir loop.
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
     push(regTmp1);
 
     mov(regJJCounter, 0);
@@ -754,10 +754,10 @@ jitGEMMF32RD<KType>::generateJrLoop(utils::generatorParams& params)
     // two offsets at the same time is safe.
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
     add(regTmp1, nSubBlockSize);
     mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
         regTmp1);
 
     add(regJJCounter, nSubBlockSize);

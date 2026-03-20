@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_LPGEMM_SIGMOID_AVX2_H
-#define AOCL_LPGEMM_SIGMOID_AVX2_H
+#ifndef AOCL_DLP_GEMM_SIGMOID_AVX2_H
+#define AOCL_DLP_GEMM_SIGMOID_AVX2_H
 
 // Sigmoid(in_reg) = 1 / (1 + exp(-1 * in_reg)).
 // in_reg is expected to contain float values.
@@ -45,4 +45,4 @@
     ex_out = (__m128i)_mm_add_ps((__m128)ex_out, _mm_set1_ps(1));              \
     in_reg = _mm_div_ps(_mm_set1_ps(1), (__m128)ex_out);
 
-#endif // AOCL_LPGEMM_SIGMOID_AVX2_H
+#endif // AOCL_DLP_GEMM_SIGMOID_AVX2_H

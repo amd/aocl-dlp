@@ -26,17 +26,17 @@
  *
  */
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "logging/lpgemm_logger.h"
-#include "lpgemm_5loop_interface_apis.h"
-#include "lpgemm_ops_bundle.h"
-#include "lpgemm_post_ops.h"
-#include "lpgemm_types.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_5loop_interface_apis.h"
+#include "dlp_gemm_ops_bundle.h"
+#include "dlp_gemm_post_ops.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "logging/dlp_gemm_logger.h"
 #include "runtime/dlp_runtime.h"
-#include "threading/lpgemm_thread_decor_openmp.h"
+#include "threading/dlp_gemm_thread_decor_openmp.h"
 
 void
 aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
@@ -57,15 +57,16 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
                                  const md_t      ldc,
                                  dlp_metadata_t* metadata)
 {
-    LPGEMM_START_LOGGER();
-    LPGEMM_WRITE_LOGGER("s8s8s32obf16_sym_quant", order, transa, transb, m, n,
-                        k, ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
-                        ((float)beta), ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    DLP_GEMM_WRITE_LOGGER("s8s8s32obf16_sym_quant", order, transa, transb, m, n,
+                          k, ((float)alpha), lda, mem_format_a, ldb,
+                          mem_format_b, ((float)beta), ldc, metadata);
 
     DLP_METADATA_SET_ERROR(metadata,
                            DLP_CLSC_SUCCESS); // Set default error to success.
 
-    // Check if avx512_vnni ISA is supported, lpgemm matmul only works with it.
+    // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
+    // it.
     if (dlp_cpuid_is_avx512vnni_supported() == FALSE) {
         dlp_print_msg(" AVX512_VNNI ISA not supported by processor, "
                       "cannot perform s8s8s32 gemm.",
@@ -79,8 +80,9 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
 
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_GEMM_CHECK("s8s8s32obf16_sym_quant", order, transa, transb, m, n, k, a,
-                    lda, mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
+    AOCL_DLP_GEMM_CHECK("s8s8s32obf16_sym_quant", order, transa, transb, m, n,
+                        k, a, lda, mem_format_a, b, ldb, mem_format_b, c, ldc,
+                        err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         goto err_hndl;
@@ -124,8 +126,8 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
     const md_t rs_c = ldc;
     const md_t cs_c = 1;
 
-    AOCL_MEMORY_TAG mtag_a;
-    AOCL_MEMORY_TAG mtag_b;
+    AOCL_DLP_MEMORY_TAG mtag_a;
+    AOCL_DLP_MEMORY_TAG mtag_b;
 
     dlp_param_map_char_to_lpmtag(mem_format_a, &mtag_a);
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
@@ -186,8 +188,8 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
     }
 
     // convert group-level post-op struct to linked list format.
-    lpgemm_group_post_op grp_post_op_list[AOCL_MAX_POST_OPS];
-    dlp_clsc_err_t       err = lpgemm_translate_to_group_postops_list(
+    dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
+    dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
         metadata->post_op_grp, grp_post_op_list, m, n, k);
 
     if (err != DLP_CLSC_SUCCESS) {
@@ -196,9 +198,9 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
     }
 
     // Convert post op struct to post op linked list format.
-    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS];
-    err = lpgemm_translate_to_post_ops_list(metadata, post_op_list, (void*)c,
-                                            (void*)(&order), m, n);
+    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
+    err = dlp_gemm_translate_to_post_ops_list(metadata, post_op_list, (void*)c,
+                                              (void*)(&order), m, n);
 
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
@@ -210,35 +212,35 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
 
-    lpgemm_ops_bundle_t ops =
-        LPGEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
+    dlp_gemm_ops_bundle_t ops =
+        DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
-        lpgemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
+        dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
             rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     } else {
-        lpgemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
+        dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
             rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     }
 #else
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
-        lpgemm_s8s8s32o32_sym_quant_thread_decorator(
+        dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
             rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     } else {
-        lpgemm_s8s8s32o32_sym_quant_thread_decorator(
+        dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
             rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_BF16);
     }
 #endif
 
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }

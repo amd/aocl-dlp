@@ -30,7 +30,7 @@
 
 #include "kernels/dlp_kernels.h"
 
-#include "../../zen/f32f32f32/lpgemm_kernel_macros_f32_avx2.h"
+#include "../../zen/f32f32f32/dlp_gemm_kernel_macros_f32_avx2.h"
 
 #define LPGEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, paddr, stride)         \
     ymm0 = _mm256_loadu_ps(paddr);                                             \
@@ -76,7 +76,7 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
     const float* b_use = NULL;
     float*       c_use = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     __m256 ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm6, ymm7;
     __m256 ymm8, ymm9, ymm10, ymm11, ymm13, ymm14, ymm15;
@@ -482,8 +482,8 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         }
 
         // post-ops
-        post_ops_attr.is_last_k            = TRUE;
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        post_ops_attr.is_last_k              = TRUE;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
 
     POST_OPS_BIAS_1x32F: {

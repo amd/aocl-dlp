@@ -26,17 +26,17 @@
  *
  */
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "logging/lpgemm_logger.h"
-#include "lpgemm_5loop_interface_apis.h"
-#include "lpgemm_ops_bundle.h"
-#include "lpgemm_post_ops.h"
-#include "lpgemm_types.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_5loop_interface_apis.h"
+#include "dlp_gemm_ops_bundle.h"
+#include "dlp_gemm_post_ops.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "logging/dlp_gemm_logger.h"
 #include "runtime/dlp_runtime.h"
-#include "threading/lpgemm_thread_decor_openmp.h"
+#include "threading/dlp_gemm_thread_decor_openmp.h"
 
 /**
  * aocl_gemm_f32s8s32o<bf16/s32/f32/s8/u8>
@@ -158,10 +158,10 @@ aocl_gemm_f32s8s32_impl(const char        order,
                         kernel_datatype_t krnl_dtype,
                         DLP_TYPE          c_dtype)
 {
-    LPGEMM_START_LOGGER();
-    LPGEMM_WRITE_LOGGER(func_name, order, transa, transb, m, n, k,
-                        ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
-                        ((float)beta), ldc, metadata);
+    DLP_GEMM_START_LOGGER();
+    DLP_GEMM_WRITE_LOGGER(func_name, order, transa, transb, m, n, k,
+                          ((float)alpha), lda, mem_format_a, ldb, mem_format_b,
+                          ((float)beta), ldc, metadata);
 
     // Set default error status to success. Will be updated if any check fails.
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
@@ -184,8 +184,8 @@ aocl_gemm_f32s8s32_impl(const char        order,
 
     // Validate input parameters (dimensions, strides, pointers, etc.).
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_GEMM_CHECK(func_name, order, transa, transb, m, n, k, a, lda,
-                    mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
+    AOCL_DLP_GEMM_CHECK(func_name, order, transa, transb, m, n, k, a, lda,
+                        mem_format_a, b, ldb, mem_format_b, c, ldc, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         goto err_hndl;
@@ -240,8 +240,8 @@ aocl_gemm_f32s8s32_impl(const char        order,
     const md_t rs_c = ldc; // C: always row-major output
     const md_t cs_c = 1;
 
-    AOCL_MEMORY_TAG mtag_a;
-    AOCL_MEMORY_TAG mtag_b;
+    AOCL_DLP_MEMORY_TAG mtag_a;
+    AOCL_DLP_MEMORY_TAG mtag_b;
 
     dlp_param_map_char_to_lpmtag(mem_format_a, &mtag_a);
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
@@ -269,8 +269,8 @@ aocl_gemm_f32s8s32_impl(const char        order,
 
     // Translate user-provided post-op metadata to internal linked-list format.
     // Post-ops includes dequantization of results.
-    lpgemm_post_op post_op_list[AOCL_MAX_POST_OPS + 1];
-    dlp_clsc_err_t err = lpgemm_translate_to_post_ops_list(
+    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS + 1];
+    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
         metadata, post_op_list, (void*)c, (void*)(&order), m, n);
 
     if (err != DLP_CLSC_SUCCESS) {
@@ -282,8 +282,8 @@ aocl_gemm_f32s8s32_impl(const char        order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(S8S8S32OS32);
-    lpgemm_cntx_t  lcntx_l;
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t  lcntx_l;
 
     // Create thread-local copy since context may be modified during execution
     lcntx_l = *lcntx_g;
@@ -303,23 +303,23 @@ aocl_gemm_f32s8s32_impl(const char        order,
         goto err_hndl;
     }
 
-    lpgemm_ops_bundle_t ops =
-        LPGEMM_OPS_BUNDLE_INIT_QUANT(metadata->a_pre_quant, post_op_list);
+    dlp_gemm_ops_bundle_t ops =
+        DLP_GEMM_OPS_BUNDLE_INIT_QUANT(metadata->a_pre_quant, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
     // Multi-threaded execution using OpenMP parallel regions.
-    lpgemm_f32s8s32os32_openmp_thread_decorator(
+    dlp_gemm_f32s8s32os32_openmp_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
         rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops, c_dtype);
 #else
     // Single-threaded or manually-threaded execution.
-    lpgemm_f32s8s32os32_thread_decorator(
+    dlp_gemm_f32s8s32os32_thread_decorator(
         m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (int32_t*)c,
         rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops, c_dtype);
 #endif
 
 err_hndl:;
-    LPGEMM_STOP_LOGGER();
+    DLP_GEMM_STOP_LOGGER();
 }
 
 // =========================================================================

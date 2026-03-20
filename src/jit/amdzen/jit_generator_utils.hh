@@ -342,7 +342,7 @@ struct gemvM1GeneratorParams
     int K_SUB_ITER; // Sub-iterations size(since KC is usually large, and thus
                     // is further iterated over in blocks of K_SUB_ITER)
 
-    AOCL_MEMORY_TAG mtag_b; // Memory tag for the B matrix
+    AOCL_DLP_MEMORY_TAG mtag_b; // Memory tag for the B matrix
 
     bool nloop;   // Whether to loop in n direction in steps of NR
     bool kloop;   // Whether to loop in k direction in steps of numElemsPerReg
@@ -366,7 +366,7 @@ struct gemvM1GeneratorParams
                           int                              _N_LEFT,
                           int                              _KC,
                           int                              _K_SUB_ITER,
-                          AOCL_MEMORY_TAG                  _mtag_b,
+                          AOCL_DLP_MEMORY_TAG              _mtag_b,
                           bool                             _nloop,
                           bool                             _kloop,
                           bool                             _nfringe,

@@ -28,9 +28,9 @@
 
 #include <immintrin.h>
 
+#include "dlp_gemm_s32_kern_macros.h"
+#include "dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
-#include "lpgemm_s32_kern_macros.h"
-#include "lpgemm_s32_memcpy_macros.h"
 
 #define LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)         \
     zmm0 = _mm512_loadu_si512(paddr);                                          \
@@ -82,7 +82,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
     const int8_t*  b_use = NULL;
     int32_t*       c_use = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     for (iter_t ir = 0; ir < m0; ir += MR) {
         md_t   mr0    = dlp_min((m0 - ir), MR);
@@ -475,7 +475,7 @@ LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
         acc_8        = _mm512_cvtepi32_ps(zmm8);
 
         // Post Ops
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
 
         post_ops_attr.is_last_k = TRUE;
         POST_OP_LABEL_LASTK_SAFE_JUMP

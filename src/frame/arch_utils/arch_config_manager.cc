@@ -355,7 +355,7 @@ archConfigManager::setArch(void)
     auto actualArch = queryUnderlyingArch();
 
     auto& manager = dlp::env_utils::EnvironmentVariableManager::getInstance();
-    thisArch      = manager.getArchitectureFromEnv("AOCL_ENABLE_INSTRUCTIONS");
+    thisArch = manager.getArchitectureFromEnv("AOCL_DLP_ENABLE_INSTRUCTIONS");
 
     bool aocl_e_i = false;
     if (thisArch != ArchitectureType::Error) {

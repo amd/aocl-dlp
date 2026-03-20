@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_UTIL_INTERFACE_H
-#define AOCL_UTIL_INTERFACE_H
+#ifndef AOCL_DLP_UTIL_INTERFACE_H
+#define AOCL_DLP_UTIL_INTERFACE_H
 
 #include "classic/aocl_bf16_type.h"
 #include "classic/dlp_base_types.h"
@@ -62,4 +62,4 @@ DLP_CLASSIC_EXPORT void
 /// @ref aocl_gemm_softmax_f32
 aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx);
 
-#endif // AOCL_UTIL_INTERFACE_H
+#endif // AOCL_DLP_UTIL_INTERFACE_H

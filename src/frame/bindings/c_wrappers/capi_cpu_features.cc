@@ -129,10 +129,11 @@ dlp_get_arch(void)
 bool
 dlp_aocl_enable_instruction_query(void)
 {
-    // Check whether the AOCL_ENABLE_INSTRUCTIONS environment variable
+    // Check whether the AOCL_DLP_ENABLE_INSTRUCTIONS environment variable
     // is set or not.
     static const bool aocl_e_i = []() -> bool {
-        auto arch_id = dlp_env_get_var_arch_type("AOCL_ENABLE_INSTRUCTIONS");
+        auto arch_id =
+            dlp_env_get_var_arch_type("AOCL_DLP_ENABLE_INSTRUCTIONS");
 
         bool aocl_e_i = false;
         if (arch_id != DLP_ARCH_ERROR) {

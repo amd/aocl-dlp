@@ -87,7 +87,7 @@ jitFP16_GEMM<KType>::initializeParameters(bool mLoop)
     // Load post_op_c_i for downscale buffer addressing
     mov(regTmp2,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     // Initialize parameter pointers from gemmParams structure
     mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
@@ -368,7 +368,7 @@ jitFP16_GEMM<KType>::generateMLoop(utils::generatorParams& params)
 
     lea(regTmp2, ptr[regTmp2 + MR]);
     mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
         regTmp2);
 
     // Decrement M counter

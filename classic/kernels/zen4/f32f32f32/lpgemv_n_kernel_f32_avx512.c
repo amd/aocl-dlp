@@ -28,8 +28,8 @@
 
 #include <immintrin.h>
 
+#include "dlp_gemm_kernel_macros_f32.h"
 #include "kernels/dlp_kernels.h"
-#include "lpgemm_kernel_macros_f32.h"
 
 #define LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)         \
     zmm0 = _mm512_loadu_ps(paddr);                                             \
@@ -83,10 +83,10 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
     };
 
     // Strides are updated based on matrix packing/reordering.
-    const float*        a_use         = NULL;
-    const float*        b_use         = NULL;
-    float*              c_use         = NULL;
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    const float*          a_use         = NULL;
+    const float*          b_use         = NULL;
+    float*                c_use         = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     for (iter_t mr = 0; mr < m0; mr += MR) {
         md_t   mr0    = dlp_min((m0 - mr), MR);
@@ -439,8 +439,8 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
         }
 
         // Post Ops
-        post_ops_attr.is_last_k            = TRUE;
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        post_ops_attr.is_last_k              = TRUE;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
 
     POST_OPS_BIAS_6x64F: {

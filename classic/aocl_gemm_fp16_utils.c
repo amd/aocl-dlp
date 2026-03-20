@@ -28,13 +28,13 @@
 
 #include <string.h>
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "fp16fp16fp16/lpgemm_reorder_fp16.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "kernels/fp16fp16fp16/lpgemm_pack_fp16.h"
+#include "config/dlp_gemm_config.h"
+#include "fp16fp16fp16/dlp_gemm_reorder_fp16.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "kernels/fp16fp16fp16/dlp_gemm_pack_fp16.h"
 
 #ifdef DLP_ENABLE_OPENMP
 #include <omp.h>
@@ -50,7 +50,8 @@ aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if AVX-512-FP16 ISA is supported, lpgemm fp16 reorder requires it.
+    // Check if AVX-512-FP16 ISA is supported, dlp_gemm fp16 reorder requires
+    // it.
     if (dlp_cpuid_is_avx512fp16_supported() == FALSE) {
         dlp_print_msg(" AVX-512-FP16 ISA not supported by processor, "
                       "cannot perform f16f16f16of16 reorder.",
@@ -59,18 +60,18 @@ aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
         return 0;
     }
 
-    // Initialize lpgemm context.
+    // Initialize dlp_gemm context.
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_BUF_SIZE_CHECK("f16f16f16of16", order, trans, mat_type, k, n,
-                                err_no);
+    AOCL_DLP_REORDER_BUF_SIZE_CHECK("f16f16f16of16", order, trans, mat_type, k,
+                                    n, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return 0; // Error.
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -78,7 +79,7 @@ aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
         return 0; // A reorder not supported.
     }
 
-    const md_t NR = lpgemm_get_block_size_NR_global_cntx(F16F16F16OF16);
+    const md_t NR = dlp_gemm_get_block_size_NR_global_cntx(F16F16F16OF16);
 
     // Extra space since packing does width in multiples of NR (packb_min_NR).
     // One ZMM register = 32 FP16 elements.
@@ -108,7 +109,8 @@ aocl_reorder_f16f16f16of16(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if AVX-512-FP16 ISA is supported, lpgemm fp16 reorder requires it.
+    // Check if AVX-512-FP16 ISA is supported, dlp_gemm fp16 reorder requires
+    // it.
     if (dlp_cpuid_is_avx512fp16_supported() == FALSE) {
         dlp_print_msg(" AVX-512-FP16 ISA not supported by processor, "
                       "cannot perform f16f16f16of16 reorder.",
@@ -117,12 +119,12 @@ aocl_reorder_f16f16f16of16(const char      order,
         return;
     }
 
-    // Initialize lpgemm context.
+    // Initialize dlp_gemm context.
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("f16f16f16of16", order, trans, mat_type, input_buf_addr,
-                       reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("f16f16f16of16", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -141,7 +143,7 @@ aocl_reorder_f16f16f16of16(const char      order,
         cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -167,21 +169,21 @@ aocl_reorder_f16f16f16of16(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F16F16F16OF16);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F16F16F16OF16);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
 
     // Create dummy original b obj.
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)input_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    reorderb_nr128_f16f16f16of16(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_reorderb_nr128_f16f16f16of16(&b, &b_reorder, &rntm_g, lcntx_g);
 }
 
 void
@@ -208,8 +210,8 @@ aocl_unreorder_f16f16f16of16(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UNREORDER_CHECK("f16f16f16of16", order, mat_type, reorder_buf_addr,
-                         output_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_UNREORDER_CHECK("f16f16f16of16", order, mat_type, reorder_buf_addr,
+                             output_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -226,7 +228,7 @@ aocl_unreorder_f16f16f16of16(const char      order,
         cs_b = ldb;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -252,19 +254,19 @@ aocl_unreorder_f16f16f16of16(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F16F16F16OF16);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F16F16F16OF16);
 
     // Create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = (void*)reorder_buf_addr;
 
     // Create dummy b obj.
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = output_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    unreorderb_nr128_f16f16f16of16(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_unreorderb_nr128_f16f16f16of16(&b, &b_reorder, &rntm_g, lcntx_g);
 }

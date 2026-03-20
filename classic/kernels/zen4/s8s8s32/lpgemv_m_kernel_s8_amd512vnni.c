@@ -28,8 +28,8 @@
 
 #include <immintrin.h>
 
-#include "../u8s8s32/lpgemm_s32_kern_macros.h"
-#include "../u8s8s32/lpgemm_s32_memcpy_macros.h"
+#include "../u8s8s32/dlp_gemm_s32_kern_macros.h"
+#include "../u8s8s32/dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
 
 LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
@@ -47,7 +47,7 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
     const int8_t* a_use = NULL;
     const int8_t* b_use = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     for (iter_t jr = 0; jr < n0; jr += NR) {
         NR = dlp_min(64, ((n0 - jr) / 16) * 16);
@@ -321,8 +321,8 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
         acc_16 = _mm512_cvtepi32_ps(zmm16);
         acc_20 = _mm512_cvtepi32_ps(zmm20);
 
-        post_ops_attr.is_last_k            = TRUE;
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        post_ops_attr.is_last_k              = TRUE;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
 
     POST_OPS_BIAS_6x64: {

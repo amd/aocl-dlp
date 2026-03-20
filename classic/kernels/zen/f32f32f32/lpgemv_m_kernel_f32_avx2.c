@@ -28,31 +28,31 @@
 
 #include <immintrin.h>
 
+#include "dlp_gemm_kernel_macros_f32_avx2.h"
 #include "kernels/dlp_kernels.h"
-#include "lpgemm_kernel_macros_f32_avx2.h"
 
 void
-lpgemv_m_one_f32f32f32of32_avx2_LT16(const md_t            n0,
-                                     const md_t            k,
-                                     const float*          a,
-                                     const md_t            rs_a,
-                                     const md_t            cs_a,
-                                     const AOCL_MEMORY_TAG mtag_a,
-                                     const float*          b,
-                                     md_t                  rs_b,
-                                     const md_t            cs_b,
-                                     const AOCL_MEMORY_TAG mtag_b,
-                                     float*                c,
-                                     const md_t            rs_c,
-                                     const md_t            jr,
-                                     const float           alpha,
-                                     const float           beta,
-                                     md_t                  NR,
-                                     const md_t            KC,
-                                     const md_t            n_sub_updated,
-                                     const md_t            jc_cur_loop_rem,
-                                     lpgemm_post_op*       post_op,
-                                     lpgemm_post_op_attr*  post_op_attr)
+dlp_gemv_m_one_f32f32f32of32_avx2_LT16(const md_t                n0,
+                                       const md_t                k,
+                                       const float*              a,
+                                       const md_t                rs_a,
+                                       const md_t                cs_a,
+                                       const AOCL_DLP_MEMORY_TAG mtag_a,
+                                       const float*              b,
+                                       md_t                      rs_b,
+                                       const md_t                cs_b,
+                                       const AOCL_DLP_MEMORY_TAG mtag_b,
+                                       float*                    c,
+                                       const md_t                rs_c,
+                                       const md_t                jr,
+                                       const float               alpha,
+                                       const float               beta,
+                                       md_t                      NR,
+                                       const md_t                KC,
+                                       const md_t                n_sub_updated,
+                                       const md_t             jc_cur_loop_rem,
+                                       dlp_gemm_post_op*      post_op,
+                                       dlp_gemm_post_op_attr* post_op_attr)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
@@ -68,8 +68,8 @@ lpgemv_m_one_f32f32f32of32_avx2_LT16(const md_t            n0,
     const float* b_use = NULL;
     float*       c_use = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
-    __m256i             masks[9]      = {
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
+    __m256i               masks[9]      = {
         _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, 0), // 0 elements (all zeros)
         _mm256_set_epi32(0, 0, 0, 0, 0, 0, 0, -1), // 1 element
         _mm256_set_epi32(0, 0, 0, 0, 0, 0, -1, -1), // 2 elements
@@ -228,8 +228,8 @@ lpgemv_m_one_f32f32f32of32_avx2_LT16(const md_t            n0,
     }
 
     // Post Ops
-    post_ops_attr.is_last_k            = TRUE;
-    lpgemm_post_op* post_ops_list_temp = post_op;
+    post_ops_attr.is_last_k              = TRUE;
+    dlp_gemm_post_op* post_ops_list_temp = post_op;
     POST_OP_LABEL_LASTK_SAFE_JUMP
 
 POST_OPS_BIAS_1x16F: {
@@ -608,14 +608,14 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
     const float* b_use = NULL;
     float*       c_use = NULL;
 
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
     for (iter_t jr = 0; jr < n0; jr += NR) {
         md_t nr0 = dlp_min((n0 - jr), NR);
         c_use    = c + jr;
 
         if (nr0 < NR) {
             b_use = b;
-            lpgemv_m_one_f32f32f32of32_avx2_LT16(
+            dlp_gemv_m_one_f32f32f32of32_avx2_LT16(
                 nr0, k, a, rs_a, cs_a, mtag_a, b_use, rs_b, cs_b, mtag_b, c_use,
                 rs_c, jr, alpha, beta, NR, KC, n_sub_updated, jc_cur_loop_rem,
                 post_op, &post_ops_attr);
@@ -749,8 +749,8 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         }
 
         // Post Ops
-        post_ops_attr.is_last_k            = TRUE;
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        post_ops_attr.is_last_k              = TRUE;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
 
     POST_OPS_BIAS_1x16F: {

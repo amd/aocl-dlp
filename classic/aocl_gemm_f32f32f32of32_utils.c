@@ -28,12 +28,12 @@
 
 #include <string.h>
 
-#include "aocl_gemm_check.h"
+#include "aocl_dlp_gemm_check.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "f32f32f32/lpgemm_reorder_f32.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "kernels/f32f32f32/lpgemm_pack_f32.h"
+#include "config/dlp_gemm_config.h"
+#include "f32f32f32/dlp_gemm_reorder_f32.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "kernels/f32f32f32/dlp_gemm_pack_f32.h"
 
 #ifdef DLP_ENABLE_OPENMP
 #include <omp.h>
@@ -49,7 +49,7 @@ aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if AVX2 ISA is supported, lpgemm fp32 matmul only works with it.
+    // Check if AVX2 ISA is supported, dlp_gemm fp32 matmul only works with it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, "
                       "cannot perform f32f32f32 gemm.",
@@ -58,18 +58,18 @@ aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
         return 0; // Error.
     }
 
-    // Initialize lpgemm context.
+    // Initialize dlp_gemm context.
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_BUF_SIZE_CHECK("f32f32f32of32", order, trans, mat_type, k, n,
-                                err_no);
+    AOCL_DLP_REORDER_BUF_SIZE_CHECK("f32f32f32of32", order, trans, mat_type, k,
+                                    n, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return 0; // Error.
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -77,7 +77,7 @@ aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
         return 0; // A reorder not supported.
     }
 
-    const md_t NR = lpgemm_get_block_size_NR_global_cntx(F32F32F32OF32);
+    const md_t NR = dlp_gemm_get_block_size_NR_global_cntx(F32F32F32OF32);
 
     // Extra space since packing does width in multiples of NR.
     md_t n_reorder;
@@ -107,7 +107,7 @@ aocl_reorder_f32f32f32of32(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if AVX2 ISA is supported, lpgemm fp32 matmul only works with it.
+    // Check if AVX2 ISA is supported, dlp_gemm fp32 matmul only works with it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, "
                       "cannot perform f32f32f32 gemm.",
@@ -116,12 +116,12 @@ aocl_reorder_f32f32f32of32(const char      order,
         return; // Error.
     }
 
-    // Initialize lpgemm context.
+    // Initialize dlp_gemm context.
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("f32f32f32of32", order, trans, mat_type, input_buf_addr,
-                       reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("f32f32f32of32", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -140,7 +140,7 @@ aocl_reorder_f32f32f32of32(const char      order,
         cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -149,10 +149,10 @@ aocl_reorder_f32f32f32of32(const char      order,
     }
 
     // Query the context for various blocksizes.
-    lpgemm_cntx_t* lcntx = lpgemm_get_global_cntx_obj(F32F32F32OF32);
-    md_t           NC    = lcntx->blksz.NC;
-    md_t           KC    = lcntx->blksz.KC;
-    md_t           NR    = lcntx->blksz.NR;
+    dlp_gemm_cntx_t* lcntx = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
+    md_t             NC    = lcntx->blksz.NC;
+    md_t             KC    = lcntx->blksz.KC;
+    md_t             NR    = lcntx->blksz.NR;
 
     md_t rs_b_reorder = 0;
     md_t cs_b_reorder = 0;
@@ -245,7 +245,7 @@ aocl_reorder_f32f32f32of32(const char      order,
                 // st = ( jc_cur_loop * k )    <traverse blocks 1,2,3,4>
                 //    + ( n_sub_updated * pc ) <traverse block 5>
                 //    + ( NC' * kc0_updated)   <traverse block 6>
-                ((lpgemm_pack_f32)lcntx->packb_fun_ptr)(
+                ((dlp_gemm_pack_f32)lcntx->packb_fun_ptr)(
                     reorder_buf_addr + (jc_cur_loop * k) + (n_sub_updated * pc)
                         + (jc_cur_loop_rem * kc0),
                     input_buf_addr + (rs_b * pc) + (cs_b * jc), rs_b, cs_b, nc0,
@@ -270,7 +270,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
-    // Check if AVX2 ISA is supported, lpgemm fp32 matmul only works with it.
+    // Check if AVX2 ISA is supported, dlp_gemm fp32 matmul only works with it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, "
                       "cannot perform f32f32f32 gemm.",
@@ -279,12 +279,12 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
         return; // Error.
     }
 
-    // Initialize lpgemm context.
+    // Initialize dlp_gemm context.
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_REORDER_CHECK("f32f32f32of32_reference", order, trans, mat_type,
-                       input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_REORDER_CHECK("f32f32f32of32_reference", order, trans, mat_type,
+                           input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -303,7 +303,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
         cs_b = dlp_is_notrans(dlp_trans) ? ldb : 1;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -312,10 +312,10 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
     }
 
     // Query the context for various blocksizes.
-    lpgemm_cntx_t* lcntx = lpgemm_get_global_cntx_obj(F32F32F32OF32);
-    md_t           NC    = lcntx->blksz.NC;
-    md_t           KC    = lcntx->blksz.KC;
-    md_t           NR    = lcntx->blksz.NR;
+    dlp_gemm_cntx_t* lcntx = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
+    md_t             NC    = lcntx->blksz.NC;
+    md_t             KC    = lcntx->blksz.KC;
+    md_t             NR    = lcntx->blksz.NR;
 
     md_t rs_b_reorder = 0;
     md_t cs_b_reorder = 0;
@@ -408,7 +408,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
                 // st = ( jc_cur_loop * k )    <traverse blocks 1,2,3,4>
                 //    + ( n_sub_updated * pc ) <traverse block 5>
                 //    + ( NC' * kc0_updated)   <traverse block 6>
-                packb_f32f32f32of32_reference(
+                dlp_packb_f32f32f32of32_reference(
                     reorder_buf_addr + (jc_cur_loop * k) + (n_sub_updated * pc)
                         + (jc_cur_loop_rem * kc0),
                     input_buf_addr + (rs_b * pc) + (cs_b * jc), rs_b, cs_b, nc0,
@@ -421,16 +421,16 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
 }
 
 void
-unreorderb_nr64_f32f32f32of32_reference(lpgemm_obj_t*  b,
-                                        lpgemm_obj_t*  b_unreorder,
-                                        dlp_rntm_t*    rntm_g,
-                                        lpgemm_cntx_t* lcntx)
+dlp_unreorderb_nr64_f32f32f32of32_reference(dlp_gemm_obj_t*  b,
+                                            dlp_gemm_obj_t*  b_unreorder,
+                                            dlp_rntm_t*      rntm_g,
+                                            dlp_gemm_cntx_t* lcntx)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t NR = lcntx->blksz.NR;
 
-    // Extracting the matrix properties from the lpgemm object
+    // Extracting the matrix properties from the dlp_gemm object
     md_t rs_b = b->rs;
     md_t cs_b = b->cs;
     md_t n    = b->width;
@@ -472,7 +472,7 @@ unreorderb_nr64_f32f32f32of32_reference(lpgemm_obj_t*  b,
             for (iter_t pc = 0; pc < k; pc += KC) {
                 md_t kc0 = dlp_min((k - pc), KC);
 
-                unpackb_f32f32f32of32_reference(
+                dlp_unpackb_f32f32f32of32_reference(
                     ((float*)b_unreorder->storage.aligned_buffer)
                         + (jc_cur_loop * k) + (n_sub_updated * pc)
                         + (jc_cur_loop_rem * kc0),
@@ -502,8 +502,9 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
     aocl_lpgemm_init_global_cntx();
 
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
-    AOCL_UNREORDER_CHECK("f32f32f32of32_reference", order, mat_type,
-                         reorder_buf_addr, output_buf_addr, k, n, ldb, err_no);
+    AOCL_DLP_UNREORDER_CHECK("f32f32f32of32_reference", order, mat_type,
+                             reorder_buf_addr, output_buf_addr, k, n, ldb,
+                             err_no);
     if (err_no != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
@@ -520,7 +521,7 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
         cs_b = ldb;
     }
 
-    AOCL_MATRIX_TYPE input_mat_type;
+    AOCL_DLP_MATRIX_TYPE input_mat_type;
     dlp_param_map_char_to_lpmat_type(mat_type, &input_mat_type);
 
     if (input_mat_type == A_MATRIX) {
@@ -546,19 +547,20 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    lpgemm_cntx_t* lcntx_g = lpgemm_get_global_cntx_obj(F32F32F32OF32);
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
 
     // create dummy b_reorder obj.
-    lpgemm_obj_t b_reorder;
+    dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = (void*)reorder_buf_addr;
 
     // create dummy b obj.
-    lpgemm_obj_t b;
+    dlp_gemm_obj_t b;
     b.storage.aligned_buffer = (void*)output_buf_addr;
     b.rs                     = rs_b;
     b.cs                     = cs_b;
     b.width                  = n;
     b.length                 = k;
 
-    unreorderb_nr64_f32f32f32of32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_unreorderb_nr64_f32f32f32of32_reference(&b, &b_reorder, &rntm_g,
+                                                lcntx_g);
 }

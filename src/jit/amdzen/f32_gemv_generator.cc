@@ -410,13 +410,13 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
         // Check for is_first_k
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp2, regTmp2);
         je(label_betaop_col, T_NEAR);
 
         mov(regTmpYptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
         // NULL check
         cmp(regTmpYptr, 0);
@@ -424,19 +424,19 @@ jitF32GEMVN1<KType>::scaleYWithBetaColStored(int mSize, bool betaOne)
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
         add(regTmpYptr, regTmp2);
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
@@ -566,13 +566,13 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         // Check for is_first_k
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp2, regTmp2);
         je(label_betaop_row, T_NEAR);
 
         mov(regTmpYptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
         // NULL check
         cmp(regTmpYptr, 0);
@@ -580,19 +580,19 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
         add(regTmpYptr, regTmp2);
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
@@ -1055,13 +1055,13 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
         // Check for is_last_k
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp2, regTmp2);
         je(label_storeop_col, T_NEAR);
 
         mov(regTmpYptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
         // NULL check
         cmp(regTmpYptr, 0);
@@ -1069,19 +1069,19 @@ jitF32GEMVN1<KType>::storeYValuesColStored(int mSize)
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
         add(regTmpYptr, regTmp2);
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
@@ -1204,14 +1204,14 @@ jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
             test(regTmp2, regTmp2);
             je(label_storeop_row, T_NEAR);
 
             mov(regTmpYptr,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                    + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
             // NULL check
             cmp(regTmpYptr, 0);
@@ -1220,7 +1220,7 @@ jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
             lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
             add(regTmpYptr, regTmp2);
@@ -1228,13 +1228,13 @@ jitF32GEMVN1<KType>::storeYValuesRowStored(int mSize)
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                    + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
             lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
             mov(regKIter,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
             imul(regKIter, regTmp2);
             add(regTmpYptr, regKIter);
@@ -1493,11 +1493,11 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             mov(regTmp1,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
             add(regTmp1, MR);
             mov(ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
                 regTmp1);
         }
 
@@ -2041,14 +2041,14 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
         // Check for is_first_k
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp2, regTmp2);
         je(label_beta_scale_fringe, T_NEAR);
 
         // Get the downscale buffer pointer
         mov(regTmpYptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
         // NULL check
         cmp(regTmpYptr, 0);
@@ -2056,19 +2056,19 @@ jitF32GEMVM1<KType>::scaleYWithBetaFringe(bool isBetaOne)
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
         add(regTmpYptr, regTmp2);
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
@@ -2221,7 +2221,7 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                 mov(regTmp2,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                        + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                        + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
                 test(regTmp2, regTmp2);
                 je(label_beta_scale, T_NEAR);
 
@@ -2229,7 +2229,7 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                 mov(regTmpYptr,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                        + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                        + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
                 // NULL check
                 cmp(regTmpYptr, 0);
@@ -2238,7 +2238,7 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                 mov(regTmp2,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                        + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                        + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
                 lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
                 add(regTmpYptr, regTmp2);
@@ -2246,13 +2246,13 @@ jitF32GEMVM1<KType>::scaleYWithBeta(bool nMask)
                 mov(regTmp2,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                        + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                        + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
                 lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
                 mov(regKIter,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                        + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                        + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
                 imul(regKIter, regTmp2);
                 add(regTmpYptr, regKIter);
@@ -2412,13 +2412,13 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
         // Check for is_last_k
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp2, regTmp2);
         je(label_store_fringe, T_NEAR);
 
         mov(regTmpYptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
         // NULL check
         cmp(regTmpYptr, 0);
@@ -2426,19 +2426,19 @@ jitF32GEMVM1<KType>::storeYValuesFringe()
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
         add(regTmpYptr, regTmp2);
 
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
@@ -2542,14 +2542,14 @@ jitF32GEMVM1<KType>::storeYValues(bool nMask)
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
             test(regTmp2, regTmp2);
             je(label_store, T_NEAR);
 
             mov(regTmpYptr,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+                    + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
             // NULL check
             cmp(regTmpYptr, 0);
@@ -2558,7 +2558,7 @@ jitF32GEMVM1<KType>::storeYValues(bool nMask)
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
             lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
             add(regTmpYptr, regTmp2);
@@ -2566,13 +2566,13 @@ jitF32GEMVM1<KType>::storeYValues(bool nMask)
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+                    + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
             lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]); // BF16 stride
 
             mov(regKIter,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
             imul(regKIter, regTmp2);
             add(regTmpYptr, regKIter);
@@ -2830,11 +2830,11 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             mov(regTmp1,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
             add(regTmp1, NR);
             mov(ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
                 regTmp1);
         }
 

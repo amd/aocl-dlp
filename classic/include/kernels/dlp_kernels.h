@@ -29,18 +29,18 @@
 #ifndef DLP_KERNEL_HDRS_H
 #define DLP_KERNEL_HDRS_H
 
-#include "gemm_utils/lpgemm_utils.h"
-#include "kernels/bf16bf16f32/lpgemm_pack_bf16.h"
-#include "kernels/f32f32f32/lpgemm_pack_f32.h"
-#include "kernels/fp16fp16fp16/lpgemm_pack_fp16.h"
-#include "kernels/lpgemm_eltwise_ops_kernels.h"
-#include "kernels/lpgemm_kernels.h"
-#include "kernels/lpgemm_utils_kernels.h"
-#include "kernels/s8s8s32/lpgemm_packa_s8.h"
-#include "kernels/s8s8s32/lpgemm_packb_s8.h"
-#include "kernels/u8s8s32/lpgemm_packa.h"
-#include "kernels/u8s8s32/lpgemm_packb.h"
-#include "lpgemm_post_ops.h"
-#include "sys_utils/lpgemm_sys.h"
+#include "dlp_gemm_post_ops.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "kernels/bf16bf16f32/dlp_gemm_pack_bf16.h"
+#include "kernels/dlp_gemm_eltwise_ops_kernels.h"
+#include "kernels/dlp_gemm_kernels.h"
+#include "kernels/dlp_gemm_utils_kernels.h"
+#include "kernels/f32f32f32/dlp_gemm_pack_f32.h"
+#include "kernels/fp16fp16fp16/dlp_gemm_pack_fp16.h"
+#include "kernels/s8s8s32/dlp_gemm_packa_s8.h"
+#include "kernels/s8s8s32/dlp_gemm_packb_s8.h"
+#include "kernels/u8s8s32/dlp_gemm_packa.h"
+#include "kernels/u8s8s32/dlp_gemm_packb.h"
+#include "sys_utils/dlp_gemm_sys.h"
 
 #endif // DLP_KERNEL_HDRS_H

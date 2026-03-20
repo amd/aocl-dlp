@@ -136,6 +136,6 @@ bool
 dlp_env_is_logger_enabled()
 {
     static const bool dlpLoggerEnabled =
-        dlp_env_get_bool("AOCL_ENABLE_LPGEMM_LOGGER", FALSE);
+        dlp_env_get_bool("AOCL_DLP_ENABLE_LPGEMM_LOGGER", FALSE);
     return dlpLoggerEnabled;
 }

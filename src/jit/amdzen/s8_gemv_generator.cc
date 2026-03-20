@@ -121,7 +121,7 @@ jitGEMVS8N1<KType>::initializeParameters(utils::gemvN1GeneratorParams& params)
     if (c_downscale != DLP_S32) {
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
     }
 }
 
@@ -276,7 +276,7 @@ jitGEMVS8N1<KType>::conversionCompensation(int mSize)
     // Load bsumptr
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+            + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
     vpbroadcastd(RegType(xBaseIdx), ptr[regTmp1]);
 
     int mLeft = mSize % vnniWidth;
@@ -317,11 +317,11 @@ jitGEMVS8N1<KType>::updateCBufferPointers()
 {
     mov(regTmpYptr,
         ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+            + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+            + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
 
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
@@ -1464,11 +1464,11 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             mov(regTmp1,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
             add(regTmp1, MR);
             mov(ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
                 regTmp1);
         }
 
@@ -1971,12 +1971,12 @@ jitGEMVS8M1<KType>::conversionCompensation(bool isFringe)
         // Load b_col_sum_vec pointer
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+                + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
 
         // Load b_sum_offset
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+                + offsetof(dlp_gemm_post_op_attr, b_sum_offset)]);
 
         // Calculate address: b_col_sum_vec + b_sum_offset * sizeof(int32_t)
         // and store in regTmp1
@@ -2010,12 +2010,12 @@ jitGEMVS8M1<KType>::conversionCompensation(bool isFringe)
     // Load b_col_sum_vec pointer
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+            + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
 
     // Load b_sum_offset
     mov(regTmp2,
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+            + offsetof(dlp_gemm_post_op_attr, b_sum_offset)]);
 
     // Calculate address: b_col_sum_vec + b_sum_offset * sizeof(int32_t)
     // and store in regTmp1
@@ -2069,11 +2069,11 @@ jitGEMVS8M1<KType>::updateYBufferPointers()
 {
     mov(regTmpYptr,
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+            + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
@@ -2786,10 +2786,10 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Update b_sum_offset and store to memory
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+                + offsetof(dlp_gemm_post_op_attr, b_sum_offset)]);
         add(regTmp2, NR);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_sum_offset)],
+                + offsetof(dlp_gemm_post_op_attr, b_sum_offset)],
             regTmp2);
 
         // Update post_op_c_j for the next n-iteration
@@ -2797,11 +2797,11 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
             add(regTmp2, NR);
             mov(ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                    + offsetof(lpgemm_post_op_attr, post_op_c_j)],
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
                 regTmp2);
         }
 
@@ -2965,10 +2965,10 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Update b_sum_offset and store to memory
         mov(regTmp2,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+                + offsetof(dlp_gemm_post_op_attr, b_sum_offset)]);
         add(regTmp2, NR);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, b_sum_offset)],
+                + offsetof(dlp_gemm_post_op_attr, b_sum_offset)],
             regTmp2);
     }
 

@@ -95,26 +95,26 @@ struct gemmParams : public kernelParams
     // Quantization scaling fields
     void* quantScale; // Per-tensor or per-channel scale factor
 
-    lpgemm_post_op*     kernelOpsList;
-    lpgemm_post_op_attr kernelOpsAttr;
+    dlp_gemm_post_op*     kernelOpsList;
+    dlp_gemm_post_op_attr kernelOpsAttr;
 
-    gemmParams(void*               A,
-               void*               B,
-               void*               C_acc,
-               md_t                _m,
-               md_t                _n,
-               md_t                _k,
-               md_t                rs_a,
-               md_t                cs_a,
-               md_t                ps_a,
-               md_t                rs_b,
-               md_t                cs_b,
-               md_t                rs_c,
-               md_t                cs_c,
-               void*               alpha_acc,
-               void*               beta_acc,
-               lpgemm_post_op*     kernelOpsList,
-               lpgemm_post_op_attr kernelOpsAttr)
+    gemmParams(void*                 A,
+               void*                 B,
+               void*                 C_acc,
+               md_t                  _m,
+               md_t                  _n,
+               md_t                  _k,
+               md_t                  rs_a,
+               md_t                  cs_a,
+               md_t                  ps_a,
+               md_t                  rs_b,
+               md_t                  cs_b,
+               md_t                  rs_c,
+               md_t                  cs_c,
+               void*                 alpha_acc,
+               void*                 beta_acc,
+               dlp_gemm_post_op*     kernelOpsList,
+               dlp_gemm_post_op_attr kernelOpsAttr)
         : a(A)
         , b(B)
         , c(C_acc)
@@ -328,25 +328,25 @@ struct gemvN1Params : public kernelParams
     uint32_t               kmask_bf16_avx512;
     uint32_t               kmask_fp16_avx512;
     uint64_t               kmask_i8_avx512;
-    lpgemm_post_op*        kernelOpsList; // List of post-ops
-    lpgemm_post_op_attr    kernelOpsAttr; // Attributes for post-ops
+    dlp_gemm_post_op*      kernelOpsList; // List of post-ops
+    dlp_gemm_post_op_attr  kernelOpsAttr; // Attributes for post-ops
 
     // Constructor
-    gemvN1Params(void*               A,
-                 void*               X,
-                 void*               Y,
-                 md_t                M,
-                 md_t                K,
-                 md_t                rs_a,
-                 md_t                cs_a,
-                 md_t                rs_b,
-                 md_t                cs_b,
-                 md_t                rs_c,
-                 md_t                cs_c,
-                 void*               alpha_acc,
-                 void*               beta_acc,
-                 lpgemm_post_op*     kernelOps     = nullptr,
-                 lpgemm_post_op_attr kernelOpsAttr = {})
+    gemvN1Params(void*                 A,
+                 void*                 X,
+                 void*                 Y,
+                 md_t                  M,
+                 md_t                  K,
+                 md_t                  rs_a,
+                 md_t                  cs_a,
+                 md_t                  rs_b,
+                 md_t                  cs_b,
+                 md_t                  rs_c,
+                 md_t                  cs_c,
+                 void*                 alpha_acc,
+                 void*                 beta_acc,
+                 dlp_gemm_post_op*     kernelOps     = nullptr,
+                 dlp_gemm_post_op_attr kernelOpsAttr = {})
         : a(A)
         , x(X)
         , y(Y)
@@ -554,27 +554,27 @@ struct gemvM1Params : public kernelParams
 
     std::array<int32_t, 8> nmask_avx2;
 
-    lpgemm_post_op*     kernelOpsList; // List of post-ops
-    lpgemm_post_op_attr kernelOpsAttr; // Attributes for post-ops
+    dlp_gemm_post_op*     kernelOpsList; // List of post-ops
+    dlp_gemm_post_op_attr kernelOpsAttr; // Attributes for post-ops
 
     // Constructor
-    gemvM1Params(void*               X,
-                 void*               B,
-                 void*               Y,
-                 md_t                N,
-                 md_t                K,
-                 md_t                rs_x,
-                 md_t                cs_x,
-                 md_t                rs_b,
-                 md_t                cs_b,
-                 md_t                rs_y,
-                 md_t                cs_y,
-                 md_t                n_sub_updated,
-                 md_t                jc_cur_loop_rem,
-                 void*               alpha_acc,
-                 void*               beta_acc,
-                 lpgemm_post_op*     kernelOps     = nullptr,
-                 lpgemm_post_op_attr kernelOpsAttr = {})
+    gemvM1Params(void*                 X,
+                 void*                 B,
+                 void*                 Y,
+                 md_t                  N,
+                 md_t                  K,
+                 md_t                  rs_x,
+                 md_t                  cs_x,
+                 md_t                  rs_b,
+                 md_t                  cs_b,
+                 md_t                  rs_y,
+                 md_t                  cs_y,
+                 md_t                  n_sub_updated,
+                 md_t                  jc_cur_loop_rem,
+                 void*                 alpha_acc,
+                 void*                 beta_acc,
+                 dlp_gemm_post_op*     kernelOps     = nullptr,
+                 dlp_gemm_post_op_attr kernelOpsAttr = {})
         : x(X)
         , b(B)
         , y(Y)

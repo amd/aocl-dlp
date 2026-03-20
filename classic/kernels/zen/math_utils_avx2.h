@@ -25,16 +25,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef AOCL_LPGEMM_MATH_UTILS_AVX2_H
-#define AOCL_LPGEMM_MATH_UTILS_AVX2_H
+#ifndef AOCL_DLP_GEMM_MATH_UTILS_AVX2_H
+#define AOCL_DLP_GEMM_MATH_UTILS_AVX2_H
 
 // constants for exp function
-#define lpgemm_exp_c0 0x1.0000014439a91p0
-#define lpgemm_exp_c1 0x1.62e43170e3344p-1
-#define lpgemm_exp_c2 0x1.ebf906bc4c115p-3
-#define lpgemm_exp_c3 0x1.c6ae2bb88c0c8p-5
-#define lpgemm_exp_c4 0x1.3d1079db4ef69p-7
-#define lpgemm_exp_c5 0x1.5f8905cb0cc4ep-10
+#define dlp_gemm_exp_c0 0x1.0000014439a91p0
+#define dlp_gemm_exp_c1 0x1.62e43170e3344p-1
+#define dlp_gemm_exp_c2 0x1.ebf906bc4c115p-3
+#define dlp_gemm_exp_c3 0x1.c6ae2bb88c0c8p-5
+#define dlp_gemm_exp_c4 0x1.3d1079db4ef69p-7
+#define dlp_gemm_exp_c5 0x1.5f8905cb0cc4ep-10
 
 #define TBL_LN2   0x1.71547652b82fep+0
 #define EXPF_HUGE 0x1.8p+23
@@ -49,14 +49,14 @@
 #define POLY_EVAL_6_AVX2(r, r2, z)                                             \
     r2 = _mm256_mul_ps(r, r);                                                  \
     z  = _mm256_fmadd_ps(r2,                                                   \
-                         _mm256_fmadd_ps(r, _mm256_set1_ps(lpgemm_exp_c3),     \
-                                         _mm256_set1_ps(lpgemm_exp_c2)),       \
-                         _mm256_fmadd_ps(r, _mm256_set1_ps(lpgemm_exp_c1),     \
-                                         _mm256_set1_ps(lpgemm_exp_c0)));      \
+                         _mm256_fmadd_ps(r, _mm256_set1_ps(dlp_gemm_exp_c3),   \
+                                         _mm256_set1_ps(dlp_gemm_exp_c2)),     \
+                         _mm256_fmadd_ps(r, _mm256_set1_ps(dlp_gemm_exp_c1),   \
+                                         _mm256_set1_ps(dlp_gemm_exp_c0)));    \
     r2 = _mm256_mul_ps(r2, r2);                                                \
     r  = _mm256_fmadd_ps(r2,                                                   \
-                         _mm256_fmadd_ps(r, _mm256_set1_ps(lpgemm_exp_c5),     \
-                                         _mm256_set1_ps(lpgemm_exp_c4)),       \
+                         _mm256_fmadd_ps(r, _mm256_set1_ps(dlp_gemm_exp_c5),   \
+                                         _mm256_set1_ps(dlp_gemm_exp_c4)),     \
                          z);
 
 #define EXPF_AVX2(x, r, r2, z, dn, q)                                          \
@@ -94,14 +94,14 @@
 #define POLY_EVAL_6_SSE(r, r2, z)                                              \
     r2 = _mm_mul_ps(r, r);                                                     \
     z  = _mm_fmadd_ps(r2,                                                      \
-                      _mm_fmadd_ps(r, _mm_set1_ps(lpgemm_exp_c3),              \
-                                   _mm_set1_ps(lpgemm_exp_c2)),                \
-                      _mm_fmadd_ps(r, _mm_set1_ps(lpgemm_exp_c1),              \
-                                   _mm_set1_ps(lpgemm_exp_c0)));               \
+                      _mm_fmadd_ps(r, _mm_set1_ps(dlp_gemm_exp_c3),            \
+                                   _mm_set1_ps(dlp_gemm_exp_c2)),              \
+                      _mm_fmadd_ps(r, _mm_set1_ps(dlp_gemm_exp_c1),            \
+                                   _mm_set1_ps(dlp_gemm_exp_c0)));             \
     r2 = _mm_mul_ps(r2, r2);                                                   \
     r  = _mm_fmadd_ps(r2,                                                      \
-                      _mm_fmadd_ps(r, _mm_set1_ps(lpgemm_exp_c5),              \
-                                   _mm_set1_ps(lpgemm_exp_c4)),                \
+                      _mm_fmadd_ps(r, _mm_set1_ps(dlp_gemm_exp_c5),            \
+                                   _mm_set1_ps(dlp_gemm_exp_c4)),              \
                       z);
 #define EXPF_SSE(x, r, r2, z, dn, q)                                           \
     z  = _mm_mul_ps(x, _mm_set1_ps(TBL_LN2));                                  \

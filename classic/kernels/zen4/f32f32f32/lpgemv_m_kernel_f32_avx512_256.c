@@ -28,10 +28,10 @@
 
 #include <immintrin.h>
 
+#include "dlp_gemm_kernel_macros_f32.h"
 #include "kernels/dlp_kernels.h"
-#include "lpgemm_kernel_macros_f32.h"
 
-#include "../../zen/f32f32f32/lpgemm_kernel_macros_f32_avx2.h"
+#include "../../zen/f32f32f32/dlp_gemm_kernel_macros_f32_avx2.h"
 
 // Zero-out the given YMM accumulator registers
 #define ZERO_ACC_YMM_4_REG(ymm0, ymm1, ymm2, ymm3)                             \
@@ -53,10 +53,10 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
     };
 
     // Strides are updated based on matrix packing/reordering.
-    const float*        a_use         = NULL;
-    const float*        b_use         = NULL;
-    float*              c_use         = NULL;
-    lpgemm_post_op_attr post_ops_attr = *(post_op_attr);
+    const float*          a_use         = NULL;
+    const float*          b_use         = NULL;
+    float*                c_use         = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
     // Predefined masks for handling edge cases
     __m256i masks[9] = {
@@ -316,8 +316,8 @@ LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         }
 
         // Post Ops
-        post_ops_attr.is_last_k            = TRUE;
-        lpgemm_post_op* post_ops_list_temp = post_op;
+        post_ops_attr.is_last_k              = TRUE;
+        dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
 
     POST_OPS_BIAS_1x64F: {

@@ -123,7 +123,7 @@ jitGEMMS8<KType>::initializeParameters(bool addIrLoop)
 
     mov(regTmp2,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     // Load k-fringe mask to k2
     kmovw(k2, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftmask)]);
@@ -228,10 +228,10 @@ jitGEMMS8<KType>::loadBSumValues()
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, b_col_sum_vec)]);
+            + offsetof(dlp_gemm_post_op_attr, b_col_sum_vec)]);
     mov(regTmp3,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, b_sum_offset)]);
+            + offsetof(dlp_gemm_post_op_attr, b_sum_offset)]);
 
     lea(regTmp1, ptr[regTmp1 + (regTmp3 * sizeof(int32_t))]);
 
@@ -255,7 +255,7 @@ jitGEMMS8<KType>::conversionCompensation()
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
     je("BYPASS_COMP", T_NEAR);
 
@@ -296,11 +296,11 @@ jitGEMMS8<KType>::updateCBufferPointers()
 {
     mov(regTmpCptr,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+            + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
@@ -312,7 +312,7 @@ jitGEMMS8<KType>::updateCBufferPointers()
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+            + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
 
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
@@ -342,7 +342,7 @@ jitGEMMS8<KType>::scaleBeta()
     if (c_downscale == DLP_S8) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETAOP", T_NEAR);
 
@@ -376,7 +376,7 @@ jitGEMMS8<KType>::scaleBeta()
     } else if (c_downscale == DLP_U8) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETAOP", T_NEAR);
 
@@ -414,7 +414,7 @@ jitGEMMS8<KType>::scaleBeta()
     } else if (c_downscale == DLP_BF16) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETAOP", T_NEAR);
 
@@ -459,7 +459,7 @@ jitGEMMS8<KType>::scaleBeta()
     } else if (c_downscale == DLP_F32) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETAOP", T_NEAR);
 
@@ -533,7 +533,7 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
     if (c_downscale == DLP_S8) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
 
@@ -576,7 +576,7 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
     } else if (c_downscale == DLP_U8) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
 
@@ -629,7 +629,7 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
     if (c_downscale == DLP_BF16) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
 
@@ -697,7 +697,7 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
     } else if (c_downscale == DLP_F32) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
 
@@ -850,7 +850,7 @@ jitGEMMS8<KType>::generateIrLoop(utils::generatorParams& params)
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
     je(".STOREC", T_NEAR); // skip post-ops if not the final k iteration
 
@@ -894,7 +894,7 @@ jitGEMMS8<KType>::generateIrLoop(utils::generatorParams& params)
         // two offsets at the same time is safe.
         lea(regTmp2, ptr[regTmp2 + MR]);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
             regTmp2);
 
         // decrement m_iter

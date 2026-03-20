@@ -326,28 +326,28 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
     float gelu_macros[6] = { 1.4426950408889634, 1.2582912E7, -88.0f, 88.0f,
                              (float)(1.0 / 0.0), -2147483648 };
 
-    float lpgemm_exp[6] = { 1.0000000754895704,   0.6931472254087585,
-                            0.2402210737432219,   0.05550297297702539,
-                            0.009676036358193323, 0.001341000536524434 };
+    float dlp_gemm_exp[6] = { 1.0000000754895704,   0.6931472254087585,
+                              0.2402210737432219,   0.05550297297702539,
+                              0.009676036358193323, 0.001341000536524434 };
 
-    float  erf_consts[5]  = { 0.70710678118654f, 1.0, 0.5, 3.553f,
-                              3.91920638084411621F };
-    double lpgemm_erf[16] = { 0x1.20dd7890d27e1cec99fce48c29cp0,
-                              -0x1.ab4bed70f238422edeeba9c558p-16,
-                              -0x1.80a1bd5878e0b0689c5ff4fcdd4p-2,
-                              -0x1.07cb4cde6a7d9528c8a732990e4p-8,
-                              0x1.092cba598f96f00ddc5854cf7cp-3,
-                              -0x1.51f0ce4ac87c55f11f685864714p-5,
-                              0x1.4101f320bf8bc4d41c228faaa6cp-5,
-                              -0x1.2300882a7d1b712726997de80ep-4,
-                              0x1.d45745fff0e4b6d0604a9ab6284p-5,
-                              -0x1.9eb1491956e31ded96176d7c8acp-6,
-                              0x1.b9183fc75d326b9044bc63c9694p-8,
-                              -0x1.10e8f8c89ad8645e7d769cd596cp-10,
-                              0x1.224ffc80cc19957a48ecedad6c8p-14,
-                              0x1.12a30f42c71308321e7e7cb0174p-18,
-                              -0x1.155445e2e006723066d72d22ddcp-20,
-                              0x1.c6a4181da4ef76f22bd39bb5dcp-25 };
+    float  erf_consts[5]    = { 0.70710678118654f, 1.0, 0.5, 3.553f,
+                                3.91920638084411621F };
+    double dlp_gemm_erf[16] = { 0x1.20dd7890d27e1cec99fce48c29cp0,
+                                -0x1.ab4bed70f238422edeeba9c558p-16,
+                                -0x1.80a1bd5878e0b0689c5ff4fcdd4p-2,
+                                -0x1.07cb4cde6a7d9528c8a732990e4p-8,
+                                0x1.092cba598f96f00ddc5854cf7cp-3,
+                                -0x1.51f0ce4ac87c55f11f685864714p-5,
+                                0x1.4101f320bf8bc4d41c228faaa6cp-5,
+                                -0x1.2300882a7d1b712726997de80ep-4,
+                                0x1.d45745fff0e4b6d0604a9ab6284p-5,
+                                -0x1.9eb1491956e31ded96176d7c8acp-6,
+                                0x1.b9183fc75d326b9044bc63c9694p-8,
+                                -0x1.10e8f8c89ad8645e7d769cd596cp-10,
+                                0x1.224ffc80cc19957a48ecedad6c8p-14,
+                                0x1.12a30f42c71308321e7e7cb0174p-18,
+                                -0x1.155445e2e006723066d72d22ddcp-20,
+                                0x1.c6a4181da4ef76f22bd39bb5dcp-25 };
 
     // ERF coefficients for AVX-512 piecewise polynomial
     // approximation 6 degrees × 32 regions (24 active + 8 padding for
@@ -416,10 +416,10 @@ class kernelOpsGeneratorX86 : public gen::kernelOpsGeneratorInterface
 
     const md_t gelu_consts_off    = 0;
     const md_t gelu_macros_off    = gelu_consts_off + sizeof(gelu_consts);
-    const md_t lpgemm_exp_off     = gelu_macros_off + sizeof(gelu_macros);
-    const md_t erf_consts_off     = lpgemm_exp_off + sizeof(lpgemm_exp);
-    const md_t lpgemm_erf_off     = erf_consts_off + sizeof(erf_consts);
-    const md_t erf_f32_coeffs_off = lpgemm_erf_off + sizeof(lpgemm_erf);
+    const md_t dlp_gemm_exp_off   = gelu_macros_off + sizeof(gelu_macros);
+    const md_t erf_consts_off     = dlp_gemm_exp_off + sizeof(dlp_gemm_exp);
+    const md_t dlp_gemm_erf_off   = erf_consts_off + sizeof(erf_consts);
+    const md_t erf_f32_coeffs_off = dlp_gemm_erf_off + sizeof(dlp_gemm_erf);
     const md_t erf_f32_constants_off =
         erf_f32_coeffs_off + sizeof(erf_f32_coeffs_hex);
 

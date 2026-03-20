@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef LPGEMM_INT4_CVT_UTILS_H
-#define LPGEMM_INT4_CVT_UTILS_H
+#ifndef DLP_GEMM_INT4_CVT_UTILS_H
+#define DLP_GEMM_INT4_CVT_UTILS_H
 
 /* shift_idx:__m512i*/
 #define MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx)                          \
@@ -423,4 +423,4 @@
                        _mm256_extracti32x4_epi32(in, idx))),                   \
                    scale_reg))
 
-#endif // LPGEMM_INT4_CVT_UTILS_H
+#endif // DLP_GEMM_INT4_CVT_UTILS_H

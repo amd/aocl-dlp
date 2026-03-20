@@ -45,9 +45,9 @@ gemmF32DEBackend::gemmF32DEBackend()
 {
     // Use this eKernelInstPref to generate kernelInfo for the 32 Ymm register
     // based f32 kernel generation.
-    eKernelInstPref =
-        dlp::env_utils::EnvironmentVariableManager::getInstance()
-            .getKernelInstructionPreferenceFromEnv("AOCL_ENABLE_INSTRUCTIONS");
+    eKernelInstPref = dlp::env_utils::EnvironmentVariableManager::getInstance()
+                          .getKernelInstructionPreferenceFromEnv(
+                              "AOCL_DLP_ENABLE_INSTRUCTIONS");
 
     isAvx512 =
         arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
@@ -60,7 +60,7 @@ gemmF32DEBackend::gemmF32DEBackend()
     }
 
     // This needs to be downgraded if the actual cpu is avx512 but is
-    // downgraded via using AOCL_ENABLE_INSTRUCTIONS.
+    // downgraded via using AOCL_DLP_ENABLE_INSTRUCTIONS.
     numRegisters = cpu_utils::cpuFeaturesInstance().getNumVectorRegisters();
     numVectorMaskRegisters =
         cpu_utils::cpuFeaturesInstance().getNumVectorMaskRegisters();
@@ -178,15 +178,15 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     // If it doesn't exist, we reroute to use the F32 JIT path.
     // Env variable standard :
     // On machines that support AVX512BF16, we use the BF16 path only
-    // when the environment variable('AOCL_ENABLE_INSTRUCTIONS') is NOT
+    // when the environment variable('AOCL_DLP_ENABLE_INSTRUCTIONS') is NOT
     // set to AVX2(or it's alternative, like ZEN3, ZEN2 or ZEN). This is the
     // standard that the legacy code enforces. NOTE : Downscaling support on F32
     // JIT exists on it's AVX2 code-path
     //        Thus, when rerouting, we have to reroute only on machines that
     //        supports AVX2 exclusively(without any AVX512 support).
-    eKernelInstPref =
-        dlp::env_utils::EnvironmentVariableManager::getInstance()
-            .getKernelInstructionPreferenceFromEnv("AOCL_ENABLE_INSTRUCTIONS");
+    eKernelInstPref = dlp::env_utils::EnvironmentVariableManager::getInstance()
+                          .getKernelInstructionPreferenceFromEnv(
+                              "AOCL_DLP_ENABLE_INSTRUCTIONS");
 
     isAvx512Bf16 = arch_utils::archConfigManager::getInstance()
                        .isAvx512Bf16SupportedByArch();
@@ -207,8 +207,8 @@ gemmBF16DEBackend::gemmBF16DEBackend()
         // we choose to run the F32(AVX2) code-path.
         f32Backend = std::make_unique<gemmF32DEBackend>();
     } else {
-        // In scenarios where the AOCL_ENABLE_INSTRUCTIONS is set to AVX512 or
-        // AVX512_256, or not set at all, we generate the AVX512BF16 JIT
+        // In scenarios where the AOCL_DLP_ENABLE_INSTRUCTIONS is set to AVX512
+        // or AVX512_256, or not set at all, we generate the AVX512BF16 JIT
         // kernels. Once the hybrid version is implemented, we will avoid this
         // hardcoding.
         // kernel instruction preference is set avx512_zmm_bf16_favour when
@@ -263,9 +263,9 @@ gemmU8S8DEBackend::gemmU8S8DEBackend()
     , canGenerateKernelInfo(true)
 {
     // Use this eKernelInstPref to generate kernelInfo for kernel generation.
-    eKernelInstPref =
-        dlp::env_utils::EnvironmentVariableManager::getInstance()
-            .getKernelInstructionPreferenceFromEnv("AOCL_ENABLE_INSTRUCTIONS");
+    eKernelInstPref = dlp::env_utils::EnvironmentVariableManager::getInstance()
+                          .getKernelInstructionPreferenceFromEnv(
+                              "AOCL_DLP_ENABLE_INSTRUCTIONS");
 
     isAvx512 =
         arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
@@ -325,9 +325,9 @@ gemmS8DEBackend::gemmS8DEBackend()
     , canGenerateKernelInfo(true)
 {
     // Use this eKernelInstPref to generate kernelInfo for kernel generation.
-    eKernelInstPref =
-        dlp::env_utils::EnvironmentVariableManager::getInstance()
-            .getKernelInstructionPreferenceFromEnv("AOCL_ENABLE_INSTRUCTIONS");
+    eKernelInstPref = dlp::env_utils::EnvironmentVariableManager::getInstance()
+                          .getKernelInstructionPreferenceFromEnv(
+                              "AOCL_DLP_ENABLE_INSTRUCTIONS");
 
     // Check for AVX512 support
     isAvx512 =
@@ -382,7 +382,7 @@ gemmS8DEBackend::getKernelInfoForInput(iDEInput* in)
 
 void
 gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
-                                 lpgemm_post_op*                  post_op,
+                                 dlp_gemm_post_op*                post_op,
                                  kernel_frame::kernelDatatype     k_dtype)
 {
     kernel_frame::kernelOps kOpsType = kernel_frame::kernelOps::invalid;

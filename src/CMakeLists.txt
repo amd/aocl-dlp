@@ -59,7 +59,7 @@ if(DLP_ENABLE_OPENMP)
 endif()
 
 if(DLP_ENABLE_LOGGING)
-    target_compile_definitions(aocl_dlp_plus PRIVATE AOCL_LPGEMM_LOGGER_SUPPORT=1)
+    target_compile_definitions(aocl_dlp_plus PRIVATE AOCL_DLP_GEMM_LOGGER_SUPPORT=1)
 endif()
 
 

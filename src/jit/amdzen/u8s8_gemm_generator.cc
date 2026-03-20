@@ -82,7 +82,7 @@ jitU8S8VNNI_GEMM<KType>::initializeParameters(bool mLoop)
     // Load post_op_c_i for downscale buffer addressing
     mov(regTmp2,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_i)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
     // Initialize parameter pointers from gemmParams structure
     mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
@@ -214,7 +214,7 @@ jitU8S8VNNI_GEMM<KType>::storeResult()
         // Check is_last_k and call the downscale
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_last_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(".STORE_S32", T_NEAR);
 
@@ -518,11 +518,11 @@ jitU8S8VNNI_GEMM<KType>::updateCBufferPointers()
 {
     mov(regTmpCptr,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, buf_downscale)]);
+            + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_j)]);
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
@@ -534,7 +534,7 @@ jitU8S8VNNI_GEMM<KType>::updateCBufferPointers()
 
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, rs_c_downscale)]);
+            + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
 
     if (c_downscale == DLP_BF16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
@@ -562,7 +562,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
     if (c_downscale == DLP_U8) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETA_S32",
            T_NEAR); // NOT first_k → accumulate from S32 buffer (beta=1)
@@ -603,7 +603,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
     } else if (c_downscale == DLP_S8) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETA_S32",
            T_NEAR); // NOT first_k → accumulate from S32 buffer (beta=1)
@@ -635,7 +635,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
     } else if (c_downscale == DLP_F32) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETA_S32",
            T_NEAR); // NOT first_k → accumulate from S32 buffer (beta=1)
@@ -666,7 +666,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
     } else if (c_downscale == DLP_BF16) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-                + offsetof(lpgemm_post_op_attr, is_first_k)]);
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
         test(regTmp1, regTmp1);
         je("BETA_S32",
            T_NEAR); // NOT first_k → accumulate from S32 buffer (beta=1)
@@ -753,7 +753,7 @@ jitU8S8VNNI_GEMM<KType>::generatePostOps(utils::generatorParams& params)
     // Post-Ops dispatcher
     mov(regTmp1,
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, is_last_k)]);
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
     test(regTmp1, regTmp1);
     je(local_store_result, T_NEAR);
 
@@ -878,7 +878,7 @@ jitU8S8VNNI_GEMM<KType>::generateMLoop(utils::generatorParams& params)
 
     lea(regTmp2, ptr[regTmp2 + MR]);
     mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(lpgemm_post_op_attr, post_op_c_i)],
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
         regTmp2);
     // Decrement M counter
     dec(regMiter);

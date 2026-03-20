@@ -1,0 +1,625 @@
+/*
+ * Copyright © Advanced Micro Devices, Inc., or its affiliates.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions are met:
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ * 3. Neither the name of the copyright holder nor the names of its contributors
+ *    may be used to endorse or promote products derived from this software
+ *    without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
+ * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES ( INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ *
+ */
+
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_5loop_interface_apis.h"
+#include "dlp_gemm_ops_bundle.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "kernels/dlp_gemm_kernels.h"
+#include "kernels/u8s8s32/dlp_gemm_packa.h"
+#include "kernels/u8s8s32/dlp_gemm_packb.h"
+#include "sys_utils/dlp_gemm_sys.h"
+#include "threading/dlp_gemm_thread_utils.h"
+// Kernel function prototypes
+typedef void (*dlp_gemm_rowvar_s32)(const md_t,
+                                    const md_t,
+                                    const md_t,
+                                    const uint8_t*,
+                                    const md_t,
+                                    const md_t,
+                                    const md_t,
+                                    const int8_t*,
+                                    const md_t,
+                                    const md_t,
+                                    int32_t*,
+                                    const md_t,
+                                    const md_t,
+                                    const int32_t,
+                                    const int32_t,
+                                    dlp_gemm_post_op*,
+                                    dlp_gemm_post_op_attr);
+
+#ifdef DLP_KERNELS_ZEN4
+
+LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
+{
+    md_t NC = lcntx->blksz.NC;
+    md_t KC = lcntx->blksz.KC;
+    md_t MC = lcntx->blksz.MC;
+    md_t NR = lcntx->blksz.NR;
+
+    // Strides are updated based on matrix packing/reordering.
+    uint8_t* a_use    = (uint8_t*)a;
+    md_t     rs_a_use = rs_a;
+    md_t     cs_a_use = cs_a;
+
+    int8_t* b_use    = (int8_t*)b;
+    md_t    rs_b_use = rs_b;
+    md_t    cs_b_use = cs_b;
+
+    int32_t* c_use = NULL;
+
+    dlp_gemm_post_op_attr post_ops_attr;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.is_first_k        = TRUE;
+    post_ops_attr.is_last_k         = TRUE;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
+
+    if (c_downscale < DLP_S32 || c_downscale == DLP_F32)
+        post_ops_attr.buf_downscale = c;
+    else
+        post_ops_attr.buf_downscale = NULL;
+
+    msz_t mem_a_size_req = 0;
+    msz_t mem_b_size_req = 0;
+
+    uint8_t* pack_a_buffer = NULL;
+    int8_t*  pack_b_buffer = NULL;
+
+    // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
+    dlp_task_id_t thread_jc;
+    dlp_task_id_t thread_ic;
+
+    dlp_gemm_gen_dlp_task_ids(thread, &thread_jc, &thread_ic);
+
+    if (n == 1) {
+        // Increased MR from 6 to 16 to make use of 32 ZMM registers
+        md_t MR = 16;
+
+        // Pack B matrix if rs_b > 1
+        if ((mtag_b == PACK) && (rs_b != 1)) {
+            mem_b_size_req = sizeof(int8_t) * k;
+
+            if (pack_b_buffer == NULL) {
+                dlp_clsc_err_t ret_err;
+                pack_b_buffer =
+                    dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
+            }
+
+            for (iter_t k0 = 0; k0 < k; k0++) {
+                pack_b_buffer[k0] = b[k0 * rs_b];
+            }
+
+            b_use    = pack_b_buffer;
+            rs_b_use = 1;
+            cs_b_use = 1;
+        }
+        // Compute the IC loop thread range for the current thread.
+        md_t ic_start, ic_end;
+        thread_ic.n_way   = (thread_ic.n_way == 1) ? (thread->n_threads)
+                                                   : (thread_ic.n_way);
+        thread_ic.work_id = thread->tid;
+        dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
+
+        for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
+            md_t           mc0           = dlp_min((ic_end - ic), MC);
+            const uint8_t* a_use         = a + ic * rs_a;
+            c_use                        = c + ic * rs_c;
+            post_ops_attr.post_op_c_i    = ic;
+            post_ops_attr.post_op_c_j    = 0;
+            post_ops_attr.rs_c_downscale = rs_c;
+
+            if (mtag_a == PACK) {
+                mem_a_size_req = sizeof(uint8_t) * mc0 * k;
+
+                if (pack_a_buffer == NULL) {
+                    dlp_clsc_err_t ret_err;
+                    pack_a_buffer =
+                        dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
+                }
+
+                ((packa_s32)lcntx->packa_fun_ptr)(pack_a_buffer,
+                                                  (a + (rs_a * ic)), rs_a, cs_a,
+                                                  mc0, k, &rs_a_use, &cs_a_use);
+                a_use = pack_a_buffer;
+            }
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
+                                   (uint8_t*)a_use, rs_a_use, cs_a_use, 1,
+                                   (int8_t*)(b_use), rs_b_use, cs_b_use, 0, 0,
+                                   c_use, rs_c, 1, (void*)&alpha, (void*)&beta,
+                                   post_op_list, post_ops_attr);
+            } else {
+                // Call dlp_gemv_n_one kernel
+                dlp_gemv_n_one_u8s8s32os32(
+                    mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
+                    post_op_list, &post_ops_attr);
+            }
+        }
+
+        // Release pack buffers
+        if (mtag_a == PACK && (pack_a_buffer != NULL)) {
+            dlp_free_page_aligned(pack_a_buffer);
+        }
+        if (mtag_b == PACK && (pack_b_buffer != NULL)) {
+            dlp_free_page_aligned(pack_b_buffer);
+        }
+    } else {
+        md_t gemm_MR = lcntx->blksz.MR;
+
+        // Compute the JC loop thread range for the current thread.
+        md_t jc_start, jc_end;
+        thread_jc.n_way   = (thread_jc.n_way == 1) ? (thread->n_threads)
+                                                   : (thread_jc.n_way);
+        thread_jc.work_id = thread->tid;
+        dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
+
+        md_t packb_min_NR = dlp_get_packb_u8s8s32o32_min_NR();
+
+        md_t k_updated = make_multiple_of_n(k, 4);
+
+        rs_a_use = rs_a;
+        cs_a_use = 4;
+
+        if (mtag_a == PACK) {
+            mem_a_size_req = sizeof(uint8_t) * k;
+
+            if (pack_a_buffer == NULL) {
+                dlp_clsc_err_t ret_err;
+                pack_a_buffer =
+                    dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
+            }
+
+            ((packa_s32)lcntx->packa_fun_ptr)(pack_a_buffer, a, rs_a, cs_a, 1,
+                                              k, &rs_a_use, &cs_a_use);
+            dlp_get_packa_strides_mfringe_u8s8s32os32(rs_a, cs_a, &rs_a_use,
+                                                      &cs_a_use, gemm_MR, 1);
+
+            a_use = pack_a_buffer;
+        }
+
+        for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
+            md_t nc0 = dlp_min((jc_end - jc), NC);
+            c_use    = c + jc;
+
+            md_t jc_cur_loop     = jc;
+            md_t jc_cur_loop_rem = 0;
+            md_t n_sub_updated   = 0;
+
+            if (mtag_b == REORDERED) {
+                get_B_panel_reordered_start_offset_width(
+                    jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
+                    &nc0, &n_sub_updated);
+
+                b_use = (int8_t*)(b + (jc_cur_loop * k_updated));
+                dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
+            } else if (mtag_b == PACK) {
+                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                mem_b_size_req   = sizeof(int8_t) * nc0_updated * k_updated;
+
+                n_sub_updated = nc0_updated;
+
+                if (pack_b_buffer == NULL) {
+                    dlp_clsc_err_t ret_err;
+                    pack_b_buffer =
+                        dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
+                }
+
+                for (iter_t pc = 0; pc < k; pc += KC) {
+                    md_t kc0 = dlp_min((k - pc), KC);
+
+                    ((packb_s32)lcntx->packb_fun_ptr)(
+                        ((int8_t*)pack_b_buffer + (n_sub_updated * pc)),
+                        (((int8_t*)b) + (rs_b * pc) + (jc * cs_b)), rs_b, cs_b,
+                        nc0, kc0, &rs_b_use, &cs_b_use);
+                }
+
+                b_use = pack_b_buffer;
+            }
+
+            post_ops_attr.post_op_c_i    = 0;
+            post_ops_attr.post_op_c_j    = jc;
+            post_ops_attr.rs_c_downscale = rs_c;
+
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(
+                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (uint8_t*)a_use,
+                    rs_a_use, cs_a_use, 1, (int8_t*)b_use, rs_b_use, cs_b_use,
+                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
+                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
+            } else {
+                dlp_gemv_m_one_u8s8s32os32(
+                    nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
+                    n_sub_updated, jc_cur_loop_rem, post_op_list,
+                    &post_ops_attr);
+            }
+
+            if (mtag_b == REORDERED) {
+                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            }
+        } // jc loop
+
+        // Release pack buffers.
+        if (mtag_b == PACK && (pack_b_buffer != NULL)) {
+            dlp_free_page_aligned(pack_b_buffer);
+        }
+        if (mtag_a == PACK && (pack_a_buffer)) {
+            dlp_free_page_aligned(pack_a_buffer);
+        }
+    }
+}
+#endif
+
+// B should always be packed.
+DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
+                       /* mutable */)
+{
+    // Extract operations from bundle into local variables
+    DLP_GEMM_OPS_EXTRACT(ops);
+
+    md_t NC = lcntx->blksz.NC;
+    md_t KC = lcntx->blksz.KC;
+    md_t MC = lcntx->blksz.MC;
+    md_t NR = lcntx->blksz.NR;
+    md_t MR = lcntx->blksz.MR;
+
+    if (mtag_b == UNPACKED) {
+        // Error: can only work with packed B now.
+        return;
+    }
+
+#ifdef DLP_KERNELS_ZEN4
+
+    if ((m == 1) || (n == 1)) {
+        dlp_gemv_rowvar_u8s8s32os32(
+            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
+            cs_c, alpha, beta, rntm, thread, lcntx, post_op_list, c_downscale);
+        return;
+    }
+
+#endif
+
+    // Strides are updated based on matrix packing/reordering.
+    const uint8_t* a_use          = NULL;
+    md_t           rs_a_use       = rs_a;
+    md_t           cs_a_use       = cs_a;
+    md_t           a_block_stride = 0;
+
+    const int8_t* b_use    = NULL;
+    md_t          rs_b_use = rs_b;
+    md_t          cs_b_use = cs_b;
+
+    int32_t* c_use_jc       = NULL;
+    int32_t* c_use_ic       = NULL;
+    md_t     rs_c_use       = rs_c;
+    md_t     rs_c_downscale = rs_c;
+
+    // Pack buffer for A.
+    uint8_t* pack_a_buffer_u8s8s32o32 = NULL;
+    msz_t    mem_a_size_req           = 0;
+
+    // Pack buffer for B.
+    int8_t* pack_b_buffer  = NULL;
+    msz_t   mem_b_size_req = 0;
+    md_t    packb_min_NR   = dlp_get_packb_u8s8s32o32_min_NR();
+
+    // Temporary buffer for C accumulation when downscaling is required.
+    int32_t* temp_scal_c_buffer_u8s8s32o32 = NULL;
+    msz_t    mem_scale_c_size_req          = 0;
+
+    // kc needs to be a multiple of 4 so that it can be used with vpdpbusd
+    // instruction. Padding is added in cases this condition is not
+    // satisfied, and therefore the k offset used for packed/reordered
+    // buffer needs to be updated.
+    md_t k_updated = make_multiple_of_n(k, 4);
+
+    // To decide whether to apply post ops or not.
+    bool is_last_k = FALSE;
+
+    // To decide whether to use original s8 C or temp buffer for beta scale.
+    bool is_first_k = FALSE;
+
+    dlp_gemm_post_op_attr post_ops_attr;
+    post_ops_attr.c_stor_type       = c_downscale;
+    post_ops_attr.rs_c_downscale    = rs_c;
+    post_ops_attr.cs_c_downscale    = cs_c;
+    post_ops_attr.b_sum_offset      = 0;
+    post_ops_attr.b_col_sum_vec     = NULL;
+    post_ops_attr.b_col_sum_vec_s16 = NULL;
+
+    if (c_downscale < DLP_S32 || c_downscale == DLP_F32) {
+        post_ops_attr.buf_downscale = c;
+    } else {
+        post_ops_attr.buf_downscale = NULL;
+    }
+
+    // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
+    dlp_task_id_t thread_jc;
+    dlp_task_id_t thread_ic;
+
+    dlp_gemm_gen_dlp_task_ids(thread, &thread_jc, &thread_ic);
+
+    // Compute the JC, IC loop thread range for the current thread.
+    md_t jc_start, jc_end;
+    dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
+
+    md_t ic_start, ic_end;
+    dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
+
+    for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
+        md_t nc0 = dlp_min((jc_end - jc), NC);
+
+        md_t jc_cur_loop     = jc;
+        md_t jc_cur_loop_rem = 0;
+        md_t n_sub_updated   = 0;
+
+        if (mtag_b == REORDERED) {
+            get_B_panel_reordered_start_offset_width(
+                jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
+                &n_sub_updated);
+        }
+
+        if (c_downscale == DLP_S32) {
+            c_use_jc = c + jc;
+        }
+        // Temp accumulaton buffer for C allocation.
+        else if (c_downscale < DLP_S32 || c_downscale == DLP_F32) {
+            // Buffer memory is only required if output needs to be
+            // persisted across iterations of the pc/KC loop.
+            // It was observed that the locks used while checking out
+            // a buffer from memory pool had an impact on performance
+            // and is better to not checkout if k <= KC.
+            if (k > KC) {
+                // The nc block itself can be split in 2 if its on a reorder
+                // boundary. In this scenario its possible the first block
+                // is smaller the second block, and the temporary buffer
+                // should be allocated for the largest block.
+                md_t nc0_buf = dlp_min((jc_end - jc), NC);
+                mem_scale_c_size_req =
+                    sizeof(int32_t) * nc0_buf * (ic_end - ic_start);
+
+                if (temp_scal_c_buffer_u8s8s32o32 == NULL) {
+                    dlp_clsc_err_t ret_err;
+                    temp_scal_c_buffer_u8s8s32o32 =
+                        dlp_malloc_page_aligned(mem_scale_c_size_req, &ret_err);
+                }
+
+                c_use_jc = (int32_t*)temp_scal_c_buffer_u8s8s32o32;
+            }
+
+            // The temp c buffer stride is modified as opposed to original C
+            // matrix.
+            rs_c_use = nc0;
+        }
+
+        for (iter_t pc = 0; pc < k; pc += KC) {
+            int32_t beta0 = (pc == 0) ? beta : 1;
+            md_t    kc0   = dlp_min((k - pc), KC);
+
+            // kc0 needs to be a multiple of 4 so that it can be
+            // used with vpdpbusd instruction. Padding is added in
+            // cases this condition is not satisfied, and therefore
+            // the kc0 offsets used for packed/reordered buffers
+            // needs to be updated.
+            md_t kc0_updated = make_multiple_of_n(kc0, 4);
+
+            // No parallelization in k dim, k always starts at 0.
+            is_first_k               = (pc == 0) ? (TRUE) : (FALSE);
+            post_ops_attr.is_first_k = is_first_k;
+
+            is_last_k               = ((pc + KC) >= k) ? (TRUE) : (FALSE);
+            post_ops_attr.is_last_k = is_last_k;
+
+            if (mtag_b == PACK) {
+                // Pack B chunks are based on jc work id.
+                md_t jc_work_id = thread_jc.work_id;
+
+                // Using child thrinfo (thread_ic) tid to decide chief thread
+                // per B matrix chunk (jc work id group)
+                if (dlp_thread_am_ochief(&thread_ic)) {
+                    // nc0 needs to be a multiple of 16 since this gives maximum
+                    // vectorization. Packing B always results in buffers with
+                    // width which is a multiple of 16. Subsequently the nc0
+                    // offsets used for packed/reordered buffers needs to be
+                    // updated.
+                    md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                    mem_b_size_req = sizeof(int8_t) * nc0_updated * kc0_updated;
+
+                    if (pack_b_buffer == NULL) {
+                        dlp_clsc_err_t ret_err;
+                        pack_b_buffer =
+                            dlp_malloc_page_aligned(mem_b_size_req, &ret_err);
+                    }
+
+                    thread->comm[jc_work_id].sent_object = pack_b_buffer;
+                }
+
+                // All threads in work group should wait till chief thread has
+                // finished allocating the packing buffers.
+                dlp_atomic_barrier(thread_ic.ocomm_id,
+                                   &thread->comm[jc_work_id]);
+
+                pack_b_buffer = (int8_t*)thread->comm[jc_work_id].sent_object;
+
+                // Compute the B panel per thread loop range for parallel
+                // packing using ic_ways number of threads. Since atmost only
+                // ic_ways threads can be used, the thread_ic attributes are
+                // used to split the loop range.
+                md_t jc_packb_start, jc_packb_end;
+                dlp_thread_task_range(&thread_ic, nc0, NR, FALSE,
+                                      &jc_packb_start, &jc_packb_end);
+
+                // Ensure thread ranges are valid, especially cases where no:
+                // of threads available for parallelization are greater than
+                // no: of B panel NR chunks.
+                if ((jc_packb_end > jc_packb_start)
+                    && (jc_packb_start < (jc + nc0))) {
+                    ((packb_s32)lcntx->packb_fun_ptr)(
+                        pack_b_buffer + (jc_packb_start * kc0_updated),
+                        (b + (rs_b * pc) + (cs_b * jc)
+                         + (cs_b * jc_packb_start)),
+                        rs_b, cs_b, (jc_packb_end - jc_packb_start), kc0,
+                        &rs_b_use, &cs_b_use);
+                } else {
+                    dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
+                }
+
+                // All threads in work group should wait till B matrix packing
+                // is completed by the participating threads.
+                dlp_atomic_barrier(thread_ic.ocomm_id,
+                                   &thread->comm[jc_work_id]);
+                b_use = pack_b_buffer;
+            } else if (mtag_b == REORDERED) {
+                // In multi-threaded scenarios, an extra offset into a given
+                // packed B panel is required, since the jc loop split can
+                // result in per thread start offset inside the panel, instead
+                // of panel boundaries.
+                b_use = b + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
+                        + (jc_cur_loop_rem * kc0_updated);
+
+                dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
+            } else {
+                // Unpacked B not supported.
+                return;
+            }
+
+            for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
+                md_t mc0 = dlp_min((ic_end - ic), MC);
+
+                // Only per thread C matrix is stored in temp buffer, so both
+                // per thread jc and ic start should be normalized to zero.
+                if (c_downscale < DLP_S32 || c_downscale == DLP_F32) {
+                    c_use_ic = c_use_jc + (rs_c_use * (ic - ic_start));
+                } else {
+                    c_use_ic = c_use_jc + (rs_c_use * ic);
+                }
+
+                // Matrix A packed and reordered code path is not triggerred
+                // currently for row-major inputs since we do not support it
+                // yet. Pack is enabled for column-major inputs to transform
+                // into row-major inputs as kernel expects row storage format.
+                if (mtag_a == PACK) {
+                    mem_a_size_req = sizeof(uint8_t) * mc0 * kc0_updated;
+
+                    if (pack_a_buffer_u8s8s32o32 == NULL) {
+                        dlp_clsc_err_t ret_err;
+                        pack_a_buffer_u8s8s32o32 =
+                            dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
+                    }
+
+                    ((packa_s32)lcntx->packa_fun_ptr)(
+                        pack_a_buffer_u8s8s32o32,
+                        (a + (rs_a * ic) + (cs_a * pc)), rs_a, cs_a, mc0, kc0,
+                        &rs_a_use, &cs_a_use);
+                    a_use = pack_a_buffer_u8s8s32o32;
+
+                    if (cs_a == 1) {
+                        a_block_stride = kc0_updated;
+                    }
+
+                    else {
+                        a_block_stride = rs_a_use;
+                    }
+                } else if (mtag_a == REORDERED) {
+                    dlp_gemm_get_packa_strides(lcntx, &rs_a_use, &cs_a_use);
+                    a_use          = a + (pc * m) + (kc0_updated * ic);
+                    a_block_stride = kc0_updated;
+                } else {
+                    a_use = a + (rs_a * ic) + (cs_a * pc);
+
+                    // Int8 kernel reads 4 elements, totalling 4 bytes in a
+                    // single broadcast for use in vnni instruction.
+                    // Non vnni based kernel requires update to this code.
+                    cs_a_use       = 4;
+                    a_block_stride = rs_a;
+                }
+
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
+                    md_t nr0 = dlp_min((nc0 - jr), NR);
+
+                    // Post ops meta attributes.
+                    post_ops_attr.post_op_c_i    = ic;
+                    post_ops_attr.post_op_c_j    = (jc + jr);
+                    post_ops_attr.rs_c_downscale = rs_c_downscale;
+
+                    // Call the micro-kernel - JIT if available, classic
+                    // fallback
+                    if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                        dlp_execute_kernel(
+                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
+                            (uint8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                            (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
+                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                            (void*)&alpha, (void*)&beta0, post_op_list,
+                            post_ops_attr);
+                    } else {
+                        // Call classic kernel
+                        ((dlp_gemm_rowvar_s32)lcntx->kern_fun_ptr)(
+                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
+                            a_block_stride, (b_use + (jr * kc0_updated)),
+                            rs_b_use, cs_b_use, (c_use_ic + jr), rs_c_use, 1,
+                            alpha, beta0, post_op_list, post_ops_attr);
+                    }
+                }
+            }
+        }
+        if (mtag_b == REORDERED) {
+            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+        }
+    }
+
+    // Release pack buffers.
+    if (mtag_b == PACK) {
+        // All threads in work group should wait till B matrix usage is
+        // completed by the participating threads.
+        dlp_atomic_barrier(thread_jc.ocomm_id,
+                           &thread->comm[thread_jc.work_id]);
+
+        if (dlp_thread_am_ochief(&thread_ic)) {
+            if (pack_b_buffer != NULL) {
+                dlp_free_page_aligned(pack_b_buffer);
+            }
+        }
+    }
+    if (mtag_a == PACK) {
+        if (pack_a_buffer_u8s8s32o32 != NULL) {
+            dlp_free_page_aligned(pack_a_buffer_u8s8s32o32);
+        }
+    }
+    if (c_downscale < DLP_S32 || c_downscale == DLP_F32) {
+        if (temp_scal_c_buffer_u8s8s32o32 != NULL) {
+            dlp_free_page_aligned(temp_scal_c_buffer_u8s8s32o32);
+        }
+    }
+}

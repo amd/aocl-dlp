@@ -270,18 +270,18 @@ struct kernelOpsMetaData
 
 struct kernelInfo
 {
-    md_t            mr;
-    md_t            nr;
-    md_t            term_fringe_nr;
-    md_t            k_unroll;
-    md_t            kc;
-    md_t            prefetch_c_dist;
-    scalingType     alphaScalingType;
-    scalingType     betaScalingType;
-    AOCL_MEMORY_TAG mtag_a;
-    AOCL_MEMORY_TAG mtag_b;
-    bool            genLtKrnlForAvailFullKrnl;
-    bool            invokeRD;
+    md_t                mr;
+    md_t                nr;
+    md_t                term_fringe_nr;
+    md_t                k_unroll;
+    md_t                kc;
+    md_t                prefetch_c_dist;
+    scalingType         alphaScalingType;
+    scalingType         betaScalingType;
+    AOCL_DLP_MEMORY_TAG mtag_a;
+    AOCL_DLP_MEMORY_TAG mtag_b;
+    bool                genLtKrnlForAvailFullKrnl;
+    bool                invokeRD;
 
     // Not using std::vector for kOpsArr due to slight overhead compared
     // to raw pointers.
@@ -301,8 +301,8 @@ struct kernelInfo
         , prefetch_c_dist(0)
         , alphaScalingType(kernel_frame::scalingType::generic)
         , betaScalingType(kernel_frame::scalingType::generic)
-        , mtag_a(AOCL_MEMORY_TAG::UNPACKED)
-        , mtag_b(AOCL_MEMORY_TAG::UNPACKED)
+        , mtag_a(AOCL_DLP_MEMORY_TAG::UNPACKED)
+        , mtag_b(AOCL_DLP_MEMORY_TAG::UNPACKED)
         , genLtKrnlForAvailFullKrnl(false)
         , kOpsArr(nullptr)
         , kOpsArrSize(0)
@@ -320,8 +320,8 @@ struct kernelInfo
                md_t                               _prefetch_c_dist,
                scalingType                        _alphaScalingType,
                scalingType                        _betaScalingType,
-               AOCL_MEMORY_TAG                    mtag_a,
-               AOCL_MEMORY_TAG                    mtag_b,
+               AOCL_DLP_MEMORY_TAG                mtag_a,
+               AOCL_DLP_MEMORY_TAG                mtag_b,
                bool                               _genLtKrnlForAvailFullKrnl,
                bool                               _invokeRD,
                std::unique_ptr<kernelOpsMetaData> kOpsArr,

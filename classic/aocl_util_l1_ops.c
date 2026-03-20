@@ -27,16 +27,16 @@
  */
 
 #include "classic/aocl_util_interface_apis.h"
-#include "config/lpgemm_config.h"
-#include "gemm_utils/lpgemm_utils.h"
-#include "kernels/lpgemm_utils_kernels.h"
-#include "lpgemm_types.h"
+#include "config/dlp_gemm_config.h"
+#include "dlp_gemm_types.h"
+#include "gemm_utils/dlp_gemm_utils.h"
+#include "kernels/dlp_gemm_utils_kernels.h"
 
 void
 aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx)
 {
-    // Check if AVX2 ISA is supported, lpgemm u8s8s16os16 matmul only works with
-    // it.
+    // Check if AVX2 ISA is supported, dlp_gemm u8s8s16os16 matmul only works
+    // with it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, AOCL GEMM "
                       "utility l1 operations not supported.",
@@ -51,16 +51,16 @@ aocl_gemm_gelu_tanh_f32(const md_t n, float* x, const md_t incx)
         return; // Error.
     }
 
-    lpgemm_util_cntx_t* lutil_cntx_g =
-        lpgemm_util_get_global_cntx_obj(F32_GELU_TANH);
-    ((lpgemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
+    dlp_gemm_util_cntx_t* lutil_cntx_g =
+        dlp_gemm_util_get_global_cntx_obj(F32_GELU_TANH);
+    ((dlp_gemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
 }
 
 void
 aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx)
 {
-    // Check if AVX2 ISA is supported, lpgemm u8s8s16os16 matmul only works with
-    // it.
+    // Check if AVX2 ISA is supported, dlp_gemm u8s8s16os16 matmul only works
+    // with it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, AOCL GEMM "
                       "utility l1 operations not supported.",
@@ -75,16 +75,16 @@ aocl_gemm_gelu_erf_f32(const md_t n, float* x, const md_t incx)
         return; // Error.
     }
 
-    lpgemm_util_cntx_t* lutil_cntx_g =
-        lpgemm_util_get_global_cntx_obj(F32_GELU_ERF);
-    ((lpgemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
+    dlp_gemm_util_cntx_t* lutil_cntx_g =
+        dlp_gemm_util_get_global_cntx_obj(F32_GELU_ERF);
+    ((dlp_gemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
 }
 
 void
 aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx)
 {
-    // Check if AVX2 ISA is supported, lpgemm u8s8s16os16 matmul only works with
-    // it.
+    // Check if AVX2 ISA is supported, dlp_gemm u8s8s16os16 matmul only works
+    // with it.
     if (dlp_cpuid_is_avx2fma3_supported() == FALSE) {
         dlp_print_msg(" AVX2 ISA not supported by processor, AOCL GEMM "
                       "utility l1 operations not supported.",
@@ -99,7 +99,7 @@ aocl_gemm_softmax_f32(const md_t n, float* x, const md_t incx)
         return; // Error.
     }
 
-    lpgemm_util_cntx_t* lutil_cntx_g =
-        lpgemm_util_get_global_cntx_obj(F32_SOFTMAX);
-    ((lpgemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
+    dlp_gemm_util_cntx_t* lutil_cntx_g =
+        dlp_gemm_util_get_global_cntx_obj(F32_SOFTMAX);
+    ((dlp_gemm_util_l1_op_f32_kernel_t)lutil_cntx_g->kern_fun_ptr)(n, x, incx);
 }

@@ -25,8 +25,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
-#ifndef AOCL_FP16_TYPE_H
-#define AOCL_FP16_TYPE_H
+#ifndef AOCL_DLP_FP16_TYPE_H
+#define AOCL_DLP_FP16_TYPE_H
 
 #include <stdint.h>
 
@@ -56,4 +56,4 @@ typedef uint16_t float16;
 #define FP16_MIN_NORM ((float16)0x0400) /**< Minimum positive normal        */
 /** @} */
 
-#endif // AOCL_FP16_TYPE_H
+#endif // AOCL_DLP_FP16_TYPE_H

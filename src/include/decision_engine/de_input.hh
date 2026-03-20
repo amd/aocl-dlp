@@ -55,9 +55,9 @@ class gemmDEInput : public iDEInput
     md_t                         cs_c;
     void*                        alpha;
     void*                        beta;
-    AOCL_MEMORY_TAG              mtag_a;
-    AOCL_MEMORY_TAG              mtag_b;
-    lpgemm_post_op*              metadata;
+    AOCL_DLP_MEMORY_TAG          mtag_a;
+    AOCL_DLP_MEMORY_TAG          mtag_b;
+    dlp_gemm_post_op*            metadata;
     md_t                         mr_hint;
     md_t                         nr_hint;
     md_t                         kc_hint;
@@ -75,9 +75,9 @@ class gemmDEInput : public iDEInput
                 md_t                         cs_c,
                 void*                        alpha,
                 void*                        beta,
-                AOCL_MEMORY_TAG              mtag_a,
-                AOCL_MEMORY_TAG              mtag_b,
-                lpgemm_post_op*              metadata,
+                AOCL_DLP_MEMORY_TAG          mtag_a,
+                AOCL_DLP_MEMORY_TAG          mtag_b,
+                dlp_gemm_post_op*            metadata,
                 md_t                         mr_hint,
                 md_t                         nr_hint,
                 md_t                         kc_hint,
