@@ -64,7 +64,7 @@ dlp_param_map_char_to_lpmat_type(const char            mtag,
 }
 
 DLP_INLINE md_t
-make_multiple_of_n(md_t k, md_t n)
+dlp_make_multiple_of_n(md_t k, md_t n)
 {
     if (n <= 0) {
         return 0;
@@ -74,7 +74,7 @@ make_multiple_of_n(md_t k, md_t n)
 }
 
 DLP_INLINE md_t
-get_Bpanel_width_for_kmd_traversal(md_t jc, md_t n, md_t NC, md_t NR)
+dlp_gemm_get_Bpanel_width_for_kmd_traversal(md_t jc, md_t n, md_t NC, md_t NR)
 {
     md_t n_mod_NR      = n % NR;
     md_t n_sub_updated = NC;
@@ -96,14 +96,14 @@ get_Bpanel_width_for_kmd_traversal(md_t jc, md_t n, md_t NC, md_t NR)
 }
 
 DLP_INLINE void
-get_B_panel_reordered_start_offset_width(md_t  jc,
-                                         md_t  n,
-                                         md_t  NC,
-                                         md_t  NR,
-                                         md_t* panel_start,
-                                         md_t* panel_offset,
-                                         md_t* panel_width,
-                                         md_t* panel_width_kmd_trav)
+dlp_gemm_get_B_panel_reordered_start_offset_width(md_t  jc,
+                                                  md_t  n,
+                                                  md_t  NC,
+                                                  md_t  NR,
+                                                  md_t* panel_start,
+                                                  md_t* panel_offset,
+                                                  md_t* panel_width,
+                                                  md_t* panel_width_kmd_trav)
 {
     // Since n dimension is split across threads in units of NR blocks,
     // it could happen that B matrix chunk for a thread may be part of
@@ -119,11 +119,12 @@ get_B_panel_reordered_start_offset_width(md_t  jc,
         (*panel_width) = NC - (*panel_offset);
     }
 
-    (*panel_width_kmd_trav) = get_Bpanel_width_for_kmd_traversal(jc, n, NC, NR);
+    (*panel_width_kmd_trav) =
+        dlp_gemm_get_Bpanel_width_for_kmd_traversal(jc, n, NC, NR);
 }
 
 DLP_INLINE void
-adjust_B_panel_reordered_jc(md_t* jc, md_t panel_start)
+dlp_gemm_adjust_B_panel_reordered_jc(md_t* jc, md_t panel_start)
 {
     // Since n dimension is split across threads in units of NR blocks,
     // it could happen that B matrix chunk for a thread may be part of
@@ -135,7 +136,7 @@ adjust_B_panel_reordered_jc(md_t* jc, md_t panel_start)
 }
 
 static inline bool
-is_single_thread(dlp_rntm_t* rntm_g)
+dlp_is_single_thread(dlp_rntm_t* rntm_g)
 {
     bool is_st = FALSE;
 

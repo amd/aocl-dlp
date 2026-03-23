@@ -87,7 +87,7 @@ aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
     if (n == 1) {
         n_reorder = 1;
     } else {
-        n_reorder = make_multiple_of_n(n, 16);
+        n_reorder = dlp_make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 4.
@@ -95,11 +95,11 @@ aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
     if (n == 1) {
         k_reorder = k;
     } else {
-        k_reorder = make_multiple_of_n(k, 4);
+        k_reorder = dlp_make_multiple_of_n(k, 4);
     }
 #else
-    md_t n_reorder = make_multiple_of_n(n, 16);
-    md_t k_reorder = make_multiple_of_n(k, 4);
+    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
+    md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 #endif
 
     msz_t size_req = sizeof(int8_t) * k_reorder * n_reorder;

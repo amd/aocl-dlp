@@ -122,7 +122,7 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
 
 DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32);
 
-#define LPGEMV_TINY(A_type, B_type, C_type, LP_SFX)                            \
+#define DLP_GEMV_TINY(A_type, B_type, C_type, LP_SFX)                          \
     void dlp_gemv_rowvar_tiny_##LP_SFX(                                        \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
@@ -132,10 +132,10 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32);
         dlp_gemm_cntx_t* lcntx, dlp_gemm_post_op* post_op_list,                \
         DLP_TYPE c_downscale)
 
-LPGEMV_TINY(float, float, float, f32f32f32of32);
-LPGEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32);
+DLP_GEMV_TINY(float, float, float, f32f32f32of32);
+DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32);
 
-#define LPGEMV(A_type, B_type, C_type, LP_SFX)                                 \
+#define DLP_GEMV(A_type, B_type, C_type, LP_SFX)                               \
     void dlp_gemv_rowvar_##LP_SFX(                                             \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
@@ -145,13 +145,13 @@ LPGEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32);
         dlp_rntm_t* rntm, dlp_gemm_thrinfo_t* thread, dlp_gemm_cntx_t* lcntx,  \
         dlp_gemm_post_op* post_op_list, DLP_TYPE c_downscale)
 
-LPGEMV(float, float, float, f32f32f32of32);
-LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32);
-LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32);
-LPGEMV(int8_t, int8_t, int32_t, s8s8s32os32);
-LPGEMV(float16, float16, float16, f16f16f16of16);
+DLP_GEMV(float, float, float, f32f32f32of32);
+DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32);
+DLP_GEMV(uint8_t, int8_t, int32_t, u8s8s32os32);
+DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32os32);
+DLP_GEMV(float16, float16, float16, f16f16f16of16);
 
-#define LPGEMV_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)                    \
+#define DLP_GEMV_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)                  \
     void dlp_gemv_rowvar_f32_fallback_##LP_SFX(                                \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
@@ -161,9 +161,9 @@ LPGEMV(float16, float16, float16, f16f16f16of16);
         dlp_rntm_t* rntm, dlp_gemm_thrinfo_t* thread, dlp_gemm_cntx_t* lcntx,  \
         dlp_gemm_post_op* post_op_list, DLP_TYPE c_downscale)
 
-LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
+DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
 
-#define LPGEMV2(A_type, B_type, C_type, LP_SFX)                                \
+#define DLP_GEMV2(A_type, B_type, C_type, LP_SFX)                              \
     void dlp_gemv_rowvar_##LP_SFX(                                             \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
@@ -174,9 +174,9 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
         dlp_gemm_group_post_op* grp_post_op_list,                              \
         dlp_gemm_post_op* post_op_list, DLP_TYPE c_downscale)
 
-LPGEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
+DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
 
-#define LPGEMV3(A_type, B_type, C_type, LP_SFX)                                \
+#define DLP_GEMV3(A_type, B_type, C_type, LP_SFX)                              \
     void dlp_gemv_rowvar_##LP_SFX(                                             \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
         const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
@@ -187,7 +187,7 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
         dlp_quant_op* a_pre_quant, dlp_gemm_post_op* post_op_list,             \
         DLP_TYPE c_downscale)
 
-LPGEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32);
-LPGEMV3(float, int8_t, int32_t, f32s8s32os32);
+DLP_GEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32);
+DLP_GEMV3(float, int8_t, int32_t, f32s8s32os32);
 
 #endif // DLP_GEMM_5LOOP_INTF_H

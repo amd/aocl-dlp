@@ -54,7 +54,7 @@ typedef void (*dlp_gemm_rowvar_bf16)(const md_t,
                                      dlp_gemm_post_op_attr);
 
 #ifdef DLP_KERNELS_ZEN4
-LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
+DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -219,7 +219,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
 
             if (mtag_b == REORDERED) {
 
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
 
@@ -228,7 +228,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
                 dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
             } else if (mtag_b == PACK) {
 
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
                 mem_b_size_req   = sizeof(bfloat16) * nc0_updated * k_updated;
 
                 n_sub_updated = nc0_updated;
@@ -273,7 +273,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
             }
 
             if (mtag_b == REORDERED) {
-                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
             }
         } // jc loop
 
@@ -291,7 +291,7 @@ LPGEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
 DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
-    // Handle using LPGEMV when m or/and n equal to 1
+    // Handle using DLP_GEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if ((n == 1) || (m == 1)) {
         dlp_gemv_rowvar_bf16bf16f32of32(
@@ -380,7 +380,7 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -449,7 +449,8 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                     // width which is a multiple of 16. Subsequently the nc0
                     // offsets used for packed/reordered buffers needs to be
                     // updated.
-                    md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                    md_t nc0_updated =
+                        dlp_make_multiple_of_n(nc0, packb_min_NR);
                     mem_b_size_req =
                         sizeof(bfloat16) * nc0_updated * kc0_updated;
 
@@ -576,7 +577,7 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
             }
         }
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 
@@ -666,7 +667,7 @@ typedef void (*dlp_gemv_n_one_ker_ft)(const md_t,
                                       dlp_gemm_post_op*,
                                       dlp_gemm_post_op_attr*);
 
-LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
+DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     // DLP_BF16 Contexts
     md_t NC = lcntx->blksz.NC;
@@ -876,11 +877,11 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated   = 0;
 
-            md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+            md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
             mem_b_size_req   = sizeof(float) * nc0_updated * k_updated;
 
             if (mtag_b == REORDERED) {
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
             }
@@ -964,7 +965,7 @@ LPGEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
 #if (!defined(DLP_GEMM_BF16_JIT))
-    // Handle using LPGEMV when m or/and n equal to 1
+    // Handle using DLP_GEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if ((n == 1) || (m == 1)) {
         dlp_gemv_rowvar_f32_fallback_bf16bf16f32of32(
@@ -1057,7 +1058,7 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -1141,7 +1142,7 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                     // offsets used for packed/reordered buffers needs to be
                     // updated.
                     md_t nc0_updated =
-                        make_multiple_of_n(nc0_buf, packb_min_NR);
+                        dlp_make_multiple_of_n(nc0_buf, packb_min_NR);
 
                     mem_b_size_req = sizeof(float) * nc0_updated * kc0_updated;
                     dlp_clsc_err_t ret_err;
@@ -1283,7 +1284,7 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
             }
         }
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

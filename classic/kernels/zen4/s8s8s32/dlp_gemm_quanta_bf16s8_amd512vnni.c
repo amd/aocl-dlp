@@ -121,60 +121,60 @@
     LOAD_8_BF16_TO_F32_MASKED_COL(idx + 8, dest, mask, src, ic, kr, rs, cs)
 
 void
-quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                             const bfloat16* a,
-                             const md_t      rs_a,
-                             const md_t      cs_a,
-                             const md_t      MC,
-                             const md_t      KC,
-                             const void*     scale_factor,
-                             const DLP_TYPE  sf_type,
-                             md_t            sf_len,
-                             const md_t      ic_offset);
+dlp_quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
+                                 const bfloat16* a,
+                                 const md_t      rs_a,
+                                 const md_t      cs_a,
+                                 const md_t      MC,
+                                 const md_t      KC,
+                                 const void*     scale_factor,
+                                 const DLP_TYPE  sf_type,
+                                 md_t            sf_len,
+                                 const md_t      ic_offset);
 
 void
-quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                              const bfloat16* a,
-                              const md_t      rs_a,
-                              const md_t      cs_a,
-                              const md_t      MC,
-                              const md_t      KC,
-                              const void*     scale_factor,
-                              const DLP_TYPE  sf_type,
-                              md_t            sf_len,
-                              const void*     zero_point,
-                              const DLP_TYPE  zp_type,
-                              md_t            zp_len,
-                              const md_t      ic_offset);
+dlp_quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
+                                  const bfloat16* a,
+                                  const md_t      rs_a,
+                                  const md_t      cs_a,
+                                  const md_t      MC,
+                                  const md_t      KC,
+                                  const void*     scale_factor,
+                                  const DLP_TYPE  sf_type,
+                                  md_t            sf_len,
+                                  const void*     zero_point,
+                                  const DLP_TYPE  zp_type,
+                                  md_t            zp_len,
+                                  const md_t      ic_offset);
 
 void
-quant_a_sym_bf16s8_col_major(int8_t*         quant_a_buffer,
-                             const bfloat16* a,
-                             const md_t      rs_a,
-                             const md_t      cs_a,
-                             const md_t      MC,
-                             const md_t      KC,
-                             const void*     scale_factor,
-                             const DLP_TYPE  sf_type,
-                             md_t            sf_len,
-                             const md_t      ic_offset);
+dlp_quant_a_sym_bf16s8_col_major(int8_t*         quant_a_buffer,
+                                 const bfloat16* a,
+                                 const md_t      rs_a,
+                                 const md_t      cs_a,
+                                 const md_t      MC,
+                                 const md_t      KC,
+                                 const void*     scale_factor,
+                                 const DLP_TYPE  sf_type,
+                                 md_t            sf_len,
+                                 const md_t      ic_offset);
 
 void
-quant_a_asym_bf16s8_col_major(int8_t*         quant_a_buffer,
-                              const bfloat16* a,
-                              const md_t      rs_a,
-                              const md_t      cs_a,
-                              const md_t      MC,
-                              const md_t      KC,
-                              const void*     scale_factor,
-                              const DLP_TYPE  sf_type,
-                              md_t            sf_len,
-                              const void*     zero_point,
-                              const DLP_TYPE  zp_type,
-                              md_t            zp_len,
-                              const md_t      ic_offset);
+dlp_quant_a_asym_bf16s8_col_major(int8_t*         quant_a_buffer,
+                                  const bfloat16* a,
+                                  const md_t      rs_a,
+                                  const md_t      cs_a,
+                                  const md_t      MC,
+                                  const md_t      KC,
+                                  const void*     scale_factor,
+                                  const DLP_TYPE  sf_type,
+                                  md_t            sf_len,
+                                  const void*     zero_point,
+                                  const DLP_TYPE  zp_type,
+                                  md_t            zp_len,
+                                  const md_t      ic_offset);
 /**
- * quanta_mr16_bf16s8
+ * dlp_quanta_mr16_bf16s8
  *
  * Entry point for BF16 to S8 quantization optimized for AMD Zen4 (AVX-512
  * VNNI). Dispatcher that routes to symmetric or asymmetric quantization based
@@ -202,51 +202,51 @@ quant_a_asym_bf16s8_col_major(int8_t*         quant_a_buffer,
  * layouts.
  */
 void
-quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
-                   const bfloat16* a,
-                   const md_t      rs_a,
-                   const md_t      cs_a,
-                   const md_t      MC,
-                   const md_t      KC,
-                   const void*     scale_factor,
-                   const DLP_TYPE  sf_type,
-                   md_t            sf_len,
-                   const void*     zero_point,
-                   const DLP_TYPE  zp_type,
-                   md_t            zp_len,
-                   const md_t      ic_offset)
+dlp_quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
+                       const bfloat16* a,
+                       const md_t      rs_a,
+                       const md_t      cs_a,
+                       const md_t      MC,
+                       const md_t      KC,
+                       const void*     scale_factor,
+                       const DLP_TYPE  sf_type,
+                       md_t            sf_len,
+                       const void*     zero_point,
+                       const DLP_TYPE  zp_type,
+                       md_t            zp_len,
+                       const md_t      ic_offset)
 {
     // Input is column-major (rs_a == 1)
     if (rs_a == 1) {
         if (zero_point) {
             // Asymmetric quantization: q = round(a * scale) - zero_point
-            quant_a_asym_bf16s8_col_major(
+            dlp_quant_a_asym_bf16s8_col_major(
                 quant_a_buffer, a, rs_a, cs_a, MC, KC, scale_factor, sf_type,
                 sf_len, zero_point, zp_type, zp_len, ic_offset);
         } else {
             // Symmetric quantization: q = round(a * scale)
-            quant_a_sym_bf16s8_col_major(quant_a_buffer, a, rs_a, cs_a, MC, KC,
-                                         scale_factor, sf_type, sf_len,
-                                         ic_offset);
+            dlp_quant_a_sym_bf16s8_col_major(quant_a_buffer, a, rs_a, cs_a, MC,
+                                             KC, scale_factor, sf_type, sf_len,
+                                             ic_offset);
         }
     } else {
         // Input is row-major (cs_a == 1)
         if (zero_point) {
             // Asymmetric quantization: q = round(a * scale) - zero_point
-            quant_a_asym_bf16s8_row_major(
+            dlp_quant_a_asym_bf16s8_row_major(
                 quant_a_buffer, a, rs_a, cs_a, MC, KC, scale_factor, sf_type,
                 sf_len, zero_point, zp_type, zp_len, ic_offset);
         } else {
             // Symmetric quantization: q = round(a * scale)
-            quant_a_sym_bf16s8_row_major(quant_a_buffer, a, rs_a, cs_a, MC, KC,
-                                         scale_factor, sf_type, sf_len,
-                                         ic_offset);
+            dlp_quant_a_sym_bf16s8_row_major(quant_a_buffer, a, rs_a, cs_a, MC,
+                                             KC, scale_factor, sf_type, sf_len,
+                                             ic_offset);
         }
     }
 }
 
 /*
- * quant_a_sym_bf16s8_row_major
+ * dlp_quant_a_sym_bf16s8_row_major
  *
  * Convert an MC x KC BF16 matrix (row-major, cs_a==1) to int8 using symmetric
  * per-tensor (sf_len==1) or per-row (sf_len>=MC) scale factors:
@@ -262,16 +262,16 @@ quanta_mr16_bf16s8(int8_t*         quant_a_buffer,
  * Output layout: Dense row-major (row stride = KC)
  */
 void
-quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                             const bfloat16* a,
-                             const md_t      rs_a,
-                             const md_t      cs_a,
-                             const md_t      MC,
-                             const md_t      KC,
-                             const void*     scale_factor,
-                             const DLP_TYPE  sf_type,
-                             md_t            sf_len,
-                             const md_t      ic_offset)
+dlp_quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
+                                 const bfloat16* a,
+                                 const md_t      rs_a,
+                                 const md_t      cs_a,
+                                 const md_t      MC,
+                                 const md_t      KC,
+                                 const void*     scale_factor,
+                                 const DLP_TYPE  sf_type,
+                                 md_t            sf_len,
+                                 const md_t      ic_offset)
 {
     // AVX-512 parameters: process 16 elements per vector register.
     md_t      MR       = 16;            // Max rows per unrolled block
@@ -514,7 +514,7 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
     }
 }
 /*
- * quant_a_asym_bf16s8_row_major
+ * dlp_quant_a_asym_bf16s8_row_major
  *
  * Convert an MC x KC BF16 matrix (row-major, cs_a==1) to int8 using asymmetric
  * per-tensor (sf_len==1) or per-row (sf_len>=MC) quantization:
@@ -532,19 +532,19 @@ quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
  * rounding.
  */
 void
-quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
-                              const bfloat16* a,
-                              const md_t      rs_a,
-                              const md_t      cs_a,
-                              const md_t      MC,
-                              const md_t      KC,
-                              const void*     scale_factor,
-                              const DLP_TYPE  sf_type,
-                              md_t            sf_len,
-                              const void*     zero_point,
-                              const DLP_TYPE  zp_type,
-                              md_t            zp_len,
-                              const md_t      ic_offset)
+dlp_quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
+                                  const bfloat16* a,
+                                  const md_t      rs_a,
+                                  const md_t      cs_a,
+                                  const md_t      MC,
+                                  const md_t      KC,
+                                  const void*     scale_factor,
+                                  const DLP_TYPE  sf_type,
+                                  md_t            sf_len,
+                                  const void*     zero_point,
+                                  const DLP_TYPE  zp_type,
+                                  md_t            zp_len,
+                                  const md_t      ic_offset)
 {
     md_t      MR       = 16;
     md_t      NUM_ELEM = 16;
@@ -906,7 +906,7 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
 }
 
 /*
- * quant_a_sym_bf16s8_col_major
+ * dlp_quant_a_sym_bf16s8_col_major
  *
  * Convert an MC x KC BF16 matrix (column-major, rs_a==1) to int8 using
  * symmetric per-tensor (sf_len==1) or per-row (sf_len>=MC) scale factors:
@@ -923,16 +923,16 @@ quant_a_asym_bf16s8_row_major(int8_t*         quant_a_buffer,
  * Output layout: Dense row-major (row stride = KC)
  */
 void
-quant_a_sym_bf16s8_col_major(int8_t*         quant_a_buffer,
-                             const bfloat16* a,
-                             const md_t      rs_a,
-                             const md_t      cs_a,
-                             const md_t      MC,
-                             const md_t      KC,
-                             const void*     scale_factor,
-                             const DLP_TYPE  sf_type,
-                             md_t            sf_len,
-                             const md_t      ic_offset)
+dlp_quant_a_sym_bf16s8_col_major(int8_t*         quant_a_buffer,
+                                 const bfloat16* a,
+                                 const md_t      rs_a,
+                                 const md_t      cs_a,
+                                 const md_t      MC,
+                                 const md_t      KC,
+                                 const void*     scale_factor,
+                                 const DLP_TYPE  sf_type,
+                                 md_t            sf_len,
+                                 const md_t      ic_offset)
 {
     // AVX-512 parameters: process 16 elements per vector register.
     md_t MR       = 16;            // Max rows per unrolled block
@@ -1314,7 +1314,7 @@ quant_a_sym_bf16s8_col_major(int8_t*         quant_a_buffer,
 }
 
 /*
- * quant_a_asym_bf16s8_col_major
+ * dlp_quant_a_asym_bf16s8_col_major
  *
  * Convert an MC x KC BF16 matrix (column-major, rs_a==1) to int8 using
  * asymmetric per-tensor (sf_len==1) or per-row (sf_len>=MC) quantization:
@@ -1331,19 +1331,19 @@ quant_a_sym_bf16s8_col_major(int8_t*         quant_a_buffer,
  * Output layout: Dense row-major (row stride = KC)
  */
 void
-quant_a_asym_bf16s8_col_major(int8_t*         quant_a_buffer,
-                              const bfloat16* a,
-                              const md_t      rs_a,
-                              const md_t      cs_a,
-                              const md_t      MC,
-                              const md_t      KC,
-                              const void*     scale_factor,
-                              const DLP_TYPE  sf_type,
-                              md_t            sf_len,
-                              const void*     zero_point,
-                              const DLP_TYPE  zp_type,
-                              md_t            zp_len,
-                              const md_t      ic_offset)
+dlp_quant_a_asym_bf16s8_col_major(int8_t*         quant_a_buffer,
+                                  const bfloat16* a,
+                                  const md_t      rs_a,
+                                  const md_t      cs_a,
+                                  const md_t      MC,
+                                  const md_t      KC,
+                                  const void*     scale_factor,
+                                  const DLP_TYPE  sf_type,
+                                  md_t            sf_len,
+                                  const void*     zero_point,
+                                  const DLP_TYPE  zp_type,
+                                  md_t            zp_len,
+                                  const md_t      ic_offset)
 {
     // AVX-512 parameters: process 16 elements per vector register.
     md_t MR       = 16;            // Max rows per unrolled block

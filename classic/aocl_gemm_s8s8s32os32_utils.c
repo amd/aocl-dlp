@@ -85,7 +85,7 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
     if (n == 1) {
         n_reorder = 1;
     } else {
-        n_reorder = make_multiple_of_n(n, 16);
+        n_reorder = dlp_make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 4.
@@ -93,11 +93,11 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
     if (n == 1) {
         k_reorder = k;
     } else {
-        k_reorder = make_multiple_of_n(k, 4);
+        k_reorder = dlp_make_multiple_of_n(k, 4);
     }
 #else
-    md_t n_reorder = make_multiple_of_n(n, 16);
-    md_t k_reorder = make_multiple_of_n(k, 4);
+    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
+    md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 #endif
     // extra memory of n_reorder * sizeof(int32_t) to store sum of every column
     // of B matrix buffer
@@ -158,7 +158,7 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     if (n == 1) {
         n_reorder = 1;
     } else {
-        n_reorder = make_multiple_of_n(n, 16);
+        n_reorder = dlp_make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 4.
@@ -166,11 +166,11 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     if (n == 1) {
         k_reorder = k;
     } else {
-        k_reorder = make_multiple_of_n(k, 4);
+        k_reorder = dlp_make_multiple_of_n(k, 4);
     }
 #else
-    md_t n_reorder = make_multiple_of_n(n, 16);
-    md_t k_reorder = make_multiple_of_n(k, 4);
+    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
+    md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 #endif
     md_t group_size = symq_meta_data->group_size;
 

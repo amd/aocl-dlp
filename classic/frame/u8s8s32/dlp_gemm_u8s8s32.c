@@ -56,7 +56,7 @@ typedef void (*dlp_gemm_rowvar_s32)(const md_t,
 
 #ifdef DLP_KERNELS_ZEN4
 
-LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
+DLP_GEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -186,7 +186,7 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         md_t packb_min_NR = dlp_get_packb_u8s8s32o32_min_NR();
 
-        md_t k_updated = make_multiple_of_n(k, 4);
+        md_t k_updated = dlp_make_multiple_of_n(k, 4);
 
         rs_a_use = rs_a;
         cs_a_use = 4;
@@ -217,14 +217,14 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
             md_t n_sub_updated   = 0;
 
             if (mtag_b == REORDERED) {
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
 
                 b_use = (int8_t*)(b + (jc_cur_loop * k_updated));
                 dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
             } else if (mtag_b == PACK) {
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
                 mem_b_size_req   = sizeof(int8_t) * nc0_updated * k_updated;
 
                 n_sub_updated = nc0_updated;
@@ -266,7 +266,7 @@ LPGEMV(uint8_t, int8_t, int32_t, u8s8s32os32)
             }
 
             if (mtag_b == REORDERED) {
-                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
             }
         } // jc loop
 
@@ -342,7 +342,7 @@ DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
     // instruction. Padding is added in cases this condition is not
     // satisfied, and therefore the k offset used for packed/reordered
     // buffer needs to be updated.
-    md_t k_updated = make_multiple_of_n(k, 4);
+    md_t k_updated = dlp_make_multiple_of_n(k, 4);
 
     // To decide whether to apply post ops or not.
     bool is_last_k = FALSE;
@@ -385,7 +385,7 @@ DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -432,7 +432,7 @@ DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
             // cases this condition is not satisfied, and therefore
             // the kc0 offsets used for packed/reordered buffers
             // needs to be updated.
-            md_t kc0_updated = make_multiple_of_n(kc0, 4);
+            md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
             // No parallelization in k dim, k always starts at 0.
             is_first_k               = (pc == 0) ? (TRUE) : (FALSE);
@@ -453,7 +453,8 @@ DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
                     // width which is a multiple of 16. Subsequently the nc0
                     // offsets used for packed/reordered buffers needs to be
                     // updated.
-                    md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                    md_t nc0_updated =
+                        dlp_make_multiple_of_n(nc0, packb_min_NR);
                     mem_b_size_req = sizeof(int8_t) * nc0_updated * kc0_updated;
 
                     if (pack_b_buffer == NULL) {
@@ -595,7 +596,7 @@ DLP_GEMM_5LOOP_UNIFIED(uint8_t, int8_t, int32_t, int32_t, u8s8s32o32,
             }
         }
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

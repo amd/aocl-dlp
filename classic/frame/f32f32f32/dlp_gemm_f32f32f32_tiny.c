@@ -105,7 +105,7 @@ typedef void (*dlp_gemv_n_one_a_pack_ft)(float*,
                                          md_t*,
                                          md_t*);
 
-LPGEMV_TINY(float, float, float, f32f32f32of32)
+DLP_GEMV_TINY(float, float, float, f32f32f32of32)
 {
     const float* a_use    = (float*)a;
     md_t         rs_a_use = rs_a;
@@ -258,7 +258,7 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
             rs_b_use = NR;
             cs_b_use = 1;
         } else if (mtag_b == PACK) {
-            md_t  nc0_updated    = make_multiple_of_n(n, NR);
+            md_t  nc0_updated    = dlp_make_multiple_of_n(n, NR);
             msz_t mem_b_size_req = sizeof(float) * nc0_updated * k;
 
             pack_b_buffer_f32f32f32of32 =
@@ -305,7 +305,7 @@ LPGEMV_TINY(float, float, float, f32f32f32of32)
 }
 DLP_GEMM_TINY(float, float, float, f32f32f32of32)
 {
-    // Handle using LPGEMV when m or/and n equal to 1
+    // Handle using DLP_GEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if (((m == 1) || (n == 1))
         && ((dlp_cpuid_is_avx512_supported() == TRUE)
@@ -394,7 +394,7 @@ DLP_GEMM_TINY(float, float, float, f32f32f32of32)
         cs_b_use = 1;
         ps_b_use = k;
     } else if ((mtag_b == PACK) && (rs_b == 1)) {
-        md_t nc0_updated = make_multiple_of_n(n, NR);
+        md_t nc0_updated = dlp_make_multiple_of_n(n, NR);
         mem_b_size_req   = sizeof(float) * nc0_updated * k;
 
         dlp_clsc_err_t err = DLP_CLSC_SUCCESS;

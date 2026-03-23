@@ -36,12 +36,13 @@ extern "C"
 
 #include "classic/dlp_base_types.h"
 
-    DLP_CLASSIC_EXPORT void get_jit_kernel(dlp_gemm_jit_inputs_t* params,
-                                           void*                  buffer,
-                                           md_t                   bufferSize);
+    DLP_CLASSIC_EXPORT void dlp_gemm_get_jit_kernel_inplace(
+        dlp_gemm_jit_inputs_t* params, void* buffer, md_t bufferSize);
 
-    DLP_CLASSIC_EXPORT void* get_jit_code(dlp_gemm_jit_inputs_t* params);
-    DLP_CLASSIC_EXPORT md_t  get_kernel_size(dlp_gemm_jit_inputs_t* params);
+    DLP_CLASSIC_EXPORT void* dlp_gemm_get_jit_code(
+        dlp_gemm_jit_inputs_t* params);
+    DLP_CLASSIC_EXPORT md_t
+    dlp_gemm_get_kernel_size(dlp_gemm_jit_inputs_t* params);
 
 #ifdef __cplusplus
 }

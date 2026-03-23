@@ -89,7 +89,7 @@ void*
 dlp_gemm_get_jit_kernel(md_t m_index, md_t n_index);
 
 bool
-get_jit_kernels_generated();
+dlp_gemm_get_jit_kernels_generated();
 
 void
 dlp_gemm_mod_block_size_s16(

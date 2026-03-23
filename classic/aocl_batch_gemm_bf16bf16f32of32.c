@@ -79,7 +79,7 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
     dlp_init_global_cntx();
 
 #ifdef DLP_GEMM_BF16_JIT
-    if (get_jit_kernels_generated() == FALSE) {
+    if (dlp_gemm_get_jit_kernels_generated() == FALSE) {
         dlp_print_msg(" Could not generate bf16bf16f32of32 "
                       " kernels using JIT.",
                       __FILE__, __LINE__);
@@ -352,7 +352,7 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
     dlp_init_global_cntx();
 
 #ifdef DLP_GEMM_BF16_JIT
-    if (get_jit_kernels_generated() == FALSE) {
+    if (dlp_gemm_get_jit_kernels_generated() == FALSE) {
         dlp_print_msg(" Could not generate bf16bf16f32of32 "
                       " kernels using JIT.",
                       __FILE__, __LINE__);

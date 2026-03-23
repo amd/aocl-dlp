@@ -167,7 +167,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
 
     for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0         = dlp_min((jc_end - jc), NC);
-        md_t nc0_updated = make_multiple_of_n(nc0, 16);
+        md_t nc0_updated = dlp_make_multiple_of_n(nc0, 16);
 
         md_t jc_cur_loop     = jc;
         md_t jc_cur_loop_rem = 0;
@@ -175,7 +175,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
 
         /* B should always be reordered */
         {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -439,7 +439,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
         }
         /* B is always reordered */
         {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

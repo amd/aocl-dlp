@@ -90,7 +90,7 @@ dlp_reorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -149,7 +149,7 @@ dlp_reorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b,
                     rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 
@@ -206,7 +206,7 @@ dlp_unreorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -229,7 +229,7 @@ dlp_unreorderb_nr64_bf16bf16f32of32_reference(dlp_gemm_obj_t*  b,
                     nc0, kc0, rs_b, cs_b);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 }
@@ -288,7 +288,7 @@ dlp_reorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -347,7 +347,7 @@ dlp_reorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
                     rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 
@@ -404,7 +404,7 @@ dlp_unreorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -427,7 +427,7 @@ dlp_unreorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
                     nc0, kc0, rs_b, cs_b);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 }
@@ -487,7 +487,7 @@ dlp_reorderb_nr64_bf16s4f32of32(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated   = 0;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -547,7 +547,7 @@ dlp_reorderb_nr64_bf16s4f32of32(dlp_gemm_obj_t*  b,
                     mat_type);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 
@@ -610,7 +610,7 @@ dlp_reorderb_mxp_nr64_f32obf16(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 16, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -668,7 +668,7 @@ dlp_reorderb_mxp_nr64_f32obf16(dlp_gemm_obj_t*  b,
                     rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

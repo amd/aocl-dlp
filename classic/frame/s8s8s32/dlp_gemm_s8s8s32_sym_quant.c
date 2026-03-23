@@ -40,7 +40,7 @@
 // 1. Mandatory for matrix B to be reordered, i.e., mtag_b == REORDERED.
 // 2. K should be divisible by group_size.
 #ifdef DLP_KERNELS_ZEN4
-LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
+DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -191,8 +191,8 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         // instruction. Padding is added in cases this condition is not
         // satisfied, and therefore the k offset used for packed/reordered
         // buffer needs to be updated.
-        md_t k_updated = make_multiple_of_n(k, 4);
-        md_t n_updated = make_multiple_of_n(n, 16);
+        md_t k_updated = dlp_make_multiple_of_n(k, 4);
+        md_t n_updated = dlp_make_multiple_of_n(n, 16);
 
         rs_a_use = rs_a;
         cs_a_use = 4;
@@ -228,7 +228,7 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
             md_t n_sub_updated   = 0;
 
             if (mtag_b == REORDERED) {
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
 
@@ -260,7 +260,7 @@ LPGEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                 &post_ops_attr);
 
             if (mtag_b == REORDERED) {
-                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
             }
         } // jc loop
 
@@ -352,8 +352,8 @@ DLP_GEMM_5LOOP_UNIFIED(
     // instruction. Padding is added in cases this condition is not
     // satisfied, and therefore the k offset used for packed/reordered
     // buffer needs to be updated.
-    md_t k_updated = make_multiple_of_n(k, 4);
-    md_t n_updated = make_multiple_of_n(n, 16);
+    md_t k_updated = dlp_make_multiple_of_n(k, 4);
+    md_t n_updated = dlp_make_multiple_of_n(n, 16);
 
     // To decide whether to apply post ops or not.
     bool is_last_k = FALSE;
@@ -417,7 +417,7 @@ DLP_GEMM_5LOOP_UNIFIED(
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -468,7 +468,7 @@ DLP_GEMM_5LOOP_UNIFIED(
             // cases this condition is not satisfied, and therefore
             // the kc0 offsets used for packed/reordered buffers
             // needs to be updated.
-            md_t kc0_updated = make_multiple_of_n(kc0, 4);
+            md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
             // No parallelization in k dim, k always starts at 0.
             is_first_k               = (pc == 0) ? (TRUE) : (FALSE);
@@ -483,7 +483,7 @@ DLP_GEMM_5LOOP_UNIFIED(
 
                 // Using child thrinfo (thread_ic) tid to decide chief thread
                 // per B matrix chunk (jc work id group)
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
 
                 md_t group_start = pc / group_size;
                 md_t group_end   = (pc + kc0 - 1) / group_size;
@@ -747,7 +747,7 @@ DLP_GEMM_5LOOP_UNIFIED(
             }
         }
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

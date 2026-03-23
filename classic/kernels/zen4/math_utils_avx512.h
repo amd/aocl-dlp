@@ -131,7 +131,7 @@ typedef union
 } flt32_t;
 
 static inline unsigned int
-asuint32(float f)
+dlp_asuint32(float f)
 {
     flt32_t fl = { .f = f };
     return fl.u;
@@ -181,7 +181,7 @@ asuint32(float f)
 #define ERF_AOCL_DLP_AVX512(y, r)                                              \
     {                                                                          \
         __m512   absr  = _mm512_abs_ps(r);                                     \
-        uint32_t uxmax = asuint32(_mm512_reduce_max_ps(absr));                 \
+        uint32_t uxmax = dlp_asuint32(_mm512_reduce_max_ps(absr));             \
         __m512d  _y1d  = _mm512_cvtps_pd(_mm512_extractf32x8_ps(absr, 0));     \
         __m512d  _y2d  = _mm512_cvtps_pd(_mm512_extractf32x8_ps(absr, 1));     \
                                                                                \

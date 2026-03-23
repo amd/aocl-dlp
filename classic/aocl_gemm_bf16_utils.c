@@ -236,7 +236,7 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
     if (n == 1) {
         n_reorder = 1;
     } else {
-        n_reorder = make_multiple_of_n(n, 16);
+        n_reorder = dlp_make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 2.
@@ -244,11 +244,11 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
     if (n == 1) {
         k_reorder = k;
     } else {
-        k_reorder = make_multiple_of_n(k, 2);
+        k_reorder = dlp_make_multiple_of_n(k, 2);
     }
 #else
-    md_t n_reorder = make_multiple_of_n(n, 16);
-    md_t k_reorder = make_multiple_of_n(k, 2);
+    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
+    md_t k_reorder = dlp_make_multiple_of_n(k, 2);
 #endif
     msz_t size_req = sizeof(int16_t) * k_reorder * n_reorder;
 
@@ -597,7 +597,7 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
     }
     else*/
     {
-        n_reorder = make_multiple_of_n(n, 16);
+        n_reorder = dlp_make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 2.
@@ -608,7 +608,7 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
     }
     else*/
     {
-        k_reorder = make_multiple_of_n(k, 2);
+        k_reorder = dlp_make_multiple_of_n(k, 2);
     }
 
     msz_t size_req = (sizeof(int8_t) * k_reorder * n_reorder) / 2;

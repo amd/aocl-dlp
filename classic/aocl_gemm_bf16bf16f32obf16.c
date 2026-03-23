@@ -114,7 +114,7 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     }
 
 #ifdef DLP_GEMM_BF16_JIT
-    if (get_jit_kernels_generated() == FALSE) {
+    if (dlp_gemm_get_jit_kernels_generated() == FALSE) {
         dlp_print_msg(" Could not generate bf16bf16f32obf16 "
                       " kernels using JIT.",
                       __FILE__, __LINE__);
@@ -356,7 +356,7 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5))
         && (dlp_cpuid_is_avx512bf16_supported() == TRUE)
         && (is_tiny_input_bf16obf16(m_use, n_use, k, &lcntx_l) == TRUE)
-        && (is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
+        && (dlp_is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {
         dlp_gemm_rowvar_tiny_bf16bf16f32of32(
             m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
             rs_b_use, cs_b_use, mtag_b_use, (float*)c, rs_c_use, cs_c_use,

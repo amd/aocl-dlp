@@ -469,7 +469,7 @@ aocl_gemm_f32f32f32of32(const char      order,
         goto err_hndl;
     }
 
-    if (is_single_thread(&rntm_g) == TRUE) {
+    if (dlp_is_single_thread(&rntm_g) == TRUE) {
         if (is_tiny_input_f32(m_use, n_use, k_use, &lcntx_l) == TRUE) {
             dlp_gemm_rowvar_tiny_f32f32f32of32(
                 m_use, n_use, k_use, a_use, rs_a_use, cs_a_use, mtag_a_use,

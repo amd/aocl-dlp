@@ -85,10 +85,10 @@ aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
     // One ZMM register = 32 FP16 elements.
     md_t n_reorder;
     if (n == 1) {
-        // When n == 1, LPGEMV doesn't expect B to be reordered.
+        // When n == 1, DLP_GEMV doesn't expect B to be reordered.
         n_reorder = 1;
     } else {
-        n_reorder = make_multiple_of_n(n, NR);
+        n_reorder = dlp_make_multiple_of_n(n, NR);
     }
 
     msz_t size_req = sizeof(float16) * k * n_reorder;
@@ -152,7 +152,7 @@ aocl_reorder_f16f16f16of16(const char      order,
     }
 
     // When n == 1, B matrix becomes a vector.
-    // Reordering is avoided so that LPGEMV can process it efficiently.
+    // Reordering is avoided so that DLP_GEMV can process it efficiently.
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(float16)));
@@ -237,7 +237,7 @@ aocl_unreorder_f16f16f16of16(const char      order,
     }
 
     // When n == 1, B matrix becomes a vector.
-    // Reordering is avoided so that LPGEMV can process it efficiently.
+    // Reordering is avoided so that DLP_GEMV can process it efficiently.
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(output_buf_addr, reorder_buf_addr, (k * sizeof(float16)));

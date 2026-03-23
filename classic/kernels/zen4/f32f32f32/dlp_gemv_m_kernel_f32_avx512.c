@@ -31,7 +31,7 @@
 #include "dlp_gemm_kernel_macros_f32.h"
 #include "kernels/dlp_kernels.h"
 
-LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32)
+DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_6x64F_DISABLE,    &&POST_OPS_BIAS_6x64F,

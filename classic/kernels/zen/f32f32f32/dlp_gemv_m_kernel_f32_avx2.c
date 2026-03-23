@@ -593,7 +593,7 @@ POST_OPS_1x16F_DISABLE:;
     }
 }
 
-LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
+DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,

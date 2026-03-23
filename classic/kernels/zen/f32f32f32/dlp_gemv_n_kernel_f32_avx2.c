@@ -36,34 +36,35 @@
 //  the horizontal reduction done to produce one output from each
 //  accumulator register
 
-#define LPGEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, paddr, stride)         \
+#define DLP_GEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, paddr, stride)       \
     ymm0 = _mm256_loadu_ps(paddr);                                             \
     ymm1 = _mm256_loadu_ps(paddr + stride);                                    \
     ymm2 = _mm256_loadu_ps(paddr + 2 * stride);                                \
     ymm3 = _mm256_loadu_ps(paddr + 3 * stride);
 
-#define LPGEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3, mask, paddr,       \
-                                    stride)                                    \
+#define DLP_GEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3, mask, paddr,     \
+                                      stride)                                  \
     ymm0 = _mm256_maskload_ps(paddr, mask);                                    \
     ymm1 = _mm256_maskload_ps(paddr + stride, mask);                           \
     ymm2 = _mm256_maskload_ps(paddr + 2 * stride, mask);                       \
     ymm3 = _mm256_maskload_ps(paddr + 3 * stride, mask);
 
-#define LPGEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0, ymm1,      \
-                              ymm2, ymm3)                                      \
+#define DLP_GEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0, ymm1,    \
+                                ymm2, ymm3)                                    \
     ymm8  = _mm256_fmadd_ps(ymm0, ymm7, ymm8);                                 \
     ymm9  = _mm256_fmadd_ps(ymm1, ymm7, ymm9);                                 \
     ymm10 = _mm256_fmadd_ps(ymm2, ymm7, ymm10);                                \
     ymm11 = _mm256_fmadd_ps(ymm3, ymm7, ymm11);
 
-#define LPGEMV_YMM2XMM(ymm8, ymm9, ymm10, ymm11, ymm0, ymm1, ymm2, ymm3, xmm0) \
+#define DLP_GEMV_YMM2XMM(ymm8, ymm9, ymm10, ymm11, ymm0, ymm1, ymm2, ymm3,     \
+                         xmm0)                                                 \
     ymm0 = _mm256_hadd_ps(ymm8, ymm9);                                         \
     ymm1 = _mm256_hadd_ps(ymm10, ymm11);                                       \
     ymm0 = _mm256_hadd_ps(ymm0, ymm1);                                         \
     xmm0 = _mm_add_ps(_mm256_extractf128_ps(ymm0, 0),                          \
                       _mm256_extractf128_ps(ymm0, 1));
 
-LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
+DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
@@ -122,20 +123,20 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 b_use += 8; // move b pointer to next 8 elements
 
                 // Load 4x8 from row 0-3 of A
-                LPGEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, a_use, rs_a);
+                DLP_GEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, a_use, rs_a);
                 a_use += 4 * rs_a; // move a pointer to next 4x8 elements
 
                 // Perform the dot product
-                LPGEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0,
-                                      ymm1, ymm2, ymm3);
+                DLP_GEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0,
+                                        ymm1, ymm2, ymm3);
 
                 // Load 4x8 from row 4-7 of A
-                LPGEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, a_use, rs_a);
+                DLP_GEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, a_use, rs_a);
                 a_use -= 4 * rs_a; // move a pointer to next 4x8 elements
 
                 // Perform the dot product
-                LPGEMV_N_KERNEL_4_FMA(ymm12, ymm13, ymm14, ymm15, ymm7, ymm0,
-                                      ymm1, ymm2, ymm3);
+                DLP_GEMV_N_KERNEL_4_FMA(ymm12, ymm13, ymm14, ymm15, ymm7, ymm0,
+                                        ymm1, ymm2, ymm3);
 
                 a_use += 8;
             } // k-loop
@@ -144,29 +145,29 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                 ymm7 = _mm256_maskload_ps(b_use, k_rem_mask);
 
                 // Load 4x8 from row 0-3 of A
-                LPGEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3, k_rem_mask,
-                                            a_use, rs_a);
+                DLP_GEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3,
+                                              k_rem_mask, a_use, rs_a);
                 a_use += 4 * rs_a; // move a pointer to next 4x8 elements
 
                 // Perform the dot product
-                LPGEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0,
-                                      ymm1, ymm2, ymm3);
+                DLP_GEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0,
+                                        ymm1, ymm2, ymm3);
 
                 // Load 4x8 from row 4-7 of A
-                LPGEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3, k_rem_mask,
-                                            a_use, rs_a);
+                DLP_GEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3,
+                                              k_rem_mask, a_use, rs_a);
                 a_use -= 4 * rs_a; // move a pointer to next 4x8 elements
 
                 // Perform the dot product
-                LPGEMV_N_KERNEL_4_FMA(ymm12, ymm13, ymm14, ymm15, ymm7, ymm0,
-                                      ymm1, ymm2, ymm3);
+                DLP_GEMV_N_KERNEL_4_FMA(ymm12, ymm13, ymm14, ymm15, ymm7, ymm0,
+                                        ymm1, ymm2, ymm3);
             }
 
             // Add the registers horizontally to get one output
-            LPGEMV_YMM2XMM(ymm8, ymm9, ymm10, ymm11, ymm0, ymm1, ymm2, ymm3,
-                           xmm0);
-            LPGEMV_YMM2XMM(ymm12, ymm13, ymm14, ymm15, ymm4, ymm1, ymm2, ymm3,
-                           xmm1);
+            DLP_GEMV_YMM2XMM(ymm8, ymm9, ymm10, ymm11, ymm0, ymm1, ymm2, ymm3,
+                             xmm0);
+            DLP_GEMV_YMM2XMM(ymm12, ymm13, ymm14, ymm15, ymm4, ymm1, ymm2, ymm3,
+                             xmm1);
 
             // compose outputs into one ymm to perform post-ops.
             ymm8 = _mm256_insertf128_ps(ymm8, xmm0, 0);
@@ -184,25 +185,25 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                     b_use += 8; // move b pointer to next 8 elements
 
                     // Load 4x8 from row 0-3 of A
-                    LPGEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, a_use,
-                                            rs_a);
+                    DLP_GEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, a_use,
+                                              rs_a);
                     a_use += 8; // move a pointer to next 4x8 elements
 
                     // Perform the dot product
-                    LPGEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0,
-                                          ymm1, ymm2, ymm3);
+                    DLP_GEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7,
+                                            ymm0, ymm1, ymm2, ymm3);
                 } // k-loop
 
                 if (k_rem) {
                     ymm7 = _mm256_maskload_ps(b_use, k_rem_mask);
 
                     // Load 4x8 from row 0-3 of A
-                    LPGEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3,
-                                                k_rem_mask, a_use, rs_a);
+                    DLP_GEMV_N_KERNEL_4_MASKLOADS(ymm0, ymm1, ymm2, ymm3,
+                                                  k_rem_mask, a_use, rs_a);
 
                     // Perform the dot product
-                    LPGEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7, ymm0,
-                                          ymm1, ymm2, ymm3);
+                    DLP_GEMV_N_KERNEL_4_FMA(ymm8, ymm9, ymm10, ymm11, ymm7,
+                                            ymm0, ymm1, ymm2, ymm3);
                 }
 
                 // update pointers
@@ -213,8 +214,8 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
                 // Horizontal add 4 ymm registers and get output into 2 xmm
                 // registers
-                LPGEMV_YMM2XMM(ymm8, ymm9, ymm10, ymm11, ymm0, ymm1, ymm2, ymm3,
-                               xmm0)
+                DLP_GEMV_YMM2XMM(ymm8, ymm9, ymm10, ymm11, ymm0, ymm1, ymm2,
+                                 ymm3, xmm0)
 
                 // compose outputs into one ymm to perform post-ops.
                 ymm8   = _mm256_insertf128_ps(ymm8, xmm0, 0);
@@ -278,8 +279,8 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
                         ymm12 = ymm14;
                 }
 
-                LPGEMV_YMM2XMM(ymm12, ymm13, ymm14, ymm15, ymm0, ymm1, ymm2,
-                               ymm3, xmm1);
+                DLP_GEMV_YMM2XMM(ymm12, ymm13, ymm14, ymm15, ymm0, ymm1, ymm2,
+                                 ymm3, xmm1);
                 if (regidx == 0)
                     ymm8 = _mm256_insertf128_ps(ymm8, xmm1, 0);
                 else

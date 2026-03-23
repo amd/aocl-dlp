@@ -57,7 +57,7 @@ typedef void (*dlp_gemm_rowvar_s32_s8)(const md_t,
 
 #ifdef DLP_KERNELS_ZEN4
 
-LPGEMV(int8_t, int8_t, int32_t, s8s8s32o32)
+DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -203,8 +203,8 @@ LPGEMV(int8_t, int8_t, int32_t, s8s8s32o32)
 
         md_t packb_min_NR = dlp_get_packb_s8s8s32o32_min_NR();
 
-        md_t k_updated = make_multiple_of_n(k, 4);
-        md_t n_updated = make_multiple_of_n(n, 16);
+        md_t k_updated = dlp_make_multiple_of_n(k, 4);
+        md_t n_updated = dlp_make_multiple_of_n(n, 16);
 
         rs_a_use = rs_a;
         cs_a_use = 4;
@@ -236,7 +236,7 @@ LPGEMV(int8_t, int8_t, int32_t, s8s8s32o32)
             md_t n_sub_updated   = 0;
 
             if (mtag_b == REORDERED) {
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
 
@@ -247,7 +247,7 @@ LPGEMV(int8_t, int8_t, int32_t, s8s8s32o32)
                 post_ops_attr.b_col_sum_vec =
                     ((int32_t*)(b + (k_updated * n_updated))) + jc;
             } else if (mtag_b == PACK) {
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
 
                 mem_b_size_req = sizeof(int8_t) * nc0_updated * k_updated
                                  + (nc0_updated * sizeof(int32_t));
@@ -301,7 +301,7 @@ LPGEMV(int8_t, int8_t, int32_t, s8s8s32o32)
             }
 
             if (mtag_b == REORDERED) {
-                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
             }
         } // jc loop
 
@@ -377,8 +377,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
     // instruction. Padding is added in cases this condition is not
     // satisfied, and therefore the k offset used for packed/reordered
     // buffer needs to be updated.
-    md_t k_updated = make_multiple_of_n(k, 4);
-    md_t n_updated = make_multiple_of_n(n, 16);
+    md_t k_updated = dlp_make_multiple_of_n(k, 4);
+    md_t n_updated = dlp_make_multiple_of_n(n, 16);
 
     // To decide whether to apply post ops or not.
     bool is_last_k = FALSE;
@@ -421,7 +421,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -470,7 +470,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
             // cases this condition is not satisfied, and therefore
             // the kc0 offsets used for packed/reordered buffers
             // needs to be updated.
-            md_t kc0_updated = make_multiple_of_n(kc0, 4);
+            md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
             // No parallelization in k dim, k always starts at 0.
             is_first_k               = (pc == 0) ? (TRUE) : (FALSE);
@@ -485,7 +485,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
 
                 // Using child thrinfo (thread_ic) tid to decide chief thread
                 // per B matrix chunk (jc work id group)
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
 
                 if (dlp_thread_am_ochief(&thread_ic)) {
                     // nc0 needs to be a multiple of 16 since this gives maximum
@@ -656,7 +656,7 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
             }
         }
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

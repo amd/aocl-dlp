@@ -82,7 +82,7 @@ aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
     // Extra space since packing does width in multiples of NR.
     md_t n_reorder;
     if (n == 1) {
-        // When n == 1, LPGEMV doesn't expect B to be reordered.
+        // When n == 1, DLP_GEMV doesn't expect B to be reordered.
         n_reorder = 1;
     } else {
         n_reorder = ((n + NR - 1) / NR) * NR;
@@ -166,7 +166,7 @@ aocl_reorder_f32f32f32of32(const char      order,
     n_threads      = (n_threads > 0) ? n_threads : 1;
 
     // When n == 1, B marix becomes a vector.
-    // Reordering is avoided so that LPGEMV can process it efficiently.
+    // Reordering is avoided so that DLP_GEMV can process it efficiently.
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(float)));
@@ -203,7 +203,7 @@ aocl_reorder_f32f32f32of32(const char      order,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -252,7 +252,7 @@ aocl_reorder_f32f32f32of32(const char      order,
                     kc0, &rs_b_reorder, &cs_b_reorder);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 }
@@ -329,7 +329,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
     n_threads      = (n_threads > 0) ? n_threads : 1;
 
     // When n == 1, B marix becomes a vector.
-    // Reordering is avoided so that LPGEMV can process it efficiently.
+    // Reordering is avoided so that DLP_GEMV can process it efficiently.
     if (n == 1) {
         if (rs_b == 1) {
             memcpy(reorder_buf_addr, input_buf_addr, (k * sizeof(float)));
@@ -366,7 +366,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -415,7 +415,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
                     kc0, NR, &rs_b_reorder, &cs_b_reorder);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 }
@@ -465,7 +465,7 @@ dlp_unreorderb_nr64_f32f32f32of32_reference(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -481,7 +481,7 @@ dlp_unreorderb_nr64_f32f32f32of32_reference(dlp_gemm_obj_t*  b,
                     nc0, kc0, NR, rs_b, cs_b);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 }

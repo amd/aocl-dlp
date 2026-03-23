@@ -32,8 +32,8 @@
 #include "../u8s8s32/dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
 
-// LPGEMV M=1 kernel for handling GEMV with group symmetric quantization.
-LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
+// DLP_GEMV M=1 kernel for handling GEMV with group symmetric quantization.
+DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
@@ -103,7 +103,7 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
             md_t group_end =
                 ((md_t)grp_post_ops_attr.grp_post_op_k + kc0 - 1) / group_size;
 
-            md_t kc0_updated = make_multiple_of_n(kc0, 4);
+            md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
             b_pc             = b + (n_sub_updated * pc)
                    + ((jc_cur_loop_rem + jr) * kc0_updated);
 

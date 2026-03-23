@@ -44,11 +44,11 @@
 #define DLP_NUM_STATIC_COMMS 96
 
 DLP_INLINE void
-calculate_n_threads_per_gemm(md_t        group_size,
-                             md_t*       n_threads,
-                             md_t*       n_gemms_in_parallel,
-                             md_t*       n_threads_per_gemm,
-                             dlp_rntm_t* rntm_g)
+dlp_calculate_n_threads_per_gemm(md_t        group_size,
+                                 md_t*       n_threads,
+                                 md_t*       n_gemms_in_parallel,
+                                 md_t*       n_threads_per_gemm,
+                                 dlp_rntm_t* rntm_g)
 {
     // Guard against group_size <= 0 to prevent divide-by-zero
     if (group_size <= 0) {
@@ -71,7 +71,7 @@ calculate_n_threads_per_gemm(md_t        group_size,
 }
 
 DLP_INLINE md_t
-next_factor(const md_t nt, const md_t part_nt)
+dlp_next_factor(const md_t nt, const md_t part_nt)
 {
     if (part_nt == nt) {
         return part_nt;
@@ -85,7 +85,7 @@ next_factor(const md_t nt, const md_t part_nt)
 }
 
 DLP_INLINE md_t
-prev_factor(const md_t nt, const md_t part_nt)
+dlp_prev_factor(const md_t nt, const md_t part_nt)
 {
     if (part_nt == 1) {
         return part_nt;
@@ -122,8 +122,8 @@ dlp_gemm_pnl_wrk_heur_adjust_ic_jc_ways(md_t  MR,
         md_t nu_jc_cur      = (nu + (*jc_ways) - 1) / (*jc_ways);
         md_t panel_work_cur = mu_ic_cur + nu_jc_cur;
 
-        const md_t next_ic         = next_factor((*n_threads), (*ic_ways));
-        const md_t prev_jc         = prev_factor((*n_threads), (*jc_ways));
+        const md_t next_ic         = dlp_next_factor((*n_threads), (*ic_ways));
+        const md_t prev_jc         = dlp_prev_factor((*n_threads), (*jc_ways));
         md_t       mu_ic_next      = (mu + next_ic - 1) / next_ic;
         md_t       nu_jc_prev      = (nu + prev_jc - 1) / prev_jc;
         md_t       panel_work_next = mu_ic_next + nu_jc_prev;
@@ -136,8 +136,8 @@ dlp_gemm_pnl_wrk_heur_adjust_ic_jc_ways(md_t  MR,
 
         nu_mod_jc_ways = nu % (*jc_ways);
         if ((nu_mod_jc_ways != 0) && (next_ic < (*n_threads))) {
-            const md_t next_next_ic    = next_factor((*n_threads), next_ic);
-            const md_t prev_prev_jc    = prev_factor((*n_threads), prev_jc);
+            const md_t next_next_ic    = dlp_next_factor((*n_threads), next_ic);
+            const md_t prev_prev_jc    = dlp_prev_factor((*n_threads), prev_jc);
             md_t       mu_ic_next_next = (mu + next_next_ic - 1) / next_next_ic;
             md_t       nu_jc_prev_prev = (nu + prev_prev_jc - 1) / prev_prev_jc;
             md_t       panel_work_next_next = mu_ic_next_next + nu_jc_prev_prev;
@@ -151,9 +151,9 @@ dlp_gemm_pnl_wrk_heur_adjust_ic_jc_ways(md_t  MR,
             nu_mod_jc_ways = nu % (*jc_ways);
             if ((nu_mod_jc_ways != 0) && (next_next_ic < (*n_threads))) {
                 const md_t next_next_next_ic =
-                    next_factor((*n_threads), next_next_ic);
+                    dlp_next_factor((*n_threads), next_next_ic);
                 const md_t prev_prev_prev_jc =
-                    prev_factor((*n_threads), prev_prev_jc);
+                    dlp_prev_factor((*n_threads), prev_prev_jc);
                 md_t mu_ic_next_next_next =
                     (mu + next_next_next_ic - 1) / next_next_next_ic;
                 md_t nu_jc_prev_prev_prev =
@@ -230,10 +230,10 @@ dlp_gemm_adjust_ic_jc_ways(const md_t m,
     const md_t    n_jc                = n / (*jc_ways);
     const int64_t cur_work_per_thread = m_ic + n_jc;
 
-    const md_t next_ic = next_factor((*n_threads), (*ic_ways));
-    const md_t prev_ic = prev_factor((*n_threads), (*ic_ways));
-    const md_t next_jc = next_factor((*n_threads), (*jc_ways));
-    const md_t prev_jc = prev_factor((*n_threads), (*jc_ways));
+    const md_t next_ic = dlp_next_factor((*n_threads), (*ic_ways));
+    const md_t prev_ic = dlp_prev_factor((*n_threads), (*ic_ways));
+    const md_t next_jc = dlp_next_factor((*n_threads), (*jc_ways));
+    const md_t prev_jc = dlp_prev_factor((*n_threads), (*jc_ways));
 
     const md_t m_next_ic = m / next_ic;
     const md_t m_prev_ic = m / prev_ic;
@@ -378,8 +378,8 @@ batch_dlp_gemm_s32o32_get_threading(md_t                    group_size,
                                     AOCL_DLP_OPERATION_TYPE op_type)
 {
 
-    calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
-                                 n_threads_per_gemm, rntm_g);
+    dlp_calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
+                                     n_threads_per_gemm, rntm_g);
 
     if ((*n_threads_per_gemm) > 1) {
 
@@ -630,8 +630,8 @@ batch_dlp_gemm_bf16bf16f32of32_get_threading(md_t        group_size,
                                              dlp_rntm_t* rntm_g)
 {
 
-    calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
-                                 n_threads_per_gemm, rntm_g);
+    dlp_calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
+                                     n_threads_per_gemm, rntm_g);
 
     /* The user is not allowed to set ic_ways or jc_ways */
     if ((*n_threads_per_gemm) > 1) {
@@ -778,8 +778,8 @@ batch_dlp_gemm_f32f32f32of32_get_threading(md_t        group_size,
                                            dlp_rntm_t* rntm_g)
 {
 
-    calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
-                                 n_threads_per_gemm, rntm_g);
+    dlp_calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
+                                     n_threads_per_gemm, rntm_g);
 
     // Query the context for SUP limits.
     const md_t MT = dlp_gemm_get_sup_thres_MT_global_cntx(F32F32F32OF32);

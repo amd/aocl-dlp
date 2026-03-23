@@ -31,27 +31,27 @@
 #include "dlp_gemm_kernel_macros_f32.h"
 #include "kernels/dlp_kernels.h"
 
-#define LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)         \
+#define DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)       \
     zmm0 = _mm512_loadu_ps(paddr);                                             \
     zmm1 = _mm512_loadu_ps(paddr + stride);                                    \
     zmm2 = _mm512_loadu_ps(paddr + 2 * stride);                                \
     zmm3 = _mm512_loadu_ps(paddr + 3 * stride);
 
-#define LPGEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7, k1, paddr,   \
-                                    stride)                                    \
+#define DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7, k1, paddr, \
+                                      stride)                                  \
     zmm0 = _mm512_mask_loadu_ps(zmm7, k1, paddr);                              \
     zmm1 = _mm512_mask_loadu_ps(zmm7, k1, paddr + stride);                     \
     zmm2 = _mm512_mask_loadu_ps(zmm7, k1, paddr + 2 * stride);                 \
     zmm3 = _mm512_mask_loadu_ps(zmm7, k1, paddr + 3 * stride);
 
-#define LPGEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0, zmm1,      \
-                              zmm2, zmm3)                                      \
+#define DLP_GEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0, zmm1,    \
+                                zmm2, zmm3)                                    \
     zmm8  = _mm512_fmadd_ps(zmm0, zmm6, zmm8);                                 \
     zmm9  = _mm512_fmadd_ps(zmm1, zmm6, zmm9);                                 \
     zmm10 = _mm512_fmadd_ps(zmm2, zmm6, zmm10);                                \
     zmm11 = _mm512_fmadd_ps(zmm3, zmm6, zmm11);
 
-#define LPGEMV_ZMM2XMM(zmm0, zmm1, zmm2, zmm3, ymm0, ymm1, ymm2, ymm3, xmm0)   \
+#define DLP_GEMV_ZMM2XMM(zmm0, zmm1, zmm2, zmm3, ymm0, ymm1, ymm2, ymm3, xmm0) \
     ymm0 = _mm256_add_ps(_mm512_extractf32x8_ps(zmm0, 0x0),                    \
                          _mm512_extractf32x8_ps(zmm0, 0x1));                   \
     ymm1 = _mm256_add_ps(_mm512_extractf32x8_ps(zmm1, 0x0),                    \
@@ -70,7 +70,7 @@
 //  to produce C output of MRX1. The vectorization is done in k loop and
 //  the horizontal reduction done to produce one output from each
 //  accumulator register
-LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
+DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_6x64F_DISABLE,    &&POST_OPS_BIAS_6x64F,
@@ -142,30 +142,32 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                 b_use += 16; // move b pointer to next 16 elements
 
                 // Load 4x16 elements from row0-row3 of A
-                LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use, rs_a)
                 a_use += (4 * rs_a);
 
                 // Load 4x16 elements from row3-row7 of A
-                LPGEMV_N_KERNEL_4_LOADS(zmm24, zmm25, zmm26, zmm27, a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_LOADS(zmm24, zmm25, zmm26, zmm27, a_use,
+                                          rs_a)
                 a_use += (4 * rs_a);
 
-                LPGEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0,
-                                      zmm1, zmm2, zmm3)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0,
+                                        zmm1, zmm2, zmm3)
 
                 // Load 4x16 elements from row8-row11 of A
-                LPGEMV_N_KERNEL_4_LOADS(zmm28, zmm29, zmm30, zmm31, a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_LOADS(zmm28, zmm29, zmm30, zmm31, a_use,
+                                          rs_a)
                 a_use += (4 * rs_a);
 
                 // Load 4x16 elements from row12-row15 of A
-                LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use, rs_a)
                 a_use -= (12 * rs_a); // Update aptr back to move horizontally
 
-                LPGEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6, zmm24,
-                                      zmm25, zmm26, zmm27)
-                LPGEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6, zmm28,
-                                      zmm29, zmm30, zmm31)
-                LPGEMV_N_KERNEL_4_FMA(zmm20, zmm21, zmm22, zmm23, zmm6, zmm0,
-                                      zmm1, zmm2, zmm3)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6, zmm24,
+                                        zmm25, zmm26, zmm27)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6, zmm28,
+                                        zmm29, zmm30, zmm31)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm20, zmm21, zmm22, zmm23, zmm6, zmm0,
+                                        zmm1, zmm2, zmm3)
                 a_use += 16;
             } // kloop
 
@@ -174,41 +176,41 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                     zmm7, k1, b_use); // Load 0-15 in b[k+0 - k+15]
 
                 // Load 4x16 elements from row0-row3 of A
-                LPGEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7, k1,
-                                            a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7, k1,
+                                              a_use, rs_a)
                 a_use += (4 * rs_a);
 
-                LPGEMV_N_KERNEL_4_MASKLOADS(zmm24, zmm25, zmm26, zmm27, zmm7,
-                                            k1, a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm24, zmm25, zmm26, zmm27, zmm7,
+                                              k1, a_use, rs_a)
                 a_use += (4 * rs_a);
 
-                LPGEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0,
-                                      zmm1, zmm2, zmm3)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0,
+                                        zmm1, zmm2, zmm3)
 
-                LPGEMV_N_KERNEL_4_MASKLOADS(zmm28, zmm29, zmm30, zmm31, zmm7,
-                                            k1, a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm28, zmm29, zmm30, zmm31, zmm7,
+                                              k1, a_use, rs_a)
                 a_use += (4 * rs_a);
 
-                LPGEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7, k1,
-                                            a_use, rs_a)
+                DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7, k1,
+                                              a_use, rs_a)
 
-                LPGEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6, zmm24,
-                                      zmm25, zmm26, zmm27)
-                LPGEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6, zmm28,
-                                      zmm29, zmm30, zmm31)
-                LPGEMV_N_KERNEL_4_FMA(zmm20, zmm21, zmm22, zmm23, zmm6, zmm0,
-                                      zmm1, zmm2, zmm3)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6, zmm24,
+                                        zmm25, zmm26, zmm27)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6, zmm28,
+                                        zmm29, zmm30, zmm31)
+                DLP_GEMV_N_KERNEL_4_FMA(zmm20, zmm21, zmm22, zmm23, zmm6, zmm0,
+                                        zmm1, zmm2, zmm3)
             } // kloop
 
             // Add the registers horizantally to get one
-            LPGEMV_ZMM2XMM(zmm8, zmm9, zmm10, zmm11, ymm0, ymm1, ymm2, ymm3,
-                           xmm0)
-            LPGEMV_ZMM2XMM(zmm12, zmm13, zmm14, zmm15, ymm4, ymm1, ymm2, ymm3,
-                           xmm1)
-            LPGEMV_ZMM2XMM(zmm16, zmm17, zmm18, zmm19, ymm5, ymm1, ymm2, ymm3,
-                           xmm2)
-            LPGEMV_ZMM2XMM(zmm20, zmm21, zmm22, zmm23, ymm6, ymm1, ymm2, ymm3,
-                           xmm3)
+            DLP_GEMV_ZMM2XMM(zmm8, zmm9, zmm10, zmm11, ymm0, ymm1, ymm2, ymm3,
+                             xmm0)
+            DLP_GEMV_ZMM2XMM(zmm12, zmm13, zmm14, zmm15, ymm4, ymm1, ymm2, ymm3,
+                             xmm1)
+            DLP_GEMV_ZMM2XMM(zmm16, zmm17, zmm18, zmm19, ymm5, ymm1, ymm2, ymm3,
+                             xmm2)
+            DLP_GEMV_ZMM2XMM(zmm20, zmm21, zmm22, zmm23, ymm6, ymm1, ymm2, ymm3,
+                             xmm3)
 
             // compose outputs into one zmm to perform post-ops
             zmm8 = _mm512_insertf32x4(zmm8, xmm0, 0);
@@ -229,19 +231,20 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                     b_use += 16; // move b pointer to next 16 elements
 
                     // Load 4x16 elements from row0-row3 of A
-                    LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use, rs_a)
+                    DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use,
+                                              rs_a)
                     a_use += (4 * rs_a);
 
                     // Load 4x16 elements from row3-row7 of A
-                    LPGEMV_N_KERNEL_4_LOADS(zmm24, zmm25, zmm26, zmm27, a_use,
-                                            rs_a)
+                    DLP_GEMV_N_KERNEL_4_LOADS(zmm24, zmm25, zmm26, zmm27, a_use,
+                                              rs_a)
                     a_use -= (4 * rs_a);
 
                     // Perform FMA on two 4x16 block of A with 16x1
-                    LPGEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0,
-                                          zmm1, zmm2, zmm3)
-                    LPGEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6,
-                                          zmm24, zmm25, zmm26, zmm27)
+                    DLP_GEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6,
+                                            zmm0, zmm1, zmm2, zmm3)
+                    DLP_GEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6,
+                                            zmm24, zmm25, zmm26, zmm27)
                     a_use += 16;
                 }
 
@@ -250,15 +253,15 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                         zmm7, k1, b_use); // Load 0-15 in b[k+0 - k+15]
 
                     // Load 4x16 elements from row0-row3 of A
-                    LPGEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7,
-                                                k1, a_use, rs_a)
+                    DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7,
+                                                  k1, a_use, rs_a)
                     a_use += (4 * rs_a);
-                    LPGEMV_N_KERNEL_4_MASKLOADS(zmm24, zmm25, zmm26, zmm27,
-                                                zmm7, k1, a_use, rs_a)
-                    LPGEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0,
-                                          zmm1, zmm2, zmm3)
-                    LPGEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6,
-                                          zmm24, zmm25, zmm26, zmm27)
+                    DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm24, zmm25, zmm26, zmm27,
+                                                  zmm7, k1, a_use, rs_a)
+                    DLP_GEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6,
+                                            zmm0, zmm1, zmm2, zmm3)
+                    DLP_GEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6,
+                                            zmm24, zmm25, zmm26, zmm27)
                 }
 
                 // update pointers
@@ -269,10 +272,10 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
 
                 // Horizontal add 8 zmm registers and get output into 2 xmm
                 // registers
-                LPGEMV_ZMM2XMM(zmm8, zmm9, zmm10, zmm11, ymm0, ymm1, ymm2, ymm3,
-                               xmm0)
-                LPGEMV_ZMM2XMM(zmm12, zmm13, zmm14, zmm15, ymm4, ymm1, ymm2,
-                               ymm3, xmm1)
+                DLP_GEMV_ZMM2XMM(zmm8, zmm9, zmm10, zmm11, ymm0, ymm1, ymm2,
+                                 ymm3, xmm0)
+                DLP_GEMV_ZMM2XMM(zmm12, zmm13, zmm14, zmm15, ymm4, ymm1, ymm2,
+                                 ymm3, xmm1)
 
                 // insert xmm outputs into final output zmm8 reg
                 zmm8   = _mm512_insertf32x4(zmm8, xmm0, 0);
@@ -287,10 +290,11 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                     zmm6 = _mm512_loadu_ps(b_use); // Load 0-15 in b[k+0 - k+15]
                     b_use += 16; // move b pointer to next 16 elements
                     // Load 4x16 elements from row0-row3 of A
-                    LPGEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use, rs_a)
+                    DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_use,
+                                              rs_a)
                     // Perform FMA on 4x16 block of A with 16x1
-                    LPGEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6,
-                                          zmm0, zmm1, zmm2, zmm3)
+                    DLP_GEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6,
+                                            zmm0, zmm1, zmm2, zmm3)
                     a_use += 16;
                 }
 
@@ -298,10 +302,10 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                     zmm6 = _mm512_mask_loadu_ps(
                         zmm7, k1, b_use); // Load 0-15 in b[k+0 - k+15]
                     // Load 4x16 elements from row0-row3 of A
-                    LPGEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7,
-                                                k1, a_use, rs_a)
-                    LPGEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6,
-                                          zmm0, zmm1, zmm2, zmm3)
+                    DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, zmm7,
+                                                  k1, a_use, rs_a)
+                    DLP_GEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19, zmm6,
+                                            zmm0, zmm1, zmm2, zmm3)
                 }
 
                 // update pointers
@@ -311,8 +315,8 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                 b_use        = b;
 
                 // Horizontal add 4 zmm reg and get the output into one xmm
-                LPGEMV_ZMM2XMM(zmm16, zmm17, zmm18, zmm19, ymm5, ymm1, ymm2,
-                               ymm3, xmm2)
+                DLP_GEMV_ZMM2XMM(zmm16, zmm17, zmm18, zmm19, ymm5, ymm1, ymm2,
+                                 ymm3, xmm2)
 
                 // insert xmm outputs into final output zmm8 reg based on regidx
                 if (regidx == 0)
@@ -377,8 +381,8 @@ LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32)
                 }
 
                 // Horizontal add 4 zmm reg and get the output into one xmm
-                LPGEMV_ZMM2XMM(zmm20, zmm21, zmm22, zmm23, ymm6, ymm1, ymm2,
-                               ymm3, xmm3)
+                DLP_GEMV_ZMM2XMM(zmm20, zmm21, zmm22, zmm23, ymm6, ymm1, ymm2,
+                                 ymm3, xmm3)
 
                 // insert xmm outputs into final output zmm8 reg based on regidx
                 if (regidx == 0)

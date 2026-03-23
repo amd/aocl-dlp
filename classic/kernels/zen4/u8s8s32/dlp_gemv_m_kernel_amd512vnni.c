@@ -28,11 +28,11 @@
 
 #include <immintrin.h>
 
-#include "../u8s8s32/dlp_gemm_s32_kern_macros.h"
-#include "../u8s8s32/dlp_gemm_s32_memcpy_macros.h"
+#include "dlp_gemm_s32_kern_macros.h"
+#include "dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
 
-LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
+DLP_GEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
@@ -41,11 +41,11 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
         &&POST_OPS_CLIP_6x64,       &&POST_OPS_DOWNSCALE_6x64,
         &&POST_OPS_MATRIX_ADD_6x64, &&POST_OPS_SWISH_6x64,
         &&POST_OPS_MATRIX_MUL_6x64, &&POST_OPS_TANH_6x64,
-        &&POST_OPS_SIGMOID_6x64
+        &&POST_OPS_SIGMOID_6x64,
     };
 
-    const int8_t* a_use = NULL;
-    const int8_t* b_use = NULL;
+    const uint8_t* a_use = NULL;
+    const int8_t*  b_use = NULL;
 
     dlp_gemm_post_op_attr post_ops_attr = *(post_op_attr);
 
@@ -74,6 +74,7 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
             k2 = k3 = k4 = k6 = k7 = k8 = 0;
         } else if (nr0 < 16) {
             k1 = (0xFFFF >> (16 - (nr0 & 0x0F)));
+            // k5 not updated since reorder will have padding to make it nr16.
             k2 = k3 = k4 = k6 = k7 = k8 = 0;
         }
 
@@ -109,9 +110,6 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
 
             a_use = a + pc;
 
-            uint8_t cvt_uint8 = 128;
-            __m512i vec_uint8 = _mm512_set1_epi8(cvt_uint8);
-
             for (iter_t kr = 0; kr < k_iter; kr++) {
                 // load first 4x64 tile from row 0-3
                 zmm0 = _mm512_maskz_loadu_epi16(k5, b_use);
@@ -125,11 +123,6 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
                 zmm5 = _mm512_set1_epi32(*(int32_t*)(a_use + cs_a));
                 zmm6 = _mm512_set1_epi32(*(int32_t*)(a_use + cs_a * 2));
                 zmm7 = _mm512_set1_epi32(*(int32_t*)(a_use + cs_a * 3));
-
-                zmm4 = _mm512_add_epi8(zmm4, vec_uint8);
-                zmm5 = _mm512_add_epi8(zmm5, vec_uint8);
-                zmm6 = _mm512_add_epi8(zmm6, vec_uint8);
-                zmm7 = _mm512_add_epi8(zmm7, vec_uint8);
 
                 // Load second 4x64 tile from row 0-3
                 zmm24 = _mm512_maskz_loadu_epi16(k6, b_use);
@@ -184,7 +177,6 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
 
                 // Broadcast col0 elements of A
                 zmm4 = _mm512_set1_epi32(*(int32_t*)(a_use));
-                zmm4 = _mm512_add_epi8(zmm4, vec_uint8);
 
                 zmm8  = _mm512_dpbusd_epi32(zmm8, zmm4, zmm0);
                 zmm12 = _mm512_dpbusd_epi32(zmm12, zmm4, zmm1);
@@ -199,13 +191,12 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
                 __mmask16 load_mask =
                     _cvtu32_mask16(0xFFFF >> (16 - k_partial_pieces));
 
+                // load first 4x64 tile from row 0-3
                 zmm0 = _mm512_maskz_loadu_epi16(k5, b_use);
 
                 // Broadcast a[0,kr:kr+4].
                 a_kfringe_buf = _mm_maskz_loadu_epi8(load_mask, a_use);
-
-                zmm4 = _mm512_broadcastd_epi32(a_kfringe_buf);
-                zmm4 = _mm512_add_epi8(zmm4, vec_uint8);
+                zmm4          = _mm512_broadcastd_epi32(a_kfringe_buf);
 
                 zmm1 = _mm512_maskz_loadu_epi16(k6, b_use + cs_b);
                 zmm2 = _mm512_maskz_loadu_epi16(k7, b_use + 2 * cs_b);
@@ -235,20 +226,6 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
         zmm22 = _mm512_add_epi32(zmm23, zmm22);
         zmm20 = _mm512_add_epi32(zmm22, zmm20); // 64 outputs
 
-        int32_t* bsumptr =
-            post_ops_attr.b_col_sum_vec + post_ops_attr.b_sum_offset;
-
-        zmm0 = _mm512_maskz_loadu_epi32(k1, bsumptr);
-        zmm1 = _mm512_maskz_loadu_epi32(k2, bsumptr + 16);
-        zmm2 = _mm512_maskz_loadu_epi32(k3, bsumptr + 32);
-        zmm3 = _mm512_maskz_loadu_epi32(k4, bsumptr + 48);
-
-        zmm8  = _mm512_sub_epi32(zmm8, zmm0);
-        zmm12 = _mm512_sub_epi32(zmm12, zmm1);
-        zmm16 = _mm512_sub_epi32(zmm16, zmm2);
-        zmm20 = _mm512_sub_epi32(zmm20, zmm3);
-
-        // Load alpha and beta
         __m512i selector1 = _mm512_set1_epi32(alpha);
         __m512i selector2 = _mm512_set1_epi32(beta);
 
@@ -523,7 +500,6 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
             }
         }
 
-        // Need to ensure sse not used to avoid avx512 -> sse transition.
         __m512 zero_point0 = _mm512_setzero_ps();
         __m512 zero_point1 = _mm512_setzero_ps();
         __m512 zero_point2 = _mm512_setzero_ps();
@@ -546,16 +522,16 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
                 F32_ZP_LOAD(zero_point1, k1, 1)
                 F32_ZP_LOAD(zero_point2, k1, 2)
                 F32_ZP_LOAD(zero_point3, k1, 3)
-            } else if (post_ops_list_temp->zp_stor_type == DLP_U8) {
-                U8_F32_ZP_LOAD(zero_point0, k1, 0)
-                U8_F32_ZP_LOAD(zero_point1, k1, 1)
-                U8_F32_ZP_LOAD(zero_point2, k1, 2)
-                U8_F32_ZP_LOAD(zero_point3, k1, 3)
-            } else {
+            } else if (post_ops_list_temp->zp_stor_type == DLP_S8) {
                 S8_F32_ZP_LOAD(zero_point0, k1, 0)
                 S8_F32_ZP_LOAD(zero_point1, k1, 1)
                 S8_F32_ZP_LOAD(zero_point2, k1, 2)
                 S8_F32_ZP_LOAD(zero_point3, k1, 3)
+            } else {
+                U8_F32_ZP_LOAD(zero_point0, k1, 0)
+                U8_F32_ZP_LOAD(zero_point1, k1, 1)
+                U8_F32_ZP_LOAD(zero_point2, k1, 2)
+                U8_F32_ZP_LOAD(zero_point3, k1, 3)
             }
         } else if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
             if (post_ops_list_temp->zp_stor_type == DLP_BF16) {
@@ -573,16 +549,16 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
                 S32_F32_ZP_BCST(zero_point1)
                 S32_F32_ZP_BCST(zero_point2)
                 S32_F32_ZP_BCST(zero_point3)
-            } else if (post_ops_list_temp->zp_stor_type == DLP_U8) {
-                U8_F32_ZP_BCST(zero_point0)
-                U8_F32_ZP_BCST(zero_point1)
-                U8_F32_ZP_BCST(zero_point2)
-                U8_F32_ZP_BCST(zero_point3)
-            } else {
+            } else if (post_ops_list_temp->zp_stor_type == DLP_S8) {
                 S8_F32_ZP_BCST(zero_point0)
                 S8_F32_ZP_BCST(zero_point1)
                 S8_F32_ZP_BCST(zero_point2)
                 S8_F32_ZP_BCST(zero_point3)
+            } else {
+                U8_F32_ZP_BCST(zero_point0)
+                U8_F32_ZP_BCST(zero_point1)
+                U8_F32_ZP_BCST(zero_point2)
+                U8_F32_ZP_BCST(zero_point3)
             }
         }
 
@@ -999,7 +975,6 @@ LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
     }
 
         post_ops_attr.post_op_c_j += nr0;
-        post_ops_attr.b_sum_offset += nr0;
 
     } // jr loop
 }

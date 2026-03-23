@@ -66,7 +66,7 @@ static dlp_instr_pref_t global_dlp_gemmenable_instr_pref = DLP_INSTR_PREF_NONE;
 // This bool indicates whether JIT kernel generation has been successful.
 static bool jit_kernels_generated = FALSE;
 bool
-get_jit_kernels_generated()
+dlp_gemm_get_jit_kernels_generated()
 {
     return jit_kernels_generated;
 }
@@ -86,7 +86,7 @@ static void* global_jit_kernels[DLP_GEMM_BF16_MR]
 #ifdef DUMP_JIT_CODE
 // Funtion to Dump JIT generated kernel
 void
-dump_jit_code(
+dlp_gemm_dump_jit_code(
     const void* code, int code_size, const char* code_name, int m, int n)
 {
     if (code) {
@@ -260,11 +260,12 @@ _dlp_gemm_cntx_init_func_map()
                 global_jit_kernels[m][n] =
                     dlp_malloc_page_aligned(JIT_KERNEL_SIZE, &err);
                 if (global_jit_kernels[m][n] != NULL) {
-                    get_jit_kernel(&inputs, global_jit_kernels[m][n],
-                                   JIT_KERNEL_SIZE);
+                    dlp_gemm_get_jit_kernel_inplace(
+                        &inputs, global_jit_kernels[m][n], JIT_KERNEL_SIZE);
 #ifdef DUMP_JIT_CODE
-                    dump_jit_code(global_jit_kernels[m][n], JIT_KERNEL_SIZE,
-                                  "dlp_gemm", inputs.MR, inputs.NR);
+                    dlp_gemm_dump_jit_code(global_jit_kernels[m][n],
+                                           JIT_KERNEL_SIZE, "dlp_gemm",
+                                           inputs.MR, inputs.NR);
 #endif
                 } else {
                     jit_kernels_generated = FALSE;

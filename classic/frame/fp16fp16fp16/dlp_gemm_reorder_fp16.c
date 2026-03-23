@@ -86,7 +86,7 @@ dlp_reorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
 
             // Helper function rounds n_sub_updated to multiples of 32
             // packb_min_NR=32 for buffer rounding granularity (one ZMM)
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 32, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -113,7 +113,7 @@ dlp_reorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
                     rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 
@@ -171,7 +171,7 @@ dlp_unreorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
             md_t n_sub_updated;
 
             // Same helper function as in reorder
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, 32, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
 
@@ -198,7 +198,7 @@ dlp_unreorderb_nr128_f16f16f16of16(dlp_gemm_obj_t*  b,
                     rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
             }
 
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 }

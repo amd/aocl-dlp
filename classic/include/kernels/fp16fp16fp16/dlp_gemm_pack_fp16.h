@@ -161,22 +161,22 @@ dlp_packa_mr32_f16f16f16of16(float16*       pack_a_buffer,
 
 // Reference PackA implementation (ISA-independent, scalar)
 void
-packa_f16f16f16of16_reference(float16*       pack_a,
-                              const float16* a,
-                              const md_t     rs_a,
-                              const md_t     cs_a,
-                              const md_t     MC,
-                              const md_t     KC,
-                              md_t*          rs_p,
-                              md_t*          cs_p);
+dlp_packa_f16f16f16of16_reference(float16*       pack_a,
+                                  const float16* a,
+                                  const md_t     rs_a,
+                                  const md_t     cs_a,
+                                  const md_t     MC,
+                                  const md_t     KC,
+                                  md_t*          rs_p,
+                                  md_t*          cs_p);
 
 // Reference UnpackA implementation (ISA-independent, scalar)
 void
-unpacka_f16f16f16of16_reference(float16*       a,
-                                const float16* pack_a,
-                                const md_t     rs_a,
-                                const md_t     cs_a,
-                                const md_t     MC,
-                                const md_t     KC);
+dlp_unpacka_f16f16f16of16_reference(float16*       a,
+                                    const float16* pack_a,
+                                    const md_t     rs_a,
+                                    const md_t     cs_a,
+                                    const md_t     MC,
+                                    const md_t     KC);
 
 #endif // DLP_GEMM_FP16_PACKB

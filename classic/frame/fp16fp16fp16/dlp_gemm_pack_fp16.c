@@ -53,7 +53,8 @@ dlp_packb_nr128_f16f16f16of16_ref(float16*       pack_b_buffer,
     md_t chunk_size;
 
     // Round NC to nearest multiple of packb_min_NR
-    md_t nc_rounded = (NC <= 32) ? NC : make_multiple_of_n(NC, packb_min_NR);
+    md_t nc_rounded = (NC <= 32) ? NC
+                                 : dlp_make_multiple_of_n(NC, packb_min_NR);
 
     // Select largest applicable chunk size
     if (nc_rounded >= 128) {
@@ -67,8 +68,8 @@ dlp_packb_nr128_f16f16f16of16_ref(float16*       pack_b_buffer,
     }
 
     // Pass selected chunk size to reference packer
-    packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC,
-                                  chunk_size, rs_p, cs_p);
+    dlp_packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC,
+                                      chunk_size, rs_p, cs_p);
 }
 
 void
@@ -81,8 +82,8 @@ dlp_packb_nr96_f16f16f16of16(float16*       pack_b_buffer,
                              md_t*          rs_p,
                              md_t*          cs_p)
 {
-    packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 96,
-                                  rs_p, cs_p);
+    dlp_packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 96,
+                                      rs_p, cs_p);
 }
 
 void
@@ -95,8 +96,8 @@ dlp_packb_nr64_f16f16f16of16(float16*       pack_b_buffer,
                              md_t*          rs_p,
                              md_t*          cs_p)
 {
-    packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 64,
-                                  rs_p, cs_p);
+    dlp_packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 64,
+                                      rs_p, cs_p);
 }
 
 void
@@ -109,8 +110,8 @@ dlp_packb_nr32_f16f16f16of16(float16*       pack_b_buffer,
                              md_t*          rs_p,
                              md_t*          cs_p)
 {
-    packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 32,
-                                  rs_p, cs_p);
+    dlp_packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 32,
+                                      rs_p, cs_p);
 }
 
 void
@@ -124,8 +125,8 @@ dlp_packb_nrlt32_f16f16f16of16(float16*       pack_b_buffer,
                                md_t*          cs_p)
 {
     // For NC < 32, pad to NR=32 with zeros
-    packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 32,
-                                  rs_p, cs_p);
+    dlp_packb_f16f16f16of16_reference(pack_b_buffer, b, rs_b, cs_b, NC, KC, 32,
+                                      rs_p, cs_p);
 }
 
 // ============================================================================
@@ -148,7 +149,8 @@ dlp_unpackb_nr128_f16f16f16of16(float16*       b,
     md_t chunk_size;
 
     // Round NC to nearest multiple of packb_min_NR
-    md_t nc_rounded = (NC <= 32) ? NC : make_multiple_of_n(NC, packb_min_NR);
+    md_t nc_rounded = (NC <= 32) ? NC
+                                 : dlp_make_multiple_of_n(NC, packb_min_NR);
 
     // Select largest applicable chunk size (must match packb for round-trip
     // correctness)
@@ -165,8 +167,8 @@ dlp_unpackb_nr128_f16f16f16of16(float16*       b,
     // Pass selected chunk size to reference unpacker
     // Note: Reference function expects (b, unpack_b_buffer, NC, KC, NR, rs_b,
     // cs_b)
-    unpackb_f16f16f16of16_reference(b, (float16*)unpack_b_buffer, NC, KC,
-                                    chunk_size, rs_b, cs_b);
+    dlp_unpackb_f16f16f16of16_reference(b, (float16*)unpack_b_buffer, NC, KC,
+                                        chunk_size, rs_b, cs_b);
 
     // Set output strides (row-major output)
     if (rs_p)

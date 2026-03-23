@@ -105,7 +105,7 @@ typedef void (*dlp_gemv_a_pack_ft)(float*,
                                    md_t*,
                                    md_t*);
 
-LPGEMV(float, float, float, f32f32f32of32)
+DLP_GEMV(float, float, float, f32f32f32of32)
 {
     // Ignoring mtag_a/b and should_pack_A/B for now .
     // Matrices are packed only when the storage format is not supported by the
@@ -313,7 +313,7 @@ LPGEMV(float, float, float, f32f32f32of32)
             md_t n_sub_updated   = 0;
 
             if (mtag_b == REORDERED) {
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                     &n_sub_updated);
 
@@ -326,7 +326,7 @@ LPGEMV(float, float, float, f32f32f32of32)
                 // vectorization. Packing B always results in buffers with width
                 // which is a multiple of 16. Subsequently the nc0 offsets used
                 // for packed/reordered buffers needs to be updated.
-                md_t nc0_updated = make_multiple_of_n(nc0, NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, NR);
 
                 mem_b_size_req = sizeof(float) * nc0_updated * k;
                 n_sub_updated  = nc0_updated;
@@ -372,7 +372,7 @@ LPGEMV(float, float, float, f32f32f32of32)
             }
 
             if (mtag_b == REORDERED) {
-                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
             }
         } // jc loop
 
@@ -391,7 +391,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
     // Extract operations from bundle into local variables
     DLP_GEMM_OPS_EXTRACT(ops);
 
-    // Handle using LPGEMV when m or/and n equal to 1
+    // Handle using DLP_GEMV when m or/and n equal to 1
     if (((m == 1) || (n == 1))
         && ((dlp_cpuid_is_avx512_supported() == TRUE)
             || (dlp_cpuid_is_avx2fma3_supported() == TRUE))) {
@@ -511,7 +511,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -550,7 +550,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                     // width which is a multiple of 16. Subsequently the nc0
                     // offsets used for packed/reordered buffers needs to be
                     // updated.
-                    md_t nc0_updated = make_multiple_of_n(nc0, NR);
+                    md_t nc0_updated = dlp_make_multiple_of_n(nc0, NR);
                     mem_b_size_req   = sizeof(float) * nc0_updated * kc0;
 
                     // The largest value for mem_b_size_req will be the first
@@ -677,7 +677,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
             }
         }
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

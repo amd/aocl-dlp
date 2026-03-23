@@ -40,7 +40,7 @@
     ymm2 = _mm256_setzero_ps();                                                \
     ymm3 = _mm256_setzero_ps();
 
-LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
+DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_1x64F_DISABLE,    &&POST_OPS_BIAS_1x64F,

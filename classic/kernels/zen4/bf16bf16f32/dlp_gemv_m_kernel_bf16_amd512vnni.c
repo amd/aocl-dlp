@@ -32,10 +32,10 @@
 #include "dlp_gemm_f32_kern_macros.h"
 
 #ifdef DLP_GEMM_BF16_JIT
-LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
+DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
 #else
 
-LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
+DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     static void* post_ops_labels[] = {
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,

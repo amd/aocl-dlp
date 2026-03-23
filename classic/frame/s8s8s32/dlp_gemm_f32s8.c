@@ -45,7 +45,7 @@
  *   - B is an S8 vector (packed or reordered for efficiency)
  *   - C is an S32 accumulator, which may be downscaled to S8, U8, BF16, or F32
  */
-LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
+DLP_GEMV3(float, int8_t, int32_t, f32s8s32os32)
 {
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
@@ -179,9 +179,9 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
 
             // Perform on-the-fly quantization: F32 -> S8
             // Uses per-row scale factors and zero-points indexed by IC offset.
-            quanta_mr16_f32s8(quant_a_buffer_s8, (float*)(a + (rs_a * ic)),
-                              rs_a, cs_a, mc0, k, sf, sf_type, sf_len, zp_val,
-                              zp_type, zp_len, ic);
+            dlp_quanta_mr16_f32s8(quant_a_buffer_s8, (float*)(a + (rs_a * ic)),
+                                  rs_a, cs_a, mc0, k, sf, sf_type, sf_len,
+                                  zp_val, zp_type, zp_len, ic);
 
             // Update A pointer and strides to use quantized buffer.
             a_use    = quant_a_buffer_s8;
@@ -216,8 +216,8 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
 
         md_t packb_min_NR = dlp_get_packb_s8s8s32o32_min_NR();
 
-        md_t k_updated = make_multiple_of_n(k, 4);
-        md_t n_updated = make_multiple_of_n(n, 16);
+        md_t k_updated = dlp_make_multiple_of_n(k, 4);
+        md_t n_updated = dlp_make_multiple_of_n(n, 16);
 
         rs_a_use = rs_a;
         cs_a_use = 4;
@@ -232,8 +232,8 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
         }
 
         // Perform on-the-fly quantization: F32 -> S8 for single row
-        quanta_mr16_f32s8(quant_a_buffer_s8, (float*)a, rs_a, cs_a, 1, k, sf,
-                          sf_type, sf_len, zp_val, zp_type, zp_len, 0);
+        dlp_quanta_mr16_f32s8(quant_a_buffer_s8, (float*)a, rs_a, cs_a, 1, k,
+                              sf, sf_type, sf_len, zp_val, zp_type, zp_len, 0);
 
         a_use = quant_a_buffer_s8;
 
@@ -246,7 +246,7 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
             md_t n_sub_updated   = 0;
 
             if (mtag_b == REORDERED) {
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
 
@@ -257,7 +257,7 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
                 post_ops_attr.b_col_sum_vec =
                     ((int32_t*)(b + (k_updated * n_updated))) + jc;
             } else if (mtag_b == PACK) {
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
 
                 mem_b_size_req = sizeof(int8_t) * nc0_updated * k_updated
                                  + (nc0_updated * sizeof(int32_t));
@@ -303,7 +303,7 @@ LPGEMV3(float, int8_t, int32_t, f32s8s32os32)
                 post_op_list, post_ops_attr);
 
             if (mtag_b == REORDERED) {
-                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
             }
         } // jc loop
 
@@ -448,8 +448,8 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
     // This function automatically pads k to a multiple of 4 if needed, so the
     // caller does not need to ensure this property. The k offset used for
     // packed/reordered buffers is updated accordingly.
-    md_t k_updated = make_multiple_of_n(k, 4);
-    md_t n_updated = make_multiple_of_n(n, 16);
+    md_t k_updated = dlp_make_multiple_of_n(k, 4);
+    md_t n_updated = dlp_make_multiple_of_n(n, 16);
 
     // Flags to control K-dimension accumulation behavior:
     // - is_last_k: TRUE on final KC iteration -> apply post-ops and downscaling
@@ -498,7 +498,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -547,7 +547,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
 
             // Align kc0 to multiple of 4 for SIMD instruction requirements.
             // Packed/reordered buffers include this padding.
-            md_t kc0_updated = make_multiple_of_n(kc0, 4);
+            md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
             // Set K iteration flags for proper accumulation and post-op
             // application.
@@ -567,7 +567,8 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
 
                     // Using child thrinfo (thread_ic) tid to decide chief
                     // thread per B matrix chunk (jc work id group)
-                    md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                    md_t nc0_updated =
+                        dlp_make_multiple_of_n(nc0, packb_min_NR);
 
                     if (dlp_thread_am_ochief(&thread_ic)) {
                         // Buffer layout: [packed B matrix] + [column sum
@@ -694,10 +695,10 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
                 // Perform on-the-fly quantization: F32 -> S8
                 // Uses per-row scale factors and zero-points indexed by IC
                 // offset.
-                quanta_mr16_f32s8(quant_a_buffer_s8,
-                                  (float*)(a + (rs_a * ic) + (cs_a * pc)), rs_a,
-                                  cs_a, mc0, kc0, sf, sf_type, sf_len, zp_val,
-                                  zp_type, zp_len, ic);
+                dlp_quanta_mr16_f32s8(quant_a_buffer_s8,
+                                      (float*)(a + (rs_a * ic) + (cs_a * pc)),
+                                      rs_a, cs_a, mc0, kc0, sf, sf_type, sf_len,
+                                      zp_val, zp_type, zp_len, ic);
 
                 // Update A pointer and strides to use quantized buffer.
                 // Quantized layout: row-major with row_stride = kc0
@@ -736,7 +737,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, int8_t, int32_t, int32_t, f32s8s32os32, const)
             }
         }
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

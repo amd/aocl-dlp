@@ -76,14 +76,14 @@ dlp_packb_nrlt32_f16f16f16of16_row_major_ref(float16*       pack_b,
 }
 
 static void
-packb_f16f16f16of16_row_major_ref(float16*       pack_b,
-                                  const float16* b,
-                                  const md_t     ldb,
-                                  const md_t     NC,
-                                  const md_t     KC,
-                                  const md_t     NR,
-                                  md_t*          rs_b,
-                                  md_t*          cs_b)
+dlp_packb_f16f16f16of16_row_major_ref(float16*       pack_b,
+                                      const float16* b,
+                                      const md_t     ldb,
+                                      const md_t     NC,
+                                      const md_t     KC,
+                                      const md_t     NR,
+                                      md_t*          rs_b,
+                                      md_t*          cs_b)
 {
     md_t n_full_pieces            = NC / NR;
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;
@@ -168,14 +168,14 @@ dlp_packb_nr_f16f16f16of16_col_major_ref(float16*       pack_b_buffer,
 }
 
 static void
-packb_f16f16f16of16_col_major_ref(float16*       pack_b_buffer,
-                                  const float16* b,
-                                  const md_t     ldb,
-                                  const md_t     NC,
-                                  const md_t     KC,
-                                  const md_t     NR,
-                                  md_t*          rs_b,
-                                  md_t*          cs_b)
+dlp_packb_f16f16f16of16_col_major_ref(float16*       pack_b_buffer,
+                                      const float16* b,
+                                      const md_t     ldb,
+                                      const md_t     NC,
+                                      const md_t     KC,
+                                      const md_t     NR,
+                                      md_t*          rs_b,
+                                      md_t*          cs_b)
 {
     md_t n_full_pieces            = NC / NR;
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;
@@ -236,22 +236,22 @@ packb_f16f16f16of16_col_major_ref(float16*       pack_b_buffer,
 }
 
 void
-packb_f16f16f16of16_reference(float16*       pack_b,
-                              const float16* b,
-                              const md_t     rs_b,
-                              const md_t     cs_b,
-                              const md_t     NC,
-                              const md_t     KC,
-                              const md_t     NR,
-                              md_t*          rs_p,
-                              md_t*          cs_p)
+dlp_packb_f16f16f16of16_reference(float16*       pack_b,
+                                  const float16* b,
+                                  const md_t     rs_b,
+                                  const md_t     cs_b,
+                                  const md_t     NC,
+                                  const md_t     KC,
+                                  const md_t     NR,
+                                  md_t*          rs_p,
+                                  md_t*          cs_p)
 {
     if (cs_b == 1) {
-        packb_f16f16f16of16_row_major_ref(pack_b, b, rs_b, NC, KC, NR, rs_p,
-                                          cs_p);
+        dlp_packb_f16f16f16of16_row_major_ref(pack_b, b, rs_b, NC, KC, NR, rs_p,
+                                              cs_p);
     } else {
-        packb_f16f16f16of16_col_major_ref(pack_b, b, cs_b, NC, KC, NR, rs_p,
-                                          cs_p);
+        dlp_packb_f16f16f16of16_col_major_ref(pack_b, b, cs_b, NC, KC, NR, rs_p,
+                                              cs_p);
     }
 }
 
@@ -277,13 +277,13 @@ dlp_unpackb_nr_f16f16f16of16_ref(float16*       b,
 }
 
 void
-unpackb_f16f16f16of16_reference(float16*   b,
-                                float16*   unpack_b_buffer,
-                                const md_t NC,
-                                const md_t KC,
-                                const md_t NR,
-                                md_t       rs_b,
-                                md_t       cs_b)
+dlp_unpackb_f16f16f16of16_reference(float16*   b,
+                                    float16*   unpack_b_buffer,
+                                    const md_t NC,
+                                    const md_t KC,
+                                    const md_t NR,
+                                    md_t       rs_b,
+                                    md_t       cs_b)
 {
     md_t n_full_pieces            = NC / NR;
     md_t n_full_pieces_loop_limit = n_full_pieces * NR;

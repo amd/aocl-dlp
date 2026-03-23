@@ -54,7 +54,7 @@ typedef void (*dlp_gemm_rowvar_bf16)(const md_t,
                                      dlp_gemm_post_op_attr);
 
 #ifdef DLP_KERNELS_ZEN4
-LPGEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
+DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     // Strides are updated based on matrix packing/reordering.
     bfloat16* a_use    = (bfloat16*)a;
@@ -148,7 +148,7 @@ DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
-    // Handle using LPGEMV when m or/and n equal to 1
+    // Handle using DLP_GEMV when m or/and n equal to 1
     // The avx512 check will be removed when avx2 kernels added in future
     if (n == 1) {
         dlp_gemv_rowvar_tiny_bf16bf16f32of32(
@@ -217,7 +217,7 @@ DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         // vectorization. Packing B always results in buffers with width
         // which is a multiple of 16. Subsequently the nc0 offsets used
         // for packed/reordered buffers needs to be updated.
-        md_t nc0_updated = make_multiple_of_n(n, packb_min_NR);
+        md_t nc0_updated = dlp_make_multiple_of_n(n, packb_min_NR);
         mem_b_size_req   = sizeof(bfloat16) * nc0_updated * k0_updated;
         pack_b_buffer_bf16 =
             (bfloat16*)dlp_malloc_page_aligned(mem_b_size_req, &err);

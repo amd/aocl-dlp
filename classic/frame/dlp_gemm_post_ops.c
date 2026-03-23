@@ -31,7 +31,7 @@
 #include "gemm_utils/dlp_gemm_utils.h"
 
 static inline DLP_TYPE
-get_stor_type(DLP_TYPE pstor_type)
+dlp_gemm_get_stor_type(DLP_TYPE pstor_type)
 {
     DLP_TYPE stor_type = DLP_INVALID;
     switch (pstor_type) {
@@ -175,7 +175,8 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
         // }
 
         DLP_TYPE tmp_zp_stor_type =
-            DLP_INVALID; // get_stor_type( ( metadata->a_zp )->zero_point_type
+            DLP_INVALID; // dlp_gemm_get_stor_type( ( metadata->a_zp
+                         // )->zero_point_type
                          // );
 
         // At this point we are sure that sf and zp types of both matrices
@@ -183,7 +184,7 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
         DLP_TYPE tmp_sf_stor_type = DLP_INVALID;
         if (metadata->a_scl != NULL) {
             tmp_sf_stor_type =
-                get_stor_type((metadata->a_scl)->scale_factor_type);
+                dlp_gemm_get_stor_type((metadata->a_scl)->scale_factor_type);
         }
 
         dlp_gemm_set_group_post_ops_node_params(
@@ -434,11 +435,12 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
         // --- Step 4: Extract storage types ---
         DLP_TYPE tmp_zp_stor_type =
             (metadata->a_post_quant)->zp
-                ? get_stor_type((metadata->a_post_quant)->zp->zero_point_type)
+                ? dlp_gemm_get_stor_type(
+                      (metadata->a_post_quant)->zp->zero_point_type)
                 : DLP_INVALID;
         DLP_TYPE tmp_sf_stor_type =
             (metadata->a_post_quant)->scl
-                ? get_stor_type(
+                ? dlp_gemm_get_stor_type(
                       (metadata->a_post_quant)->scl->scale_factor_type)
                 : DLP_INVALID;
 
@@ -515,7 +517,7 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         // type and this will be stored in the stor_type for now
                         // because the static kernel relies on the stor_type and
                         // not the scale factor type.
-                        tmp_stor_type = get_stor_type(
+                        tmp_stor_type = dlp_gemm_get_stor_type(
                             (metadata->eltwise + e_i)->algo.stor_type);
                         tmp_code = POST_OPS_RELU_SCALE;
                         break;
@@ -534,7 +536,7 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                             return DLP_CLSC_NULL_POINTER;
                         }
                         // Alpha and Beta should have same storage type for CLIP
-                        tmp_stor_type = get_stor_type(
+                        tmp_stor_type = dlp_gemm_get_stor_type(
                             (metadata->eltwise + e_i)->algo.stor_type);
                         tmp_code = POST_OPS_CLIP;
                         break;
@@ -544,7 +546,7 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                                           __FILE__, __LINE__);
                             return DLP_CLSC_NULL_POINTER;
                         }
-                        tmp_stor_type = get_stor_type(
+                        tmp_stor_type = dlp_gemm_get_stor_type(
                             (metadata->eltwise + e_i)->algo.stor_type);
                         tmp_code = POST_OPS_SWISH;
                         break;
@@ -584,17 +586,17 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                 }
 
                 DLP_TYPE tmp_stor_type =
-                    get_stor_type((metadata->bias + b_i)->stor_type);
+                    dlp_gemm_get_stor_type((metadata->bias + b_i)->stor_type);
                 // Extract SF storage type
                 DLP_TYPE tmp_sf_stor_type =
                     (metadata->bias + b_i)->sf
-                        ? get_stor_type(
+                        ? dlp_gemm_get_stor_type(
                               (metadata->bias + b_i)->sf->scale_factor_type)
                         : DLP_INVALID;
 
                 DLP_TYPE tmp_zp_stor_type =
                     (metadata->bias + b_i)->zp
-                        ? get_stor_type(
+                        ? dlp_gemm_get_stor_type(
                               (metadata->bias + b_i)->zp->zero_point_type)
                         : DLP_INVALID;
 
@@ -677,12 +679,12 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
 
                 DLP_TYPE tmp_zp_stor_type =
                     (metadata->scale + s_i)->zp
-                        ? get_stor_type(
+                        ? dlp_gemm_get_stor_type(
                               (metadata->scale + s_i)->zp->zero_point_type)
                         : DLP_INVALID;
                 DLP_TYPE tmp_sf_stor_type =
                     (metadata->scale + s_i)->sf
-                        ? get_stor_type(
+                        ? dlp_gemm_get_stor_type(
                               (metadata->scale + s_i)->sf->scale_factor_type)
                         : DLP_INVALID;
 
@@ -720,14 +722,14 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         __FILE__, __LINE__);
                     return DLP_CLSC_NULL_POINTER;
                 }
-                DLP_TYPE tmp_stor_type =
-                    get_stor_type((metadata->matrix_add + m_i)->stor_type);
+                DLP_TYPE tmp_stor_type = dlp_gemm_get_stor_type(
+                    (metadata->matrix_add + m_i)->stor_type);
 
                 /* Get scale factor storage type */
                 DLP_TYPE sf_stor_type =
                     (metadata->matrix_add + m_i)->sf
-                        ? get_stor_type((metadata->matrix_add + m_i)
-                                            ->sf->scale_factor_type)
+                        ? dlp_gemm_get_stor_type((metadata->matrix_add + m_i)
+                                                     ->sf->scale_factor_type)
                         : DLP_INVALID;
 
                 if (((metadata->matrix_add + m_i)->sf
@@ -767,14 +769,14 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         __FILE__, __LINE__);
                     return DLP_CLSC_NULL_POINTER;
                 }
-                DLP_TYPE tmp_stor_type =
-                    get_stor_type((metadata->matrix_mul + mul_i)->stor_type);
+                DLP_TYPE tmp_stor_type = dlp_gemm_get_stor_type(
+                    (metadata->matrix_mul + mul_i)->stor_type);
 
                 /* Get scale factor storage type */
                 DLP_TYPE sf_stor_type =
                     (metadata->matrix_mul + mul_i)->sf
-                        ? get_stor_type((metadata->matrix_mul + mul_i)
-                                            ->sf->scale_factor_type)
+                        ? dlp_gemm_get_stor_type((metadata->matrix_mul + mul_i)
+                                                     ->sf->scale_factor_type)
                         : DLP_INVALID;
 
                 if (((metadata->matrix_mul + mul_i)->sf

@@ -34,24 +34,24 @@
 
 // Reference packing (ISA-independent)
 void
-packb_f16f16f16of16_reference(float16*       pack_b,
-                              const float16* b,
-                              const md_t     rs_b,
-                              const md_t     cs_b,
-                              const md_t     NC,
-                              const md_t     KC,
-                              const md_t     NR,
-                              md_t*          rs_p,
-                              md_t*          cs_p);
+dlp_packb_f16f16f16of16_reference(float16*       pack_b,
+                                  const float16* b,
+                                  const md_t     rs_b,
+                                  const md_t     cs_b,
+                                  const md_t     NC,
+                                  const md_t     KC,
+                                  const md_t     NR,
+                                  md_t*          rs_p,
+                                  md_t*          cs_p);
 
 void
-unpackb_f16f16f16of16_reference(float16*   b,
-                                float16*   unpack_b_buffer,
-                                const md_t NC,
-                                const md_t KC,
-                                const md_t NR,
-                                md_t       rs_b,
-                                md_t       cs_b);
+dlp_unpackb_f16f16f16of16_reference(float16*   b,
+                                    float16*   unpack_b_buffer,
+                                    const md_t NC,
+                                    const md_t KC,
+                                    const md_t NR,
+                                    md_t       rs_b,
+                                    md_t       cs_b);
 
 // High-level reorder wrappers (with threading and blocking)
 void

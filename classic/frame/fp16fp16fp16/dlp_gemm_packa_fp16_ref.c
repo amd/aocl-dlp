@@ -121,14 +121,14 @@ dlp_packa_mr32_f16f16f16of16_col_major_ref(float16*       pack_a,
  * stride (set to 1)
  */
 void
-packa_f16f16f16of16_reference(float16*       pack_a,
-                              const float16* a,
-                              const md_t     rs_a,
-                              const md_t     cs_a,
-                              const md_t     MC,
-                              const md_t     KC,
-                              md_t*          rs_p,
-                              md_t*          cs_p)
+dlp_packa_f16f16f16of16_reference(float16*       pack_a,
+                                  const float16* a,
+                                  const md_t     rs_a,
+                                  const md_t     cs_a,
+                                  const md_t     MC,
+                                  const md_t     KC,
+                                  md_t*          rs_p,
+                                  md_t*          cs_p)
 {
     md_t MR     = 32; // Packing block size
     md_t m_full = MC / MR;
@@ -176,12 +176,12 @@ packa_f16f16f16of16_reference(float16*       pack_a,
  * Output: a[m][k] in original layout (row-major or column-major)
  */
 static void
-unpacka_mr32_f16f16f16of16_row_major_ref(float16*       a,
-                                         const float16* pack_a,
-                                         const md_t     MR,
-                                         const md_t     lda,
-                                         const md_t     KC,
-                                         const md_t     m_actual)
+dlp_unpacka_mr32_f16f16f16of16_row_major_ref(float16*       a,
+                                             const float16* pack_a,
+                                             const md_t     MR,
+                                             const md_t     lda,
+                                             const md_t     KC,
+                                             const md_t     m_actual)
 {
     // Copy M-rows from packed format back to row-major
     for (iter_t m = 0; m < m_actual; m++) {
@@ -194,12 +194,12 @@ unpacka_mr32_f16f16f16of16_row_major_ref(float16*       a,
 }
 
 static void
-unpacka_mr32_f16f16f16of16_col_major_ref(float16*       a,
-                                         const float16* pack_a,
-                                         const md_t     MR,
-                                         const md_t     lda,
-                                         const md_t     KC,
-                                         const md_t     m_actual)
+dlp_unpacka_mr32_f16f16f16of16_col_major_ref(float16*       a,
+                                             const float16* pack_a,
+                                             const md_t     MR,
+                                             const md_t     lda,
+                                             const md_t     KC,
+                                             const md_t     m_actual)
 {
     // Transpose: read row-wise from packed, write column-wise to output
     for (iter_t m = 0; m < m_actual; m++) {
@@ -222,12 +222,12 @@ unpacka_mr32_f16f16f16of16_col_major_ref(float16*       a,
  *   KC: Number of K-columns to unpack
  */
 void
-unpacka_f16f16f16of16_reference(float16*       a,
-                                const float16* pack_a,
-                                const md_t     rs_a,
-                                const md_t     cs_a,
-                                const md_t     MC,
-                                const md_t     KC)
+dlp_unpacka_f16f16f16of16_reference(float16*       a,
+                                    const float16* pack_a,
+                                    const md_t     rs_a,
+                                    const md_t     cs_a,
+                                    const md_t     MC,
+                                    const md_t     KC)
 {
     md_t MR     = 32; // Packing block size
     md_t m_full = MC / MR;
@@ -237,29 +237,29 @@ unpacka_f16f16f16of16_reference(float16*       a,
         // Row-major output
         // Unpack full MR=32 blocks
         for (iter_t ic = 0; ic < m_full * MR; ic += MR) {
-            unpacka_mr32_f16f16f16of16_row_major_ref(
+            dlp_unpacka_mr32_f16f16f16of16_row_major_ref(
                 a + ic * rs_a, pack_a + ic * KC, MR, rs_a, KC, MR);
         }
 
         // Unpack M-fringe (if any)
         if (m_rem > 0) {
-            unpacka_mr32_f16f16f16of16_row_major_ref(a + m_full * MR * rs_a,
-                                                     pack_a + m_full * MR * KC,
-                                                     MR, rs_a, KC, m_rem);
+            dlp_unpacka_mr32_f16f16f16of16_row_major_ref(
+                a + m_full * MR * rs_a, pack_a + m_full * MR * KC, MR, rs_a, KC,
+                m_rem);
         }
     } else {
         // Column-major output
         // Unpack full MR=32 blocks
         for (iter_t ic = 0; ic < m_full * MR; ic += MR) {
-            unpacka_mr32_f16f16f16of16_col_major_ref(a + ic, pack_a + ic * KC,
-                                                     MR, cs_a, KC, MR);
+            dlp_unpacka_mr32_f16f16f16of16_col_major_ref(
+                a + ic, pack_a + ic * KC, MR, cs_a, KC, MR);
         }
 
         // Unpack M-fringe (if any)
         if (m_rem > 0) {
-            unpacka_mr32_f16f16f16of16_col_major_ref(a + m_full * MR,
-                                                     pack_a + m_full * MR * KC,
-                                                     MR, cs_a, KC, m_rem);
+            dlp_unpacka_mr32_f16f16f16of16_col_major_ref(
+                a + m_full * MR, pack_a + m_full * MR * KC, MR, cs_a, KC,
+                m_rem);
         }
     }
 }

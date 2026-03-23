@@ -54,7 +54,7 @@
 #ifdef DLP_KERNELS_ZEN4
 
 /*
- * LPGEMV: FP16 GEMV (General Matrix-Vector Multiplication)
+ * DLP_GEMV: FP16 GEMV (General Matrix-Vector Multiplication)
  *
  * Handles two cases:
  * - n=1: y = A * x (M x K matrix * K x 1 vector = M x 1 vector)
@@ -64,7 +64,7 @@
  * - n=1: MR=16 for better register utilization, parallelize along M (IC loop)
  * - m=1: NR=128 from GEMM, parallelize along N (JC loop) with K-blocking
  */
-LPGEMV(float16, float16, float16, f16f16f16of16)
+DLP_GEMV(float16, float16, float16, f16f16f16of16)
 {
     const md_t NC = lcntx->blksz.NC;
     const md_t KC = lcntx->blksz.KC;
@@ -235,7 +235,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
             md_t n_sub_updated   = 0;
 
             if (mtag_b == REORDERED) {
-                get_B_panel_reordered_start_offset_width(
+                dlp_gemm_get_B_panel_reordered_start_offset_width(
                     jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem,
                     &nc0, &n_sub_updated);
 
@@ -249,7 +249,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
                  * PACK: Pack B for this JC panel (all of K at once)
                  * Following F32 pattern - pack all KC blocks before kernel call
                  */
-                md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                md_t nc0_updated = dlp_make_multiple_of_n(nc0, packb_min_NR);
                 mem_b_size_req   = sizeof(float16) * nc0_updated * k;
                 n_sub_updated    = nc0_updated;
 
@@ -292,7 +292,7 @@ LPGEMV(float16, float16, float16, f16f16f16of16)
                 post_op_list, post_ops_attr);
 
             if (mtag_b == REORDERED) {
-                adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
             }
         }
 
@@ -382,7 +382,7 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
         md_t n_sub_updated   = 0;
 
         if (mtag_b == REORDERED) {
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, packb_min_NR, &jc_cur_loop, &jc_cur_loop_rem, &nc0,
                 &n_sub_updated);
         }
@@ -421,7 +421,8 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                 md_t jc_work_id = thread_jc.work_id;
 
                 if (dlp_thread_am_ochief(&thread_ic)) {
-                    md_t nc0_updated = make_multiple_of_n(nc0, packb_min_NR);
+                    md_t nc0_updated =
+                        dlp_make_multiple_of_n(nc0, packb_min_NR);
                     mem_b_size_req =
                         sizeof(float16) * nc0_updated * kc0_updated;
 
@@ -539,7 +540,7 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
         }
 
         if (mtag_b == REORDERED) {
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 

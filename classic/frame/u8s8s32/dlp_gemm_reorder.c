@@ -58,7 +58,7 @@ dlp_reorderb_nr64_u8s8s32o32(dlp_gemm_obj_t*  b,
     // instruction. Padding is added in cases this condition is not
     // satisfied, and therefore the k offset used for packed/reordered
     // buffer needs to be updated.
-    md_t k_updated = make_multiple_of_n(k, 4);
+    md_t k_updated = dlp_make_multiple_of_n(k, 4);
 
     md_t n_threads = rntm->num_threads;
     n_threads      = (n_threads > 0) ? n_threads : 1;
@@ -88,7 +88,7 @@ dlp_reorderb_nr64_u8s8s32o32(dlp_gemm_obj_t*  b,
             md_t jc_cur_loop_rem = 0;
             md_t n_sub_updated;
 
-            get_B_panel_reordered_start_offset_width(
+            dlp_gemm_get_B_panel_reordered_start_offset_width(
                 jc, n, NC, dlp_get_packb_u8s8s32o32_min_NR(), &jc_cur_loop,
                 &jc_cur_loop_rem, &nc0, &n_sub_updated);
 
@@ -99,7 +99,7 @@ dlp_reorderb_nr64_u8s8s32o32(dlp_gemm_obj_t*  b,
                 // vpdpbusd instruction. Padding is added in cases this
                 // condition is not satisfied, and therefore the kc0 offsets
                 // used for packed/reordered buffers needs to be updated.
-                md_t kc0_updated = make_multiple_of_n(kc0, 4);
+                md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
                 // The offsets are calculated in such a way that it resembles
                 // the reorder buffer traversal in single threaded reordering.
@@ -144,7 +144,7 @@ dlp_reorderb_nr64_u8s8s32o32(dlp_gemm_obj_t*  b,
                      + jc * cs_b),
                     rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
             }
-            adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
         }
     }
 
@@ -177,7 +177,7 @@ dlp_reordera_mr6_u8s8s32o32(dlp_gemm_obj_t*  a,
         // vpdpbusd instruction. Padding is added in cases this
         // condition is not satisfied, and therefore the kc0 offsets
         // used for packed/reordered buffers needs to be updated.
-        md_t kc0_updated = make_multiple_of_n(kc0, 4);
+        md_t kc0_updated = dlp_make_multiple_of_n(kc0, 4);
 
         for (iter_t ic = 0; ic < m; ic += MC) {
             md_t mc0 = dlp_min((m - ic), MC);

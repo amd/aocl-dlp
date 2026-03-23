@@ -36,9 +36,9 @@ extern "C"
 
     static dlp_gemm_jit* dlp_gemm_jit_objs[DLP_GEMM_BF16_MR][DLP_GEMM_BF16_NR];
 
-    void get_jit_kernel(dlp_gemm_jit_inputs_t* params,
-                        void*                  buffer,
-                        md_t                   bufferSize)
+    void dlp_gemm_get_jit_kernel_inplace(dlp_gemm_jit_inputs_t* params,
+                                         void*                  buffer,
+                                         md_t                   bufferSize)
     {
         md_t m_idx                      = (params->MR) % DLP_GEMM_BF16_MR;
         md_t n_idx                      = (params->NR) / NUM_F32_ELEMS_PER_ZMM;
@@ -46,14 +46,14 @@ extern "C"
         dlp_gemm_jit_objs[m_idx][n_idx]->generate_kernel(params);
     }
 
-    void* get_jit_code(dlp_gemm_jit_inputs_t* params)
+    void* dlp_gemm_get_jit_code(dlp_gemm_jit_inputs_t* params)
     {
         md_t m_idx = (params->MR) % DLP_GEMM_BF16_MR;
         md_t n_idx = (params->NR) / NUM_F32_ELEMS_PER_ZMM;
         return ((void*)dlp_gemm_jit_objs[m_idx][n_idx]->get_code());
     }
 
-    md_t get_kernel_size(dlp_gemm_jit_inputs_t* params)
+    md_t dlp_gemm_get_kernel_size(dlp_gemm_jit_inputs_t* params)
     {
         md_t m_idx = (params->MR) % DLP_GEMM_BF16_MR;
         md_t n_idx = (params->NR) / NUM_F32_ELEMS_PER_ZMM;

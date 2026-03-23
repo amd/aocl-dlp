@@ -608,7 +608,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
                                 int32_t,
                                 s8s8s32os32_1xlt16_sym_quant);
 
-#define LPGEMV_M_EQ1_KERN(A_type, B_type, C_type, LP_SFX)                      \
+#define DLP_GEMV_M_EQ1_KERN(A_type, B_type, C_type, LP_SFX)                    \
     void dlp_gemv_m_one_##LP_SFX(                                              \
         const md_t n0, const md_t k, const A_type* a, const md_t rs_a,         \
         const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a, const B_type* b,    \
@@ -618,15 +618,15 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
         const md_t jc_cur_loop_rem, dlp_gemm_post_op* post_op,                 \
         dlp_gemm_post_op_attr* post_op_attr)
 
-LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32);
-LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2);
-LPGEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256);
-LPGEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32);
-LPGEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32);
-LPGEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
-LPGEMV_M_EQ1_KERN(float16, float16, float16, f16f16f16of16);
+DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32);
+DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2);
+DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256);
+DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32);
+DLP_GEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32);
+DLP_GEMV_M_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
+DLP_GEMV_M_EQ1_KERN(float16, float16, float16, f16f16f16of16);
 
-#define LPGEMV_M_EQ1_KERN2(A_type, B_type, C_type, LP_SFX)                     \
+#define DLP_GEMV_M_EQ1_KERN2(A_type, B_type, C_type, LP_SFX)                   \
     void dlp_gemv_m_one_##LP_SFX(                                              \
         const md_t n0, const md_t k, const A_type* a, const md_t rs_a,         \
         const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a, const B_type* b,    \
@@ -637,9 +637,9 @@ LPGEMV_M_EQ1_KERN(float16, float16, float16, f16f16f16of16);
         dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
         dlp_gemm_post_op* post_op, dlp_gemm_post_op_attr* post_op_attr)
 
-LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
+DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
 
-#define LPGEMV_N_EQ1_KERN(A_type, B_type, C_type, LP_SFX)                      \
+#define DLP_GEMV_N_EQ1_KERN(A_type, B_type, C_type, LP_SFX)                    \
     void dlp_gemv_n_one_##LP_SFX(                                              \
         const md_t m0, const md_t k, const A_type* a, const md_t rs_a,         \
         const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a, const B_type* b,    \
@@ -648,15 +648,15 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
         const C_type beta, const md_t MR, const md_t KC,                       \
         dlp_gemm_post_op* post_op, dlp_gemm_post_op_attr* post_op_attr)
 
-LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32);
-LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2);
-LPGEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256);
-LPGEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32);
-LPGEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32);
-LPGEMV_N_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
-LPGEMV_N_EQ1_KERN(float16, float16, float16, f16f16f16of16);
+DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32);
+DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2);
+DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256);
+DLP_GEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32);
+DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32);
+DLP_GEMV_N_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32);
+DLP_GEMV_N_EQ1_KERN(float16, float16, float16, f16f16f16of16);
 
-#define LPGEMV_N_EQ1_KERN2(A_type, B_type, C_type, LP_SFX)                     \
+#define DLP_GEMV_N_EQ1_KERN2(A_type, B_type, C_type, LP_SFX)                   \
     void dlp_gemv_n_one_##LP_SFX(                                              \
         const md_t m0, const md_t k, const A_type* a, const md_t rs_a,         \
         const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a, const B_type* b,    \
@@ -666,7 +666,7 @@ LPGEMV_N_EQ1_KERN(float16, float16, float16, f16f16f16of16);
         dlp_gemm_grp_post_op_attr grp_post_ops_attr,                           \
         dlp_gemm_post_op* post_op, dlp_gemm_post_op_attr* post_op_attr)
 
-LPGEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
+DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
 
 /* ==========================================================================
  * F16F16F16OF16 GEMM kernels removed - JIT handles FP16 GEMM
