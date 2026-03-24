@@ -453,7 +453,7 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
     L(".BLOOPKITERBP");
     RETURN_IF_ERROR(kLoopCompute(false, 1));
     // B prefetch
-    dec(regKIter);
+    sub(regKIter, 1);
     jne(".BLOOPKITERBP", T_NEAR);
 
     if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -467,7 +467,7 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
 
     L(".BLOOPKITERAP");
     RETURN_IF_ERROR(kLoopCompute(false, 1));
-    dec(regKIter);
+    sub(regKIter, 1);
     jne(".BLOOPKITERAP", T_NEAR);
 
     L(".BCONSIDKLEFTREM");
@@ -536,7 +536,7 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
         moveCPtr();
 
         // Decrement m_iter
-        dec(regMiter);
+        sub(regMiter, 1);
         jne(".BLOOP6X64I", T_NEAR);
     }
 

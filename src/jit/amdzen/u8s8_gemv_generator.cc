@@ -1244,7 +1244,7 @@ jitU8S8VNNI_GEMVN1<KType>::generateIrLoop(int mSize)
     mov(regTmpAptr, regTmpYptr); // Update the A pointer
     add(regXptr, RegBytes);      // Update the X pointer to the next K chunk
 
-    dec(regKIter);
+    sub(regKIter, 1);
     jnz(".KLOOP_START", T_NEAR);
 
     L(".KLOOP_FRINGE");
@@ -1343,7 +1343,7 @@ jitU8S8VNNI_GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
                 regTmp1);
         }
 
-        dec(regMIter);
+        sub(regMIter, 1);
         jnz(".MLOOP_START", T_NEAR);
     }
 
@@ -1799,7 +1799,7 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
         lea(regTmpYptr, ptr[regTmpYptr + RegBytes * K_SUB_ITER]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kc_main_loop_start, T_NEAR);
 
         L(sub_loop_kc_main_loop_end);
@@ -1818,7 +1818,7 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         // For the nleft, rowStride is RegBytes (1 ZMM)
         lea(regTmpYptr, ptr[regTmpYptr + RegBytes]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kc_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kc_fringe_loop_end);
@@ -1840,7 +1840,7 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
         lea(regTmpYptr, ptr[regTmpYptr + RegBytes * K_SUB_ITER]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kf_main_loop_start, T_NEAR);
 
         L(sub_loop_kf_main_loop_end);
@@ -1867,7 +1867,7 @@ jitU8S8VNNI_GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         // For the nleft, rowStride is RegBytes (1 ZMM)
         lea(regTmpYptr, ptr[regTmpYptr + RegBytes]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kf_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kf_fringe_loop_end);
@@ -2770,7 +2770,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     // Also, increment the pointer offset
                     mov(regTmp2, KC);
                     add(regIncK, regTmp2);
-                    dec(regKIter);
+                    sub(regKIter, 1);
                     jnz(label_n_loop_k_loop_start, T_NEAR);
                 }
 
@@ -2860,7 +2860,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     regTmp2);
             }
 
-            dec(regNIter);
+            sub(regNIter, 1);
             jnz(label_n_loop_start, T_NEAR);
         }
 
@@ -2937,7 +2937,7 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     // Also, increment the pointer offset
                     mov(regTmp2, KC);
                     add(regIncK, regTmp2);
-                    dec(regKIter);
+                    sub(regKIter, 1);
                     jnz(label_n_fringe_k_loop_start, T_NEAR);
                 }
 

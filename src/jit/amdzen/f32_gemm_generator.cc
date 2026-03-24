@@ -1215,7 +1215,7 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     // Kernel unroll loop
     L(".BLOOPKITER");
     RETURN_IF_ERROR(kernelUnroll(params.K_UNROLL));
-    dec(regKIter); // i -= 1
+    sub(regKIter, 1); // i -= 1
     jne(".BLOOPKITER", T_NEAR);
 
     L(".BCONSIDKLEFT");
@@ -1314,7 +1314,7 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
         moveCPtr(regCPtr, regRsC, currentMR);
 
         // decrement m_iter
-        dec(regMiter);
+        sub(regMiter, 1);
 
         jne(".BLOOP6X64I", T_NEAR);
     }
@@ -1621,7 +1621,7 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
                 moveCPtr(regCPtr, regRsC, currentMR);
 
                 // decrement m_iter
-                dec(regMiter);
+                sub(regMiter, 1);
 
                 jne(".BLOOP6X64I", T_NEAR);
 
@@ -1681,7 +1681,7 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
             // check if nIter is 0
             mov(regNiter,
                 ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
-            dec(regNiter);
+            sub(regNiter, 1);
             mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)],
                 regNiter);
             jnz(NIterLoop, T_NEAR);
@@ -1877,7 +1877,7 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
                 // and then check if nIter is 0
                 mov(regNiter,
                     ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
-                dec(regNiter);
+                sub(regNiter, 1);
                 mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)],
                     regNiter);
                 jnz(NIterLoop[mr - 1], T_NEAR);
@@ -1940,7 +1940,7 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
             mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)], regCPtr);
 
             // decrement m_iter
-            dec(regMiter);
+            sub(regMiter, 1);
 
             jne(MIterLoop, T_NEAR);
 

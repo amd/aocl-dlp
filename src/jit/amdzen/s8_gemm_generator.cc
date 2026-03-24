@@ -818,7 +818,7 @@ jitGEMMS8<KType>::generateIrLoop(utils::generatorParams& params)
     // K-loop
     L(".BLOOPKITER");
     RETURN_IF_ERROR(kLoop(params.K_UNROLL, false));
-    dec(regKIter);
+    sub(regKIter, 1);
     jne(".BLOOPKITER", T_NEAR);
 
     // K-left loop
@@ -898,7 +898,7 @@ jitGEMMS8<KType>::generateIrLoop(utils::generatorParams& params)
             regTmp2);
 
         // decrement m_iter
-        dec(regMiter);
+        sub(regMiter, 1);
 
         jne(".BLOOP6x64I", T_NEAR);
     }

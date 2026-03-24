@@ -301,7 +301,7 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
 
     RETURN_IF_ERROR(generateKrLoop(params.K_UNROLL, false));
 
-    dec(regKIter);
+    sub(regKIter, 1);
     jne(".K_UNROLL_LOOP", T_NEAR);
 
     L(".CONSIDER_K_LEFT");
@@ -323,7 +323,7 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
 
         RETURN_IF_ERROR(generateKrLoop(1, false));
 
-        dec(regKIter);
+        sub(regKIter, 1);
         jne(".K_UNROLL_1", T_NEAR);
     }
 
@@ -345,7 +345,7 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
     // For avx512/avx512_256 config, we generate code that processes
     // all kLeft elements at once using masked load instructions.
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-        dec(regKIter);
+        sub(regKIter, 1);
         jne(".LOOP_K_LEFT1", T_NEAR);
     }
 
@@ -438,7 +438,7 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
             regTmp1);
 
         // decrement m_iter
-        dec(regMiter);
+        sub(regMiter, 1);
         jne(".SLOOP6X4I", T_NEAR);
     }
 

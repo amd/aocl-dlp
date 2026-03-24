@@ -1041,7 +1041,7 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 add(regXptr, RegBytes); // Since X will be unit-strided (64
                                         // bytes for ZMM)
 
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(label_m_loop_k_loop_start, T_NEAR);
             }
             L(label_m_loop_k_loop_end);
@@ -1106,7 +1106,7 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 regKIter);
         }
 
-        dec(regMIter);
+        sub(regMIter, 1);
         jnz(label_m_loop_start, T_NEAR);
     }
 
@@ -1152,7 +1152,7 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 add(regXptr, RegBytes); // Since X will be unit-strided (64
                                         // bytes for ZMM)
 
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(label_m_fringe_k_loop_start, T_NEAR);
             }
             L(label_m_fringe_k_loop_end);
@@ -1516,7 +1516,7 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         // B moved by 8 rows
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kc_main_loop_start, T_NEAR);
 
         L(sub_loop_kc_main_loop_end);
@@ -1536,7 +1536,7 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         // B moved by 2 rows
         lea(regBptr, ptr[regBptr + regRsB]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kc_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kc_fringe_loop_end);
@@ -1559,7 +1559,7 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         lea(regXptr, ptr[regXptr + K_SUB_ITER * 2 * sizeof(bfloat16)]);
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kf_main_loop_start, T_NEAR);
 
         L(sub_loop_kf_main_loop_end);
@@ -1577,7 +1577,7 @@ jitBF16GEMVM1<KType>::loopKSubIter(bool kfringe, bool nfringe)
         lea(regXptr, ptr[regXptr + 2 * sizeof(bfloat16)]);
         lea(regBptr, ptr[regBptr + regRsB]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kf_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kf_fringe_loop_end);
@@ -1960,7 +1960,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
                 add(regIncK, regTmp2);
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(label_n_loop_k_loop_start, T_NEAR);
             }
 
@@ -2066,7 +2066,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 regTmp1);
         }
 
-        dec(regNIter);
+        sub(regNIter, 1);
         jnz(label_n_loop_start, T_NEAR);
     }
     L(label_n_loop_end);
@@ -2139,7 +2139,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
                 add(regIncK, regTmp2);
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(label_n_fringe_main_k_loop_start, T_NEAR);
             }
 
@@ -2307,7 +2307,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
                 add(regIncK, regTmp2);
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(label_n_fringe_left_k_loop_start, T_NEAR);
             }
 
