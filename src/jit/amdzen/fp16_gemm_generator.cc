@@ -151,7 +151,7 @@ jitFP16_GEMM<KType>::generateIrLoop(utils::generatorParams& params)
         // Main unrolled K-loop
         L(".FP16_LOOPKITER");
         RETURN_IF_ERROR(kUnroll(params.K_UNROLL, false));
-        dec(regKIter);
+        sub(regKIter, 1);
         jne(".FP16_LOOPKITER", T_NEAR);
 
         L(".FP16_CONSIDKLEFT");
@@ -164,7 +164,7 @@ jitFP16_GEMM<KType>::generateIrLoop(utils::generatorParams& params)
         // Process remaining K one at a time
         L(".FP16_KLEFTLOOP");
         RETURN_IF_ERROR(kUnroll(1, false));
-        dec(regKIter);
+        sub(regKIter, 1);
         jne(".FP16_KLEFTLOOP", T_NEAR);
 
         L(".FP16_POSTACCUM");
@@ -372,7 +372,7 @@ jitFP16_GEMM<KType>::generateMLoop(utils::generatorParams& params)
         regTmp2);
 
     // Decrement M counter
-    dec(regMiter);
+    sub(regMiter, 1);
     jne(".FP16_MLOOP_START", T_NEAR);
 
     L(".FP16_MLOOP_END");

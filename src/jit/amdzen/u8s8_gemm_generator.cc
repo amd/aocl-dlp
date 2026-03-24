@@ -146,7 +146,7 @@ jitU8S8VNNI_GEMM<KType>::generateIrLoop(utils::generatorParams& params)
         // Main unrolled K-loop
         L(".BLOOPKITER");
         RETURN_IF_ERROR(kUnroll(params.K_UNROLL, false));
-        dec(regKIter);
+        sub(regKIter, 1);
         jne(".BLOOPKITER", T_NEAR);
 
         L(".BCONSIDKLEFT");
@@ -881,7 +881,7 @@ jitU8S8VNNI_GEMM<KType>::generateMLoop(utils::generatorParams& params)
             + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
         regTmp2);
     // Decrement M counter
-    dec(regMiter);
+    sub(regMiter, 1);
     jne(".MLOOP_START", T_NEAR);
 
     L(".MLOOP_END");

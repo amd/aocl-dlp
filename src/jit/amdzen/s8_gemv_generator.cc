@@ -1385,7 +1385,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 add(regXptr,
                     RegBytes); // Update the X pointer to the next K chunk
 
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(".KLOOP_BEGIN", T_NEAR);
             }
             L(".KLOOP_END");
@@ -1472,7 +1472,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 regTmp1);
         }
 
-        dec(regMIter);
+        sub(regMIter, 1);
         jnz(".MLOOP_BEGIN", T_NEAR);
     }
     L(".MLOOP_END");
@@ -1514,7 +1514,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 add(regXptr,
                     RegBytes); // Update the X pointer to the next K chunk
 
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(".MFRINGE_KLOOP_BEGIN", T_NEAR);
             }
             L(".MFRINGE_KLOOP_END");
@@ -1870,7 +1870,7 @@ jitGEMVS8M1<KType>::kLoop(bool kfringe, bool nfringe)
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
         lea(regTmpYptr, ptr[regTmpYptr + 64 * K_SUB_ITER]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kc_main_loop_start, T_NEAR);
 
         L(sub_loop_kc_main_loop_end);
@@ -1888,7 +1888,7 @@ jitGEMVS8M1<KType>::kLoop(bool kfringe, bool nfringe)
         lea(regBptr, ptr[regBptr + regRsB]);
         lea(regTmpYptr, ptr[regTmpYptr + 64]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kc_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kc_fringe_loop_end);
@@ -1909,7 +1909,7 @@ jitGEMVS8M1<KType>::kLoop(bool kfringe, bool nfringe)
         lea(regBptr, ptr[regBptr + regRsB * K_SUB_ITER]);
         lea(regTmpYptr, ptr[regTmpYptr + 64 * K_SUB_ITER]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kf_main_loop_start, T_NEAR);
 
         L(sub_loop_kf_main_loop_end);
@@ -1935,7 +1935,7 @@ jitGEMVS8M1<KType>::kLoop(bool kfringe, bool nfringe)
         lea(regBptr, ptr[regBptr + regRsB]);
         lea(regTmpYptr, ptr[regTmpYptr + 64]);
 
-        dec(regKSubIter);
+        sub(regKSubIter, 1);
         jnz(sub_loop_kf_fringe_loop_start, T_NEAR);
 
         L(sub_loop_kf_fringe_loop_end);
@@ -2699,7 +2699,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
                 mov(regTmp2, KC);
                 add(regIncK, regTmp2);
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(label_n_loop_k_loop_start, T_NEAR);
             }
 
@@ -2810,7 +2810,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         add(regIncN, regTmp2);
         lea(regYptr, ptr[regYptr + regTmp2 * sizeof(int32_t)]);
 
-        dec(regNIter);
+        sub(regNIter, 1);
         jnz(label_n_loop_start, T_NEAR);
     }
 
@@ -2876,7 +2876,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
                 mov(regTmp2, KC);
                 add(regIncK, regTmp2);
-                dec(regKIter);
+                sub(regKIter, 1);
                 jnz(label_n_fringe_k_loop_start, T_NEAR);
             }
 
