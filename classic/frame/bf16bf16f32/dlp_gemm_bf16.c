@@ -948,6 +948,10 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                        beta, f32_NR, KC, n_sub_updated, jc_cur_loop_rem,
                        post_op_list, &post_ops_attr);
             }
+
+            if (mtag_b == REORDERED) {
+                dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
+            }
         }
 
         if (b_unreorder != NULL) {
