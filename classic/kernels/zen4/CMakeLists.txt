@@ -36,6 +36,16 @@ dlp_glob_sources_recursive(ZEN4_SOURCES ${CMAKE_CURRENT_SOURCE_DIR})
 # Create the zen4 kernel object library
 add_library(dlp_kernel_zen4 OBJECT ${ZEN4_SOURCES})
 
+if(CMAKE_C_COMPILER_ID MATCHES "GNU")
+    set_source_files_properties(
+        ${CMAKE_CURRENT_SOURCE_DIR}/s8s8s32/dlp_gemm_6x64rowmajor_s8_grp_amd512vnni.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/s8s8s32/dlp_gemm_m_fringe_s8_grp_amd512vnni.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/s8s8s32/dlp_gemm_mn_fringe_s8_grp_amd512vnni.c
+        ${CMAKE_CURRENT_SOURCE_DIR}/s8s8s32/dlp_gemm_n_fringe_s8_grp_amd512vnni.c
+        PROPERTIES COMPILE_FLAGS "-fno-tree-partial-pre"
+    )
+endif()
+
 # Set include directories for zen4 kernels
 set(ZEN4_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}
