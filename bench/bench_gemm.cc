@@ -51,6 +51,7 @@
 #include "adaptors/dlp/ual_dlp.hh"
 #include "framework/matrix.hh"
 #include "framework/ual_factory.hh"
+#include "framework/ual_plan.hh"
 #include "framework/utils/arg_parser.hh"
 
 // OpenMP for detailed threading info.
@@ -94,8 +95,6 @@ class OptimizedGemmBenchmark : public ConcreteUAL
     OptimizedGemmBenchmark(const GemmBenchConfig& config, int numa_node = 1)
         : config_(config)
         , numa_node_(numa_node)
-        , has_post_ops_(config.has_post_ops)
-        , post_ops_(config.post_ops)
     {
         // Store dimensions
         m_        = config.m;
@@ -160,78 +159,41 @@ class OptimizedGemmBenchmark : public ConcreteUAL
             B_.setPacked(true);
         }
 
-        // Cache pointers and metadata for hot path
-        a_ptr_      = A_.getMatrixData().getMatrixPtr();
-        b_ptr_      = B_.getMatrixData().getMatrixPtr();
-        c_ptr_      = C_.getMatrixData().getMatrixPtr();
-        lda_        = A_.getLeadingDimension();
-        ldb_        = B_.getLeadingDimension();
-        ldc_        = C_.getLeadingDimension();
-        memFormatA_ = A_.isPacked() ? 'p' : (A_.isReordered() ? 'r' : 'n');
-        memFormatB_ = B_.isPacked() ? 'p' : (B_.isReordered() ? 'r' : 'n');
+        // Cache C pointer for DoNotOptimize in hot path
+        c_ptr_ = C_.getMatrixData().getMatrixPtr();
+
+        // Create and configure the execution plan
+        plan_ = this->createPlan();
+        plan_->configureFrom(A_, B_, C_, acc_type_, alpha_, beta_);
+
+        // Add post-ops to the plan if present
+        if (config.has_post_ops && config.post_op_params) {
+            for (const auto& p : *config.post_op_params) {
+                plan_->addPostOp(p->clone());
+            }
+        }
+
+        // Pre-build all backend state
+        plan_->prepare();
     }
 
     // Benchmark execution (called once per benchmark)
     void run(benchmark::State& state)
     {
-        // Choose between post_ops path and no-post_ops path
-        if (has_post_ops_) {
-            runWithPostOps(state);
-        } else {
-            runWithoutPostOps(state);
-        }
-    }
+        // Bind buffers once before the hot loop
+        plan_->setBuffers(A_, B_, C_);
 
-  private:
-    // Run benchmark without post_ops (uses low-level interface for max perf)
-    void runWithoutPostOps(benchmark::State& state)
-    {
         // WARMUP: 5 iterations to stabilize CPU/cache
         for (iter_t i = 0; i < 5; ++i) {
-            this->gemm(m_, n_, k_, a_ptr_, a_type_, layout_, transA_,
-                       memFormatA_, lda_, b_ptr_, b_type_, layout_, transB_,
-                       memFormatB_, ldb_, c_ptr_, c_type_, layout_, false, ldc_,
-                       acc_type_, alpha_, beta_);
+            plan_->execute();
         }
 
-        // MEASURED LOOP: Only pure GEMM calls
+        // MEASURED LOOP: Only plan execute calls
         for (auto _ : state) {
-            UALError status =
-                this->gemm(m_, n_, k_, a_ptr_, a_type_, layout_, transA_,
-                           memFormatA_, lda_, b_ptr_, b_type_, layout_, transB_,
-                           memFormatB_, ldb_, c_ptr_, c_type_, layout_, false,
-                           ldc_, acc_type_, alpha_, beta_);
+            UALError status = plan_->execute();
 
             if (status != UALError::UAL_SUCCESS) {
                 state.SkipWithError("GEMM operation failed");
-                return;
-            }
-
-            // Prevent compiler optimization
-            benchmark::DoNotOptimize(c_ptr_);
-            benchmark::ClobberMemory();
-        }
-
-        // Calculate and report metrics
-        BenchmarkMetrics::calculateAndReport(state, m_, n_, k_, a_type_,
-                                             b_type_, c_type_);
-    }
-
-    // Run benchmark with post_ops (uses Matrix-based interface)
-    void runWithPostOps(benchmark::State& state)
-    {
-        // WARMUP: 5 iterations to stabilize CPU/cache
-        for (iter_t i = 0; i < 5; ++i) {
-            this->gemm(A_, B_, C_, acc_type_, post_ops_, alpha_, beta_);
-        }
-
-        // MEASURED LOOP: GEMM with post_ops
-        for (auto _ : state) {
-            UALError status =
-                this->gemm(A_, B_, C_, acc_type_, post_ops_, alpha_, beta_);
-
-            if (status != UALError::UAL_SUCCESS) {
-                state.SkipWithError("GEMM with post_ops failed");
                 return;
             }
 
@@ -249,23 +211,20 @@ class OptimizedGemmBenchmark : public ConcreteUAL
     const GemmBenchConfig& config_;
     int                    numa_node_;
 
-    // Post-operations support
-    bool                        has_post_ops_;
-    std::shared_ptr<IOperation> post_ops_;
+    // Execution plan (replaces old gemm() call paths)
+    std::unique_ptr<IUalPlan> plan_;
 
     // Matrix storage (allocated once in constructor)
     Matrix A_, B_, C_;
 
-    // Cached pointers and metadata for hot path
-    void*        a_ptr_;
-    void*        b_ptr_;
-    void*        c_ptr_;
+    // Cached pointer for DoNotOptimize
+    void* c_ptr_;
+
+    // Cached metadata for metrics reporting
     md_t         m_, n_, k_;
-    md_t         lda_, ldb_, ldc_;
     MatrixType   a_type_, b_type_, c_type_, acc_type_;
     MatrixLayout layout_;
     bool         transA_, transB_;
-    char         memFormatA_, memFormatB_;
     double       alpha_, beta_;
 };
 

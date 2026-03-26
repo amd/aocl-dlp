@@ -29,15 +29,11 @@
 #pragma once
 
 #include "framework/matrix.hh"
-#include "framework/ual.hh"
 #include <memory>
 #include <stdexcept>
 #include <vector>
 
 namespace dlp::testing::framework {
-
-// Forward declarations
-class IOperation;
 
 /**
  * @enum OperationType
@@ -52,7 +48,29 @@ enum class OperationType : uint8_t
     Scale       = 4,
     A_Quant     = 5,
     WOQ         = 6, // Weight-Only Quantization for bf16s4
+    B_Quant     = 7, // B matrix quantization (b_pre_quant / b_post_quant)
 };
+
+/**
+ * @brief Check if an operation type is a pre-GEMM (quantisation) operation
+ */
+inline bool
+isPreOp(OperationType type)
+{
+    return type == OperationType::A_Quant || type == OperationType::B_Quant
+           || type == OperationType::WOQ;
+}
+
+/**
+ * @brief Check if an operation type is a post-GEMM (fusion) operation
+ */
+inline bool
+isPostOp(OperationType type)
+{
+    return type == OperationType::ElementWise || type == OperationType::Bias
+           || type == OperationType::Scale || type == OperationType::MatAdd
+           || type == OperationType::MatMul;
+}
 
 /**
  * @enum ElementWiseOperation
@@ -297,6 +315,78 @@ class WOQParam : public IOperationParam
     const Matrix* getB_ZeroPoint() const { return m_b_zero_point.get(); }
     bool hasB_ScaleFactor() const { return m_b_scale_factor != nullptr; }
     bool hasB_ZeroPoint() const { return m_b_zero_point != nullptr; }
+};
+
+/**
+ * @class BQuantParam
+ * @brief Parameter class for B matrix quantization operations
+ * Mirrors AQuantParam but for the B matrix (b_pre_quant / b_post_quant)
+ */
+class BQuantParam : public IOperationParam
+{
+  private:
+    std::unique_ptr<Matrix> m_b_pre_op_sf;
+    std::unique_ptr<Matrix> m_b_post_op_sf;
+    std::unique_ptr<Matrix> m_b_pre_op_zp;
+    std::unique_ptr<Matrix> m_b_post_op_zp;
+    md_t                    m_group_size = 0;
+
+  public:
+    BQuantParam() = default;
+
+    BQuantParam(const BQuantParam& other)
+        : m_group_size(other.m_group_size)
+    {
+        if (other.m_b_pre_op_sf) {
+            m_b_pre_op_sf = std::make_unique<Matrix>(*other.m_b_pre_op_sf);
+        }
+        if (other.m_b_post_op_sf) {
+            m_b_post_op_sf = std::make_unique<Matrix>(*other.m_b_post_op_sf);
+        }
+        if (other.m_b_pre_op_zp) {
+            m_b_pre_op_zp = std::make_unique<Matrix>(*other.m_b_pre_op_zp);
+        }
+        if (other.m_b_post_op_zp) {
+            m_b_post_op_zp = std::make_unique<Matrix>(*other.m_b_post_op_zp);
+        }
+    }
+
+    OperationType getType() const override { return OperationType::B_Quant; }
+
+    std::unique_ptr<IOperationParam> clone() const override
+    {
+        return std::make_unique<BQuantParam>(*this);
+    }
+
+    void setB_PreOpScaleFactor(const Matrix& sf)
+    {
+        m_b_pre_op_sf = std::make_unique<Matrix>(sf);
+    }
+    void setB_PostOpScaleFactor(const Matrix& sf)
+    {
+        m_b_post_op_sf = std::make_unique<Matrix>(sf);
+    }
+    void setB_PreOpZeroPoint(const Matrix& zp)
+    {
+        m_b_pre_op_zp = std::make_unique<Matrix>(zp);
+    }
+    void setB_PostOpZeroPoint(const Matrix& zp)
+    {
+        m_b_post_op_zp = std::make_unique<Matrix>(zp);
+    }
+    void          setGroupSize(md_t groupSize) { m_group_size = groupSize; }
+    const Matrix* getB_PreOpScaleFactor() const { return m_b_pre_op_sf.get(); }
+    const Matrix* getB_PostOpScaleFactor() const
+    {
+        return m_b_post_op_sf.get();
+    }
+    const Matrix* getB_PreOpZeroPoint() const { return m_b_pre_op_zp.get(); }
+    const Matrix* getB_PostOpZeroPoint() const { return m_b_post_op_zp.get(); }
+    md_t          getGroupSize() const { return m_group_size; }
+    bool hasB_PreOpScaleFactor() const { return m_b_pre_op_sf != nullptr; }
+    bool hasB_PostOpScaleFactor() const { return m_b_post_op_sf != nullptr; }
+    bool hasB_PreOpZeroPoint() const { return m_b_pre_op_zp != nullptr; }
+    bool hasB_PostOpZeroPoint() const { return m_b_post_op_zp != nullptr; }
 };
 
 /**
@@ -764,6 +854,71 @@ class AQuantBuilder
 };
 
 /**
+ * @class BQuantBuilder
+ * @brief Type-safe builder for B matrix quantization operations
+ */
+class BQuantBuilder
+{
+  private:
+    std::unique_ptr<Matrix> m_b_pre_op_sf;
+    std::unique_ptr<Matrix> m_b_post_op_sf;
+    std::unique_ptr<Matrix> m_b_pre_op_zp;
+    std::unique_ptr<Matrix> m_b_post_op_zp;
+    md_t                    m_group_size = 0;
+
+  public:
+    BQuantBuilder& setB_PreOpScaleFactor(const Matrix& sf)
+    {
+        m_b_pre_op_sf = std::make_unique<Matrix>(sf);
+        return *this;
+    }
+    BQuantBuilder& setB_PostOpScaleFactor(const Matrix& sf)
+    {
+        m_b_post_op_sf = std::make_unique<Matrix>(sf);
+        return *this;
+    }
+    BQuantBuilder& setB_PreOpZeroPoint(const Matrix& zp)
+    {
+        m_b_pre_op_zp = std::make_unique<Matrix>(zp);
+        return *this;
+    }
+    BQuantBuilder& setB_PostOpZeroPoint(const Matrix& zp)
+    {
+        m_b_post_op_zp = std::make_unique<Matrix>(zp);
+        return *this;
+    }
+    BQuantBuilder& setGroupSize(md_t groupSize)
+    {
+        m_group_size = groupSize;
+        return *this;
+    }
+    std::unique_ptr<IOperationParam> build()
+    {
+        if (!m_b_pre_op_sf) {
+            throw std::runtime_error(
+                "B_PreOpScaleFactor is required for B_Quant operation");
+        }
+        if (!m_b_post_op_sf) {
+            throw std::runtime_error(
+                "B_PostOpScaleFactor is required for B_Quant operation");
+        }
+        auto param = std::make_unique<BQuantParam>();
+        param->setB_PreOpScaleFactor(*m_b_pre_op_sf);
+        param->setB_PostOpScaleFactor(*m_b_post_op_sf);
+        if (m_b_pre_op_zp) {
+            param->setB_PreOpZeroPoint(*m_b_pre_op_zp);
+        }
+        if (m_b_post_op_zp) {
+            param->setB_PostOpZeroPoint(*m_b_post_op_zp);
+        }
+        if (m_group_size > 0) {
+            param->setGroupSize(m_group_size);
+        }
+        return param;
+    }
+};
+
+/**
  * @class WOQBuilder
  * @brief Type-safe builder for Weight-Only Quantization (WOQ) pre-operations
  */
@@ -981,102 +1136,15 @@ namespace postops {
     {
         return AQuantBuilder{};
     }
+    inline BQuantBuilder createBQuant()
+    {
+        return BQuantBuilder{};
+    }
     inline WOQBuilder createWOQ()
     {
         return WOQBuilder{};
     }
 
 } // namespace postops
-
-// OPERATION PARAMETERS CONTAINER
-/**
- * @class OperationParams
- * @brief Container for multiple operation parameters
- */
-class OperationParams
-{
-  private:
-    std::vector<std::unique_ptr<IOperationParam>> m_params;
-
-  public:
-    void add(std::unique_ptr<IOperationParam> param)
-    {
-        if (param) {
-            m_params.push_back(std::move(param));
-        }
-    }
-
-    void add(const IOperationParam& param)
-    {
-        m_params.push_back(param.clone());
-    }
-
-    void clear() { m_params.clear(); }
-
-    size_t size() const { return m_params.size(); }
-
-    bool empty() const { return m_params.empty(); }
-
-    // Iterator support for range-based loops
-    auto begin() const { return m_params.begin(); }
-    auto end() const { return m_params.end(); }
-
-    // Access by index
-    const IOperationParam& operator[](size_t index) const
-    {
-        return *m_params[index];
-    }
-
-    const std::unique_ptr<IOperationParam>& getParam(size_t index) const
-    {
-        return m_params[index];
-    }
-};
-
-// IOPERATION INTERFACE
-/**
- * @class IOperation
- * @brief Interface for post-operation handling
- */
-class IOperation
-{
-  protected:
-    UALType                                       m_ual_type = UALType::REF;
-    std::vector<std::unique_ptr<IOperationParam>> m_operation_params;
-
-  public:
-    virtual ~IOperation() = default;
-    virtual UALType getUALType() const { return m_ual_type; }
-
-    // Intuitive interface
-    virtual void addOperations(const OperationParams& params)         = 0;
-    virtual void addOperation(std::unique_ptr<IOperationParam> param) = 0;
-    virtual void finalize()                                           = 0;
-
-    // Access to parameters for backend implementations
-    const std::vector<std::unique_ptr<IOperationParam>>& getParams() const
-    {
-        return m_operation_params;
-    }
-};
-
-// OPERATION FACTORY
-/**
- * @class OperationFactory
- * @brief Factory for creating UAL-specific operation objects
- */
-class OperationFactory
-{
-  public:
-    /**
-     * @brief Create an operation object for the specified UAL type
-     * @param type UAL type to create operation for
-     * @return Shared pointer to the created operation
-     */
-    static std::shared_ptr<IOperation> createOperation(UALType type);
-};
-
-// Note: RefOperation is now implemented in framework/operation_ref.hh
-// in the dlp::testing::classic namespace
 
 } // namespace dlp::testing::framework

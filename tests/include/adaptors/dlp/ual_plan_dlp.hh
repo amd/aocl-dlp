@@ -28,7 +28,9 @@
 
 #pragma once
 
-#include "framework/operation.hh"
+#include "framework/ual_plan.hh"
+#include <cstring>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -41,28 +43,49 @@ namespace dlp::testing::classic {
 
 using namespace dlp::testing::framework;
 
-// Forward declaration for friend class
-class UalDlp;
-
 /**
- * @class DlpOperation
- * @brief DLP-specific implementation of post-operations
+ * @class DlpUalPlan
+ * @brief DLP backend implementation of IUalPlan
  *
- * This class implements the IOperation interface for the DLP backend,
- * converting high-level operation parameters to DLP's dlp_metadata_t structure.
- *
- * Supports multiple operations of the same type efficiently by:
- * 1. Collecting operations in vectors during addOperation()
- * 2. Allocating arrays once in finalize() based on actual counts
- * 3. Keeping toAoclPostOp() lightweight (just returns pointer)
+ * prepare() builds ONE dlp_metadata_t with ALL fields (post-ops + quant),
+ * resolves the dispatch function pointer, and pre-casts alpha/beta.
+ * execute() calls the pre-resolved function with pre-built metadata.
  */
-class DlpOperation : public dlp::testing::framework::IOperation
+class DlpUalPlan : public dlp::testing::framework::IUalPlan
 {
-  private:
-    std::shared_ptr<dlp_metadata_t> m_postops;
-    bool                            m_finalized = false;
+  public:
+    DlpUalPlan();
+    ~DlpUalPlan();
 
-    // Collections for different operation types (filled during addOperation)
+    void     prepare() override;
+    UALError execute() override;
+
+    dlp_metadata_t* getMetadata() const { return m_metadata; }
+
+  private:
+    // Pre-built metadata (ONE struct for everything)
+    dlp_metadata_t* m_metadata = nullptr;
+
+    // Pre-resolved dispatch function
+    // Takes (a_ptr, lda, b_ptr, ldb, c_ptr, ldc) - all other args captured
+    std::function<void(void*, md_t, void*, md_t, void*, md_t)> m_dispatch;
+
+    // Pre-resolved dispatch state
+    char m_layout_char     = 'r';
+    char m_transA_char     = 'n';
+    char m_transB_char     = 'n';
+    char m_transB_resolved = 'n';
+
+    // Pre-cast alpha/beta
+    float   m_alpha_f32 = 1.0f;
+    float   m_beta_f32  = 0.0f;
+    int32_t m_alpha_s32 = 1;
+    int32_t m_beta_s32  = 0;
+
+    // Encoded type combo for dispatch
+    uint64_t m_type_code = 0;
+
+    // Typed post-op vectors (filled during prepare from m_post_ops)
     std::vector<std::unique_ptr<dlp::testing::framework::ElementWiseParam>>
         m_elementwise_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::ScaleParam>>
@@ -72,45 +95,47 @@ class DlpOperation : public dlp::testing::framework::IOperation
         m_matrix_add_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::MatrixMulParam>>
         m_matrix_mul_ops;
-    std::vector<std::unique_ptr<dlp::testing::framework::AQuantParam>>
-        m_a_quant_ops;
-    std::vector<std::unique_ptr<dlp::testing::framework::WOQParam>> m_woq_ops;
 
-    // Friend class - UalDlp can access private members and methods
-    friend class UalDlp;
+    // Cleanup metadata
+    void cleanupMetadata();
 
-    // Private method to get the backend-specific postops structure
-    dlp_metadata_t* toAoclPostOp() { return m_postops.get(); }
-
-    // Helper methods for batch conversion (called once in finalize)
+    // Post-op conversion (moved from DlpOperation)
     void convertElementWiseOperations();
     void convertScaleOperations();
     void convertBiasOperations();
     void convertMatrixAddOperations();
     void convertMatrixMulOperations();
     void buildSequenceVector();
+
+    // Quant conversion (moved from DlpOperation)
     void convertA_QuantOperations();
+    void convertB_QuantOperations();
     void convertWOQOperations();
 
-    // Helper to convert Matrix to appropriate DLP format
-    void*    convertMatrixToPtr(const dlp::testing::framework::Matrix& matrix);
-    DLP_TYPE getStorageType(dlp::testing::framework::MatrixType type);
-    DLP_ELT_ALGO_TYPE getElementWiseAlgoType(
-        dlp::testing::framework::ElementWiseOperation op);
-    DLP_POST_OP_TYPE getPostOpType(dlp::testing::framework::OperationType type);
+    // Helpers
+    void*                    convertMatrixToPtr(const Matrix& matrix);
+    static DLP_TYPE          getStorageType(MatrixType type);
+    static DLP_ELT_ALGO_TYPE getElementWiseAlgoType(ElementWiseOperation op);
+    static DLP_POST_OP_TYPE  getPostOpType(OperationType type);
 
-  public:
-    DlpOperation();
-    ~DlpOperation();
+    // Type encoding (from UalDlp)
+    template<MatrixType A, MatrixType B, MatrixType C, MatrixType Acc>
+    static constexpr uint64_t encodeTypes()
+    {
+        return (static_cast<uint64_t>(A) << 48)
+               | (static_cast<uint64_t>(B) << 32)
+               | (static_cast<uint64_t>(C) << 16) | static_cast<uint64_t>(Acc);
+    }
 
-    dlp_metadata_t* getMetadata() const { return m_postops.get(); }
-
-    // IOperation interface implementation
-    void addOperations(
-        const dlp::testing::framework::OperationParams& params) override;
-    void addOperation(std::unique_ptr<dlp::testing::framework::IOperationParam>
-                          param) override;
-    void finalize() override;
+    static uint64_t encodeTypes(MatrixType a,
+                                MatrixType b,
+                                MatrixType c,
+                                MatrixType acc)
+    {
+        return (static_cast<uint64_t>(a) << 48)
+               | (static_cast<uint64_t>(b) << 32)
+               | (static_cast<uint64_t>(c) << 16) | static_cast<uint64_t>(acc);
+    }
 };
 
 } // namespace dlp::testing::classic

@@ -29,6 +29,7 @@
 #include "framework/utils/parser.hh"
 #include "framework/matrix.hh"
 #include "framework/operation.hh"
+#include "framework/ual_plan.hh"
 
 #include <cmath>
 #include <iostream>
@@ -100,15 +101,14 @@ MicroTest::extractBoolParam(
     return default_value;
 }
 
-std::shared_ptr<IOperation>
-MicroTest::getPostOp(UALType ual_type) const
+std::vector<std::unique_ptr<IOperationParam>>
+MicroTest::getPostOpParams() const
 {
-    if (!m_has_postops) {
-        return nullptr; // No PostOps for this test case
-    }
+    std::vector<std::unique_ptr<IOperationParam>> result;
 
-    // Create the operation using OperationFactory
-    auto operation = OperationFactory::createOperation(ual_type);
+    if (!m_has_postops) {
+        return result; // No PostOps for this test case
+    }
 
     // Get current combination from PostOpsIterator
     auto        combination = m_postops_iterator->getCurrentCombination();
@@ -125,13 +125,95 @@ MicroTest::getPostOp(UALType ual_type) const
         // Create the appropriate operation parameter with correct indices
         auto param = createOperationParam(op_config, param_indices);
 
-        // Add to operation
-        operation->addOperation(std::move(param));
+        // Only collect post-op types (ElementWise, Bias, Scale, MatAdd, MatMul)
+        if (isPostOp(param->getType())) {
+            result.push_back(std::move(param));
+        }
     }
 
-    // Finalize and return
-    operation->finalize();
-    return operation;
+    return result;
+}
+
+std::unique_ptr<AQuantParam>
+MicroTest::getAQuantParam() const
+{
+    if (!m_has_postops) {
+        return nullptr;
+    }
+
+    // Get current combination from PostOpsIterator
+    auto        combination = m_postops_iterator->getCurrentCombination();
+    const auto& operations  = m_postops_iterator->getOperations();
+
+    for (size_t op_index : combination) {
+        const auto& op_config = operations[op_index];
+
+        const auto& param_indices =
+            m_postops_iterator->getParameterIndices(op_index);
+
+        auto param = createOperationParam(op_config, param_indices);
+
+        if (param->getType() == OperationType::A_Quant) {
+            // Clone as AQuantParam (downcast the cloned unique_ptr)
+            auto cloned = param->clone();
+            return std::unique_ptr<AQuantParam>(
+                static_cast<AQuantParam*>(cloned.release()));
+        }
+    }
+
+    return nullptr;
+}
+
+std::unique_ptr<WOQParam>
+MicroTest::getWOQParam() const
+{
+    if (!m_has_postops) {
+        return nullptr;
+    }
+
+    // Get current combination from PostOpsIterator
+    auto        combination = m_postops_iterator->getCurrentCombination();
+    const auto& operations  = m_postops_iterator->getOperations();
+
+    for (size_t op_index : combination) {
+        const auto& op_config = operations[op_index];
+
+        const auto& param_indices =
+            m_postops_iterator->getParameterIndices(op_index);
+
+        auto param = createOperationParam(op_config, param_indices);
+
+        if (param->getType() == OperationType::WOQ) {
+            // Clone as WOQParam (downcast the cloned unique_ptr)
+            auto cloned = param->clone();
+            return std::unique_ptr<WOQParam>(
+                static_cast<WOQParam*>(cloned.release()));
+        }
+    }
+
+    return nullptr;
+}
+
+void
+MicroTest::configurePlan(IUalPlan& plan) const
+{
+    // Add post-op params to the plan
+    auto post_ops = getPostOpParams();
+    for (auto& param : post_ops) {
+        plan.addPostOp(std::move(param));
+    }
+
+    // Set AQuant if present
+    auto a_quant = getAQuantParam();
+    if (a_quant) {
+        plan.setAQuant(std::move(a_quant));
+    }
+
+    // Set WOQ if present
+    auto woq = getWOQParam();
+    if (woq) {
+        plan.setWOQ(std::move(woq));
+    }
 }
 
 std::unique_ptr<IOperationParam>

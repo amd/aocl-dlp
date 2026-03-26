@@ -74,8 +74,8 @@ struct PreparedBatchGemmArgs
     // Storage to manage metadata lifetime (keeps objects alive)
     std::vector<std::shared_ptr<void>> backend_metadata_storage;
 
-    // Post-operations per group
-    std::vector<std::shared_ptr<IOperation>> post_ops;
+    // Post-operation params per group (stored for lifetime management)
+    std::vector<std::vector<std::unique_ptr<IOperationParam>>> post_ops;
 
     // Pre-converted alpha/beta for zero-overhead type casting
     // These are populated during metadata preparation based on data types
@@ -226,8 +226,14 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
                 group.C_matrices[i].getMatrixData().getMatrixPtr());
         }
 
-        // Store post-operations per group
-        out.post_ops.push_back(group.postOps);
+        // Store post-operations per group (clone params)
+        std::vector<std::unique_ptr<IOperationParam>> cloned_params;
+        for (const auto& p : group.post_op_params) {
+            if (p) {
+                cloned_params.push_back(p->clone());
+            }
+        }
+        out.post_ops.push_back(std::move(cloned_params));
     }
 
     out.total_matrices = total_matrices;

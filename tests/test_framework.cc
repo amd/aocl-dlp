@@ -27,10 +27,15 @@
  */
 
 // Custom Headers
+#include "adaptors/dlp/ual_dlp.hh"
+#include "adaptors/ref/ual_ref.hh"
 #include "classic/dlp_base_types.h"
 #include "framework/cartesian_product.hh"
+#include "framework/matrix.hh"
+#include "framework/operation.hh"
 #include "framework/range.hh"
 #include "framework/simple_product.hh"
+#include "framework/ual_plan.hh"
 #include "framework/value_iterable.hh"
 #include "framework/vector_iterable.hh"
 
@@ -666,10 +671,6 @@ TEST(SimpleProductTest, MultipleSingleValuesExpanded)
 }
 
 // Test fixture for Matrix reorder functionality
-#include "adaptors/ref/ual_ref.hh"
-#include "framework/matrix.hh"
-#include "framework/operation.hh"
-
 using namespace dlp::testing::framework;
 using namespace dlp::testing::classic;
 
@@ -1001,10 +1002,11 @@ TEST_F(PostOpsTest, MatrixOperationValidation)
     EXPECT_THROW(postops::createMatrixMul().build(), std::runtime_error);
 }
 
-// Test OperationParams container
+// Test direct vector<unique_ptr<IOperationParam>> usage (replaces removed
+// OperationParams container)
 TEST_F(PostOpsTest, OperationParamsContainer)
 {
-    OperationParams params;
+    std::vector<std::unique_ptr<IOperationParam>> params;
     EXPECT_TRUE(params.empty());
     EXPECT_EQ(params.size(), 0);
 
@@ -1015,17 +1017,17 @@ TEST_F(PostOpsTest, OperationParamsContainer)
     auto scale_factor = Matrix::fromValue(2.0f);
     auto scale = postops::createScale().setScaleFactor(scale_factor).build();
 
-    params.add(std::move(relu));
-    params.add(std::move(prelu));
-    params.add(std::move(scale));
+    params.push_back(std::move(relu));
+    params.push_back(std::move(prelu));
+    params.push_back(std::move(scale));
 
     EXPECT_FALSE(params.empty());
     EXPECT_EQ(params.size(), 3);
 
     // Test access by index
-    EXPECT_EQ(params[0].getType(), OperationType::ElementWise);
-    EXPECT_EQ(params[1].getType(), OperationType::ElementWise);
-    EXPECT_EQ(params[2].getType(), OperationType::Scale);
+    EXPECT_EQ(params[0]->getType(), OperationType::ElementWise);
+    EXPECT_EQ(params[1]->getType(), OperationType::ElementWise);
+    EXPECT_EQ(params[2]->getType(), OperationType::Scale);
 
     // Test iteration
     size_t count = 0;
@@ -1041,79 +1043,73 @@ TEST_F(PostOpsTest, OperationParamsContainer)
     EXPECT_EQ(params.size(), 0);
 }
 
-// Test operation factory
-TEST_F(PostOpsTest, OperationFactory)
+// Test plan creation via UalDlp / UalRef (replaces removed OperationFactory)
+TEST_F(PostOpsTest, PlanCreation)
 {
-    // Test DLP operation creation
-    auto dlp_operation = OperationFactory::createOperation(UALType::DLP);
-    EXPECT_NE(dlp_operation, nullptr);
-    EXPECT_EQ(dlp_operation->getUALType(), UALType::DLP);
+    // Test DLP plan creation
+    auto ual_dlp  = std::make_unique<UalDlp>();
+    auto dlp_plan = ual_dlp->createPlan();
+    ASSERT_NE(dlp_plan, nullptr);
 
-    // Test REF operation creation
-    auto ref_operation = OperationFactory::createOperation(UALType::REF);
-    EXPECT_NE(ref_operation, nullptr);
-    EXPECT_EQ(ref_operation->getUALType(), UALType::REF);
-
-    // Test unsupported UAL type
-    EXPECT_THROW(OperationFactory::createOperation(static_cast<UALType>(999)),
-                 std::runtime_error);
+    // Test REF plan creation
+    auto ual_ref  = std::make_unique<UalRef>();
+    auto ref_plan = ual_ref->createPlan();
+    ASSERT_NE(ref_plan, nullptr);
 }
 
-// Test RefOperation functionality
-TEST_F(PostOpsTest, RefOperationFunctionality)
+// Test RefUalPlan post-op functionality (replaces removed RefOperation)
+TEST_F(PostOpsTest, RefPlanFunctionality)
 {
-    auto operation = OperationFactory::createOperation(UALType::REF);
+    auto ual  = std::make_unique<UalRef>();
+    auto plan = ual->createPlan();
 
-    // Test adding individual operations
+    // Test adding individual post-ops
     auto relu  = postops::createRelu().build();
     auto alpha = Matrix::fromValue(0.1f);
     auto prelu = postops::createPrelu().setAlpha(alpha).build();
 
-    operation->addOperation(std::move(relu));
-    operation->addOperation(std::move(prelu));
+    plan->addPostOp(std::move(relu));
+    plan->addPostOp(std::move(prelu));
 
-    // Test finalization (should not throw)
-    EXPECT_NO_THROW(operation->finalize());
+    EXPECT_EQ(plan->getPostOps().size(), 2);
 
-    // Test adding operations after finalization (RefOperation allows this)
+    // Test adding more post-ops
     auto scale_factor = Matrix::fromValue(2.0f);
     auto scale = postops::createScale().setScaleFactor(scale_factor).build();
-    EXPECT_NO_THROW(operation->addOperation(std::move(scale)));
+    EXPECT_NO_THROW(plan->addPostOp(std::move(scale)));
+    EXPECT_EQ(plan->getPostOps().size(), 3);
 }
 
-// Test DLP operation functionality
-TEST_F(PostOpsTest, DlpOperationFunctionality)
+// Test DlpUalPlan post-op functionality (replaces removed DlpOperation)
+TEST_F(PostOpsTest, DlpPlanFunctionality)
 {
-    auto operation = OperationFactory::createOperation(UALType::DLP);
+    auto ual  = std::make_unique<UalDlp>();
+    auto plan = ual->createPlan();
 
-    // Test adding operations via OperationParams
-    OperationParams params;
-
+    // Test adding post-ops
     auto relu         = postops::createRelu().build();
     auto alpha        = Matrix::fromValue(0.2f);
     auto prelu        = postops::createPrelu().setAlpha(alpha).build();
     auto scale_factor = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f });
     auto scale = postops::createScale().setScaleFactor(scale_factor).build();
 
-    params.add(std::move(relu));
-    params.add(std::move(prelu));
-    params.add(std::move(scale));
+    plan->addPostOp(std::move(relu));
+    plan->addPostOp(std::move(prelu));
+    plan->addPostOp(std::move(scale));
 
-    operation->addOperations(params);
+    EXPECT_EQ(plan->getPostOps().size(), 3);
 
-    // Test finalization
-    EXPECT_NO_THROW(operation->finalize());
-
-    // Test adding operations after finalization should throw
-    auto bias_vec = Matrix::fromValue(0.5f);
-    auto bias     = postops::createBias().setBias(bias_vec).build();
-    EXPECT_THROW(operation->addOperation(std::move(bias)), std::runtime_error);
+    // Verify the types of added post-ops
+    EXPECT_EQ(plan->getPostOps()[0]->getType(), OperationType::ElementWise);
+    EXPECT_EQ(plan->getPostOps()[1]->getType(), OperationType::ElementWise);
+    EXPECT_EQ(plan->getPostOps()[2]->getType(), OperationType::Scale);
 }
 
-// Test complex operation sequence
+// Test complex post-op sequence via plan
 TEST_F(PostOpsTest, ComplexOperationSequence)
 {
-    auto operation = OperationFactory::createOperation(UALType::DLP);
+    auto ual  = std::make_unique<UalDlp>();
+    auto plan = ual->createPlan();
 
     // Create a complex sequence: Bias -> Scale -> PReLU -> Clip
     auto bias_vec = Matrix::fromVector(std::vector<float>{ 0.1f, 0.2f, 0.3f });
@@ -1131,17 +1127,18 @@ TEST_F(PostOpsTest, ComplexOperationSequence)
     auto clip =
         postops::createClip().setLowerBound(lower).setUpperBound(upper).build();
 
-    // Add operations in sequence
-    operation->addOperation(std::move(bias));
-    operation->addOperation(std::move(scale));
-    operation->addOperation(std::move(prelu));
-    operation->addOperation(std::move(clip));
+    // Add post-ops in sequence
+    plan->addPostOp(std::move(bias));
+    plan->addPostOp(std::move(scale));
+    plan->addPostOp(std::move(prelu));
+    plan->addPostOp(std::move(clip));
 
-    // Finalize
-    EXPECT_NO_THROW(operation->finalize());
-
-    // Verify UAL type
-    EXPECT_EQ(operation->getUALType(), UALType::DLP);
+    // Verify post-ops were added
+    EXPECT_EQ(plan->getPostOps().size(), 4);
+    EXPECT_EQ(plan->getPostOps()[0]->getType(), OperationType::Bias);
+    EXPECT_EQ(plan->getPostOps()[1]->getType(), OperationType::Scale);
+    EXPECT_EQ(plan->getPostOps()[2]->getType(), OperationType::ElementWise);
+    EXPECT_EQ(plan->getPostOps()[3]->getType(), OperationType::ElementWise);
 }
 
 // Test parameter cloning
@@ -1171,7 +1168,7 @@ TEST_F(PostOpsTest, ParameterCloning)
               clone_param.getAlpha()); // Different objects
 }
 
-// Test your vision: exactly as described in the task
+// Test plan-based post-op flow (replaces removed IOperation/OperationParams)
 TEST_F(PostOpsTest, BasicPostOpFlowTest)
 {
     auto ew = postops::createPrelu()
@@ -1183,28 +1180,24 @@ TEST_F(PostOpsTest, BasicPostOpFlowTest)
                          std::vector<float>{ 1.0f, 2.0f }, MatrixType::f32))
                      .build();
 
-    OperationParams params;
-    params.add(std::move(ew));
-    params.add(std::move(scale));
+    // Backend integration via plan
+    auto ual  = std::make_unique<UalDlp>();
+    auto plan = ual->createPlan();
+    plan->addPostOp(std::move(ew));
+    plan->addPostOp(std::move(scale));
 
-    // Backend integration
-    auto operation = OperationFactory::createOperation(UALType::DLP);
-    operation->addOperations(params);
-    operation->finalize();
+    // Verify the plan has the correct post-ops
+    EXPECT_EQ(plan->getPostOps().size(), 2);
 
-    // Verify the operation was created successfully
-    EXPECT_EQ(operation->getUALType(), UALType::DLP);
-    EXPECT_EQ(operation->getParams().size(), 2);
-
-    // Verify first operation (PReLU)
-    const auto& first_param = *operation->getParams()[0];
+    // Verify first post-op (PReLU)
+    const auto& first_param = *plan->getPostOps()[0];
     EXPECT_EQ(first_param.getType(), OperationType::ElementWise);
     const auto& ew_param = static_cast<const ElementWiseParam&>(first_param);
     EXPECT_EQ(ew_param.getOperation(), ElementWiseOperation::Prelu);
     EXPECT_TRUE(ew_param.hasAlpha());
 
-    // Verify second operation (Scale)
-    const auto& second_param = *operation->getParams()[1];
+    // Verify second post-op (Scale)
+    const auto& second_param = *plan->getPostOps()[1];
     EXPECT_EQ(second_param.getType(), OperationType::Scale);
     const auto& scale_param = static_cast<const ScaleParam&>(second_param);
     EXPECT_TRUE(scale_param.hasScaleFactor());

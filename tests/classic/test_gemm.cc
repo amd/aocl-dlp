@@ -30,11 +30,11 @@
 // INCLUDES AND DEPENDENCIES
 // ============================================================================
 
-#include "adaptors/ref/operation_ref.hh"
 #include "classic/aocl_bf16_type.h"
 #include "framework/operation.hh"
 #include "framework/ual.hh"
 #include "framework/ual_factory.hh"
+#include "framework/ual_plan.hh"
 #include "framework/utils/arg_parser.hh"
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
@@ -124,16 +124,18 @@ struct GemmTestConfig
     std::string name   = "";
     MatrixType  a_type = MatrixType::f32, b_type = MatrixType::f32,
                c_type = MatrixType::f32, acc_type = MatrixType::f32;
-    MatrixLayout                storage_format = MatrixLayout::ROW_MAJOR;
-    md_t                        m = 0, n = 0, k = 0;
-    md_t                        lda = 0, ldb = 0, ldc = 0;
-    double                      alpha = 1.0, beta = 0.0;
-    bool                        transA = false, transB = false;
-    bool                        reorderA = false, reorderB = false;
-    bool                        packA = false, packB = false;
-    std::shared_ptr<IOperation> postops_dlp = nullptr;
-    std::shared_ptr<IOperation> postops_ref = nullptr;
-    bool                        has_postops = false;
+    MatrixLayout storage_format = MatrixLayout::ROW_MAJOR;
+    md_t         m = 0, n = 0, k = 0;
+    md_t         lda = 0, ldb = 0, ldc = 0;
+    double       alpha = 1.0, beta = 0.0;
+    bool         transA = false, transB = false;
+    bool         reorderA = false, reorderB = false;
+    bool         packA = false, packB = false;
+    std::shared_ptr<std::vector<std::unique_ptr<IOperationParam>>>
+                                 post_op_params;
+    std::shared_ptr<AQuantParam> a_quant_param;
+    std::shared_ptr<WOQParam>    woq_param;
+    bool                         has_postops = false;
 
     // Optional fill_value configuration
     bool        has_fill_value         = false;
@@ -155,28 +157,31 @@ struct GemmTestConfig
     GemmTestConfig() = default;
 
     // Constructor for easy initialization
-    GemmTestConfig(const std::string&          test_name,
-                   MatrixType                  a_type_,
-                   MatrixType                  b_type_,
-                   MatrixType                  c_type_,
-                   MatrixType                  acc_type_,
-                   MatrixLayout                storage_format_,
-                   md_t                        m_,
-                   md_t                        n_,
-                   md_t                        k_,
-                   md_t                        lda_,
-                   md_t                        ldb_,
-                   md_t                        ldc_,
-                   double                      alpha_,
-                   double                      beta_,
-                   bool                        transA_,
-                   bool                        transB_,
-                   bool                        reorderA_,
-                   bool                        reorderB_,
-                   bool                        packA_,
-                   bool                        packB_,
-                   std::shared_ptr<IOperation> postops_dlp_ = nullptr,
-                   std::shared_ptr<IOperation> postops_ref_ = nullptr)
+    GemmTestConfig(
+        const std::string& test_name,
+        MatrixType         a_type_,
+        MatrixType         b_type_,
+        MatrixType         c_type_,
+        MatrixType         acc_type_,
+        MatrixLayout       storage_format_,
+        md_t               m_,
+        md_t               n_,
+        md_t               k_,
+        md_t               lda_,
+        md_t               ldb_,
+        md_t               ldc_,
+        double             alpha_,
+        double             beta_,
+        bool               transA_,
+        bool               transB_,
+        bool               reorderA_,
+        bool               reorderB_,
+        bool               packA_,
+        bool               packB_,
+        std::shared_ptr<std::vector<std::unique_ptr<IOperationParam>>>
+                                     post_op_params_ = nullptr,
+        std::shared_ptr<AQuantParam> a_quant_param_  = nullptr,
+        std::shared_ptr<WOQParam>    woq_param_      = nullptr)
         : name(test_name)
         , a_type(a_type_)
         , b_type(b_type_)
@@ -197,17 +202,15 @@ struct GemmTestConfig
         , reorderB(reorderB_)
         , packA(packA_)
         , packB(packB_)
-        , postops_dlp(postops_dlp_)
-        , postops_ref(postops_ref_)
+        , post_op_params(std::move(post_op_params_))
+        , a_quant_param(std::move(a_quant_param_))
+        , woq_param(std::move(woq_param_))
         , has_postops(false) //
     {
         // Check if post-ops actually contain operations (not just non-null
         // pointers) This handles the cartesian product case where empty
         // post-ops are created
-        bool has_dlp_ops = postops_dlp_ && !postops_dlp_->getParams().empty();
-        bool has_ref_ops = postops_ref_ && !postops_ref_->getParams().empty();
-
-        has_postops = has_dlp_ops && has_ref_ops;
+        has_postops = post_op_params && !post_op_params->empty();
     }
 
     // Equality operator for Google Test
@@ -220,8 +223,7 @@ struct GemmTestConfig
                && reorderA == other.reorderA && reorderB == other.reorderB
                && packA == other.packA && packB == other.packB
                && has_postops == other.has_postops
-               && postops_dlp == other.postops_dlp
-               && postops_ref == other.postops_ref;
+               && post_op_params == other.post_op_params;
     }
 };
 
@@ -382,10 +384,8 @@ printConfigDetails(const GemmTestConfig& config)
             << ", packB=" << (config.packB ? "true" : "false") << "\n";
     details << "PostOps: has_postops="
             << (config.has_postops ? "true" : "false");
-    if (config.has_postops) {
-        details << ", DLP PostOps=" << (config.postops_dlp ? "present" : "null")
-                << ", REF PostOps="
-                << (config.postops_ref ? "present" : "null");
+    if (config.has_postops && config.post_op_params) {
+        details << ", PostOp count=" << config.post_op_params->size();
     }
     details << "\n";
 
@@ -449,17 +449,15 @@ PrintTo(const Matrix& matrix, std::ostream* os)
 
 // Helper function to extract operation names from PostOps
 std::string
-extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
+extractPostOpsDescription(
+    const std::vector<std::unique_ptr<IOperationParam>>& params)
 {
-    if (!postops) {
+    if (params.empty()) {
         return "";
     }
 
     std::ostringstream       postops_desc;
     std::vector<std::string> op_names;
-
-    // Get the operation parameters
-    const auto& params = postops->getParams();
 
     for (const auto& param : params) {
         switch (param->getType()) {
@@ -606,11 +604,11 @@ generateTestName(const MicroTest&   microTest,
         name << "_beta" << beta_str;
     }
 
-    auto postops_ref = microTest.getPostOp(UALType::REF);
+    auto postop_params = microTest.getPostOpParams();
 
     std::string postops_desc;
-    if (postops_ref) {
-        postops_desc = extractPostOpsDescription(postops_ref);
+    if (!postop_params.empty()) {
+        postops_desc = extractPostOpsDescription(postop_params);
     }
 
     if (!postops_desc.empty()) {
@@ -658,9 +656,16 @@ loadTestConfigurations(const std::string& yaml_file)
                 std::string testName =
                     generateTestName(microTest, currentTestName, i, j);
 
-                // Extract PostOps from MicroTest
-                auto postops_dlp = microTest.getPostOp(UALType::DLP);
-                auto postops_ref = microTest.getPostOp(UALType::REF);
+                // Extract PostOps params from MicroTest
+                auto post_op_params_vec = std::make_shared<
+                    std::vector<std::unique_ptr<IOperationParam>>>(
+                    microTest.getPostOpParams());
+                auto a_quant = microTest.getAQuantParam();
+                auto woq     = microTest.getWOQParam();
+                auto a_quant_shared =
+                    a_quant ? std::make_shared<AQuantParam>(*a_quant) : nullptr;
+                auto woq_shared = woq ? std::make_shared<WOQParam>(*woq)
+                                      : nullptr;
 
                 // Extract configuration from parser
                 GemmTestConfig config(
@@ -684,8 +689,9 @@ loadTestConfigurations(const std::string& yaml_file)
                     microTest.getReorderB(),      // reorderB
                     microTest.getPackA(),         // packA
                     microTest.getPackB(),         // packB
-                    postops_dlp,                  // postops_dlp
-                    postops_ref                   // postops_ref
+                    post_op_params_vec,           // post_op_params
+                    a_quant_shared,               // a_quant_param
+                    woq_shared                    // woq_param
                 );
 
                 // Extract fill_value if present
@@ -758,7 +764,8 @@ createAdditionalTestConfigs()
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
                          false, false,            // packA, packB
-                         nullptr, nullptr         // postops_dlp, postops_ref
+                         nullptr, nullptr,
+                         nullptr // post_op_params, a_quant, woq
     );
 
     configs.emplace_back("rectangular_1",         // name
@@ -773,7 +780,8 @@ createAdditionalTestConfigs()
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
                          false, false,            // packA, packB
-                         nullptr, nullptr         // postops_dlp, postops_ref
+                         nullptr, nullptr,
+                         nullptr // post_op_params, a_quant, woq
     );
 
     configs.emplace_back("transposed_A",          // name
@@ -788,7 +796,8 @@ createAdditionalTestConfigs()
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
                          false, false,            // packA, packB
-                         nullptr, nullptr         // postops_dlp, postops_ref
+                         nullptr, nullptr,
+                         nullptr // post_op_params, a_quant, woq
     );
 
     configs.emplace_back("edge_case_1x1",         // name
@@ -803,7 +812,8 @@ createAdditionalTestConfigs()
                          false, false,            // transA, transB
                          false, false,            // reorderA, reorderB
                          false, false,            // packA, packB
-                         nullptr, nullptr         // postops_dlp, postops_ref
+                         nullptr, nullptr,
+                         nullptr // post_op_params, a_quant, woq
     );
 
     configs.emplace_back("edge_case_100x100_transposedB_reorderedB", // name
@@ -818,7 +828,8 @@ createAdditionalTestConfigs()
                          false, true,             // transA, transB
                          false, true,             // reorderA, reorderB
                          false, false,            // packA, packB
-                         nullptr, nullptr         // postops_dlp, postops_ref
+                         nullptr, nullptr,
+                         nullptr // post_op_params, a_quant, woq
     );
 
     return configs;
@@ -1105,10 +1116,21 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         }
 
         // UAL instances are already verified in SetUp(), no need to assert
-        // again Perform GEMM with test UAL implementation
-        UALError test_status =
-            ual_test_->gemm(A, B, C, config_.acc_type, config_.postops_dlp,
-                            config_.alpha, config_.beta);
+        // again Perform GEMM with test UAL implementation using plan API
+        auto test_plan = ual_test_->createPlan();
+        test_plan->configureFrom(A, B, C, config_.acc_type, config_.alpha,
+                                 config_.beta);
+        if (config_.post_op_params) {
+            for (const auto& p : *config_.post_op_params)
+                test_plan->addPostOp(p->clone());
+        }
+        if (config_.a_quant_param)
+            test_plan->setAQuant(
+                std::make_unique<AQuantParam>(*config_.a_quant_param));
+        if (config_.woq_param)
+            test_plan->setWOQ(std::make_unique<WOQParam>(*config_.woq_param));
+        test_plan->prepare();
+        UALError test_status = test_plan->executeWith(A, B, C);
         if (test_status == UALError::UAL_NOT_SUPPORTED) {
             GTEST_SKIP()
                 << "UAL under test GEMM not supported for this configuration";
@@ -1116,10 +1138,21 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
         bool test_result = (test_status == UALError::UAL_SUCCESS);
 
-        // Perform GEMM with reference UAL implementation
-        UALError ref_status =
-            ual_ref_->gemm(A_ref, B_ref, C_ref, config_.acc_type,
-                           config_.postops_ref, config_.alpha, config_.beta);
+        // Perform GEMM with reference UAL implementation using plan API
+        auto ref_plan = ual_ref_->createPlan();
+        ref_plan->configureFrom(A_ref, B_ref, C_ref, config_.acc_type,
+                                config_.alpha, config_.beta);
+        if (config_.post_op_params) {
+            for (const auto& p : *config_.post_op_params)
+                ref_plan->addPostOp(p->clone());
+        }
+        if (config_.a_quant_param)
+            ref_plan->setAQuant(
+                std::make_unique<AQuantParam>(*config_.a_quant_param));
+        if (config_.woq_param)
+            ref_plan->setWOQ(std::make_unique<WOQParam>(*config_.woq_param));
+        ref_plan->prepare();
+        UALError ref_status = ref_plan->executeWith(A_ref, B_ref, C_ref);
 
         bool ref_result = (ref_status == UALError::UAL_SUCCESS);
 
@@ -1243,14 +1276,20 @@ TEST(GEMMTest, Basic)
     // Make a copy of C for reference
     C_ref = C;
 
-    // Perform GEMM
-    std::unique_ptr<IUal> ual = UalFactory::createUal(UALType::DLP);
-    UALError dlp_status       = ual->gemm(A, B, C, MatrixType::f32, nullptr);
+    // Perform GEMM using plan API
+    std::unique_ptr<IUal> ual  = UalFactory::createUal(UALType::DLP);
+    auto                  plan = ual->createPlan();
+    plan->configureFrom(A, B, C, MatrixType::f32);
+    plan->prepare();
+    UALError dlp_status = plan->executeWith(A, B, C);
     EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS);
 
-    // Perform GEMM with reference implementation
-    ual                 = UalFactory::createUal(UALType::REF);
-    UALError ref_status = ual->gemm(A, B, C_ref, MatrixType::f32, nullptr);
+    // Perform GEMM with reference implementation using plan API
+    ual           = UalFactory::createUal(UALType::REF);
+    auto ref_plan = ual->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::f32);
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
     EXPECT_EQ(ref_status, UALError::UAL_SUCCESS);
 
     // To compare with reference, we need to set the k dimension for tolerance
@@ -1278,14 +1317,18 @@ TEST(GEMMTest, EdgeCases)
     C_small.fillRandom(3);
     C_small_ref = C_small;
 
-    std::unique_ptr<IUal> ual = UalFactory::createUal(UALType::DLP);
-    UALError              dlp_status =
-        ual->gemm(A_small, B_small, C_small, MatrixType::f32, nullptr);
+    std::unique_ptr<IUal> ual  = UalFactory::createUal(UALType::DLP);
+    auto                  plan = ual->createPlan();
+    plan->configureFrom(A_small, B_small, C_small, MatrixType::f32);
+    plan->prepare();
+    UALError dlp_status = plan->executeWith(A_small, B_small, C_small);
     ASSERT_EQ(dlp_status, UALError::UAL_SUCCESS);
 
-    ual = UalFactory::createUal(UALType::REF);
-    UALError ref_status =
-        ual->gemm(A_small, B_small, C_small_ref, MatrixType::f32, nullptr);
+    ual           = UalFactory::createUal(UALType::REF);
+    auto ref_plan = ual->createPlan();
+    ref_plan->configureFrom(A_small, B_small, C_small_ref, MatrixType::f32);
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A_small, B_small, C_small_ref);
     ASSERT_EQ(ref_status, UALError::UAL_SUCCESS);
 
     // To compare with reference, we need to set the k dimension for tolerance
@@ -1347,51 +1390,41 @@ TEST(GEMMTest, PostOpsIntegration)
     C.fillValue(0.0f);
     C_ref = C;
 
-    // Create PostOps using the builder pattern
-    auto operation_dlp = OperationFactory::createOperation(UALType::DLP);
+    // Create PostOps using the builder pattern and plan API
+    std::unique_ptr<IUal> ual_dlp  = UalFactory::createUal(UALType::DLP);
+    auto                  dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C, MatrixType::f32);
 
     // Add a ReLU operation
-    auto relu_dlp = createRelu().build();
-    operation_dlp->addOperation(std::move(relu_dlp));
+    dlp_plan->addPostOp(createRelu().build());
 
     // Add a bias operation
     auto bias_dlp =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_dlp = createBias().setBias(bias_dlp).build();
-    operation_dlp->addOperation(std::move(biasOp_dlp));
+    dlp_plan->addPostOp(createBias().setBias(bias_dlp).build());
 
-    // Finalize the operations
-    operation_dlp->finalize();
-
-    // Perform GEMM with PostOps using DLP
-    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-    UALError              dlp_status =
-        ual_dlp->gemm(A, B, C, MatrixType::f32, operation_dlp);
+    // Prepare and execute
+    dlp_plan->prepare();
+    UALError dlp_status = dlp_plan->executeWith(A, B, C);
 
     // For now, just verify that the operation doesn't crash
     // In a real implementation, we would verify the actual results
     EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS)
         << "DLP GEMM with PostOps should succeed";
 
-    auto operation_ref = OperationFactory::createOperation(UALType::REF);
+    // Test with reference implementation
+    std::unique_ptr<IUal> ual_ref  = UalFactory::createUal(UALType::REF);
+    auto                  ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::f32);
 
-    // Add a ReLU operation
-    auto relu_ref = createRelu().build();
-    operation_ref->addOperation(std::move(relu_ref));
-
-    // Add a bias operation
+    // Add same operations to reference plan
+    ref_plan->addPostOp(createRelu().build());
     auto bias_ref =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_ref = createBias().setBias(bias_ref).build();
-    operation_ref->addOperation(std::move(biasOp_ref));
+    ref_plan->addPostOp(createBias().setBias(bias_ref).build());
 
-    // Finalize the operations
-    operation_ref->finalize();
-
-    // Test with reference implementation (should ignore PostOps)
-    std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
-    UALError              ref_status =
-        ual_ref->gemm(A, B, C_ref, MatrixType::f32, operation_ref);
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
     EXPECT_EQ(ref_status, UALError::UAL_SUCCESS)
         << "Reference GEMM with PostOps should succeed";
@@ -1400,15 +1433,18 @@ TEST(GEMMTest, PostOpsIntegration)
     C_ref.setK(k);
     EXPECT_EQ(C_ref, C);
 
-    // Test with nullptr PostOps (should behave like original gemm)
+    // Test with no PostOps (should behave like original gemm)
     Matrix C_no_postops(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
                         false);
     C_no_postops.fillValue(0.0f);
 
+    auto no_postops_plan = ual_dlp->createPlan();
+    no_postops_plan->configureFrom(A, B, C_no_postops, MatrixType::f32);
+    no_postops_plan->prepare();
     UALError no_postops_status =
-        ual_dlp->gemm(A, B, C_no_postops, MatrixType::f32, nullptr);
+        no_postops_plan->executeWith(A, B, C_no_postops);
     EXPECT_EQ(no_postops_status, UALError::UAL_SUCCESS)
-        << "DLP GEMM with nullptr PostOps should succeed";
+        << "DLP GEMM with no PostOps should succeed";
 }
 
 // Test for PostOps Builder Pattern
@@ -1436,12 +1472,14 @@ TEST(GEMMTest, PostOpsBuilderPattern)
     auto matAddOp = createMatrixAdd().setMatrix(matrix).build();
     EXPECT_EQ(matAddOp->getType(), OperationType::MatAdd);
 
-    // Test operation creation for different UAL types
-    auto dlp_operation = OperationFactory::createOperation(UALType::DLP);
-    EXPECT_EQ(dlp_operation->getUALType(), UALType::DLP);
+    // Test plan creation for different UAL types
+    auto ual_dlp  = UalFactory::createUal(UALType::DLP);
+    auto dlp_plan = ual_dlp->createPlan();
+    EXPECT_NE(dlp_plan, nullptr);
 
-    auto ref_operation = OperationFactory::createOperation(UALType::REF);
-    EXPECT_EQ(ref_operation->getUALType(), UALType::REF);
+    auto ual_ref  = UalFactory::createUal(UALType::REF);
+    auto ref_plan = ual_ref->createPlan();
+    EXPECT_NE(ref_plan, nullptr);
 }
 
 // Test for multiple PostOps of the same type
@@ -1462,42 +1500,34 @@ TEST(GEMMTest, MultiplePostOpsOfSameType)
     B.fillValue(0.2f);
     C.fillValue(0.0f);
 
-    // Create PostOps with multiple operations of the same type
-    auto operation = OperationFactory::createOperation(UALType::DLP);
+    // Create plan with multiple operations of the same type
+    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+    auto                  plan    = ual_dlp->createPlan();
+    plan->configureFrom(A, B, C, MatrixType::f32);
 
     // Add multiple RELU operations
-    auto relu1 = createRelu().build();
-    operation->addOperation(std::move(relu1));
-
-    auto relu2 = createRelu().build();
-    operation->addOperation(std::move(relu2));
+    plan->addPostOp(createRelu().build());
+    plan->addPostOp(createRelu().build());
 
     // Add multiple BIAS operations
     auto bias1 =
         Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp1 = createBias().setBias(bias1).build();
-    operation->addOperation(std::move(biasOp1));
+    plan->addPostOp(createBias().setBias(bias1).build());
 
     auto bias2 =
         Matrix::fromVector(std::vector<float>{ 0.5f, 1.0f, 1.5f, 2.0f });
-    auto biasOp2 = createBias().setBias(bias2).build();
-    operation->addOperation(std::move(biasOp2));
+    plan->addPostOp(createBias().setBias(bias2).build());
 
     // Add multiple SCALE operations
-    auto scale1   = Matrix::fromVector(std::vector<float>{ 1.5f });
-    auto scaleOp1 = createScale().setScaleFactor(scale1).build();
-    operation->addOperation(std::move(scaleOp1));
+    auto scale1 = Matrix::fromVector(std::vector<float>{ 1.5f });
+    plan->addPostOp(createScale().setScaleFactor(scale1).build());
 
-    auto scale2   = Matrix::fromVector(std::vector<float>{ 2.0f });
-    auto scaleOp2 = createScale().setScaleFactor(scale2).build();
-    operation->addOperation(std::move(scaleOp2));
+    auto scale2 = Matrix::fromVector(std::vector<float>{ 2.0f });
+    plan->addPostOp(createScale().setScaleFactor(scale2).build());
 
-    // Finalize the operations
-    operation->finalize();
-
-    // Perform GEMM with multiple PostOps using DLP
-    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-    UALError dlp_status = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+    // Prepare and execute
+    plan->prepare();
+    UALError dlp_status = plan->executeWith(A, B, C);
 
     // Verify that the operation doesn't crash and handles multiple ops
     // correctly
@@ -1529,25 +1559,23 @@ TEST(GEMMTest, DebugMultipleOps)
     B.fillValue(1.0f);
     C.fillValue(0.0f);
 
-    // Create PostOps with just two RELU operations
-    auto operation = OperationFactory::createOperation(UALType::DLP);
+    // Create plan with just two RELU operations
+    std::cout << "Creating UAL and plan..." << std::endl;
+    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+    auto                  plan    = ual_dlp->createPlan();
+    plan->configureFrom(A, B, C, MatrixType::f32);
 
     std::cout << "Adding first RELU operation..." << std::endl;
-    auto relu1 = createRelu().build();
-    operation->addOperation(std::move(relu1));
+    plan->addPostOp(createRelu().build());
 
     std::cout << "Adding second RELU operation..." << std::endl;
-    auto relu2 = createRelu().build();
-    operation->addOperation(std::move(relu2));
+    plan->addPostOp(createRelu().build());
 
-    std::cout << "Finalizing operations..." << std::endl;
-    operation->finalize();
+    std::cout << "Preparing plan..." << std::endl;
+    plan->prepare();
 
-    std::cout << "Creating UAL..." << std::endl;
-    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-
-    std::cout << "Calling GEMM..." << std::endl;
-    UALError dlp_status = ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+    std::cout << "Executing plan..." << std::endl;
+    UALError dlp_status = plan->executeWith(A, B, C);
 
     std::cout << "GEMM result: "
               << (dlp_status == UALError::UAL_SUCCESS ? "SUCCESS" : "FAILED")
@@ -1579,25 +1607,22 @@ TEST(GEMMTest, IsolateSegFault)
 
     // Test 1: Just BIAS operations
     {
-        auto operation = OperationFactory::createOperation(UALType::DLP);
-
         try {
+            std::cout << "Creating UAL and plan..." << std::endl;
+            std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+            auto                  plan    = ual_dlp->createPlan();
+            plan->configureFrom(A, B, C, MatrixType::f32);
+
             std::cout << "Creating bias matrix..." << std::endl;
             auto bias1 = Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f });
-            std::cout << "Creating bias operation..." << std::endl;
-            auto biasOp1 = createBias().setBias(bias1).build();
             std::cout << "Adding bias operation..." << std::endl;
-            operation->addOperation(std::move(biasOp1));
+            plan->addPostOp(createBias().setBias(bias1).build());
 
-            std::cout << "Finalizing..." << std::endl;
-            operation->finalize();
+            std::cout << "Preparing plan..." << std::endl;
+            plan->prepare();
 
-            std::cout << "Creating UAL..." << std::endl;
-            std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-
-            std::cout << "Calling GEMM with BIAS..." << std::endl;
-            UALError status =
-                ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+            std::cout << "Executing plan with BIAS..." << std::endl;
+            UALError status = plan->executeWith(A, B, C);
 
             std::cout << "BIAS test result: "
                       << (status == UALError::UAL_SUCCESS ? "SUCCESS"
@@ -1614,25 +1639,23 @@ TEST(GEMMTest, IsolateSegFault)
 
     // Test 2: SCALE operations with scale factor
     {
-        auto operation = OperationFactory::createOperation(UALType::DLP);
-
         try {
+            std::cout << "Creating UAL and plan..." << std::endl;
+            std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+            auto                  plan    = ual_dlp->createPlan();
+            plan->configureFrom(A, B, C, MatrixType::f32);
+
             std::cout << "Creating scale operation with scale factor..."
                       << std::endl;
             auto scale = Matrix::fromVector(std::vector<float>{ 1.5f });
-            auto sc1   = createScale().setScaleFactor(scale).build();
             std::cout << "Adding scale operation..." << std::endl;
-            operation->addOperation(std::move(sc1));
+            plan->addPostOp(createScale().setScaleFactor(scale).build());
 
-            std::cout << "Finalizing..." << std::endl;
-            operation->finalize();
+            std::cout << "Preparing plan..." << std::endl;
+            plan->prepare();
 
-            std::cout << "Creating UAL..." << std::endl;
-            std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-
-            std::cout << "Calling GEMM with SCALE..." << std::endl;
-            UALError status =
-                ual_dlp->gemm(A, B, C, MatrixType::f32, operation);
+            std::cout << "Executing plan with SCALE..." << std::endl;
+            UALError status = plan->executeWith(A, B, C);
 
             std::cout << "Scale test result: "
                       << (status == UALError::UAL_SUCCESS ? "SUCCESS"
@@ -1673,51 +1696,37 @@ TEST(GEMMTest, PostOpsComprehensiveComparison)
     B_ref.fillValue(0.2f);
     C_ref.fillValue(0.0f);
 
-    // Create PostOps for DLP
-    auto operation_dlp = OperationFactory::createOperation(UALType::DLP);
-
-    // Add ReLU operation to DLP
-    auto relu_dlp = createRelu().build();
-    operation_dlp->addOperation(std::move(relu_dlp));
-
-    // Add bias operation to DLP
-    auto bias_dlp =
-        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_dlp = createBias().setBias(bias_dlp).build();
-    operation_dlp->addOperation(std::move(biasOp_dlp));
-
-    operation_dlp->finalize();
-
-    // Create PostOps for REF (identical operations)
-    auto operation_ref = OperationFactory::createOperation(UALType::REF);
-
-    // Add ReLU operation to REF
-    auto relu_ref = createRelu().build();
-    operation_ref->addOperation(std::move(relu_ref));
-
-    // Add bias operation to REF
-    auto bias_ref =
-        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
-    auto biasOp_ref = createBias().setBias(bias_ref).build();
-    operation_ref->addOperation(std::move(biasOp_ref));
-
-    operation_ref->finalize();
-
-    // Test DLP implementation
+    // Test DLP implementation with plan API
     std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
     ASSERT_TRUE(ual_dlp != nullptr) << "Failed to create DLP UAL";
+    auto dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A_dlp, B_dlp, C_dlp, MatrixType::f32);
 
-    UALError dlp_status =
-        ual_dlp->gemm(A_dlp, B_dlp, C_dlp, MatrixType::f32, operation_dlp);
+    // Add ReLU and bias operations to DLP plan
+    dlp_plan->addPostOp(createRelu().build());
+    auto bias_dlp =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
+    dlp_plan->addPostOp(createBias().setBias(bias_dlp).build());
+
+    dlp_plan->prepare();
+    UALError dlp_status = dlp_plan->executeWith(A_dlp, B_dlp, C_dlp);
     EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS)
         << "DLP GEMM with PostOps should succeed";
 
-    // Test REF implementation
+    // Test REF implementation with plan API
     std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
     ASSERT_TRUE(ual_ref != nullptr) << "Failed to create REF UAL";
+    auto ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A_ref, B_ref, C_ref, MatrixType::f32);
 
-    UALError ref_status =
-        ual_ref->gemm(A_ref, B_ref, C_ref, MatrixType::f32, operation_ref);
+    // Add identical operations to REF plan
+    ref_plan->addPostOp(createRelu().build());
+    auto bias_ref =
+        Matrix::fromVector(std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f });
+    ref_plan->addPostOp(createBias().setBias(bias_ref).build());
+
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A_ref, B_ref, C_ref);
     EXPECT_EQ(ref_status, UALError::UAL_SUCCESS)
         << "REF GEMM with PostOps should succeed";
 
@@ -1731,7 +1740,7 @@ TEST(GEMMTest, PostOpsComprehensiveComparison)
               << std::endl;
 }
 
-// Test for UAL type validation
+// Test for UAL type validation with plan API
 TEST(GEMMTest, PostOpsUALTypeValidation)
 {
     // Test setup
@@ -1741,55 +1750,33 @@ TEST(GEMMTest, PostOpsUALTypeValidation)
 
     Matrix A(m, k, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
     Matrix B(k, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
-    Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_dlp(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+    Matrix C_ref(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
 
     A.fillValue(1.0f);
     B.fillValue(1.0f);
-    C.fillValue(0.0f);
+    C_dlp.fillValue(0.0f);
+    C_ref.fillValue(0.0f);
 
-    // Create DLP PostOps
-    auto dlp_operation = OperationFactory::createOperation(UALType::DLP);
-    auto relu_dlp      = createRelu().build();
-    dlp_operation->addOperation(std::move(relu_dlp));
-    dlp_operation->finalize();
+    // Test: DLP UAL plan with PostOps (should succeed)
+    std::unique_ptr<IUal> ual_dlp  = UalFactory::createUal(UALType::DLP);
+    auto                  dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C_dlp, MatrixType::f32);
+    dlp_plan->addPostOp(createRelu().build());
+    dlp_plan->prepare();
+    UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
+    EXPECT_EQ(dlp_status, UALError::UAL_SUCCESS)
+        << "DLP UAL plan with PostOps should succeed";
 
-    // Create REF PostOps
-    auto ref_operation = OperationFactory::createOperation(UALType::REF);
-    auto relu_ref      = createRelu().build();
-    ref_operation->addOperation(std::move(relu_ref));
-    ref_operation->finalize();
-
-    // Test: DLP UAL with DLP PostOps (should succeed)
-    std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
-    UALError              dlp_with_dlp_status =
-        ual_dlp->gemm(A, B, C, MatrixType::f32, dlp_operation);
-    EXPECT_EQ(dlp_with_dlp_status, UALError::UAL_SUCCESS)
-        << "DLP UAL with DLP PostOps should succeed";
-
-    // Test: REF UAL with REF PostOps (should succeed)
-    std::unique_ptr<IUal> ual_ref = UalFactory::createUal(UALType::REF);
-    UALError              ref_with_ref_status =
-        ual_ref->gemm(A, B, C, MatrixType::f32, ref_operation);
-    EXPECT_EQ(ref_with_ref_status, UALError::UAL_SUCCESS)
-        << "REF UAL with REF PostOps should succeed";
-
-    // Test: DLP UAL with REF PostOps (should fail due to type mismatch)
-    Matrix C_mismatch1(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
-                       false);
-    C_mismatch1.fillValue(0.0f);
-    UALError dlp_with_ref_status =
-        ual_dlp->gemm(A, B, C_mismatch1, MatrixType::f32, ref_operation);
-    EXPECT_NE(dlp_with_ref_status, UALError::UAL_SUCCESS)
-        << "DLP UAL with REF PostOps should fail due to type mismatch";
-
-    // Test: REF UAL with DLP PostOps (should fail due to type mismatch)
-    Matrix C_mismatch2(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1,
-                       false);
-    C_mismatch2.fillValue(0.0f);
-    UALError ref_with_dlp_status =
-        ual_ref->gemm(A, B, C_mismatch2, MatrixType::f32, dlp_operation);
-    EXPECT_NE(ref_with_dlp_status, UALError::UAL_SUCCESS)
-        << "REF UAL with DLP PostOps should fail due to type mismatch";
+    // Test: REF UAL plan with PostOps (should succeed)
+    std::unique_ptr<IUal> ual_ref  = UalFactory::createUal(UALType::REF);
+    auto                  ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::f32);
+    ref_plan->addPostOp(createRelu().build());
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
+    EXPECT_EQ(ref_status, UALError::UAL_SUCCESS)
+        << "REF UAL plan with PostOps should succeed";
 
     std::cout << "UAL type validation test completed!" << std::endl;
 }
@@ -1847,22 +1834,16 @@ TEST_F(EmptyPostOpsTest, S8_ColumnMajor_EmptyPostOps_ShouldSucceed)
     C_dlp.fillValue(0);
     C_ref.fillValue(0);
 
-    // Create empty post-ops objects (non-null but with zero operations)
-    auto empty_postops_dlp = OperationFactory::createOperation(UALType::DLP);
-    auto empty_postops_ref = OperationFactory::createOperation(UALType::REF);
-    empty_postops_dlp->finalize();
-    empty_postops_ref->finalize();
+    // Execute GEMM with empty post-ops (plan with no post-ops added)
+    auto dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C_dlp, MatrixType::s32);
+    dlp_plan->prepare();
+    UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
 
-    // Verify that post-ops are non-null but empty
-    ASSERT_NE(empty_postops_dlp, nullptr);
-    ASSERT_NE(empty_postops_ref, nullptr);
-    ASSERT_EQ(empty_postops_ref->getParams().size(), 0);
-
-    // Execute GEMM with empty post-ops - should succeed
-    UALError dlp_status =
-        ual_dlp->gemm(A, B, C_dlp, MatrixType::s32, empty_postops_dlp);
-    UALError ref_status =
-        ual_ref->gemm(A, B, C_ref, MatrixType::s32, empty_postops_ref);
+    auto ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::s32);
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
     // Skip test if DLP GEMM is not supported (e.g., AVX512_VNNI for INT8)
     if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
@@ -1904,9 +1885,16 @@ TEST_F(EmptyPostOpsTest, S8_ColumnMajor_NoPostOps_ShouldSucceed)
     C_dlp.fillValue(0);
     C_ref.fillValue(0);
 
-    // Execute GEMM with nullptr post-ops - should succeed
-    UALError dlp_status = ual_dlp->gemm(A, B, C_dlp, MatrixType::s32, nullptr);
-    UALError ref_status = ual_ref->gemm(A, B, C_ref, MatrixType::s32, nullptr);
+    // Execute GEMM with no post-ops (plan-based) - should succeed
+    auto dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C_dlp, MatrixType::s32);
+    dlp_plan->prepare();
+    UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
+
+    auto ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::s32);
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
     // Skip test if DLP GEMM is not supported (e.g., AVX512_VNNI for INT8)
     if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
@@ -1947,15 +1935,14 @@ TEST_F(EmptyPostOpsTest, S8_ColumnMajor_ActualPostOps_ShouldFail)
     B.fillValue(3);
     C_dlp.fillValue(0);
 
-    // Create post-ops with actual operation (Relu)
-    auto postops_dlp = OperationFactory::createOperation(UALType::DLP);
-    auto relu_param  = createRelu().build();
-    postops_dlp->addOperation(std::move(relu_param));
-    postops_dlp->finalize();
+    // Create plan with actual post-ops (Relu)
+    auto dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C_dlp, MatrixType::s32);
+    dlp_plan->addPostOp(createRelu().build());
+    dlp_plan->prepare();
 
     // Execute GEMM with actual post-ops - should be not supported
-    UALError dlp_status =
-        ual_dlp->gemm(A, B, C_dlp, MatrixType::s32, postops_dlp);
+    UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
 
     // DLP should return NOT_SUPPORTED for S8 + column-major + post-ops
     // (either because ISA not supported, or because post-ops not supported for
@@ -1986,15 +1973,16 @@ TEST_F(EmptyPostOpsTest, EmptyPostOps_EquivalentTo_NullptrPostOps)
     C_empty.fillValue(0);
     C_null.fillValue(0);
 
-    // Create empty post-ops
-    auto empty_postops = OperationFactory::createOperation(UALType::DLP);
-    empty_postops->finalize();
+    // Execute GEMM with empty plan (no post-ops) and another empty plan
+    auto plan_empty = ual_dlp->createPlan();
+    plan_empty->configureFrom(A, B, C_empty, MatrixType::s32);
+    plan_empty->prepare();
+    UALError status_empty = plan_empty->executeWith(A, B, C_empty);
 
-    // Execute GEMM with empty post-ops and nullptr
-    UALError status_empty =
-        ual_dlp->gemm(A, B, C_empty, MatrixType::s32, empty_postops);
-    UALError status_null =
-        ual_dlp->gemm(A, B, C_null, MatrixType::s32, nullptr);
+    auto plan_null = ual_dlp->createPlan();
+    plan_null->configureFrom(A, B, C_null, MatrixType::s32);
+    plan_null->prepare();
+    UALError status_null = plan_null->executeWith(A, B, C_null);
 
     // Skip test if DLP GEMM is not supported (e.g., AVX512_VNNI for INT8)
     if (status_empty == UALError::UAL_NOT_SUPPORTED
@@ -2009,7 +1997,7 @@ TEST_F(EmptyPostOpsTest, EmptyPostOps_EquivalentTo_NullptrPostOps)
     // Results should be identical
     auto compare_result = C_empty.compare(C_null);
     EXPECT_TRUE(compare_result.equal)
-        << "Empty post-ops and nullptr should produce identical results";
+        << "Empty post-ops and no post-ops should produce identical results";
 }
 
 /**
@@ -2034,22 +2022,16 @@ TEST_F(EmptyPostOpsTest, S8_RowMajor_EmptyPostOps_ShouldSucceed)
     C_dlp.fillValue(0);
     C_ref.fillValue(0);
 
-    // Create empty post-ops objects (non-null but with zero operations)
-    auto empty_postops_dlp = OperationFactory::createOperation(UALType::DLP);
-    auto empty_postops_ref = OperationFactory::createOperation(UALType::REF);
-    empty_postops_dlp->finalize();
-    empty_postops_ref->finalize();
+    // Execute GEMM with empty post-ops (plan with no post-ops added)
+    auto dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C_dlp, MatrixType::s32);
+    dlp_plan->prepare();
+    UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
 
-    // Verify that post-ops are non-null but empty
-    ASSERT_NE(empty_postops_dlp, nullptr);
-    ASSERT_NE(empty_postops_ref, nullptr);
-    ASSERT_EQ(empty_postops_ref->getParams().size(), 0);
-
-    // Execute GEMM with empty post-ops - should succeed
-    UALError dlp_status =
-        ual_dlp->gemm(A, B, C_dlp, MatrixType::s32, empty_postops_dlp);
-    UALError ref_status =
-        ual_ref->gemm(A, B, C_ref, MatrixType::s32, empty_postops_ref);
+    auto ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::s32);
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
     // Skip test if DLP GEMM is not supported (e.g., AVX512_VNNI for INT8)
     if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
@@ -2092,9 +2074,16 @@ TEST_F(EmptyPostOpsTest, S8_RowMajor_NoPostOps_ShouldSucceed)
     C_dlp.fillValue(0);
     C_ref.fillValue(0);
 
-    // Execute GEMM with nullptr post-ops - should succeed
-    UALError dlp_status = ual_dlp->gemm(A, B, C_dlp, MatrixType::s32, nullptr);
-    UALError ref_status = ual_ref->gemm(A, B, C_ref, MatrixType::s32, nullptr);
+    // Execute GEMM with no post-ops using plan API - should succeed
+    auto dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C_dlp, MatrixType::s32);
+    dlp_plan->prepare();
+    UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
+
+    auto ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::s32);
+    ref_plan->prepare();
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
     // Skip test if DLP GEMM is not supported (e.g., AVX512_VNNI for INT8)
     if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
@@ -2138,21 +2127,20 @@ TEST_F(EmptyPostOpsTest, S8_RowMajor_ActualPostOps_ShouldSucceed)
     C_dlp.fillValue(0);
     C_ref.fillValue(0);
 
-    // Create post-ops with actual operation (Relu)
-    auto postops_dlp    = OperationFactory::createOperation(UALType::DLP);
-    auto postops_ref    = OperationFactory::createOperation(UALType::REF);
-    auto relu_param_dlp = createRelu().build();
-    auto relu_param_ref = createRelu().build();
-    postops_dlp->addOperation(std::move(relu_param_dlp));
-    postops_ref->addOperation(std::move(relu_param_ref));
-    postops_dlp->finalize();
-    postops_ref->finalize();
+    // Create plans with actual post-ops (Relu)
+    auto dlp_plan = ual_dlp->createPlan();
+    dlp_plan->configureFrom(A, B, C_dlp, MatrixType::s32);
+    dlp_plan->addPostOp(createRelu().build());
+    dlp_plan->prepare();
+
+    auto ref_plan = ual_ref->createPlan();
+    ref_plan->configureFrom(A, B, C_ref, MatrixType::s32);
+    ref_plan->addPostOp(createRelu().build());
+    ref_plan->prepare();
 
     // Execute GEMM with actual post-ops - should succeed for row-major
-    UALError dlp_status =
-        ual_dlp->gemm(A, B, C_dlp, MatrixType::s32, postops_dlp);
-    UALError ref_status =
-        ual_ref->gemm(A, B, C_ref, MatrixType::s32, postops_ref);
+    UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
+    UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
     // Skip test if DLP GEMM is not supported (e.g., AVX512_VNNI for INT8)
     if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
@@ -2196,15 +2184,16 @@ TEST_F(EmptyPostOpsTest, RowMajor_EmptyPostOps_EquivalentTo_NullptrPostOps)
     C_empty.fillValue(0);
     C_null.fillValue(0);
 
-    // Create empty post-ops
-    auto empty_postops = OperationFactory::createOperation(UALType::DLP);
-    empty_postops->finalize();
+    // Execute GEMM with two separate plans (both with no post-ops)
+    auto plan_empty = ual_dlp->createPlan();
+    plan_empty->configureFrom(A, B, C_empty, MatrixType::s32);
+    plan_empty->prepare();
+    UALError status_empty = plan_empty->executeWith(A, B, C_empty);
 
-    // Execute GEMM with empty post-ops and nullptr
-    UALError status_empty =
-        ual_dlp->gemm(A, B, C_empty, MatrixType::s32, empty_postops);
-    UALError status_null =
-        ual_dlp->gemm(A, B, C_null, MatrixType::s32, nullptr);
+    auto plan_null = ual_dlp->createPlan();
+    plan_null->configureFrom(A, B, C_null, MatrixType::s32);
+    plan_null->prepare();
+    UALError status_null = plan_null->executeWith(A, B, C_null);
 
     // Skip test if DLP GEMM is not supported (e.g., AVX512_VNNI for INT8)
     if (status_empty == UALError::UAL_NOT_SUPPORTED
@@ -2219,7 +2208,7 @@ TEST_F(EmptyPostOpsTest, RowMajor_EmptyPostOps_EquivalentTo_NullptrPostOps)
     // Results should be identical
     auto compare_result = C_empty.compare(C_null);
     EXPECT_TRUE(compare_result.equal)
-        << "Empty post-ops and nullptr should produce identical results for "
+        << "Two plans with no post-ops should produce identical results for "
            "row-major";
 }
 

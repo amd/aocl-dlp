@@ -29,11 +29,11 @@
 #pragma once
 
 #include "framework/ual.hh"
+#include "framework/ual_plan.hh"
 
 namespace dlp::testing::classic {
 
 using dlp::testing::framework::BatchGroup;
-using dlp::testing::framework::IOperation;
 using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
 using dlp::testing::framework::MatrixLayout;
@@ -58,6 +58,12 @@ class UalDlp : public IUal
      * Initializes a DLP-based UAL implementation.
      */
     UalDlp();
+
+    /**
+     * @brief Create a DLP execution plan
+     * @return Unique pointer to a DlpUalPlan
+     */
+    std::unique_ptr<dlp::testing::framework::IUalPlan> createPlan() override;
 
     /**
      * @brief Get the UAL type
@@ -115,27 +121,6 @@ class UalDlp : public IUal
                      MatrixType    C_type,
                      MatrixType    accType) override;
 
-    /**
-     * @brief Perform general matrix multiplication with post-operations: C =
-     * alpha*A*B + beta*C + PostOps
-     *
-     * @param A First input matrix
-     * @param B Second input matrix
-     * @param C Output matrix
-     * @param accType Accumulation type
-     * @param postOps Post-operations to apply (nullptr for no post-ops)
-     * @param alpha Scaling factor for A*B (default: 1.0)
-     * @param beta Scaling factor for C (default: 0.0)
-     * @return UALError Error code indicating success or failure
-     */
-    UALError gemm(const Matrix&                      A,
-                  const Matrix&                      B,
-                  Matrix&                            C,
-                  MatrixType                         accType,
-                  const std::shared_ptr<IOperation>& postOps,
-                  double                             alpha = 1.0,
-                  double                             beta  = 0.0) override;
-
     UALError batch_gemm(std::vector<BatchGroup>& groups,
                         MatrixType               accType) override;
 
@@ -164,60 +149,6 @@ class UalDlp : public IUal
      * @return UALError Error code indicating success or failure
      */
     UALError batch_gemm(const PreparedBatchGemmArgs& prepared) override;
-
-    /**
-     * @brief Perform general matrix multiplication with raw pointers for
-     * benchmarking
-     *
-     * @param m Number of rows in A and C
-     * @param n Number of columns in B and C
-     * @param k Number of columns in A and rows in B
-     * @param matA Pointer to matrix A data
-     * @param matA_type Data type of matrix A
-     * @param matA_layout Memory layout of matrix A
-     * @param matA_transposed Whether matrix A is transposed
-     * @param matA_reordered Whether matrix A is reordered
-     * @param matA_leadingDim Leading dimension of matrix A
-     * @param matB Pointer to matrix B data
-     * @param matB_type Data type of matrix B
-     * @param matB_layout Memory layout of matrix B
-     * @param matB_transposed Whether matrix B is transposed
-     * @param matB_reordered Whether matrix B is reordered
-     * @param matB_leadingDim Leading dimension of matrix B
-     * @param matC Pointer to matrix C data
-     * @param matC_type Data type of matrix C
-     * @param matC_layout Memory layout of matrix C
-     * @param matC_transposed Whether matrix C is transposed
-     * @param matC_leadingDim Leading dimension of matrix C
-     * @param accType Accumulation type
-     * @param alpha Scaling factor for A*B
-     * @param beta Scaling factor for C
-     * @return UAL_SUCCESS on success, or an appropriate UALError error code on
-     * failure
-     */
-    UALError gemm(md_t         m,
-                  md_t         n,
-                  md_t         k,
-                  void*        matA,
-                  MatrixType   matA_type,
-                  MatrixLayout matA_layout,
-                  bool         matA_transposed,
-                  char         memFormatA,
-                  md_t         matA_leadingDim,
-                  void*        matB,
-                  MatrixType   matB_type,
-                  MatrixLayout matB_layout,
-                  bool         matB_transposed,
-                  char         memFormatB,
-                  md_t         matB_leadingDim,
-                  void*        matC,
-                  MatrixType   matC_type,
-                  MatrixLayout matC_layout,
-                  bool         matC_transposed,
-                  md_t         matC_leadingDim,
-                  MatrixType   accType,
-                  double       alpha = 1.0,
-                  double       beta  = 0.0) const override;
 };
 
 } // namespace dlp::testing::classic

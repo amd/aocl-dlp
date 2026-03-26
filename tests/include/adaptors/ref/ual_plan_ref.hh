@@ -28,36 +28,59 @@
 
 #pragma once
 
-#include "adaptors/dlp/operation_dlp.hh"
-#include "framework/ual.hh"
+#include "framework/ual_plan.hh"
 
 namespace dlp::testing::classic {
 
-inline UALError
-extract_dlp_metadata(const std::vector<BatchGroup>& groups,
-                     std::vector<dlp_metadata_t*>&  metadata)
+using dlp::testing::framework::IUalPlan;
+using dlp::testing::framework::Matrix;
+using dlp::testing::framework::UALError;
+
+/**
+ * @class RefUalPlan
+ * @brief Reference implementation of IUalPlan
+ *
+ * Implements the plan-based GEMM interface for the reference backend.
+ * prepare() is a no-op (ref does all work in execute). execute() applies
+ * post-ops directly from the plan's quant and post-op params, then
+ * delegates to UalRef to perform the reference GEMM computation.
+ */
+class RefUalPlan : public IUalPlan
 {
-    metadata.assign(groups.size(), nullptr);
+  public:
+    RefUalPlan()           = default;
+    ~RefUalPlan() override = default;
 
-    for (std::size_t idx = 0; idx < groups.size(); ++idx) {
-        const auto& group = groups[idx];
-        if (!group.postOps) {
-            continue;
-        }
+    /**
+     * @brief Prepare the plan for execution
+     *
+     * The reference backend does all work in execute(), so prepare()
+     * simply marks the plan as ready.
+     */
+    void prepare() override;
 
-        if (group.postOps->getUALType() != UALType::DLP) {
-            return UALError::UAL_POSTOPS_MISMATCH;
-        }
+    /**
+     * @brief Execute the GEMM computation
+     *
+     * Builds a temporary RefOperation from the plan's quant and post-op
+     * parameters, creates a temporary UalRef instance, and delegates the
+     * GEMM computation to UalRef::gemm(). Uses matrix pointers stored by
+     * setBuffers().
+     *
+     * @return UALError Error code indicating success or failure
+     */
+    UALError execute() override;
 
-        auto* dlpOp = dynamic_cast<DlpOperation*>(group.postOps.get());
-        if (!dlpOp) {
-            return UALError::UAL_CAST_ERROR;
-        }
-
-        metadata[idx] = dlpOp->getMetadata();
-    }
-
-    return UALError::UAL_SUCCESS;
-}
+  private:
+    /**
+     * @brief Apply post-operations from m_post_ops to matrix C
+     *
+     * Iterates over the plan's post-op list and applies each operation
+     * to the output matrix.
+     *
+     * @param C The output matrix to apply post-ops to
+     */
+    void applyPostOps(Matrix& C);
+};
 
 } // namespace dlp::testing::classic

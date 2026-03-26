@@ -162,9 +162,6 @@ configToGroups(const BatchGemmBenchConfig& config)
             group.C_matrices.push_back(std::move(C));
         }
 
-        // No post-ops for now (can be added later)
-        group.postOps = nullptr;
-
         groups.push_back(std::move(group));
     }
 

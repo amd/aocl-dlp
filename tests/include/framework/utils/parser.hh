@@ -42,6 +42,10 @@
 #include <memory>
 #include <vector>
 
+namespace dlp::testing::framework {
+class IUalPlan;
+} // namespace dlp::testing::framework
+
 namespace dlp::testing::utils {
 
 using namespace dlp::testing::framework;
@@ -822,11 +826,29 @@ class MicroTest
     }
 
     /**
-     * @brief Get PostOps operation for the specified UAL type
-     * @param ual_type The UAL type (DLP or REF) to create operation for
-     * @return Ready-to-use IOperation object, or nullptr if no PostOps
+     * @brief Get post-op parameters parsed from YAML
+     * @return Vector of post-op params (ElementWise, Bias, Scale, MatAdd,
+     * MatMul only)
      */
-    std::shared_ptr<IOperation> getPostOp(UALType ual_type) const;
+    std::vector<std::unique_ptr<IOperationParam>> getPostOpParams() const;
+
+    /**
+     * @brief Get AQuant parameter if present
+     * @return AQuantParam or nullptr
+     */
+    std::unique_ptr<AQuantParam> getAQuantParam() const;
+
+    /**
+     * @brief Get WOQ parameter if present
+     * @return WOQParam or nullptr
+     */
+    std::unique_ptr<WOQParam> getWOQParam() const;
+
+    /**
+     * @brief Configure a plan with all parsed operations
+     * @param plan The plan to configure with post-ops and quant params
+     */
+    void configurePlan(IUalPlan& plan) const;
 
     /**
      * @brief Check if tolerance configuration is present
@@ -1168,7 +1190,7 @@ class MicroTest
      * @param config PostOp configuration from YAML
      * @param param_indices Map from parameter name to array index for
      * extraction
-     * @return Operation parameter ready to be added to IOperation
+     * @return Operation parameter ready to be added to a plan or collected
      */
     std::unique_ptr<IOperationParam> createOperationParam(
         const PostOpsIterator::PostOpConfig& config,

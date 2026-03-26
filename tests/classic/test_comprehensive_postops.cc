@@ -27,6 +27,7 @@
  */
 
 #include "framework/ual_factory.hh"
+#include "framework/ual_plan.hh"
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
 
@@ -77,10 +78,9 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesRangeListTest)
         std::set<std::string> postops_types_found;
 
         do {
-            auto dlp_ops = microTest.getPostOp(UALType::DLP);
-            auto ref_ops = microTest.getPostOp(UALType::REF);
+            bool has_postops = !microTest.getPostOpParams().empty();
 
-            if (dlp_ops || ref_ops) {
+            if (has_postops) {
                 postops_found++;
 
                 // Log first few combinations to see variety
@@ -123,12 +123,9 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesRangeListTest)
         std::cout << "  Total combinations: " << microTest2.getSize()
                   << std::endl;
 
-        auto postops_dlp_2 = microTest2.getPostOp(UALType::DLP);
-        auto postops_ref_2 = microTest2.getPostOp(UALType::REF);
+        bool has_postops_2 = !microTest2.getPostOpParams().empty();
 
-        std::cout << "  DLP PostOps: " << (postops_dlp_2 ? "PRESENT" : "NONE")
-                  << std::endl;
-        std::cout << "  REF PostOps: " << (postops_ref_2 ? "PRESENT" : "NONE")
+        std::cout << "  PostOps: " << (has_postops_2 ? "PRESENT" : "NONE")
                   << std::endl;
 
     } catch (const std::exception& e) {
@@ -151,12 +148,14 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesListTest)
         std::cout << "  Total combinations: " << microTest.getSize()
                   << std::endl;
 
-        // Verify PostOps are working
-        auto postops_dlp = microTest.getPostOp(UALType::DLP);
-        auto postops_ref = microTest.getPostOp(UALType::REF);
+        // Verify PostOps are working (first cartesian combination may be empty)
+        auto& mutableTest = const_cast<MicroTest&>(microTest);
+        while (microTest.getPostOpParams().empty() && mutableTest.hasNext()) {
+            mutableTest.next();
+        }
+        bool has_postops = !microTest.getPostOpParams().empty();
 
-        EXPECT_TRUE(postops_dlp || postops_ref)
-            << "Should have PostOps in list configuration";
+        EXPECT_TRUE(has_postops) << "Should have PostOps in list configuration";
 
         // Test a few combinations to verify variety
         int   tested           = 0;
@@ -164,10 +163,9 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesListTest)
         auto& mutableMicroTest = const_cast<MicroTest&>(microTest);
 
         do {
-            auto dlp_ops = microTest.getPostOp(UALType::DLP);
-            auto ref_ops = microTest.getPostOp(UALType::REF);
+            bool has_ops = !microTest.getPostOpParams().empty();
 
-            if (dlp_ops || ref_ops) {
+            if (has_ops) {
                 with_postops++;
             }
 
@@ -212,12 +210,9 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesValueTest)
         std::cout << "  Total combinations: " << microTest.getSize()
                   << std::endl;
 
-        auto postops_dlp = microTest.getPostOp(UALType::DLP);
-        auto postops_ref = microTest.getPostOp(UALType::REF);
+        bool has_postops = !microTest.getPostOpParams().empty();
 
-        std::cout << "  DLP PostOps: " << (postops_dlp ? "PRESENT" : "NONE")
-                  << std::endl;
-        std::cout << "  REF PostOps: " << (postops_ref ? "PRESENT" : "NONE")
+        std::cout << "  PostOps: " << (has_postops ? "PRESENT" : "NONE")
                   << std::endl;
 
         // Test medium matrix
@@ -231,12 +226,9 @@ TEST_F(ComprehensivePostOpsTest, AllPostOpsTypesValueTest)
         std::cout << "  Total combinations: " << microTest2.getSize()
                   << std::endl;
 
-        auto postops_dlp_2 = microTest2.getPostOp(UALType::DLP);
-        auto postops_ref_2 = microTest2.getPostOp(UALType::REF);
+        bool has_postops_2 = !microTest2.getPostOpParams().empty();
 
-        std::cout << "  DLP PostOps: " << (postops_dlp_2 ? "PRESENT" : "NONE")
-                  << std::endl;
-        std::cout << "  REF PostOps: " << (postops_ref_2 ? "PRESENT" : "NONE")
+        std::cout << "  PostOps: " << (has_postops_2 ? "PRESENT" : "NONE")
                   << std::endl;
 
     } catch (const std::exception& e) {
@@ -279,18 +271,20 @@ TEST_F(ComprehensivePostOpsTest, PostOpsWithGemmIntegrationTest)
         auto ual_ref = UalFactory::createUal(UALType::REF);
 
         do {
-            auto postops_dlp = microTest.getPostOp(UALType::DLP);
-            auto postops_ref = microTest.getPostOp(UALType::REF);
+            bool has_postops = !microTest.getPostOpParams().empty();
 
-            if (postops_dlp || postops_ref) {
+            if (has_postops) {
                 try {
-                    // Test GEMM with PostOps
+                    // Test GEMM with PostOps using plan API
                     UALError dlp_status = UALError::UAL_FAILURE;
                     UALError ref_status = UALError::UAL_FAILURE;
 
-                    if (postops_dlp) {
-                        dlp_status = ual_dlp->gemm(A, B, C_dlp, MatrixType::f32,
-                                                   postops_dlp);
+                    {
+                        auto dlp_plan = ual_dlp->createPlan();
+                        dlp_plan->configureFrom(A, B, C_dlp, MatrixType::f32);
+                        microTest.configurePlan(*dlp_plan);
+                        dlp_plan->prepare();
+                        dlp_status = dlp_plan->executeWith(A, B, C_dlp);
                         // Skip test if ISA not supported
                         if (dlp_status == UALError::UAL_NOT_SUPPORTED) {
                             GTEST_SKIP() << "DLP GEMM not supported on this "
@@ -298,9 +292,12 @@ TEST_F(ComprehensivePostOpsTest, PostOpsWithGemmIntegrationTest)
                         }
                     }
 
-                    if (postops_ref) {
-                        ref_status = ual_ref->gemm(A, B, C_ref, MatrixType::f32,
-                                                   postops_ref);
+                    {
+                        auto ref_plan = ual_ref->createPlan();
+                        ref_plan->configureFrom(A, B, C_ref, MatrixType::f32);
+                        microTest.configurePlan(*ref_plan);
+                        ref_plan->prepare();
+                        ref_status = ref_plan->executeWith(A, B, C_ref);
                     }
 
                     if (dlp_status == UALError::UAL_SUCCESS
@@ -373,11 +370,9 @@ TEST_F(ComprehensivePostOpsTest, BackwardCompatibilityTest)
         std::cout << "  Total combinations: " << microTest.getSize()
                   << std::endl;
 
-        auto postops_dlp = microTest.getPostOp(UALType::DLP);
-        auto postops_ref = microTest.getPostOp(UALType::REF);
+        bool has_postops = !microTest.getPostOpParams().empty();
 
-        EXPECT_EQ(postops_dlp, nullptr) << "Should have no PostOps";
-        EXPECT_EQ(postops_ref, nullptr) << "Should have no PostOps";
+        EXPECT_FALSE(has_postops) << "Should have no PostOps";
 
         std::cout << "  PostOps: CORRECTLY ABSENT" << std::endl;
 
@@ -390,8 +385,12 @@ TEST_F(ComprehensivePostOpsTest, BackwardCompatibilityTest)
         B.fillValue(0.2f);
         C.fillValue(0.0f);
 
-        auto     ual_dlp = UalFactory::createUal(UALType::DLP);
-        UALError status  = ual_dlp->gemm(A, B, C, MatrixType::f32, postops_dlp);
+        auto ual_dlp = UalFactory::createUal(UALType::DLP);
+        auto plan    = ual_dlp->createPlan();
+        plan->configureFrom(A, B, C, MatrixType::f32);
+        microTest.configurePlan(*plan);
+        plan->prepare();
+        UALError status = plan->executeWith(A, B, C);
 
         // Skip test if ISA not supported
         if (status == UALError::UAL_NOT_SUPPORTED) {

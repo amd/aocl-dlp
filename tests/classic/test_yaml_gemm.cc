@@ -1031,46 +1031,49 @@ TEST(YamlParserTest, ElementwiseParametersComprehensiveTest)
         std::cout << "\n=== Comprehensive Elementwise Parameters Test ==="
                   << std::endl;
 
+        // Helper: advance past empty cartesian combinations to find one with
+        // post-ops. Cartesian product iterators include an empty combination
+        // (no ops selected) as the first entry.
+        auto advanceToNonEmpty = [](MicroTest& mt) {
+            while (mt.getPostOpParams().empty() && mt.hasNext()) {
+                mt.next();
+            }
+        };
+
         // Test 1: Default values (backward compatibility)
         parser.reset();
-        const MicroTest& defaultTest = parser.getMicroTest();
+        MicroTest& defaultTest = const_cast<MicroTest&>(parser.getMicroTest());
+        advanceToNonEmpty(defaultTest);
 
         std::cout << "Test 1: Default values..." << std::endl;
-        auto postop_dlp = defaultTest.getPostOp(UALType::DLP);
-        auto postop_ref = defaultTest.getPostOp(UALType::REF);
+        auto postop_params = defaultTest.getPostOpParams();
 
-        EXPECT_NE(postop_dlp, nullptr)
-            << "DLP PostOp should be created with defaults";
-        EXPECT_NE(postop_ref, nullptr)
-            << "REF PostOp should be created with defaults";
+        EXPECT_FALSE(postop_params.empty())
+            << "PostOp should be created with defaults";
         std::cout << "✓ Default values test passed" << std::endl;
 
         // Test 2: Custom parameters for multiple operations
         parser.next();
-        const MicroTest& customTest = parser.getMicroTest();
+        MicroTest& customTest = const_cast<MicroTest&>(parser.getMicroTest());
+        advanceToNonEmpty(customTest);
 
         std::cout << "Test 2: Custom parameters..." << std::endl;
-        postop_dlp = customTest.getPostOp(UALType::DLP);
-        postop_ref = customTest.getPostOp(UALType::REF);
+        postop_params = customTest.getPostOpParams();
 
-        EXPECT_NE(postop_dlp, nullptr)
-            << "DLP PostOp should be created with custom params";
-        EXPECT_NE(postop_ref, nullptr)
-            << "REF PostOp should be created with custom params";
+        EXPECT_FALSE(postop_params.empty())
+            << "PostOp should be created with custom params";
         std::cout << "✓ Custom parameters test passed" << std::endl;
 
         // Test 3: Different data types (bf16)
         parser.next();
-        const MicroTest& typesTest = parser.getMicroTest();
+        MicroTest& typesTest = const_cast<MicroTest&>(parser.getMicroTest());
+        advanceToNonEmpty(typesTest);
 
         std::cout << "Test 3: Different data types..." << std::endl;
-        postop_dlp = typesTest.getPostOp(UALType::DLP);
-        postop_ref = typesTest.getPostOp(UALType::REF);
+        postop_params = typesTest.getPostOpParams();
 
-        EXPECT_NE(postop_dlp, nullptr)
-            << "DLP PostOp should be created with bf16 types";
-        EXPECT_NE(postop_ref, nullptr)
-            << "REF PostOp should be created with bf16 types";
+        EXPECT_FALSE(postop_params.empty())
+            << "PostOp should be created with bf16 types";
         std::cout << "✓ Different data types test passed" << std::endl;
 
         std::cout << "✓ All Tests PASSED - Comprehensive parameter support "
@@ -2669,21 +2672,16 @@ TEST(YamlParserTest, BatchGemmWithPostOps)
             const MicroTest& microTest = parser.getMicroTest();
 
             // Check if PostOps are available by attempting to get them
-            auto postops_dlp =
-                microTest.getPostOp(dlp::testing::framework::UALType::DLP);
-            auto postops_ref =
-                microTest.getPostOp(dlp::testing::framework::UALType::REF);
+            auto postop_params = microTest.getPostOpParams();
 
-            if (postops_dlp != nullptr && postops_ref != nullptr) {
+            if (!postop_params.empty()) {
                 found_postops_test = true;
 
                 std::cout << "Found batch GEMM test with PostOps at index " << i
                           << std::endl;
 
-                EXPECT_NE(postops_dlp, nullptr)
-                    << "DLP PostOps should be available";
-                EXPECT_NE(postops_ref, nullptr)
-                    << "REF PostOps should be available";
+                EXPECT_FALSE(postop_params.empty())
+                    << "PostOps should be available";
 
                 // Verify group_size is present
                 EXPECT_TRUE(microTest.hasGroupSize());
@@ -2734,9 +2732,8 @@ TEST(YamlParserTest, BatchGemmPostOpsConsistency)
             MicroTest&       microTest = const_cast<MicroTest&>(microTestRef);
 
             // Check if PostOps are available
-            auto postops_check =
-                microTest.getPostOp(dlp::testing::framework::UALType::DLP);
-            if (postops_check == nullptr) {
+            auto postop_params = microTest.getPostOpParams();
+            if (postop_params.empty()) {
                 if (i < microTestCount - 1)
                     parser.next();
                 continue;
@@ -2749,10 +2746,9 @@ TEST(YamlParserTest, BatchGemmPostOpsConsistency)
             size_t iterations = std::min(microTest.getSize(), size_t(3));
 
             for (std::size_t j = 0; j < iterations; ++j) {
-                auto postops_dlp =
-                    microTest.getPostOp(dlp::testing::framework::UALType::DLP);
+                auto postop_params_iter = microTest.getPostOpParams();
 
-                EXPECT_NE(postops_dlp, nullptr)
+                EXPECT_FALSE(postop_params_iter.empty())
                     << "PostOps should be available at iteration " << j;
 
                 std::cout << "  Iteration " << j << ": PostOps OK" << std::endl;
@@ -2796,12 +2792,9 @@ TEST(YamlParserTest, BatchGemmPostOpsWithGroupSizes)
         for (std::size_t i = 0; i < microTestCount; ++i) {
             const MicroTest& microTest = parser.getMicroTest();
 
-            auto postops =
-                microTest.getPostOp(dlp::testing::framework::UALType::DLP);
-            if (postops != nullptr && microTest.hasGroupSize()) {
+            auto postop_params = microTest.getPostOpParams();
+            if (!postop_params.empty() && microTest.hasGroupSize()) {
                 md_t group_size = microTest.getGroupSize();
-
-                EXPECT_NE(postops, nullptr);
 
                 if (group_size == 1) {
                     single_group_postops++;
@@ -3199,17 +3192,18 @@ TEST_F(BatchGemmFrameworkTest, PostOpsWithGroupSize)
     for (std::size_t i = 0; i < microTestCount; ++i) {
         const MicroTest& microTest = parser.getMicroTest();
 
-        auto postops = microTest.getPostOp(UALType::DLP);
-        if (postops != nullptr && microTest.hasGroupSize()) {
+        auto postop_params = microTest.getPostOpParams();
+        if (!postop_params.empty() && microTest.hasGroupSize()) {
             found = true;
 
             // Verify both PostOps and group_size are accessible
-            EXPECT_NE(postops, nullptr);
+            EXPECT_FALSE(postop_params.empty());
             EXPECT_TRUE(microTest.hasGroupSize());
 
             md_t group_size = microTest.getGroupSize();
 
-            EXPECT_NE(postops, nullptr) << "PostOps should be available";
+            EXPECT_FALSE(postop_params.empty())
+                << "PostOps should be available";
             EXPECT_GT(group_size, 0) << "Group size should be positive";
 
             std::cout << "✓ Found batch GEMM test with PostOps and group_size="
@@ -3251,8 +3245,8 @@ TEST_F(BatchGemmFrameworkTest, PostOpsWithVariousGroupConfigurations)
         const MicroTest& microTestRef = parser.getMicroTest();
         MicroTest&       microTest    = const_cast<MicroTest&>(microTestRef);
 
-        auto postops = microTest.getPostOp(UALType::DLP);
-        if (postops != nullptr && microTest.hasGroupSize()) {
+        auto postop_params = microTest.getPostOpParams();
+        if (!postop_params.empty() && microTest.hasGroupSize()) {
             // Check group configuration by examining iterations
             md_t initial_group_size = microTest.getGroupSize();
 

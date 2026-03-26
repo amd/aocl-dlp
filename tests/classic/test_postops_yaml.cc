@@ -27,6 +27,7 @@
  */
 
 #include "framework/ual_factory.hh"
+#include "framework/ual_plan.hh"
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
 
@@ -79,21 +80,13 @@ TEST_F(PostOpsYamlTest, BasicPostOpsParsingTest)
         EXPECT_EQ(microTest.getAType(), MatrixType::f32);
 
         // Test PostOps functionality
-        auto postops_dlp = microTest.getPostOp(UALType::DLP);
-        auto postops_ref = microTest.getPostOp(UALType::REF);
+        bool has_postops = !microTest.getPostOpParams().empty();
 
-        if (postops_dlp) {
-            std::cout << "  DLP PostOps: CREATED SUCCESSFULLY" << std::endl;
-            EXPECT_NE(postops_dlp, nullptr) << "DLP PostOps should be created";
+        if (has_postops) {
+            std::cout << "  PostOps: CREATED SUCCESSFULLY" << std::endl;
+            EXPECT_TRUE(has_postops) << "PostOps should be created";
         } else {
-            std::cout << "  DLP PostOps: NONE (empty combination)" << std::endl;
-        }
-
-        if (postops_ref) {
-            std::cout << "  REF PostOps: CREATED SUCCESSFULLY" << std::endl;
-            EXPECT_NE(postops_ref, nullptr) << "REF PostOps should be created";
-        } else {
-            std::cout << "  REF PostOps: NONE (empty combination)" << std::endl;
+            std::cout << "  PostOps: NONE (empty combination)" << std::endl;
         }
 
         // Iterate through some combinations to test PostOps iterator
@@ -103,10 +96,9 @@ TEST_F(PostOpsYamlTest, BasicPostOpsParsingTest)
         auto& mutableMicroTest = const_cast<MicroTest&>(microTest);
 
         do {
-            auto dlp_ops = microTest.getPostOp(UALType::DLP);
-            auto ref_ops = microTest.getPostOp(UALType::REF);
+            bool has_ops = !microTest.getPostOpParams().empty();
 
-            if (dlp_ops || ref_ops) {
+            if (has_ops) {
                 postops_found++;
                 std::cout << "  Combination " << combination_count
                           << ": PostOps present" << std::endl;
@@ -145,17 +137,12 @@ TEST_F(PostOpsYamlTest, BasicPostOpsParsingTest)
                   << std::endl;
 
         // This test case should have no PostOps
-        auto postops_dlp_2 = microTest2.getPostOp(UALType::DLP);
-        auto postops_ref_2 = microTest2.getPostOp(UALType::REF);
+        bool has_postops_2 = !microTest2.getPostOpParams().empty();
 
-        EXPECT_EQ(postops_dlp_2, nullptr)
-            << "Second test case should have no PostOps";
-        EXPECT_EQ(postops_ref_2, nullptr)
+        EXPECT_FALSE(has_postops_2)
             << "Second test case should have no PostOps";
 
-        std::cout << "  DLP PostOps: " << (postops_dlp_2 ? "PRESENT" : "NONE")
-                  << std::endl;
-        std::cout << "  REF PostOps: " << (postops_ref_2 ? "PRESENT" : "NONE")
+        std::cout << "  PostOps: " << (has_postops_2 ? "PRESENT" : "NONE")
                   << std::endl;
 
     } catch (const std::exception& e) {
@@ -230,19 +217,22 @@ TEST_F(PostOpsYamlTest, PostOpsWithGemmTest)
         C_dlp.fillValue(0.0f);
         C_ref.fillValue(0.0f);
 
-        // Get PostOps
-        auto postops_dlp = microTest.getPostOp(UALType::DLP);
-        auto postops_ref = microTest.getPostOp(UALType::REF);
-
         // Create UAL instances
         auto ual_dlp = UalFactory::createUal(UALType::DLP);
         auto ual_ref = UalFactory::createUal(UALType::REF);
 
-        // Test GEMM with PostOps (should not crash)
-        UALError dlp_status =
-            ual_dlp->gemm(A, B, C_dlp, MatrixType::f32, postops_dlp);
-        UALError ref_status =
-            ual_ref->gemm(A, B, C_ref, MatrixType::f32, postops_ref);
+        // Test GEMM with PostOps using plan API (should not crash)
+        auto dlp_plan = ual_dlp->createPlan();
+        dlp_plan->configureFrom(A, B, C_dlp, MatrixType::f32);
+        microTest.configurePlan(*dlp_plan);
+        dlp_plan->prepare();
+        UALError dlp_status = dlp_plan->executeWith(A, B, C_dlp);
+
+        auto ref_plan = ual_ref->createPlan();
+        ref_plan->configureFrom(A, B, C_ref, MatrixType::f32);
+        microTest.configurePlan(*ref_plan);
+        ref_plan->prepare();
+        UALError ref_status = ref_plan->executeWith(A, B, C_ref);
 
         // Skip test if ISA not supported (e.g., AVX512_VNNI for INT8)
         if (dlp_status == UALError::UAL_NOT_SUPPORTED

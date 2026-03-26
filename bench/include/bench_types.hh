@@ -40,7 +40,7 @@ namespace dlp { namespace testing { namespace utils {
 }}} // namespace dlp::testing::utils
 
 namespace dlp { namespace testing { namespace framework {
-    class IOperation;
+    class IOperationParam;
 }}} // namespace dlp::testing::framework
 
 namespace dlp::benchmarking {
@@ -70,8 +70,10 @@ struct GemmBenchConfig
     bool        force_int_distribution = true;
 
     // Optional post_operations configuration
-    bool                                                 has_post_ops = false;
-    std::shared_ptr<dlp::testing::framework::IOperation> post_ops;
+    bool has_post_ops = false;
+    std::shared_ptr<
+        std::vector<std::unique_ptr<dlp::testing::framework::IOperationParam>>>
+        post_op_params;
 
     // Default constructor
     GemmBenchConfig()

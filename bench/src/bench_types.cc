@@ -63,19 +63,18 @@ GemmBenchConfig::hash() const
 }
 
 std::string
-extractPostOpsDescription(const std::shared_ptr<IOperation>& postops)
+extractPostOpsDescription(
+    const std::shared_ptr<std::vector<std::unique_ptr<IOperationParam>>>&
+        post_op_params)
 {
-    if (!postops) {
+    if (!post_op_params || post_op_params->empty()) {
         return "";
     }
 
     std::ostringstream       postops_desc;
     std::vector<std::string> op_names;
 
-    // Get the operation parameters
-    const auto& params = postops->getParams();
-
-    for (const auto& param : params) {
+    for (const auto& param : *post_op_params) {
         switch (param->getType()) {
             case OperationType::ElementWise: {
                 const auto& ew_param =
@@ -175,8 +174,8 @@ generateBenchmarkName(const GemmBenchConfig& config)
 
     // Add detailed post_ops information
     std::string postops_desc;
-    if (config.has_post_ops && config.post_ops) {
-        postops_desc = extractPostOpsDescription(config.post_ops);
+    if (config.has_post_ops && config.post_op_params) {
+        postops_desc = extractPostOpsDescription(config.post_op_params);
     }
 
     if (!postops_desc.empty()) {
@@ -281,11 +280,12 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                 }
 
                 // Extract post_ops if present
-                auto post_op =
-                    microTest.getPostOp(dlp::testing::framework::UALType::DLP);
-                if (post_op) {
-                    config.has_post_ops = true;
-                    config.post_ops     = post_op;
+                auto post_op_params_vec = std::make_shared<
+                    std::vector<std::unique_ptr<IOperationParam>>>(
+                    microTest.getPostOpParams());
+                if (post_op_params_vec && !post_op_params_vec->empty()) {
+                    config.has_post_ops   = true;
+                    config.post_op_params = post_op_params_vec;
                 }
 
                 // Generate name after populating config

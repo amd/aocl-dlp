@@ -26,7 +26,6 @@
  *
  */
 
-#include "adaptors/ref/operation_ref.hh"
 #include "framework/matrix.hh"
 #include "framework/operation.hh"
 #include "framework/ual.hh"
@@ -92,15 +91,71 @@ struct BatchGemmTestConfig
     double tolerance_absolute = -1.0;
 
     // PostOps support (per-group to handle dimension-dependent PostOps)
-    bool                                     has_postops = false;
-    std::vector<std::shared_ptr<IOperation>> dlp_postops_per_group;
-    std::vector<std::shared_ptr<IOperation>> ref_postops_per_group;
+    bool has_postops = false;
+    std::vector<std::vector<std::unique_ptr<IOperationParam>>>
+        post_op_params_per_group;
 
     // Test identification
     size_t config_index = 0;
 
     // Default constructor
     BatchGemmTestConfig() = default;
+
+    // Move constructor and assignment (defaulted)
+    BatchGemmTestConfig(BatchGemmTestConfig&&)            = default;
+    BatchGemmTestConfig& operator=(BatchGemmTestConfig&&) = default;
+
+    // Copy constructor - needed for GTest parameterized tests
+    BatchGemmTestConfig(const BatchGemmTestConfig& other)
+        : name(other.name)
+        , a_type(other.a_type)
+        , b_type(other.b_type)
+        , c_type(other.c_type)
+        , acc_type(other.acc_type)
+        , storage_format(other.storage_format)
+        , m_values(other.m_values)
+        , n_values(other.n_values)
+        , k_values(other.k_values)
+        , lda_values(other.lda_values)
+        , ldb_values(other.ldb_values)
+        , ldc_values(other.ldc_values)
+        , alpha_values(other.alpha_values)
+        , beta_values(other.beta_values)
+        , transA_values(other.transA_values)
+        , transB_values(other.transB_values)
+        , reorderA_values(other.reorderA_values)
+        , reorderB_values(other.reorderB_values)
+        , packA_values(other.packA_values)
+        , packB_values(other.packB_values)
+        , group_size_values(other.group_size_values)
+        , has_tolerances(other.has_tolerances)
+        , tolerance_relative(other.tolerance_relative)
+        , tolerance_absolute(other.tolerance_absolute)
+        , has_postops(other.has_postops)
+        , config_index(other.config_index)
+    {
+        post_op_params_per_group.reserve(other.post_op_params_per_group.size());
+        for (const auto& group_params : other.post_op_params_per_group) {
+            std::vector<std::unique_ptr<IOperationParam>> cloned;
+            cloned.reserve(group_params.size());
+            for (const auto& p : group_params) {
+                if (p) {
+                    cloned.push_back(p->clone());
+                }
+            }
+            post_op_params_per_group.push_back(std::move(cloned));
+        }
+    }
+
+    // Copy assignment
+    BatchGemmTestConfig& operator=(const BatchGemmTestConfig& other)
+    {
+        if (this != &other) {
+            BatchGemmTestConfig tmp(other);
+            *this = std::move(tmp);
+        }
+        return *this;
+    }
 
     /**
      * @brief Get number of groups in this test configuration
@@ -168,8 +223,27 @@ cloneGroups(const std::vector<BatchGroup>& groups)
 {
     std::vector<BatchGroup> copies;
     copies.reserve(groups.size());
-    for (const auto& group : groups) {
-        copies.push_back(group);
+    for (const auto& src : groups) {
+        BatchGroup dst;
+        dst.A_matrices = src.A_matrices;
+        dst.B_matrices = src.B_matrices;
+        dst.C_matrices = src.C_matrices;
+        dst.m          = src.m;
+        dst.n          = src.n;
+        dst.k          = src.k;
+        dst.alpha      = src.alpha;
+        dst.beta       = src.beta;
+        dst.memFormatA = src.memFormatA;
+        dst.memFormatB = src.memFormatB;
+        for (const auto& p : src.post_op_params) {
+            if (p) {
+                dst.post_op_params.push_back(p->clone());
+            }
+        }
+        if (src.a_quant) {
+            dst.a_quant = std::make_unique<AQuantParam>(*src.a_quant);
+        }
+        copies.push_back(std::move(dst));
     }
     return copies;
 }
@@ -291,19 +365,12 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
 
                     // Extract PostOps for THIS group (sized for current
                     // dimensions)
-                    auto dlp_postops = microTest.getPostOp(UALType::DLP);
-                    auto ref_postops = microTest.getPostOp(UALType::REF);
-                    config.dlp_postops_per_group.emplace_back(dlp_postops);
-                    config.ref_postops_per_group.emplace_back(ref_postops);
+                    auto params  = microTest.getPostOpParams();
+                    bool has_ops = !params.empty();
+                    config.post_op_params_per_group.emplace_back(
+                        std::move(params));
 
-                    // Check if post-ops actually contain operations (not just
-                    // non-null handles)
-                    bool has_dlp_ops =
-                        dlp_postops && !dlp_postops->getParams().empty();
-                    bool has_ref_ops =
-                        ref_postops && !ref_postops->getParams().empty();
-
-                    config.has_postops = has_dlp_ops && has_ref_ops;
+                    config.has_postops = has_ops;
 
                     j++;
 
@@ -315,7 +382,7 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                     }
                 } while (true);
 
-                configs.push_back(config);
+                configs.push_back(std::move(config));
                 total_configs++;
 
             } else {
@@ -374,24 +441,13 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                     }
 
                     // CARTESIAN: Extract PostOps once (single group per test)
-                    config.dlp_postops_per_group.emplace_back(
-                        microTest.getPostOp(UALType::DLP));
-                    config.ref_postops_per_group.emplace_back(
-                        microTest.getPostOp(UALType::REF));
+                    auto params  = microTest.getPostOpParams();
+                    bool has_ops = !params.empty();
+                    config.post_op_params_per_group.emplace_back(
+                        std::move(params));
+                    config.has_postops = has_ops;
 
-                    // Check if post-ops actually contain operations (not just
-
-                    bool has_dlp_ops = config.dlp_postops_per_group[0]
-                                       && !config.dlp_postops_per_group[0]
-                                               ->getParams()
-                                               .empty();
-                    bool has_ref_ops = config.ref_postops_per_group[0]
-                                       && !config.ref_postops_per_group[0]
-                                               ->getParams()
-                                               .empty();
-                    config.has_postops = has_dlp_ops && has_ref_ops;
-
-                    configs.push_back(config);
+                    configs.push_back(std::move(config));
                     total_configs++;
                     j++;
 
@@ -432,9 +488,9 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
  * @return Vector of BatchGroup objects ready for execution
  */
 std::vector<BatchGroup>
-configToGroups(
-    const BatchGemmTestConfig&                      config,
-    const std::vector<std::shared_ptr<IOperation>>& postops_per_group = {})
+configToGroups(const BatchGemmTestConfig& config,
+               const std::vector<std::vector<std::unique_ptr<IOperationParam>>>&
+                   postops_per_group = {})
 {
     std::vector<BatchGroup> groups;
     groups.reserve(config.getGroupCount());
@@ -518,7 +574,11 @@ configToGroups(
 
         // Assign PostOps (per-group to handle dimension-dependent PostOps)
         if (!postops_per_group.empty() && g < postops_per_group.size()) {
-            group.postOps = postops_per_group[g];
+            for (const auto& p : postops_per_group[g]) {
+                if (p) {
+                    group.post_op_params.push_back(p->clone());
+                }
+            }
         }
 
         groups.push_back(std::move(group));
@@ -665,10 +725,10 @@ check_valid_batch_params(const BatchGemmTestConfig& config)
 
 TEST(BatchGemmTest, SingleGroupSingleMatrix)
 {
-    auto base_groups = std::vector<BatchGroup>{
+    std::vector<BatchGroup> base_groups;
+    base_groups.push_back(
         makeF32Group(/*m=*/8, /*n=*/8, /*k=*/8, /*matrix_count=*/1,
-                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/0),
-    };
+                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/0));
 
     auto dlp_groups = cloneGroups(base_groups);
     auto ref_groups = cloneGroups(base_groups);
@@ -689,12 +749,13 @@ TEST(BatchGemmTest, SingleGroupSingleMatrix)
 
 TEST(BatchGemmTest, MultipleGroupsMultipleMatrices)
 {
-    auto base_groups = std::vector<BatchGroup>{
+    std::vector<BatchGroup> base_groups;
+    base_groups.push_back(
         makeF32Group(/*m=*/6, /*n=*/4, /*k=*/5, /*matrix_count=*/2,
-                     /*alpha=*/1.25, /*beta=*/0.1, /*seed_offset=*/10),
+                     /*alpha=*/1.25, /*beta=*/0.1, /*seed_offset=*/10));
+    base_groups.push_back(
         makeF32Group(/*m=*/12, /*n=*/7, /*k=*/9, /*matrix_count=*/3,
-                     /*alpha=*/0.75, /*beta=*/0.2, /*seed_offset=*/30),
-    };
+                     /*alpha=*/0.75, /*beta=*/0.2, /*seed_offset=*/30));
 
     auto dlp_groups = cloneGroups(base_groups);
     auto ref_groups = cloneGroups(base_groups);
@@ -715,23 +776,25 @@ TEST(BatchGemmTest, MultipleGroupsMultipleMatrices)
 
 TEST(BatchGemmTest, MixedGroupConfigurations)
 {
-    auto base_groups = std::vector<BatchGroup>{
+    std::vector<BatchGroup> base_groups;
+    base_groups.push_back(
         makeF32Group(/*m=*/5, /*n=*/3, /*k=*/4, /*matrix_count=*/1,
                      /*alpha=*/0.9, /*beta=*/0.3, /*seed_offset=*/50,
                      MatrixLayout::ROW_MAJOR, MatrixLayout::ROW_MAJOR,
                      MatrixLayout::ROW_MAJOR, /*transA=*/false,
-                     /*transB=*/true),
+                     /*transB=*/true));
+    base_groups.push_back(
         makeF32Group(/*m=*/16, /*n=*/16, /*k=*/8, /*matrix_count=*/4,
                      /*alpha=*/1.4, /*beta=*/-0.2, /*seed_offset=*/100,
                      MatrixLayout::ROW_MAJOR, MatrixLayout::ROW_MAJOR,
                      MatrixLayout::ROW_MAJOR, /*transA=*/true,
-                     /*transB=*/false),
+                     /*transB=*/false));
+    base_groups.push_back(
         makeF32Group(/*m=*/9, /*n=*/11, /*k=*/7, /*matrix_count=*/2,
                      /*alpha=*/0.6, /*beta=*/0.5, /*seed_offset=*/300,
                      MatrixLayout::ROW_MAJOR, MatrixLayout::ROW_MAJOR,
                      MatrixLayout::ROW_MAJOR, /*transA=*/false,
-                     /*transB=*/false),
-    };
+                     /*transB=*/false));
 
     auto dlp_groups = cloneGroups(base_groups);
     auto ref_groups = cloneGroups(base_groups);
@@ -753,31 +816,21 @@ TEST(BatchGemmTest, MixedGroupConfigurations)
 TEST(BatchGemmTest, GlobalPostOpsBasic)
 {
     // Create a simple batch group
-    auto base_groups = std::vector<BatchGroup>{
+    std::vector<BatchGroup> base_groups;
+    base_groups.push_back(
         makeF32Group(/*m=*/8, /*n=*/8, /*k=*/8, /*matrix_count=*/2,
-                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/100),
-    };
+                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/100));
 
     auto dlp_groups = cloneGroups(base_groups);
     auto ref_groups = cloneGroups(base_groups);
 
     // Add PostOps manually (RELU)
-    auto dlp_postops = OperationFactory::createOperation(UALType::DLP);
-    auto relu_dlp    = createRelu().build();
-    dlp_postops->addOperation(std::move(relu_dlp));
-    dlp_postops->finalize();
-
-    auto ref_postops = OperationFactory::createOperation(UALType::REF);
-    auto relu_ref    = createRelu().build();
-    ref_postops->addOperation(std::move(relu_ref));
-    ref_postops->finalize();
-
     // Attach PostOps to all groups
     for (auto& group : dlp_groups) {
-        group.postOps = dlp_postops;
+        group.post_op_params.push_back(createRelu().build());
     }
     for (auto& group : ref_groups) {
-        group.postOps = ref_postops;
+        group.post_op_params.push_back(createRelu().build());
     }
 
     auto ual_dlp = UalFactory::createUal(UALType::DLP);
@@ -822,45 +875,30 @@ TEST(BatchGemmTest, GlobalPostOpsBasic)
 TEST(BatchGemmTest, GlobalPostOpsMultipleGroups)
 {
     // Create multiple groups with different dimensions
-    auto base_groups = std::vector<BatchGroup>{
+    std::vector<BatchGroup> base_groups;
+    base_groups.push_back(
         makeF32Group(/*m=*/8, /*n=*/8, /*k=*/8, /*matrix_count=*/2,
-                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/200),
+                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/200));
+    base_groups.push_back(
         makeF32Group(/*m=*/16, /*n=*/16, /*k=*/16, /*matrix_count=*/3,
-                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/300),
-    };
+                     /*alpha=*/1.0, /*beta=*/0.0, /*seed_offset=*/300));
 
     auto dlp_groups = cloneGroups(base_groups);
     auto ref_groups = cloneGroups(base_groups);
 
     // Add PostOps (RELU + Bias) to all groups
-    auto dlp_postops = OperationFactory::createOperation(UALType::DLP);
-    auto relu_dlp    = createRelu().build();
-    dlp_postops->addOperation(std::move(relu_dlp));
-
-    auto bias_dlp   = Matrix::fromVector(std::vector<float>{
+    auto bias_vec = Matrix::fromVector(std::vector<float>{
         1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f,
         12.0f, 13.0f, 14.0f, 15.0f, 16.0f });
-    auto biasOp_dlp = createBias().setBias(bias_dlp).build();
-    dlp_postops->addOperation(std::move(biasOp_dlp));
-    dlp_postops->finalize();
 
-    auto ref_postops = OperationFactory::createOperation(UALType::REF);
-    auto relu_ref    = createRelu().build();
-    ref_postops->addOperation(std::move(relu_ref));
-
-    auto bias_ref   = Matrix::fromVector(std::vector<float>{
-        1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f,
-        12.0f, 13.0f, 14.0f, 15.0f, 16.0f });
-    auto biasOp_ref = createBias().setBias(bias_ref).build();
-    ref_postops->addOperation(std::move(biasOp_ref));
-    ref_postops->finalize();
-
-    // Attach global PostOps to all groups
+    // Attach PostOps to all groups
     for (auto& group : dlp_groups) {
-        group.postOps = dlp_postops;
+        group.post_op_params.push_back(createRelu().build());
+        group.post_op_params.push_back(createBias().setBias(bias_vec).build());
     }
     for (auto& group : ref_groups) {
-        group.postOps = ref_postops;
+        group.post_op_params.push_back(createRelu().build());
+        group.post_op_params.push_back(createBias().setBias(bias_vec).build());
     }
 
     auto ual_dlp = UalFactory::createUal(UALType::DLP);
@@ -934,9 +972,10 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
         bool params_valid = check_valid_batch_params(config);
 
         // Convert config to groups (with per-group PostOps if present)
-        auto dlp_groups = configToGroups(config, config.dlp_postops_per_group);
-        auto ref_groups = configToGroups(
-            config, config.ref_postops_per_group); // Fresh copy for reference
+        auto dlp_groups =
+            configToGroups(config, config.post_op_params_per_group);
+        auto ref_groups =
+            configToGroups(config, config.post_op_params_per_group);
 
         // Create UAL instances
         auto ual_dlp = UalFactory::createUal(UALType::DLP);

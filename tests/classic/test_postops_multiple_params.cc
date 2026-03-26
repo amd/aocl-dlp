@@ -40,8 +40,6 @@ using namespace dlp::testing::utils;
 using dlp::testing::framework::Matrix;
 using dlp::testing::framework::MatrixLayout;
 using dlp::testing::framework::MatrixType;
-using dlp::testing::framework::UalFactory;
-using dlp::testing::framework::UALType;
 
 /**
  * @class PostOpsMultipleParamsTest
@@ -72,8 +70,8 @@ class PostOpsMultipleParamsTest : public ::testing::Test
             << ",N:" << microTest.getN() << ",K:" << microTest.getK();
 
         // Include PostOps existence in signature
-        auto postops = microTest.getPostOp(UALType::DLP);
-        oss << ",postops:" << (postops != nullptr ? "yes" : "no");
+        bool has_postops = !microTest.getPostOpParams().empty();
+        oss << ",postops:" << (has_postops ? "yes" : "no");
 
         return oss.str();
     }
@@ -114,8 +112,8 @@ TEST_F(PostOpsMultipleParamsTest, TwoParameterExpansion)
             << "Should have 4 combinations (2×2 parameter expansion)";
 
         // Verify PostOps are present
-        auto postops = microTest.getPostOp(UALType::DLP);
-        EXPECT_NE(postops, nullptr)
+        bool has_postops = !microTest.getPostOpParams().empty();
+        EXPECT_TRUE(has_postops)
             << "PostOps should be created for first combination";
 
         std::cout << "✓ Two parameter expansion validated" << std::endl;
@@ -169,8 +167,8 @@ TEST_F(PostOpsMultipleParamsTest, ThreeParameterOdometerOrder)
         int   combo_count      = 0;
 
         do {
-            auto postops = microTest.getPostOp(UALType::DLP);
-            if (postops) {
+            bool has_postops = !microTest.getPostOpParams().empty();
+            if (has_postops) {
                 std::cout << "  Combination " << combo_count
                           << ": PostOps created" << std::endl;
             }
