@@ -27,9 +27,13 @@
  */
 
 /*
- * Zen4 pack-B that converts u4 B to bf16 with fused dequant (scale and
- * zero_point from pre_ops_attr). Asymmetric u4 only; symmetric (scale-only)
- * is not supported. Output is bf16 in packed layout for bf16 GEMM.
+ * Zen4 pack-B: u4 B -> bf16 with fused dequant from pre_ops_attr (scale +
+ * zero_point). Asymmetric u4 only; symmetric (scale-only) not supported.
+ * Dequant modes (zero_point_type):
+ * - DLP_S8: bf16 B_elem = round_f32_to_bf16(scale * (u4 - zp_s8)).
+ * - DLP_BF16 (float-domain): bf16 B_elem = round_f32_to_bf16((u4 - 8) * scale
+ *   + zp_bf16); ZP buffer layout matches scale (per group / column).
+ * Output is bf16 in packed layout for bf16 GEMM.
  */
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
@@ -77,6 +81,8 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
     __m256i ymm0, ymm1;
     /* Regs to store zero-point values */
     __m512i zero_point, zero_point0, zero_point1;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3, zp_4, zp_5;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5, zmm6, zmm7, zmm8, zmm9;
     /* Regs to store intermediate int8 elements */
@@ -87,6 +93,8 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
     __m512i mask_zp1, mask_zp2, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
+
+    bool float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
 
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
 
@@ -126,18 +134,47 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
 
         /* load zero_point values */
         if (pre_ops_attr.zero_point_len == 1) {
-            zero_point = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                zp_1 = zp_0;
+                zp_2 = zp_0;
+                zp_3 = zp_0;
+                zp_4 = zp_0;
+                zp_5 = zp_0;
+            } else {
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                /* interleave zero-point values */
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         } else {
-            zero_point = _mm512_maskz_loadu_epi8(
-                0xFFFFFFFFFFFF, (pre_ops_attr.zero_point + pre_op_off));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                zp_2 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off + 16));
+                zp_4 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off + 32));
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+                zp_5 = _mm512_permutex2var_ps(zp_4, mask_scale2, zp_4);
+                zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
+            } else {
+                zero_point = _mm512_maskz_loadu_epi8(
+                    0xFFFFFFFFFFFF, (pre_ops_attr.zero_point + pre_op_off));
+                /* interleave zero-point values */
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         }
-
-        /* interleave zero-point values */
-        zero_point1 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -196,25 +233,38 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
-
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
-
-            zmm1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
-
             ymm1 =
                 _mm256_maskz_loadu_epi8(0xFFFF, (b_group + (kr * NR + 64) / 2));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0));
+                zmm1 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 3, zmm7, zp_3),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 2, zmm6, zp_2));
+                zmm2 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 1, zmm9, zp_5),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 0, zmm8, zp_4));
+            } else {
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
-            zmm2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
-                                       CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
 
+                zmm1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
+                zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+
+                zmm2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
+                                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
+            }
             // store to pack_b buffer
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR), (__m512i)zmm0);
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR) + 32,
@@ -230,13 +280,6 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point1 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
 
             ymm0 = _mm256_loadu_si256((__m256i const*)(b_group));
             ymm1 = _mm256_maskz_loadu_epi8(0xFFFF, b_group + 32);
@@ -244,20 +287,57 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
-
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
-            zmm1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
-
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+            md_t      partial_k_idx = k_start + k_full_pieces_per_group;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            zmm2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
-                                       CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0)));
+                zmm1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 3, zmm7, zp_3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 2, zmm6, zp_2)));
+                zmm2 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 1, zmm9, zp_5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 0, zmm8, zp_4)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+                /* Interleave zero_point values with zeroes */
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+                zmm1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
+                zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+
+                zmm2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
+                                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
+            }
 
             // store to pack_b buffer
             _mm512_storeu_si512(packb_group, (__m512i)zmm0);
@@ -282,6 +362,8 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
     __m256i ymm0;
     /* Regs to store zero-point values */
     __m512i zero_point, zero_point0;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5, zmm6, zmm7;
     /* Regs to store intermediate int8 elements */
@@ -290,6 +372,7 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
     __m512bh zmm0, zmm1;
     /* Regs to store masks */
     __m512i mask_zp1, mask_scale1, mask_scale2;
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
@@ -324,16 +407,37 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
 
         /* load zero_point values */
         if (pre_ops_attr.zero_point_len == 1) {
-            zero_point = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                zp_1 = zp_0;
+                zp_2 = zp_0;
+                zp_3 = zp_0;
+            } else {
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         } else {
-            zero_point = _mm512_maskz_loadu_epi8(
-                0xFFFFFFFF, (pre_ops_attr.zero_point + pre_op_off));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                zp_2 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off + 16));
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+            } else {
+                zero_point = _mm512_maskz_loadu_epi8(
+                    0xFFFFFFFF, (pre_ops_attr.zero_point + pre_op_off));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         }
-
-        /* interleave zero-point values */
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -384,14 +488,24 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0));
+                zmm1 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 3, zmm7, zp_3),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 2, zmm6, zp_2));
+            } else {
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
 
-            zmm1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
-
+                zmm1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
+            }
             // store to pack_b buffer
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR), (__m512i)zmm0);
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR) + 32,
@@ -404,24 +518,46 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
-
             ymm0 = _mm256_loadu_si256((__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            md_t      partial_k_idx = k_start + k_full_pieces_per_group;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
-            zmm1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0)));
+                zmm1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 3, zmm7, zp_3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 2, zmm6, zp_2)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
 
+                /* Interleave zero_point values with zeroes */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+                zmm1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
+            }
             // store to pack_b buffer
             _mm512_storeu_si512(packb_group, (__m512i)zmm0);
             _mm512_storeu_si512(packb_group + 32, (__m512i)zmm1);
@@ -443,6 +579,8 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
     __m256i ymm0;
     /* Regs to store zero-point values */
     __m512i zero_point, zero_point0;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5;
     /* Regs to store intermediate int8 elements */
@@ -453,6 +591,7 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
     __m512i mask_zp1, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
     __m512i sign_comp = _mm512_set1_epi8(0x08);
 
@@ -485,16 +624,31 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
 
         /* load zero_point values */
         if (pre_ops_attr.zero_point_len == 1) {
-            zero_point = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                zp_1 = zp_0;
+            } else {
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         } else {
-            zero_point = _mm512_maskz_loadu_epi8(
-                0xFFFF, (pre_ops_attr.zero_point + pre_op_off));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+            } else {
+                zero_point = _mm512_maskz_loadu_epi8(
+                    0xFFFF, (pre_ops_attr.zero_point + pre_op_off));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         }
-
-        /* interleave zero-point values */
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -536,10 +690,17 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0));
+            } else {
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            }
 
             // store to pack_b buffer
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR), (__m512i)zmm0);
@@ -551,21 +712,34 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
-
             ymm0 = _mm256_maskz_loadu_epi8(0xFFFF, (__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            md_t      partial_k_idx = k_start + k_full_pieces_per_group;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            }
 
             // store to pack_b buffer
             _mm512_storeu_si512(packb_group, (__m512i)zmm0);
@@ -588,6 +762,8 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
     __m256i ymm0;
     /* Regs to store zero-point values */
     __m512i zero_point, zero_point0;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1;
     /* Regs to store scale factor values */
     __m512 zmm4, zmm5;
     /* Regs to store intermediate int8 elements */
@@ -598,7 +774,7 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
     __m512i mask_zp1, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
-
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
 
     __m512i sign_comp = _mm512_set1_epi8(0x08);
@@ -634,17 +810,31 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
 
         /* load zero_point values */
         if (pre_ops_attr.zero_point_len == 1) {
-            zero_point = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                zp_1 = zp_0;
+            } else {
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         } else {
-            zero_point = _mm512_maskz_loadu_epi8(
-                lmask, (pre_ops_attr.zero_point + pre_op_off));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+            } else {
+                zero_point = _mm512_maskz_loadu_epi8(
+                    lmask, (pre_ops_attr.zero_point + pre_op_off));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         }
-
-        /* interleave zero-point values */
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
-
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
                 zmm4 = _mm512_maskz_loadu_ps(
@@ -686,10 +876,17 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0));
+            } else {
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            }
 
             // store to pack_b buffer
             _mm512_mask_storeu_epi32(packb_group + ((kr + 0) * NR), lmask,
@@ -703,21 +900,36 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
         // appear in the last group. So, packb_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
 
             ymm0 = _mm256_maskz_loadu_epi8(lmask, (__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            md_t      partial_k_idx = k_start + k_full_pieces_per_group;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+
+                /* Interleave zero_point values with zeroes */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            }
 
             // store to pack_b buffer
             _mm512_mask_storeu_epi32(packb_group, lmask, (__m512i)zmm0);
@@ -754,6 +966,8 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
     __m512 zmm4, zmm5, zmm6, zmm7, zmm8, zmm9, zmm10, zmm11;
     /* Regs to store int8 elems zero-point values */
     __m512i zero_point, zero_point0, zero_point1;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3, zp_4, zp_5, zp_6, zp_7;
     /* Reg to load int4 data */
     __m256i ymm0, ymm1;
     /* Reg to store intermediate int8 elements */
@@ -764,6 +978,7 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
     __m512i mask_zp1, mask_zp2;
 
     __m512i shift_idx_64;
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
 
     mask_zp1 = _mm512_set_epi64(0x5F1F5E1E5D1D5C1C, 0x5B1B5A1A59195818,
@@ -803,18 +1018,57 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
 
             /* load zero_point values */
             if (pre_ops_attr.zero_point_len == 1) {
-                zero_point = _mm512_set1_epi8(
-                    *((uint8_t*)(pre_ops_attr.zero_point) + group));
+                if (float_domain_zp) {
+                    zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                        *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                    zp_1 = zp_0;
+                    zp_2 = zp_0;
+                    zp_3 = zp_0;
+                    zp_4 = zp_0;
+                    zp_5 = zp_0;
+                    zp_6 = zp_0;
+                    zp_7 = zp_0;
+                } else {
+                    zero_point = _mm512_set1_epi8(
+                        *((int8_t*)(pre_ops_attr.zero_point) + group));
+                    /* interleave zero-point values */
+                    zero_point1 = _mm512_permutex2var_epi8(zero_point, mask_zp2,
+                                                           zero_point);
+                    zero_point0 = _mm512_permutex2var_epi8(zero_point, mask_zp1,
+                                                           zero_point);
+                }
             } else {
-                zero_point = _mm512_loadu_si512((pre_ops_attr.zero_point)
-                                                + pre_op_off + jr);
+                if (float_domain_zp) {
+                    zp_0 = CVT_BF16_F32_INT_SHIFT(
+                        _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
+                                           + pre_op_off + jr));
+                    zp_2 = CVT_BF16_F32_INT_SHIFT(
+                        _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
+                                           + pre_op_off + jr + 16));
+                    zp_4 = CVT_BF16_F32_INT_SHIFT(
+                        _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
+                                           + pre_op_off + jr + 32));
+                    zp_6 = CVT_BF16_F32_INT_SHIFT(
+                        _mm256_loadu_epi16((bfloat16*)(pre_ops_attr.zero_point)
+                                           + pre_op_off + jr + 48));
+                    zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                    zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                    zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                    zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+                    zp_5 = _mm512_permutex2var_ps(zp_4, mask_scale2, zp_4);
+                    zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
+                    zp_7 = _mm512_permutex2var_ps(zp_6, mask_scale2, zp_6);
+                    zp_6 = _mm512_permutex2var_ps(zp_6, mask_scale1, zp_6);
+                } else {
+                    zero_point = _mm512_loadu_si512(
+                        (pre_ops_attr.zero_point) + pre_op_off
+                        + jr); /* interleave zero-point values */
+                    zero_point1 = _mm512_permutex2var_epi8(zero_point, mask_zp2,
+                                                           zero_point);
+                    zero_point0 = _mm512_permutex2var_epi8(zero_point, mask_zp1,
+                                                           zero_point);
+                }
             }
-
-            /* interleave zero-point values */
-            zero_point1 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
             /* load scale factor values */
             if (pre_ops_attr.scale_factor_len > 1) {
@@ -897,27 +1151,40 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                    sign_comp, signed_upscale);
 
-                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
-
-                zmm0 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
-
-                zmm1 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
-                                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
-
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                    sign_comp, signed_upscale);
+                if (float_domain_zp) {
+                    zmm0 = _mm512_cvtne2ps_pbh(
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1),
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0));
+                    zmm1 = _mm512_cvtne2ps_pbh(
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 3, zmm7, zp_3),
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 2, zmm6, zp_2));
+                    zmm2 = _mm512_cvtne2ps_pbh(
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 1, zmm9, zp_5),
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 0, zmm8, zp_4));
+                    zmm3 = _mm512_cvtne2ps_pbh(
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 3, zmm11, zp_7),
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 2, zmm10, zp_6));
+                } else {
+                    zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
-                zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+                    zmm0 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
 
-                zmm2 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
-                                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
-                zmm3 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 3, zmm11),
-                                        CVT_INT8_F32_SCAL_16(zmm15, 2, zmm10));
+                    zmm1 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
+                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
+                    zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+
+                    zmm2 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
+                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
+                    zmm3 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm15, 3, zmm11),
+                        CVT_INT8_F32_SCAL_16(zmm15, 2, zmm10));
+                }
 
                 // store to pack_b buffer
                 _mm512_storeu_si512(packb_group + (jr * KC_updated)
@@ -941,14 +1208,6 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
             // appear in the last group. So, packb_group and b_group pointers
             // need not be updated after handling k_partial pieces.
             if (k_partial_pieces) {
-                __m512i zero_reg = _mm512_setzero_si512();
-
-                /* Interleave zero_point values with zeroes */
-                zero_point1 =
-                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
-                zero_point0 =
-                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
-
                 ymm0 = _mm256_loadu_si256(
                     (__m256i const*)(b_group + (jr * KC_updated) / 2));
                 ymm1 = _mm256_loadu_si256(
@@ -957,26 +1216,67 @@ dlp_packsclb_nr64_bf16u4f32of32(bfloat16*            packb_bf16,
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                    sign_comp, signed_upscale);
 
-                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
-
-                zmm0 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
-                zmm1 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
-                                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
-
                 CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm1, zmm15, shift_idx_64,
                                                    sign_comp, signed_upscale);
 
-                zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+                md_t      partial_k_idx = k_start + k_full_pieces_per_group;
+                __mmask16 kpartial_keep =
+                    LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-                zmm2 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
-                                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
-                zmm3 =
-                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm15, 3, zmm11),
-                                        CVT_INT8_F32_SCAL_16(zmm15, 2, zmm10));
+                if (float_domain_zp) {
+                    zmm0 = _mm512_cvtne2ps_pbh(
+                        _mm512_maskz_mov_ps(
+                            kpartial_keep,
+                            LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1)),
+                        _mm512_maskz_mov_ps(
+                            kpartial_keep,
+                            LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0)));
+                    zmm1 = _mm512_cvtne2ps_pbh(
+                        _mm512_maskz_mov_ps(
+                            kpartial_keep,
+                            LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 3, zmm7, zp_3)),
+                        _mm512_maskz_mov_ps(
+                            kpartial_keep,
+                            LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 2, zmm6, zp_2)));
+                    zmm2 = _mm512_cvtne2ps_pbh(
+                        _mm512_maskz_mov_ps(
+                            kpartial_keep,
+                            LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 1, zmm9, zp_5)),
+                        _mm512_maskz_mov_ps(
+                            kpartial_keep,
+                            LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 0, zmm8, zp_4)));
+                    zmm3 = _mm512_cvtne2ps_pbh(
+                        _mm512_maskz_mov_ps(
+                            kpartial_keep,
+                            LPGEMM_U4_DEQUANT_BF16ZP_16(zmm15, 3, zmm11, zp_7)),
+                        _mm512_maskz_mov_ps(kpartial_keep,
+                                            LPGEMM_U4_DEQUANT_BF16ZP_16(
+                                                zmm15, 2, zmm10, zp_6)));
+                } else {
+                    __m512i zero_reg = _mm512_setzero_si512();
+                    /* Interleave zero_point values with zeroes */
+                    zero_point1 = _mm512_permutex2var_epi8(zero_point, mask_zp2,
+                                                           zero_reg);
+                    zero_point0 = _mm512_permutex2var_epi8(zero_point, mask_zp1,
+                                                           zero_reg);
+
+                    zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
+                    zmm0 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+                    zmm1 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm14, 3, zmm7),
+                        CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
+                    zmm15 = _mm512_sub_epi8(zmm15, zero_point1);
+
+                    zmm2 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm15, 1, zmm9),
+                        CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
+                    zmm3 = _mm512_cvtne2ps_pbh(
+                        CVT_INT8_F32_SCAL_16(zmm15, 3, zmm11),
+                        CVT_INT8_F32_SCAL_16(zmm15, 2, zmm10));
+                }
 
                 // store to pack_b buffer
                 _mm512_storeu_si512(packb_group + (jr * KC_updated),
@@ -1060,12 +1360,14 @@ dlp_packsclb_nr1_bf16u4f32of32(bfloat16*            packb_bf16,
 
     __m256i  ymm0;
     __m512i  zero_point, zero_point0;
+    __m512   zp_0, zp_1;
     __m512   zmm4, zmm5;
     __m512i  zmm14;
     __m512bh zmm0;
     __m512i  mask_zp1, mask_scale1, mask_scale2;
 
     __m512i shift_idx_64;
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
 
     __m512i   sign_comp = _mm512_set1_epi8(0x08);
@@ -1097,16 +1399,31 @@ dlp_packsclb_nr1_bf16u4f32of32(bfloat16*            packb_bf16,
 
         /* load zero_point values */
         if (pre_ops_attr.zero_point_len == 1) {
-            zero_point = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + group));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + group)));
+                zp_1 = zp_0;
+            } else {
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + group));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         } else {
-            zero_point = _mm512_maskz_loadu_epi8(
-                0xFFFF, (pre_ops_attr.zero_point + pre_op_off));
+            if (float_domain_zp) {
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_off));
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+            } else {
+                zero_point = _mm512_maskz_loadu_epi8(
+                    0xFFFF, (pre_ops_attr.zero_point + pre_op_off));
+                /* interleave zero-point values */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
         }
-
-        /* interleave zero-point values */
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         if (pre_ops_attr.scale_factor_len > 1) {
             if (pre_ops_attr.scale_factor_type == DLP_F32) {
@@ -1147,10 +1464,17 @@ dlp_packsclb_nr1_bf16u4f32of32(bfloat16*            packb_bf16,
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, false);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0));
+            } else {
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            }
 
             __m128i lo = _mm512_extracti32x4_epi32((__m512i)zmm0, 0);
             _mm_storeu_si32((void*)(packb_group + kr), lo);
@@ -1160,22 +1484,36 @@ dlp_packsclb_nr1_bf16u4f32of32(bfloat16*            packb_bf16,
         packb_group += k_full_pieces_per_group;
 
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
-
             ymm0 = _mm256_maskz_loadu_epi8(lmask, (__m256i const*)(b_group));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(ymm0, zmm14, shift_idx_64,
                                                sign_comp, false);
 
-            zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+            md_t      partial_k_idx = k_start + k_full_pieces_per_group;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            zmm0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
-                                       CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            if (float_domain_zp) {
+                zmm0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 1, zmm5, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(zmm14, 0, zmm4, zp_0)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
 
+                /* Interleave zero_point values with zeroes */
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+
+                zmm14 = _mm512_sub_epi8(zmm14, zero_point0);
+
+                zmm0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(zmm14, 1, zmm5),
+                                        CVT_INT8_F32_SCAL_16(zmm14, 0, zmm4));
+            }
             __m128i lo = _mm512_extracti32x4_epi32((__m512i)zmm0, 0);
             _mm_storeu_si32((void*)packb_group, lo);
         }

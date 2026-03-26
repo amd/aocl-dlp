@@ -134,11 +134,7 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
     pre_ops_attr.scale_factor_len  = pre_op_list->scale_factor_len;
     pre_ops_attr.scale_factor_type = pre_op_list->scale_factor_type;
     pre_ops_attr.group_size        = group_size;
-
-    pre_ops_attr.pre_op_ld = n;
-
-    pre_ops_attr.zero_point     = pre_op_list->zp;
-    pre_ops_attr.zero_point_len = pre_op_list->zp_len;
+    pre_ops_attr.pre_op_ld         = n;
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;

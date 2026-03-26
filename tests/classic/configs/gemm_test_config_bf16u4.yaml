@@ -41,7 +41,7 @@ gemm_tests:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
-            zero_point_type: ["s8"]
+            zero_point_type: ["s8", "bf16"]
     tolerances:
       absolute: 0
       relative: 0
@@ -78,7 +78,7 @@ gemm_tests:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
-            zero_point_type: ["s8"]
+            zero_point_type: ["s8", "bf16"]
     tolerances:
       absolute: 0
       relative: 0
@@ -112,7 +112,7 @@ gemm_tests:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
-            zero_point_type: ["s8"]
+            zero_point_type: ["s8", "bf16"]
     tolerances:
       absolute: 0
       relative: 0
@@ -149,7 +149,7 @@ gemm_tests:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
-            zero_point_type: ["s8"]
+            zero_point_type: ["s8", "bf16"]
     tolerances:
       absolute: 0
       relative: 0
@@ -183,7 +183,7 @@ gemm_tests:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
-            zero_point_type: ["s8"]
+            zero_point_type: ["s8", "bf16"]
     tolerances:
       absolute: 0
       relative: 0
@@ -223,7 +223,7 @@ gemm_tests:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
-            zero_point_type: ["s8"]
+            zero_point_type: ["s8", "bf16"]
     tolerances:
       absolute: 0
       relative: 0
@@ -263,7 +263,7 @@ gemm_tests:
             scale_factor_len: ["1", "n"]
             scale_factor_type: ["f32"]
             zero_point_len: ["1", "n"]
-            zero_point_type: ["s8"]
+            zero_point_type: ["s8", "bf16"]
     tolerances:
       absolute: 0
       relative: 0

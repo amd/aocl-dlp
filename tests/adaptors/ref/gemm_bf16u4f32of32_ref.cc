@@ -28,12 +28,13 @@
 
 #include "adaptors/ref/gemm_ref.hh"
 #include "utils/conversion_utils.hh"
+#include <cmath>
 #include <iostream>
 
 namespace dlp::testing::classic::ref {
 
 using dlp::testing::utils::bf16_to_f32;
-using dlp::testing::utils::f32_to_bf16;
+using dlp::testing::utils::f32_to_bf16_vcvtneps2bf16;
 
 /** Unpack one u4 from packed uint8: row*ldb+col, low nibble first; u4 in
  * [0,15], unsigned. */
@@ -48,16 +49,21 @@ unpack_u4(const uint8_t* packed, md_t ldb, md_t row, md_t col)
 }
 
 /**
- * Reference: BF16×U4 GEMM, float output (WOQ). Asymmetric dequant: zero_point
+ * Reference: BF16×U4 GEMM, float output (WOQ). Asymmetric dequant; zero_point
  * required. C := alpha * A * dequant(B) + beta * C. A=bf16, B=packed u4 (2 per
- * byte), C=f32. dequant(B)[k,j] = (unpack_u4(B)[k,j] - zp[j]) * scale[j]
- * (per-tensor when sf_len/zp_len==1). reorder_b: B column-major (k,j), stride
- * k_updated=(k+1)&~1, index j*k_updated+k.
+ * byte), C=f32. reorder_b: B column-major (k,j), stride k_updated=(k+1)&~1,
+ * index j*k_updated+k.
  *
- * To match DLP behavior: the kernel scales B in f32 then converts to bf16
- * before the BF16 matmul, so the effective dequant(B) is rounded to bf16. We
- * apply the same bf16 rounding here so ref matches for any scale (e.g.
- * sf=1.3f).
+ * Integer-domain ZP (zp_type s8, etc.):
+ *   dequant = (u4 - zp) * scale (per column when zp_len == n).
+ *
+ * Float-domain ZP (zp_type bf16, matches DLP zero_point_type DLP_BF16):
+ *   dequant = (u4 - 8) * scale + zp_f32; zp buffer holds bfloat16 ZPs with
+ *   the same layout as scale (per-tensor / per-n).
+ *
+ * To match DLP: dequant B is rounded with VCVTNE (f32_to_bf16_vcvtneps2bf16),
+ * then K is stepped two at a time using bf16_dot2_fma_accumulate (scalar
+ * std::fma, same order as VDPBF16PS; no SIMD intrinsics). Odd K uses one FMA.
  */
 void
 aocl_gemm_bf16u4f32of32_ref(const char            order,
@@ -133,6 +139,8 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
         return getValueFromBuffer(b_zp_data, zp_type, per_tensor_zp ? 0 : j);
     };
 
+    const bool float_domain_zp = (zp_type == framework::MatrixType::bf16);
+
     md_t i, j, l;
     for (i = 0; i < m; i++) {
         for (j = 0; j < n; j++) {
@@ -148,25 +156,47 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
 
             float scale_j = getScale(j);
             float zp_j    = getZp(j);
-            float sum     = 0.0f;
-            for (l = 0; l < k; l++) {
-                uint8_t b_u4;
+
+            // get b_u4 at index lk
+            auto b_u4_at = [&](md_t lk) -> uint8_t {
                 if (transb == 'N' || transb == 'n') {
                     if (reorder_b)
-                        b_u4 = unpack_u4(B, b_ldb, j, l);
-                    else
-                        b_u4 = unpack_u4(B, b_ldb, l, j);
-                } else {
-                    if (reorder_b)
-                        b_u4 = unpack_u4(B, b_ldb, l, j);
-                    else
-                        b_u4 = unpack_u4(B, b_ldb, j, l);
+                        return unpack_u4(B, b_ldb, j, lk);
+                    return unpack_u4(B, b_ldb, lk, j);
                 }
-                float b_f32 = (static_cast<float>(b_u4) - zp_j) * scale_j;
-                // Match DLP: kernel converts scaled B to bf16 before matmul
-                b_f32 = bf16_to_f32(f32_to_bf16(b_f32));
-                sum += bf16_to_f32(*a_ptr) * b_f32;
-                a_ptr += a_stride;
+                if (reorder_b)
+                    return unpack_u4(B, b_ldb, lk, j);
+                return unpack_u4(B, b_ldb, j, lk);
+            };
+
+            // dequant B to f32
+            auto dequant_b_f32 = [&](uint8_t b_u4) -> float {
+                return float_domain_zp
+                           ? (static_cast<float>(b_u4) - 8.0f) * scale_j + zp_j
+                           : (static_cast<float>(b_u4) - zp_j) * scale_j;
+            };
+
+            float sum = 0.0f;
+            for (l = 0; l + 1 < k; l += 2) {
+                // dequant B to f32
+                float b0 = dequant_b_f32(b_u4_at(l));
+                float b1 = dequant_b_f32(b_u4_at(l + 1));
+                // convert f32 to bf16
+                float b_bf0 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b0));
+                float b_bf1 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b1));
+                // convert a_ptr to f32
+                float a_f32   = bf16_to_f32(*a_ptr);
+                float a_f32_1 = bf16_to_f32(*(a_ptr + a_stride));
+                // accumulate fma
+                sum = std::fma(a_f32_1, b_bf1, sum);
+                sum = std::fma(a_f32, b_bf0, sum);
+                a_ptr += 2 * a_stride;
+            }
+            if (l < k) {
+                float b_bf = bf16_to_f32(
+                    f32_to_bf16_vcvtneps2bf16(dequant_b_f32(b_u4_at(l))));
+                float a_f32 = bf16_to_f32(*a_ptr);
+                sum         = std::fma(a_f32, b_bf, sum);
             }
 
             if (beta != 0.0f)

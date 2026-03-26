@@ -423,4 +423,19 @@
                        _mm256_extracti32x4_epi32(in, idx))),                   \
                    scale_reg))
 
+/* (b-8)*scale + zp_f32; b = unpacked u4 in byte lanes 0..15 */
+#define LPGEMM_U4_DEQUANT_BF16ZP_16(b_s8, lane_idx, scale_reg, zp_reg)         \
+    _mm512_add_ps(                                                             \
+        _mm512_mul_ps(_mm512_cvtepi32_ps(_mm512_sub_epi32(                     \
+                          _mm512_cvtepu8_epi32(                                \
+                              _mm512_extracti32x4_epi32((b_s8), (lane_idx))),  \
+                          _mm512_set1_epi32(8))),                              \
+                      (scale_reg)),                                            \
+        (zp_reg))
+
+/* Tail k in 2-wide DPBF16: maskz clears junk lanes; parity picks 0x5555 vs
+ * 0xAAAA. */
+#define LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx)                        \
+    _cvtu32_mask16(((partial_k_idx) & 1) ? 0xAAAAu : 0x5555u)
+
 #endif // DLP_GEMM_INT4_CVT_UTILS_H

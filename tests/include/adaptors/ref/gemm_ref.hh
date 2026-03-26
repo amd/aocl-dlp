@@ -220,6 +220,8 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
                             framework::MatrixType sf_type,
                             bool                  reorder_b = false);
 
+/** BF16×U4 ref: zp_type s8 => (u4-zp)*scale; zp_type bf16 => (u4-8)*scale+zp.
+ */
 void
 aocl_gemm_bf16u4f32of32_ref(const char            order,
                             const char            transa,

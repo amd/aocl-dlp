@@ -139,6 +139,8 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
 
     pre_ops_attr.zero_point     = pre_op_list->zp;
     pre_ops_attr.zero_point_len = pre_op_list->zp_len;
+    // Float-domain bf16 zp and int-domain s8 zp are supported.
+    pre_ops_attr.zero_point_type = pre_op_list->zp_type;
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;

@@ -103,15 +103,24 @@ aocl_gemm_bf16u4f32_impl(const char        order,
         goto err_hndl;
     }
 
-    // Add early returns for NULL pointers.
+    // Add early returns for NULL or invalid pointers.
     if (metadata == NULL || metadata->pre_ops == NULL
-        || metadata->pre_ops->b_zp == NULL
-        || metadata->pre_ops->b_scl == NULL) {
+        || metadata->pre_ops->b_scl == NULL
+        || metadata->pre_ops->b_zp == NULL) {
         dlp_print_msg("One or more required parameters (metadata, pre_ops, "
                       "pre_ops->b_zp, "
-                      "pre_ops->b_scl) are NULL. Exiting..",
+                      "pre_ops->b_scl) are NULL or invalid. Exiting..",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
+        goto err_hndl;
+    }
+
+    // Check if zero-point type is supported.
+    if (metadata->pre_ops->b_zp->zero_point_type != DLP_S8
+        && metadata->pre_ops->b_zp->zero_point_type != DLP_BF16) {
+        dlp_print_msg(" zero-point type is not supported. Exiting..", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }
 

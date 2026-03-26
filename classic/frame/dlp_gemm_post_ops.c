@@ -64,7 +64,8 @@ dlp_gemm_set_pre_ops_node_params(dlp_gemm_pre_op* pre_op_node,
                                  void*            scale_factor,
                                  md_t             zero_point_len,
                                  md_t             scale_factor_len,
-                                 md_t             scale_factor_type)
+                                 md_t             scale_factor_type,
+                                 md_t             zero_point_type)
 {
     pre_op_node->group_size        = group_size;
     pre_op_node->scale_factor      = scale_factor;
@@ -72,6 +73,7 @@ dlp_gemm_set_pre_ops_node_params(dlp_gemm_pre_op* pre_op_node,
     pre_op_node->zp                = zero_point;
     pre_op_node->zp_len            = zero_point_len;
     pre_op_node->scale_factor_type = scale_factor_type;
+    pre_op_node->zp_type           = zero_point_type;
     pre_op_node->next              = NULL;
 }
 
@@ -227,14 +229,14 @@ dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
 
     if ((pre_op_unparsed == NULL) || (pre_op_unparsed->seq_length <= 0)) {
         dlp_gemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
-                                         DLP_INVALID);
+                                         DLP_INVALID, DLP_INVALID);
 
         return DLP_CLSC_SUCCESS;
     }
 
     if ((pre_op_unparsed->seq_length > AOCL_DLP_MAX_PRE_OPS)) {
         dlp_gemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
-                                         DLP_INVALID);
+                                         DLP_INVALID, DLP_INVALID);
 
         dlp_print_msg(" Max supported pre-ops is 2, supplied input pre-ops"
                       " are more. Exiting..",
@@ -288,7 +290,10 @@ dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
                 ? DLP_INVALID
                 : (((pre_op_unparsed->b_scl)->scale_factor_type == DLP_BF16)
                        ? DLP_BF16
-                       : DLP_F32));
+                       : DLP_F32),
+            (pre_op_unparsed->b_zp == NULL)
+                ? DLP_INVALID
+                : ((pre_op_unparsed->b_zp)->zero_point_type));
 
         // Simulating linked list using an array.
         if (i < (pre_op_unparsed->seq_length - 1)) {

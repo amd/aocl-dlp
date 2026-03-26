@@ -27,12 +27,16 @@
  */
 
 /*
- * Zen4 M-fringe micro-kernels (5x64, 4x64, 3x64, 2x64, 1x64) for GEMM with
- * bfloat16 A and unsigned 4-bit (u4) B (asymmetric WOQ). Fused dequant:
- * scale * (u4 - zero_point). Same logic as 6x64 U4 kernel; MR varies by kernel.
+ * Zen4 M fringe micro-kernel for GEMM with bfloat16 A and unsigned 4-bit (u4) B
+ * (asymmetric weight-only quantization). Two dequant modes:
+ * - zero_point_type DLP_S8 (default): dequant = scale * (u4 - zp_s8).
+ * - zero_point_type DLP_BF16 (float-domain): dequant = (u4 - 8) * scale +
+ *   zp_bf16; zero_point buffer holds bfloat16 ZPs with the same layout as
+ *   scale_factor (64 columns / group). B is packed 2 u4 values per byte.
  * Symmetric (scale-only) quantization is not supported.
  *
  */
+
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 #include <string.h>
@@ -98,8 +102,9 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp      = _mm512_set1_epi8(0x08);
-    bool    signed_upscale = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    __m512i sign_comp       = _mm512_set1_epi8(0x08);
+    bool    signed_upscale  = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8, b1_s8;
@@ -118,7 +123,10 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
     /* Regs to store zero-point values */
+    // zp registers for int8_t zp
     __m512i zero_point, zero_point0, zero_point1;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3, zp_4, zp_5, zp_6, zp_7;
 
     /* Reg to store masks to interleave zero-point */
     __m512i mask_zp1, mask_zp2;
@@ -214,18 +222,59 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
         if (pre_ops_attr.zero_point_len > 1) {
             pre_op_zp_off =
                 (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
-            zero_point = _mm512_loadu_si512((uint8_t*)(pre_ops_attr.zero_point)
-                                            + pre_op_zp_off);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zp_2 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 16));
+                zp_4 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 32));
+                zp_6 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 48));
+
+                // Interleave zp vectors
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+                zp_5 = _mm512_permutex2var_ps(zp_4, mask_scale2, zp_4);
+                zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
+                zp_7 = _mm512_permutex2var_ps(zp_6, mask_scale2, zp_6);
+                zp_6 = _mm512_permutex2var_ps(zp_6, mask_scale1, zp_6);
+            } else {
+                // ZP type is DLP_S8
+                zero_point = _mm512_loadu_si512(
+                    (int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+            }
         } else {
             pre_op_zp_off = group;
-            zero_point    = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
-        }
 
-        zero_point1 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
+                zp_1 = zp_0;
+                zp_2 = zp_0;
+                zp_3 = zp_0;
+                zp_4 = zp_0;
+                zp_5 = zp_0;
+                zp_6 = zp_0;
+                zp_7 = zp_0;
+            } else {
+                // ZP type is DLP_S8, load and convert to DLP_F32 type
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
+        }
 
         for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
@@ -238,27 +287,43 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256(
                 (__m256i const*)(b_group + ((rs_b * kr) / 2) + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0));
+                b1 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2));
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b2 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4));
+                b3 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6));
+            } else {
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
+                b1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b3 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -323,14 +388,6 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
         // appear in the last group. So, a_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point1 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
-
             // Broadcast a[0,kr:kr+2].
             a_kfringe_buf = *(a_group + (rs_a * 0));
             a_bf16_0      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
@@ -340,26 +397,71 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_5x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256((__m256i const*)(b_group + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            md_t      partial_k_idx = k_start + k_full_pieces * 2;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2)));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b2 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+
+                b0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
+
+                b1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+
+                b2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+
+                b3 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -2026,8 +2128,9 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp      = _mm512_set1_epi8(0x08);
-    bool    signed_upscale = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    __m512i sign_comp       = _mm512_set1_epi8(0x08);
+    bool    signed_upscale  = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8, b1_s8;
@@ -2046,7 +2149,10 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
     /* Regs to store zero-point values */
+    // zp registers for int8_t zp
     __m512i zero_point, zero_point0, zero_point1;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3, zp_4, zp_5, zp_6, zp_7;
 
     /* Reg to store masks to interleave zero-point */
     __m512i mask_zp1, mask_zp2;
@@ -2164,18 +2270,59 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
         if (pre_ops_attr.zero_point_len > 1) {
             pre_op_zp_off =
                 (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
-            zero_point = _mm512_loadu_si512((uint8_t*)(pre_ops_attr.zero_point)
-                                            + pre_op_zp_off);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zp_2 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 16));
+                zp_4 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 32));
+                zp_6 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 48));
+
+                // Interleave zp vectors
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+                zp_5 = _mm512_permutex2var_ps(zp_4, mask_scale2, zp_4);
+                zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
+                zp_7 = _mm512_permutex2var_ps(zp_6, mask_scale2, zp_6);
+                zp_6 = _mm512_permutex2var_ps(zp_6, mask_scale1, zp_6);
+            } else {
+                // ZP type is DLP_S8
+                zero_point = _mm512_loadu_si512(
+                    (int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+            }
         } else {
             pre_op_zp_off = group;
-            zero_point    = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
-        }
 
-        zero_point1 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
+                zp_1 = zp_0;
+                zp_2 = zp_0;
+                zp_3 = zp_0;
+                zp_4 = zp_0;
+                zp_5 = zp_0;
+                zp_6 = zp_0;
+                zp_7 = zp_0;
+            } else {
+                // ZP type is DLP_S8, load and convert to DLP_F32 type
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
+        }
 
         for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
@@ -2188,27 +2335,42 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256(
                 (__m256i const*)(b_group + ((rs_b * kr) / 2) + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0));
+                b1 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2));
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4));
+                b3 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6));
+            } else {
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
+                b1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
-
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b3 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+4]*b[kr:kr+4,0-63]
@@ -2261,13 +2423,6 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
         // appear in the last group. So, a_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point1 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
 
             // Broadcast a[0,kr:kr+2].
             a_kfringe_buf = *(a_group + (rs_a * 0));
@@ -2278,26 +2433,75 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256((__m256i const*)(b_group + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            md_t      partial_k_idx = k_start + k_full_pieces * 2;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2)));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b2 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2)));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6)));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -3706,8 +3910,9 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp      = _mm512_set1_epi8(0x08);
-    bool    signed_upscale = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    __m512i sign_comp       = _mm512_set1_epi8(0x08);
+    bool    signed_upscale  = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8, b1_s8;
@@ -3726,7 +3931,10 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
     /* Regs to store zero-point values */
+    // zp registers for int8_t zp
     __m512i zero_point, zero_point0, zero_point1;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3, zp_4, zp_5, zp_6, zp_7;
 
     /* Reg to store masks to interleave zero-point */
     __m512i mask_zp1, mask_zp2;
@@ -3822,18 +4030,59 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
         if (pre_ops_attr.zero_point_len > 1) {
             pre_op_zp_off =
                 (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
-            zero_point = _mm512_loadu_si512((uint8_t*)(pre_ops_attr.zero_point)
-                                            + pre_op_zp_off);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zp_2 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 16));
+                zp_4 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 32));
+                zp_6 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 48));
+
+                // Interleave zp vectors
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+                zp_5 = _mm512_permutex2var_ps(zp_4, mask_scale2, zp_4);
+                zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
+                zp_7 = _mm512_permutex2var_ps(zp_6, mask_scale2, zp_6);
+                zp_6 = _mm512_permutex2var_ps(zp_6, mask_scale1, zp_6);
+            } else {
+                // ZP type is DLP_S8
+                zero_point = _mm512_loadu_si512(
+                    (int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+            }
         } else {
             pre_op_zp_off = group;
-            zero_point    = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
-        }
 
-        zero_point1 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
+                zp_1 = zp_0;
+                zp_2 = zp_0;
+                zp_3 = zp_0;
+                zp_4 = zp_0;
+                zp_5 = zp_0;
+                zp_6 = zp_0;
+                zp_7 = zp_0;
+            } else {
+                // ZP type is DLP_S8, load and convert to DLP_F32 type
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
+        }
 
         for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
@@ -3846,27 +4095,43 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256(
                 (__m256i const*)(b_group + ((rs_b * kr) / 2) + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0));
+                b1 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2));
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b2 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4));
+                b3 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6));
+            } else {
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
+                b1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b3 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -3907,13 +4172,6 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
         // appear in the last group. So, a_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point1 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
 
             // Broadcast a[0,kr:kr+2].
             a_kfringe_buf = *(a_group + (rs_a * 0));
@@ -3924,26 +4182,75 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256((__m256i const*)(b_group + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            md_t      partial_k_idx = k_start + k_full_pieces * 2;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2)));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b2 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2)));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6)));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -5071,8 +5378,9 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp      = _mm512_set1_epi8(0x08);
-    bool    signed_upscale = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    __m512i sign_comp       = _mm512_set1_epi8(0x08);
+    bool    signed_upscale  = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8, b1_s8;
@@ -5091,7 +5399,10 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
     /* Regs to store zero-point values */
+    // zp registers for int8_t zp
     __m512i zero_point, zero_point0, zero_point1;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3, zp_4, zp_5, zp_6, zp_7;
 
     /* Reg to store masks to interleave zero-point */
     __m512i mask_zp1, mask_zp2;
@@ -5199,18 +5510,59 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
         if (pre_ops_attr.zero_point_len > 1) {
             pre_op_zp_off =
                 (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
-            zero_point = _mm512_loadu_si512((uint8_t*)(pre_ops_attr.zero_point)
-                                            + pre_op_zp_off);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zp_2 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 16));
+                zp_4 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 32));
+                zp_6 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 48));
+
+                // Interleave zp vectors
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+                zp_5 = _mm512_permutex2var_ps(zp_4, mask_scale2, zp_4);
+                zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
+                zp_7 = _mm512_permutex2var_ps(zp_6, mask_scale2, zp_6);
+                zp_6 = _mm512_permutex2var_ps(zp_6, mask_scale1, zp_6);
+            } else {
+                // ZP type is DLP_S8
+                zero_point = _mm512_loadu_si512(
+                    (int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+            }
         } else {
             pre_op_zp_off = group;
-            zero_point    = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
-        }
 
-        zero_point1 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
+                zp_1 = zp_0;
+                zp_2 = zp_0;
+                zp_3 = zp_0;
+                zp_4 = zp_0;
+                zp_5 = zp_0;
+                zp_6 = zp_0;
+                zp_7 = zp_0;
+            } else {
+                // ZP type is DLP_S8, load and convert to DLP_F32 type
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
+        }
 
         for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr:kr+2].
@@ -5223,27 +5575,43 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256(
                 (__m256i const*)(b_group + ((rs_b * kr) / 2) + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0));
+                b1 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2));
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b2 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4));
+                b3 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6));
+            } else {
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
+                b1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b3 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -5272,14 +5640,6 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
         // appear in the last group. So, a_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point1 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
-
             // Broadcast a[0,kr:kr+2].
             a_kfringe_buf = *(a_group + (rs_a * 0));
             a_bf16_0      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
@@ -5289,26 +5649,75 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_2x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256((__m256i const*)(b_group + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            md_t      partial_k_idx = k_start + k_full_pieces * 2;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2)));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b2 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
+
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2)));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6)));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -6168,8 +6577,9 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
 
     __m512i shift_idx_64;
     MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx_64);
-    __m512i sign_comp      = _mm512_set1_epi8(0x08);
-    bool    signed_upscale = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    __m512i sign_comp       = _mm512_set1_epi8(0x08);
+    bool    signed_upscale  = false; /* u4 asymmetric: unsigned unpack 0..15 */
+    bool    float_domain_zp = pre_ops_attr.zero_point_type == DLP_BF16;
 
     /* regs to store intermediate int8 values */
     __m512i b0_s8, b1_s8;
@@ -6188,7 +6598,10 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
                          0x0B, 0x1A, 0x0A, 0x19, 0x09, 0x18, 0x08);
 
     /* Regs to store zero-point values */
+    // zp registers for int8_t zp
     __m512i zero_point, zero_point0, zero_point1;
+    // zp registers for bfloat16 zp
+    __m512 zp_0, zp_1, zp_2, zp_3, zp_4, zp_5, zp_6, zp_7;
 
     /* Reg to store masks to interleave zero-point */
     __m512i mask_zp1, mask_zp2;
@@ -6291,18 +6704,59 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
         if (pre_ops_attr.zero_point_len > 1) {
             pre_op_zp_off =
                 (group * pre_ops_attr.pre_op_ld) + pre_ops_attr.pre_op_b_j;
-            zero_point = _mm512_loadu_si512((uint8_t*)(pre_ops_attr.zero_point)
-                                            + pre_op_zp_off);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zp_2 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 16));
+                zp_4 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 32));
+                zp_6 = CVT_BF16_F32_INT_SHIFT((__m256i)_mm256_loadu_epi16(
+                    (bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off + 48));
+
+                // Interleave zp vectors
+                zp_1 = _mm512_permutex2var_ps(zp_0, mask_scale2, zp_0);
+                zp_0 = _mm512_permutex2var_ps(zp_0, mask_scale1, zp_0);
+                zp_3 = _mm512_permutex2var_ps(zp_2, mask_scale2, zp_2);
+                zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
+                zp_5 = _mm512_permutex2var_ps(zp_4, mask_scale2, zp_4);
+                zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
+                zp_7 = _mm512_permutex2var_ps(zp_6, mask_scale2, zp_6);
+                zp_6 = _mm512_permutex2var_ps(zp_6, mask_scale1, zp_6);
+            } else {
+                // ZP type is DLP_S8
+                zero_point = _mm512_loadu_si512(
+                    (int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+            }
         } else {
             pre_op_zp_off = group;
-            zero_point    = _mm512_set1_epi8(
-                *((uint8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
-        }
 
-        zero_point1 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            if (float_domain_zp == true) {
+                // ZP type is DLP_BF16, load and convert to DLP_F32 type
+                zp_0 = CVT_BF16_F32_INT_SHIFT(_mm256_set1_epi16(
+                    *((bfloat16*)(pre_ops_attr.zero_point) + pre_op_zp_off)));
+                zp_1 = zp_0;
+                zp_2 = zp_0;
+                zp_3 = zp_0;
+                zp_4 = zp_0;
+                zp_5 = zp_0;
+                zp_6 = zp_0;
+                zp_7 = zp_0;
+            } else {
+                // ZP type is DLP_S8, load and convert to DLP_F32 type
+                zero_point = _mm512_set1_epi8(
+                    *((int8_t*)(pre_ops_attr.zero_point) + pre_op_zp_off));
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
+            }
+        }
 
         for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             // Broadcast a[0,kr]
@@ -6315,27 +6769,43 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256(
                 (__m256i const*)(b_group + ((rs_b * kr) / 2) + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0));
+                b1 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2));
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b2 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4));
+                b3 = _mm512_cvtne2ps_pbh(
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7),
+                    LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6));
+            } else {
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
+                b1 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+                b3 =
+                    _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+            }
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -6352,13 +6822,6 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
         // appear in the last group. So, a_group and b_group pointers
         // need not be updated after handling k_partial pieces.
         if (k_partial_pieces) {
-            __m512i zero_reg = _mm512_setzero_si512();
-
-            /* Interleave zero_point values with zeroes */
-            zero_point1 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
-            zero_point0 =
-                _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
 
             // Broadcast a[0,kr:kr+2].
             a_kfringe_buf     = *(a_group + (rs_a * 0));
@@ -6369,27 +6832,75 @@ DLP_GEMM_M_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_1x64)
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b0_s4, b0_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
-
-            b0 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0));
-
-            b1 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3),
-                                     CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2));
-
             b1_s4 = _mm256_loadu_si256((__m256i const*)(b_group + 32));
 
             CVT_INT4_TO_INT8_64ELEM_MULTISHIFT(b1_s4, b1_s8, shift_idx_64,
                                                sign_comp, signed_upscale);
 
-            b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+            md_t      partial_k_idx = k_start + k_full_pieces * 2;
+            __mmask16 kpartial_keep =
+                LPGEMM_BF16U4_PARTIALK_KEEP_MASK(partial_k_idx);
 
-            b2 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4));
+            if (float_domain_zp == true) {
+                b0 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 1, scale1, zp_1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 0, scale0, zp_0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 3, scale3, zp_3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b0_s8, 2, scale2, zp_2)));
 
-            b3 = _mm512_cvtne2ps_pbh(CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7),
-                                     CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6));
+                b2 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 1, scale5, zp_5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 0, scale4, zp_4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 3, scale7, zp_7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep,
+                        LPGEMM_U4_DEQUANT_BF16ZP_16(b1_s8, 2, scale6, zp_6)));
+            } else {
+                __m512i zero_reg = _mm512_setzero_si512();
+                zero_point0 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_reg);
+                zero_point1 =
+                    _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_reg);
 
+                b0_s8 = _mm512_sub_epi8(b0_s8, zero_point0);
+                b0    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b0_s8, 1, scale1)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 0, scale0)));
+                b1 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b0_s8, 3, scale3)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b0_s8, 2, scale2)));
+                b1_s8 = _mm512_sub_epi8(b1_s8, zero_point1);
+                b2    = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                           CVT_INT8_F32_SCAL_16(b1_s8, 1, scale5)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 0, scale4)));
+                b3 = _mm512_cvtne2ps_pbh(
+                    _mm512_maskz_mov_ps(kpartial_keep,
+                                        CVT_INT8_F32_SCAL_16(b1_s8, 3, scale7)),
+                    _mm512_maskz_mov_ps(
+                        kpartial_keep, CVT_INT8_F32_SCAL_16(b1_s8, 2, scale6)));
+            }
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
             c_float_0p0 = _mm512_dpbf16_ps(c_float_0p0, a_bf16_0, b0);

@@ -42,6 +42,7 @@ typedef struct dlp_gemm_pre_op_t
     uint64_t                  scale_factor_type;
     void*                     zp;
     uint64_t                  zp_len;
+    uint64_t                  zp_type;
     struct dlp_gemm_pre_op_t* next;
 } dlp_gemm_pre_op;
 
@@ -90,6 +91,7 @@ typedef struct dlp_gemm_pre_op_attr_t
     md_t  scale_factor_type;
     void* zero_point;
     md_t  zero_point_len;
+    md_t  zero_point_type;
     md_t  pre_op_b_i;
     md_t  pre_op_b_j;
     md_t  group_size;
