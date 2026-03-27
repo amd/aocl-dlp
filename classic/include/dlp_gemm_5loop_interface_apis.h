@@ -85,6 +85,10 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
 DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                        /* mutable */);
 
+// F32×FP16→F32 mixed-precision variant (A=F32, B=FP16, C=F32)
+DLP_GEMM_5LOOP_UNIFIED(float, float16, float, float, f32f16f32of32,
+                       /* mutable */);
+
 // MP variant (const rs_b/cs_b/mtag_b)
 DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const);
 DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const);
@@ -150,6 +154,7 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32);
 DLP_GEMV(uint8_t, int8_t, int32_t, u8s8s32os32);
 DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32os32);
 DLP_GEMV(float16, float16, float16, f16f16f16of16);
+DLP_GEMV(float, float16, float, f32f16f32of32);
 
 #define DLP_GEMV_F32_FALLBACK(A_type, B_type, C_type, LP_SFX)                  \
     void dlp_gemv_rowvar_f32_fallback_##LP_SFX(                                \

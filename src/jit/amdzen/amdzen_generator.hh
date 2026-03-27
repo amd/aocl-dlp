@@ -446,4 +446,73 @@ class jitAmdZenFP16 : public dlp::jit::jitGeneratorBase
     }
 };
 
+/**
+ * @brief JIT generator for F32×FP16→F32 mixed-precision GEMM
+ *
+ * B is loaded as FP16 and converted to F32 via vcvtph2ps.
+ * A, C, alpha, beta are all F32. FMA uses vfmadd231ps.
+ * Supports MR=6, NR=64 blocking with 16 F32 elements per ZMM register.
+ */
+class jitAmdZenF32FP16 : public dlp::jit::jitGeneratorBase
+{
+    std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
+    std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
+    AOCL_DLP_MEMORY_TAG                            mtag_b;
+
+    static constexpr int FP16_ELEM_SIZE = 2;
+    static constexpr int F32_ELEM_SIZE  = 4;
+    static constexpr int F32_PER_ZMM    = 16;
+
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+  public:
+    md_t               MR, NR, KC;
+    md_t               numMRVariants, numNRVariants;
+    md_t               numKernelVariants;
+    md_t               K_UNROLL, PREFETCH_C_DIST;
+    md_t               c_downscale;
+    std::vector<void*> kernelCodeBlocks;
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
+
+    jitAmdZenF32FP16();
+    ~jitAmdZenF32FP16();
+    jitAmdZenF32FP16(const jitAmdZenF32FP16&)            = delete;
+    jitAmdZenF32FP16& operator=(const jitAmdZenF32FP16&) = delete;
+    jitAmdZenF32FP16(jitAmdZenF32FP16&&)                 = delete;
+    jitAmdZenF32FP16& operator=(jitAmdZenF32FP16&&)      = delete;
+
+    int getProcessBlockSize() const;
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+    dlp::jit::jitGeneratorError operator()(
+        const dlp::jit::jitGeneratorContext& jI) override
+    {
+        return generateAllKernels(jI);
+    }
+
+    std::vector<dlp::kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override
+    {
+        return mKernelDatatypes;
+    }
+
+    std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override
+    {
+        return mIsaFeaturesRequired;
+    }
+
+    dlp::kernels::kernelError executeKernel(
+        dlp::kernels::kernelParams* _params) override;
+
+    std::unique_ptr<jitGeneratorBase> clone() override
+    {
+        return std::make_unique<jitAmdZenF32FP16>();
+    }
+};
+
 } // namespace amdzen::gen

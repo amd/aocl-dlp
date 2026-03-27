@@ -95,6 +95,13 @@ aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
                                         const md_t      k,
                                         const md_t      n,
                                         dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT msz_t
+aocl_get_reorder_buf_size_f32f16f32of32(const char      order,
+                                        const char      trans,
+                                        const char      mat_type,
+                                        const md_t      k,
+                                        const md_t      n,
+                                        dlp_metadata_t* metadata);
 
 /**
  * @brief Returns the size of the buffer (in bytes) required for the
@@ -215,6 +222,16 @@ aocl_reorder_bf16s4f32of32(const char      order,
                            dlp_metadata_t* metadata);
 DLP_CLASSIC_EXPORT void
 aocl_reorder_f16f16f16of16(const char      order,
+                           const char      trans,
+                           const char      mat_type,
+                           const float16*  input_buf_addr,
+                           float16*        reorder_buf_addr,
+                           const md_t      k,
+                           const md_t      n,
+                           const md_t      ldb,
+                           dlp_metadata_t* metadata);
+DLP_CLASSIC_EXPORT void
+aocl_reorder_f32f16f32of32(const char      order,
                            const char      trans,
                            const char      mat_type,
                            const float16*  input_buf_addr,
@@ -792,6 +809,32 @@ aocl_gemm_bf16s8s32obf16(const char      order,
                          bfloat16*       c,
                          const md_t      ldc,
                          dlp_metadata_t* metadata);
+
+/**
+ * @brief F32xFP16->F32 mixed-precision GEMM: C = alpha * A * B + beta * C
+ *
+ * A is F32, B is FP16, C is F32. Accumulation is in F32.
+ * B is converted from FP16 to F32 inside the JIT micro-kernel
+ * using vcvtph2ps, then accumulated with vfmadd231ps.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_gemm_f32f16f32of32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const float     alpha,
+                        const float*    a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const float16*  b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const float     beta,
+                        float*          c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata);
 
 /**
  * @brief FP16×FP16 GEMM with native FP16 accumulation and FP16 output

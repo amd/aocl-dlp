@@ -619,6 +619,27 @@ UalRef::gemm(const Matrix& A,
             return true;
         }
 
+        case encode_types<MatrixType::f32, MatrixType::fp16, MatrixType::f32,
+                          MatrixType::f32>(): {
+            // F32×FP16→F32 mixed-precision reference
+            float alpha_f32 = static_cast<float>(alpha);
+            float beta_f32  = static_cast<float>(beta);
+
+            dlp::testing::classic::ref::aocl_gemm_f32f16f32of32_ref(
+                layoutA, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), alpha_f32,
+                reinterpret_cast<const float*>(
+                    A.getMatrixData().getMatrixPtr()),
+                static_cast<int>(A.getLeadingDimension()),
+                reinterpret_cast<const float16*>(
+                    B.getMatrixData().getMatrixPtr()),
+                static_cast<int>(B.getLeadingDimension()), beta_f32,
+                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
+                static_cast<int>(C.getLeadingDimension()), nullptr);
+
+            return true;
+        }
+
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s32,
                           MatrixType::s32>(): {
             // For u8/s8 operations, alpha/beta are int32_t type

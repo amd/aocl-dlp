@@ -618,4 +618,58 @@ gemmFP16DEBackend::getKernelInfoForInput(iDEInput* in)
     }
 }
 
+gemmF32FP16DEBackend::gemmF32FP16DEBackend()
+    : isAvx512(false)
+    , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
+    , canGenerateKernelInfo(true)
+{
+    isAvx512 =
+        arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
+
+    // F32×FP16 only requires AVX-512F + AVX-512BW (for vcvtph2ps zmm)
+    // Does NOT require avx512fp16 (that's for native FP16 arithmetic)
+    if (!isAvx512) {
+        canGenerateKernelInfo = false;
+    } else {
+        eKernelInstPref =
+            kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+    }
+}
+
+std::optional<kernel_frame::kernelInfo>
+gemmF32FP16DEBackend::getKernelInfoForInput(iDEInput* in)
+{
+    auto gemmIn = static_cast<gemmDEInput*>(in);
+    if (gemmIn == nullptr) {
+        return std::nullopt;
+    }
+
+    if (!canGenerateKernelInfo) {
+        return std::nullopt;
+    }
+
+    kernel_frame::kernelInfo kI;
+    if (gemmIn->m == 1 || gemmIn->n == 1) {
+        kI = getGemvKernelInfoForInputFastPath(
+            gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
+            gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
+            gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
+            gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
+    } else {
+        kI = getGemmKernelInfoForInputFastPath(
+            gemmIn->k_dtype, gemmIn->m, gemmIn->n, gemmIn->k, gemmIn->rs_a,
+            gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
+            gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
+            gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
+            gemmIn->kc_hint, gemmIn->c_downscale, false);
+    }
+
+    if ((kI.mr <= 0) || (kI.nr <= 0)) {
+        return std::nullopt;
+    } else {
+        return std::make_optional(kI);
+    }
+}
+
 } // namespace dlp::de

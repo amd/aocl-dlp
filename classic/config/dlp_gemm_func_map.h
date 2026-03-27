@@ -77,7 +77,8 @@
     PBMACRO(S8S8S32OS32, dlp_packb_nr64_s8s8s32os32)                           \
     PBMACRO(U8S4S32OS32, dlp_packb_nr64_u8s4s32o32)                            \
     PBMACRO(BF16S4F32OF32, dlp_packb_nr64_bf16s4f32of32)                       \
-    PBMACRO(BF16U4F32OF32, dlp_packb_nr64_bf16u4f32of32)
+    PBMACRO(BF16U4F32OF32, dlp_packb_nr64_bf16u4f32of32)                       \
+    PBMACRO(F32F16F32OF32, dlp_packb_nr64_f32f16f32of32)
 
 #define DLP_GEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX512_256             \
     PBMACRO(F32F32F32OF32, dlp_packb_nr64_f32f32f32of32)
@@ -127,7 +128,8 @@
     KMACRO(BF16BF16F32OF32, NULL)                                              \
     KMACRO(BF16S4F32OF32, NULL)                                                \
     KMACRO(S8S8S32OS32, dlp_gemm_rowvar_s8s8s32os32_6x64)                      \
-    KMACRO(BF16U4F32OF32, NULL)
+    KMACRO(BF16U4F32OF32, NULL)                                                \
+    KMACRO(F32F16F32OF32, NULL)
 
 #define DLP_GEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256                   \
     KMACRO(F32F32F32OF32, dlp_gemm_rowvar_f32f32f32of32_avx512_256_6x64m)
@@ -159,7 +161,8 @@
     PBMACRO(S8S8S32OS32, dlp_packb_nr64_s8s8s32os32)                           \
     PBMACRO(U8S4S32OS32, dlp_packb_nr64_u8s4s32o32)                            \
     PBSMACRO(BF16S4F32OF32, dlp_packb_nr64_bf16s4f32of32)                      \
-    PBSMACRO(BF16U4F32OF32, dlp_packb_nr64_bf16u4f32of32)
+    PBSMACRO(BF16U4F32OF32, dlp_packb_nr64_bf16u4f32of32)                      \
+    PBMACRO(F32F16F32OF32, dlp_packb_nr64_f32f16f32of32)
 
 #define DLP_GEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_TO_AVX512_256                  \
     PBMACRO(F32F32F32OF32, dlp_packb_nr64_f32f32f32of32)

@@ -39,6 +39,7 @@
 #include "kernels/dlp_gemm_eltwise_ops_kernels.h"
 #include "kernels/dlp_gemm_kernels.h"
 #include "kernels/dlp_gemm_utils_kernels.h"
+#include "kernels/f32f16f32/dlp_gemm_pack_f16_f32f16.h"
 #include "kernels/f32f32f32/dlp_gemm_pack_f32.h"
 #include "kernels/fp16fp16fp16/dlp_gemm_pack_fp16.h"
 #include "kernels/s8s8s32/dlp_gemm_packa_s8.h"
@@ -230,6 +231,7 @@ _dlp_gemm_cntx_init_func_map()
     global_cntx_t_list[BF16S4F32OF32].kern_fun_ptr   = NULL;
     global_cntx_t_list[F32OBF16].kern_fun_ptr        = NULL;
     global_cntx_t_list[BF16U4F32OF32].kern_fun_ptr   = NULL;
+    global_cntx_t_list[F32F16F32OF32].kern_fun_ptr   = NULL;
 
     // Kernel dispatch object factory.
     if (dlp_cpuid_is_avx512bf16_supported() == TRUE) {

@@ -179,11 +179,20 @@ UalDlp::reorder(const Matrix& in,
                 effective_cols, &meta);
         }
     } else if (in.getMatrixType() == MatrixType::fp16) {
-        // For fp16, use the f16f16f16of16 reorder function
-        alloc_bytes = aocl_get_reorder_buf_size_f16f16f16of16(
-            in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
-            in.isTransposed() ? 't' : 'n', 'B', effective_rows, effective_cols,
-            &meta);
+        // For fp16 B matrix, select reorder based on GEMM context:
+        // F32×FP16→F32 uses NR=64 packing, pure FP16 uses NR=128
+        if (A_type == MatrixType::f32 && C_type == MatrixType::f32
+            && accType == MatrixType::f32) {
+            alloc_bytes = aocl_get_reorder_buf_size_f32f16f32of32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, &meta);
+        } else {
+            alloc_bytes = aocl_get_reorder_buf_size_f16f16f16of16(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, &meta);
+        }
     } else if (in.getMatrixType() == MatrixType::s4) {
         // For s4, bf16s4 with f32 accumulation
         // Note: s4 is used with bf16 A matrix and f32 accumulation
@@ -273,13 +282,26 @@ UalDlp::reorder(const Matrix& in,
                 &meta);
             break;
         case MatrixType::fp16:
-            aocl_reorder_f16f16f16of16(
-                layout, in.isTransposed() ? 't' : 'n', 'B',
-                reinterpret_cast<const float16*>(
-                    in.getMatrixData().getMatrixPtr()),
-                reinterpret_cast<float16*>(out.getMatrixData().getMatrixPtr()),
-                effective_rows, effective_cols, in.getLeadingDimension(),
-                &meta);
+            if (A_type == MatrixType::f32 && C_type == MatrixType::f32
+                && accType == MatrixType::f32) {
+                aocl_reorder_f32f16f32of32(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const float16*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<float16*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    &meta);
+            } else {
+                aocl_reorder_f16f16f16of16(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const float16*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<float16*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    &meta);
+            }
             break;
         case MatrixType::s4:
             // For s4, use bf16s4 reorder function

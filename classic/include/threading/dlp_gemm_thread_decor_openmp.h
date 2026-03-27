@@ -65,6 +65,10 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
 GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     float16, float16, float16, float16, f16f16f16of16)
 
+// F32×FP16→F32 mixed-precision variant
+GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
+    float, float16, float, float, f32f16f32of32)
+
 // MP, GRP, Q variants (mutable mtag_b)
 GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     bfloat16, int8_t, float, float, bf16s4f32of32)
@@ -145,6 +149,9 @@ GEN_DLP_GEMM_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
 // FP16 variant
 GEN_DLP_GEMM_DECORATOR_FN_DECL(
     float16, float16, float16, float16, f16f16f16of16)
+
+// F32×FP16→F32 mixed-precision variant
+GEN_DLP_GEMM_DECORATOR_FN_DECL(float, float16, float, float, f32f16f32of32)
 
 // MP, GRP, Q variants (mutable mtag_b)
 GEN_DLP_GEMM_DECORATOR_FN_DECL(bfloat16, int8_t, float, float, bf16s4f32of32)

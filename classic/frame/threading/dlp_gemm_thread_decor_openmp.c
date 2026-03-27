@@ -617,6 +617,79 @@ dlp_gemm_f16f16f16of16_get_threading(md_t*       n_threads,
     }
 }
 
+/*
+ * F32×FP16→F32 mixed-precision threading function.
+ * Uses MR=6, NR=64 (same as BF16 for MR, same as F32 for NR).
+ * Based on bf16bf16f32of32 threading with F32F16F32OF32 block sizes.
+ */
+DLP_INLINE void
+dlp_gemm_f32f16f32of32_get_threading(md_t*       n_threads,
+                                     md_t*       ic_ways,
+                                     md_t*       jc_ways,
+                                     md_t        m,
+                                     md_t        n,
+                                     md_t        k,
+                                     dlp_rntm_t* rntm_g)
+{
+    *n_threads = rntm_g->num_threads;
+    *jc_ways   = rntm_g->jc_ways;
+    *ic_ways   = rntm_g->ic_ways;
+
+    if (((*ic_ways) > 0) || ((*jc_ways) > 0)) {
+        // If DLP_IC_NT or JC_NT are set.
+        // Default cases.
+        *ic_ways = ((*ic_ways) > 0) ? (*ic_ways) : 1;
+        *jc_ways = ((*jc_ways) > 0) ? (*jc_ways) : 1;
+
+        *n_threads = (*jc_ways) * (*ic_ways);
+    } else if ((*n_threads) > 1) {
+        md_t       NR = dlp_gemm_get_block_size_NR_global_cntx(F32F16F32OF32);
+        md_t       MR = dlp_gemm_get_block_size_MR_global_cntx(F32F16F32OF32);
+        md_t       mr_blks               = (m + MR - 1) / MR;
+        md_t       nr_blks               = (n + NR - 1) / NR;
+        md_t       mrxnr_blks            = mr_blks * nr_blks;
+        md_t       mr_blks_adj_n_threads = ((*n_threads) / mr_blks) * mr_blks;
+        md_t       delta_mr_blks_adj     = (*n_threads) - mr_blks_adj_n_threads;
+        const md_t low_freq_thres        = 6;
+
+        if (n <= NR) {
+            (*ic_ways)   = (*n_threads);
+            (*jc_ways)   = 1;
+            (*n_threads) = (*ic_ways) * (*jc_ways);
+        } else if (m <= MR) {
+            (*jc_ways)   = (*n_threads);
+            (*ic_ways)   = 1;
+            (*n_threads) = (*ic_ways) * (*jc_ways);
+        } else if (((n % NR) == 0) && (mrxnr_blks <= (*n_threads))
+                   && (delta_mr_blks_adj < low_freq_thres)) {
+            (*ic_ways)   = mr_blks;
+            (*jc_ways)   = (*n_threads) / (*ic_ways);
+            (*n_threads) = (*ic_ways) * (*jc_ways);
+        } else {
+            // If DLP_NUM_THREADS are set, generate jc,ic from the same.
+            dlp_thread_partition_2x2((*n_threads), m, n, ic_ways, jc_ways);
+
+            // Adjust ic/jc ways based on panel work heuristics.
+            if (mr_blks >= (*ic_ways)) {
+                dlp_gemm_pnl_wrk_heur_adjust_ic_jc_ways(MR, NR, m, n, n_threads,
+                                                        ic_ways, jc_ways);
+            }
+
+            // Handle prime number of threads.
+            if (dlp_is_prime(*n_threads)) {
+                dlp_gemm_pnl_wrk_heur_adjust_threading_for_prime_nt(
+                    MR, NR, m, n, n_threads, ic_ways, jc_ways);
+            }
+        }
+    } else {
+        // Setting all the values to 1 in case n_threads <= 1. This ensures
+        // the threading parameters are valid.
+        *n_threads = 1;
+        *jc_ways   = 1;
+        *ic_ways   = 1;
+    }
+}
+
 DLP_INLINE void
 batch_dlp_gemm_bf16bf16f32of32_get_threading(md_t        group_size,
                                              md_t*       n_threads,
@@ -1043,6 +1116,10 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
     float16, float16, float16, float16, f16f16f16of16, f16f16f16of16, 0, 0)
 
+// F32×FP16→F32 mixed-precision variant
+GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    float, float16, float, float, f32f16f32of32, f32f16f32of32, 0, 0)
+
 // MP variant (pre-ops + post-ops, mutable mtag_b, MC logic)
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
                                       int8_t,
@@ -1401,6 +1478,10 @@ GEN_DLP_GEMM_DECORATOR_UNIFIED(
 // FP16 variant
 GEN_DLP_GEMM_DECORATOR_UNIFIED(
     float16, float16, float16, float16, f16f16f16of16, 0, 0)
+
+// F32×FP16→F32 mixed-precision variant
+GEN_DLP_GEMM_DECORATOR_UNIFIED(
+    float, float16, float, float, f32f16f32of32, 0, 0)
 
 // MP variant (pre-ops + post-ops, mutable mtag_b, MC logic)
 GEN_DLP_GEMM_DECORATOR_UNIFIED(

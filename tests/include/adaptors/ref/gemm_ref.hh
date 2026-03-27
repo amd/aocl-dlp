@@ -68,6 +68,23 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                             dlp_metadata_t* post_ops);
 
 void
+aocl_gemm_f32f16f32of32_ref(const char      order,
+                            const char      transa,
+                            const char      transb,
+                            const md_t      m,
+                            const md_t      n,
+                            const md_t      k,
+                            float           alpha,
+                            const float*    A,
+                            int             lda,
+                            const float16*  B,
+                            int             ldb,
+                            float           beta,
+                            float*          C,
+                            int             ldc,
+                            dlp_metadata_t* post_ops);
+
+void
 aocl_gemm_bf16bf16f32of32_ref(const char      order,
                               const char      transa,
                               const char      transb,

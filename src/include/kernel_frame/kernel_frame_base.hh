@@ -69,8 +69,7 @@ enum class kernelDatatype : uint8_t
     bf16bf16f32of32,
     f32f32f32of32,
     f16f16f16of16, // FP16×FP16 → FP16 (with native FP16 accumulator)
-    f16f16f32of16, // FP16×FP16 → FP16 (with F32 accumulator)
-    f16f16f32of32, // FP16×FP16 → F32 (with F32 accumulator)
+    f32f16f32of32, // F32×FP16 → F32 (mixed-precision, B stored as FP16)
     max_kernel_datatypes
 };
 

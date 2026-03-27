@@ -59,9 +59,11 @@ typedef enum
         9, // float16 - A, float16 - B, float - C (FP32 accumulator)
     F16F16F16OF16 =
         10, // float16 - A, float16 - B, float16 - C (FP16 accumulator)
-    BF16U4F32OF32 = 11 // Only used for reordering uint4_t B matrix.
+    BF16U4F32OF32 = 11, // Only used for reordering uint4_t B matrix.
+    F32F16F32OF32 =
+        12 // float - A, float16 - B, float - C (F32×FP16 mixed-precision)
 } AOCL_DLP_OPERATION_TYPE;
-#define AOCL_DLP_OPERATION_TYPE_LEN 12
+#define AOCL_DLP_OPERATION_TYPE_LEN 13
 
 typedef enum
 {
