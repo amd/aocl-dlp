@@ -226,14 +226,23 @@ dlp_gemm_adjust_ic_jc_ways(const md_t m,
                            md_t*      jc_ways,
                            md_t       m_boost)
 {
+    md_t mu = (m + MR - 1) / MR;
+    md_t nu = (n + NR - 1) / NR;
+
     const md_t    m_ic                = m / (*ic_ways);
     const md_t    n_jc                = n / (*jc_ways);
     const int64_t cur_work_per_thread = m_ic + n_jc;
 
-    const md_t next_ic = dlp_next_factor((*n_threads), (*ic_ways));
-    const md_t prev_ic = dlp_prev_factor((*n_threads), (*ic_ways));
-    const md_t next_jc = dlp_next_factor((*n_threads), (*jc_ways));
-    const md_t prev_jc = dlp_prev_factor((*n_threads), (*jc_ways));
+    md_t          mu_ic = (mu + (*ic_ways) - 1) / (*ic_ways);
+    md_t          nu_jc = (nu + (*jc_ways) - 1) / (*jc_ways);
+    const int64_t cur_panel_work_per_thread = mu_ic + nu_jc;
+
+    const md_t next_ic      = dlp_next_factor((*n_threads), (*ic_ways));
+    const md_t next_next_ic = dlp_next_factor((*n_threads), next_ic);
+    const md_t prev_ic      = dlp_prev_factor((*n_threads), (*ic_ways));
+    const md_t next_jc      = dlp_next_factor((*n_threads), (*jc_ways));
+    const md_t prev_jc      = dlp_prev_factor((*n_threads), (*jc_ways));
+    const md_t prev_prev_jc = dlp_prev_factor((*n_threads), prev_jc);
 
     const md_t m_next_ic = m / next_ic;
     const md_t m_prev_ic = m / prev_ic;
@@ -243,14 +252,27 @@ dlp_gemm_adjust_ic_jc_ways(const md_t m,
     const int64_t next_jc_work_per_thread = n_next_jc + m_prev_ic;
     const int64_t next_ic_work_per_thread = m_next_ic + n_prev_jc;
 
+    md_t          mu_next_ic                    = (mu + next_ic - 1) / next_ic;
+    md_t          nu_prev_jc                    = (nu + prev_jc - 1) / prev_jc;
+    const int64_t next_ic_panel_work_per_thread = mu_next_ic + nu_prev_jc;
+
+    md_t          mu_next_next_ic = (mu + next_next_ic - 1) / next_next_ic;
+    md_t          nu_prev_prev_jc = (nu + prev_prev_jc - 1) / prev_prev_jc;
+    const int64_t next_next_ic_panel_work_per_thread =
+        mu_next_next_ic + nu_prev_prev_jc;
+
+    md_t nu_mod_jc_ways      = nu % (*jc_ways);
+    md_t nu_mod_prev_jc_ways = nu % prev_jc;
+
     const md_t MCx2                = MC * 2;
     const md_t k_factor            = k / KC;
     const md_t n_jc_modulo_NR      = n_jc % NR;
     const md_t n_prev_jc_modulo_NR = n_prev_jc % NR;
     const md_t n_next_jc_modulo_NR = n_next_jc % NR;
 
-    bool can_increase_ic = FALSE;
-    bool can_increase_jc = FALSE;
+    bool can_increase_ic       = FALSE;
+    bool can_increase_ic_twice = FALSE;
+    bool can_increase_jc       = FALSE;
 
     if (((*ic_ways) > 1) && ((*jc_ways) < (*n_threads))) {
         if (next_jc_work_per_thread < cur_work_per_thread) {
@@ -287,11 +309,29 @@ dlp_gemm_adjust_ic_jc_ways(const md_t m,
                       && (n_next_jc_modulo_NR == 0))) {
             can_increase_ic = TRUE;
         }
+        // Performance improvement observed when per thread panel work reduces
+        // with increasing ic upto 2 increments in ic.
+        else if (((nu_mod_jc_ways != 0)
+                  || ((m > (m_boost * n)) && (nu_mod_prev_jc_ways == 0)))
+                 && (next_ic <= (*n_threads))
+                 && (next_ic_panel_work_per_thread
+                     < cur_panel_work_per_thread)) {
+            can_increase_ic = TRUE;
+            if ((nu_mod_prev_jc_ways != 0) && (next_next_ic <= (*n_threads))
+                && (next_next_ic_panel_work_per_thread
+                    < next_ic_panel_work_per_thread)) {
+                can_increase_ic_twice = TRUE;
+            }
+        }
     }
 
     if (can_increase_ic) {
         (*ic_ways) = next_ic;
         (*jc_ways) = prev_jc;
+        if (can_increase_ic_twice) {
+            (*ic_ways) = next_next_ic;
+            (*jc_ways) = prev_prev_jc;
+        }
     } else if (can_increase_jc) {
         // Giving priority to ic and m dimensions, if m >= n, jc must be < ic.
         if (((m >= n) && (prev_ic >= next_jc))
@@ -809,7 +849,7 @@ dlp_gemm_f32f32f32of32_get_threading(md_t*       n_threads,
         } else {
             // If DLP_NUM_THREADS are set, generate jc,ic from the same.
             dlp_thread_partition_2x2((*n_threads), m, n, ic_ways, jc_ways);
-            if ((mr_blks >= (*ic_ways)) && (nr_blks >= (*jc_ways))) {
+            if (mr_blks >= (*ic_ways)) {
                 dlp_gemm_adjust_ic_jc_ways(m, n, k, MC, NC, KC, MR, NR,
                                            n_threads, ic_ways, jc_ways, 5);
             }
