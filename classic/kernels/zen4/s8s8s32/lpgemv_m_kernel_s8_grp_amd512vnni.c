@@ -102,9 +102,10 @@ LPGEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
             md_t group_end =
                 ((md_t)grp_post_ops_attr.grp_post_op_k + kc0 - 1) / group_size;
-            md_t num_groups = group_end - group_start + 1;
 
-            b_pc = b + (n_sub_updated * pc) + (jr * num_groups * group_size);
+            md_t kc0_updated = make_multiple_of_n(kc0, 4);
+            b_pc             = b + (n_sub_updated * pc)
+                   + ((jc_cur_loop_rem + jr) * kc0_updated);
 
             md_t g_id = 0;
             for (iter_t group = group_start; group <= group_end; group++) {
