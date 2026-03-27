@@ -298,7 +298,7 @@ DLP_GEMM_5LOOP_UNIFIED(
         return;
     }
 
-#ifdef DLP_KERNELS_ZEN4
+#if 0
     // Invoke gemv kernels for m = 1 or n = 1.
     if (((m == 1) || (n == 1)) && (mtag_b == REORDERED)) {
         if ((k % grp_post_op_list->group_size != 0)
@@ -317,7 +317,6 @@ DLP_GEMM_5LOOP_UNIFIED(
 
         return;
     }
-
 #endif
 
     // Strides are updated based on matrix packing/reordering.

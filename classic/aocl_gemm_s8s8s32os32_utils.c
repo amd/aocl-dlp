@@ -155,17 +155,23 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     // not rounded to NR (=64), since that would result in memory wastage.
 #ifdef DLP_KERNELS_ZEN4
     md_t n_reorder;
+#if 0
     if (n == 1) {
         n_reorder = 1;
-    } else {
+    } else
+#endif
+    {
         n_reorder = dlp_make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 4.
     md_t k_reorder;
+#if 0
     if (n == 1) {
         k_reorder = k;
-    } else {
+    } else
+#endif
+    {
         k_reorder = dlp_make_multiple_of_n(k, 4);
     }
 #else
@@ -355,6 +361,7 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
     }
 
 #ifdef DLP_KERNELS_ZEN4
+#if 0
     if (n == 1) {
         // Calculate the address of the beginning of the column sum buffer that
         // is allocated after the reorder buffer.
@@ -379,6 +386,7 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
 
         return;
     }
+#endif
 #endif
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.
