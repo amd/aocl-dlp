@@ -5126,9 +5126,6 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_4x16)
             }
         }
 
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
-
         for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
                 0xFFFF, (__m256i const*)(b_group + ((rs_b * kr) / 2)));
@@ -6005,9 +6002,6 @@ DLP_GEMM_MN_FRINGE_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_3x16)
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
             }
         }
-
-        zero_point0 =
-            _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
 
         for (iter_t kr = 0; kr < k_full_pieces; kr += 1) {
             b0_s4 = _mm256_maskz_loadu_epi8(
