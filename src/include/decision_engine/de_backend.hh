@@ -233,7 +233,7 @@ class gemmF32DEBackend : public iDEBackend
                                ? 16
                                : 64;
                 k_unroll = 2;
-                kc       = 512; // This is hardcoded from ZEN4 context.
+                kc       = 512; // This is hardcoded from ZEN3 context.
             } else if (isAvx512) {
                 mr = 1;
                 nr = 64;
@@ -242,7 +242,6 @@ class gemmF32DEBackend : public iDEBackend
                      == kernel_frame::kernelInstrPreference::avx512_ymm_favour)
                         ? 2
                         : 4;
-                kc = 512;
             } else {
                 return INVALID_KERNEL_INFO;
             }
