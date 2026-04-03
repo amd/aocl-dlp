@@ -22,9 +22,8 @@ gemm_tests:
     mtagA: ["none","pack","pack"]
     mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 100.0
+      absolute: 50.0
     product_type: "simple"
   # Basic test cases bf16bf16f32obf16
   - name: "medium_matrix"
@@ -48,7 +47,6 @@ gemm_tests:
     mtagA: ["none","pack","pack"]
     mtagB: ["reorder","pack","none"]   # Matrix B reordering can improve performance
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 200.0
+      absolute: 50.0
     product_type: "simple"

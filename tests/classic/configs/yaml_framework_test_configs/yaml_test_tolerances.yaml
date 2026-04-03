@@ -34,9 +34,8 @@ tolerance_test:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      absolute: 5
       relative: 1
-
+      absolute: 5
   # Test 3: Zero tolerance (bitwise equality)
   - name: "zero_tolerance"
     a_type: ["f32"]
@@ -54,8 +53,8 @@ tolerance_test:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      absolute: 0
       relative: 0
+      absolute: 0
 
   # Test 4: Only relative tolerance specified
   - name: "relative_only"

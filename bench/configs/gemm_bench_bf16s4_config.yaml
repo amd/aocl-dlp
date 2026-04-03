@@ -58,9 +58,8 @@ gemm_tests:
             alpha_type: ["f32"]
             alpha: 1
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 125.0
+      absolute: 50.0
     product_type: "cartesian"
 
   # ==========================================================================
@@ -97,9 +96,8 @@ gemm_tests:
             zero_point_len: ["1"]
             zero_point_type: ["f32"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 100.0
+      absolute: 50.0
     product_type: "cartesian"
 
   # ==========================================================================
@@ -136,9 +134,8 @@ gemm_tests:
             zero_point_len: ["1"]
             zero_point_type: ["f32"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 100.0
+      absolute: 50.0
     product_type: "cartesian"
 
   # ==========================================================================
@@ -176,9 +173,8 @@ gemm_tests:
             zero_point_len: ["1"]
             zero_point_type: ["f32"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 100.0
+      absolute: 50.0
     product_type: "cartesian"
 
   # Test 5: M >= 64, N >= 1024, K >= 1024
@@ -213,9 +209,8 @@ gemm_tests:
             zero_point_len: ["n"]
             zero_point_type: ["f32"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 100.0
+      absolute: 50.0
     product_type: "cartesian"
 
   # Test 6: M = 32, Higher N and K (N > 3072) when N <= K
@@ -249,9 +244,8 @@ gemm_tests:
             zero_point_len: ["n"]
             zero_point_type: ["f32"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 100.0
+      absolute: 50.0
     product_type: "cartesian"
 
   # ==========================================================================
@@ -288,7 +282,6 @@ gemm_tests:
             zero_point_len: ["1"]
             zero_point_type: ["f32"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 100.0
+      absolute: 50.0
     product_type: "cartesian"

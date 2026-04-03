@@ -48,6 +48,7 @@ CLEAN_PREVIOUS=true
 VERBOSE=false
 SERVE_HTTP=false
 HTTP_PORT=8080
+GCOV_TOOL="gcov"
 
 # Function to print colored output
 print_info() {
@@ -136,6 +137,41 @@ check_dependencies() {
     fi
 
     print_verbose "All dependencies found: lcov, genhtml, gcov"
+}
+
+# Function to resolve a gcov tool matching the configured compiler.
+resolve_gcov_tool() {
+    GCOV_TOOL="gcov"
+
+    local cmake_cache="$BUILD_DIR/CMakeCache.txt"
+    if [ ! -f "$cmake_cache" ]; then
+        print_verbose "CMake cache not found, using default gcov"
+        return 0
+    fi
+
+    local c_compiler
+    c_compiler=$(grep -E '^CMAKE_C_COMPILER:STRING=' "$cmake_cache" | head -1 | cut -d= -f2-)
+
+    if [ -z "$c_compiler" ]; then
+        print_verbose "C compiler not found in CMake cache, using default gcov"
+        return 0
+    fi
+
+    local compiler_base
+    compiler_base=$(basename "$c_compiler")
+
+    if [[ "$compiler_base" =~ -([0-9]+)$ ]]; then
+        local compiler_ver="${BASH_REMATCH[1]}"
+        local versioned_gcov="gcov-$compiler_ver"
+
+        if command -v "$versioned_gcov" >/dev/null 2>&1; then
+            GCOV_TOOL="$versioned_gcov"
+            print_verbose "Resolved gcov tool '$GCOV_TOOL' from compiler '$compiler_base'"
+            return 0
+        fi
+    fi
+
+    print_verbose "No compiler-matched gcov found, using default gcov"
 }
 
 # Function to validate directories
@@ -275,6 +311,7 @@ collect_coverage_data() {
     lcov --capture --directory "$BUILD_DIR" \
          --output-file /tmp/coverage_raw.info \
          --base-directory "$PROJECT_ROOT" \
+            --gcov-tool "$GCOV_TOOL" \
          --no-external \
          --quiet
 
@@ -636,6 +673,7 @@ main() {
 
     check_dependencies
     validate_directories
+    resolve_gcov_tool
     clean_previous_reports
     create_coverage_directory
     generate_exclusion_patterns

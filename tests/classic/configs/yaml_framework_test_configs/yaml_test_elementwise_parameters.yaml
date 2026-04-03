@@ -20,8 +20,8 @@ yaml_test:
     mtagA: "none"
     mtagB: "none"
     tolerances:
-      absolute: 50
-      relative: 50
+      relative: 125.0
+      absolute: 50.0
     post_operations:
       cartesian: true
       operations:
@@ -48,8 +48,8 @@ yaml_test:
     mtagA: "none"
     mtagB: "none"
     tolerances:
-      absolute: 50
-      relative: 50
+      relative: 130.0
+      absolute: 52.0
     post_operations:
       cartesian: false
       operations:
@@ -89,8 +89,8 @@ yaml_test:
     mtagA: "none"
     mtagB: "none"
     tolerances:
-      absolute: 50
-      relative: 50
+      relative: 125.0
+      absolute: 50.0
     post_operations:
       cartesian: true
       operations:

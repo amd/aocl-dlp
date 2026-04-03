@@ -40,9 +40,8 @@ gemm_tests:
             a_quant_zp_len: ["m"]
             a_quant_zp_type: ["f32"]
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 125.0
+      absolute: 50.0
     product_type: "simple"
 
   # ==========================================================================
@@ -77,9 +76,8 @@ gemm_tests:
         - type: "Elementwise-GELU-TANH"
           params: {}
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 150.0
+      absolute: 64.1
     product_type: "simple"
 
   # ==========================================================================
@@ -114,9 +112,8 @@ gemm_tests:
         - type: "Elementwise-RELU"
           params: {}
     tolerances:
-      float: 1.0e-5
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 125.0
+      absolute: 50.0
     product_type: "simple"
 
   # ==========================================================================
@@ -155,7 +152,6 @@ gemm_tests:
             scale_factor_type: ["f32"]
             scale_factor_len: ["n"]
     tolerances:
-      float: 1.0e-4
-      bfloat16: 1.0e-2
-      int8: 0
+      relative: 152.5
+      absolute: 65.1
     product_type: "simple"

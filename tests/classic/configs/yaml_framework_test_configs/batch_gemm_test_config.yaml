@@ -227,8 +227,8 @@ batch_gemm_tests:
     mtagB: "none"
     group_size: 3  # Single group, 3 matrices
     tolerances:
-      relative: 150.0
-      absolute: 150.0
+      relative: 127.5
+      absolute: 51.0
     post_operations:
       cartesian: false
       operations:
@@ -281,8 +281,8 @@ batch_gemm_tests:
     mtagB: "none"
     group_size: [2, 2]  # 2 groups, each with 2 matrices
     tolerances:
-      relative: 200.0
-      absolute: 200.0
+      relative: 130.0
+      absolute: 52.0
     post_operations:
       cartesian: false
       operations:

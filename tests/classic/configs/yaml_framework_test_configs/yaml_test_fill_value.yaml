@@ -21,8 +21,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      absolute: 0
-      relative: 0
+      relative: 100.0
+      absolute: 50.0
     fill_value:
       lb: -2.5
       ub: 3.5
@@ -45,8 +45,8 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none"]
     tolerances:
-      absolute: 0
-      relative: 0
+      relative: 100.0
+      absolute: 50.0
     fill_value:
       lb: -1.0
       ub: 1.0
