@@ -457,7 +457,7 @@ class kernelRegister
      *
      * THREAD SAFETY: Thread-safe via underlying dispatch table synchronization
      *
-     * @param kB Pointer to kernel instance (ownership transferred to registry)
+     * @param _kB Pointer to kernel instance (ownership transferred to registry)
      * @param kernelFamily String identifier for kernel family (moved)
      * @param kDtype Specific datatype for function pointer retrieval
      * @return Reference wrapper to registered kernel, or nullptr on failure

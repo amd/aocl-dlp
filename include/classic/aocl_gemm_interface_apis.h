@@ -53,6 +53,7 @@ aocl_get_reorder_buf_size_f32f32f32of32(const char      order,
                                         const md_t      k,
                                         const md_t      n,
                                         dlp_metadata_t* metadata);
+/// @brief Returns buffer size (in bytes) for matrix reordering.
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_u8s8s32os32(const char      order,
                                       const char      trans,
@@ -60,6 +61,7 @@ aocl_get_reorder_buf_size_u8s8s32os32(const char      order,
                                       const md_t      k,
                                       const md_t      n,
                                       dlp_metadata_t* metadata);
+/// @brief Returns buffer size (in bytes) for matrix reordering.
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
                                           const char      trans,
@@ -67,6 +69,7 @@ aocl_get_reorder_buf_size_bf16bf16f32of32(const char      order,
                                           const md_t      k,
                                           const md_t      n,
                                           dlp_metadata_t* metadata);
+/// @brief Returns buffer size (in bytes) for matrix reordering.
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
                                       const char      trans,
@@ -74,6 +77,7 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
                                       const md_t      k,
                                       const md_t      n,
                                       dlp_metadata_t* metadata);
+/// @brief Returns buffer size (in bytes) for matrix reordering.
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
                                       const char      trans,
@@ -81,6 +85,7 @@ aocl_get_reorder_buf_size_u8s4s32os32(const char      order,
                                       const md_t      k,
                                       const md_t      n,
                                       dlp_metadata_t* metadata);
+/// @brief Returns buffer size (in bytes) for matrix reordering.
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
                                         const char      trans,
@@ -88,6 +93,7 @@ aocl_get_reorder_buf_size_bf16s4f32of32(const char      order,
                                         const md_t      k,
                                         const md_t      n,
                                         dlp_metadata_t* metadata);
+/// @brief Returns buffer size (in bytes) for matrix reordering.
 DLP_CLASSIC_EXPORT msz_t
 aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
                                         const char      trans,
@@ -150,6 +156,7 @@ aocl_reorder_f32f32f32of32(const char      order,
                            const md_t      n,
                            const md_t      ldb,
                            dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_f32f32f32of32_reference(const char      order,
                                      const char      trans,
@@ -160,6 +167,7 @@ aocl_reorder_f32f32f32of32_reference(const char      order,
                                      const md_t      n,
                                      const md_t      ldb,
                                      dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_u8s8s32os32(const char      order,
                          const char      trans,
@@ -170,6 +178,7 @@ aocl_reorder_u8s8s32os32(const char      order,
                          const md_t      n,
                          const md_t      ldb,
                          dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_bf16bf16f32of32(const char      order,
                              const char      trans,
@@ -180,6 +189,7 @@ aocl_reorder_bf16bf16f32of32(const char      order,
                              const md_t      n,
                              const md_t      ldb,
                              dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_bf16bf16f32of32_reference(const char      order,
                                        const char      trans,
@@ -190,6 +200,7 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
                                        const md_t      n,
                                        const md_t      ldb,
                                        dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_s8s8s32os32(const char      order,
                          const char      trans,
@@ -200,6 +211,7 @@ aocl_reorder_s8s8s32os32(const char      order,
                          const md_t      n,
                          const md_t      ldb,
                          dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_u8s4s32os32(const char      order,
                          const char      trans,
@@ -210,6 +222,7 @@ aocl_reorder_u8s4s32os32(const char      order,
                          const md_t      n,
                          const md_t      ldb,
                          dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_bf16s4f32of32(const char      order,
                            const char      trans,
@@ -220,6 +233,7 @@ aocl_reorder_bf16s4f32of32(const char      order,
                            const md_t      n,
                            const md_t      ldb,
                            dlp_metadata_t* metadata);
+/// @brief Reorders the input matrix into an optimized layout.
 DLP_CLASSIC_EXPORT void
 aocl_reorder_f16f16f16of16(const char      order,
                            const char      trans,
@@ -296,7 +310,6 @@ aocl_reorder_f32obf16(const char      order,
 /**
  * @brief Converts a reordered matrix back to its original format.
  * @param[in] order Memory layout (row-major or column-major).
- * @param[in] trans Transpose option for the matrix.
  * @param[in] mat_type Type of the matrix (e.g., 'A' for matrix A, 'B' for
  * matrix B).
  * @param[in] reorder_buf_addr Pointer to the reordered matrix buffer.
@@ -315,6 +328,7 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
                                const md_t      n,
                                const md_t      ldb,
                                dlp_metadata_t* metadata);
+/// @brief Converts a reordered matrix back to its original layout.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_bf16bf16f32of32_reference(const char      order,
                                          const char      mat_type,
@@ -324,6 +338,7 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
                                          const md_t      n,
                                          const md_t      ldb,
                                          dlp_metadata_t* metadata);
+/// @brief Converts a reordered matrix back to its original layout.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_f32f32f32of32_reference(const char      order,
                                        const char      mat_type,
@@ -333,6 +348,7 @@ aocl_unreorder_f32f32f32of32_reference(const char      order,
                                        const md_t      n,
                                        const md_t      ldb,
                                        dlp_metadata_t* metadata);
+/// @brief Converts a reordered matrix back to its original layout.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_s8s8s32os32_reference(const char      order,
                                      const char      mat_type,
@@ -342,6 +358,7 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
                                      const md_t      n,
                                      const md_t      ldb,
                                      dlp_metadata_t* metadata);
+/// @brief Converts a reordered matrix back to its original layout.
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_f16f16f16of16(const char      order,
                              const char      mat_type,
@@ -353,28 +370,32 @@ aocl_unreorder_f16f16f16of16(const char      order,
                              dlp_metadata_t* metadata);
 
 /**
- * @brief GEMM (General Matrix Multiplication) with support for fused
- * post-operations.
- */
-
-/**
- * @param[in] order Memory layout (row-major or column-major).
- * @param[in] transa Transpose option for matrix A.
- * @param[in] transb Transpose option for matrix B.
- * @param[in] m Row dimensions.
- * @param[in] n Column dimensions.
- * @param[in] k Inner dimensions.
+ * @brief Performs GEMM (General Matrix Multiplication) with support
+ * for fused post-operations.
+ *
+ * Computes C = post_ops(alpha * op(A) * op(B) + beta * C), where op(X)
+ * is X or X^T depending on the transpose flag.
+ *
+ * @param[in] order Memory layout: 'R' for row-major, 'C' for column-major.
+ * @param[in] transa Transpose option for matrix A: 'N' (no) or 'T' (yes).
+ * @param[in] transb Transpose option for matrix B: 'N' (no) or 'T' (yes).
+ * @param[in] m Number of rows in matrices A and C.
+ * @param[in] n Number of columns in matrices B and C.
+ * @param[in] k Number of columns in A / rows in B (inner dimension).
  * @param[in] alpha Scalar multiplier for the product of matrices A and B.
  * @param[in] a Pointer to matrix A.
  * @param[in] lda Leading dimension of matrix A.
- * @param[in] mem_format_a Memory format of matrix A.
+ * @param[in] mem_format_a Memory format of matrix A: 'N' (normal),
+ *            'P' (packed), or 'R' (reordered).
  * @param[in] b Pointer to matrix B.
  * @param[in] ldb Leading dimension of matrix B.
- * @param[in] mem_format_b Memory format of matrix B.
+ * @param[in] mem_format_b Memory format of matrix B: 'N' (normal),
+ *            'P' (packed), or 'R' (reordered).
  * @param[in] beta Scalar multiplier for matrix C.
- * @param[in/out] c Pointer to matrix C.
+ * @param[in,out] c Pointer to matrix C (output).
  * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation structures.
+ * @param[in] metadata Pointer to post-operation metadata, or NULL for
+ *            no post-operations.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_u8s8s32os32(const char      order,
@@ -490,7 +511,7 @@ aocl_gemm_u8s8s32ou8(const char      order,
  * @param[in] ldb Leading dimension of matrix B.
  * @param[in] mem_format_b Memory format of matrix B.
  * @param[in] beta Scalar multiplier for matrix C.
- * @param[in/out] c Pointer to matrix C.
+ * @param[in,out] c Pointer to matrix C.
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
@@ -608,7 +629,7 @@ aocl_gemm_s8s8s32ou8(const char      order,
  * @param[in] ldb Leading dimension of matrix B.
  * @param[in] mem_format_b Memory format of matrix B.
  * @param[in] beta Scalar multiplier for matrix C.
- * @param[in/out] c Pointer to matrix C.
+ * @param[in,out] c Pointer to matrix C.
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
@@ -666,7 +687,7 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
  * @param[in] ldb Leading dimension of matrix B.
  * @param[in] mem_format_b Memory format of matrix B.
  * @param[in] beta Scalar multiplier for matrix C.
- * @param[in/out] c Pointer to matrix C.
+ * @param[in,out] c Pointer to matrix C.
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
@@ -857,7 +878,7 @@ aocl_gemm_f32f16f32of32(const char      order,
  * @param[in] ldb Leading dimension of matrix B.
  * @param[in] mem_format_b Memory format of matrix B.
  * @param[in] beta Scalar multiplier for matrix C.
- * @param[in/out] c Pointer to matrix C (FP16 output).
+ * @param[in,out] c Pointer to matrix C (FP16 output).
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
  */
@@ -1059,25 +1080,7 @@ aocl_gemm_f32s8s32ou8(const char      order,
                       const md_t      ldc,
                       dlp_metadata_t* metadata);
 
-/**
- * @param[in] order Memory layout (row-major or column-major).
- * @param[in] transa Transpose option for matrix A.
- * @param[in] transb Transpose option for matrix B.
- * @param[in] m Row dimensions.
- * @param[in] n Column dimensions.
- * @param[in] k Inner dimensions.
- * @param[in] alpha Scalar multiplier for the product of matrices A and B.
- * @param[in] a Pointer to matrix A.
- * @param[in] lda Leading dimension of matrix A.
- * @param[in] mem_format_a Memory format of matrix A.
- * @param[in] b Pointer to matrix B.
- * @param[in] ldb Leading dimension of matrix B.
- * @param[in] mem_format_b Memory format of matrix B.
- * @param[in] beta Scalar multiplier for matrix C.
- * @param[in/out] c Pointer to matrix C.
- * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation structures.
- */
+/// @copydoc aocl_gemm_u8s8s32os32
 DLP_CLASSIC_EXPORT void
 aocl_gemm_f32f32f32of32(const char      order,
                         const char      transa,

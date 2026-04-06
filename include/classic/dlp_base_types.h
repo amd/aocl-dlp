@@ -74,8 +74,10 @@
 #endif
 
 #ifdef DLP_CLASSIC_ARCH_64
+/** @brief Matrix buffer size type (64-bit on 64-bit platforms). */
 typedef uint64_t msz_t;
 #else
+/** @brief Matrix buffer size type (32-bit on 32-bit platforms). */
 typedef uint32_t msz_t;
 #endif
 
@@ -85,22 +87,34 @@ typedef uint32_t msz_t;
 #define DLP_INLINE static
 #endif
 
+/** @brief Matrix dimension type. Used for m, n, k, leading dimensions. */
 typedef int64_t md_t;
 
-// iter_t: Type for loop iteration variables that iterate over dimensions.
-// Using int64_t ensures compatibility with md_t (dimension type) and avoids
-// sign-compare warnings when comparing with dimension values.
+/**
+ * @brief Loop iteration type, compatible with md_t.
+ *
+ * Using int64_t avoids sign-compare warnings when comparing
+ * with dimension values.
+ */
 typedef int64_t iter_t;
 
+/**
+ * @brief Opaque pointer-sized handle type.
+ *
+ * This is not itself a function-pointer type; it is an opaque handle that
+ * may be used internally to store callable addresses or other implementation
+ * specific pointers.
+ */
 typedef void* opaq_fp_t;
 
+/** @brief Transpose options for matrix operations. */
 typedef enum
 {
-    DLP_NO_TRANSPOSE = 0,
-    DLP_TRANSPOSE,
-    DLP_CONJ_NO_TRANSPOSE,
-    DLP_CONJ_TRANSPOSE,
-    DLP_PACKED,
+    DLP_NO_TRANSPOSE = 0,  /**< No transpose */
+    DLP_TRANSPOSE,         /**< Transpose */
+    DLP_CONJ_NO_TRANSPOSE, /**< Conjugate, no transpose */
+    DLP_CONJ_TRANSPOSE,    /**< Conjugate transpose */
+    DLP_PACKED,            /**< Packed format */
 } dlp_trans_t;
 
 #define dlp_min(a, b)  ((a) < (b) ? (a) : (b))

@@ -30,6 +30,13 @@
 
 #include <stdint.h>
 
+/**
+ * @brief BFloat16 (Brain Floating Point) type definition.
+ *
+ * BFloat16 format: 1 sign bit + 8 exponent bits + 7 mantissa bits = 16 bits.
+ * Same exponent range as float32, reduced mantissa precision.
+ * Stored as int16_t for bit-level compatibility.
+ */
 typedef int16_t bfloat16;
 
 #endif // AOCL_DLP_GEMM_HALF_PRECISION_TYPE_H

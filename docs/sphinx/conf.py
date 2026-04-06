@@ -93,7 +93,7 @@ else:
     templates_path = ['_template']
 
 
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'CMakeLists.txt']
+exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', 'CMakeLists.txt', 'requirements.txt']
 
 f = open(".sphinx/_toc.yml.in", "w")
 f.write("root: index")
@@ -108,7 +108,9 @@ html_theme = 'rocm_docs_theme'
 html_theme_options = {
     "link_main_doc": False,
     "flavor": "local",
-    "repository_provider" : None,
+    "repository_provider" : "github",
+    "repository_url": "https://github.com/amd/aocl-dlp",
+    "repository_branch": "dev",
 }
 
 # Set canonical base URL for link generation (local server during development)

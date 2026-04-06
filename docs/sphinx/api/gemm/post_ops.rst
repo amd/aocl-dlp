@@ -1,4 +1,3 @@
-:orphan:
 
 Post-Operations
 ===============
@@ -56,6 +55,20 @@ Post-Op Building Blocks
    :members:
 
 .. doxygenstruct:: DLP_SYMM_STAT_QUANT
+   :project: aocl-dlp
+   :members:
+
+.. doxygenstruct:: dlp_quant_op
+   :project: aocl-dlp
+   :members:
+
+Error Handling
+--------------
+
+.. doxygenenum:: dlp_clsc_err_t
+   :project: aocl-dlp
+
+.. doxygenstruct:: dlp_error_hndl_t
    :project: aocl-dlp
    :members:
 

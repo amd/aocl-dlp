@@ -165,6 +165,7 @@ class ThreadLocalFallbackKernelStorage
      *
      * @param kType Kernel routine type
      * @param kDtype Kernel datatype
+     * @param kInfo Optional key for lookup (default: nullptr)
      * @return Kernel pointer or nullptr if not found
      */
     template<typename KEY_COMPARATOR, typename KEY_TYPE>

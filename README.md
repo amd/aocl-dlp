@@ -11,32 +11,36 @@ AOCL-DLP is a library designed to provide optimized deep learning primitives for
 - **Symmetric Quantization Support**: Provides specialized routines for symmetric quantization
 - **Extensive Thread Support**: Optimized for parallel execution via OpenMP
 
+
+## Data Type Terminology
+
+| Terminology | Description |
+|-------------|-------------|
+| u4/s4       | uint4_t or int4_t |
+| u8/s8       | uint8_t or int8_t |
+| u32/s32     | uint32_t or int32_t |
+| f32         | float32 |
+| f16         | float16 |
+| bf16        | bfloat16 |
+
 ## Supported Data Types
 
 AOCL-DLP provides support for various data type combinations for GEMM operations:
 
-| Input A    | Input B    | Output C   | Accumulator | Function Suffix     |
-|------------|------------|------------|-------------|---------------------|
-| float      | float      | float      | float       | f32f32f32of32       |
-| float16    | float16    | float16    | float16     | f16f16f16of16       |
-| bfloat16   | bfloat16   | float      | float       | bf16bf16f32of32     |
-| bfloat16   | bfloat16   | bfloat16   | float       | bf16bf16f32obf16    |
-| bfloat16   | int8_t     | float      | float       | bf16s4f32of32       |
-| bfloat16   | int8_t     | bfloat16   | float       | bf16s4f32obf16      |
-| uint8_t    | int8_t     | int32_t    | int32_t     | u8s8s32os32         |
-| uint8_t    | int8_t     | int8_t     | int32_t     | u8s8s32os8          |
-| uint8_t    | int8_t     | uint8_t    | int32_t     | u8s8s32ou8          |
-| uint8_t    | int8_t     | float      | int32_t     | u8s8s32of32         |
-| uint8_t    | int8_t     | bfloat16   | int32_t     | u8s8s32obf16        |
-| int8_t     | int8_t     | int32_t    | int32_t     | s8s8s32os32         |
-| int8_t     | int8_t     | int8_t     | int32_t     | s8s8s32os8          |
-| int8_t     | int8_t     | uint8_t    | int32_t     | s8s8s32ou8          |
-| int8_t     | int8_t     | float      | int32_t     | s8s8s32of32         |
-| int8_t     | int8_t     | bfloat16   | int32_t     | s8s8s32obf16        |
+| Input A | Input B | Output C | Accumulator | Function Suffix |
+|---------|---------|----------|-------------|-----------------|
+| u8/s8 | s8 | s32/s8/u8/f32/bf16 | s32 | <u8\|s8>s8s32o<s32\|s8\|u8\|f32\|bf16> |
+| bf16/f32 | s8 | s32/s8/u8/f32/bf16 | s32 | <bf16\|f32>s8s32o<s32\|s8\|u8\|f32\|bf16> |
+| bf16 | s4/u4 | f32/bf16 | f32 | bf16<s4\|u4>f32o<f32\|bf16> |
+| bf16 | bf16 | f32/bf16 | f32 | bf16bf16f32o<f32\|bf16> |
+| f32 | f32 | f32 | f32 | f32f32f32of32 |
+| f16 | f16 | f16 | f16 | f16f16f16of16 |
+| u8 | s4 | s32 | s32 | u8s4s32os32 |
 
-Additionally, symmetric quantization variants are provided for:
-- `s8s8s32of32_sym_quant`
-- `s8s8s32obf16_sym_quant`
+**Notes:**
+- `u8s4s32os32` only has `reorder` and `get_reorder_buf_size` APIs (no gemm)
+- `s8s8s32o<f32|bf16>` also has `_sym_quant` variants for symmetric quantization
+- Mixed-precision reorder: `f32obf16` (converts f32 input to bf16 reordered output)
 
 ## Pre-Operations
 

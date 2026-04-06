@@ -9,7 +9,7 @@ Before building AOCL-DLP, ensure your system meets the following requirements:
 ### Software
 - CMake (≥ 3.26)
 - C/C++ compiler with C11/C++17 support (e.g., GCC 11+, Clang 14+)
-- OpenMP and/or pthread libraries (for multi-threading)
+- OpenMP library (for multi-threading)
 - ninja-build (optional, for Ninja generator support)
 
 **Note: GCC 11 introduced AVX512_BF16 support, which is required for bfloat16 GEMM.**
@@ -41,7 +41,7 @@ AOCL-DLP uses CMake for its build system with several configurable options:
 | CMAKE_C_COMPILER              | system       | Specify C compiler (e.g., gcc)                                     |
 |                               |              |                                                                    |
 | **Threading & Sanitizers**    |              |                                                                    |
-| DLP_THREADING_MODEL           | "none"       | Threading model ("none", "openmp", "pthread")                      |
+| DLP_THREADING_MODEL           | "none"       | Threading model ("none", "openmp")                      |
 | DLP_ENABLE_OPENMP             | ON           | Override OpenMP support (auto-enabled by threading model)         |
 | DLP_OPENMP_ROOT               | ""           | Custom path to OpenMP installation                                 |
 | DLP_USE_LLVM_OPENMP           | OFF          | Force using LLVM OpenMP implementation                             |
@@ -128,7 +128,7 @@ cmake -DBUILD_TESTING=ON -DDLP_TESTING_CTEST_DISABLED=OFF ..
 
 ### Threading Model Configuration
 
-AOCL-DLP supports multiple threading models:
+AOCL-DLP supports the following threading models:
 
 ```bash
 # No threading (default)
@@ -136,9 +136,6 @@ cmake -DDLP_THREADING_MODEL=none ..
 
 # Enable OpenMP threading
 cmake -DDLP_THREADING_MODEL=openmp ..
-
-# Enable Pthread threading
-cmake -DDLP_THREADING_MODEL=pthread ..
 ```
 
 **Note:** Setting `DLP_THREADING_MODEL=openmp` automatically enables OpenMP support. The separate `DLP_ENABLE_OPENMP` option (default: ON) provides additional control and can disable OpenMP entirely with `-DDLP_ENABLE_OPENMP=OFF`.
@@ -242,7 +239,7 @@ AOCL-DLP uses a modern CMake build system structured as follows:
 - `cmake/dlp_benchmark.cmake`: Defines benchmarking options and infrastructure
 - `cmake/dlp_build_options.cmake`: Defines build target options (examples, sanitizers)
 - `cmake/dlp_documentation.cmake`: Defines documentation options and generation
-- `cmake/dlp_dependencies.cmake`: Manages OpenMP and Pthread dependencies
+- `cmake/dlp_dependencies.cmake`: Manages OpenMP dependencies
 - `cmake/dlp_compiler_flags_linux.cmake`: Sets compiler flags for Linux
 - `cmake/dlp_compiler_flags_windows.cmake`: Sets compiler flags for Windows
 - `cmake/dlp_install.cmake`: Manages installation rules
@@ -256,7 +253,6 @@ If you encounter issues with the selected threading model:
 
 1. Make sure the required libraries are installed on your system:
    - For OpenMP: OpenMP development libraries
-   - For Pthread: POSIX threads library
 
 2. For OpenMP-specific issues:
 

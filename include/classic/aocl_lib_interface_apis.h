@@ -140,6 +140,12 @@ dlp_thread_set_num_threads(md_t n_threads);
 DLP_CLASSIC_EXPORT md_t
 dlp_thread_get_num_threads_active(void);
 
+/**
+ * @brief Query whether AOCL_DLP_ENABLE_INSTRUCTIONS environment variable is
+ * set.
+ *
+ * @return true if the environment variable is set, false otherwise.
+ */
 DLP_CLASSIC_EXPORT bool
 dlp_aocl_enable_instruction_query(void);
 

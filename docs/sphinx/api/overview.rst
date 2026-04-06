@@ -245,20 +245,33 @@ Usage Pattern
 
 .. code-block:: c
 
-   // Initialize post-operations
-   aocl_post_op post_ops;
-   aocl_post_op_init(&post_ops);
+   // Configure post-operations via dlp_metadata_t
+   float bias_vector[N] = { /* ... */ };
 
-   // Add bias operation
-   aocl_post_op_bias bias_op = {.bias = bias_vector};
-   aocl_post_op_append_bias(&post_ops, &bias_op);
+   dlp_post_op_bias bias_op = {
+       .bias = bias_vector, .stor_type = DLP_F32,
+       .sf = NULL, .zp = NULL
+   };
 
-   // Add activation
-   aocl_post_op_eltwise relu_op = {.algo = AOCL_ELTWISE_RELU};
-   aocl_post_op_append_eltwise(&post_ops, &relu_op);
+   dlp_post_op_eltwise relu_op = {
+       .sf = NULL,
+       .algo = { .alpha = NULL, .beta = NULL,
+                 .algo_type = RELU, .stor_type = DLP_F32 }
+   };
+
+   DLP_POST_OP_TYPE seq[] = { BIAS, ELTWISE };
+
+   dlp_metadata_t meta = {0};
+   meta.seq_length  = 2;
+   meta.seq_vector  = seq;
+   meta.bias        = &bias_op;
+   meta.eltwise     = &relu_op;
+   meta.num_eltwise = 1;
 
    // Use in GEMM
-   aocl_gemm_f32f32f32of32(..., &post_ops);
+   aocl_gemm_f32f32f32of32('R', 'N', 'N', m, n, k,
+       1.0f, a, lda, 'N', b, ldb, 'N',
+       0.0f, c, ldc, &meta);
 
 Performance Optimization
 ------------------------
@@ -312,7 +325,7 @@ Optimize parallel execution:
    dlp_thread_set_num_threads(8);
 
    // Configure workload distribution
-   dlp_thread_set_ways(2, 2, 2);  // 3D parallelization
+   dlp_thread_set_ways(2, 4);  // JC=2, IC=4 loop parallelization
 
 Common Usage Patterns
 ---------------------
@@ -501,4 +514,7 @@ See Also
 
 * :doc:`gemm/index` - Detailed GEMM API documentation
 * :doc:`gemm/post_ops` - Post-operations reference
-* `AOCL-DLP Examples and Tutorials (GitHub Wiki) <https://github.com/AMD-AOCL/aocl-dlp/wiki/Examples-and-Tutorials>`_
+* :doc:`types/index` - Data types and structures reference
+* `AOCL-DLP Examples and Tutorials <https://github.com/amd/aocl-dlp/wiki/Examples-and-Tutorials>`_
+* `Quick Start Guide <https://github.com/amd/aocl-dlp/wiki/Quick-Start>`_
+* `Integration Guide <https://github.com/amd/aocl-dlp/wiki/Integration-Guide>`_

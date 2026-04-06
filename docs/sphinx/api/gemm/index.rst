@@ -69,6 +69,57 @@ Mixed Precision GEMM
 .. doxygenfunction:: aocl_gemm_bf16s4f32obf16
    :project: aocl-dlp
 
+BFloat16-Int4 Mixed Precision
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfunction:: aocl_gemm_bf16u4f32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_bf16u4f32obf16
+   :project: aocl-dlp
+
+BFloat16-Int8 Mixed Precision
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfunction:: aocl_gemm_bf16s8s32os32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_bf16s8s32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_bf16s8s32obf16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_bf16s8s32os8
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_bf16s8s32ou8
+   :project: aocl-dlp
+
+Float32-Int8 Mixed Precision
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfunction:: aocl_gemm_f32s8s32os32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_f32s8s32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_f32s8s32obf16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_f32s8s32os8
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_f32s8s32ou8
+   :project: aocl-dlp
+
+Float16 GEMM
+~~~~~~~~~~~~~
+
+.. doxygenfunction:: aocl_gemm_f16f16f16of16
+   :project: aocl-dlp
+
 Symmetric Quantization GEMM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -188,6 +239,12 @@ Reordering Functions
 .. doxygenfunction:: aocl_reorder_f32obf16
    :project: aocl-dlp
 
+.. doxygenfunction:: aocl_reorder_f16f16f16of16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_get_reorder_buf_size_f16f16f16of16
+   :project: aocl-dlp
+
 Unreordering Functions
 ~~~~~~~~~~~~~~~~~~~~~~
 
@@ -201,6 +258,9 @@ Unreordering Functions
    :project: aocl-dlp
 
 .. doxygenfunction:: aocl_unreorder_s8s8s32os32_reference
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_unreorder_f16f16f16of16
    :project: aocl-dlp
 
 

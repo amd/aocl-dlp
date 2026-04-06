@@ -16,6 +16,7 @@ Complete API reference for AOCL-DLP (AMD Optimizing CPU Libraries - Deep Learnin
 
    api/overview
    api/gemm/index
+   api/gemm/post_ops
    api/eltwise/index
    api/utils/index
    api/library/index
@@ -43,6 +44,16 @@ Core GEMM Operations
      - Unsigned/signed 8-bit quantized GEMM
    * - ``aocl_gemm_s8s8s32os8``
      - Signed 8-bit quantized GEMM
+   * - ``aocl_gemm_f16f16f16of16``
+     - IEEE float16 precision GEMM
+   * - ``aocl_gemm_bf16s4f32of32``
+     - BFloat16 x int4 mixed precision
+   * - ``aocl_gemm_bf16s8s32os32``
+     - BFloat16 x int8 mixed precision
+   * - ``aocl_gemm_f32s8s32os32``
+     - Float32 x int8 mixed precision
+   * - ``aocl_gemm_s8s8s32of32_sym_quant``
+     - Symmetric quantization GEMM
 
 .. _index-batch-operations:
 
@@ -57,6 +68,24 @@ Batch Operations
      - Description
    * - ``aocl_batch_gemm_*``
      - Batch processing for multiple matrices
+
+.. _index-post-operations:
+
+Post-Operations
+~~~~~~~~~~~~~~~
+
+.. list-table:: Post-Operations Framework
+   :header-rows: 1
+   :widths: 40 60
+
+   * - Type / Structure
+     - Description
+   * - ``dlp_metadata_t``
+     - Main metadata structure for configuring post-ops
+   * - ``DLP_POST_OP_TYPE``
+     - Post-op types: BIAS, ELTWISE, SCALE, MATRIX_ADD, MATRIX_MUL
+   * - ``DLP_ELT_ALGO_TYPE``
+     - Activation functions: RELU, GELU, SWISH, TANH, SIGMOID, etc.
 
 Matrix Utilities
 ~~~~~~~~~~~~~~~~
@@ -120,7 +149,9 @@ Library Management
    * - ``dlp_thread_set_ways``
      - Configure parallelization strategy
    * - ``dlp_aocl_enable_instruction_query``
-     - Query hardware capabilities
+     - Query AOCL_DLP_ENABLE_INSTRUCTIONS environment setting
+   * - ``dlp_version_query``
+     - Query library version (major, minor, patch)
 
 API Selection Guide
 -------------------
@@ -163,10 +194,12 @@ See Also
 * :doc:`api/overview` - API design principles and usage patterns
 * :doc:`api/gemm/index` - GEMM operations documentation
 * :doc:`api/gemm/post_ops` - Post-operations framework
+* `Quick Start Guide <https://github.com/amd/aocl-dlp/wiki/Quick-Start>`_ - Get started in 5 minutes
+* `Integration Guide <https://github.com/amd/aocl-dlp/wiki/Integration-Guide>`_ - CMake integration, linking, and troubleshooting
+* `Examples and Tutorials <https://github.com/amd/aocl-dlp/wiki/Examples-and-Tutorials>`_ - Code examples and usage patterns
 
 Indices and Tables
 ==================
 
 * :ref:`genindex`
-* :ref:`modindex`
 * :ref:`search`

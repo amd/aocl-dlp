@@ -55,6 +55,11 @@ class JitMemoryBoundTest : public test_jit_utils::JitGeneratorTestBase
   protected:
     /**
      * @brief Reusable helper for GEMM maximal post-ops tests across datatypes
+     * @param datatypeName Name of the datatype being tested
+     * @param allKTypes Vector of kernel instruction types to test
+     * @param skipMessage Message to display when skipping unsupported types
+     * @param downscaleTypes Vector of downscale type pairs for post-ops
+     * @param generateFunc Callback to generate the JIT kernel
      * @param kiModifier Optional callback to tweak kernelInfo before param
      *                   construction (e.g., U8S8 sets prefetch_c_dist = 0)
      */
