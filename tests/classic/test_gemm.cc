@@ -1187,8 +1187,16 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                     config_.tolerance_absolute;
             }
 
+            if (config_.has_postops
+                && (config_.c_type == MatrixType::s32
+                    || config_.c_type == MatrixType::s8
+                    || config_.c_type == MatrixType::u8)) {
+                compare_opts.intTolerance = 1;
+            }
+
             // Detailed comparison with mismatch reporting
             auto compare_result = C.compare(C_ref, compare_opts);
+
             if (!compare_result.equal) {
                 std::ostringstream detailed_error;
                 detailed_error

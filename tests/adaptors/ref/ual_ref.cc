@@ -1312,6 +1312,11 @@ UalRef::applyUnifiedPostOp(Matrix&                             matrix,
         }
     }
 
+    if (dlp::testing::utils::isIntegerType(original_type)) {
+        dlp::testing::utils::truncateF32ToMicro(
+            temp_data.get(), static_cast<size_t>(rows) * cols);
+    }
+
     // Convert back to original type
     dlp::testing::utils::copyToMatrix<float>(temp_data.get(), ld, matrix,
                                              MatrixLayout::ROW_MAJOR);

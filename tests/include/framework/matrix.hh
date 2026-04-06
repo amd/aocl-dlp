@@ -80,6 +80,9 @@ namespace dlp { namespace testing { namespace framework {
             -1.0; ///< Relative tolerance multiplier (-1 = use default 50.0)
         double absToleranceMultiplier =
             -1.0; ///< Absolute tolerance multiplier (-1 = use default 50.0)
+        unsigned int intTolerance =
+            0; ///< Allowed absolute difference for integer type comparisons
+               ///< 0 = exact match, 1 = allow +/-1 for post-op quantization.
 
         /**
          * @brief Create options for fast mode (boolean comparison only)

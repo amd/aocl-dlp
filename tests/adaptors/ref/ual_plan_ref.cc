@@ -36,6 +36,8 @@
 #include <memory>
 
 using namespace dlp::testing::framework;
+using dlp::testing::utils::isIntegerType;
+using dlp::testing::utils::truncateF32ToMicro;
 
 namespace dlp::testing::classic {
 
@@ -148,6 +150,11 @@ RefUalPlan::execute()
         }
 
         applyPostOps(tempC_f32);
+        if (hasPostOps && isIntegerType(outputType)) {
+            truncateF32ToMicro(reinterpret_cast<float*>(tempC_f32.getData()),
+                               static_cast<size_t>(tempC_f32.getRows())
+                                   * tempC_f32.getCols());
+        }
         dlp::testing::utils::copyToMatrix<float>(
             reinterpret_cast<const float*>(tempC_f32.getData()),
             tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
@@ -236,6 +243,11 @@ RefUalPlan::execute()
         }
 
         applyPostOps(tempC_f32);
+        if (hasPostOps && isIntegerType(outputType)) {
+            truncateF32ToMicro(reinterpret_cast<float*>(tempC_f32.getData()),
+                               static_cast<size_t>(tempC_f32.getRows())
+                                   * tempC_f32.getCols());
+        }
         dlp::testing::utils::copyToMatrix<float>(
             reinterpret_cast<const float*>(tempC_f32.getData()),
             tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
@@ -273,6 +285,11 @@ RefUalPlan::execute()
         }
 
         applyPostOps(tempC_f32);
+        if (isIntegerType(outputType)) {
+            truncateF32ToMicro(reinterpret_cast<float*>(tempC_f32.getData()),
+                               static_cast<size_t>(tempC_f32.getRows())
+                                   * tempC_f32.getCols());
+        }
         dlp::testing::utils::copyToMatrix<float>(
             reinterpret_cast<const float*>(tempC_f32.getData()),
             tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());

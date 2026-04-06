@@ -696,10 +696,18 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
     result.usedAbsTolerance = absTol;
     result.usedRelTolerance = relTol;
 
-    // Fast mode for integer types: use memcmp
-    if (!opts.verbose
-        && (m_type != MatrixType::f32 && m_type != MatrixType::bf16
-            && m_type != MatrixType::fp16)) {
+    // Fast mode for integer types: use memcmp when exact match is required.
+    // intTolerance only applies to s32/u32/s8/u8; for other integer types
+    // we still use memcmp even if intTolerance is non-zero.
+    const bool isFloatType =
+        (m_type == MatrixType::f32 || m_type == MatrixType::bf16
+         || m_type == MatrixType::fp16);
+    const bool hasIntToleranceSupport =
+        (m_type == MatrixType::s32 || m_type == MatrixType::u32
+         || m_type == MatrixType::s8 || m_type == MatrixType::u8);
+
+    if (!opts.verbose && !isFloatType
+        && (opts.intTolerance == 0 || !hasIntToleranceSupport)) {
         result.equal =
             (std::memcmp(m_data, other.m_data, m_dataSizeBytes) == 0);
         return result;
@@ -1107,15 +1115,17 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
             elementCount = m_dataSizeBytes / sizeof(int32_t);
 
             for (std::size_t i = 0; i < elementCount; ++i) {
-                if (data1[i] != data2[i]) {
+                int64_t diff64 = static_cast<int64_t>(data1[i])
+                                 - static_cast<int64_t>(data2[i]);
+                int64_t absDiff = diff64 >= 0 ? diff64 : -diff64;
+                if (absDiff > static_cast<int64_t>(opts.intTolerance)) {
                     result.equal = false;
 
                     if (!opts.verbose) {
                         return result;
                     }
 
-                    double diff = std::abs(static_cast<double>(data1[i])
-                                           - static_cast<double>(data2[i]));
+                    double diff = static_cast<double>(absDiff);
 
                     if (result.mismatches.size() < opts.maxMismatches) {
                         size_t       r = i / m_leadingDim;
@@ -1148,15 +1158,19 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
             elementCount = m_dataSizeBytes / sizeof(uint32_t);
 
             for (std::size_t i = 0; i < elementCount; ++i) {
-                if (data1[i] != data2[i]) {
+                uint64_t absDiff = (data1[i] > data2[i])
+                                       ? static_cast<uint64_t>(data1[i])
+                                             - static_cast<uint64_t>(data2[i])
+                                       : static_cast<uint64_t>(data2[i])
+                                             - static_cast<uint64_t>(data1[i]);
+                if (absDiff > static_cast<uint64_t>(opts.intTolerance)) {
                     result.equal = false;
 
                     if (!opts.verbose) {
                         return result;
                     }
 
-                    double diff = std::abs(static_cast<double>(data1[i])
-                                           - static_cast<double>(data2[i]));
+                    double diff = static_cast<double>(absDiff);
 
                     if (result.mismatches.size() < opts.maxMismatches) {
                         size_t       r = i / m_leadingDim;
@@ -1270,15 +1284,16 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
             elementCount        = m_dataSizeBytes / sizeof(int8_t);
 
             for (std::size_t i = 0; i < elementCount; ++i) {
-                if (data1[i] != data2[i]) {
+                unsigned int absDiff = static_cast<unsigned int>(std::abs(
+                    static_cast<int>(data1[i]) - static_cast<int>(data2[i])));
+                if (absDiff > opts.intTolerance) {
                     result.equal = false;
 
                     if (!opts.verbose) {
                         return result;
                     }
 
-                    double diff = std::abs(static_cast<double>(data1[i])
-                                           - static_cast<double>(data2[i]));
+                    double diff = static_cast<double>(absDiff);
 
                     if (result.mismatches.size() < opts.maxMismatches) {
                         size_t       r = i / m_leadingDim;
@@ -1311,15 +1326,16 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
             elementCount = m_dataSizeBytes / sizeof(uint8_t);
 
             for (std::size_t i = 0; i < elementCount; ++i) {
-                if (data1[i] != data2[i]) {
+                unsigned int absDiff = static_cast<unsigned int>(std::abs(
+                    static_cast<int>(data1[i]) - static_cast<int>(data2[i])));
+                if (absDiff > opts.intTolerance) {
                     result.equal = false;
 
                     if (!opts.verbose) {
                         return result;
                     }
 
-                    double diff = std::abs(static_cast<double>(data1[i])
-                                           - static_cast<double>(data2[i]));
+                    double diff = static_cast<double>(absDiff);
 
                     if (result.mismatches.size() < opts.maxMismatches) {
                         size_t       r = i / m_leadingDim;

@@ -31,12 +31,43 @@
 
 #include "classic/dlp_base_types.h"
 #include "framework/matrix.hh"
+#include <cmath>
 
 namespace dlp { namespace testing { namespace utils {
 
     using dlp::testing::framework::Matrix;
     using dlp::testing::framework::MatrixLayout;
     using dlp::testing::framework::MatrixType;
+
+    /**
+     * @brief Check if a MatrixType is an integer output type (s32/u32/s8/u8)
+     * @param type The MatrixType to check
+     * @return true if the type is an integer output type
+     */
+    inline bool isIntegerType(MatrixType type)
+    {
+        return type == MatrixType::s32 || type == MatrixType::u32
+               || type == MatrixType::s8 || type == MatrixType::u8;
+    }
+
+    /**
+     * @brief Truncate F32 values to 1e-6 precision
+     *
+     * Removes sub-1e-6 (sub-micro) numeric differences between DLP's
+     * polynomial approximations and libm that cause +-1 integer
+     * mismatches at rounding boundaries when converting F32 post-op
+     * results back to integer types.
+     *
+     * @param data Pointer to F32 data array
+     * @param count Number of elements to truncate
+     */
+    inline void truncateF32ToMicro(float* data, size_t count)
+    {
+        constexpr float scale = 1e6f;
+        for (size_t i = 0; i < count; ++i) {
+            data[i] = std::trunc(data[i] * scale) / scale;
+        }
+    }
 
     /**
      * @brief Convert a single value from any MatrixType to intermediate type
