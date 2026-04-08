@@ -1720,10 +1720,27 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
                        const Matrix& addMatrix,
                        const Matrix* scaleFactor)
 {
-    float scale = 1.0f;
-    if (scaleFactor) {
-        scale = dlp::testing::utils::convertTo<float>(
-            scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
+    bool has_sf = (scaleFactor != nullptr);
+    bool per_channel =
+        has_sf && ((scaleFactor->getRows() * scaleFactor->getCols()) > 1);
+
+    // Prepare scale factor data for per-channel case
+    md_t                     scale_size = 1;
+    std::unique_ptr<float[]> scale_data;
+    float                    scalar_scale = 1.0f;
+
+    if (has_sf) {
+        if (per_channel) {
+            scale_size = scaleFactor->getRows() * scaleFactor->getCols();
+            scale_data.reset(new float[scale_size]);
+            for (iter_t i = 0; i < scale_size; ++i) {
+                scale_data[i] = dlp::testing::utils::convertTo<float>(
+                    scaleFactor->getData(), scaleFactor->getMatrixType(), i);
+            }
+        } else {
+            scalar_scale = dlp::testing::utils::convertTo<float>(
+                scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
+        }
     }
 
     // If both matrices are f32, apply directly
@@ -1749,6 +1766,9 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
                     (addMatrix.getLayout() == MatrixLayout::ROW_MAJOR)
                         ? (static_cast<size_t>(i) * add_matrix_ld + j)
                         : (static_cast<size_t>(j) * add_matrix_ld + i);
+                // Use per-channel scale if available, otherwise use scalar
+                float scale = per_channel ? scale_data[j % scale_size]
+                                          : scalar_scale;
                 data[matrix_idx] += add_data[add_idx] * scale;
             }
         }
@@ -1776,6 +1796,9 @@ UalRef::applyMatrixAdd(Matrix&       matrix,
     for (iter_t i = 0; i < rows; ++i) {
         for (iter_t j = 0; j < cols; ++j) {
             size_t idx = static_cast<size_t>(i) * ld + j;
+            // Use per-channel scale if available, otherwise use scalar
+            float scale = per_channel ? scale_data[j % scale_size]
+                                      : scalar_scale;
             temp_matrix[idx] += temp_add[idx] * scale;
         }
     }
@@ -1790,10 +1813,27 @@ UalRef::applyMatrixMul(Matrix&       matrix,
                        const Matrix& mulMatrix,
                        const Matrix* scaleFactor)
 {
-    float scale = 1.0f;
-    if (scaleFactor) {
-        scale = dlp::testing::utils::convertTo<float>(
-            scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
+    bool has_sf = (scaleFactor != nullptr);
+    bool per_channel =
+        has_sf && ((scaleFactor->getRows() * scaleFactor->getCols()) > 1);
+
+    // Prepare scale factor data for per-channel case
+    md_t                     scale_size = 1;
+    std::unique_ptr<float[]> scale_data;
+    float                    scalar_scale = 1.0f;
+
+    if (has_sf) {
+        if (per_channel) {
+            scale_size = scaleFactor->getRows() * scaleFactor->getCols();
+            scale_data.reset(new float[scale_size]);
+            for (iter_t i = 0; i < scale_size; ++i) {
+                scale_data[i] = dlp::testing::utils::convertTo<float>(
+                    scaleFactor->getData(), scaleFactor->getMatrixType(), i);
+            }
+        } else {
+            scalar_scale = dlp::testing::utils::convertTo<float>(
+                scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
+        }
     }
 
     // If both matrices are f32, apply directly
@@ -1819,6 +1859,9 @@ UalRef::applyMatrixMul(Matrix&       matrix,
                     (mulMatrix.getLayout() == MatrixLayout::ROW_MAJOR)
                         ? (static_cast<size_t>(i) * mul_matrix_ld + j)
                         : (static_cast<size_t>(j) * mul_matrix_ld + i);
+                // Use per-channel scale if available, otherwise use scalar
+                float scale = per_channel ? scale_data[j % scale_size]
+                                          : scalar_scale;
                 data[matrix_idx] *= mul_data[mul_idx] * scale;
             }
         }
@@ -1846,6 +1889,9 @@ UalRef::applyMatrixMul(Matrix&       matrix,
     for (iter_t i = 0; i < rows; ++i) {
         for (iter_t j = 0; j < cols; ++j) {
             size_t idx = static_cast<size_t>(i) * ld + j;
+            // Use per-channel scale if available, otherwise use scalar
+            float scale = per_channel ? scale_data[j % scale_size]
+                                      : scalar_scale;
             temp_matrix[idx] *= temp_mul[idx] * scale;
         }
     }
