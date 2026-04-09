@@ -1407,6 +1407,30 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
             // Set the for-loop sequence for k-dimension
             if (params.kloop) {
+                // Cache aliasing mitigation: when row stride is near a
+                // multiple of 4096 bytes (L1 cache modulus on Zen4),
+                // all 16 rows (MR=16, AVX-512) map to the same L1 cache
+                // set, exceeding its 8-way associativity and causing
+                // thrashing. Detect this at runtime and split the k-loop
+                // into two passes of MR/2=8 rows each.
+                Xbyak::Label label_alias_path;
+                bool enableAliasMitigation = (MR > 8);
+
+                if (enableAliasMitigation) {
+                    // Aliasing detection: cache set conflicts occur when
+                    // rsA is near a multiple of 4096 bytes (L1 cache
+                    // modulus on Zen4, 64 sets × 64B lines = 4096B).
+                    // With MR=16 rows, aliasing occurs when 8+ rows
+                    // map to the same L1 cache set (8-way associative).
+                    mov(regTmp2, regRsA);
+                    and_(regTmp2, 0xFFF); // rsA mod 4096 (bytes)
+                    cmp(regTmp2, 64);
+                    jb(label_alias_path, T_NEAR);
+                    cmp(regTmp2, 4096 - 64);
+                    ja(label_alias_path, T_NEAR);
+                }
+
+                // --- Normal path (non-aliasing strides) ---
                 mov(regKIter,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
@@ -1430,6 +1454,90 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
                 sub(regKIter, 1);
                 jnz(label_m_loop_k_loop_start, T_NEAR);
+
+                if (enableAliasMitigation) {
+                    jmp(label_m_loop_k_loop_end, T_NEAR);
+
+                    // --- Alias path (two-pass, 8 rows per pass) ---
+                    L(label_alias_path);
+
+                    // Pass 1: rows 0..MR/2-1
+                    {
+                        Xbyak::Label lp1_start, lp1_end;
+                        mov(regKIter,
+                            ptr[stackPtr
+                                + offsetof(
+                                    dlp::kernels::gemvN1Params, k_iter)]);
+                        test(regKIter, regKIter);
+                        jz(lp1_end, T_NEAR);
+                        L(lp1_start);
+
+                        RETURN_IF_ERROR((loadXValues()));
+                        RETURN_IF_ERROR((processMRBlock(MR / 2)));
+
+                        mov(regTmp1, simdWidth);
+                        imul(regTmp1, regCsA);
+                        add(regTmpYptr, regTmp1);
+                        mov(regTmpAptr, regTmpYptr);
+                        add(regXptr, RegBytes);
+
+                        sub(regKIter, 1);
+                        jnz(lp1_start, T_NEAR);
+                        L(lp1_end);
+                    }
+
+                    // Save pass-1 column position in regTmp2 for restore
+                    // after pass 2
+                    mov(regTmp2, regTmpYptr);
+
+                    // Setup pass 2: start from row MR/2
+                    mov(regTmpYptr, regAptr);
+                    mov(regTmp1, MR / 2);
+                    imul(regTmp1, regRsA);
+                    add(regTmpYptr, regTmp1);
+                    mov(regTmpAptr, regTmpYptr);
+
+                    // Reset X pointer for pass 2
+                    mov(regXptr,
+                        ptr[stackPtr
+                            + offsetof(dlp::kernels::gemvN1Params, x)]);
+
+                    // Pass 2: rows MR/2..MR-1
+                    {
+                        int savedAccumBase = accumBaseIdx;
+                        accumBaseIdx += MR / 2;
+
+                        Xbyak::Label lp2_start, lp2_end;
+                        mov(regKIter,
+                            ptr[stackPtr
+                                + offsetof(
+                                    dlp::kernels::gemvN1Params, k_iter)]);
+                        test(regKIter, regKIter);
+                        jz(lp2_end, T_NEAR);
+                        L(lp2_start);
+
+                        RETURN_IF_ERROR((loadXValues()));
+                        RETURN_IF_ERROR((processMRBlock(MR / 2)));
+
+                        mov(regTmp1, simdWidth);
+                        imul(regTmp1, regCsA);
+                        add(regTmpYptr, regTmp1);
+                        mov(regTmpAptr, regTmpYptr);
+                        add(regXptr, RegBytes);
+
+                        sub(regKIter, 1);
+                        jnz(lp2_start, T_NEAR);
+                        L(lp2_end);
+
+                        accumBaseIdx = savedAccumBase;
+                    }
+
+                    // Restore A column position for shared k-fringe
+                    // (regXptr is already correct: both passes iterate
+                    //  k_iter times, ending at X_base + k_iter*RegBytes)
+                    mov(regTmpYptr, regTmp2);
+                    mov(regTmpAptr, regTmpYptr);
+                }
             }
             L(label_m_loop_k_loop_end);
 
