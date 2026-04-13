@@ -139,6 +139,8 @@ init_bias_post_op(dlp_metadata_t* md, md_t n)
     for (int i = 0; i < n; ++i)
         ((int32_t*)md->bias[0].bias)[i] = i % 23;
     md->bias[0].stor_type = DLP_S32; // raw bias type matches accumulator
+    md->bias[0].bias_len  = n;
+    md->bias[0].zp        = NULL;
     md->bias[0].sf        = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
     if (!md->bias[0].sf)
         return false;

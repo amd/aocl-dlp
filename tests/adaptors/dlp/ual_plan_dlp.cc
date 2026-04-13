@@ -819,6 +819,8 @@ DlpUalPlan::convertBiasOperations()
         const auto& param = *m_bias_ops[i];
 
         m_metadata->bias[i].bias = convertMatrixToPtr(param.getBias());
+        m_metadata->bias[i].bias_len =
+            param.getBias().getRows() * param.getBias().getCols();
         m_metadata->bias[i].stor_type =
             getStorageType(param.getBias().getMatrixType());
 

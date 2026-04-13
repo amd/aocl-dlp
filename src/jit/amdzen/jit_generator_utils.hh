@@ -28,8 +28,15 @@
 
 #pragma once
 
+#include <cassert>
 #include <cmath>
+#include <cstdint>
+#include <functional>
+#include <initializer_list>
+#include <optional>
 #include <stack>
+#include <type_traits>
+#include <vector>
 
 #if DLP_OS_WINDOWS
 #include <windows.h>
@@ -68,6 +75,11 @@ enum class kernelInstrType : uint16_t
     avx512_ymm_32_reg,
     avx512_zmm_32_reg
 };
+
+// x86 AVX-512 Opmask register allocation constants.
+// k0 is reserved by hardware for implicit unmasked operations.
+static constexpr int MASK_START_IDX   = 1; // First usable Opmask index (k1)
+static constexpr int NUM_USABLE_MASKS = 7; // k1 through k7
 
 struct generatorParams
 {
@@ -510,39 +522,6 @@ int_log2(int value)
     // This is much faster as it compiles to a single instruction (bsr/lzcnt)
 }
 
-template<typename REG_TYPE>
-class registerGuard
-{
-    Xbyak::CodeGenerator* jit;
-    std::stack<REG_TYPE>  regStack;
-
-  public:
-    registerGuard(Xbyak::CodeGenerator* _jit)
-        : jit{ _jit }
-    {
-    }
-
-    void saveRegister(REG_TYPE reg)
-    {
-        regStack.push(reg);
-        jit->push(reg);
-    }
-
-    ~registerGuard()
-    {
-        while (!regStack.empty()) {
-            auto tReg = regStack.top();
-            jit->pop(tReg);
-            regStack.pop();
-        }
-    }
-
-    registerGuard(registerGuard&)             = delete;
-    registerGuard(registerGuard&&)            = delete;
-    registerGuard& operator=(registerGuard&)  = delete;
-    registerGuard& operator=(registerGuard&&) = delete;
-};
-
 class jitGeneratorUtils
 {
   public:
@@ -583,6 +562,752 @@ class jitGeneratorUtils
             return dlp::jit::jitGeneratorError::badKernelInfo;
         }
         return dlp::jit::jitGeneratorError::success;
+    }
+};
+
+template<kernelInstrType KType>
+constexpr int
+maskSaveWidth()
+{
+    if constexpr (KType == kernelInstrType::avx512_zmm_32_reg)
+        return 2; // kmovw
+    else if constexpr (KType == kernelInstrType::avx512_ymm_32_reg)
+        return 1; // kmovb
+    else if constexpr (KType == kernelInstrType::avx512_xmm_32_reg)
+        return 1; // kmovb
+    else
+        return 0;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// maskOffset encoding helpers
+//
+// The maskOffset parameter in generateKernelOps carries either a memory
+// offset (>= 0) or an encoded immediate (<= -2). This lets callers like the
+// RD generator pass a JIT-gen-time constant mask without touching memory.
+//
+//   maskOffset >= 0  : byte offset from stackPtr into gemmParams (GEMM/GEMV)
+//   maskOffset == -1 : no mask
+//   maskOffset <= -2 : encoded immediate, decode with decodeMaskImmediate()
+// ═══════════════════════════════════════════════════════════════════════════
+static constexpr int
+encodeMaskImmediate(int value)
+{
+    return -(value + 2);
+}
+static constexpr int
+decodeMaskImmediate(int encoded)
+{
+    return -(encoded + 2);
+}
+static constexpr bool
+isMaskImmediate(int maskOffset)
+{
+    return maskOffset <= -2;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Unified Register Management
+// ═══════════════════════════════════════════════════════════════════════════
+
+template<typename REG_TYPE, int MAX_REGS>
+class registerPool;
+template<typename REG_TYPE>
+struct registerHighPressureHandling;
+
+// ─────────────────────────────────────────────────────────────────────────
+// registerStackOperations<REG_TYPE>: type-specific save/restore instructions
+// ─────────────────────────────────────────────────────────────────────────
+
+template<typename REG_TYPE>
+struct registerStackOperations
+{
+    static void saveToStack(Xbyak::CodeGenerator* jit, int idx, int regBytes)
+    {
+        jit->sub(jit->rsp, regBytes);
+        jit->vmovups(jit->ptr[jit->rsp], REG_TYPE(idx));
+    }
+
+    static void restoreFromStack(Xbyak::CodeGenerator* jit,
+                                 int                   idx,
+                                 int                   regBytes)
+    {
+        jit->vmovups(REG_TYPE(idx), jit->ptr[jit->rsp]);
+        jit->add(jit->rsp, regBytes);
+    }
+};
+
+// Extend with additional kmov variants (kmovd, kmovq) if wider
+// mask save/restore is needed in the future.
+template<>
+struct registerStackOperations<Xbyak::Opmask>
+{
+    static void saveToStack(Xbyak::CodeGenerator* jit, int idx, int regBytes)
+    {
+        jit->sub(jit->rsp, regBytes);
+        if (regBytes == 1)
+            jit->kmovb(jit->ptr[jit->rsp], Xbyak::Opmask(idx));
+        else if (regBytes == 2)
+            jit->kmovw(jit->ptr[jit->rsp], Xbyak::Opmask(idx));
+        else {
+            jit->add(jit->rsp, regBytes);
+            assert(false && "Unsupported mask regBytes for stack save");
+        }
+    }
+
+    static void restoreFromStack(Xbyak::CodeGenerator* jit,
+                                 int                   idx,
+                                 int                   regBytes)
+    {
+        if (regBytes == 1)
+            jit->kmovb(Xbyak::Opmask(idx), jit->ptr[jit->rsp]);
+        else if (regBytes == 2)
+            jit->kmovw(Xbyak::Opmask(idx), jit->ptr[jit->rsp]);
+        else {
+            assert(false && "Unsupported mask regBytes for stack restore");
+            return;
+        }
+        jit->add(jit->rsp, regBytes);
+    }
+};
+
+template<>
+struct registerStackOperations<Xbyak::Reg64>
+{
+    static void saveToStack(Xbyak::CodeGenerator* jit,
+                            int                   idx,
+                            int /*regBytes*/)
+    {
+        jit->push(Xbyak::Reg64(idx));
+    }
+
+    static void restoreFromStack(Xbyak::CodeGenerator* jit,
+                                 int                   idx,
+                                 int /*regBytes*/)
+    {
+        jit->pop(Xbyak::Reg64(idx));
+    }
+};
+
+static constexpr uint8_t INVALID_REG_SOURCE = 255;
+
+// ─────────────────────────────────────────────────────────────────────────
+// registerGuard<REG_TYPE>: standalone RAII register guard (dual-mode)
+//
+// Pool mode (vector/mask): created by registerPool::acquireGuard(), releases
+//   back to pool via type-erased function pointer on destruction.
+// Direct-save mode (GP): created directly, push on ctor, pop on dtor.
+// ─────────────────────────────────────────────────────────────────────────
+
+template<typename REG_TYPE>
+class registerGuard
+{
+    using ReleaseFn = void (*)(void* pool, int idx, uint8_t source);
+
+    void*                 pool      = nullptr;
+    ReleaseFn             releaseFn = nullptr;
+    Xbyak::CodeGenerator* jit       = nullptr;
+    int                   regIdx    = -1;
+    uint8_t               source    = INVALID_REG_SOURCE;
+    int                   regBytes  = 0;
+    std::vector<int>      savedRegs;
+
+  public:
+    registerGuard() = default;
+
+    // Pool mode: created by registerPool::acquireGuard()
+    registerGuard(void*                 poolArg,
+                  ReleaseFn             fn,
+                  int                   idxArg,
+                  uint8_t               sourceArg,
+                  int                   regBytesArg,
+                  Xbyak::CodeGenerator* gen)
+        : pool(poolArg)
+        , releaseFn(fn)
+        , jit(gen)
+        , regIdx(idxArg)
+        , source(sourceArg)
+        , regBytes(regBytesArg)
+    {
+    }
+
+    // Direct-save mode: push on construction, pop on destruction
+    registerGuard(Xbyak::CodeGenerator* gen, int idxArg, int regBytesArg = 8)
+        : jit(gen)
+        , regIdx(idxArg)
+        , regBytes(regBytesArg)
+    {
+        registerStackOperations<REG_TYPE>::saveToStack(jit, regIdx, regBytes);
+    }
+
+    // Bulk-save mode (GP only): no initial register, use saveRegister() to add
+    template<typename R = REG_TYPE,
+             typename   = std::enable_if_t<std::is_same_v<R, Xbyak::Reg64>>>
+    explicit registerGuard(Xbyak::CodeGenerator* gen)
+        : jit(gen)
+    {
+    }
+
+    ~registerGuard()
+    {
+        if (!savedRegs.empty()) {
+            for (int i = static_cast<int>(savedRegs.size()) - 1; i >= 0; --i)
+                jit->pop(Xbyak::Reg64(savedRegs[i]));
+            return;
+        }
+        if (regIdx < 0)
+            return;
+        if (pool && releaseFn) {
+            releaseFn(pool, regIdx, source);
+        } else if (jit) {
+            registerStackOperations<REG_TYPE>::restoreFromStack(jit, regIdx,
+                                                                regBytes);
+        }
+    }
+
+    // Move semantics
+    registerGuard(registerGuard&& o) noexcept
+        : pool(o.pool)
+        , releaseFn(o.releaseFn)
+        , jit(o.jit)
+        , regIdx(o.regIdx)
+        , source(o.source)
+        , regBytes(o.regBytes)
+        , savedRegs(std::move(o.savedRegs))
+    {
+        o.regIdx = -1;
+        o.pool   = nullptr;
+        o.jit    = nullptr;
+    }
+
+    registerGuard& operator=(registerGuard&& o) noexcept
+    {
+        if (this != &o) {
+            if (!savedRegs.empty()) {
+                for (int i = static_cast<int>(savedRegs.size()) - 1; i >= 0;
+                     --i)
+                    jit->pop(Xbyak::Reg64(savedRegs[i]));
+            } else if (regIdx >= 0) {
+                if (pool && releaseFn)
+                    releaseFn(pool, regIdx, source);
+                else if (jit)
+                    registerStackOperations<REG_TYPE>::restoreFromStack(
+                        jit, regIdx, regBytes);
+            }
+            pool      = o.pool;
+            releaseFn = o.releaseFn;
+            jit       = o.jit;
+            regIdx    = o.regIdx;
+            source    = o.source;
+            regBytes  = o.regBytes;
+            savedRegs = std::move(o.savedRegs);
+            o.regIdx  = -1;
+            o.pool    = nullptr;
+            o.jit     = nullptr;
+        }
+        return *this;
+    }
+
+    registerGuard(const registerGuard&)            = delete;
+    registerGuard& operator=(const registerGuard&) = delete;
+
+    int idx() const { return regIdx; }
+    // WARNING: Returns REG_TYPE(-1) if guard is invalid. Callers MUST check
+    // isValid() or use RETURN_IF_ERROR(pool.acquireGuard(guard)) before
+    // using the guard as a register operand. REG_TYPE(-1) will produce
+    // garbage x86 register encoding in JIT output.
+    operator REG_TYPE() const { return REG_TYPE(regIdx); }
+    explicit operator bool() const { return regIdx >= 0; }
+    bool     isValid() const { return regIdx >= 0; }
+
+    // ── GP bulk save (SFINAE: only for Reg64) ──
+
+    template<typename R = REG_TYPE,
+             typename   = std::enable_if_t<std::is_same_v<R, Xbyak::Reg64>>>
+    void saveRegister(Xbyak::Reg64 reg)
+    {
+        jit->push(reg);
+        savedRegs.push_back(reg.getIdx());
+    }
+
+    // ── Mask-specific reset methods (SFINAE: only for Opmask) ──
+
+    template<typename R = REG_TYPE,
+             typename   = std::enable_if_t<std::is_same_v<R, Xbyak::Opmask>>>
+    void resetToAllOnes()
+    {
+        if (regIdx < 0 || !jit)
+            return;
+        jit->kxnorw(Xbyak::Opmask(regIdx), Xbyak::Opmask(regIdx),
+                    Xbyak::Opmask(regIdx));
+    }
+
+    template<typename R = REG_TYPE,
+             typename   = std::enable_if_t<std::is_same_v<R, Xbyak::Opmask>>>
+    void resetFromFringe(const Xbyak::Opmask& fringeMask, int shiftBits)
+    {
+        if (regIdx < 0 || !jit)
+            return;
+        if (shiftBits == 0) {
+            jit->kmovb(Xbyak::Opmask(regIdx), fringeMask);
+        } else {
+            jit->kshiftrw(Xbyak::Opmask(regIdx), fringeMask, shiftBits);
+        }
+    }
+
+    template<typename R = REG_TYPE,
+             typename   = std::enable_if_t<std::is_same_v<R, Xbyak::Opmask>>>
+    void reset(bool useFringe, const Xbyak::Opmask& fringeMask, int shiftBits)
+    {
+        if (useFringe)
+            resetFromFringe(fringeMask, shiftBits);
+        else
+            resetToAllOnes();
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// registerPool<REG_TYPE, MAX_REGS>: unified register pool with builder pattern
+//
+// Manages free, preserve, and accumulator register lists.
+// Builder: addPreserve(), setAccumulators(), then init() (free list
+// auto-computed).
+// ─────────────────────────────────────────────────────────────────────────
+
+template<typename REG_TYPE, int MAX_REGS>
+class registerPool
+{
+    template<typename R>
+    friend struct registerHighPressureHandling;
+
+    int freeList[MAX_REGS];
+    int preserveList[MAX_REGS];
+    int accumList[MAX_REGS];
+    int regInUseList[MAX_REGS];
+
+    int freeCount     = 0;
+    int preserveCount = 0;
+    int accumCount    = 0;
+    int regInUseCount = 0;
+
+    uint64_t reservedReg = 0;
+
+    Xbyak::CodeGenerator* jit      = nullptr;
+    int                   regBytes = 0;
+
+    dlp::jit::jitGeneratorError regPoolError =
+        dlp::jit::jitGeneratorError::success;
+
+    // ── Internal helpers ──
+
+    void saveToStack(int idx)
+    {
+        registerStackOperations<REG_TYPE>::saveToStack(jit, idx, regBytes);
+    }
+
+    void restoreFromStack(int idx)
+    {
+        registerStackOperations<REG_TYPE>::restoreFromStack(jit, idx, regBytes);
+    }
+
+    void removeFromInUse(int idx)
+    {
+        for (int i = 0; i < regInUseCount; ++i) {
+            if (regInUseList[i] == idx) {
+                regInUseList[i] = regInUseList[--regInUseCount];
+                return;
+            }
+        }
+    }
+
+    static void releaseToPool(void* pool, int idx, uint8_t source)
+    {
+        static_cast<registerPool*>(pool)->release(idx, source);
+    }
+
+    void addToList(int* list, int& count, int idx)
+    {
+        if (idx >= 0 && count < MAX_REGS)
+            list[count++] = idx;
+    }
+
+    dlp::jit::jitGeneratorError filterAndValidate(int*  list,
+                                                  int&  count,
+                                                  bool* claimed)
+    {
+        int n = 0;
+        for (int i = 0; i < count; ++i) {
+            int idx = list[i];
+            if (idx < 0 || idx >= MAX_REGS)
+                return dlp::jit::jitGeneratorError::badKernelInfo;
+            if ((reservedReg >> idx) & 1u)
+                continue;
+            if (claimed[idx])
+                return dlp::jit::jitGeneratorError::badKernelInfo;
+            claimed[idx] = true;
+            list[n++]    = idx;
+        }
+        count = n;
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    dlp::jit::jitGeneratorError applyOpWithRegister(
+        int        scratchRegNeeded,
+        const int* accumIndices,
+        int        numAccums,
+        std::function<dlp::jit::jitGeneratorError(const int*, int)>& initFn,
+        std::function<void(int, const int*, int)>&                   opFn)
+    {
+        if (scratchRegNeeded <= 0 || scratchRegNeeded > MAX_REGS)
+            return dlp::jit::jitGeneratorError::notSupported;
+
+        struct Reg
+        {
+            int     idx;
+            uint8_t source;
+        };
+        Reg acquiredRegs[MAX_REGS];
+        int scratchIndices[MAX_REGS];
+        int numAcquired = 0;
+
+        for (int i = 0; i < scratchRegNeeded; ++i) {
+            auto r = acquire();
+            if (r.idx < 0) {
+                for (int j = numAcquired - 1; j >= 0; --j)
+                    release(acquiredRegs[j].idx, acquiredRegs[j].source);
+                return dlp::jit::jitGeneratorError::notSupported;
+            }
+            acquiredRegs[numAcquired]   = { r.idx, r.source };
+            scratchIndices[numAcquired] = r.idx;
+            ++numAcquired;
+        }
+
+        if (initFn) {
+            auto initErr = initFn(scratchIndices, numAcquired);
+            if (initErr != dlp::jit::jitGeneratorError::success) {
+                for (int i = numAcquired - 1; i >= 0; --i)
+                    release(acquiredRegs[i].idx, acquiredRegs[i].source);
+                return initErr;
+            }
+        }
+
+        for (int i = 0; i < numAccums; ++i)
+            opFn(accumIndices[i], scratchIndices, numAcquired);
+
+        for (int i = numAcquired - 1; i >= 0; --i)
+            release(acquiredRegs[i].idx, acquiredRegs[i].source);
+
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+  public:
+    struct AcquiredRegister
+    {
+        int idx;
+        uint8_t
+            source; // 0=free, 1=preserve, 2=accum, INVALID_REG_SOURCE=invalid
+
+        operator REG_TYPE() const { return REG_TYPE(idx); }
+        explicit operator bool() const { return idx >= 0; }
+    };
+
+    registerPool() = default;
+
+    dlp::jit::jitGeneratorError checkError() const { return regPoolError; }
+
+    // ── Builder methods ──
+
+    registerPool& addPreserve(int idx)
+    {
+        addToList(preserveList, preserveCount, idx);
+        return *this;
+    }
+
+    registerPool& addPreserve(int start, int count)
+    {
+        for (int i = 0; i < count; ++i)
+            addToList(preserveList, preserveCount, start + i);
+        return *this;
+    }
+
+    registerPool& setAccumulators(int startIdx, int count)
+    {
+        for (int i = 0; i < count; ++i)
+            addToList(accumList, accumCount, startIdx + i);
+        return *this;
+    }
+
+    // ── Validation + activation ──
+
+    dlp::jit::jitGeneratorError init(
+        Xbyak::CodeGenerator*  gen,
+        int                    regBytesArg,
+        std::optional<uint8_t> reservedBits = std::nullopt)
+    {
+        // Guard against double-init: jit is nullptr at construction (default
+        // member initializer) and set to gen at the end of this method.
+        // A second init() call would append duplicate entries to freeList
+        // without resetting counts, corrupting pool state.
+        if (jit != nullptr)
+            return dlp::jit::jitGeneratorError::badKernelInfo;
+
+        if (reservedBits.has_value())
+            reservedReg = reservedBits.value();
+
+        bool claimed[MAX_REGS] = {};
+
+        auto err = filterAndValidate(preserveList, preserveCount, claimed);
+        if (err != dlp::jit::jitGeneratorError::success)
+            return err;
+
+        err = filterAndValidate(accumList, accumCount, claimed);
+        if (err != dlp::jit::jitGeneratorError::success)
+            return err;
+
+        for (int i = 0; i < MAX_REGS; ++i)
+            if (!((reservedReg >> i) & 1u) && !claimed[i])
+                freeList[freeCount++] = i;
+
+        jit      = gen;
+        regBytes = regBytesArg;
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    // ── Acquire / Release ──
+
+    AcquiredRegister acquire()
+    {
+        if (!jit)
+            return { -1, INVALID_REG_SOURCE };
+
+        AcquiredRegister r = { -1, INVALID_REG_SOURCE };
+        if (freeCount > 0) {
+            r = { freeList[--freeCount], 0 };
+        } else if (preserveCount > 0) {
+            int idx = preserveList[--preserveCount];
+            saveToStack(idx);
+            r = { idx, 1 };
+        } else if (accumCount > 1) {
+            int idx = accumList[--accumCount];
+            saveToStack(idx);
+            r = { idx, 2 };
+        }
+
+        if (r.idx >= 0) {
+            if (regInUseCount >= MAX_REGS) {
+                regPoolError = dlp::jit::jitGeneratorError::badKernelInfo;
+                return { -1, INVALID_REG_SOURCE };
+            }
+            regInUseList[regInUseCount++] = r.idx;
+        }
+
+        return r;
+    }
+
+    void release(int idx, uint8_t source)
+    {
+        if (idx < 0)
+            return;
+        removeFromInUse(idx);
+        switch (source) {
+            case 0:
+                freeList[freeCount++] = idx;
+                break;
+            case 1:
+                restoreFromStack(idx);
+                preserveList[preserveCount++] = idx;
+                break;
+            case 2:
+                restoreFromStack(idx);
+                accumList[accumCount++] = idx;
+                break;
+            default:
+                regPoolError = dlp::jit::jitGeneratorError::badKernelInfo;
+                break;
+        }
+    }
+
+    // ── RAII guard acquisition ──
+
+    registerGuard<REG_TYPE> acquireGuard()
+    {
+        auto r = acquire();
+        if (r.idx < 0)
+            return registerGuard<REG_TYPE>();
+        return registerGuard<REG_TYPE>(this, &releaseToPool, r.idx, r.source,
+                                       regBytes, jit);
+    }
+
+    dlp::jit::jitGeneratorError acquireGuard(registerGuard<REG_TYPE>& out)
+    {
+        auto r = acquire();
+        if (r.idx < 0)
+            return dlp::jit::jitGeneratorError::notSupported;
+        out = registerGuard<REG_TYPE>(this, &releaseToPool, r.idx, r.source,
+                                      regBytes, jit);
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    // ── Bulk operation ──
+
+    dlp::jit::jitGeneratorError applyOp(
+        int scratchRegNeeded,
+        std::function<dlp::jit::jitGeneratorError(const int*, int)> initFn,
+        std::function<void(int, const int*, int)>                   opFn)
+    {
+        if ((freeCount + preserveCount) >= scratchRegNeeded) {
+            return applyOpWithRegister(scratchRegNeeded, accumList, accumCount,
+                                       initFn, opFn);
+        } else {
+            return registerHighPressureHandling<REG_TYPE>::apply(
+                *this, scratchRegNeeded, initFn, opFn);
+        }
+    }
+
+    registerPool(const registerPool&)            = delete;
+    registerPool& operator=(const registerPool&) = delete;
+    registerPool& operator=(registerPool&&)      = delete;
+
+    registerPool(registerPool&& o) noexcept
+        : freeCount(o.freeCount)
+        , preserveCount(o.preserveCount)
+        , accumCount(o.accumCount)
+        , regInUseCount(o.regInUseCount)
+        , reservedReg(o.reservedReg)
+        , jit(o.jit)
+        , regBytes(o.regBytes)
+    {
+        for (int i = 0; i < this->freeCount; ++i)
+            freeList[i] = o.freeList[i];
+        for (int i = 0; i < this->preserveCount; ++i)
+            preserveList[i] = o.preserveList[i];
+        for (int i = 0; i < this->accumCount; ++i)
+            accumList[i] = o.accumList[i];
+        for (int i = 0; i < this->regInUseCount; ++i)
+            regInUseList[i] = o.regInUseList[i];
+        o.jit         = nullptr;
+        o.reservedReg = 0;
+    }
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// registerHighPressureHandling<REG_TYPE>: high-pressure allocation strategies
+//
+// Primary template: vector accumulator rotation (Phase 1 + Phase 2)
+// Opmask specialization: nested borrow from regInUseList
+// ─────────────────────────────────────────────────────────────────────────
+
+template<typename REG_TYPE>
+struct registerHighPressureHandling
+{
+    template<int MAX_REGS>
+    static dlp::jit::jitGeneratorError apply(
+        registerPool<REG_TYPE, MAX_REGS>& pool,
+        int                               scratchRegNeeded,
+        std::function<dlp::jit::jitGeneratorError(const int*, int)> initFn,
+        std::function<void(int, const int*, int)>                   opFn)
+    {
+        int numToBorrow =
+            scratchRegNeeded - (pool.freeCount + pool.preserveCount);
+        if (numToBorrow <= 0)
+            numToBorrow = 1;
+        if (numToBorrow > pool.accumCount)
+            numToBorrow = pool.accumCount;
+        if (pool.freeCount + numToBorrow > MAX_REGS)
+            return dlp::jit::jitGeneratorError::notSupported;
+
+        int accumsRemaining = pool.accumCount - numToBorrow;
+        if (accumsRemaining <= 0)
+            return dlp::jit::jitGeneratorError::notSupported;
+
+        int borrowedRegs[MAX_REGS];
+        for (int i = 0; i < numToBorrow; ++i)
+            borrowedRegs[i] = pool.accumList[i];
+
+        // Phase 1: Save lower accums to stack, promote to free list
+        for (int i = 0; i < numToBorrow; ++i) {
+            pool.saveToStack(pool.accumList[i]);
+            pool.freeList[pool.freeCount++] = pool.accumList[i];
+        }
+        for (int i = 0; i < accumsRemaining; ++i)
+            pool.accumList[i] = pool.accumList[i + numToBorrow];
+        pool.accumCount = accumsRemaining;
+
+        auto err1 = pool.applyOpWithRegister(scratchRegNeeded, pool.accumList,
+                                             pool.accumCount, initFn, opFn);
+
+        // Undo phase 1 promotion
+        pool.freeCount -= numToBorrow;
+        for (int i = accumsRemaining - 1; i >= 0; --i)
+            pool.accumList[i + numToBorrow] = pool.accumList[i];
+        for (int i = 0; i < numToBorrow; ++i)
+            pool.accumList[i] = borrowedRegs[i];
+        pool.accumCount = accumsRemaining + numToBorrow;
+
+        if (err1 != dlp::jit::jitGeneratorError::success)
+            return err1;
+
+        // Phase 2: Rotation for borrowed accumulators
+        for (int i = numToBorrow - 1; i >= 0; --i)
+            pool.restoreFromStack(borrowedRegs[i]);
+        for (int i = 0; i < numToBorrow; ++i) {
+            int upperIdx = pool.accumCount - numToBorrow + i;
+            pool.saveToStack(pool.accumList[upperIdx]);
+            pool.freeList[pool.freeCount++] = pool.accumList[upperIdx];
+        }
+
+        auto err2 = pool.applyOpWithRegister(scratchRegNeeded, borrowedRegs,
+                                             numToBorrow, initFn, opFn);
+
+        // Undo phase 2 promotion
+        pool.freeCount -= numToBorrow;
+        for (int i = numToBorrow - 1; i >= 0; --i)
+            pool.restoreFromStack(
+                pool.accumList[pool.accumCount - numToBorrow + i]);
+
+        return err2;
+    }
+};
+
+template<>
+struct registerHighPressureHandling<Xbyak::Opmask>
+{
+    template<int MAX_REGS>
+    static dlp::jit::jitGeneratorError apply(
+        registerPool<Xbyak::Opmask, MAX_REGS>& pool,
+        int                                    scratchRegNeeded,
+        std::function<dlp::jit::jitGeneratorError(const int*, int)> initFn,
+        std::function<void(int, const int*, int)>                   opFn)
+    {
+        int numToBorrow =
+            scratchRegNeeded - (pool.freeCount + pool.preserveCount);
+        if (numToBorrow <= 0)
+            numToBorrow = 1;
+        if (numToBorrow > pool.regInUseCount)
+            return dlp::jit::jitGeneratorError::notSupported;
+
+        int borrowedRegs[MAX_REGS];
+        for (int i = 0; i < numToBorrow; ++i)
+            borrowedRegs[i] = pool.regInUseList[--pool.regInUseCount];
+
+        // Save in-use values, promote to free
+        for (int i = 0; i < numToBorrow; ++i) {
+            pool.saveToStack(borrowedRegs[i]);
+            pool.freeList[pool.freeCount++] = borrowedRegs[i];
+        }
+
+        int  emptyAccums[1] = {};
+        auto err = pool.applyOpWithRegister(scratchRegNeeded, emptyAccums, 0,
+                                            initFn, opFn);
+
+        // Undo: remove from free, restore in-use values
+        pool.freeCount -= numToBorrow;
+        for (int i = numToBorrow - 1; i >= 0; --i) {
+            pool.restoreFromStack(borrowedRegs[i]);
+            pool.regInUseList[pool.regInUseCount++] = borrowedRegs[i];
+        }
+
+        return err;
     }
 };
 

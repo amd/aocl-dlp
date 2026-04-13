@@ -71,7 +71,7 @@ typedef struct dlp_gemm_post_op_t
     uint64_t op_code;
     void*    op_args1; // zero_point, bias, sum_buff
     void*    op_args2; // alpha, storage order, sum_zero_point
-    void*    op_args3; // beta, zero_point_len
+    void*    op_args3; // beta, zero_point_len, bias_len
     void*    scale_factor;
     md_t     scale_factor_len;
     void*    bias_zp;     // Zero point pointer (for BIAS dequantization)

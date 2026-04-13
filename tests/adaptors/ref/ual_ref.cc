@@ -1494,22 +1494,23 @@ UalRef::applyScale(Matrix&       matrix,
                    const Matrix* scaleFactor,
                    const Matrix* zeroPoint)
 {
-    if (!scaleFactor) {
-        return;
-    }
-
-    // Determine scale length: 1 (per-tensor) or N (per-channel)
-    bool per_channel    = (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
+    bool has_sf         = (scaleFactor != nullptr);
     bool has_zero_point = (zeroPoint != nullptr);
+
+    if (!has_sf && !has_zero_point)
+        return;
+
+    bool per_channel =
+        has_sf && (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
     bool per_channel_zp =
         has_zero_point && ((zeroPoint->getRows() * zeroPoint->getCols()) > 1);
 
     if (!per_channel && !per_channel_zp) {
-        // Single scale value and optionally single zero point - convert to
-        // float
-        float scale = dlp::testing::utils::convertTo<float>(
-            scaleFactor->getData(), scaleFactor->getMatrixType(), 0);
-        float zp = 0.0f;
+        float scale = has_sf ? dlp::testing::utils::convertTo<float>(
+                                   scaleFactor->getData(),
+                                   scaleFactor->getMatrixType(), 0)
+                             : 1.0f;
+        float zp    = 0.0f;
         if (has_zero_point) {
             zp = dlp::testing::utils::convertTo<float>(
                 zeroPoint->getData(), zeroPoint->getMatrixType(), 0);
@@ -1522,21 +1523,21 @@ UalRef::applyScale(Matrix&       matrix,
         return;
     }
 
-    // For per-channel scaling, we need to handle layout properly
     md_t rows = matrix.getRows();
     md_t cols = matrix.getCols();
     md_t ld   = matrix.getLeadingDimension();
 
-    // Convert scale factor to float array
-    md_t scale_size = scaleFactor->getRows() * scaleFactor->getCols();
-    std::unique_ptr<float[]> scale_data(new float[scale_size]);
-
-    for (iter_t i = 0; i < scale_size; ++i) {
-        scale_data[i] = dlp::testing::utils::convertTo<float>(
-            scaleFactor->getData(), scaleFactor->getMatrixType(), i);
+    md_t                     scale_size = 0;
+    std::unique_ptr<float[]> scale_data;
+    if (has_sf) {
+        scale_size = scaleFactor->getRows() * scaleFactor->getCols();
+        scale_data.reset(new float[scale_size]);
+        for (iter_t i = 0; i < scale_size; ++i) {
+            scale_data[i] = dlp::testing::utils::convertTo<float>(
+                scaleFactor->getData(), scaleFactor->getMatrixType(), i);
+        }
     }
 
-    // Convert zero point to float array if provided
     md_t                     zp_size = 0;
     std::unique_ptr<float[]> zp_data;
     if (has_zero_point) {
@@ -1548,14 +1549,12 @@ UalRef::applyScale(Matrix&       matrix,
         }
     }
 
-    // If matrix is already f32, apply directly
     if (matrix.getMatrixType() == MatrixType::f32) {
         float* data = reinterpret_cast<float*>(matrix.getData());
 
-        // Per-channel assumed along N (columns)
         for (iter_t i = 0; i < rows; ++i) {
             for (iter_t j = 0; j < cols; ++j) {
-                float  scale = scale_data[j % scale_size];
+                float  scale = has_sf ? scale_data[j % scale_size] : 1.0f;
                 float  zp    = has_zero_point ? zp_data[j % zp_size] : 0.0f;
                 size_t idx   = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                                    ? (static_cast<size_t>(i) * ld + j)
@@ -1581,7 +1580,7 @@ UalRef::applyScale(Matrix&       matrix,
     // Apply per-channel scaling in float
     for (iter_t i = 0; i < rows; ++i) {
         for (iter_t j = 0; j < cols; ++j) {
-            float  scale   = scale_data[j % scale_size];
+            float  scale   = has_sf ? scale_data[j % scale_size] : 1.0f;
             float  zp      = has_zero_point ? zp_data[j % zp_size] : 0.0f;
             size_t idx     = static_cast<size_t>(i) * temp_ld + j;
             temp_data[idx] = temp_data[idx] * scale + zp;

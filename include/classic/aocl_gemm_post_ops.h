@@ -234,6 +234,7 @@ typedef struct
     DLP_TYPE  stor_type; /**< Storage type of bias values */
     dlp_sf_t* sf;        /**< Scale factor for dequantization */
     dlp_zp_t* zp;        /**< Zero point for dequantization */
+    md_t      bias_len;  /**< Length of bias array.*/
 } dlp_post_op_bias;
 
 /**

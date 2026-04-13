@@ -97,61 +97,71 @@ struct ArchitectureTraits;
 template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx2_ymm_16_reg>
 {
-    using RegType                        = Xbyak::Ymm;
-    using halfRegType                    = Xbyak::Xmm;
-    static constexpr int  regSize        = 256;
-    static constexpr int  regBytes       = regSize / 8;
-    static constexpr int  numRegs        = 16;
-    static constexpr bool hasMaskSupport = false;
-    static constexpr bool isAVX512       = false;
+    using RegType                             = Xbyak::Ymm;
+    using halfRegType                         = Xbyak::Xmm;
+    static constexpr int     regSize          = 256;
+    static constexpr int     regBytes         = regSize / 8;
+    static constexpr int     numRegs          = 16;
+    static constexpr bool    hasMaskSupport   = false;
+    static constexpr bool    isAVX512         = false;
+    static constexpr int     numMaskRegs      = 0;
+    static constexpr uint8_t reservedMaskBits = 0x00;
 };
 
 template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx2_xmm_16_reg>
 {
-    using RegType                        = Xbyak::Xmm;
-    using halfRegType                    = Xbyak::Xmm;
-    static constexpr int  regSize        = 128;
-    static constexpr int  regBytes       = regSize / 8;
-    static constexpr int  numRegs        = 16;
-    static constexpr bool hasMaskSupport = false;
-    static constexpr bool isAVX512       = false;
+    using RegType                             = Xbyak::Xmm;
+    using halfRegType                         = Xbyak::Xmm;
+    static constexpr int     regSize          = 128;
+    static constexpr int     regBytes         = regSize / 8;
+    static constexpr int     numRegs          = 16;
+    static constexpr bool    hasMaskSupport   = false;
+    static constexpr bool    isAVX512         = false;
+    static constexpr int     numMaskRegs      = 0;
+    static constexpr uint8_t reservedMaskBits = 0x00;
 };
 
 template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx512_zmm_32_reg>
 {
-    using RegType                        = Xbyak::Zmm;
-    using halfRegType                    = Xbyak::Ymm;
-    static constexpr int  regSize        = 512;
-    static constexpr int  regBytes       = regSize / 8;
-    static constexpr int  numRegs        = 32;
-    static constexpr bool hasMaskSupport = true;
-    static constexpr bool isAVX512       = true;
+    using RegType                             = Xbyak::Zmm;
+    using halfRegType                         = Xbyak::Ymm;
+    static constexpr int     regSize          = 512;
+    static constexpr int     regBytes         = regSize / 8;
+    static constexpr int     numRegs          = 32;
+    static constexpr bool    hasMaskSupport   = true;
+    static constexpr bool    isAVX512         = true;
+    static constexpr int     numMaskRegs      = 8;
+    static constexpr uint8_t reservedMaskBits = 0x01;
 };
 
 template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx512_ymm_32_reg>
 {
-    using RegType                        = Xbyak::Ymm;
-    using halfRegType                    = Xbyak::Xmm;
-    static constexpr int  regSize        = 256;
-    static constexpr int  regBytes       = regSize / 8;
-    static constexpr int  numRegs        = 32;
-    static constexpr bool hasMaskSupport = true;
-    static constexpr bool isAVX512       = true;
+    using RegType                             = Xbyak::Ymm;
+    using halfRegType                         = Xbyak::Xmm;
+    static constexpr int     regSize          = 256;
+    static constexpr int     regBytes         = regSize / 8;
+    static constexpr int     numRegs          = 32;
+    static constexpr bool    hasMaskSupport   = true;
+    static constexpr bool    isAVX512         = true;
+    static constexpr int     numMaskRegs      = 8;
+    static constexpr uint8_t reservedMaskBits = 0x01;
 };
 
 template<>
 struct ArchitectureTraits<utils::kernelInstrType::avx512_xmm_32_reg>
 {
-    using RegType                        = Xbyak::Xmm;
-    using halfRegType                    = Xbyak::Xmm;
-    static constexpr int  regSize        = 128;
-    static constexpr int  regBytes       = regSize / 8;
-    static constexpr int  numRegs        = 32;
-    static constexpr bool hasMaskSupport = true;
-    static constexpr bool isAVX512       = true;
+    using RegType                             = Xbyak::Xmm;
+    using halfRegType                         = Xbyak::Xmm;
+    static constexpr int     regSize          = 128;
+    static constexpr int     regBytes         = regSize / 8;
+    static constexpr int     numRegs          = 32;
+    static constexpr bool    hasMaskSupport   = true;
+    static constexpr bool    isAVX512         = true;
+    static constexpr int     numMaskRegs      = 8;
+    static constexpr uint8_t reservedMaskBits = 0x01;
 };
 
 } // namespace amdzen::traits

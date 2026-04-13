@@ -90,10 +90,7 @@ class jitFP16GEMVN1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
 
-    // Mask register array (k1-k7 available, k0 reserved)
-    static constexpr int NUM_USABLE_MASKS = 7;
-    static constexpr int MASK_START_IDX   = 1;
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS];
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     // =================================================================
     // REGISTER ALLOCATION
@@ -222,10 +219,7 @@ class jitFP16GEMVM1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType   betaScalingType;
     AOCL_DLP_MEMORY_TAG              mtag_b;
 
-    // Mask register array
-    static constexpr int NUM_USABLE_MASKS = 7;
-    static constexpr int MASK_START_IDX   = 1;
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS];
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     // =================================================================
     // REGISTER ALLOCATION (K_SUB_ITER pattern following U8S8)

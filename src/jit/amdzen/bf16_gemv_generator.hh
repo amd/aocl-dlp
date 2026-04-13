@@ -86,10 +86,7 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp2;             // General purpose temporary register 2
     Xbyak::Reg64 regTmp3;             // General purpose temporary register 3
 
-    // Add mask register array (for AVX512)
-    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
-    static constexpr int MASK_START_IDX   = 1;        // Start from k1
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     Xbyak::Label label_m_loop_start;            // Main m-dimension loop
     Xbyak::Label label_m_loop_end;              // End of m-dimension loop
@@ -220,10 +217,7 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regIncN;
     Xbyak::Reg64 regIncK;
 
-    // Add mask register array (for AVX512)
-    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
-    static constexpr int MASK_START_IDX   = 1;        // Start from k1
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     Xbyak::Label label_n_loop_start;
     Xbyak::Label label_n_loop_end;

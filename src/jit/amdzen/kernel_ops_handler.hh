@@ -28,7 +28,6 @@
 
 #pragma once
 
-#include <map>
 #include <memory>
 
 #include "jit/jit_generator_base.hh"
@@ -41,34 +40,33 @@
 
 namespace amdzen::gen {
 
-using namespace Xbyak;
-
-// kernelOpHandler class that implements
+/**
+ * @brief Templated facade for post-op code generation.
+ *
+ * Directly owns kernelOpsGeneratorX86<KType>, eliminating virtual dispatch.
+ * GEMM generators (already templated on KType) instantiate this directly.
+ *
+ * Usage:
+ *   kernelOpsHandler<KType> handler(jit);
+ *   handler.generateKernelOps(kernelOps, ..., vecPool, maskPool, maskOffset);
+ */
+template<utils::kernelInstrType KType>
 class kernelOpsHandler
 {
+    using Traits = traits::ArchitectureTraits<KType>;
+    using VecPoolType =
+        utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+    using MaskPoolType =
+        utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+    std::unique_ptr<x86gen::kernelOpsGeneratorX86<KType>> kOpsGen;
+
   public:
-    kernelOpsHandler(Xbyak::CodeGenerator* jit, utils::kernelInstrType kType)
-        : kOpsGen{ nullptr }
+    explicit kernelOpsHandler(Xbyak::CodeGenerator* jit)
+        : kOpsGen(std::make_unique<x86gen::kernelOpsGeneratorX86<KType>>(jit))
     {
-        if (kType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
-                utils::kernelInstrType::avx512_zmm_32_reg>>(jit);
-        } else if (kType == utils::kernelInstrType::avx512_ymm_32_reg) {
-            kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
-                utils::kernelInstrType::avx512_ymm_32_reg>>(jit);
-        } else if (kType == utils::kernelInstrType::avx2_ymm_16_reg) {
-            kOpsGen = std::make_unique<x86gen::kernelOpsGeneratorX86<
-                utils::kernelInstrType::avx2_ymm_16_reg>>(jit);
-        }
     }
 
-    ~kernelOpsHandler()                                  = default;
-    kernelOpsHandler(const kernelOpsHandler&)            = delete;
-    kernelOpsHandler& operator=(const kernelOpsHandler&) = delete;
-    kernelOpsHandler(kernelOpsHandler&&)                 = delete;
-    kernelOpsHandler& operator=(kernelOpsHandler&&)      = delete;
-
-    // Main post-op interface
     dlp::jit::jitGeneratorError generateKernelOps(
         std::vector<dlp::kernel_frame::kernelOpsMetaData>& kernelOps,
         const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
@@ -78,27 +76,25 @@ class kernelOpsHandler
         bool                  useMask,
         int                   numMaskRegs,
         int                   cRegStartIdx,
-        int                   cRegCount)
+        int                   cRegCount,
+        VecPoolType&          vecPool,
+        MaskPoolType&         maskPool,
+        int                   maskOffset)
     {
-        if (kOpsGen) {
-            return kOpsGen->generateKernelOps(
-                kernelOps, postOpsArgWrapperPtrReg, algoType, MR, NR, useMask,
-                numMaskRegs, cRegStartIdx, cRegCount);
-        }
-        return dlp::jit::jitGeneratorError::error;
+        if (!kOpsGen)
+            return dlp::jit::jitGeneratorError::notSupported;
+        return kOpsGen->generateKernelOps(kernelOps, postOpsArgWrapperPtrReg,
+                                          algoType, MR, NR, useMask,
+                                          numMaskRegs, cRegStartIdx, cRegCount,
+                                          vecPool, maskPool, maskOffset);
     }
-
-    // Function to generate the gelu const embeddings within the kernel.
-    dlp::jit::jitGeneratorError generateKernelOpsAttributes()
-    {
-        if (kOpsGen) {
-            return kOpsGen->embedKernelOpsAttributes();
-        }
-        return dlp::jit::jitGeneratorError::error;
-    }
-
-  private:
-    std::unique_ptr<kernelOpsGeneratorInterface> kOpsGen;
 };
 
 } // namespace amdzen::gen
+
+extern template class amdzen::gen::kernelOpsHandler<
+    amdzen::utils::kernelInstrType::avx512_zmm_32_reg>;
+extern template class amdzen::gen::kernelOpsHandler<
+    amdzen::utils::kernelInstrType::avx512_ymm_32_reg>;
+extern template class amdzen::gen::kernelOpsHandler<
+    amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;

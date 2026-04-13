@@ -590,6 +590,14 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     return DLP_CLSC_NULL_POINTER;
                 }
 
+                if ((metadata->bias + b_i)->bias
+                    && ((metadata->bias + b_i)->bias_len != 1)
+                    && ((metadata->bias + b_i)->bias_len != n)) {
+                    dlp_print_msg(" BIAS bias_len is != 1 and != n. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+                }
+
                 DLP_TYPE tmp_stor_type =
                     dlp_gemm_get_stor_type((metadata->bias + b_i)->stor_type);
                 // Extract SF storage type
@@ -626,7 +634,9 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                 dlp_gemm_set_node_params(
                     (post_op_list + i), POST_OPS_BIAS,
                     (metadata->bias + b_i)->bias, meta_arg,
-                    NULL, // op_args3 is NULL for BIAS
+                    ((metadata->bias + b_i)->bias_len > 0)
+                        ? &((metadata->bias + b_i)->bias_len)
+                        : NULL,
                     (metadata->bias + b_i)->sf
                         ? (metadata->bias + b_i)->sf->scale_factor
                         : NULL,
@@ -671,7 +681,7 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     dlp_print_msg(" Post_op.scale scale factor length is < n."
                                   " Exiting..",
                                   __FILE__, __LINE__);
-                    return DLP_CLSC_NULL_POINTER;
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
                 }
                 if ((metadata->scale + s_i)->zp
                     && ((metadata->scale + s_i)->zp->zero_point_len != 1)
@@ -679,7 +689,7 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     dlp_print_msg(" Post_op.scale zero point length is < n."
                                   " Exiting..",
                                   __FILE__, __LINE__);
-                    return DLP_CLSC_NULL_POINTER;
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
                 }
 
                 DLP_TYPE tmp_zp_stor_type =

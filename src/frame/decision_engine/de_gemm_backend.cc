@@ -396,6 +396,10 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             metaData->cMatFormat = (storFormatC == 'c')
                                        ? kernel_frame::storageFormat::colMajor
                                        : kernel_frame::storageFormat::rowMajor;
+            if (post_op->op_args3 != nullptr) {
+                md_t bias_len          = *static_cast<md_t*>(post_op->op_args3);
+                metaData->isScalarBias = (bias_len == 1);
+            }
             // Dequantization support for BIAS
             if (post_op->scale_factor != nullptr) {
                 // Set scale factor datatype from user-provided type
@@ -458,18 +462,21 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
             metaData->type = kernel_frame::kernelOps::downscale;
             char storFormatC =
                 std::tolower(*(static_cast<char*>(post_op->op_args2)));
-            metaData->cMatFormat    = (storFormatC == 'c')
-                                          ? kernel_frame::storageFormat::colMajor
-                                          : kernel_frame::storageFormat::rowMajor;
-            metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
-                static_cast<DLP_TYPE>(post_op->sf_stor_type));
-            metaData->scalarScaleFactorRequired =
-                (post_op->scale_factor_len == 1) ? true : false;
-            metaData->vectorScaleFactorRequired =
-                (post_op->scale_factor_len > 1) ? true : false;
-            metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
-                static_cast<DLP_TYPE>(post_op->zp_stor_type));
+            metaData->cMatFormat = (storFormatC == 'c')
+                                       ? kernel_frame::storageFormat::colMajor
+                                       : kernel_frame::storageFormat::rowMajor;
+            if (post_op->scale_factor != nullptr) {
+                metaData->scaleFactorDt =
+                    utils::getStorageDtFromAoclStorageType(
+                        static_cast<DLP_TYPE>(post_op->sf_stor_type));
+                metaData->scalarScaleFactorRequired =
+                    (post_op->scale_factor_len == 1) ? true : false;
+                metaData->vectorScaleFactorRequired =
+                    (post_op->scale_factor_len > 1) ? true : false;
+            }
             if (post_op->op_args3 != nullptr) {
+                metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
+                    static_cast<DLP_TYPE>(post_op->zp_stor_type));
                 metaData->scalarZeroPointRequired =
                     (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true
                                                                     : false;

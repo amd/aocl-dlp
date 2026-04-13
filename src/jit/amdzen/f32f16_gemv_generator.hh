@@ -82,9 +82,7 @@ class jitF32FP16GEMVN1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
 
-    static constexpr int NUM_USABLE_MASKS = 7;
-    static constexpr int MASK_START_IDX   = 1;
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS];
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     /*
      * Register allocation for MR=16, F32 accumulation:
@@ -142,7 +140,7 @@ class jitF32FP16GEMVN1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError loadMasks();
 
-    std::unique_ptr<gen::kernelOpsHandler>            kernelOpsHandlerPtr;
+    std::unique_ptr<gen::kernelOpsHandler<KType>>     kernelOpsHandlerPtr;
     std::vector<dlp::kernel_frame::kernelOpsMetaData> kernelOpsVector;
 };
 
@@ -193,9 +191,7 @@ class jitF32FP16GEMVM1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType   betaScalingType;
     AOCL_DLP_MEMORY_TAG              mtag_b;
 
-    static constexpr int NUM_USABLE_MASKS = 7;
-    static constexpr int MASK_START_IDX   = 1;
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS];
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     /*
      * Register allocation for NR=64, F32 accumulation, K_SUB_ITER=4:
@@ -265,7 +261,7 @@ class jitF32FP16GEMVM1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError loadMasks();
 
-    std::unique_ptr<gen::kernelOpsHandler>            kernelOpsHandlerPtr;
+    std::unique_ptr<gen::kernelOpsHandler<KType>>     kernelOpsHandlerPtr;
     std::vector<dlp::kernel_frame::kernelOpsMetaData> kernelOpsVector;
 };
 

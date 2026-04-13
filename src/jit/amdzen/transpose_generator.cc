@@ -585,17 +585,16 @@ TransposeGenerator<KType>::generateTranspose(
     dlp::jit::jitAlgoType algoType,
     bool                  fuseBetaWithStore)
 {
-    // Save registers that will be used as temporaries
-    utils::registerGuard<Xbyak::Reg64> rG{ jit_ };
-    rG.saveRegister(regCjr);
-    rG.saveRegister(regRsCBlock);
-    rG.saveRegister(regCsCBlock);
-    rG.saveRegister(regCsC);
-    rG.saveRegister(regNleft);
-    rG.saveRegister(regTmp1);
-    rG.saveRegister(regTmp2);
-    rG.saveRegister(regTmp3);
-    rG.saveRegister(regTmp4);
+    utils::registerGuard<Xbyak::Reg64> gprGuard{ jit_ };
+    gprGuard.saveRegister(regCjr);
+    gprGuard.saveRegister(regRsCBlock);
+    gprGuard.saveRegister(regCsCBlock);
+    gprGuard.saveRegister(regCsC);
+    gprGuard.saveRegister(regNleft);
+    gprGuard.saveRegister(regTmp1);
+    gprGuard.saveRegister(regTmp2);
+    gprGuard.saveRegister(regTmp3);
+    gprGuard.saveRegister(regTmp4);
 
     // Set up context: load stride values, configure masks, etc.
     setContext(postOpsArgWrapperPtrReg, fuseBetaWithStore);

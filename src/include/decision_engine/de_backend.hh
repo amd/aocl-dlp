@@ -352,15 +352,6 @@ class gemmF32DEBackend : public iDEBackend
 
         bool invokeRD = false;
 
-        // TODO: For RD inputs kMask is set from the generator and nmask is
-        // calculated on the fly within the RD GEMM. Currently, when post-ops
-        // module reloads the maskF32 values into the opMask, the kMask gets
-        // overwritten for RD kernels while post-ops expects nMask. Until a
-        // proper handshake of the mask registers is established between
-        // post-ops and GEMM the RD kenrels will be disabled with post-ops.
-        bool hasPostOps =
-            (metadata != nullptr) && (metadata->op_code != POST_OPS_DISABLE);
-
         // The pack-conversion function from f32 to bf16 only supports
         // packing of matrices to row-major format. Hence Rd kernels can't
         // be used when bf16 API is rerouted to FP32.
@@ -376,7 +367,7 @@ class gemmF32DEBackend : public iDEBackend
         // inefficiency
         //   (just above 16-boundary), bounded by n<=72 and k>=64
         // - Very small m (<=6): RD wins broadly for n<=72
-        if (!hasPostOps && !(rerouted_from_other_backend)
+        if (!(rerouted_from_other_backend)
             && ((k >= m * 8) || (n <= 8 && k >= 32)
                 || (n % 16 != 0 && n % 16 <= 8 && n <= 72 && k >= 64
                     && (n <= 48 || m <= 32))

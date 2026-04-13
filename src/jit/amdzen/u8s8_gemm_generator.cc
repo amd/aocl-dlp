@@ -91,8 +91,12 @@ jitU8S8VNNI_GEMM<KType>::initializeParameters(bool mLoop)
     mov(regRsB, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsB)]);
     mov(regRsC, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsC)]);
 
-    // Load k-fringe mask to k2
-    kmovw(k2, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftmask)]);
+    for (int i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
+    }
+
+    kmovw(mask_regs[0],
+          ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftmask)]);
 
     // Scale strides for VNNI format and data types
     lea(regRsC, ptr[regRsC * sizeof(int32_t)]);
@@ -101,8 +105,7 @@ jitU8S8VNNI_GEMM<KType>::initializeParameters(bool mLoop)
 
     if (useMask) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            // For AVX512 ZMM: load 16-bit mask for int32 elements
-            kmovw(k3,
+            kmovw(mask_regs[1],
                   ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskS32)]);
         }
     }
@@ -268,11 +271,13 @@ jitU8S8VNNI_GEMM<KType>::storeResultS32()
                 if (accumulatorsAreF32) {
                     // F32 accumulators - convert to S32 before storing
                     vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                    vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes] | k3 | T_z,
+                    vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes]
+                                  | mask_regs[1] | T_z,
                               Zmm(aRegIdx));
                 } else {
                     // S32 accumulators - direct store
-                    vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes] | k3 | T_z,
+                    vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes]
+                                  | mask_regs[1] | T_z,
                               RegType(cRegIdx + i * bReg + bFullReg));
                 }
             }
@@ -308,11 +313,11 @@ jitU8S8VNNI_GEMM<KType>::storeResultS8()
                 if (accumulatorsAreF32) {
                     // F32 accumulators - convert F32→S32 then saturate to S8
                     vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * 16] | k3,
+                    vpmovsdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
                              Zmm(aRegIdx));
                 } else {
                     // S32 accumulators - direct saturation to S8
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * 16] | k3,
+                    vpmovsdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
                              RegType(cRegIdx + i * bReg + bFullReg));
                 }
             }
@@ -363,13 +368,15 @@ jitU8S8VNNI_GEMM<KType>::storeResultU8()
                     vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
                     vpmaxsd(Zmm(aRegIdx), Zmm(aRegIdx), Zmm(aRegIdx + 1));
                     vpminsd(Zmm(aRegIdx), Zmm(aRegIdx), Zmm(aRegIdx + 2));
-                    vpmovdb(ptr[regTmpCptr + bFullReg * 16] | k3, Zmm(aRegIdx));
+                    vpmovdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
+                            Zmm(aRegIdx));
                 } else {
                     // S32 accumulators - direct clamp to U8
                     vpmaxsd(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg),
                             Zmm(aRegIdx + 1));
                     vpminsd(Zmm(aRegIdx), Zmm(aRegIdx), Zmm(aRegIdx + 2));
-                    vpmovdb(ptr[regTmpCptr + bFullReg * 16] | k3, Zmm(aRegIdx));
+                    vpmovdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
+                            Zmm(aRegIdx));
                 }
             }
             add(regTmpCptr, regTmp1);
@@ -403,12 +410,14 @@ jitU8S8VNNI_GEMM<KType>::storeResultF32()
             if (bMaskReg > 0) {
                 if (accumulatorsAreF32) {
                     // F32 accumulators - direct masked store
-                    vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | k3,
+                    vmovups(ptr[regTmpCptr + bFullReg * RegBytes]
+                                | mask_regs[1],
                             Zmm(cRegIdx + i * bReg + bFullReg));
                 } else {
                     // S32 accumulators - convert to F32 and store
                     vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                    vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | k3,
+                    vmovups(ptr[regTmpCptr + bFullReg * RegBytes]
+                                | mask_regs[1],
                             Zmm(aRegIdx));
                 }
             }
@@ -485,7 +494,7 @@ jitU8S8VNNI_GEMM<KType>::storeResultBF16()
                 vpsrld(Zmm(aRegIdx + 1), Zmm(aRegIdx + 1), 16);
                 vpmovdw(Ymm(aRegIdx + 1), Zmm(aRegIdx + 1));
 
-                vmovdqu16(ptr[regTmpCptr + bFullReg * 32] | k3,
+                vmovdqu16(ptr[regTmpCptr + bFullReg * 32] | mask_regs[1],
                           Ymm(aRegIdx + 1));
             }
             add(regTmpCptr, regTmp1);
@@ -583,7 +592,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
 
             // Handle masked beta scaling
             if (bMaskReg > 0) {
-                vmovdqu8(Xmm(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu8(Xmm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                          ptr[regTmpCptr + bFullReg * 16]);
                 vpmovzxbd(Zmm(bRegIdx + bFullReg), Xmm(bRegIdx + bFullReg));
                 // vpdpbusd(Zmm(cRegIdx + i * bReg + bFullReg),
@@ -619,7 +628,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
                        Zmm(bRegIdx + j));
             }
             if (bMaskReg > 0) {
-                vmovdqu8(Xmm(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu8(Xmm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                          ptr[regTmpCptr + bFullReg * 16]);
                 vpmovsxbd(Zmm(bRegIdx + bFullReg), Xmm(bRegIdx + bFullReg));
                 vpmulld(Zmm(bRegIdx + bFullReg), Zmm(bRegIdx + bFullReg),
@@ -650,7 +659,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
                        Zmm(bRegIdx + j));
             }
             if (bMaskReg > 0) {
-                vcvtps2dq(Zmm(bRegIdx + bFullReg) | k3 | T_z,
+                vcvtps2dq(Zmm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                           ptr[regTmpCptr + bFullReg * RegBytes]);
                 vpmulld(Zmm(bRegIdx + bFullReg), Zmm(bRegIdx + bFullReg),
                         Zmm(betaRegIdx));
@@ -684,7 +693,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
                        Zmm(bRegIdx + j));
             }
             if (bMaskReg > 0) {
-                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                           ptr[regTmpCptr + bFullReg * 32]);
                 vpmovsxwd(Xbyak::Zmm(bRegIdx + bFullReg),
                           Xbyak::Ymm(bRegIdx + bFullReg));
@@ -715,7 +724,7 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
         }
         if (bMaskReg > 0) {
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-                vmovdqu32(RegType(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu32(RegType(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                           ptr[regTmpCptr + bFullReg * RegBytes]);
                 vpmulld(RegType(bRegIdx + bFullReg),
                         RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
@@ -757,25 +766,47 @@ jitU8S8VNNI_GEMM<KType>::generatePostOps(utils::generatorParams& params)
     test(regTmp1, regTmp1);
     je(local_store_result, T_NEAR);
 
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
+
+    if (kernelOpsHandlerPtr) {
+        using VecPoolType =
+            utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+        using MaskPoolType =
+            utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
         // Convert S32 accumulators to F32 for post-ops compatibility
-        // Post-ops module expects F32 accumulators for all operations
         for (iter_t i = 0; i < cReg; i++) {
             vcvtdq2ps(Zmm(cRegIdx + i), Zmm(cRegIdx + i));
         }
 
-        // Mark that accumulators are now F32 for store functions
         accumulatorsAreF32 = true;
 
-        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
+        VecPoolType vecPool;
+        vecPool.setAccumulators(cRegIdx, cReg);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
-        RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
+        // U8S8 GEMM preserves 2 masks when fringe: one for S32/F32 data, one
+        // for comparison
+        int          maskCount = useMask ? 2 : 1;
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, maskCount);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset =
+            useMask
+                ? static_cast<int>(offsetof(dlp::kernels::gemmParams, maskS32))
+                : -1;
+
+        RETURN_IF_ERROR(kernelOpsHandlerPtr->generateKernelOps(
             params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
-            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg));
+            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg,
+            vecPool, maskPool, maskOffset));
 
-        kernelOpsHandler.generateKernelOpsAttributes();
-
-        // Store results with F32 accumulators (post-ops path)
         RETURN_IF_ERROR(storeResult());
         jmp(local_end_store, T_NEAR);
     }
@@ -898,7 +929,7 @@ jitU8S8VNNI_GEMM<KType>::broadcastAVNNIwithB(bool isVNNIrem)
         if (isVNNIrem) {
 
             // Masked load with zero-extension: load kLeft bytes, zero the rest
-            vmovdqu8(Ymm(aRegIdx) | k2 | T_z, ptr[regTmpAptr]);
+            vmovdqu8(Ymm(aRegIdx) | mask_regs[0] | T_z, ptr[regTmpAptr]);
 
             // Broadcast the loaded 4-byte pattern to all lanes
             vpbroadcastd(RegType(aRegIdx), Xmm(aRegIdx));

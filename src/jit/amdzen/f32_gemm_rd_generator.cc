@@ -276,7 +276,8 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
 
     if (params.mLoop) {
 
-        // restore the value of post_op_c_i before starting the IR loop
+        // Restore the original post_op_c_i from the JR-pushed stack slot
+        // into gemmParams, so each IR loop starts from the correct value.
         mov(regTmp1, ptr[rsp]);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
@@ -371,9 +372,18 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
     test(regTmp1, regTmp1);
     je(label_store_result, T_NEAR);
 
-    // Create and set up kernelOphandler if there are post-ops
+    // Create kernel ops handler if there are post-ops
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
-        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
+
+    if (kernelOpsHandlerPtr) {
+        using VecPoolType =
+            utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+        using MaskPoolType =
+            utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
 
         // post-ops are applied in the last k iteration, so we need to
         // scale beta before applying post-ops
@@ -385,17 +395,35 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
             RETURN_IF_ERROR(betaScale());
         }
 
+        // Build vec pool:
+        //   - A regs [aRegIdx, bRegIdx): free (safe to clobber)
+        //   - B regs [bRegIdx, cRegIdx): preserve (needed post-ops for testing)
+        VecPoolType vecPool;
+        vecPool.addPreserve(bRegIdx,
+                            cRegIdx - bRegIdx); // B regs -> preserve
+        vecPool.setAccumulators(cRegIdx, cReg);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, useMask ? numMaskRegs : 0);
+        if constexpr (KType != utils::kernelInstrType::avx2_ymm_16_reg) {
+            maskPool.addPreserve(kLeftMask.getIdx());
+        }
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        // Encode the n-dimension mask as an immediate via maskOffset.
+        // nSubBlockSize is a JIT-gen-time constant, so no memory write needed.
+        int maskOffset =
+            useMask ? utils::encodeMaskImmediate((1u << nSubBlockSize) - 1)
+                    : -1;
+
         // Results are always in MR number of XMM registers.
         // since we are using RegType in post-ops module,
         // we always need to use mask to load elements.
-        RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+        RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
             params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
-            0, true, 1, cRegIdx, cReg)));
-
-        // The gelu constants are embedded within the generated JIT kernel.
-        // Otherwise a bug was observed whereby the address of gelu constants
-        // inside the class turned out to be beyond what JIT can access.
-        kernelOpsHandler.generateKernelOpsAttributes();
+            0, true, 1, cRegIdx, cReg, vecPool, maskPool, maskOffset)));
 
         mov(regTmpCptr, regCptr);
 

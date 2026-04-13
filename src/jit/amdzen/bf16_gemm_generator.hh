@@ -80,10 +80,7 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
 
-    // Add mask register array (for AVX512)
-    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
-    static constexpr int MASK_START_IDX   = 1;        // Start from k1
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     bool useMask =
         false; // Flag to indicate if masked instructions are generated

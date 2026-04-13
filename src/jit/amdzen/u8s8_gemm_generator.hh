@@ -96,6 +96,8 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     int aReg, bReg, bFullReg, bMaskReg, cReg;
     int aRegIdx, bRegIdx, cRegIdx, maskRegIdx;
 
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
+
     // =================================================================
     // GENERAL PURPOSE REGISTERS
     // =================================================================

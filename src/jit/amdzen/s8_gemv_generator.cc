@@ -31,6 +31,8 @@
 #include "jit_register/jit_register.hh"
 #include "s8_gemv_generator.hh"
 
+#include <memory>
+
 namespace amdzen::gen {
 
 using namespace Xbyak;
@@ -1321,6 +1323,13 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
     RETURN_IF_ERROR(allocateRegisters());
 
+    // Create kernel ops handler once, reuse across main and fringe loops
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
+
     // Load A & Y pointers from the stack
     mov(regAptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, a)]);
     mov(regYptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, y)]);
@@ -1419,25 +1428,38 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
         RETURN_IF_ERROR(scaleYByBeta(MR));
 
-        // Create and set up kernelOphandler if there are post-ops
-        if (!params.kernelOps.empty()) {
+        if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < ((MR + vnniWidth - 1) / vnniWidth); ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 
-            gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
-
             int  NR          = 1;
             bool useMask     = !(MR / vnniWidth);
             int  numMaskRegs = 1;
-            int  numCRegs    = (MR / vnniWidth);
+            int  numCRegs    = (MR + vnniWidth - 1) / vnniWidth;
 
-            RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            VecPoolType vecPool;
+            vecPool.setAccumulators(accumBaseIdx, numCRegs);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            // S8 GEMV N1 preserves 2 mask registers for S32 mask handling
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 2);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset = offsetof(dlp::kernels::gemvN1Params, mmask_avx512);
+
+            RETURN_IF_ERROR(kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1, MR,
-                NR, useMask, numMaskRegs, accumBaseIdx, numCRegs));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+                NR, useMask, numMaskRegs, accumBaseIdx, numCRegs, vecPool,
+                maskPool, maskOffset));
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(MR, true));
@@ -1460,7 +1482,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         }
 
         // Update post_op_c_i for the next m-iteration.
-        if (c_downscale != DLP_S32 || !params.kernelOps.empty()) {
+        if (c_downscale != DLP_S32 || kernelOpsHandlerPtr) {
             mov(regTmp1,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
@@ -1548,26 +1570,39 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
         RETURN_IF_ERROR(scaleYByBeta(M_LEFT));
 
-        // Create and set up kernelOphandler if there are post-ops
-        if (!params.kernelOps.empty()) {
+        if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < ((M_LEFT + vnniWidth - 1) / vnniWidth);
                  ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 
-            gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
-
             int  NR          = 1;
             bool useMask     = !(M_LEFT / vnniWidth);
             int  numMaskRegs = 1;
-            int  numCRegs    = (M_LEFT / vnniWidth);
+            int  numCRegs    = (M_LEFT + vnniWidth - 1) / vnniWidth;
 
-            RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            VecPoolType vecPool;
+            vecPool.setAccumulators(accumBaseIdx, numCRegs);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            // S8 GEMV N1 preserves 2 mask registers for S32 mask handling
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 2);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset = offsetof(dlp::kernels::gemvN1Params, mmask_avx512);
+
+            RETURN_IF_ERROR(kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
-                M_LEFT, NR, useMask, numMaskRegs, accumBaseIdx, numCRegs));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+                M_LEFT, NR, useMask, numMaskRegs, accumBaseIdx, numCRegs,
+                vecPool, maskPool, maskOffset));
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(M_LEFT, true));
@@ -2634,6 +2669,13 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
     RETURN_IF_ERROR(allocateRegisters());
 
+    // Create kernel ops handler once, reuse across main and fringe loops
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
+
     inLocalLabel();
 
     // Broadcast 128 to a vector register.
@@ -2750,24 +2792,40 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Scale result by beta
         scaleYWithBeta(false);
 
-        // Create and set up kernelOphandler if there are post-ops
-        if (!params.kernelOps.empty()) {
+        if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < (NR / vnniWidth); ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 
-            gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
-
             int MR          = 1;
             int numMaskRegs = 1;
-            int numCRegs    = (NR / vnniWidth);
+            int numCRegs    = (NR + vnniWidth - 1) / vnniWidth;
 
-            RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            VecPoolType vecPool;
+            // S8 GEMV M1 preserves vec128BaseIdx for signed-to-unsigned
+            // conversion
+            vecPool.addPreserve(vec128BaseIdx);
+            vecPool.setAccumulators(accumBaseIdx, numCRegs);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            // S8 GEMV M1 preserves 2 mask registers for S32 mask handling
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 2);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset = offsetof(dlp::kernels::gemvM1Params, nmask_avx512);
+
+            RETURN_IF_ERROR(kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, MR,
-                NR, false, numMaskRegs, accumBaseIdx, numCRegs));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+                NR, false, numMaskRegs, accumBaseIdx, numCRegs, vecPool,
+                maskPool, maskOffset));
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(false, true));
@@ -2793,7 +2851,7 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             regTmp2);
 
         // Update post_op_c_j for the next n-iteration
-        if (c_downscale != DLP_S32 || !params.kernelOps.empty()) {
+        if (c_downscale != DLP_S32 || kernelOpsHandlerPtr) {
             mov(regTmp2,
                 ptr[stackPtr
                     + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
@@ -2928,25 +2986,41 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Scale result by beta
         scaleYWithBeta(true);
 
-        // Create and set up kernelOphandler if there are post-ops
-        if (!params.kernelOps.empty()) {
+        if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < ((N_LEFT + vnniWidth - 1) / vnniWidth);
                  ++i) {
                 vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
             }
 
-            gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
-
             int MR          = 1;
             int numMaskRegs = 1;
-            int numCRegs    = (N_LEFT / vnniWidth);
+            int numCRegs    = (N_LEFT + vnniWidth - 1) / vnniWidth;
 
-            RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            VecPoolType vecPool;
+            // S8 GEMV M1 preserves vec128BaseIdx for signed-to-unsigned
+            // conversion
+            vecPool.addPreserve(vec128BaseIdx);
+            vecPool.setAccumulators(accumBaseIdx, numCRegs);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            // S8 GEMV M1 preserves 2 mask registers for S32 mask handling
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 2);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset = offsetof(dlp::kernels::gemvM1Params, nmask_avx512);
+
+            RETURN_IF_ERROR(kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, MR,
-                N_LEFT, true, numMaskRegs, accumBaseIdx, numCRegs));
-
-            kernelOpsHandler.generateKernelOpsAttributes();
+                N_LEFT, true, numMaskRegs, accumBaseIdx, numCRegs, vecPool,
+                maskPool, maskOffset));
 
             // store C assuming F32 accumulators after post-ops
             RETURN_IF_ERROR(storeY(true, true));

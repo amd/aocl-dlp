@@ -29,7 +29,11 @@
 // Explicit template instantiation for AVX2.
 // Split from x86_kernel_ops_generator.tcc to enable parallel compilation.
 
+#include "kernel_ops_handler.hh"
 #include "x86_kernel_ops_generator.tcc"
 
+// Template instantiations for AVX2 YMM (16 registers)
 template class amdzen::x86gen::kernelOpsGeneratorX86<
+    amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;
+template class amdzen::gen::kernelOpsHandler<
     amdzen::utils::kernelInstrType::avx2_ymm_16_reg>;

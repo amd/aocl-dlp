@@ -254,30 +254,31 @@ MicroTest::createOperationParam(
         auto bias_type_it = config.params.find("bias_type");
         auto bias_dim_it  = config.params.find("bias_dim");
 
-        if (bias_type_it == config.params.end()
-            || bias_type_it->second.empty()) {
-            throw std::runtime_error("Bias requires bias_type parameter");
-        }
-        if (bias_dim_it == config.params.end() || bias_dim_it->second.empty()) {
-            throw std::runtime_error("Bias requires bias_dim parameter");
+        // Extract bias_type (default: f32)
+        MatrixType  bias_type     = MatrixType::f32;
+        std::string bias_type_str = "f32";
+        if (bias_type_it != config.params.end()
+            && !bias_type_it->second.empty()) {
+            auto   type_idx_it = param_indices.find("bias_type");
+            size_t type_idx =
+                (type_idx_it != param_indices.end()) ? type_idx_it->second : 0;
+            type_idx = std::min(type_idx, bias_type_it->second.size() - 1);
+            bias_type_str =
+                std::any_cast<std::string>(bias_type_it->second[type_idx]);
+            bias_type = stringToMatrixType(bias_type_str);
         }
 
-        // Extract bias_type using parameter index
-        auto   type_idx_it = param_indices.find("bias_type");
-        size_t type_idx =
-            (type_idx_it != param_indices.end()) ? type_idx_it->second : 0;
-        type_idx = std::min(type_idx, bias_type_it->second.size() - 1);
-        auto bias_type_str =
-            std::any_cast<std::string>(bias_type_it->second[type_idx]);
-        auto bias_type = stringToMatrixType(bias_type_str);
-
-        // Extract bias_dim using parameter index
-        auto   dim_idx_it = param_indices.find("bias_dim");
-        size_t dim_idx =
-            (dim_idx_it != param_indices.end()) ? dim_idx_it->second : 0;
-        dim_idx = std::min(dim_idx, bias_dim_it->second.size() - 1);
-        auto bias_dim_str =
-            std::any_cast<std::string>(bias_dim_it->second[dim_idx]);
+        // Extract bias_dim (default: "n")
+        std::string bias_dim_str = "n";
+        if (bias_dim_it != config.params.end()
+            && !bias_dim_it->second.empty()) {
+            auto   dim_idx_it = param_indices.find("bias_dim");
+            size_t dim_idx =
+                (dim_idx_it != param_indices.end()) ? dim_idx_it->second : 0;
+            dim_idx = std::min(dim_idx, bias_dim_it->second.size() - 1);
+            bias_dim_str =
+                std::any_cast<std::string>(bias_dim_it->second[dim_idx]);
+        }
 
         // Create bias matrix based on dimension
         Matrix bias;
@@ -332,28 +333,7 @@ MicroTest::createOperationParam(
             has_sf = true;
         }
 
-        if (has_sf) {
-            bool has_explicit_sf =
-                (sf_it != config.params.end() && !sf_it->second.empty());
-            if (sf_len == "n") {
-                scale_matrix = Matrix(1, getN(), sf_type);
-                if (has_explicit_sf) {
-                    scale_matrix.fillValue(static_cast<double>(sf_value));
-                } else {
-                    scale_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
-                                            "uniform");
-                }
-            } else {
-                // Scalar (per-tensor) - default when sf_len not specified or
-                // "1"
-                scale_matrix =
-                    Matrix::fromValue(static_cast<float>(sf_value), sf_type);
-            }
-            builder.setScaleFactor(scale_matrix);
-        }
-
-        // Optional zero point for BIAS-dequantization
-        // Following same pattern as Scale post-op
+        // Detect zero point parameters before building matrices
         Matrix      zero_point_matrix;
         bool        has_zp   = false;
         std::string zp_len   = "";
@@ -380,7 +360,6 @@ MicroTest::createOperationParam(
             has_zp     = true;
         }
 
-        // If user provided explicit zero_point value, use it
         auto zp_it = config.params.find("zero_point");
         if (zp_it != config.params.end() && !zp_it->second.empty()) {
             auto   idx_it = param_indices.find("zero_point");
@@ -389,6 +368,24 @@ MicroTest::createOperationParam(
             zp_value =
                 std::stod(std::any_cast<std::string>(zp_it->second[idx]));
             has_zp = true;
+        }
+
+        if (has_sf) {
+            bool has_explicit_sf =
+                (sf_it != config.params.end() && !sf_it->second.empty());
+            if (sf_len == "n") {
+                scale_matrix = Matrix(1, getN(), sf_type);
+                if (has_explicit_sf) {
+                    scale_matrix.fillValue(static_cast<double>(sf_value));
+                } else {
+                    scale_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
+                                            "uniform");
+                }
+            } else {
+                scale_matrix =
+                    Matrix::fromValue(static_cast<float>(sf_value), sf_type);
+            }
+            builder.setScaleFactor(scale_matrix);
         }
 
         if (has_zp) {
@@ -403,8 +400,6 @@ MicroTest::createOperationParam(
                                                  MAX_VALUE, "uniform");
                 }
             } else {
-                // Scalar (per-tensor) - default when zp_len not specified or
-                // "1"
                 zero_point_matrix =
                     Matrix::fromValue(static_cast<float>(zp_value), zp_type);
             }

@@ -234,6 +234,7 @@ initSingleBiasPostOp(dlp_metadata_t* mData, md_t m, md_t n, int index)
             (float)i; // Initialize bias values
     }
     (mData->bias[index]).stor_type = DLP_F32;
+    (mData->bias[index]).bias_len  = n;
 
     // Bias scale factor.
     (mData->bias[index]).sf = NULL;

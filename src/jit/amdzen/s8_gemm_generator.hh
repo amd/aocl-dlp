@@ -69,6 +69,8 @@ class jitGEMMS8 : public Xbyak::CodeGenerator
     int MR, NR;
     int c_downscale;
 
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
+
     // Register allocations
     Xbyak::Reg64 regTmpAptr, regBptr, regTmpCptr, regRsA, regCsA, regRsB,
         regRsC, regKIter;

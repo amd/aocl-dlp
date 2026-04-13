@@ -96,10 +96,7 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
 
-    // Add mask register array (for AVX512)
-    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
-    static constexpr int MASK_START_IDX   = 1;        // Start from k1
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     // =================================================================
     // REGISTER ALLOCATION
@@ -348,9 +345,9 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
     Xbyak::Label label_bf16_lsb_mask;
 
     // Kernel operations handler for post-ops
-    std::unique_ptr<gen::kernelOpsHandler>            kernelOpsHandlerPtr;
-    std::vector<dlp::kernel_frame::kernelOpsMetaData> kernelOpsVector;
-    bool                                              accumulatorsAreF32 =
+    std::unique_ptr<gen::kernelOpsHandler<KType>>      kernelOpsHandlerPtr;
+    std::vector<dlp::kernel_frame::kernelOpsMetaData>* kernelOpsPtr = nullptr;
+    bool                                               accumulatorsAreF32 =
         false; // Track if accumulators were converted to F32 for post-ops
 };
 
@@ -411,10 +408,7 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType   betaScalingType;
     AOCL_DLP_MEMORY_TAG              mtag_b;
 
-    // Add mask register array (for AVX512)
-    static constexpr int NUM_USABLE_MASKS = 7;        // k1-k7 available
-    static constexpr int MASK_START_IDX   = 1;        // Start from k1
-    Xbyak::Opmask        mask_regs[NUM_USABLE_MASKS]; // Array of usable masks
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     // =================================================================
     // REGISTER ALLOCATION
@@ -687,9 +681,9 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Label label_bf16_lsb_mask;
 
     // Kernel operations handler for post-ops
-    std::unique_ptr<gen::kernelOpsHandler>            kernelOpsHandlerPtr;
-    std::vector<dlp::kernel_frame::kernelOpsMetaData> kernelOpsVector;
-    bool                                              accumulatorsAreF32 =
+    std::unique_ptr<gen::kernelOpsHandler<KType>>      kernelOpsHandlerPtr;
+    std::vector<dlp::kernel_frame::kernelOpsMetaData>* kernelOpsPtr = nullptr;
+    bool                                               accumulatorsAreF32 =
         false; // Track if accumulators were converted to F32 for post-ops
 };
 

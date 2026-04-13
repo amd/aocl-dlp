@@ -125,11 +125,16 @@ jitGEMMS8<KType>::initializeParameters(bool addIrLoop)
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
 
-    // Load k-fringe mask to k2
-    kmovw(k2, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftmask)]);
+    for (int i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
+    }
+
+    kmovw(mask_regs[0],
+          ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftmask)]);
 
     if (useMask) {
-        kmovw(k3, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskS32)]);
+        kmovw(mask_regs[1],
+              ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskS32)]);
     }
 }
 
@@ -178,7 +183,7 @@ jitGEMMS8<KType>::BroadcastAVNNIB(bool isVNNIrem)
         if (isVNNIrem) {
 
             // Masked load with zero-extension: load kLeft bytes, zero the rest
-            vmovdqu8(Xbyak::Ymm(aRegIdx) | k2 | T_z, ptr[regTmpAptr]);
+            vmovdqu8(Xbyak::Ymm(aRegIdx) | mask_regs[0] | T_z, ptr[regTmpAptr]);
 
             // Broadcast the loaded 4-byte pattern to all lanes
             vpbroadcastd(RegType(aRegIdx), Xbyak::Xmm(aRegIdx));
@@ -358,7 +363,7 @@ jitGEMMS8<KType>::scaleBeta()
                        RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j));
             }
             if (bMaskReg > 0) {
-                vmovdqu8(Xbyak::Xmm(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu8(Xbyak::Xmm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                          ptr[regTmpCptr + bFullReg * 16]);
                 vpmovsxbd(RegType(bRegIdx + bFullReg),
                           Xbyak::Xmm(bRegIdx + bFullReg));
@@ -395,7 +400,7 @@ jitGEMMS8<KType>::scaleBeta()
 
             // Handle masked beta scaling
             if (bMaskReg > 0) {
-                vmovdqu8(Xbyak::Xmm(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu8(Xbyak::Xmm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                          ptr[regTmpCptr + (bFullReg * (RegBytes / 4))]);
                 vpmovzxbd(RegType(bRegIdx + bFullReg),
                           Xbyak::Xmm(bRegIdx + bFullReg));
@@ -436,7 +441,7 @@ jitGEMMS8<KType>::scaleBeta()
             // Handle masked beta scaling
             if (bMaskReg > 0) {
                 // Use zero-masking (T_z) to zero unmasked elements
-                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | k3 | T_z,
+                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                           ptr[regTmpCptr + (bFullReg * (RegBytes / 2))]);
                 vpmovsxwd(RegType(bRegIdx + bFullReg),
                           Xbyak::Ymm(bRegIdx + bFullReg));
@@ -476,7 +481,7 @@ jitGEMMS8<KType>::scaleBeta()
 
             // Handle masked beta scaling
             if (bMaskReg > 0) {
-                vcvtps2dq(RegType(bRegIdx + bFullReg) | k3 | T_z,
+                vcvtps2dq(RegType(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                           ptr[regTmpCptr + bFullReg * RegBytes]);
                 vpmulld(RegType(bRegIdx + bFullReg),
                         RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
@@ -503,7 +508,7 @@ jitGEMMS8<KType>::scaleBeta()
 
         // Handle masked beta scaling
         if (bMaskReg > 0) {
-            vmovdqu32(RegType(bRegIdx + bFullReg) | k3 | T_z,
+            vmovdqu32(RegType(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                       ptr[regTmpCptr + bFullReg * RegBytes]);
             vpmulld(RegType(bRegIdx + bFullReg), RegType(bRegIdx + bFullReg),
                     RegType(betaRegIdx));
@@ -560,10 +565,12 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                     // Convert post-ops accumulated result from F32 to S32.
                     vcvtps2dq(RegType(aRegIdx),
                               RegType(cRegIdx + i * bReg + bFullReg));
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * (RegBytes / 4)] | k3,
+                    vpmovsdb(ptr[regTmpCptr + bFullReg * (RegBytes / 4)]
+                                 | mask_regs[1],
                              RegType(aRegIdx));
                 } else {
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * (RegBytes / 4)] | k3,
+                    vpmovsdb(ptr[regTmpCptr + bFullReg * (RegBytes / 4)]
+                                 | mask_regs[1],
                              RegType(cRegIdx + i * bReg + bFullReg));
                 }
             }
@@ -617,7 +624,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                         RegType(aRegIdx + 1));
                 vpminsd(RegType(aRegIdx), RegType(aRegIdx),
                         RegType(aRegIdx + 2));
-                vpmovdb(ptr[regTmpCptr + bFullReg * 16] | k3, RegType(aRegIdx));
+                vpmovdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
+                        RegType(aRegIdx));
             }
 
             add(regTmpCptr, regTmp1);
@@ -685,7 +693,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                        RegType(aRegIdx));
                 vpsrld(RegType(aRegIdx + 2), RegType(aRegIdx + 2), 16);
                 vpmovdw(Xbyak::Ymm(aRegIdx + 2), RegType(aRegIdx + 2));
-                vmovdqu16(ptr[regTmpCptr + bFullReg * (RegBytes / 2)] | k3,
+                vmovdqu16(ptr[regTmpCptr + bFullReg * (RegBytes / 2)]
+                              | mask_regs[1],
                           Xbyak::Ymm(aRegIdx + 2));
             }
 
@@ -723,7 +732,7 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                               RegType(cRegIdx + i * bReg + bFullReg));
                 }
 
-                vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | k3,
+                vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | mask_regs[1],
                         RegType(cRegIdx + i * bReg + bFullReg));
             }
 
@@ -755,7 +764,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                           RegType(cRegIdx + i * bReg + bFullReg));
             }
 
-            vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes] | k3 | T_z,
+            vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes] | mask_regs[1]
+                          | T_z,
                       RegType(cRegIdx + i * bReg + bFullReg));
         }
 
@@ -854,20 +864,45 @@ jitGEMMS8<KType>::generateIrLoop(utils::generatorParams& params)
     test(regTmp1, regTmp1);
     je(".STOREC", T_NEAR); // skip post-ops if not the final k iteration
 
-    // Create and set up kernelOphandler if there are post-ops
+    // Create kernel ops handler if there are post-ops
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
+
+    if (kernelOpsHandlerPtr) {
+        using VecPoolType =
+            utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+        using MaskPoolType =
+            utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
         // Convert to F32 since post-ops expect accumulators in F32.
         for (iter_t i = 0; i < cReg; i++) {
             vcvtdq2ps(RegType(cRegIdx + i), RegType(cRegIdx + i));
         }
 
-        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
+        VecPoolType vecPool;
+        vecPool.setAccumulators(cRegIdx, cReg);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
-        RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+        // S8 GEMM preserves 2 masks when fringe: one for S32/F32 data, one for
+        // comparison
+        int          maskCount = useMask ? 2 : 1;
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, maskCount);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset =
+            useMask
+                ? static_cast<int>(offsetof(dlp::kernels::gemmParams, maskS32))
+                : -1;
+
+        RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
             params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
-            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg)));
-
-        kernelOpsHandler.generateKernelOpsAttributes();
+            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg,
+            vecPool, maskPool, maskOffset)));
 
         // store C assuming F32 accumulators after post-ops
         RETURN_IF_ERROR(storeResult(true));

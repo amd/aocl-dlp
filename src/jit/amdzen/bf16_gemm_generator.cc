@@ -499,19 +499,38 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
     test(regTmp1, regTmp1);
     je(label_store_result, T_NEAR);
 
-    // Create and set up kernelOphandler if there are post-ops
+    // Create kernel ops handler if there are post-ops
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
-        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
 
-        // post-ops are applied in the last k iteration
-        RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
+    if (kernelOpsHandlerPtr) {
+        using VecPoolType =
+            utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+        using MaskPoolType =
+            utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+        VecPoolType vecPool;
+        vecPool.addPreserve(bRegIdx, cRegIdx - bRegIdx);
+        vecPool.setAccumulators(cRegIdx, cReg);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, params.useMask ? 1 : 0);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset =
+            params.useMask ? static_cast<int>(
+                                 offsetof(dlp::kernels::gemmParams, maskF32[0]))
+                           : -1;
+
+        RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
             params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, params.MR,
-            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg)));
-
-        // The gelu constants are embedded within the generated JIT kernel.
-        // Otherwise a bug was observed whereby the address of gelu constants
-        // inside the class turned out to be beyond what JIT can access.
-        kernelOpsHandler.generateKernelOpsAttributes();
+            params.NR, params.useMask, params.numMaskRegs, cRegIdx, cReg,
+            vecPool, maskPool, maskOffset)));
     }
 
     // store C
@@ -550,8 +569,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::loadMask()
 {
-    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
-        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
+    for (iter_t i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
     }
 
     kmovw(mask_regs[0],

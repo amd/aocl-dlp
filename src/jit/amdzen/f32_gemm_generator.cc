@@ -1242,9 +1242,18 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     test(regTmp1, regTmp1);
     je(label_store_result, T_NEAR);
 
-    // Create and set up kernelOphandler if there are post-ops
+    // Create kernel ops handler if there are post-ops
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
-        gen::kernelOpsHandler kernelOpsHandler(this, params.kType);
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
+
+    if (kernelOpsHandlerPtr) {
+        using VecPoolType =
+            utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+        using MaskPoolType =
+            utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
 
         // post-ops are applied in the last k iteration, so we need to
         // scale beta before applying post-ops
@@ -1256,14 +1265,42 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
             RETURN_IF_ERROR(scaleBeta());
         }
 
-        RETURN_IF_ERROR((kernelOpsHandler.generateKernelOps(
-            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, currentMR,
-            currentNR, useMask, numMaskRegs, cRegIdx, cReg)));
+        // Build vec pool:
+        //   - All non-accumulator regs [aRegIdx, cRegIdx): free
+        //   - AVX2: ymmMask (maskRegIdx): preserve (needed for fringe
+        //   operations)
+        VecPoolType vecPool;
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            if (useMask && maskVecReg > 0) {
+                vecPool.addPreserve(
+                    maskRegIdx); // YMM mask register -> preserve
+            }
+        }
+        vecPool.setAccumulators(cRegIdx, cReg);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
-        // The gelu constants are embedded within the generated JIT kernel.
-        // Otherwise a bug was observed whereby the address of gelu constants
-        // inside the class turned out to be beyond what JIT can access.
-        kernelOpsHandler.generateKernelOpsAttributes();
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, useMask ? numMaskRegs : 0);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset;
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            maskOffset = useMask ? offsetof(dlp::kernels::gemmParams, maskArray)
+                                 : -1;
+        } else if constexpr (KType
+                             == utils::kernelInstrType::avx512_ymm_32_reg) {
+            maskOffset =
+                useMask ? offsetof(dlp::kernels::gemmParams, maskF32_8[0]) : -1;
+        } else {
+            maskOffset =
+                useMask ? offsetof(dlp::kernels::gemmParams, maskF32[0]) : -1;
+        }
+
+        RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, currentMR,
+            currentNR, useMask, numMaskRegs, cRegIdx, cReg, vecPool, maskPool,
+            maskOffset)));
 
         // store result without fusing beta with store
         RETURN_IF_ERROR(storeResult(false, params.mLoop));
@@ -1376,8 +1413,9 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
 // Generate kernel for F32 operations
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::generateKernelBodyK1(utils::generatorParams& params,
-                                        gen::kernelOpsHandler* kernelOpsHandler)
+jitGEMMF32<KType>::generateKernelBodyK1(
+    utils::generatorParams&       params,
+    gen::kernelOpsHandler<KType>* kernelOpsHandler)
 {
     inLocalLabel();
 
@@ -1414,6 +1452,11 @@ jitGEMMF32<KType>::generateKernelBodyK1(utils::generatorParams& params,
 
     // Create and set up kernelOphandler if there are post-ops
     if (!params.kernelOps.empty()) {
+        using VecPoolType =
+            utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+        using MaskPoolType =
+            utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
         // post-ops are applied in the last k iteration, so we need to
         // scale beta before applying post-ops
         // To-Do: add support for beta scaling if beta is 1 using vaddps
@@ -1424,14 +1467,45 @@ jitGEMMF32<KType>::generateKernelBodyK1(utils::generatorParams& params,
             RETURN_IF_ERROR(scaleBeta());
         }
 
+        // Build vec pool:
+        //   - A regs [aRegIdx, bRegIdx): free (safe to clobber)
+        //   - B regs [bRegIdx, cRegIdx): preserve (needed post-ops for testing)
+        //   - AVX2: ymmMask (maskRegIdx): preserve (needed for fringe
+        //   operations)
+        VecPoolType vecPool;
+        vecPool.addPreserve(bRegIdx,
+                            cRegIdx - bRegIdx); // B regs -> preserve
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            if (useMask && maskVecReg > 0) {
+                vecPool.addPreserve(
+                    maskRegIdx); // YMM mask register -> preserve
+            }
+        }
+        vecPool.setAccumulators(cRegIdx, cReg);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, useMask ? numMaskRegs : 0);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset;
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            maskOffset = useMask ? offsetof(dlp::kernels::gemmParams, maskArray)
+                                 : -1;
+        } else if constexpr (KType
+                             == utils::kernelInstrType::avx512_ymm_32_reg) {
+            maskOffset =
+                useMask ? offsetof(dlp::kernels::gemmParams, maskF32_8[0]) : -1;
+        } else {
+            maskOffset =
+                useMask ? offsetof(dlp::kernels::gemmParams, maskF32[0]) : -1;
+        }
+
         RETURN_IF_ERROR((kernelOpsHandler->generateKernelOps(
             params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, currentMR,
-            currentNR, useMask, numMaskRegs, cRegIdx, cReg)));
-
-        // The gelu constants are embedded within the generated JIT kernel.
-        // Otherwise a bug was observed whereby the address of gelu constants
-        // inside the class turned out to be beyond what JIT can access.
-        kernelOpsHandler->generateKernelOpsAttributes();
+            currentNR, useMask, numMaskRegs, cRegIdx, cReg, vecPool, maskPool,
+            maskOffset)));
 
         // store result without fusing beta with store
         RETURN_IF_ERROR(storeResult(false, params.mLoop));
@@ -1505,10 +1579,10 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
     initializeParameters(true);
 
     // Create kernel ops handler once for the entire kernel (like f32_gemv.cc)
-    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
         kernelOpsHandlerPtr =
-            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
     }
 
     // Calculate number of NR variants we'll need to handle at runtime
@@ -1741,10 +1815,10 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
     initializeParameters(true);
 
     // Create kernel ops handler once for the entire kernel (like f32_gemv.cc)
-    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
         kernelOpsHandlerPtr =
-            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
     }
 
     // Calculate number of NR variants we'll need to handle at runtime

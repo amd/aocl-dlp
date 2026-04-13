@@ -65,11 +65,11 @@ init_bias(float* bias, int length, float value)
 
 // Utility function to apply bias separately
 void
-apply_bias(float* matrix, float* bias, int rows, int cols)
+apply_bias(float* matrix, float* bias, int rows, int cols, int bias_len)
 {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
-            matrix[i * cols + j] += bias[j];
+            matrix[i * cols + j] += (bias_len == 1) ? bias[0] : bias[j];
         }
     }
 }
@@ -136,9 +136,10 @@ main()
     printf("Multiple Post-Operations Example: Bias + ReLU + Scale\n\n");
 
     // Matrix dimensions
-    md_t m = 128; // Rows of A and C
-    md_t n = 64;  // Columns of B and C
-    md_t k = 128; // Columns of A and rows of B
+    md_t m        = 128; // Rows of A and C
+    md_t n        = 64;  // Columns of B and C
+    md_t k        = 128; // Columns of A and rows of B
+    md_t bias_len = n;   // Set to 1 for scalar bias, n for per-column
 
     // Leading dimensions (assuming row-major storage)
     md_t lda = k;
@@ -150,8 +151,8 @@ main()
     float* b  = (float*)calloc(ldb * k, sizeof(float));
     float* c1 = (float*)calloc(ldc * m, sizeof(float)); // For fused operations
     float* c2 =
-        (float*)calloc(ldc * m, sizeof(float));     // For separate operations
-    float* bias = (float*)calloc(n, sizeof(float)); // Bias vector
+        (float*)calloc(ldc * m, sizeof(float)); // For separate operations
+    float* bias = (float*)calloc(bias_len, sizeof(float)); // Bias vector
 
     if (!a || !b || !c1 || !c2 || !bias) {
         printf("Memory allocation failed\n");
@@ -163,12 +164,12 @@ main()
     init_matrix(b, k, n, 0.5f);
     memset(c1, 0, m * n * sizeof(float));
     memset(c2, 0, m * n * sizeof(float));
-    init_bias(bias, n, 0.5f);
+    init_bias(bias, bias_len, 0.5f);
 
     // Print a small section of the input matrices and bias
     print_matrix_section("Matrix A", a, m, k, 3, 3);
     print_matrix_section("Matrix B", b, k, n, 3, 3);
-    print_vector("Bias Vector", bias, n, 6);
+    print_vector("Bias Vector", bias, bias_len, bias_len < 6 ? bias_len : 6);
 
     // GEMM parameters
     float alpha        = 1.0f; // Scalar for A*B
@@ -189,7 +190,7 @@ main()
     );
 
     // Apply operations separately
-    apply_bias(c2, bias, m, n);
+    apply_bias(c2, bias, m, n, bias_len);
     apply_relu(c2, m, n);
     apply_scale(c2, m, n, scale_factor);
 
@@ -227,6 +228,7 @@ main()
     // Set the bias vector and its storage type
     metadata->bias->bias      = bias;
     metadata->bias->stor_type = DLP_F32; // Bias is in f32 format
+    metadata->bias->bias_len  = bias_len;
 
     // 2. Set up ReLU operation (elementwise)
     metadata->eltwise =

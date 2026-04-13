@@ -160,6 +160,8 @@ struct kernelOpsMetaData
     DataType      paramStorageDt; // Data type of the parameter storage
     storageFormat cMatFormat; // Storage format of the C matrix (row-major or
                               // column-major)
+    bool isScalarBias;        // Whether bias is a single scalar value
+                              // broadcast to all elements
 
     kernelOpsMetaData()
         : type(kernelOps::max_kernel_ops)
@@ -171,6 +173,7 @@ struct kernelOpsMetaData
         , vectorZeroPointRequired(false)
         , paramStorageDt(DataType::max_datatypes)
         , cMatFormat(storageFormat::rowMajor)
+        , isScalarBias(false)
     {
     }
 
@@ -182,7 +185,8 @@ struct kernelOpsMetaData
                       bool          _scalarZeroPointRequired,
                       bool          _vectorZeroPointRequired,
                       DataType      _paramStorageDt,
-                      storageFormat _CFormat)
+                      storageFormat _CFormat,
+                      bool          _isScalarBias = false)
         : type(type)
         , scaleFactorDt(_scaleFactorDt)
         , scalarScaleFactorRequired(_scalarScaleFactorRequired)
@@ -192,6 +196,7 @@ struct kernelOpsMetaData
         , vectorZeroPointRequired(_vectorZeroPointRequired)
         , paramStorageDt(_paramStorageDt)
         , cMatFormat(_CFormat)
+        , isScalarBias(_isScalarBias)
     {
     }
 
@@ -205,6 +210,7 @@ struct kernelOpsMetaData
         , vectorZeroPointRequired(other.vectorZeroPointRequired)
         , paramStorageDt(other.paramStorageDt)
         , cMatFormat(other.cMatFormat)
+        , isScalarBias(other.isScalarBias)
     {
     }
 
@@ -218,6 +224,7 @@ struct kernelOpsMetaData
         , vectorZeroPointRequired(other.vectorZeroPointRequired)
         , paramStorageDt(other.paramStorageDt)
         , cMatFormat(other.cMatFormat)
+        , isScalarBias(other.isScalarBias)
     {
     }
 
@@ -233,6 +240,7 @@ struct kernelOpsMetaData
             this->vectorZeroPointRequired   = other.vectorZeroPointRequired;
             this->paramStorageDt            = other.paramStorageDt;
             this->cMatFormat                = other.cMatFormat;
+            this->isScalarBias              = other.isScalarBias;
         }
         return *this;
     }
@@ -258,7 +266,8 @@ struct kernelOpsMetaData
             && (this->scalarZeroPointRequired == rhs.scalarZeroPointRequired)
             && (this->vectorZeroPointRequired == rhs.vectorZeroPointRequired)
             && (this->paramStorageDt == rhs.paramStorageDt)
-            && (this->cMatFormat == rhs.cMatFormat));
+            && (this->cMatFormat == rhs.cMatFormat)
+            && (this->isScalarBias == rhs.isScalarBias));
     }
 
     bool operator!=(const kernelOpsMetaData& rhs) const

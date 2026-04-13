@@ -82,9 +82,10 @@ class jitGEMVS8N1 : public Xbyak::CodeGenerator
     int accumReg; // Number of registers for accumulation (partial dot products)
     int tmpReg;   // Number of registers for temporary use
     int maskReg;  // Number of registers for mask
-    int yBaseIdx; // Starting index for accumulation registers (from end)
-    int aBaseIdx; // Starting index for A registers (from beginning)
-    int xBaseIdx; // Starting index for x registers (after A registers)
+
+    int yBaseIdx;     // Starting index for accumulation registers (from end)
+    int aBaseIdx;     // Starting index for A registers (from beginning)
+    int xBaseIdx;     // Starting index for x registers (after A registers)
     int accumBaseIdx; // Starting index for accumulation registers (after A and
                       // x)
     int tmpBaseIdx;   // Starting index for temporary registers (after A and x)
@@ -196,11 +197,12 @@ class jitGEMVS8M1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType alphaScalingType; // Type of kernel operation
     dlp::kernel_frame::scalingType betaScalingType;  // Type of beta scaling
 
-    int xReg;          // Number of registers for vector x
-    int bReg;          // Number of registers for matrix B
-    int accumReg;      // Number of registers for accumulation
-    int yReg;          // Number of registers for loading/storing Y
-    int maskReg;       // Number of registers for mask
+    int xReg;     // Number of registers for vector x
+    int bReg;     // Number of registers for matrix B
+    int accumReg; // Number of registers for accumulation
+    int yReg;     // Number of registers for loading/storing Y
+    int maskReg;  // Number of registers for mask
+
     int vec128Reg = 1; // Reserving one register for converting int8 to uint8.
     int xBaseIdx;      // Starting index for X registers
     int bBaseIdx;      // Starting index for B registers

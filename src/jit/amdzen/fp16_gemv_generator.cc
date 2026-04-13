@@ -150,8 +150,8 @@ dlp::jit::jitGeneratorError
 jitFP16GEMVM1<KType>::loadMasks()
 {
     // Initialize mask register array (k1-k7)
-    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
-        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
+    for (iter_t i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
     }
 
     // Load N-dimension mask for FP16 (32-bit mask for 32 elements per ZMM)
@@ -1074,8 +1074,8 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16GEMVN1<KType>::loadMasks()
 {
-    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
-        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
+    for (iter_t i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
     }
 
     // Load M-dimension mask (32-bit for FP16)

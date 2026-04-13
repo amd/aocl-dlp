@@ -1313,8 +1313,8 @@ dlp::jit::jitGeneratorError
 jitF32GEMVN1<KType>::loadMasks()
 {
     // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
-    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
-        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
+    for (iter_t i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
     }
 
     if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
@@ -1371,10 +1371,10 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
     loadMasks();
 
     // Create kernel ops handler once for the entire kernel
-    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
         kernelOpsHandlerPtr =
-            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
     }
 
     // Set the for-loop sequence for m-dimension
@@ -1462,18 +1462,38 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         scaleYWithBeta(MR);
 
         if (kernelOpsHandlerPtr) {
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            VecPoolType vecPool;
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vecPool.addPreserve(maskBaseIdx, maskReg);
+            }
+            vecPool.setAccumulators(accumBaseIdx, yReg);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 2);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset;
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                maskOffset = offsetof(dlp::kernels::gemvN1Params, mmask_avx512);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                maskOffset =
+                    offsetof(dlp::kernels::gemvN1Params, mmask_avx512_256);
+            } else {
+                maskOffset = offsetof(dlp::kernels::gemvN1Params, mmask_avx2);
+            }
+
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
-                params.MR, 1, false, 1, accumBaseIdx, yReg)));
-
-            kernelOpsHandlerPtr->generateKernelOpsAttributes();
-
-            // For avx2 config, we use YMM registers for masks
-            // these mask registers may have been used as scratch registers
-            // by the post-ops handler. Thus, we need to reload them.
-            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-                loadMasks();
-            }
+                params.MR, 1, false, 1, accumBaseIdx, yReg, vecPool, maskPool,
+                maskOffset)));
         }
 
         storeYValues(MR);
@@ -1579,19 +1599,40 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         scaleYWithBeta(M_LEFT);
 
         if (kernelOpsHandlerPtr) {
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            int fringeRegs = (M_LEFT + simdWidth - 1) / simdWidth;
+
+            VecPoolType vecPool;
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vecPool.addPreserve(maskBaseIdx, maskReg);
+            }
+            vecPool.setAccumulators(accumBaseIdx, fringeRegs);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 2);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset;
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                maskOffset = offsetof(dlp::kernels::gemvN1Params, mmask_avx512);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                maskOffset =
+                    offsetof(dlp::kernels::gemvN1Params, mmask_avx512_256);
+            } else {
+                maskOffset = offsetof(dlp::kernels::gemvN1Params, mmask_avx2);
+            }
+
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
-                params.M_LEFT, 1, true, 1, accumBaseIdx, M_LEFT / simdWidth)));
-
-            // This call will skip embedding tables (already done in main loop)
-            kernelOpsHandlerPtr->generateKernelOpsAttributes();
-
-            // For avx2 config, we use YMM registers for masks
-            // these mask registers may have been used as scratch registers
-            // by the post-ops handler. Thus, we need to reload them.
-            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-                loadMasks();
-            }
+                params.M_LEFT, 1, true, 1, accumBaseIdx, fringeRegs, vecPool,
+                maskPool, maskOffset)));
         }
 
         storeYValues(M_LEFT);
@@ -1749,8 +1790,8 @@ dlp::jit::jitGeneratorError
 jitF32GEMVM1<KType>::loadMasks()
 {
     // Ensuring mapping only from k1 to k7(to avoid k0 usage internally)
-    for (iter_t i = 0; i < NUM_USABLE_MASKS; i++) {
-        mask_regs[i] = Xbyak::Opmask(MASK_START_IDX + i);
+    for (iter_t i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
     }
 
     // Load the masks
@@ -2636,10 +2677,10 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     inLocalLabel();
 
     // Create kernel ops handler once for the entire kernel
-    std::unique_ptr<gen::kernelOpsHandler> kernelOpsHandlerPtr;
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
         kernelOpsHandlerPtr =
-            std::make_unique<gen::kernelOpsHandler>(this, params.kType);
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
     }
 
     mov(regYptr, ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, y)]);
@@ -2809,11 +2850,38 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         scaleYWithBeta(false);
 
         if (kernelOpsHandlerPtr) {
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            VecPoolType vecPool;
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vecPool.addPreserve(maskBaseIdx, maskReg);
+            }
+            vecPool.setAccumulators(accumBaseIdx, yReg);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 1);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset;
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                maskOffset = offsetof(dlp::kernels::gemvM1Params, nmask_avx512);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                maskOffset =
+                    offsetof(dlp::kernels::gemvM1Params, nmask_avx512_256);
+            } else {
+                maskOffset = offsetof(dlp::kernels::gemvM1Params, nmask_avx2);
+            }
+
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
-                params.NR, false, 1, accumBaseIdx, yReg)));
-
-            kernelOpsHandlerPtr->generateKernelOpsAttributes();
+                params.NR, false, 1, accumBaseIdx, yReg, vecPool, maskPool,
+                maskOffset)));
         }
 
         storeYValues(false);
@@ -2982,19 +3050,40 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         scaleYWithBeta(true);
 
         if (kernelOpsHandlerPtr) {
+            using VecPoolType =
+                utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+            using MaskPoolType =
+                utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+            int fringeRegs = (N_LEFT + simdWidth - 1) / simdWidth;
+
+            VecPoolType vecPool;
+            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+                vecPool.addPreserve(maskBaseIdx, maskReg);
+            }
+            vecPool.setAccumulators(accumBaseIdx, fringeRegs);
+            RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+            MaskPoolType maskPool;
+            maskPool.addPreserve(utils::MASK_START_IDX, 1);
+            RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                          Traits::reservedMaskBits));
+
+            int maskOffset;
+            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                maskOffset = offsetof(dlp::kernels::gemvM1Params, nmask_avx512);
+            } else if constexpr (KType
+                                 == utils::kernelInstrType::avx512_ymm_32_reg) {
+                maskOffset =
+                    offsetof(dlp::kernels::gemvM1Params, nmask_avx512_256);
+            } else {
+                maskOffset = offsetof(dlp::kernels::gemvM1Params, nmask_avx2);
+            }
+
             RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
-                params.N_LEFT, true, 1, accumBaseIdx, N_LEFT / simdWidth)));
-
-            // This call will skip embedding tables (already done in main loop)
-            kernelOpsHandlerPtr->generateKernelOpsAttributes();
-
-            // For avx2 config, we use YMM registers for masks
-            // these mask registers may have been used as scratch registers
-            // by the post-ops handler. Thus, we need to reload them.
-            if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-                loadMasks();
-            }
+                params.N_LEFT, true, 1, accumBaseIdx, fringeRegs, vecPool,
+                maskPool, maskOffset)));
         }
 
         storeYValues(true);

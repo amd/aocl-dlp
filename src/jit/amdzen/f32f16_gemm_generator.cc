@@ -297,17 +297,36 @@ jitF32FP16_GEMM<KType>::generatePostOps(utils::generatorParams& params)
     je(".F32FP16_STORE_NO_POSTOPS", T_NEAR);
 
     if (!params.kernelOps.empty()) {
-        gen::kernelOpsHandler kOpsHandler(this, params.kType);
+        using VecPoolType =
+            utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+        using MaskPoolType =
+            utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+        gen::kernelOpsHandler<KType> kOpsHandler(this);
 
         if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
             RETURN_IF_ERROR(scaleBeta());
         }
 
+        VecPoolType vecPool;
+        vecPool.addPreserve(bRegIdx, cRegIdx - bRegIdx);
+        vecPool.setAccumulators(cRegIdx, cReg);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, useMask ? 1 : 0);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset =
+            useMask
+                ? static_cast<int>(offsetof(dlp::kernels::gemmParams, maskFP16))
+                : -1;
+
         RETURN_IF_ERROR((kOpsHandler.generateKernelOps(
             params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, MR, NR,
-            useMask, numMaskRegs, cRegIdx, cReg)));
-
-        kOpsHandler.generateKernelOpsAttributes();
+            useMask, numMaskRegs, cRegIdx, cReg, vecPool, maskPool,
+            maskOffset)));
 
         RETURN_IF_ERROR(storeResult());
         jmp(".F32FP16_AFTER_STORE", T_NEAR);

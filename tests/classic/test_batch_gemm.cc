@@ -886,19 +886,24 @@ TEST(BatchGemmTest, GlobalPostOpsMultipleGroups)
     auto dlp_groups = cloneGroups(base_groups);
     auto ref_groups = cloneGroups(base_groups);
 
-    // Add PostOps (RELU + Bias) to all groups
-    auto bias_vec = Matrix::fromVector(std::vector<float>{
+    // Per-group bias vectors sized to match each group's n dimension
+    auto bias_8 = Matrix::fromVector(
+        std::vector<float>{ 1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f });
+    auto                 bias_16        = Matrix::fromVector(std::vector<float>{
         1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f, 11.0f,
         12.0f, 13.0f, 14.0f, 15.0f, 16.0f });
+    std::vector<Matrix*> bias_per_group = { &bias_8, &bias_16 };
 
-    // Attach PostOps to all groups
-    for (auto& group : dlp_groups) {
-        group.post_op_params.push_back(createRelu().build());
-        group.post_op_params.push_back(createBias().setBias(bias_vec).build());
+    // Attach PostOps to each group with matching bias dimension
+    for (std::size_t g = 0; g < dlp_groups.size(); ++g) {
+        dlp_groups[g].post_op_params.push_back(createRelu().build());
+        dlp_groups[g].post_op_params.push_back(
+            createBias().setBias(*bias_per_group[g]).build());
     }
-    for (auto& group : ref_groups) {
-        group.post_op_params.push_back(createRelu().build());
-        group.post_op_params.push_back(createBias().setBias(bias_vec).build());
+    for (std::size_t g = 0; g < ref_groups.size(); ++g) {
+        ref_groups[g].post_op_params.push_back(createRelu().build());
+        ref_groups[g].post_op_params.push_back(
+            createBias().setBias(*bias_per_group[g]).build());
     }
 
     auto ual_dlp = UalFactory::createUal(UALType::DLP);
