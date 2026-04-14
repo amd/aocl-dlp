@@ -48,6 +48,52 @@
 #include "runtime/dlp_runtime.h"
 #include "threading/dlp_gemm_thread_decor_openmp.h"
 
+/**
+ * @brief Determine if input dimensions are small enough for the tiny path.
+ *
+ * The tiny path bypasses the 5-loop framework overhead for small shapes where
+ * the setup cost would otherwise dominate the actual compute work.
+ */
+static inline bool
+is_tiny_input_f32f16(md_t m, md_t n, md_t k, dlp_gemm_cntx_t* lcntx)
+{
+    // If k is 1, tiny path triggers always since gemm is a copy/axpy.
+    // The next block (k < KC, m <= MC, n < NC) ensures all dims fit in cache;
+    // this is an early filter to avoid tiny path overhead at large shapes. Tiny
+    // path is only taken if (m,n,k) are all small enough, or for specific
+    // 'magic' cases derived from performance derivation:
+    //   - When (m <= m_thresh) and (n <= n_thresh) and (k <= k_thresh): all
+    //   dims are very small.
+    //   - Or, when (mnk < mnk_magic_num) and m != 1 and (mk < mk_thresh): for
+    //   cases where
+    //     the cost is dominated by overhead and not compute.
+
+    if (k == 1) {
+        return TRUE;
+    }
+
+    const md_t NC = lcntx->blksz.NC;
+    const md_t MC = lcntx->blksz.MC;
+    const md_t KC = lcntx->blksz.KC;
+    const md_t MR = lcntx->blksz.MR;
+    const md_t NR = lcntx->blksz.NR;
+
+    md_t       mnk           = m * n * k;
+    md_t       mk            = m * k;
+    const md_t mnk_magic_num = 12 * 64 * 960;
+    const md_t mk_thresh     = 12000;
+    const md_t m_thresh      = 6 * MR;
+    const md_t n_thresh      = 2 * NR;
+    const md_t k_thresh      = 960;
+
+    if (((k < KC) && (m <= MC) && (n < NC))
+        && (((m <= m_thresh) && (n <= n_thresh) && (k <= k_thresh))
+            || ((mnk < mnk_magic_num && m != 1 && mk < mk_thresh)))) {
+        return TRUE;
+    }
+
+    return FALSE;
+}
 void
 aocl_gemm_f32f16f32of32(const char      order,
                         const char      transa,
@@ -215,6 +261,15 @@ aocl_gemm_f32f16f32of32(const char      order,
         goto err_hndl;
     }
 
+    /* Tiny path: bypass 5-loop framework for small single-threaded shapes */
+    if ((dlp_is_single_thread(&rntm_g) == TRUE)
+        && (is_tiny_input_f32f16(m_use, n_use, k, &lcntx_l) == TRUE)) {
+        dlp_gemm_rowvar_tiny_f32f16f32of32(
+            m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+            rs_b_use, cs_b_use, mtag_b_use, c, rs_c, cs_c, alpha, beta,
+            &lcntx_l, post_op_list, DLP_F32);
+        goto err_hndl;
+    }
     dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP

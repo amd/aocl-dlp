@@ -48,6 +48,7 @@
 
 DLP_GEMM_TINY(float, float, float, f32f32f32of32);
 DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32);
+DLP_GEMM_TINY(float, float16, float, f32f16f32of32);
 
 /**
  * @brief Unified 5-loop GEMM macro with dlp_gemm_ops_bundle_t interface.
@@ -138,6 +139,7 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32);
 
 DLP_GEMV_TINY(float, float, float, f32f32f32of32);
 DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32);
+DLP_GEMV_TINY(float, float16, float, f32f16f32of32);
 
 #define DLP_GEMV(A_type, B_type, C_type, LP_SFX)                               \
     void dlp_gemv_rowvar_##LP_SFX(                                             \

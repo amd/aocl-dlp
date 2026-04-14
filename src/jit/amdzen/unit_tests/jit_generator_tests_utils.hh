@@ -35,6 +35,8 @@
 #include "jit/amdzen/bf16_gemv_generator.hh"
 #include "jit/amdzen/f32_gemm_generator.hh"
 #include "jit/amdzen/f32_gemv_generator.hh"
+#include "jit/amdzen/f32f16_gemm_generator.hh"
+#include "jit/amdzen/f32f16_gemv_generator.hh"
 #include "jit/amdzen/jit_generator_utils.hh"
 #include "jit/amdzen/s8_gemm_generator.hh"
 #include "jit/amdzen/s8_gemv_generator.hh"
@@ -336,6 +338,24 @@ class ArchBasedKernelTypes
             dlp::cpu_utils::isaFeature::avx512vnni);
 
         if (isAvx512Vnni) {
+            types.push_back(kernelInstrType::avx512_zmm_32_reg);
+        }
+        return types;
+    }
+
+    /**
+     * @brief Get kernel instruction types for F32F16 supported by the
+     * underlying hardware
+     * @return Vector of kernel types based on detected CPU architecture
+     *         (requires AVX512 with F16C support for vcvtph2ps conversion)
+     */
+    static std::vector<kernelInstrType> getAllKernelTypesForF32F16()
+    {
+        std::vector<kernelInstrType> types;
+        bool isAvx512 = dlp::arch_utils::archConfigManager::getInstance()
+                            .isAvx512SupportedByArch();
+
+        if (isAvx512) {
             types.push_back(kernelInstrType::avx512_zmm_32_reg);
         }
         return types;
@@ -768,13 +788,15 @@ class JitGeneratorTestBase : public ::testing::Test
     std::vector<kernelInstrType> allKTypes_bf16;
     std::vector<kernelInstrType> allKTypes_u8s8;
     std::vector<kernelInstrType> allKTypes_s8;
+    std::vector<kernelInstrType> allKTypes_f32f16;
 
     void SetUp() override
     {
-        allKTypes_f32  = ArchBasedKernelTypes::getAllKernelTypesForF32();
-        allKTypes_bf16 = ArchBasedKernelTypes::getAllKernelTypesForBF16();
-        allKTypes_u8s8 = ArchBasedKernelTypes::getAllKernelTypesForU8S8();
-        allKTypes_s8   = ArchBasedKernelTypes::getAllKernelTypesForS8();
+        allKTypes_f32    = ArchBasedKernelTypes::getAllKernelTypesForF32();
+        allKTypes_bf16   = ArchBasedKernelTypes::getAllKernelTypesForBF16();
+        allKTypes_u8s8   = ArchBasedKernelTypes::getAllKernelTypesForU8S8();
+        allKTypes_s8     = ArchBasedKernelTypes::getAllKernelTypesForS8();
+        allKTypes_f32f16 = ArchBasedKernelTypes::getAllKernelTypesForF32F16();
     }
 
     void expectGenerationSuccess(
@@ -860,6 +882,17 @@ class JitGeneratorTestBase : public ::testing::Test
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
+    dlp::jit::jitGeneratorError generateF32F16GemmKernel(
+        kernelInstrType kType, generatorParams& gen_params)
+    {
+        if (kType == kernelInstrType::avx512_zmm_32_reg) {
+            amdzen::gen::jitF32FP16_GEMM<kernelInstrType::avx512_zmm_32_reg>
+                base(Xbyak::AutoGrow, JIT_KERNEL_SIZE);
+            return base.generateKernel(gen_params);
+        }
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
     // ========================================================================
     // GEMV N=1 kernel generation dispatch (by kType, returns error code)
     // ========================================================================
@@ -911,6 +944,17 @@ class JitGeneratorTestBase : public ::testing::Test
         if (kType == kernelInstrType::avx512_zmm_32_reg) {
             jitGEMVS8N1<kernelInstrType::avx512_zmm_32_reg> base(
                 JIT_KERNEL_SIZE);
+            return base.generateKernel(gen_params);
+        }
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    dlp::jit::jitGeneratorError generateF32F16GemvN1Kernel(
+        kernelInstrType kType, gemvN1GeneratorParams& gen_params)
+    {
+        if (kType == kernelInstrType::avx512_zmm_32_reg) {
+            jitF32FP16GEMVN1<kernelInstrType::avx512_zmm_32_reg> base(
+                Xbyak::AutoGrow, JIT_KERNEL_SIZE);
             return base.generateKernel(gen_params);
         }
         return dlp::jit::jitGeneratorError::badKernelInfo;
@@ -968,6 +1012,17 @@ class JitGeneratorTestBase : public ::testing::Test
         if (kType == kernelInstrType::avx512_zmm_32_reg) {
             jitGEMVS8M1<kernelInstrType::avx512_zmm_32_reg> base(
                 JIT_KERNEL_SIZE);
+            return base.generateKernel(gen_params);
+        }
+        return dlp::jit::jitGeneratorError::badKernelInfo;
+    }
+
+    dlp::jit::jitGeneratorError generateF32F16GemvM1Kernel(
+        kernelInstrType kType, gemvM1GeneratorParams& gen_params)
+    {
+        if (kType == kernelInstrType::avx512_zmm_32_reg) {
+            jitF32FP16GEMVM1<kernelInstrType::avx512_zmm_32_reg> base(
+                Xbyak::AutoGrow, JIT_KERNEL_SIZE);
             return base.generateKernel(gen_params);
         }
         return dlp::jit::jitGeneratorError::badKernelInfo;

@@ -172,6 +172,20 @@ TEST_F(JitMrNrVariantsTest, S8_GEMM_MR_NR_Variants)
         });
 }
 
+// ============================================================================
+// F32F16 GEMM MR/NR Variant Tests (Without Post-Ops)
+// ============================================================================
+
+TEST_F(JitMrNrVariantsTest, F32F16_GEMM_MR_NR_Variants)
+{
+    testGemmWithPostOp(
+        "F32F16", "NoPostOps", allKTypes_f32f16, DLP_F32,
+        [](KernelOpsBuilder& b) -> KernelOpsBuilder& { return b; },
+        [this](generatorParams& p) {
+            return generateF32F16GemmKernel(p.kType, p);
+        });
+}
+
 int
 main(int argc, char** argv)
 {

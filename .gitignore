@@ -36,6 +36,12 @@ coverage
 *.png
 *.css
 *.info
+compile_commands.json
+*.md
+*.xlsx
+*.txt
+*.pdf
+*.csv
 
 # Docker tool generated files
 scripts/tools/Dockerfile
@@ -46,4 +52,3 @@ scripts/tools/log2yaml/target/
 scripts/tools/log2yaml/Cargo.lock
 .codex
 *.bak
-compile_commands.json

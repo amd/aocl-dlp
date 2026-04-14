@@ -240,6 +240,16 @@ TEST_F(JitMemoryBoundTest, S8_GEMM_AllOutputTypes_MaximalPostOps)
                            });
 }
 
+TEST_F(JitMemoryBoundTest, F32F16_GEMM_AllOutputTypes_MaximalPostOps)
+{
+    testGemmMaximalPostOps("F32F16", allKTypes_f32f16,
+                           "F32F16 tests require AVX512 support",
+                           { { DLP_F32, "F32" } },
+                           [this](kernelInstrType kType, generatorParams& p) {
+                               return generateF32F16GemmKernel(kType, p);
+                           });
+}
+
 // ============================================================================
 // GEMV N=1 Kernel Tests - All Datatypes
 // ============================================================================
@@ -293,6 +303,16 @@ TEST_F(JitMemoryBoundTest, S8_GEMVN1_AllOutputTypes_MaximalPostOps)
         });
 }
 
+TEST_F(JitMemoryBoundTest, F32F16_GEMVN1_MaximalPostOps)
+{
+    testGemvN1MaximalPostOps(
+        "F32F16", allKTypes_f32f16, "F32F16 tests require AVX512 support",
+        { { DLP_F32, "F32" } }, 15,
+        [this](kernelInstrType kType, gemvN1GeneratorParams& p) {
+            return generateF32F16GemvN1Kernel(kType, p);
+        });
+}
+
 // ============================================================================
 // GEMV M=1 Kernel Tests - All Datatypes
 // ============================================================================
@@ -343,6 +363,16 @@ TEST_F(JitMemoryBoundTest, S8_GEMVM1_AllOutputTypes_MaximalPostOps)
           { DLP_U8, "U8" } },
         63, [this](kernelInstrType kType, gemvM1GeneratorParams& p) {
             return generateS8GemvM1Kernel(kType, p);
+        });
+}
+
+TEST_F(JitMemoryBoundTest, F32F16_GEMVM1_MaximalPostOps)
+{
+    testGemvM1MaximalPostOps(
+        "F32F16", allKTypes_f32f16, "F32F16 tests require AVX512 support",
+        { { DLP_F32, "F32" } }, 63,
+        [this](kernelInstrType kType, gemvM1GeneratorParams& p) {
+            return generateF32F16GemvM1Kernel(kType, p);
         });
 }
 

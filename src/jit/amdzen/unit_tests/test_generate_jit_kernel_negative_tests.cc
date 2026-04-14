@@ -49,7 +49,8 @@ enum class Datatype
     F32,
     BF16,
     U8S8,
-    S8
+    S8,
+    F32F16
 };
 
 std::string
@@ -64,6 +65,8 @@ datatypeToString(Datatype dt)
             return "U8S8";
         case Datatype::S8:
             return "S8";
+        case Datatype::F32F16:
+            return "F32F16";
     }
     return "UNKNOWN";
 }
@@ -79,6 +82,8 @@ datatypeToDownscale(Datatype dt)
         case Datatype::U8S8:
         case Datatype::S8:
             return DLP_S32;
+        case Datatype::F32F16:
+            return DLP_F32;
     }
     return DLP_F32;
 }
@@ -101,6 +106,8 @@ datatypeSkipMessage(Datatype dt)
             return "U8S8 tests require AVX512_VNNI support";
         case Datatype::S8:
             return "S8 tests require AVX512_VNNI support";
+        case Datatype::F32F16:
+            return "F32F16 tests require AVX512 support";
     }
     return "Unsupported datatype";
 }
@@ -291,6 +298,8 @@ class JitNegativeTestBase : public JitGeneratorTestBase
                 return allKTypes_u8s8;
             case Datatype::S8:
                 return allKTypes_s8;
+            case Datatype::F32F16:
+                return allKTypes_f32f16;
         }
         return allKTypes_f32;
     }
@@ -308,6 +317,8 @@ class JitNegativeTestBase : public JitGeneratorTestBase
                 return generateU8S8GemmKernel(kType, p);
             case Datatype::S8:
                 return generateS8GemmKernel(kType, p);
+            case Datatype::F32F16:
+                return generateF32F16GemmKernel(kType, p);
         }
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
@@ -325,6 +336,8 @@ class JitNegativeTestBase : public JitGeneratorTestBase
                 return generateU8S8GemvN1Kernel(kType, p);
             case Datatype::S8:
                 return generateS8GemvN1Kernel(kType, p);
+            case Datatype::F32F16:
+                return generateF32F16GemvN1Kernel(kType, p);
         }
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
@@ -342,6 +355,8 @@ class JitNegativeTestBase : public JitGeneratorTestBase
                 return generateU8S8GemvM1Kernel(kType, p);
             case Datatype::S8:
                 return generateS8GemvM1Kernel(kType, p);
+            case Datatype::F32F16:
+                return generateF32F16GemvM1Kernel(kType, p);
         }
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
@@ -477,7 +492,17 @@ INSTANTIATE_TEST_SUITE_P(
         GemmNegativeParam{ Datatype::S8, "ExcessiveNumMaskRegs",
                            corruptNumMaskRegs(8) },
         GemmNegativeParam{ Datatype::S8, "InvalidCDownscale",
-                           corruptCDownscale(-1) }),
+                           corruptCDownscale(-1) },
+        // --- F32F16 ---
+        GemmNegativeParam{ Datatype::F32F16, "NegativeMR",
+                           corruptParam([](kernelInfo& ki) { ki.mr = -1; }) },
+        GemmNegativeParam{ Datatype::F32F16, "ZeroMR",
+                           corruptParam([](kernelInfo& ki) { ki.mr = 0; }) },
+        GemmNegativeParam{ Datatype::F32F16, "ExcessiveMR",
+                           corruptParam([](kernelInfo& ki) { ki.mr = 1000; }) },
+        GemmNegativeParam{
+            Datatype::F32F16, "ExcessiveNR",
+            corruptParam([](kernelInfo& ki) { ki.nr = 1000; }) }),
     [](const ::testing::TestParamInfo<GemmNegativeParam>& info) {
         return datatypeToString(info.param.dtype) + "_GEMM_"
                + info.param.testCase;
@@ -534,7 +559,11 @@ INSTANTIATE_TEST_SUITE_P(
         GemvN1NegativeParam{ Datatype::U8S8, "InvalidCDownscale",
                              corruptGemvN1CDownscale(-1) },
         GemvN1NegativeParam{ Datatype::S8, "InvalidCDownscale",
-                             corruptGemvN1CDownscale(-1) }),
+                             corruptGemvN1CDownscale(-1) },
+        // --- F32F16 ---
+        GemvN1NegativeParam{ Datatype::F32F16, "NegativeMR",
+                             corruptGemvN1MR(-1) },
+        GemvN1NegativeParam{ Datatype::F32F16, "ZeroMR", corruptGemvN1MR(0) }),
     [](const ::testing::TestParamInfo<GemvN1NegativeParam>& info) {
         return datatypeToString(info.param.dtype) + "_GEMVN1_"
                + info.param.testCase;
