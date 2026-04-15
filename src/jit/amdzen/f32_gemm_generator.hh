@@ -85,7 +85,7 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
         regRsC, regKIter;
     Xbyak::Reg64 regMiter;
     Xbyak::Reg64 regNiter, regNLeft; // For N-loop in k=1 kernels
-    Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
+    Xbyak::Reg64 regTmp1, regTmp2, regTmp3; // regTmp3 aliases regCsA (non-overlapping lifetimes in F32 paths)
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
 

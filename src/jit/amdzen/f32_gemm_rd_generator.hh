@@ -86,7 +86,8 @@ class jitGEMMF32RD : public Xbyak::CodeGenerator
 
     Xbyak::Reg64 stackPtr, regAptr, regBptr, regCptr;
     Xbyak::Reg64 regRsA, regCsB, regRsC;
-    Xbyak::Reg64 regKIter, regMiter, regJJCounter, regTmp1, regTmp2, regTmp3;
+    // regTmp2 unused; regKIter aliases regTmpCptr, regRsC aliases regCsB3
+    Xbyak::Reg64 regKIter, regMiter, regJJCounter, regTmp1, regTmp2;
     Xbyak::Reg64 regTmpAptr, regTmpBptr, regTmpCptr;
     Xbyak::Reg64 regCsB3, regRsA3, regRsA5;
 

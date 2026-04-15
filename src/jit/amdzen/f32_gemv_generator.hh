@@ -90,7 +90,6 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regKIter;            // K-loop iterator
     Xbyak::Reg64 regTmp1;             // General purpose temporary register 1
     Xbyak::Reg64 regTmp2;             // General purpose temporary register 2
-    Xbyak::Reg64 regTmp3;             // General purpose temporary register 3
 
     Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
@@ -226,7 +225,7 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regTmp2;
     Xbyak::Reg64 regIncN;
-    Xbyak::Reg64 regIncK;
+    static constexpr int kIncKOffset = 40; // regIncK spilled to stack [rsp+40]
 
     Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 

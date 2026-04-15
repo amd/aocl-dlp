@@ -85,7 +85,8 @@ jitGEMMF32RD<KType>::generateKernel(utils::generatorParams& params)
     // need not be used by the kernel.
     // Putting inside a scope so that some tables can be generated post
     // the ret instr. StackFrame inserts a ret instr in its destructor.
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
 
     initializeParameters(params.mLoop);
@@ -205,10 +206,13 @@ jitGEMMF32RD<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
     regJJCounter = stackFrame.t[10];
 
     regTmp1 = stackFrame.t[11];
-    regTmp2 = stackFrame.t[12];
 
-    regKIter = regTmp2;
-    regRsC   = regTmp2;
+    // regKIter aliases regTmpCptr: regKIter is live during K-loop only,
+    // regTmpCptr is reconstructed after K-loop via mov(regTmpCptr, regCptr)
+    regKIter = regTmpCptr;
+    // regRsC aliases regCsB3: regCsB3 is live during K-loop only,
+    // regRsC is live after K-loop only; regCsB3 reconstructed before each K-loop
+    regRsC = regCsB3;
 }
 
 template<utils::kernelInstrType KType>
@@ -294,6 +298,11 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
 
     regInit();
 
+    // Reconstruct regCsB3 = 3 * cs_b before K-loop entry.
+    // Required because regRsC (aliased to same register) overwrites it
+    // during the previous iteration's store phase.
+    lea(regCsB3, ptr[regCsB + regCsB * 2]);
+
     mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
     test(regKIter, regKIter);
     je(".CONSIDER_K_LEFT", T_NEAR);
@@ -351,6 +360,11 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
     }
 
     L(".POST_ACCUMULATE");
+
+    // Reconstruct regTmpCptr = regCptr after K-loop.
+    // Required because regKIter (aliased to same register) overwrites it
+    // during the K-loop.
+    mov(regTmpCptr, regCptr);
 
     // Accumulate results convert ZMM or YMM to XMM
     RETURN_IF_ERROR(reduceAccumulation());
