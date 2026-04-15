@@ -148,6 +148,10 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
         return 0; // A reorder not supported.
     }
 
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+
+    md_t KC = lcntx_g->blksz.KC;
+
     // Extra space since packing does width in multiples of 16. The vnni
     // instruction can be used as long as atleast one zmm register can be fully
     // loaded; and since k_dim needs to be atleast 4, having n_dim atleast 16
@@ -155,23 +159,20 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     // not rounded to NR (=64), since that would result in memory wastage.
 #ifdef DLP_KERNELS_ZEN4
     md_t n_reorder;
-#if 0
-    if (n == 1) {
+    // Follow alternate reordering for n==1 iff k is divisible by group_size.
+    if ((n == 1) && (k % symq_meta_data->group_size == 0)
+        && (KC % symq_meta_data->group_size == 0)) {
         n_reorder = 1;
-    } else
-#endif
-    {
+    } else {
         n_reorder = dlp_make_multiple_of_n(n, 16);
     }
 
     // Extra space since packing does length in multiples of 4.
     md_t k_reorder;
-#if 0
-    if (n == 1) {
+    if ((n == 1) && (k % symq_meta_data->group_size == 0)
+        && (KC % symq_meta_data->group_size == 0)) {
         k_reorder = k;
-    } else
-#endif
-    {
+    } else {
         k_reorder = dlp_make_multiple_of_n(k, 4);
     }
 #else
@@ -360,20 +361,27 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
         return; // A reorder not supported.
     }
 
+    // Initialize a local runtime with global settings if necessary. Note
+    // that in the case that a runtime is passed in, we make a local copy.
+    dlp_rntm_t rntm_g;
+    dlp_rntm_init_from_global(&rntm_g);
+
+    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+
+    md_t KC = lcntx_g->blksz.KC;
+
 #ifdef DLP_KERNELS_ZEN4
-#if 0
-    if (n == 1) {
+    // Follow alternate reordering for n==1 iff k is divisible by group_size.
+    if ((n == 1) && ((k % group_size) == 0) && ((KC % group_size) == 0)) {
         // Calculate the address of the beginning of the column sum buffer that
         // is allocated after the reorder buffer.
         int32_t* pack_b_column_sum =
             (int32_t*)(reorder_buf_addr + (k * sizeof(int8_t)));
 
-        // NOTE We're working under the assumption that group_size is a factor
-        // of k.
         for (iter_t k0 = 0; k0 < k; k0 += group_size) {
-            // Initialize the current column sum to 0.
+            md_t gs            = dlp_min(group_size, k - k0);
             *pack_b_column_sum = 0;
-            for (iter_t group = 0; group < group_size; group++) {
+            for (iter_t group = 0; group < gs; group++) {
                 reorder_buf_addr[k0 + group] =
                     input_buf_addr[(k0 + group) * rs_b];
                 *pack_b_column_sum += reorder_buf_addr[k0 + group];
@@ -387,13 +395,6 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
         return;
     }
 #endif
-#endif
-    // Initialize a local runtime with global settings if necessary. Note
-    // that in the case that a runtime is passed in, we make a local copy.
-    dlp_rntm_t rntm_g;
-    dlp_rntm_init_from_global(&rntm_g);
-
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;

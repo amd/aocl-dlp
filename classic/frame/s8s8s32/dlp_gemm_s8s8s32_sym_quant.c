@@ -285,30 +285,18 @@ DLP_GEMM_5LOOP_UNIFIED(
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
 
-    // Group size should always be <= KC to make sure that entire group is
-    // processed within one micro-kernel call. If group size is greater than KC,
-    // then KC will be updated to group size. This same change is done in
-    // reorder function to maintain consistency between reorder and GEMM
-    // execution.
-    if (grp_post_op_list->group_size > KC) {
-        KC = grp_post_op_list->group_size;
-    }
     if (mtag_b == UNPACKED) {
         // Error: can only work with packed B now.
         return;
     }
 
-#if 0
-    // Invoke gemv kernels for m = 1 or n = 1.
-    if (((m == 1) || (n == 1)) && (mtag_b == REORDERED)) {
-        if ((k % grp_post_op_list->group_size != 0)
-            || (KC % grp_post_op_list->group_size != 0)) {
-            dlp_print_msg(
-                "Quantized GEMV is only supported only when k and KC are "
-                "divisible by group_size.",
-                __FILE__, __LINE__);
-            return; // Error
-        }
+#ifdef DLP_KERNELS_ZEN4
+    // Invoke sym_quant gemv kernels for m = 1 or n = 1.
+    // Quantized GEMV is supported iff K and KC are divisible by group_size.
+    // Fall back to GEMM Path otherwise.
+    if (((k % grp_post_op_list->group_size) == 0)
+        && ((KC % grp_post_op_list->group_size) == 0) && (mtag_b == REORDERED)
+        && ((m == 1) || (n == 1))) {
 
         dlp_gemv_rowvar_s8s8s32o32_sym_quant(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
@@ -318,6 +306,15 @@ DLP_GEMM_5LOOP_UNIFIED(
         return;
     }
 #endif
+
+    // Group size should always be <= KC to make sure that entire group is
+    // processed within one micro-kernel call. If group size is greater than KC,
+    // then KC will be updated to group size. This same change is done in
+    // reorder function to maintain consistency between reorder and GEMM
+    // execution.
+    if (grp_post_op_list->group_size > KC) {
+        KC = grp_post_op_list->group_size;
+    }
 
     // Strides are updated based on matrix packing/reordering.
     const int8_t* a_use          = NULL;

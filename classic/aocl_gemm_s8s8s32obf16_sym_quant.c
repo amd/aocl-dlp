@@ -38,6 +38,24 @@
 #include "runtime/dlp_runtime.h"
 #include "threading/dlp_gemm_thread_decor_openmp.h"
 
+#include <stdlib.h>
+#include <string.h>
+
+// Utility function to transpose a 2D matrix
+static void
+dlp_transpose_scale_2d(
+    void* dst, const void* src, md_t rows, md_t cols, size_t elem_size)
+{
+    const char* s = (const char*)src;
+    char*       d = (char*)dst;
+    for (md_t r = 0; r < rows; r++) {
+        for (md_t c = 0; c < cols; c++) {
+            memcpy(d + (c * rows + r) * elem_size,
+                   s + (r * cols + c) * elem_size, elem_size);
+        }
+    }
+}
+
 void
 aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
                                  const char      transa,
@@ -64,6 +82,11 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
 
     DLP_METADATA_SET_ERROR(metadata,
                            DLP_CLSC_SUCCESS); // Set default error to success.
+
+    // Temporary buffers for transposed scale factors.
+    // Declared early so they are in scope at err_hndl for cleanup.
+    void* colmaj_a_scale_buf = NULL;
+    void* colmaj_b_scale_buf = NULL;
 
     // Check if avx512_vnni ISA is supported, dlp_gemm matmul only works with
     // it.
@@ -197,6 +220,76 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
         goto err_hndl;
     }
 
+    // For column-major, the kernel swaps A and B matrices.
+    // Consequentially, the scale factor arrays must also be swapped and
+    // transposed for the kernel.
+    // Original layouts: a_scale (m, num_groups), b_scale (num_groups, n)
+    // Kernel expects:   a_scale (n, num_groups), b_scale (num_groups, m)
+    // Each swap is essentially a matrix transpose.
+    if (is_column_major == TRUE) {
+        md_t group_size = grp_post_op_list[0].group_size;
+
+        md_t num_groups = (k + group_size - 1) / group_size;
+
+        // Element size depends on the scale factor storage type.
+        size_t sf_elem_size = (grp_post_op_list[0].sf_stor_type == DLP_BF16)
+                                  ? sizeof(int16_t)
+                                  : sizeof(float);
+
+        // Transpose original b_scale (num_groups, n) to a_scale (n, num_groups)
+        // for the kernel.
+        if (grp_post_op_list[0].b_scale_factor != NULL) {
+            dlp_clsc_err_t ret_err;
+            msz_t          mem_a_buf_size_req = num_groups * n * sf_elem_size;
+            colmaj_a_scale_buf =
+                dlp_malloc_page_aligned(mem_a_buf_size_req, &ret_err);
+
+            if (colmaj_a_scale_buf == NULL)
+                goto err_hndl;
+
+            dlp_transpose_scale_2d(colmaj_a_scale_buf,
+                                   grp_post_op_list[0].b_scale_factor,
+                                   num_groups, n, sf_elem_size);
+        }
+
+        // Transpose original a_scale (m, num_groups) to b_scale (num_groups, m)
+        // for the kernel.
+        if (grp_post_op_list[0].a_scale_factor != NULL) {
+            dlp_clsc_err_t ret_err;
+            msz_t          mem_b_buf_size_req = num_groups * m * sf_elem_size;
+            colmaj_b_scale_buf =
+                dlp_malloc_page_aligned(mem_b_buf_size_req, &ret_err);
+
+            if (colmaj_b_scale_buf == NULL)
+                goto err_hndl;
+
+            dlp_transpose_scale_2d(colmaj_b_scale_buf,
+                                   grp_post_op_list[0].a_scale_factor, m,
+                                   num_groups, sf_elem_size);
+        }
+
+        // Swap the pointers and lengths in grp_post_op_list.
+        for (iter_t i = 0; i < metadata->post_op_grp->seq_length; ++i) {
+            // Swap scale factor pointers to transposed buffers.
+            grp_post_op_list[i].a_scale_factor = colmaj_a_scale_buf;
+            grp_post_op_list[i].b_scale_factor = colmaj_b_scale_buf;
+
+            // Swap scale factor lengths.
+            md_t tmp_sf_len = grp_post_op_list[i].a_scale_factor_len;
+            grp_post_op_list[i].a_scale_factor_len =
+                grp_post_op_list[i].b_scale_factor_len;
+            grp_post_op_list[i].b_scale_factor_len = tmp_sf_len;
+
+            // Swap zero-point pointers and lengths.
+            void* tmp_zp                 = grp_post_op_list[i].a_zp;
+            md_t  tmp_zp_len             = grp_post_op_list[i].a_zp_len;
+            grp_post_op_list[i].a_zp     = grp_post_op_list[i].b_zp;
+            grp_post_op_list[i].a_zp_len = grp_post_op_list[i].b_zp_len;
+            grp_post_op_list[i].b_zp     = tmp_zp;
+            grp_post_op_list[i].b_zp_len = tmp_zp_len;
+        }
+    }
+
     // Convert post op struct to post op linked list format.
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
     err = dlp_gemm_translate_to_post_ops_list(metadata, post_op_list, (void*)c,
@@ -242,5 +335,12 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
 #endif
 
 err_hndl:;
+    // Free temporarily allocated buffers used for transpose in case of
+    // column-major inputs.
+    if (colmaj_a_scale_buf != NULL)
+        dlp_free_page_aligned(colmaj_a_scale_buf);
+    if (colmaj_b_scale_buf != NULL)
+        dlp_free_page_aligned(colmaj_b_scale_buf);
+
     DLP_GEMM_STOP_LOGGER();
 }
