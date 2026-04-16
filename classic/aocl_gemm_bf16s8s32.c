@@ -268,11 +268,17 @@ aocl_gemm_bf16s8s32_impl(const char        order,
         mtag_b = PACK;
     }
 
-    // Translate user-provided post-op metadata to internal linked-list format.
-    // Post-ops includes dequantization of results.
+    // ADQUANTIZE first, then seq_vector ops via
+    // translate_to_post_ops_list(post_op_list+1).
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS + 1];
-    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
-        metadata, post_op_list, (void*)c, (void*)(&order), m, n);
+    dlp_clsc_err_t   err = dlp_gemm_translate_adquantize_post_op(
+        metadata, post_op_list, (void*)(&order), m);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+    err = dlp_gemm_translate_to_post_ops_list(metadata, post_op_list + 1,
+                                              (void*)c, (void*)(&order), m, n);
 
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);

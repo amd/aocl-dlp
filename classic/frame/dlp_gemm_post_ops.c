@@ -333,6 +333,93 @@ dlp_gemm_set_node_params(dlp_gemm_post_op*     post_op_node,
 }
 
 dlp_clsc_err_t
+dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
+                                      dlp_gemm_post_op* post_op_list,
+                                      void*             meta_arg,
+                                      md_t              m)
+{
+    // Step 1: Validate metadata, a_pre_quant, and a_post_quant
+    if (metadata == NULL || metadata->a_pre_quant == NULL
+        || metadata->a_post_quant == NULL || post_op_list == NULL) {
+        dlp_print_msg("One or more required parameters (metadata, a_pre_quant, "
+                      "a_post_quant) are NULL. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NULL_POINTER;
+    }
+    // --- Step 2: Validate scale factor ---
+    if (((metadata->a_post_quant)->scl
+         && (metadata->a_post_quant)->scl->scale_factor_len > 0)
+        && ((metadata->a_post_quant)->scl->scale_factor == NULL)) {
+        dlp_print_msg(" a_post_quant.scl scale_factor is NULL. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NULL_POINTER;
+    }
+    if ((metadata->a_post_quant)->scl
+        && ((metadata->a_post_quant)->scl->scale_factor_len != 1)
+        && ((metadata->a_post_quant)->scl->scale_factor_len < m)) {
+        dlp_print_msg(" a_post_quant.scl scale factor length is < m. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+    }
+
+    // --- Step 3: Validate zero-point ---
+    if (((metadata->a_post_quant)->zp
+         && (metadata->a_post_quant)->zp->zero_point_len > 0)
+        && ((metadata->a_post_quant)->zp->zero_point == NULL)) {
+        dlp_print_msg(" a_post_quant.zp zero_point is NULL. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NULL_POINTER;
+    }
+    if ((metadata->a_post_quant)->zp
+        && ((metadata->a_post_quant)->zp->zero_point_len != 1)
+        && ((metadata->a_post_quant)->zp->zero_point_len < m)) {
+        dlp_print_msg(" a_post_quant.zp zero point length is < m. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+    }
+
+    // --- Step 4: Extract storage types ---
+    DLP_TYPE tmp_zp_stor_type =
+        (metadata->a_post_quant)->zp
+            ? dlp_gemm_get_stor_type(
+                  (metadata->a_post_quant)->zp->zero_point_type)
+            : DLP_INVALID;
+    DLP_TYPE tmp_sf_stor_type =
+        (metadata->a_post_quant)->scl
+            ? dlp_gemm_get_stor_type(
+                  (metadata->a_post_quant)->scl->scale_factor_type)
+            : DLP_INVALID;
+
+    // --- Step 5: Setup zero-point length pointer ---
+    // For symmetric quantization (no zero-point), use zero_zp_len = 0
+    static md_t zero_zp_len = 0;
+    md_t*       zero_point_len_ptr =
+        (metadata->a_post_quant)->zp
+                  ? &((metadata->a_post_quant)->zp->zero_point_len)
+                  : &zero_zp_len;
+
+    // --- Step 6: Create ADQUANTIZE node at post_op_list[0] ---
+    dlp_gemm_set_node_params(
+        post_op_list, POST_OPS_ADQUANTIZE,
+        (metadata->a_post_quant)->zp ? (metadata->a_post_quant)->zp->zero_point
+                                     : NULL,
+        meta_arg, zero_point_len_ptr,
+        (metadata->a_post_quant)->scl
+            ? (metadata->a_post_quant)->scl->scale_factor
+            : NULL,
+        (metadata->a_post_quant)->scl
+            ? (metadata->a_post_quant)->scl->scale_factor_len
+            : 0,
+        NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type);
+
+    // --- Step 7: Link to seq_vector post-ops (filled at post_op_list+1) ---
+    if (metadata->seq_length > 0) {
+        (post_op_list)->next = (post_op_list + 1);
+    }
+    return DLP_CLSC_SUCCESS;
+}
+
+dlp_clsc_err_t
 dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                                     dlp_gemm_post_op* post_op_list,
                                     void*             scale_buffer,
@@ -343,23 +430,15 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
     (void)(scale_buffer); // Unused for now, potential to be used later.
     (void)(m);            // Unused for now, potential to be used later.
 
-    if (metadata == NULL) {
-        dlp_gemm_set_node_params(post_op_list, POST_OPS_DISABLE, NULL, NULL,
-                                 NULL, NULL, 0, NULL, 0, DLP_INVALID,
-                                 DLP_INVALID, DLP_INVALID);
-
-        return DLP_CLSC_SUCCESS;
+    if (post_op_list == NULL) {
+        return DLP_CLSC_NULL_POINTER;
     }
 
-    // Check if ADQUANTIZE is present (separate from seq_vector post-ops).
-    bool has_adquantize = metadata->a_post_quant != NULL;
-
-    // If there is no ADQUANTIZE and no other post-ops (seq_vector is empty),
-    // disable post-ops and return success.
-    if (!has_adquantize && metadata->seq_length <= 0) {
+    if (metadata == NULL || (metadata->seq_length <= 0)) {
         dlp_gemm_set_node_params(post_op_list, POST_OPS_DISABLE, NULL, NULL,
                                  NULL, NULL, 0, NULL, 0, DLP_INVALID,
                                  DLP_INVALID, DLP_INVALID);
+
         return DLP_CLSC_SUCCESS;
     }
 
@@ -375,117 +454,8 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                                                // post ops permitted.
     }
 
-    // ============================================================
-    // A-DEQUANTIZATION POST-OP (Special handling - NOT in seq_vector)
-    // ============================================================
-    // NOTE: ADQUANTIZE is NOT part of the seq_vector array. It is
-    // handled separately via the a_post_quant field in metadata.
-    //
-    // When a_post_quant is present, ADQUANTIZE is explicitly placed as
-    // the FIRST node (index 0) of the post_op_list array. All regular
-    // post-ops from seq_vector are then placed starting at index 1.
-    //
-    // Purpose: Since the A matrix was quantized (e.g., BF16 -> S8),
-    // the GEMM produces scaled results. This dequantization operation
-    // corrects the scaling using:
-    //   result = round((acc + b_col_sum * zp_A) / scale_A)
-    //
-    // Quantization modes:
-    // - Per-tensor: scale_factor_len = 1 (scalar shared across all rows)
-    // - Per-row/per-channel: scale_factor_len = m (each row has its own
-    //   scale and/or zero-point value)
-    if (has_adquantize) {
-        // --- Step 1: Validate a_pre_quant existence ---
-        if (metadata->a_pre_quant == NULL) {
-            dlp_print_msg(
-                " a_post_quant exists but a_pre_quant is NULL. Exiting..",
-                __FILE__, __LINE__);
-            return DLP_CLSC_NULL_POINTER;
-        }
-
-        // --- Step 2: Validate scale factor ---
-        if (((metadata->a_post_quant)->scl
-             && (metadata->a_post_quant)->scl->scale_factor_len > 0)
-            && ((metadata->a_post_quant)->scl->scale_factor == NULL)) {
-            dlp_print_msg(" a_post_quant.scl scale_factor is NULL. Exiting..",
-                          __FILE__, __LINE__);
-            return DLP_CLSC_NULL_POINTER;
-        }
-        if ((metadata->a_post_quant)->scl
-            && ((metadata->a_post_quant)->scl->scale_factor_len != 1)
-            && ((metadata->a_post_quant)->scl->scale_factor_len < m)) {
-            dlp_print_msg(
-                " a_post_quant.scl scale factor length is < m. Exiting..",
-                __FILE__, __LINE__);
-            return DLP_CLSC_NULL_POINTER;
-        }
-
-        // --- Step 3: Validate zero-point ---
-        if (((metadata->a_post_quant)->zp
-             && (metadata->a_post_quant)->zp->zero_point_len > 0)
-            && ((metadata->a_post_quant)->zp->zero_point == NULL)) {
-            dlp_print_msg(" a_post_quant.zp zero_point is NULL. Exiting..",
-                          __FILE__, __LINE__);
-            return DLP_CLSC_NULL_POINTER;
-        }
-        if ((metadata->a_post_quant)->zp
-            && ((metadata->a_post_quant)->zp->zero_point_len != 1)
-            && ((metadata->a_post_quant)->zp->zero_point_len < m)) {
-            dlp_print_msg(
-                " a_post_quant.zp zero point length is < m. Exiting..",
-                __FILE__, __LINE__);
-            return DLP_CLSC_NULL_POINTER;
-        }
-
-        // --- Step 4: Extract storage types ---
-        DLP_TYPE tmp_zp_stor_type =
-            (metadata->a_post_quant)->zp
-                ? dlp_gemm_get_stor_type(
-                      (metadata->a_post_quant)->zp->zero_point_type)
-                : DLP_INVALID;
-        DLP_TYPE tmp_sf_stor_type =
-            (metadata->a_post_quant)->scl
-                ? dlp_gemm_get_stor_type(
-                      (metadata->a_post_quant)->scl->scale_factor_type)
-                : DLP_INVALID;
-
-        // --- Step 5: Setup zero-point length pointer ---
-        // For symmetric quantization (no zero-point), use zero_zp_len = 0
-        static md_t zero_zp_len = 0;
-        md_t*       zero_point_len_ptr =
-            (metadata->a_post_quant)->zp
-                      ? &((metadata->a_post_quant)->zp->zero_point_len)
-                      : &zero_zp_len;
-
-        // --- Step 6: Create ADQUANTIZE node at post_op_list[0] ---
-        dlp_gemm_set_node_params(
-            (post_op_list), POST_OPS_ADQUANTIZE,
-            (metadata->a_post_quant)->zp
-                ? (metadata->a_post_quant)->zp->zero_point
-                : NULL,
-            meta_arg, zero_point_len_ptr,
-            (metadata->a_post_quant)->scl
-                ? (metadata->a_post_quant)->scl->scale_factor
-                : NULL,
-            (metadata->a_post_quant)->scl
-                ? (metadata->a_post_quant)->scl->scale_factor_len
-                : 0,
-            NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type);
-
-        // --- Step 7: Link to next post-op from seq_vector if present ---
-        if (metadata->seq_length > 0) {
-            (post_op_list)->next = (post_op_list + 1);
-        }
-    }
-
-    // ADQUANTIZE (NOT in seq_vector) occupies post_op_list[0] when present.
-    // Example with ADQUANTIZE + seq_length=2:
-    //   post_op_list[0] = ADQUANTIZE, [1] = seq_vector[0], [2] = seq_vector[1]
-    md_t post_op_offset = (has_adquantize) ? 1 : 0;
-
-    if ((metadata->seq_length > 0) && (metadata->seq_vector == NULL)) {
-        dlp_print_msg(" Post_op seq_vector is NULL. Exiting..", __FILE__,
-                      __LINE__);
+    if (metadata->seq_vector == NULL) {
+        dlp_print_msg(" seq_vector is NULL. Exiting..", __FILE__, __LINE__);
         return DLP_CLSC_NULL_POINTER;
     }
 
@@ -495,10 +465,9 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
     md_t        m_i         = 0; // Multiple matrix add supported.
     md_t        mul_i       = 0; // Multiple matrix mul supported.
     static md_t zero_zp_len = 0;
-    for (iter_t i = post_op_offset; i < metadata->seq_length + post_op_offset;
-         ++i) {
+    for (iter_t i = 0; i < metadata->seq_length; ++i) {
         // Dispatcher code
-        switch (*(metadata->seq_vector + i - post_op_offset)) {
+        switch (*(metadata->seq_vector + i)) {
             case ELTWISE: {
                 if (metadata->eltwise == NULL) {
                     dlp_print_msg(" Post_op.eltwise is NULL. Exiting..",
@@ -824,8 +793,7 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
         }
 
         // Simulating linked list using an array.
-        // NOTE: ADQUANTIZE linking to next node is handled separately above
-        if (i < (metadata->seq_length + post_op_offset - 1)) {
+        if (i < (metadata->seq_length - 1)) {
             (post_op_list + i)->next = (post_op_list + i + 1);
         }
     }

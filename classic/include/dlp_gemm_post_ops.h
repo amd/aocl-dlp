@@ -106,6 +106,14 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                                     md_t              m,
                                     md_t              n);
 
+/* ADQUANTIZE at post_op_list[0]; pass post_op_list+1 to
+ * translate_to_post_ops_list. */
+dlp_clsc_err_t
+dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
+                                      dlp_gemm_post_op* post_op_list,
+                                      void*             meta_arg,
+                                      md_t              m);
+
 dlp_clsc_err_t
 dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
                                    dlp_gemm_pre_op* pre_op_list,

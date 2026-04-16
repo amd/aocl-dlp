@@ -191,16 +191,6 @@ aocl_gemm_f32s8s32_impl(const char        order,
         goto err_hndl;
     }
 
-    // Add early returns for NULL pointers.
-    if (metadata == NULL || metadata->a_pre_quant == NULL
-        || metadata->a_post_quant == NULL) {
-        dlp_print_msg("One or more required parameters (metadata, a_pre_quant, "
-                      "a_post_quant) are NULL. Exiting..",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
-        goto err_hndl;
-    }
-
     dlp_trans_t dlp_transa;
     dlp_trans_t dlp_transb;
     dlp_param_map_netlib_to_dlp_trans(transa, &dlp_transa);
@@ -267,11 +257,17 @@ aocl_gemm_f32s8s32_impl(const char        order,
         mtag_b = PACK;
     }
 
-    // Translate user-provided post-op metadata to internal linked-list format.
-    // Post-ops includes dequantization of results.
+    // ADQUANTIZE first, then seq_vector ops via
+    // translate_to_post_ops_list(post_op_list+1).
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS + 1];
-    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
-        metadata, post_op_list, (void*)c, (void*)(&order), m, n);
+    dlp_clsc_err_t   err = dlp_gemm_translate_adquantize_post_op(
+        metadata, post_op_list, (void*)(&order), m);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+    err = dlp_gemm_translate_to_post_ops_list(metadata, post_op_list + 1,
+                                              (void*)c, (void*)(&order), m, n);
 
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
