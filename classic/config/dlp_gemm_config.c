@@ -289,6 +289,15 @@ _dlp_gemm_cntx_init_func_map()
 
         _DLP_GEMM_CNTX_UPD_FUNC_MAP_FOR_CONFIGURED_ARCH()
 #endif
+    } else if (dlp_cpuid_is_avx512_supported() == TRUE) {
+#ifdef DLP_KERNELS_ZEN4
+        DLP_GEMM_KERN_FUNC_MAP_AVX512
+        DLP_GEMM_PACKA_FUNC_MAP_AVX512
+        DLP_GEMM_PACKB_FUNC_MAP_AVX512
+        DLP_GEMM_PACKBMXP_FUNC_MAP_AVX512
+
+        _DLP_GEMM_CNTX_UPD_FUNC_MAP_FOR_CONFIGURED_ARCH()
+#endif
     } else if (dlp_cpuid_is_avx2fma3_supported() == TRUE) {
 #ifdef DLP_KERNELS_ZEN3
         DLP_GEMM_KERN_FUNC_MAP_AVX2
@@ -376,7 +385,15 @@ _dlp_gemm_cntx_init_blksz_map()
     // the blocksize for a particular version of zen id is generalized
     // for all machines that support the ISA supported by that particular
     // zen id.
-    if (dlp_cpuid_is_avx512vnni_supported() == TRUE) {
+    if (dlp_cpuid_is_similar_zen5_arch() == TRUE) {
+        DLP_GEMM_BLKSZ_MAP_ZEN5
+
+        // Fallback to zen3 blocksizes has the same logic for both
+        // zen5 and zen4.
+        if (global_dlp_gemmenable_arch == DLP_ARCH_ZEN3) {
+            DLP_GEMM_BLKSZ_UPD_MAP_ZEN4_TO_ZEN
+        }
+    } else if (dlp_cpuid_is_avx512_supported() == TRUE) {
         DLP_GEMM_BLKSZ_MAP_ZEN4
 
         if (global_dlp_gemmenable_arch == DLP_ARCH_ZEN3) {
