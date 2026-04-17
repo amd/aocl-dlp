@@ -78,7 +78,8 @@ struct GemmBenchConfig
         std::vector<std::unique_ptr<dlp::testing::framework::IOperationParam>>>
         post_op_params;
 
-    // Kernel quant config (IUalPlan::setAQuant / setWOQ), not addPostOp().
+    // Kernel quant config (IUalPlan::setAQuant / setWOQ / setSymQuant), not
+    // addPostOp().
     std::shared_ptr<AQuantParam>   a_quant_param;
     std::shared_ptr<WOQParam>      woq_param;
     std::shared_ptr<SymQuantParam> sym_quant_param;

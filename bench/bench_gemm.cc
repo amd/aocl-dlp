@@ -166,7 +166,7 @@ class OptimizedGemmBenchmark : public ConcreteUAL
         plan_ = this->createPlan();
         plan_->configureFrom(A_, B_, C_, acc_type_, alpha_, beta_);
 
-        // Add post-ops to the plan if present
+        // Match MicroTest::configurePlan(): fusion ops, then quant setters.
         if (config.has_post_ops && config.post_op_params) {
             for (const auto& p : *config.post_op_params) {
                 plan_->addPostOp(p->clone());

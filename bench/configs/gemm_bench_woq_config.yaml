@@ -1,0 +1,101 @@
+# GEMM benchmarking configuration for weight-only quantization (WOQ)
+# Covers both symmetric and asymmetric WOQ: bf16 activations multiplied by 4-bit
+# quantized weights, with optional fused post-ops where defined below.
+# ==============================================================================
+# Symmetric WOQ (bf16s4f32of32):
+#   - Weights: s4; dequant uses scale factors only (per-tensor or per-channel via
+#     scale_factor_len). No zero_point parameters.
+#
+# Asymmetric WOQ (bf16u4f32of32):
+#   - Weights: u4; dequant uses scale plus zero_point (per-tensor or per-channel
+#     via scale_factor_len / zero_point_len; zero_point_type s8 or bf16).
+#
+# Common: A=bf16, C=f32, acc=f32, row-major; per-tensor ("1") and per-channel
+# ("n") scale (and zero-point where applicable) combinations via cartesian=false
+# WOQ param lists.
+# ==============================================================================
+
+gemm_tests:
+  # ==========================================================================
+  # WOQ Symmetric - Performance testing
+  # ==========================================================================
+
+  # Test 1: Small matrices - Edge cases
+  - name: "bf16s4f32of32"
+    a_type: "bf16"
+    b_type: "s4"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Small dimensions to test fringe kernels
+    m: [1, 8, 16, 32]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 64
+    ldb: 64
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            scale_factor_len: ["1", "n"]
+            scale_factor_type: ["f32"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    product_type: "cartesian"
+
+  # ==========================================================================
+  # WOQ Asymmetric - Performance testing
+  # ==========================================================================
+
+  # Test 2: Medium matrices
+  - name: "bf16u4f32of32"
+    a_type: "bf16"
+    b_type: "u4"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Medium sizes for realistic workloads
+    m: [1, 8, 16, 32]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 64
+    ldb: 64
+    ldc: 64
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            scale_factor_len: ["1", "n"]
+            scale_factor_type: ["f32"]
+            zero_point_len: ["1", "n"]
+            zero_point_type: ["s8", "bf16"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    product_type: "cartesian"

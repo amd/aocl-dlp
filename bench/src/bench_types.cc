@@ -179,6 +179,15 @@ generateBenchmarkName(const GemmBenchConfig& config)
         name << ",sym_quant";
     }
 
+    // setAQuant / setWOQ (not in post_op_params; see
+    // MicroTest::getPostOpParams)
+    if (config.a_quant_param) {
+        name << "_AQuant";
+    }
+    if (config.woq_param) {
+        name << "_WOQ";
+    }
+
     // Add detailed post_ops information
     std::string postops_desc;
     if (config.has_post_ops && config.post_op_params) {

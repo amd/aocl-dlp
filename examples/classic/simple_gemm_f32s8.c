@@ -28,7 +28,8 @@
 
 /*
  * Example: F32×S8→F32 GEMM with on-the-fly quantization
- * Demonstrates symmetric (per-tensor) and asymmetric (per-row) quantization
+ * Demonstrates symmetric (per-tensor) and asymmetric (per-token, m length)
+ * quantization
  *
  * This example shows how to use the aocl_gemm_f32s8s32of32 API where:
  *   - Matrix A is in float (F32) format, quantized on-the-fly to S8
@@ -104,15 +105,15 @@ print_s8_matrix_section(const char* name,
 }
 
 void
-compute_per_row_quant_params(float* matrix,
-                             md_t   rows,
-                             md_t   cols,
-                             md_t   ld,
-                             float* a_pre_quant_sf,
-                             float* a_post_quant_sf,
-                             float* zero_points)
+compute_per_token_quant_params(float* matrix,
+                               md_t   rows,
+                               md_t   cols,
+                               md_t   ld,
+                               float* a_pre_quant_sf,
+                               float* a_post_quant_sf,
+                               float* zero_points)
 {
-    printf("Computing per-row quantization parameters:\n");
+    printf("Computing per-token quantization parameters:\n");
 
     for (iter_t i = 0; i < rows; i++) {
         float min_val = INFINITY, max_val = -INFINITY;
@@ -221,9 +222,10 @@ main()
     print_f32_matrix_section("Result Matrix C", c, m, n, ldc, 3, 3);
 
     // =======================================================================
-    // Example 2: Asymmetric Quantization (Per-Row)
+    // Example 2: Asymmetric Quantization (Per-Token, m length)
     // =======================================================================
-    printf("\n--- Example 2: Asymmetric Quantization (Per-Row) ---\n\n");
+    printf("\n--- Example 2: Asymmetric Quantization (Per-Token, m length) "
+           "---\n\n");
 
     memset(c, 0, ldc * m * sizeof(float));
 
@@ -236,8 +238,8 @@ main()
         goto cleanup;
     }
 
-    compute_per_row_quant_params(a, m, k, lda, a_pre_quant_sf_row,
-                                 a_post_quant_sf_row, zero_points);
+    compute_per_token_quant_params(a, m, k, lda, a_pre_quant_sf_row,
+                                   a_post_quant_sf_row, zero_points);
 
     dlp_sf_t a_pre_quant_scl_row  = { .scale_factor      = a_pre_quant_sf_row,
                                       .scale_factor_len  = m,
