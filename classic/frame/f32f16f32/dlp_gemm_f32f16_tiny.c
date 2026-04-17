@@ -231,8 +231,13 @@ DLP_GEMM_TINY(float, float16, float, f32f16f32of32)
         post_ops_attr.buf_downscale = NULL;
     }
 
-    /* k=1 fast path: single JIT call for the full m x n tile */
-    if ((k == 1) && (cs_b == 1)
+    /*
+     * k=1 fast path: single JIT call when the tile fits in one NR block.
+     * The F32FP16 executeKernel only processes one NR-block per call,
+     * so this is only safe when n <= NR. For n > NR, fall through to
+     * the JR loop below which iterates over NR-wide tiles.
+     */
+    if ((k == 1) && (n <= NR) && (cs_b == 1)
         && (lcntx->dlp_kernel_hndl.kernel_base != NULL)) {
         dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, n, k, (float*)a, rs_a,
                            cs_a, MR * rs_a, (float16*)b, rs_b, cs_b, 0, 0, c,
