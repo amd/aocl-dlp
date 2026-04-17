@@ -58,6 +58,7 @@ set(EXAMPLE_SOURCES
     matrix_reorder.c
     batch_gemm.c
     quantization.c
+    simple_gemm_s8_sym_quant.c
     post_ops_combinations.c
     eltwise_ops.c
     version.c

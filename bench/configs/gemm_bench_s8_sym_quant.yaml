@@ -1,0 +1,78 @@
+gemm_tests:
+  # ==========================================================================
+  # Symmetric Quantization - Performance testing
+  # ==========================================================================
+
+  # Test 1: Small matrices - f32 output
+  - name: "s8s8s32of32_sym_quant"
+    a_type: "s8"
+    b_type: "s8"
+    c_type: "f32"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Small dimensions to test fringe kernels
+    m: [1, 8, 16, 32]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 64
+    ldb: 64
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "SymQuant"
+          params:
+            group_size: ["0", "8", "16", "32", "64"]
+            scale_factor_type: ["f32"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+    tolerances:
+      relative: 200.0
+      absolute: 50.0
+    product_type: "cartesian"
+
+  # Test 2: Small matrices - bf16 output
+  - name: "s8s8s32obf16_sym_quant"
+    a_type: "s8"
+    b_type: "s8"
+    c_type: "bf16"
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Small dimensions to test fringe kernels
+    m: [1, 8, 16, 32]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [1.0]
+    beta: [0.0]
+    lda: 64
+    ldb: 64
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "SymQuant"
+          params:
+            group_size: ["0", "8", "16", "32", "64"]
+            scale_factor_type: ["f32"]
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+          params: {}
+    tolerances:
+      relative: 200.0
+      absolute: 50.0
+    product_type: "cartesian"

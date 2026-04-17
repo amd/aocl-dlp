@@ -41,6 +41,9 @@ namespace dlp { namespace testing { namespace utils {
 
 namespace dlp { namespace testing { namespace framework {
     class IOperationParam;
+    class AQuantParam;
+    class WOQParam;
+    class SymQuantParam;
 }}} // namespace dlp::testing::framework
 
 namespace dlp::benchmarking {
@@ -74,6 +77,11 @@ struct GemmBenchConfig
     std::shared_ptr<
         std::vector<std::unique_ptr<dlp::testing::framework::IOperationParam>>>
         post_op_params;
+
+    // Kernel quant config (IUalPlan::setAQuant / setWOQ), not addPostOp().
+    std::shared_ptr<AQuantParam>   a_quant_param;
+    std::shared_ptr<WOQParam>      woq_param;
+    std::shared_ptr<SymQuantParam> sym_quant_param;
 
     // Default constructor
     GemmBenchConfig()

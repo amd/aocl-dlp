@@ -172,6 +172,17 @@ class OptimizedGemmBenchmark : public ConcreteUAL
                 plan_->addPostOp(p->clone());
             }
         }
+        if (config.a_quant_param) {
+            plan_->setAQuant(
+                std::make_unique<AQuantParam>(*config.a_quant_param));
+        }
+        if (config.woq_param) {
+            plan_->setWOQ(std::make_unique<WOQParam>(*config.woq_param));
+        }
+        if (config.sym_quant_param) {
+            plan_->setSymQuant(
+                std::make_unique<SymQuantParam>(*config.sym_quant_param));
+        }
 
         // Pre-build all backend state
         plan_->prepare();

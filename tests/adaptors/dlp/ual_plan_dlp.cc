@@ -168,6 +168,18 @@ DlpUalPlan::cleanupMetadata()
             delete m_metadata->pre_ops;
         }
 
+        // Clean up manually allocated memory for s8s8 sym group quantization
+        if (m_metadata->post_op_grp) {
+            if (m_metadata->post_op_grp->a_scl) {
+                delete m_metadata->post_op_grp->a_scl;
+            }
+            if (m_metadata->post_op_grp->b_scl) {
+                delete m_metadata->post_op_grp->b_scl;
+            }
+            delete m_metadata->post_op_grp;
+            m_metadata->post_op_grp = nullptr;
+        }
+
         // Clean up all allocated arrays
         delete[] m_metadata->eltwise;
         delete[] m_metadata->scale;
@@ -273,6 +285,10 @@ DlpUalPlan::prepare()
 
     if (m_woq) {
         convertWOQOperations();
+    }
+
+    if (m_sym_quant) {
+        convertSymQuantOperations();
     }
 
     // Compute type code for dispatch
@@ -422,14 +438,25 @@ DlpUalPlan::prepare()
 
         case encodeTypes<MatrixType::s8, MatrixType::s8, MatrixType::f32,
                          MatrixType::s32>():
-            m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
-                             md_t ldc) {
-                aocl_gemm_s8s8s32of32(
-                    layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
-                    reinterpret_cast<int8_t*>(a), lda, memA,
-                    reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
-                    reinterpret_cast<float*>(c), ldc, meta);
-            };
+            if (m_sym_quant) {
+                m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                                 md_t ldc) {
+                    aocl_gemm_s8s8s32of32_sym_quant(
+                        layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
+                        reinterpret_cast<int8_t*>(a), lda, memA,
+                        reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
+                        reinterpret_cast<float*>(c), ldc, meta);
+                };
+            } else {
+                m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                                 md_t ldc) {
+                    aocl_gemm_s8s8s32of32(
+                        layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
+                        reinterpret_cast<int8_t*>(a), lda, memA,
+                        reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
+                        reinterpret_cast<float*>(c), ldc, meta);
+                };
+            }
             break;
 
         case encodeTypes<MatrixType::s8, MatrixType::s8, MatrixType::s8,
@@ -458,14 +485,25 @@ DlpUalPlan::prepare()
 
         case encodeTypes<MatrixType::s8, MatrixType::s8, MatrixType::bf16,
                          MatrixType::s32>():
-            m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
-                             md_t ldc) {
-                aocl_gemm_s8s8s32obf16(
-                    layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
-                    reinterpret_cast<int8_t*>(a), lda, memA,
-                    reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
-                    reinterpret_cast<bfloat16*>(c), ldc, meta);
-            };
+            if (m_sym_quant) {
+                m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                                 md_t ldc) {
+                    aocl_gemm_s8s8s32obf16_sym_quant(
+                        layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
+                        reinterpret_cast<int8_t*>(a), lda, memA,
+                        reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
+                        reinterpret_cast<bfloat16*>(c), ldc, meta);
+                };
+            } else {
+                m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                                 md_t ldc) {
+                    aocl_gemm_s8s8s32obf16(
+                        layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
+                        reinterpret_cast<int8_t*>(a), lda, memA,
+                        reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
+                        reinterpret_cast<bfloat16*>(c), ldc, meta);
+                };
+            }
             break;
 
         case encodeTypes<MatrixType::bf16, MatrixType::s8, MatrixType::bf16,
@@ -1109,6 +1147,81 @@ DlpUalPlan::convertB_QuantOperations()
             getStorageType(param.getB_PostOpZeroPoint()->getMatrixType());
         m_metadata->b_post_quant->symmetric = false;
     }
+}
+
+void
+DlpUalPlan::convertSymQuantOperations()
+{
+    if (!m_sym_quant)
+        return;
+
+    const auto& param = *m_sym_quant;
+
+    // SymQuant uses post_op_grp (dlp_group_post_op), not a_pre_quant /
+    // a_post_quant (dlp_quant_op); same allocate / memset / assign shape as
+    // convertA_QuantOperations.
+
+    if (!param.hasAScale() || !param.hasBScale()) {
+        throw std::runtime_error("SymQuant: missing A or B scale matrix");
+    }
+
+    // Ensure the grouped post-op structure is allocated and zeroed
+    if (!m_metadata->post_op_grp) {
+        m_metadata->post_op_grp = new dlp_group_post_op;
+        std::memset(m_metadata->post_op_grp, 0, sizeof(dlp_group_post_op));
+    }
+    dlp_group_post_op* grp = m_metadata->post_op_grp;
+    md_t               gs  = param.getGroupSize();
+    // dlp_gemm_translate_to_group_postops_list rejects group_size > k; clamp so
+    // metadata matches the tail group implied by scale layout (same as ref).
+    if (gs != 0 && gs > m_k) {
+        gs = m_k;
+    }
+    grp->group_size = gs;
+    grp->seq_length = 1;
+
+    const Matrix* a_sf = param.getAScale();
+    const Matrix* b_sf = param.getBScale();
+
+    // A scale assignment
+    if (a_sf->getRows() != m_m) {
+        throw std::runtime_error(
+            "SymQuant: A scale row count must match GEMM m");
+    }
+    md_t ng     = a_sf->getCols();
+    md_t gs_eff = param.getGroupSize();
+    if (gs_eff == 0) {
+        gs_eff = m_k;
+    }
+    md_t ng_expect = (m_k + gs_eff - 1) / gs_eff;
+    if (ng != ng_expect) {
+        throw std::runtime_error(
+            "SymQuant: num_groups does not match k and group_size");
+    }
+    if (!grp->a_scl) {
+        grp->a_scl = new dlp_sf_t;
+    }
+    auto* a_scl              = grp->a_scl;
+    a_scl->scale_factor      = convertMatrixToPtr(*a_sf);
+    a_scl->scale_factor_len  = m_m * ng;
+    a_scl->scale_factor_type = getStorageType(a_sf->getMatrixType());
+
+    // B scale assignment
+    if (b_sf->getCols() != m_n) {
+        throw std::runtime_error(
+            "SymQuant: B scale column count must match GEMM n");
+    }
+    if (b_sf->getRows() != ng) {
+        throw std::runtime_error(
+            "SymQuant: A scale column count must equal B scale row count");
+    }
+    if (!grp->b_scl) {
+        grp->b_scl = new dlp_sf_t;
+    }
+    auto* b_scl              = grp->b_scl;
+    b_scl->scale_factor      = convertMatrixToPtr(*b_sf);
+    b_scl->scale_factor_len  = ng * m_n;
+    b_scl->scale_factor_type = getStorageType(b_sf->getMatrixType());
 }
 
 void

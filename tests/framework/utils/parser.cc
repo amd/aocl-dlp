@@ -48,6 +48,7 @@ using dlp::testing::framework::postops::createRelu;
 using dlp::testing::framework::postops::createScale;
 using dlp::testing::framework::postops::createSigmoid;
 using dlp::testing::framework::postops::createSwish;
+using dlp::testing::framework::postops::createSymQuant;
 using dlp::testing::framework::postops::createTanh;
 using dlp::testing::framework::postops::createWOQ;
 
@@ -194,6 +195,34 @@ MicroTest::getWOQParam() const
     return nullptr;
 }
 
+std::unique_ptr<SymQuantParam>
+MicroTest::getSymQuantParam() const
+{
+    if (!m_has_postops) {
+        return nullptr;
+    }
+
+    auto        combination = m_postops_iterator->getCurrentCombination();
+    const auto& operations  = m_postops_iterator->getOperations();
+
+    for (size_t op_index : combination) {
+        const auto& op_config = operations[op_index];
+
+        const auto& param_indices =
+            m_postops_iterator->getParameterIndices(op_index);
+
+        auto param = createOperationParam(op_config, param_indices);
+
+        if (param->getType() == OperationType::SymQuant) {
+            auto cloned = param->clone();
+            return std::unique_ptr<SymQuantParam>(
+                static_cast<SymQuantParam*>(cloned.release()));
+        }
+    }
+
+    return nullptr;
+}
+
 void
 MicroTest::configurePlan(IUalPlan& plan) const
 {
@@ -213,6 +242,12 @@ MicroTest::configurePlan(IUalPlan& plan) const
     auto woq = getWOQParam();
     if (woq) {
         plan.setWOQ(std::move(woq));
+    }
+
+    // Set SymQuant if present
+    auto sym_quant = getSymQuantParam();
+    if (sym_quant) {
+        plan.setSymQuant(std::move(sym_quant));
     }
 }
 
@@ -1035,6 +1070,119 @@ MicroTest::createOperationParam(
             // Symmetric quantization: no zero-point
             return createWOQ().setB_ScaleFactor(sf_matrix).build();
         }
+    } else if (config.type == "SymQuant") {
+        // SymQuant: Parse group_size (K-axis grouping; 0 = full-K as one group)
+        std::string gs_str = "32";
+        auto        gs_it  = config.params.find("group_size");
+        if (gs_it != config.params.end() && !gs_it->second.empty()) {
+            auto   idx_it = param_indices.find("group_size");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, gs_it->second.size() - 1);
+            gs_str     = std::any_cast<std::string>(gs_it->second[idx]);
+        }
+        md_t gs = static_cast<md_t>(std::stoul(gs_str));
+
+        // Parse sym_quant_sf_len (how random A/B scale matrices are filled;
+        // mirrors a_quant_sf_len: "full" = dense m×ng / ng×n, "1" = constant
+        // fill with reciprocal pair like pre/post scales, "m" = constant per A
+        // row)
+        std::string sf_len    = "full";
+        auto        sf_len_it = config.params.find("sym_quant_sf_len");
+        if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
+            auto   idx_it = param_indices.find("sym_quant_sf_len");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, sf_len_it->second.size() - 1);
+            sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
+        }
+
+        // Parse scale_factor_type
+        MatrixType sf_type    = MatrixType::f32;
+        auto       sf_type_it = config.params.find("scale_factor_type");
+        if (sf_type_it != config.params.end() && !sf_type_it->second.empty()) {
+            auto   idx_it = param_indices.find("scale_factor_type");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, sf_type_it->second.size() - 1);
+            auto type_str = std::any_cast<std::string>(sf_type_it->second[idx]);
+            sf_type       = stringToMatrixType(type_str);
+        }
+
+        md_t m = getM(), n = getN(), k = getK();
+        if (k <= 0) {
+            throw std::runtime_error("SymQuant requires positive K");
+        }
+
+        md_t gs_eff = (gs == 0) ? k : gs;
+        if (gs_eff <= 0) {
+            throw std::runtime_error("SymQuant: effective group_size invalid");
+        }
+        md_t ng = (k + gs_eff - 1) / gs_eff;
+
+        // Use fixed seed for reproducible random values across DLP and REF
+        std::mt19937                          gen(RANDOM_SEED);
+        std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
+
+        Matrix a_mat;
+        Matrix b_mat;
+
+        if (sf_len == "full") {
+            std::vector<std::vector<float>> a_rows(
+                static_cast<size_t>(m),
+                std::vector<float>(static_cast<size_t>(ng)));
+            std::vector<std::vector<float>> b_rows(
+                static_cast<size_t>(ng),
+                std::vector<float>(static_cast<size_t>(n)));
+            for (md_t i = 0; i < m; ++i) {
+                for (md_t g = 0; g < ng; ++g) {
+                    a_rows[static_cast<size_t>(i)][static_cast<size_t>(g)] =
+                        dist(gen);
+                }
+            }
+            for (md_t g = 0; g < ng; ++g) {
+                for (md_t j = 0; j < n; ++j) {
+                    b_rows[static_cast<size_t>(g)][static_cast<size_t>(j)] =
+                        dist(gen);
+                }
+            }
+            a_mat = Matrix::fromData(a_rows, sf_type);
+            b_mat = Matrix::fromData(b_rows, sf_type);
+        } else if (sf_len == "1") {
+            float sf_value = dist(gen);
+            a_mat          = Matrix(m, ng, sf_type);
+            b_mat          = Matrix(ng, n, sf_type);
+            a_mat.fillValue(static_cast<double>(sf_value));
+            b_mat.fillValue(static_cast<double>(1.0f / sf_value));
+        } else if (sf_len == "m") {
+            std::vector<std::vector<float>> a_rows(
+                static_cast<size_t>(m),
+                std::vector<float>(static_cast<size_t>(ng)));
+            std::vector<std::vector<float>> b_rows(
+                static_cast<size_t>(ng),
+                std::vector<float>(static_cast<size_t>(n)));
+            for (md_t i = 0; i < m; ++i) {
+                float v = dist(gen);
+                for (md_t g = 0; g < ng; ++g) {
+                    a_rows[static_cast<size_t>(i)][static_cast<size_t>(g)] = v;
+                }
+            }
+            for (md_t g = 0; g < ng; ++g) {
+                float w = dist(gen);
+                for (md_t j = 0; j < n; ++j) {
+                    b_rows[static_cast<size_t>(g)][static_cast<size_t>(j)] = w;
+                }
+            }
+            a_mat = Matrix::fromData(a_rows, sf_type);
+            b_mat = Matrix::fromData(b_rows, sf_type);
+        } else {
+            throw std::runtime_error(
+                "SymQuant: unknown sym_quant_sf_len (use full, 1, or m): "
+                + sf_len);
+        }
+
+        return createSymQuant()
+            .setGroupSize(gs)
+            .setAScale(a_mat)
+            .setBScale(b_mat)
+            .build();
     }
     throw std::runtime_error("Unknown operation type: " + config.type);
 }

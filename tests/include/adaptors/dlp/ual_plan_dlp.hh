@@ -111,6 +111,7 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
     void convertA_QuantOperations();
     void convertB_QuantOperations();
     void convertWOQOperations();
+    void convertSymQuantOperations();
 
     // Helpers
     void*                    convertMatrixToPtr(const Matrix& matrix);

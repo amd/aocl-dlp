@@ -35,6 +35,7 @@ set(EXAMPLE_SOURCES
     batch_gemm.c
     quantization.c
     simple_gemm_bf16s8.c
+    simple_gemm_s8_sym_quant.c
     post_ops_combinations.c
     eltwise_ops.c
     version.c

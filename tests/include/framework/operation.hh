@@ -49,6 +49,8 @@ enum class OperationType : uint8_t
     A_Quant     = 5,
     WOQ         = 6, // Weight-Only Quantization for bf16s4
     B_Quant     = 7, // B matrix quantization (b_pre_quant / b_post_quant)
+    SymQuant = 8, // Grouped symmetric scales for s8s8s32o<f32/bf16>_sym_quant
+                  // (post_op_grp)
 };
 
 /**
@@ -58,7 +60,7 @@ inline bool
 isPreOp(OperationType type)
 {
     return type == OperationType::A_Quant || type == OperationType::B_Quant
-           || type == OperationType::WOQ;
+           || type == OperationType::WOQ || type == OperationType::SymQuant;
 }
 
 /**
@@ -387,6 +389,52 @@ class BQuantParam : public IOperationParam
     bool hasB_PostOpScaleFactor() const { return m_b_post_op_sf != nullptr; }
     bool hasB_PreOpZeroPoint() const { return m_b_pre_op_zp != nullptr; }
     bool hasB_PostOpZeroPoint() const { return m_b_post_op_zp != nullptr; }
+};
+
+class SymQuantParam : public IOperationParam
+{
+  private:
+    md_t                    m_group_size = 0;
+    std::unique_ptr<Matrix> m_a_scale;
+    std::unique_ptr<Matrix> m_b_scale;
+
+  public:
+    SymQuantParam() = default;
+
+    SymQuantParam(const SymQuantParam& other)
+        : m_group_size(other.m_group_size)
+    {
+        if (other.m_a_scale) {
+            m_a_scale = std::make_unique<Matrix>(*other.m_a_scale);
+        }
+        if (other.m_b_scale) {
+            m_b_scale = std::make_unique<Matrix>(*other.m_b_scale);
+        }
+    }
+
+    OperationType getType() const override { return OperationType::SymQuant; }
+
+    std::unique_ptr<IOperationParam> clone() const override
+    {
+        return std::make_unique<SymQuantParam>(*this);
+    }
+
+    void setGroupSize(md_t groupSize) { m_group_size = groupSize; }
+    void setAScale(const Matrix& aScale)
+    {
+        m_a_scale = std::make_unique<Matrix>(aScale);
+    }
+    void setBScale(const Matrix& bScale)
+    {
+        m_b_scale = std::make_unique<Matrix>(bScale);
+    }
+
+    md_t          getGroupSize() const { return m_group_size; }
+    const Matrix* getAScale() const { return m_a_scale.get(); }
+    const Matrix* getBScale() const { return m_b_scale.get(); }
+    bool          hasAScale() const { return m_a_scale != nullptr; }
+    bool          hasBScale() const { return m_b_scale != nullptr; }
+    bool          hasGroupSize() const { return m_group_size > 0; }
 };
 
 /**
@@ -957,6 +1005,48 @@ class WOQBuilder
 };
 
 /**
+ * @class SymQuantBuilder
+ * @brief Builder for grouped symmetric quantization scales
+ * (s8s8s32o<f32/bf16>_sym_quant)
+ */
+class SymQuantBuilder
+{
+  private:
+    md_t                    m_group_size = 0;
+    std::unique_ptr<Matrix> m_a_scale;
+    std::unique_ptr<Matrix> m_b_scale;
+
+  public:
+    SymQuantBuilder& setGroupSize(md_t gs)
+    {
+        m_group_size = gs;
+        return *this;
+    }
+    SymQuantBuilder& setAScale(const Matrix& a_sf)
+    {
+        m_a_scale = std::make_unique<Matrix>(a_sf);
+        return *this;
+    }
+    SymQuantBuilder& setBScale(const Matrix& b_sf)
+    {
+        m_b_scale = std::make_unique<Matrix>(b_sf);
+        return *this;
+    }
+    std::unique_ptr<IOperationParam> build()
+    {
+        if (!m_a_scale || !m_b_scale) {
+            throw std::runtime_error(
+                "A and B scale matrices are required for SymQuant");
+        }
+        auto param = std::make_unique<SymQuantParam>();
+        param->setGroupSize(m_group_size);
+        param->setAScale(*m_a_scale);
+        param->setBScale(*m_b_scale);
+        return param;
+    }
+};
+
+/**
  * @class BiasBuilder
  * @brief Type-safe builder for Bias operations
  */
@@ -1143,6 +1233,10 @@ namespace postops {
     inline WOQBuilder createWOQ()
     {
         return WOQBuilder{};
+    }
+    inline SymQuantBuilder createSymQuant()
+    {
+        return SymQuantBuilder{};
     }
 
 } // namespace postops

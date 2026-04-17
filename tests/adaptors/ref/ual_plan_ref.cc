@@ -254,6 +254,82 @@ RefUalPlan::execute()
         return UALError::UAL_SUCCESS;
     }
 
+    // Grouped symmetric quantization: s8×s8→f32 or s8×s8→bf16 (same pattern as
+    // AQuant: f32 intermediate, post-ops, then copy/convert into C).
+    bool isS8S8SymQuant =
+        (aType == MatrixType::s8 && bType == MatrixType::s8 && m_sym_quant);
+
+    if (isS8S8SymQuant) {
+        if (!ualRef.checkValidGemmParams(A, B, C, false)) {
+            return UALError::UAL_FAILURE;
+        }
+
+        Matrix a_sf, b_sf;
+        if (m_sym_quant->hasAScale()) {
+            a_sf = *m_sym_quant->getAScale();
+        }
+        if (m_sym_quant->hasBScale()) {
+            b_sf = *m_sym_quant->getBScale();
+        }
+
+        void* a_sf_data = a_sf.getData();
+        void* b_sf_data = b_sf.getData();
+        if (!a_sf_data || !b_sf_data) {
+            return UALError::UAL_FAILURE;
+        }
+
+        md_t ng = a_sf.getCols();
+        if (b_sf.getRows() != ng || a_sf.getRows() != A.getEffectiveRows()
+            || b_sf.getCols() != B.getEffectiveCols()) {
+            return UALError::UAL_FAILURE;
+        }
+
+        if (a_sf.getMatrixType() != b_sf.getMatrixType()) {
+            return UALError::UAL_FAILURE;
+        }
+
+        md_t gs_yaml   = m_sym_quant->getGroupSize();
+        md_t k_eff     = A.getEffectiveCols();
+        md_t gs_eff    = (gs_yaml == 0) ? k_eff : gs_yaml;
+        md_t ng_expect = (k_eff + gs_eff - 1) / gs_eff;
+        if (ng != ng_expect) {
+            return UALError::UAL_FAILURE;
+        }
+
+        char    layout = (A.getLayout() == MatrixLayout::ROW_MAJOR) ? 'r' : 'c';
+        char    transA = A.isTransposed() ? 't' : 'n';
+        char    transB = B.isTransposed() ? 't' : 'n';
+        int32_t alpha_s32 = static_cast<int32_t>(m_alpha);
+        int32_t beta_s32  = static_cast<int32_t>(m_beta);
+
+        Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
+                         MatrixType::f32, C.getLayout());
+        if (beta_s32 != 0) {
+            dlp::testing::utils::copyMatrixTo<float>(
+                C, reinterpret_cast<float*>(tempC_f32.getData()),
+                tempC_f32.getLeadingDimension(), tempC_f32.getLayout());
+        } else {
+            std::memset(tempC_f32.getData(), 0, tempC_f32.getDataSizeBytes());
+        }
+
+        dlp::testing::classic::ref::aocl_gemm_s8s8s32of32_sym_quant_ref(
+            layout, transA, transB, A.getEffectiveRows(), B.getEffectiveCols(),
+            A.getEffectiveCols(), alpha_s32,
+            reinterpret_cast<const int8_t*>(A.getMatrixData().getMatrixPtr()),
+            static_cast<int>(A.getLeadingDimension()),
+            reinterpret_cast<const int8_t*>(B.getMatrixData().getMatrixPtr()),
+            static_cast<int>(B.getLeadingDimension()), beta_s32,
+            reinterpret_cast<float*>(tempC_f32.getData()),
+            static_cast<int>(tempC_f32.getLeadingDimension()), gs_yaml,
+            a_sf.getData(), b_sf.getData(), ng, a_sf.getMatrixType());
+
+        applyPostOps(tempC_f32);
+        dlp::testing::utils::copyToMatrix<float>(
+            reinterpret_cast<const float*>(tempC_f32.getData()),
+            tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
+        return UALError::UAL_SUCCESS;
+    }
+
     // Standard path: GEMM with optional f32 intermediate for post-ops
     bool isIntegerGemm =
         ((aType == MatrixType::u8 && bType == MatrixType::s8)

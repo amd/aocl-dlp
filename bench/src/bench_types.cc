@@ -130,6 +130,9 @@ extractPostOpsDescription(
             case OperationType::WOQ:
                 op_names.push_back("WOQ");
                 break;
+            case OperationType::SymQuant:
+                op_names.push_back("SymQuant");
+                break;
             default:
                 op_names.push_back("UnknownOp");
                 break;
@@ -171,6 +174,10 @@ generateBenchmarkName(const GemmBenchConfig& config)
     std::string mtagB = config.packB ? "p" : (config.reorderB ? "r" : "n");
     name << ",mtagA:" << mtagA;
     name << ",mtagB:" << mtagB;
+
+    if (config.sym_quant_param) {
+        name << ",sym_quant";
+    }
 
     // Add detailed post_ops information
     std::string postops_desc;
@@ -286,6 +293,18 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                 if (post_op_params_vec && !post_op_params_vec->empty()) {
                     config.has_post_ops   = true;
                     config.post_op_params = post_op_params_vec;
+                }
+
+                // Same as MicroTest::configurePlan(): explicit quant setters.
+                if (auto aq = microTest.getAQuantParam()) {
+                    config.a_quant_param = std::make_shared<AQuantParam>(*aq);
+                }
+                if (auto wq = microTest.getWOQParam()) {
+                    config.woq_param = std::make_shared<WOQParam>(*wq);
+                }
+                if (auto sq = microTest.getSymQuantParam()) {
+                    config.sym_quant_param =
+                        std::make_shared<SymQuantParam>(*sq);
                 }
 
                 // Generate name after populating config

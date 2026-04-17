@@ -845,6 +845,12 @@ class MicroTest
     std::unique_ptr<WOQParam> getWOQParam() const;
 
     /**
+     * @brief Get SymQuant (grouped s8×s8 symmetric scale) parameter if present
+     * @return SymQuantParam or nullptr
+     */
+    std::unique_ptr<SymQuantParam> getSymQuantParam() const;
+
+    /**
      * @brief Configure a plan with all parsed operations
      * @param plan The plan to configure with post-ops and quant params
      */
