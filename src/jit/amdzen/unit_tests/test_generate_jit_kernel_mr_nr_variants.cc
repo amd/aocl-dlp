@@ -79,7 +79,8 @@ class JitMrNrVariantsTest : public test_jit_utils::JitGeneratorTestBase
                 mrNrCombinations = { { 1, 240 }, { 1, 224 }, { 1, 208 },
                                      { 1, 192 }, { 1, 176 }, { 2, 160 },
                                      { 2, 144 }, { 2, 128 }, { 4, 96 },
-                                     { 6, 64 },  { 9, 48 },  { 14, 32 } };
+                                     { 6, 64 },  { 9, 48 },  { 14, 32 },
+                                     { 16, 16 } };
             } else if (kType == kernelInstrType::avx512_ymm_32_reg) {
                 mrNrCombinations = { { 1, 120 }, { 1, 112 }, { 1, 104 },
                                      { 1, 96 },  { 1, 88 },  { 2, 80 },
