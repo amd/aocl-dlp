@@ -246,7 +246,8 @@ jitGEMMS8<KType>::loadBSumValues()
 
     // Handle masked b_sum loads
     if (bMaskReg > 0) {
-        vmovdqu8(RegType(bRegIdx + bFullReg), ptr[regTmp1]);
+        vmovdqu8(RegType(bRegIdx + bFullReg),
+                 ptr[regTmp1 + bFullReg * RegBytes]);
     }
 
     return dlp::jit::jitGeneratorError::success;
