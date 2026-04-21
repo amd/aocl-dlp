@@ -1515,8 +1515,9 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
         params->k_left = params->k % numElemsPerReg;
 
         params->mmask_avx512 = 0xFFFF >> (MR - (params->m_left));
-        params->kmask_bf16_avx512 =
-            0xFFFFFFFF >> (numElemsPerReg - (params->k_left) % numElemsPerReg);
+        params->kmask_bf16_avx512 = static_cast<uint32_t>(
+            0xFFFFFFFFULL
+            >> (numElemsPerReg - (params->k_left) % numElemsPerReg));
 
         int is_m_loop = ((params->m) >= MR);
         // when rsC = 1, we logically have a col-major layout , where beta
