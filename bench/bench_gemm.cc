@@ -336,9 +336,14 @@ checkValidGemmParams(const GemmBenchConfig& config)
  *
  * KEY: Create ONE fixture instance per benchmark configuration,
  * stored in a vector to keep them alive for the entire benchmark run.
+ *
+ * @param configs Vector of benchmark configurations to register
+ * @param iterations Number of iterations to run (-1 for default MinTime
+ * behavior)
  */
 void
-registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs)
+registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
+                            int64_t                             iterations = -1)
 {
     // Store fixture instances to keep them alive
     // This is critical: fixtures are created ONCE and reused
@@ -353,6 +358,15 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs)
 
     std::cerr << "================================================"
               << std::endl;
+    if (iterations > 0) {
+        std::cerr << "Benchmark mode: Fixed iterations (" << iterations << ")"
+                  << std::endl;
+    } else {
+        std::cerr << "Benchmark mode: MinTime (3.0 seconds)" << std::endl;
+    }
+    std::cerr << "================================================"
+              << std::endl;
+
     for (const auto& config : configs) {
 
         if (!checkValidGemmParams(config)) {
@@ -370,11 +384,21 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs)
         fixtures.push_back(std::move(fixture));
 
         // Register benchmark with lambda that uses existing fixture
-        benchmark::RegisterBenchmark(
-            config.name.c_str(),
-            [fixture_ptr](benchmark::State& st) { fixture_ptr->run(st); })
-            ->Unit(benchmark::kMillisecond)
-            ->MinTime(3.0);
+        // Use Iterations() if specified, otherwise use MinTime()
+        if (iterations > 0) {
+            benchmark::RegisterBenchmark(
+                config.name.c_str(),
+                [fixture_ptr](benchmark::State& st) { fixture_ptr->run(st); })
+                ->Unit(benchmark::kMillisecond)
+                ->Iterations(
+                    static_cast<benchmark::IterationCount>(iterations));
+        } else {
+            benchmark::RegisterBenchmark(
+                config.name.c_str(),
+                [fixture_ptr](benchmark::State& st) { fixture_ptr->run(st); })
+                ->Unit(benchmark::kMillisecond)
+                ->MinTime(3.0);
+        }
     }
     std::cerr << "================================================"
               << std::endl;
@@ -451,8 +475,11 @@ main(int argc, char** argv)
     std::cerr << "OpenMP: Disabled" << std::endl;
 #endif
 
+    // Get iteration count from command line (-n flag)
+    int64_t iterations = parser.getIterations();
+
     // Register all benchmarks
-    registerOptimizedBenchmarks(configs);
+    registerOptimizedBenchmarks(configs, iterations);
 
     // Initialize and run Google Benchmark
     benchmark::Initialize(&argc, argv);

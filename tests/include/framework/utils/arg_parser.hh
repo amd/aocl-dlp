@@ -190,6 +190,8 @@ class ArgParser
         std::cout << "Options:\n";
         std::cout
             << "  -f, --file <path>       Specify YAML configuration file\n";
+        std::cout << "  -n <count>              Number of benchmark iterations "
+                     "(overrides MinTime)\n";
         std::cout << "  --ual-test <type>       UAL implementation to test "
                      "(DLP|REF|MKL|ONEDNN)\n";
         std::cout << "  --ual-ref <type>        UAL reference implementation "
@@ -206,8 +208,12 @@ class ArgParser
         std::cout << "  Level 1 (-v):          Verbose comparison results\n";
         std::cout << "  Level 2 (-vv):         + Print partial matrices\n";
         std::cout << "  Level 3 (-vvv):        + Print full matrices\n";
+        std::cout << "\nBenchmark Iteration Control:\n";
+        std::cout << "  By default, benchmarks run for MinTime(3.0) seconds.\n";
+        std::cout << "  Use -n to specify exact iteration count instead.\n";
         std::cout << "\nExample:\n";
         std::cout << "  " << program_name << " -f my_config.yaml\n";
+        std::cout << "  " << program_name << " -f my_config.yaml -n 1000\n";
         std::cout << "  " << program_name << " --ual-test DLP --ual-ref REF\n";
         std::cout
             << "  " << program_name
@@ -311,6 +317,20 @@ class ArgParser
     }
 
     /**
+     * @brief Get number of iterations for benchmarking
+     * @return Number of iterations if specified, -1 otherwise (use default
+     * MinTime)
+     *
+     * When the -n flag is provided, the benchmark will run exactly that many
+     * iterations instead of using the default MinTime(3.0) approach.
+     *
+     * Examples:
+     * - ./bench -f config.yaml -n 1000  → returns 1000
+     * - ./bench -f config.yaml          → returns -1 (use default MinTime)
+     */
+    int64_t getIterations() const { return iterations_; }
+
+    /**
      * @brief Parse UAL type string to UALType enum
      * @param type_str String representation of UAL type
      * @return UALType enum value
@@ -380,6 +400,20 @@ class ArgParser
                 continue;
             }
 
+            // Skip iteration count flag and value. If the value is missing,
+            // consume the flag anyway so it is not forwarded as an
+            // unrecognized argument to GoogleTest/benchmark.
+            if (arg == "-n") {
+                if (i + 1 < argc) {
+                    ++i; // Skip both flag and value
+                } else {
+                    std::cerr << "Warning: '-n' requires a value and will be "
+                                 "ignored. Usage: -n <iterations>"
+                              << std::endl;
+                }
+                continue;
+            }
+
             // Skip verbose flags (-v, -vv, -vvv, --verbose)
             if (arg == "--verbose"
                 || (arg.length() >= 2 && arg[0] == '-'
@@ -425,15 +459,36 @@ class ArgParser
                 ual_ref_ = argv_[i + 1];
                 ++i; // Skip the next argument (the value)
             }
+
+            // Handle iteration count specification: -n VALUE
+            else if (arg == "-n" && i + 1 < argc_) {
+                try {
+                    iterations_ = std::stoll(argv_[i + 1]);
+                    if (iterations_ <= 0) {
+                        std::cerr
+                            << "Warning: Invalid iteration count '"
+                            << argv_[i + 1]
+                            << "'. Must be a positive integer. Using default."
+                            << std::endl;
+                        iterations_ = -1;
+                    }
+                } catch (const std::exception&) {
+                    std::cerr
+                        << "Warning: Invalid iteration count '" << argv_[i + 1]
+                        << "'. Must be an integer. Using default." << std::endl;
+                    iterations_ = -1;
+                }
+                ++i; // Skip the next argument (the value)
+            }
         }
     }
 
-  private:
     int         argc_;
     char**      argv_;
     std::string yaml_file_;
     std::string ual_test_;
     std::string ual_ref_;
+    int64_t     iterations_ = -1; // -1 means use default MinTime behavior
 };
 
 } // namespace dlp::testing::utils
