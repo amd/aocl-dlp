@@ -1515,8 +1515,12 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
         params->k_left = params->k % numElemsPerReg;
 
         params->mmask_avx512 = 0xFFFF >> (MR - (params->m_left));
+        // When k_left == 0, shifting by numElemsPerReg (32) is undefined
+        // behavior since the shift count equals the bit width of uint32_t.
         params->kmask_bf16_avx512 =
-            0xFFFFFFFF >> (numElemsPerReg - (params->k_left) % numElemsPerReg);
+            (params->k_left == 0)
+                ? 0xFFFFFFFFu
+                : 0xFFFFFFFFu >> (numElemsPerReg - params->k_left);
 
         int is_m_loop = ((params->m) >= MR);
         // when rsC = 1, we logically have a col-major layout , where beta
@@ -2010,8 +2014,12 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
         params->k_left = params->k % numElemsPerReg;
         // md_t og_post_ops_c_i = (params->kernelOpsAttr).post_op_c_i;
 
+        // When k_left == 0, shifting by numElemsPerReg (64) is undefined
+        // behavior since the shift count equals the bit width of uint64_t.
         params->kmask_i8_avx512 =
-            0xFFFFFFFFFFFFFFFF >> (numElemsPerReg - params->k_left);
+            (params->k_left == 0)
+                ? 0xFFFFFFFFFFFFFFFFULL
+                : 0xFFFFFFFFFFFFFFFFULL >> (numElemsPerReg - params->k_left);
         params->mmask_avx512 = 0xFFFF >> (MR - params->m_left);
 
         bool m_loop        = params->m_iter >= 1;
@@ -2549,8 +2557,13 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
         params->k_iter = params->k / numElemsPerReg;
         params->k_left = params->k % numElemsPerReg;
 
-        params->mmask_avx512    = (0xFFFF >> (MR - params->m_left));
-        params->kmask_i8_avx512 = (0xFFFFFFFFFFFFFFFF >> (64 - params->k_left));
+        params->mmask_avx512 = (0xFFFF >> (MR - params->m_left));
+        // When k_left == 0, shifting by numElemsPerReg (64) is undefined
+        // behavior since the shift count equals the bit width of uint64_t.
+        params->kmask_i8_avx512 =
+            (params->k_left == 0)
+                ? 0xFFFFFFFFFFFFFFFFULL
+                : 0xFFFFFFFFFFFFFFFFULL >> (numElemsPerReg - params->k_left);
 
         int is_m_loop     = (params->m_iter != 0);
         int is_col_stored = ((params->rsC) == 1);
@@ -3133,7 +3146,7 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
 
         // Set mask for FP16 elements (32-bit mask for 32 elements per ZMM)
         uint32_t fp16Mask =
-            0xFFFFFFFF >> (numElemsPerReg - static_cast<int>(nRemainder));
+            0xFFFFFFFFu >> (numElemsPerReg - static_cast<int>(nRemainder));
         params->maskFP16 = fp16Mask;
 
         int kernel_n_idx = 0; // Use mask kernel
