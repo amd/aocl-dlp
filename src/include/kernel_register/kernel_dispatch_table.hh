@@ -61,9 +61,13 @@ using voidFunctorPtr = void*;
  *
  * MEMORY LAYOUT:
  * - Main table: TABLE_SIZE chains of CHAIN_SIZE entries each
- * - Backup table: TABLE_SIZE entries for overflow handling
+ * - Backup table: 2-dimensional with a default of 128 buckets, each consecutive
+ *                 bucket doubling in size with only a single bucket of 128
+ *                 entries allocated at initialization. New buckets are
+ *                 allocated dynamically on demand.
  * - Each entry: 64-byte cache-line aligned (key, value, occupied flag)
- * - Total memory: ~((TABLE_SIZE * CHAIN_SIZE + TABLE_SIZE) * 64) bytes
+ * - Total initial memory: ~((TABLE_SIZE * CHAIN_SIZE + 128) * 64) bytes
+ * - Backup table grows dynamically, so memory usage will increase.
  *
  * @tparam TABLE_SIZE Number of hash buckets (recommend power of 2 for
  * performance)
@@ -81,10 +85,22 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
             entry.isOccupied = false;
         }
 
-        backupTable.resize(TABLE_SIZE);
-        for (auto& entry : backupTable) {
+        // Allocate space for maxBTBuckets overflow buckets (=128).
+        backupTable.resize(maxBTBuckets);
+
+        std::size_t bucketSize = nextBucketSize.load(std::memory_order_acquire);
+        backupTable[0].resize(bucketSize);
+        for (auto& entry : backupTable[0]) {
             entry.isOccupied = false;
         }
+
+        // Since the bucket is initialized, we now make it visible to the insert
+        // and query operations.
+        nAvailBuckets.store(1, std::memory_order_relaxed);
+
+        // Update the nextBucketSize to 2x the current bucket size.
+        bucketSize *= 2;
+        nextBucketSize.store(bucketSize, std::memory_order_release);
     }
 
     ~ThreadSafeChainedDispatchTable() = default;
@@ -93,6 +109,10 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
         ThreadSafeChainedDispatchTable&& other) noexcept
         : table(std::move(other.table))
         , backupTable(std::move(other.backupTable))
+        , maxBTBuckets(other.maxBTBuckets)
+        , nAvailBuckets(other.nAvailBuckets.load(std::memory_order_acquire))
+        , baseBucketSize(other.baseBucketSize)
+        , nextBucketSize(other.nextBucketSize.load(std::memory_order_acquire))
     {
         // Let the new mutex be default constructed
     }
@@ -101,8 +121,16 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
         ThreadSafeChainedDispatchTable&& other) noexcept
     {
         if (this != &other) {
-            table       = std::move(other.table);
-            backupTable = std::move(other.backupTable);
+            table        = std::move(other.table);
+            backupTable  = std::move(other.backupTable);
+            maxBTBuckets = other.maxBTBuckets;
+            nAvailBuckets.store(
+                other.nAvailBuckets.load(std::memory_order_acquire),
+                std::memory_order_release);
+            baseBucketSize = other.baseBucketSize;
+            nextBucketSize.store(
+                other.nextBucketSize.load(std::memory_order_acquire),
+                std::memory_order_release);
             // Leave mutex as is
         }
         return *this;
@@ -256,33 +284,91 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
 
         // If the chain is full, add the element to a new backup list of
         // limited size.
-        for (std::size_t i = 0; i < TABLE_SIZE; ++i) {
-            if (backupTable[i].isOccupied.load(std::memory_order_acquire)) {
-                // If the key is already in the backup table, update the value.
-                if (KEY_COMPARATOR{}(backupTable[i].key, key)) {
-                    if (backupTable[i].value.load(std::memory_order_relaxed)
-                        != value) {
-                        VALUE_WATCHER{}(value);
-                        backupTable[i].value.store(value,
-                                                   std::memory_order_relaxed);
+        std::size_t nBuckets = nAvailBuckets.load(std::memory_order_acquire);
+        for (std::size_t bucketId = 0; bucketId < nBuckets; ++bucketId) {
+            std::size_t bucketSize = (baseBucketSize << bucketId);
+            for (std::size_t i = 0; i < bucketSize; ++i) {
+                if (backupTable[bucketId][i].isOccupied.load(
+                        std::memory_order_acquire)) {
+                    // If the key is already in the backup table, update the
+                    // value.
+                    if (KEY_COMPARATOR{}(backupTable[bucketId][i].key, key)) {
+                        if (backupTable[bucketId][i].value.load(
+                                std::memory_order_relaxed)
+                            != value) {
+                            VALUE_WATCHER{}(value);
+                            backupTable[bucketId][i].value.store(
+                                value, std::memory_order_relaxed);
+                        }
+                        return reinterpret_cast<VALUE_TYPE*>(
+                            backupTable[bucketId][i].value.load(
+                                std::memory_order_relaxed));
                     }
+                } else {
+                    VALUE_WATCHER{}(value);
+                    backupTable[bucketId][i] = Entry{ key, value, false };
+                    // This will synchronize with the acquire operation in the
+                    // query path.
+                    backupTable[bucketId][i].isOccupied.store(
+                        true, std::memory_order_release);
                     return reinterpret_cast<VALUE_TYPE*>(
-                        backupTable[i].value.load(std::memory_order_relaxed));
+                        backupTable[bucketId][i].value.load(
+                            std::memory_order_relaxed));
                 }
-            } else {
-                VALUE_WATCHER{}(value);
-                backupTable[i] = Entry{ key, value, false };
-                // This will synchronize with the acquire operation in the
-                // query path.
-                backupTable[i].isOccupied.store(true,
-                                                std::memory_order_release);
-                return reinterpret_cast<VALUE_TYPE*>(
-                    backupTable[i].value.load(std::memory_order_relaxed));
             }
         }
 
-        // If the backup list is also full, return nullptr.
-        return nullptr;
+        // At this point, all the available buckets within the backup table are
+        // full. Hence, we allocate memory for the next bucket (if applicable)
+        // and insert the kernel into its first slot.
+
+        // Using nBuckets as it is without atomic load-store semantics since we
+        // are currently inside a mutex lock, hence its value can't be
+        // overwritten by another insertion thread and query operation will only
+        // perform reads.
+        // We don't want the query to read the updated number of buckets before
+        // the generation and insertion is finished therefore, the nAvailBuckets
+        // increment and store operation is done at the end of this block.
+        if (nBuckets == maxBTBuckets) {
+            // If we reach maxBTBuckets, we can't insert the new key.
+            // maxBTBuckets is set to 128, and the maximum possible unique
+            // kernel insertions that can be stored is 128 * (2^129 - 1) before
+            // which we'll have run out of memory, so this is a safe assumption.
+            return nullptr;
+        }
+
+        // Fetch the size of the bucket to be inserted from "nextBucketSize".
+        std::size_t bucketSize = nextBucketSize.load(std::memory_order_acquire);
+
+        // Since indexing starts from 0, the number of available buckets can
+        // be used as the index for insertion of the next (read: current)
+        // bucket.
+        std::size_t bucketIdx = nBuckets;
+
+        // Allocate space for the new bucket.
+        backupTable[bucketIdx].resize(bucketSize);
+
+        // Initialize all entries in the current bucket to "unoccupied".
+        for (auto& entry : backupTable[bucketIdx]) {
+            entry.isOccupied = false;
+        }
+
+        // Insert the kernel into the first index in the newly allocated bucket.
+        VALUE_WATCHER{}(value);
+        backupTable[bucketIdx][0] = Entry{ key, value, false };
+
+        // This will synchronize with the acquire operation in the query path.
+        backupTable[bucketIdx][0].isOccupied.store(true,
+                                                   std::memory_order_release);
+
+        // Updating the variables for the next resize operations (if any).
+        bucketSize *= 2;
+        nextBucketSize.store(bucketSize, std::memory_order_release);
+        nBuckets += 1;
+        nAvailBuckets.store(nBuckets, std::memory_order_release);
+
+        return reinterpret_cast<VALUE_TYPE*>(
+            backupTable[bucketIdx][0].value.load(std::memory_order_relaxed));
     }
 
     /**
@@ -334,15 +420,37 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
             }
         }
 
-        for (std::size_t i = 0; i < TABLE_SIZE; ++i) {
-            if (backupTable[i].isOccupied.load(std::memory_order_acquire)) {
-                if (KEY_COMPARATOR{}(backupTable[i].key, key)) {
-                    return reinterpret_cast<VALUE_TYPE*>(
-                        backupTable[i].value.load(std::memory_order_relaxed));
+        // Querying the available buckets in Backup Table
+        std::size_t nBuckets = nAvailBuckets.load(std::memory_order_acquire);
+        for (std::size_t bucket = 0; bucket < nBuckets; ++bucket) {
+            // For now bucket sizes start from baseBucketSize and increment in
+            // in multiples of 2. Hence, following the pattern:
+            // baseBucketSize, 2*baseBucketSize, 4*baseBucketSize, ...
+            // Thus, size of current bucket can be calculated using bucket index
+            // and size of the chain.
+            std::size_t bucketSize = (baseBucketSize << bucket);
+
+            // NOTE
+            // If another thread creates a new bucket and inserts a key into it
+            // during this thread's query operation, we are going to ignore
+            // that bucket for the sake of determinism.
+            // Another insertion is acceptable in such a rare instance.
+
+            // Traversing over the entries within that bucket.
+            for (std::size_t i = 0; i < bucketSize; ++i) {
+                if (backupTable[bucket][i].isOccupied.load(
+                        std::memory_order_acquire)) {
+                    if (KEY_COMPARATOR{}(backupTable[bucket][i].key, key)) {
+                        return reinterpret_cast<VALUE_TYPE*>(
+                            backupTable[bucket][i].value.load(
+                                std::memory_order_relaxed));
+                    }
                 }
             }
         }
 
+        // If the key is NOT found in either the primary table or the backup
+        // table, return a nullptr to convey the same.
         return nullptr;
     }
 
@@ -353,7 +461,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
      * occupied slots. Primarily used for resource cleanup in destructors.
      *
      * PERFORMANCE:
-     * - Time: O(TABLE_SIZE * CHAIN_SIZE + TABLE_SIZE) - scans all entries
+     * - Time: O(TABLE_SIZE * CHAIN_SIZE + nAvailBuckets * BucketSize) - scans
+     * all entries
      * - Space: O(number of occupied entries) - proportional to actual usage
      * - Cache behavior: Sequential access, cache-friendly
      *
@@ -376,12 +485,15 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                     entry.value.load(std::memory_order_relaxed)));
             }
         }
-        for (auto& entry : backupTable) {
-            if (entry.isOccupied.load(std::memory_order_acquire)) {
-                values.push_back(reinterpret_cast<VALUE_TYPE*>(
-                    entry.value.load(std::memory_order_relaxed)));
+        for (auto& bucket : backupTable) {
+            for (auto& entry : bucket) {
+                if (entry.isOccupied.load(std::memory_order_acquire)) {
+                    values.push_back(reinterpret_cast<VALUE_TYPE*>(
+                        entry.value.load(std::memory_order_relaxed)));
+                }
             }
         }
+
         return values;
     }
 
@@ -392,7 +504,8 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
      * occupied slots. Used for debugging, introspection, and iteration.
      *
      * PERFORMANCE:
-     * - Time: O(TABLE_SIZE * CHAIN_SIZE + TABLE_SIZE) - scans all entries
+     * - Time: O(TABLE_SIZE * CHAIN_SIZE + nAvailBuckets * BucketSize) - scans
+     * all entries
      * - Space: O(number of occupied entries) - proportional to actual usage
      * - Cache behavior: Sequential access, cache-friendly
      *
@@ -414,11 +527,14 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
                 keys.push_back(reinterpret_cast<KEY_TYPE*>(entry.key));
             }
         }
-        for (auto& entry : backupTable) {
-            if (entry.isOccupied.load(std::memory_order_acquire)) {
-                keys.push_back(reinterpret_cast<KEY_TYPE*>(entry.key));
+        for (auto& bucket : backupTable) {
+            for (auto& entry : bucket) {
+                if (entry.isOccupied.load(std::memory_order_acquire)) {
+                    keys.push_back(reinterpret_cast<KEY_TYPE*>(entry.key));
+                }
             }
         }
+
         return keys;
     }
 
@@ -487,8 +603,37 @@ class alignas(CACHE_LINE_SIZE) ThreadSafeChainedDispatchTable
     };
 
     std::vector<Entry> table;
-    std::vector<Entry> backupTable;
     std::mutex         mtx;
+
+    // The dynamic 2-dimensional Backup Table
+    std::vector<std::vector<Entry>> backupTable;
+
+    // Each consecutive bucket will have allocation for 2x entries of the
+    // previous one.
+    // Example, for 128 buckets:
+    // bucket 0 - 128 entries (baseline)
+    // bucket 1 - 256 (2*128) entries
+    // bucket 2 - 512 (4*128) entries
+    // ...
+    // Hence the maximum number of entries that can be stored in the backup
+    // table:
+    // maxEntries = (128) + (2*128) + (4*128) + ... + (2^maxBTBuckets * 128)
+    //            = 128 * (2^(maxBTBuckets+1) - 1)
+    // Fixing maxBTBuckets to 128 hence, maxEntries = 128 * (2^129 - 1).
+    std::size_t maxBTBuckets = 128;
+
+    // nAvailBuckets denotes the currently allocated buckets in the backup
+    // table. Initially, nAvailBuckets=0 since the constructor initializes the
+    // first bucket and increments nAvailBuckets by one.
+    std::atomic<std::size_t> nAvailBuckets = 0;
+
+    // Hardcoding the baseBucketSize to 128.
+    std::size_t baseBucketSize = 128;
+
+    // nextBucketSize stores the size of the next bucket to be created.
+    // The default size is 128 (=baseBucketSize) for the first bucket,
+    // incrementing in multiples of 2 for subsequent buckets.
+    std::atomic<std::size_t> nextBucketSize = baseBucketSize;
 
     /**
      * @brief Hash function mapping key tuples to table buckets
