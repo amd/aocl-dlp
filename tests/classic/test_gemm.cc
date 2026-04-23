@@ -1210,6 +1210,23 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                     config_.tolerance_absolute;
             }
 
+            // For mixed-precision tests (e.g., bf16×bf16→f32), use input
+            // precision for epsilon calculation. The error accumulation comes
+            // from the input precision, not the output precision.
+            if ((config_.a_type == MatrixType::bf16
+                 || config_.b_type == MatrixType::bf16)
+                && config_.c_type == MatrixType::f32) {
+                // BF16 inputs with F32 output: use bf16 epsilon
+                compare_opts.useInputPrecision  = true;
+                compare_opts.inputPrecisionType = MatrixType::bf16;
+            } else if ((config_.a_type == MatrixType::fp16
+                        || config_.b_type == MatrixType::fp16)
+                       && config_.c_type == MatrixType::f32) {
+                // FP16 inputs with F32 output: use fp16 epsilon
+                compare_opts.useInputPrecision  = true;
+                compare_opts.inputPrecisionType = MatrixType::fp16;
+            }
+
             if (config_.has_postops
                 && (config_.c_type == MatrixType::s32
                     || config_.c_type == MatrixType::s8

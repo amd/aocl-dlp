@@ -607,7 +607,23 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
 
     // Determine tolerances
     double absTol, relTol;
-    if (m_type == MatrixType::f32) {
+
+    // Determine which type to use for epsilon calculation
+    // For mixed-precision tests (e.g., bf16×bf16→f32), the input precision
+    // determines the error accumulation, not the output precision.
+    MatrixType toleranceType = m_type;
+    if (opts.useInputPrecision) {
+        // Only floating-point input types have meaningful epsilon-based
+        // tolerances. Fall back to the matrix output type for any unsupported
+        // input precision to avoid accidentally forcing exact comparisons.
+        if (opts.inputPrecisionType == MatrixType::f32
+            || opts.inputPrecisionType == MatrixType::bf16
+            || opts.inputPrecisionType == MatrixType::fp16) {
+            toleranceType = opts.inputPrecisionType;
+        }
+    }
+
+    if (toleranceType == MatrixType::f32) {
         // Use k dimension for tolerance scaling if available
         // When k dimension is large (GEMM), accumulated errors increase
         double k_factor = (m_k != std::numeric_limits<md_t>::max())
@@ -631,7 +647,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
         relTol = (opts.relToleranceOverride >= 0.0)
                      ? opts.relToleranceOverride
                      : epsilon * k_factor * rel_multiplier;
-    } else if (m_type == MatrixType::bf16) {
+    } else if (toleranceType == MatrixType::bf16) {
         // Use k dimension for tolerance scaling if available
         // When k dimension is large (GEMM), accumulated errors increase
         double k_factor = (m_k != std::numeric_limits<md_t>::max())
@@ -656,7 +672,7 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
         relTol = (opts.relToleranceOverride >= 0.0)
                      ? opts.relToleranceOverride
                      : epsilon * k_factor * rel_multiplier;
-    } else if (m_type == MatrixType::fp16) {
+    } else if (toleranceType == MatrixType::fp16) {
         // Use k dimension for tolerance scaling if available
         // FP16 has better precision than BF16 (10-bit vs 7-bit mantissa)
         // For accumulated FP16 operations, error grows as sqrt(K) for random

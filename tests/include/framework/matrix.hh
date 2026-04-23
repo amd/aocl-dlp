@@ -83,6 +83,14 @@ namespace dlp { namespace testing { namespace framework {
         unsigned int intTolerance =
             0; ///< Allowed absolute difference for integer type comparisons
                ///< 0 = exact match, 1 = allow +/-1 for post-op quantization.
+        MatrixType inputPrecisionType =
+            MatrixType::f32; ///< Input precision type for tolerance calculation
+                             ///< For mixed-precision (e.g., bf16×bf16→f32), set
+                             ///< this to bf16 to use bf16 epsilon instead of
+                             ///< f32.
+        bool useInputPrecision =
+            false; ///< If true, use inputPrecisionType for epsilon calculation
+                   ///< instead of output matrix type.
 
         /**
          * @brief Create options for fast mode (boolean comparison only)
