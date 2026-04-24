@@ -1267,26 +1267,23 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
     POST_OPS_BIAS_6x64: {
         __m512 b0 = _mm512_setzero_ps();
 
+        // broadcast bias value to b0.
         if (post_ops_list_temp->stor_type == DLP_BF16) {
             b0 = (__m512)_mm512_sllv_epi32(
-                _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(
-                    _cvtu32_mask16(0x0001),
-                    ((bfloat16*)post_ops_list_temp->op_args1))),
+                _mm512_set1_epi32(
+                    (int32_t)*((bfloat16*)post_ops_list_temp->op_args1)),
                 _mm512_set1_epi32(16));
         } else if (post_ops_list_temp->stor_type == DLP_S8) {
-            b0 = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(
-                _mm_maskz_loadu_epi8(_cvtu32_mask16(0x0001),
-                                     ((int8_t*)post_ops_list_temp->op_args1))));
+            b0 = _mm512_cvtepi32_ps(_mm512_set1_epi32(
+                (int32_t)*((int8_t*)post_ops_list_temp->op_args1)));
         } else if (post_ops_list_temp->stor_type == DLP_U8) {
-            b0 = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(
-                _mm_maskz_loadu_epi8(_cvtu32_mask16(0x0001),
-                                     ((int8_t*)post_ops_list_temp->op_args1))));
+            b0 = _mm512_cvtepi32_ps(_mm512_set1_epi32(
+                (int32_t)*((uint8_t*)post_ops_list_temp->op_args1)));
         } else if (post_ops_list_temp->stor_type == DLP_S32) {
             b0 = _mm512_cvtepi32_ps(
                 _mm512_set1_epi32(*((int32_t*)post_ops_list_temp->op_args1)));
         } else {
-            b0 = _mm512_maskz_loadu_ps(_cvtu32_mask16(0x0001),
-                                       ((float*)post_ops_list_temp->op_args1));
+            b0 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
         }
         acc_8 = _mm512_add_ps(b0, acc_8);
 
