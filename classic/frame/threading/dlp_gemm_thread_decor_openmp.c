@@ -37,6 +37,39 @@
 #include "threading/dlp_gemm_thread_decor_openmp.h"
 #include "threading/dlp_gemm_thread_utils.h"
 
+/*
+ * Shape-aware mtag_b selector for BF16S4/BF16U4 MP GEMM.
+ * UNPACKED when: m_ic in [MC, 4*MC], n_jc in [1024, 10240], k <= 8.
+ * Outside this region packing B recovers enough reuse to offset the overhead.
+ */
+DLP_INLINE AOCL_DLP_MEMORY_TAG
+dlp_mtag_b_pick(md_t                    m,
+                md_t                    n,
+                md_t                    k,
+                md_t                    ic_ways,
+                md_t                    jc_ways,
+                AOCL_DLP_OPERATION_TYPE mc_op_type)
+{
+    md_t MC = dlp_gemm_get_block_size_MC_global_cntx(mc_op_type);
+
+    md_t m_ic = m / ic_ways;
+    md_t n_jc = n / jc_ways;
+
+    if (m_ic < MC)
+        return UNPACKED;
+
+    // Thresholds
+    const md_t m_ic_panels = 4; // max MC-multiples for medium-M unpacked region
+    const md_t n_jc_min    = 1024; // minimum n_jc: ~1 NC
+    const md_t n_jc_max_mul = 10;  // maximum n_jc: ~10 NC
+    const md_t k_shallow    = 8;   // shallow K: less compute to justify packing
+
+    bool fits_unpacked = (m_ic <= m_ic_panels * MC && n_jc >= n_jc_min
+                          && n_jc <= n_jc_max_mul * n_jc_min && k <= k_shallow);
+
+    return fits_unpacked ? UNPACKED : PACK_KC;
+}
+
 #ifdef DLP_ENABLE_OPENMP
 
 #include <omp.h>
@@ -1086,11 +1119,7 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
         if (HAS_MC_LOGIC) {                                                    \
-            md_t MC = dlp_gemm_get_block_size_MC_global_cntx(MC_OP_TYPE);      \
-            if ((m / ic_ways) > MC)                                            \
-                mtag_b = PACK_KC;                                              \
-            else                                                               \
-                mtag_b = UNPACKED;                                             \
+            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE);   \
         }                                                                      \
                                                                                \
         /* Communication structure setup */                                    \
@@ -1236,10 +1265,12 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
             dlp_task_comm_init(ic_ways, &cur_dlp_gemm_comms[i]);               \
         }                                                                      \
                                                                                \
-        /* MC logic for MP variant */                                          \
-        md_t MC = 0;                                                           \
+        /* m/n/k are scalar pointers shared across all batch GEMMs;            \
+         * compute mtag_b once before the parallel region. */                  \
+        AOCL_DLP_MEMORY_TAG mtag_b_mp = UNPACKED;                              \
         if (HAS_MC_LOGIC) {                                                    \
-            MC = dlp_gemm_get_block_size_MC_global_cntx(MC_OP_TYPE);           \
+            mtag_b_mp =                                                        \
+                dlp_mtag_b_pick(*m, *n, *k, ic_ways, jc_ways, MC_OP_TYPE);     \
         }                                                                      \
                                                                                \
         _Pragma("omp parallel num_threads(n_threads)")                         \
@@ -1268,11 +1299,7 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
                                                                                \
             for (iter_t i = gemm_start; i < gemm_end; i++) {                   \
                 if (HAS_MC_LOGIC) {                                            \
-                    if ((m[i] / ic_ways) > MC) {                               \
-                        mtag_b[i] = PACK_KC;                                   \
-                    } else {                                                   \
-                        mtag_b[i] = UNPACKED;                                  \
-                    }                                                          \
+                    mtag_b[i] = mtag_b_mp;                                     \
                 }                                                              \
                                                                                \
                 dlp_gemm_rowvar_##DLP_GEMM_SFX(                                \
@@ -1476,11 +1503,7 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
         if (HAS_MC_LOGIC) {                                                    \
-            md_t MC = dlp_gemm_get_block_size_MC_global_cntx(MC_OP_TYPE);      \
-            if ((m / ic_ways) > MC)                                            \
-                mtag_b = PACK_KC;                                              \
-            else                                                               \
-                mtag_b = UNPACKED;                                             \
+            mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE);   \
         }                                                                      \
                                                                                \
         /* Single comm structure for single thread */                          \
