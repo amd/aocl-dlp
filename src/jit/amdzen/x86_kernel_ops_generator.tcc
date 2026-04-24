@@ -326,7 +326,6 @@ kernelOpsGeneratorX86<KType>::initializeFringeMasks(
     return jitGeneratorError::success;
 }
 
-
 template<utils::kernelInstrType KType>
 void
 kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
@@ -447,6 +446,32 @@ kernelOpsGeneratorX86<KType>::loadVectorBF16andConvertToF32(
     return jitGeneratorError::success;
 }
 
+template<utils::kernelInstrType KType>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::loadVectorFP16andConvertToF32(
+    const Xbyak::Address& addr, const RegType& dest,
+    bool useMaskOp, const Xbyak::Opmask& mask)
+{
+    if (useMaskOp) {
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            return jitGeneratorError::notSupported;
+        } else {
+            jit->vmovdqu16(halfRegType(dest.getIdx()) | mask | jit->T_z, addr);
+        }
+    } else {
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+           return jitGeneratorError::notSupported;
+        } else {
+            jit->vmovdqu16(halfRegType(dest.getIdx()), addr);
+        }
+    }
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        jit->vcvtph2ps(dest, halfRegType(dest.getIdx()));
+    } else {
+        return jitGeneratorError::notSupported;
+    }
+    return jitGeneratorError::success;
+}
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
@@ -564,6 +589,22 @@ kernelOpsGeneratorX86<KType>::broadcastScalarBF16andConvertToF32(
     return jitGeneratorError::success;
 }
 
+template<utils::kernelInstrType KType>
+jitGeneratorError
+kernelOpsGeneratorX86<KType>::broadcastScalarFP16andConvertToF32(
+    const Xbyak::Address& addr, const RegType& dest)
+{
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        utils::registerGuard<RegType> tmpGuard;
+        RETURN_IF_ERROR(vecPool->acquireGuard(tmpGuard));
+        int tmpRegIdx = tmpGuard.idx();
+        jit->vpbroadcastw(RegType(tmpRegIdx), addr);
+        jit->vcvtph2ps(dest, halfRegType(tmpRegIdx));
+        return jitGeneratorError::success;
+    } else {
+        return jitGeneratorError::notSupported;
+    }
+}
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
@@ -922,6 +963,10 @@ jitGeneratorError MatOps<KType>::colMajorPath(
                 case DataType::bf16:
                     jit->vpslld(RegType(matRegIdx), RegType(matRegIdx), 16);
                     break;
+                case DataType::f16:
+                    jit->vpmovdw(halfRegType(matRegIdx), RegType(matRegIdx));
+                    jit->vcvtph2ps(RegType(matRegIdx), halfRegType(matRegIdx));
+                    break;
                 case DataType::s32:
                     jit->vcvtdq2ps(RegType(matRegIdx), RegType(matRegIdx));
                     break;
@@ -1001,30 +1046,8 @@ inline jitGeneratorError MatOps<utils::kernelInstrType::avx2_ymm_16_reg>::colMaj
             jit->vxorps(RegType(matRegIdx), RegType(matRegIdx), RegType(matRegIdx));
 
             for (int k = 0; k < numElems; k++) {
-                if (matOpDtype == DataType::f32) {
-                    jit->vbroadcastss(RegType(tmpRegIdx), jit->ptr[this->regTmp4]);
-                } else {
-                    jit->vpbroadcastd(RegType(tmpRegIdx), jit->ptr[this->regTmp4]);
-                    switch (matOpDtype) {
-                        case DataType::s8:
-                            jit->vpslld(RegType(tmpRegIdx), RegType(tmpRegIdx), 24);
-                            jit->vpsrad(RegType(tmpRegIdx), RegType(tmpRegIdx), 24);
-                            jit->vcvtdq2ps(RegType(tmpRegIdx), RegType(tmpRegIdx));
-                            break;
-                        case DataType::u8:
-                            jit->vpslld(RegType(tmpRegIdx), RegType(tmpRegIdx), 24);
-                            jit->vpsrld(RegType(tmpRegIdx), RegType(tmpRegIdx), 24);
-                            jit->vcvtdq2ps(RegType(tmpRegIdx), RegType(tmpRegIdx));
-                            break;
-                        case DataType::bf16:
-                            jit->vpslld(RegType(tmpRegIdx), RegType(tmpRegIdx), 16);
-                            break;
-                        case DataType::s32:
-                            jit->vcvtdq2ps(RegType(tmpRegIdx), RegType(tmpRegIdx));
-                            break;
-                        default: break;
-                    }
-                }
+                RETURN_IF_ERROR(this->broadcastScalar(
+                    matOpDtype, jit->ptr[this->regTmp4], RegType(tmpRegIdx)));
 
                 if (k == 0) {
                     jit->vmovaps(RegType(matRegIdx), RegType(tmpRegIdx));
@@ -2021,6 +2044,7 @@ Downscale<KType>::generateImpl(kernelOpsMetaData& op)
 
     auto isSupported = [](DataType dt) {
         return dt == DataType::f32  || dt == DataType::bf16 ||
+               dt == DataType::f16  ||
                dt == DataType::s8   || dt == DataType::u8   ||
                dt == DataType::s32;
     };
@@ -2348,6 +2372,7 @@ Bias<KType>::generateImpl(kernelOpsMetaData& op)
 
     auto isSupported = [](DataType dt) {
         return dt == DataType::f32  || dt == DataType::bf16 ||
+               dt == DataType::f16  ||
                dt == DataType::s8   || dt == DataType::u8   ||
                dt == DataType::s32;
     };

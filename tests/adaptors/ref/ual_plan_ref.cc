@@ -405,6 +405,30 @@ RefUalPlan::execute()
         return UALError::UAL_SUCCESS;
     }
 
+    // FP16 path: GEMM natively in FP16, post-ops in F32 intermediate
+    if ((aType == MatrixType::fp16 && bType == MatrixType::fp16)
+        && hasPostOps) {
+        bool result = ualRef.checkValidGemmParams(A, B, C, hasPostOps)
+                      && ualRef.gemm(A, B, C, m_acc_type, m_alpha, m_beta);
+        if (!result) {
+            return UALError::UAL_FAILURE;
+        }
+
+        md_t   M = C.getEffectiveRows();
+        md_t   N = C.getEffectiveCols();
+        Matrix tempC_f32(M, N, MatrixType::f32, C.getLayout());
+        dlp::testing::utils::copyMatrixTo<float>(
+            C, reinterpret_cast<float*>(tempC_f32.getData()),
+            tempC_f32.getLeadingDimension(), tempC_f32.getLayout());
+
+        applyPostOps(tempC_f32);
+
+        dlp::testing::utils::copyToMatrix<float>(
+            reinterpret_cast<const float*>(tempC_f32.getData()),
+            tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
+        return UALError::UAL_SUCCESS;
+    }
+
     // Simple path: no post-ops or no f32 intermediate needed
     bool result = ualRef.checkValidGemmParams(A, B, C, hasPostOps)
                   && ualRef.gemm(A, B, C, m_acc_type, m_alpha, m_beta);

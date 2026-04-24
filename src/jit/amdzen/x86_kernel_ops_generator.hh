@@ -193,6 +193,12 @@ class kernelOpsGeneratorX86
         bool                  useMaskOp,
         const Xbyak::Opmask&  mask = Xbyak::Opmask(0));
 
+    dlp::jit::jitGeneratorError loadVectorFP16andConvertToF32(
+        const Xbyak::Address& addr,
+        const RegType&        dest,
+        bool                  useMaskOp,
+        const Xbyak::Opmask&  mask = Xbyak::Opmask(0));
+
     dlp::jit::jitGeneratorError loadVectorInt8andConvertToF32(
         const Xbyak::Address& addr,
         const RegType&        dest,
@@ -215,6 +221,8 @@ class kernelOpsGeneratorX86
                                 const RegType&        dest);
     dlp::jit::jitGeneratorError broadcastScalarBF16andConvertToF32(
         const Xbyak::Address& addr, const RegType& dest);
+    dlp::jit::jitGeneratorError broadcastScalarFP16andConvertToF32(
+        const Xbyak::Address& addr, const RegType& dest);
     dlp::jit::jitGeneratorError broadcastScalarInt8andConvertToF32(
         const Xbyak::Address& addr, const RegType& dest);
     dlp::jit::jitGeneratorError broadcastScalarUInt8andConvertToF32(
@@ -235,6 +243,9 @@ class kernelOpsGeneratorX86
                 break;
             case dlp::kernel_frame::DataType::bf16:
                 return loadVectorBF16andConvertToF32(addr, dest, useMaskOp,
+                                                     mask);
+            case dlp::kernel_frame::DataType::f16:
+                return loadVectorFP16andConvertToF32(addr, dest, useMaskOp,
                                                      mask);
             case dlp::kernel_frame::DataType::s8:
                 return loadVectorInt8andConvertToF32(addr, dest, useMaskOp,
@@ -262,6 +273,8 @@ class kernelOpsGeneratorX86
                 break;
             case dlp::kernel_frame::DataType::bf16:
                 return broadcastScalarBF16andConvertToF32(addr, dest);
+            case dlp::kernel_frame::DataType::f16:
+                return broadcastScalarFP16andConvertToF32(addr, dest);
             case dlp::kernel_frame::DataType::s8:
                 return broadcastScalarInt8andConvertToF32(addr, dest);
             case dlp::kernel_frame::DataType::u8:
@@ -284,6 +297,8 @@ class kernelOpsGeneratorX86
                 return RegBytes;
             case dlp::kernel_frame::DataType::bf16:
                 return RegBytes / 2;
+            case dlp::kernel_frame::DataType::f16:
+                return RegBytes / 2;
             case dlp::kernel_frame::DataType::s8:
                 return RegBytes / 4;
             case dlp::kernel_frame::DataType::u8:
@@ -302,6 +317,8 @@ class kernelOpsGeneratorX86
                 return sizeof(int32_t);
             case dlp::kernel_frame::DataType::bf16:
                 return sizeof(bfloat16);
+            case dlp::kernel_frame::DataType::f16:
+                return sizeof(dlp::float16);
             case dlp::kernel_frame::DataType::s8:
                 return sizeof(int8_t);
             case dlp::kernel_frame::DataType::u8:

@@ -3003,6 +3003,16 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
                 params->nmask_fp16_avx512 =
                     0xFFFFFFFFu >> (numElemsPerReg - partial_elements);
             }
+
+            // F32 postops mask: 16 F32 elements per ZMM
+            static constexpr int F32_PER_ZMM = 16;
+            int                  f32_partial = params->n_left % F32_PER_ZMM;
+            if (f32_partial == 0) {
+                params->nmask_avx512 = 0xFFFFu;
+            } else {
+                params->nmask_avx512 = static_cast<uint16_t>(
+                    0xFFFFu >> (F32_PER_ZMM - f32_partial));
+            }
         }
 
         // Deploy the associated kernel based on n_left

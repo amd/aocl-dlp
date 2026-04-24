@@ -86,7 +86,6 @@ class jitFP16_GEMM : public Xbyak::CodeGenerator
     int  c_downscale;
     bool useMask =
         false; // Flag to indicate if masked instructions are generated
-
     // =================================================================
     // REGISTER ALLOCATION
     // =================================================================
@@ -102,6 +101,11 @@ class jitFP16_GEMM : public Xbyak::CodeGenerator
     Xbyak::Reg64 regKIter, regMiter;
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 regTmp1, regTmp2, regTmp3;
+
+    // =================================================================
+    // OPMASK REGISTERS
+    // =================================================================
+    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
     // =================================================================
     // CORE SETUP AND INITIALIZATION
@@ -180,6 +184,23 @@ class jitFP16_GEMM : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError generatePostOps(utils::generatorParams& params);
 
     /**
+     * @brief Generate a full-tile F32 post-op path when the tile fits in regs.
+     */
+    dlp::jit::jitGeneratorError generatePostOpsRegisterOnly(
+        utils::generatorParams& params);
+
+    /**
+     * @brief Generate a partial-spill post-op path with masked subroutine.
+     *
+     * The first 64-col chunk is processed from accumulator registers.
+     * The tail chunk is spilled to stack. A single 64-col subroutine
+     * with masking on the upper 2 F32 ZMMs handles both chunks:
+     * mask=0xFFFF for 64-col, mask=0x0000 for 32-col tail.
+     */
+    dlp::jit::jitGeneratorError generatePostOpsPartialSpill(
+        utils::generatorParams& params);
+
+    /**
      * @brief Dispatch to appropriate store function
      */
     dlp::jit::jitGeneratorError storeResult();
@@ -188,6 +209,27 @@ class jitFP16_GEMM : public Xbyak::CodeGenerator
      * @brief Store results as FP16 using vmovdqu16
      */
     dlp::jit::jitGeneratorError storeResultFP16();
+
+    void spillChunkToStack(int srcRegOffset, int fp16RegsPerRow);
+    void restoreStackAfterChunkSpill(int fp16RegsPerRow);
+    void convertChunkFromRegsToF32(int srcRegOffset,
+                                   int fp16RegsPerRow,
+                                   int dstRegStart);
+    void convertChunkFromStackToF32(int fp16RegsPerRow, int dstRegStart);
+
+    /**
+     * @brief Convert one row of an F32 chunk back to FP16 and store it.
+     */
+    void convertF32ChunkToFP16AndStoreRow(int  f32RegStart,
+                                          int  rowIdx,
+                                          int  colElemOffset,
+                                          int  fp16RegsPerRow,
+                                          bool maskedStore = false);
+
+    /**
+     * @brief Populate maskF32[0..1] from maskFP16 for F32 post-ops
+     */
+    void populateF32MasksFromFP16();
 
     /**
      * @brief Move C pointer for next M iteration

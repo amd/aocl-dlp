@@ -98,7 +98,7 @@ DLP_GEMV(float16, float16, float16, f16f16f16of16)
     post_ops_attr.b_col_sum_vec     = NULL;
     post_ops_attr.b_col_sum_vec_s16 = NULL;
 
-    post_ops_attr.buf_downscale = NULL;
+    post_ops_attr.buf_downscale = c;
 
     /* Generate thrinfo objects for jc and ic loops */
     dlp_task_id_t thread_jc;
@@ -360,7 +360,7 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
     post_ops_attr.b_sum_offset      = 0;
     post_ops_attr.b_col_sum_vec     = NULL;
     post_ops_attr.b_col_sum_vec_s16 = NULL;
-    post_ops_attr.buf_downscale     = NULL;
+    post_ops_attr.buf_downscale     = c;
 
     dlp_task_id_t thread_jc;
     dlp_task_id_t thread_ic;

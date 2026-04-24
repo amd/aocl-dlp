@@ -31,6 +31,7 @@
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
 #include "kernel_frame/kernel_frame_base.hh"
+#include "kernel_ops_handler.hh"
 #include "traits.hh"
 #include "xbyak/xbyak.h"
 #include "xbyak/xbyak_util.h"
@@ -131,8 +132,12 @@ class jitFP16GEMVN1 : public Xbyak::CodeGenerator
     // CORE COMPUTATION METHODS
     // =================================================================
     dlp::jit::jitGeneratorError generateMLoop(
-        utils::gemvN1GeneratorParams& params);
-    dlp::jit::jitGeneratorError generateIrLoop(int mSize);
+        utils::gemvN1GeneratorParams& params,
+        gen::kernelOpsHandler<KType>* handler);
+    dlp::jit::jitGeneratorError generateIrLoop(
+        utils::gemvN1GeneratorParams& params,
+        gen::kernelOpsHandler<KType>* handler,
+        int                           mSize);
     dlp::jit::jitGeneratorError processMRBlock(int  mSize,
                                                bool isFringe = false);
 
@@ -156,6 +161,17 @@ class jitFP16GEMVN1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeResult(int mSize);
     dlp::jit::jitGeneratorError storeY_rowStored_FP16(int mSize);
     dlp::jit::jitGeneratorError storeY_colStored_FP16(int mSize);
+
+    // =================================================================
+    // POST-OPS SUPPORT (FP16 scalar -> F32 -> PostOps -> FP16)
+    // =================================================================
+    dlp::jit::jitGeneratorError applyPostOps(
+        utils::gemvN1GeneratorParams& params,
+        gen::kernelOpsHandler<KType>& handler,
+        int                           mSize);
+
+    void convertAndPackFP16ToF32Zmm(int mSize, int dstZmmIdx);
+    void unpackAndConvertF32ZmmToFP16(int mSize, int srcZmmIdx);
 
     // =================================================================
     // HELPER METHODS
@@ -293,6 +309,19 @@ class jitFP16GEMVM1 : public Xbyak::CodeGenerator
     // =================================================================
     dlp::jit::jitGeneratorError storeYValues(bool nMask);
     dlp::jit::jitGeneratorError storeYValuesFringe();
+
+    // =================================================================
+    // POST-OPS SUPPORT (FP16 -> F32 -> PostOps -> FP16)
+    // =================================================================
+    dlp::jit::jitGeneratorError applyPostOps(
+        utils::gemvM1GeneratorParams& params,
+        gen::kernelOpsHandler<KType>& handler,
+        int                           numAccumRegs,
+        bool                          nMask,
+        int                           nActual = 0);
+
+    void convertFP16AccumToF32(int numAccumRegs, int f32RegStart);
+    void convertF32ToFP16Accum(int numAccumRegs, int f32RegStart);
 
     // =================================================================
     // HELPER METHODS

@@ -41,6 +41,9 @@ dlp_gemm_get_stor_type(DLP_TYPE pstor_type)
         case DLP_BF16:
             stor_type = DLP_BF16;
             break;
+        case DLP_F16:
+            stor_type = DLP_F16;
+            break;
         case DLP_S8:
             stor_type = DLP_S8;
             break;

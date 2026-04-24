@@ -643,6 +643,84 @@ jitFP16GEMVM1<KType>::storeYValuesFringe()
 }
 
 template<utils::kernelInstrType KType>
+void
+jitFP16GEMVM1<KType>::convertFP16AccumToF32(int numAccumRegs, int f32RegStart)
+{
+    for (iter_t i = 0; i < numAccumRegs; i++) {
+        int srcReg = accumBaseIdx + i;
+        int dstLo  = f32RegStart + i * 2;
+        int dstHi  = f32RegStart + i * 2 + 1;
+
+        vmovdqa32(Zmm(dstLo), Zmm(srcReg));
+        vextractf32x8(Ymm(dstHi), Zmm(dstLo), 1);
+        vcvtph2ps(Zmm(dstLo), Ymm(dstLo));
+        vcvtph2ps(Zmm(dstHi), Ymm(dstHi));
+    }
+}
+
+template<utils::kernelInstrType KType>
+void
+jitFP16GEMVM1<KType>::convertF32ToFP16Accum(int numAccumRegs, int f32RegStart)
+{
+    for (iter_t i = 0; i < numAccumRegs; i++) {
+        int srcLo = f32RegStart + i * 2;
+        int srcHi = f32RegStart + i * 2 + 1;
+
+        vcvtps2ph(Ymm(srcLo), Zmm(srcLo), 0x04);
+        vcvtps2ph(Ymm(srcHi), Zmm(srcHi), 0x04);
+        vinserti32x8(Zmm(srcLo), Zmm(srcLo), Ymm(srcHi), 1);
+        vmovdqa32(Zmm(accumBaseIdx + i), Zmm(srcLo));
+    }
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16GEMVM1<KType>::applyPostOps(utils::gemvM1GeneratorParams& params,
+                                   gen::kernelOpsHandler<KType>& handler,
+                                   int                           numAccumRegs,
+                                   bool                          nMask,
+                                   int                           nActual)
+{
+    static constexpr int F32_PER_ZMM = Traits::regBytes / sizeof(float);
+    using VecPoolType =
+        utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+    using MaskPoolType =
+        utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+    int  f32RegStart    = 0;
+    int  nCols          = (nActual > 0) ? nActual : numAccumRegs * nElemsPerReg;
+    int  f32FullRegs    = nCols / F32_PER_ZMM;
+    int  f32FringeElems = nCols % F32_PER_ZMM;
+    bool f32HasMask     = (f32FringeElems > 0);
+    int  f32NumMaskRegs = f32HasMask ? 1 : 0;
+    int  numCRegs       = f32FullRegs + f32NumMaskRegs;
+
+    convertFP16AccumToF32(numAccumRegs, f32RegStart);
+
+    VecPoolType vecPool;
+    vecPool.setAccumulators(f32RegStart, numCRegs);
+    RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+    MaskPoolType maskPool;
+    maskPool.addPreserve(utils::MASK_START_IDX, 1);
+    RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                  Traits::reservedMaskBits));
+
+    int maskOffset = f32HasMask ? static_cast<int>(offsetof(
+                                      dlp::kernels::gemvM1Params, nmask_avx512))
+                                : -1;
+
+    RETURN_IF_ERROR(handler.generateKernelOps(
+        params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1, nCols,
+        f32HasMask, f32NumMaskRegs, f32RegStart, numCRegs, vecPool, maskPool,
+        maskOffset));
+
+    convertF32ToFP16Accum(numAccumRegs, f32RegStart);
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
@@ -655,6 +733,12 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         RETURN_IF_ERROR(allocateRegisters());
 
         inLocalLabel();
+
+        std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
+        if (!params.kernelOps.empty()) {
+            kernelOpsHandlerPtr =
+                std::make_unique<gen::kernelOpsHandler<KType>>(this);
+        }
 
         mov(regYptr, ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, y)]);
         xor_(regIncN, regIncN);
@@ -801,11 +885,29 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             }
 
             scaleYWithBeta(false);
+
+            if (kernelOpsHandlerPtr) {
+                RETURN_IF_ERROR(applyPostOps(params, *kernelOpsHandlerPtr,
+                                             NR / nElemsPerReg, false));
+            }
+
             storeYValues(false);
 
             mov(regTmp2, NR);
             add(regIncN, regTmp2);
             lea(regYptr, ptr[regYptr + regTmp2 * sizeof(uint16_t)]);
+
+            if (!params.kernelOps.empty()) {
+                mov(regTmp1,
+                    ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+                add(regTmp1, NR);
+                mov(ptr[stackPtr
+                        + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                        + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
+                    regTmp1);
+            }
 
             sub(regNIter, 1);
             jnz(label_n_loop_start, T_NEAR);
@@ -969,6 +1071,14 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             }
 
             scaleYWithBeta(true);
+
+            if (kernelOpsHandlerPtr) {
+                int nFringeAccumRegs =
+                    (N_LEFT + nElemsPerReg - 1) / nElemsPerReg;
+                RETURN_IF_ERROR(applyPostOps(params, *kernelOpsHandlerPtr,
+                                             nFringeAccumRegs, true, N_LEFT));
+            }
+
             storeYValues(true);
         }
 
@@ -1304,19 +1414,162 @@ jitFP16GEMVN1<KType>::storeResult(int mSize)
 }
 
 template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitFP16GEMVN1<KType>::generateIrLoop(int mSize)
+void
+jitFP16GEMVN1<KType>::convertAndPackFP16ToF32Zmm(int mSize, int dstZmmIdx)
 {
-    // GEMV N=1 K-loop: For each K-chunk of simdWidth (32 FP16 elements):
-    //   1. Load x[k:k+32] as a vector
-    //   2. For each row i: load A[i][k:k+32] as vector, FMA with x
-    //   3. Advance A column pointer by simdWidth*csA, X pointer by RegBytes
-    // After K-loop: reduce each accumulator from 32 FP16 to 1 scalar
+    // Convert FP16 scalars in Xmm(accumBaseIdx+i) lane 0 to F32 and pack
+    // them into contiguous lanes of Zmm(dstZmmIdx).
+    //
+    // For each group of 4 rows: convert FP16->F32, interleave with
+    // vunpcklps, merge with vmovlhps, insert 128-bit chunk into dst ZMM.
+    // This mirrors the F32/BF16 GEMV N=1 reduceAccumulation pattern.
 
+    int src = accumBaseIdx;
+    int t0  = tmpBaseIdx;
+    int t3  = tmpBaseIdx + 3;
+    int dst = dstZmmIdx;
+
+    vpxord(Zmm(dst), Zmm(dst), Zmm(dst));
+    if (mSize == 0)
+        return;
+
+    int remaining = mSize;
+    int chunkIdx  = 0;
+
+    while (remaining > 0 && chunkIdx < 4) {
+        int startElem = chunkIdx * 4;
+        int n         = (remaining >= 4) ? 4 : remaining;
+        // Target register: chunk 0 goes into dst, others into t0
+        int chunkReg = (chunkIdx == 0) ? dst : t0;
+
+        // Convert the elements we need for this chunk
+        for (int j = 0; j < n; j++) {
+            vcvtph2ps(Xmm(src + startElem + j), Xmm(src + startElem + j));
+        }
+
+        // Pack converted F32 scalars into one XMM
+        if (n == 1) {
+            if (chunkReg != src + startElem)
+                vmovaps(Xmm(chunkReg), Xmm(src + startElem));
+        } else if (n == 2) {
+            vunpcklps(Xmm(chunkReg), Xmm(src + startElem),
+                      Xmm(src + startElem + 1));
+        } else if (n == 3) {
+            vunpcklps(Xmm(chunkReg), Xmm(src + startElem),
+                      Xmm(src + startElem + 1));
+            vinsertps(Xmm(chunkReg), Xmm(chunkReg), Xmm(src + startElem + 2),
+                      0x20);
+        } else {
+            vunpcklps(Xmm(chunkReg), Xmm(src + startElem),
+                      Xmm(src + startElem + 1));
+            vunpcklps(Xmm(t3), Xmm(src + startElem + 2),
+                      Xmm(src + startElem + 3));
+            vmovlhps(Xmm(chunkReg), Xmm(chunkReg), Xmm(t3));
+        }
+
+        if (chunkIdx > 0) {
+            vinserti32x4(Zmm(dst), Zmm(dst), Xmm(t0), chunkIdx);
+        }
+
+        remaining -= n;
+        chunkIdx++;
+    }
+}
+
+template<utils::kernelInstrType KType>
+void
+jitFP16GEMVN1<KType>::unpackAndConvertF32ZmmToFP16(int mSize, int srcZmmIdx)
+{
+    // Unpack contiguous F32 lanes from Zmm(srcZmmIdx) into individual
+    // Xmm(accumBaseIdx+i) and convert back to FP16 scalar.
+
+    int src = srcZmmIdx;
+    int t0  = tmpBaseIdx;
+
+    for (int i = 0; i < mSize; i++) {
+        int chunk = i / 4;
+        int lane  = i % 4;
+
+        if (chunk == 0) {
+            if (lane == 0) {
+                vmovaps(Xmm(accumBaseIdx + i), Xmm(src));
+            } else {
+                vshufps(Xmm(accumBaseIdx + i), Xmm(src), Xmm(src),
+                        lane | (lane << 2) | (lane << 4) | (lane << 6));
+            }
+        } else {
+            // Extract chunk once per group of 4
+            if (lane == 0) {
+                vextractf32x4(Xmm(t0), Zmm(src), chunk);
+            }
+            if (lane == 0) {
+                vmovaps(Xmm(accumBaseIdx + i), Xmm(t0));
+            } else {
+                vshufps(Xmm(accumBaseIdx + i), Xmm(t0), Xmm(t0),
+                        lane | (lane << 2) | (lane << 4) | (lane << 6));
+            }
+        }
+
+        vcvtps2ph(Xmm(accumBaseIdx + i), Xmm(accumBaseIdx + i), 0x04);
+    }
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16GEMVN1<KType>::applyPostOps(utils::gemvN1GeneratorParams& params,
+                                   gen::kernelOpsHandler<KType>& handler,
+                                   int                           mSize)
+{
+    static constexpr int F32_PER_ZMM = Traits::regBytes / sizeof(float);
+    using VecPoolType =
+        utils::registerPool<typename Traits::RegType, Traits::numRegs>;
+    using MaskPoolType =
+        utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+    int  f32FullRegs    = mSize / F32_PER_ZMM;
+    int  f32FringeElems = mSize % F32_PER_ZMM;
+    bool f32HasMask     = (f32FringeElems > 0);
+    int  f32MaskRegs    = f32HasMask ? 1 : 0;
+    int  numCRegs       = f32FullRegs + f32MaskRegs;
+    int  packRegIdx     = yBaseIdx + yReg;
+
+    // Convert FP16 scalars to F32 and pack into contiguous ZMM (no stack)
+    convertAndPackFP16ToF32Zmm(mSize, packRegIdx);
+
+    VecPoolType vecPool;
+    vecPool.setAccumulators(packRegIdx, numCRegs);
+    RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+    MaskPoolType maskPool;
+    maskPool.addPreserve(utils::MASK_START_IDX, 2);
+    RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                  Traits::reservedMaskBits));
+
+    int maskOffset = f32HasMask ? static_cast<int>(offsetof(
+                                      dlp::kernels::gemvN1Params, mmask_avx512))
+                                : -1;
+
+    RETURN_IF_ERROR(handler.generateKernelOps(
+        params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1, mSize, 1,
+        f32HasMask, f32MaskRegs, packRegIdx, numCRegs, vecPool, maskPool,
+        maskOffset));
+
+    // Unpack ZMM lanes back to FP16 scalars (no stack)
+    unpackAndConvertF32ZmmToFP16(mSize, packRegIdx);
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16GEMVN1<KType>::generateIrLoop(utils::gemvN1GeneratorParams& params,
+                                     gen::kernelOpsHandler<KType>* handler,
+                                     int                           mSize)
+{
     inLocalLabel();
 
     mov(regTmpAptr, regAptr);
-    mov(regTmpYptr, regAptr); // Track column position for A matrix (like U8S8)
+    mov(regTmpYptr, regAptr);
 
     mov(regXptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, x)]);
 
@@ -1330,16 +1583,13 @@ jitFP16GEMVN1<KType>::generateIrLoop(int mSize)
 
         L(".KLOOP_START");
 
-        // Load x[k:k+32] as a VECTOR (32 FP16 elements)
         vmovdqu16(Zmm(xBaseIdx), ptr[regXptr]);
 
         RETURN_IF_ERROR(processMRBlock(mSize, false));
 
-        // Advance to next K chunk (32 FP16 elements = 64 bytes)
-        // Column advancement: regTmpYptr tracks column position
-        add(regTmpYptr, RegBytes);   // Move column pointer by 64 bytes
-        mov(regTmpAptr, regTmpYptr); // Reset row pointer to new column
-        add(regXptr, RegBytes);      // Advance X by 64 bytes
+        add(regTmpYptr, RegBytes);
+        mov(regTmpAptr, regTmpYptr);
+        add(regXptr, RegBytes);
 
         sub(regKIter, 1);
         jnz(".KLOOP_START", T_NEAR);
@@ -1351,17 +1601,14 @@ jitFP16GEMVN1<KType>::generateIrLoop(int mSize)
         test(regKIter, regKIter);
         jz(".KLOOP_FRINGE_END", T_NEAR);
 
-        // Load remaining X elements with mask (k_left FP16 elements)
         vmovdqu16(Zmm(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
         RETURN_IF_ERROR(processMRBlock(mSize, true));
 
         L(".KLOOP_FRINGE_END");
 
-        // After K-loop: reduce each accumulator from 32 FP16 to 1 scalar
         RETURN_IF_ERROR(reduceAccumulation(mSize));
     }
 
-    // Skip alpha scaling when alpha=0 (accumulators already zeroed by regInit)
     if (alphaScalingType != dlp::kernel_frame::scalingType::one
         && alphaScalingType != dlp::kernel_frame::scalingType::zero) {
         RETURN_IF_ERROR(scaleAlpha(mSize));
@@ -1369,6 +1616,10 @@ jitFP16GEMVN1<KType>::generateIrLoop(int mSize)
 
     if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
         RETURN_IF_ERROR(scaleBeta(mSize));
+    }
+
+    if (handler) {
+        RETURN_IF_ERROR(applyPostOps(params, *handler, mSize));
     }
 
     RETURN_IF_ERROR(storeResult(mSize));
@@ -1379,7 +1630,8 @@ jitFP16GEMVN1<KType>::generateIrLoop(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitFP16GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
+jitFP16GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params,
+                                    gen::kernelOpsHandler<KType>* handler)
 {
     inLocalLabel();
 
@@ -1389,7 +1641,7 @@ jitFP16GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
 
     L(".MLOOP_START");
 
-    RETURN_IF_ERROR(generateIrLoop(MR));
+    RETURN_IF_ERROR(generateIrLoop(params, handler, MR));
 
     mov(regTmp1, MR);
     imul(regTmp1, regRsA);
@@ -1399,13 +1651,25 @@ jitFP16GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
     imul(regTmp1, regRsC);
     add(regYptr, regTmp1);
 
+    if (!params.kernelOps.empty()) {
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
+        add(regTmp1, MR);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
+            regTmp1);
+    }
+
     sub(regMIter, 1);
     jnz(".MLOOP_START", T_NEAR);
 
     L(".MLOOP_END");
     L(".M_FRINGE");
 
-    RETURN_IF_ERROR(generateIrLoop(params.M_LEFT));
+    if (params.M_LEFT > 0) {
+        RETURN_IF_ERROR(generateIrLoop(params, handler, params.M_LEFT));
+    }
 
     outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
@@ -1432,10 +1696,17 @@ jitFP16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
         loadMasks();
 
+        std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
+        if (!params.kernelOps.empty()) {
+            kernelOpsHandlerPtr =
+                std::make_unique<gen::kernelOpsHandler<KType>>(this);
+        }
+
         if (params.mloop) {
-            RETURN_IF_ERROR(generateMLoop(params));
+            RETURN_IF_ERROR(generateMLoop(params, kernelOpsHandlerPtr.get()));
         } else {
-            RETURN_IF_ERROR(generateIrLoop(params.M_LEFT));
+            RETURN_IF_ERROR(generateIrLoop(params, kernelOpsHandlerPtr.get(),
+                                           params.M_LEFT));
         }
 
         vzeroupper();

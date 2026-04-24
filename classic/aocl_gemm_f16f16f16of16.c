@@ -257,15 +257,6 @@ aocl_gemm_f16f16f16of16(const char      order,
     dlp_param_map_char_to_lpmtag(mem_format_a, &mtag_a);
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
 
-    // Post-ops are not supported for FP16 GEMM.
-    // Check if any post-ops are specified and return error if so.
-    if ((metadata != NULL) && (metadata->seq_length > 0)) {
-        dlp_print_msg(" Post-ops are not supported for f16f16f16of16 gemm.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-
     // Check for A-dequantization post-op (a_post_quant)
     if ((metadata != NULL) && (metadata->a_post_quant != NULL)) {
         dlp_print_msg(" A-dequantization post-op is not supported for "

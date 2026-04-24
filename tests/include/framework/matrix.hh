@@ -30,6 +30,7 @@
 
 #include "classic/dlp_base_types.h"
 #include "types.hh"
+#include "utils/conversion_utils.hh"
 #include <any>
 #include <limits>
 #include <memory>
@@ -746,6 +747,14 @@ namespace dlp { namespace testing { namespace framework {
                         float_bits.f = floatVal;
                         data[startIndex + i] =
                             static_cast<uint16_t>(float_bits.u >> 16);
+                    }
+                    break;
+                }
+                case MatrixType::fp16: {
+                    float16* data = reinterpret_cast<float16*>(targetData);
+                    for (std::size_t i = 0; i < count; ++i) {
+                        data[startIndex + i] = dlp::testing::utils::f32_to_fp16(
+                            static_cast<float>(source[i]));
                     }
                     break;
                 }

@@ -87,6 +87,11 @@ namespace dlp { namespace testing { namespace utils {
                 float           f32_val = bf16_to_f32(data[index]);
                 return static_cast<IntermediateT>(f32_val);
             }
+            case MatrixType::fp16: {
+                const float16* data    = static_cast<const float16*>(src_ptr);
+                float          f32_val = fp16_to_f32(data[index]);
+                return static_cast<IntermediateT>(f32_val);
+            }
             default:
                 return static_cast<IntermediateT>(0);
         }
@@ -203,6 +208,11 @@ namespace dlp { namespace testing { namespace utils {
             case MatrixType::bf16: {
                 static_cast<bfloat16*>(dst_ptr)[index] =
                     f32_to_bf16(static_cast<float>(value));
+                break;
+            }
+            case MatrixType::fp16: {
+                static_cast<float16*>(dst_ptr)[index] =
+                    f32_to_fp16(static_cast<float>(value));
                 break;
             }
             default:
