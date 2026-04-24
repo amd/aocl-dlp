@@ -34,6 +34,7 @@
 #include <cassert>
 #include <cstring>
 #include <memory>
+#include <vector>
 
 using namespace dlp::testing::framework;
 using dlp::testing::utils::isIntegerType;
@@ -254,82 +255,6 @@ RefUalPlan::execute()
         return UALError::UAL_SUCCESS;
     }
 
-    // Grouped symmetric quantization: s8×s8→f32 or s8×s8→bf16 (same pattern as
-    // AQuant: f32 intermediate, post-ops, then copy/convert into C).
-    bool isS8S8SymQuant =
-        (aType == MatrixType::s8 && bType == MatrixType::s8 && m_sym_quant);
-
-    if (isS8S8SymQuant) {
-        if (!ualRef.checkValidGemmParams(A, B, C, false)) {
-            return UALError::UAL_FAILURE;
-        }
-
-        Matrix a_sf, b_sf;
-        if (m_sym_quant->hasAScale()) {
-            a_sf = *m_sym_quant->getAScale();
-        }
-        if (m_sym_quant->hasBScale()) {
-            b_sf = *m_sym_quant->getBScale();
-        }
-
-        void* a_sf_data = a_sf.getData();
-        void* b_sf_data = b_sf.getData();
-        if (!a_sf_data || !b_sf_data) {
-            return UALError::UAL_FAILURE;
-        }
-
-        md_t ng = a_sf.getCols();
-        if (b_sf.getRows() != ng || a_sf.getRows() != A.getEffectiveRows()
-            || b_sf.getCols() != B.getEffectiveCols()) {
-            return UALError::UAL_FAILURE;
-        }
-
-        if (a_sf.getMatrixType() != b_sf.getMatrixType()) {
-            return UALError::UAL_FAILURE;
-        }
-
-        md_t gs_yaml   = m_sym_quant->getGroupSize();
-        md_t k_eff     = A.getEffectiveCols();
-        md_t gs_eff    = (gs_yaml == 0) ? k_eff : gs_yaml;
-        md_t ng_expect = (k_eff + gs_eff - 1) / gs_eff;
-        if (ng != ng_expect) {
-            return UALError::UAL_FAILURE;
-        }
-
-        char    layout = (A.getLayout() == MatrixLayout::ROW_MAJOR) ? 'r' : 'c';
-        char    transA = A.isTransposed() ? 't' : 'n';
-        char    transB = B.isTransposed() ? 't' : 'n';
-        int32_t alpha_s32 = static_cast<int32_t>(m_alpha);
-        int32_t beta_s32  = static_cast<int32_t>(m_beta);
-
-        Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
-                         MatrixType::f32, C.getLayout());
-        if (beta_s32 != 0) {
-            dlp::testing::utils::copyMatrixTo<float>(
-                C, reinterpret_cast<float*>(tempC_f32.getData()),
-                tempC_f32.getLeadingDimension(), tempC_f32.getLayout());
-        } else {
-            std::memset(tempC_f32.getData(), 0, tempC_f32.getDataSizeBytes());
-        }
-
-        dlp::testing::classic::ref::aocl_gemm_s8s8s32of32_sym_quant_ref(
-            layout, transA, transB, A.getEffectiveRows(), B.getEffectiveCols(),
-            A.getEffectiveCols(), alpha_s32,
-            reinterpret_cast<const int8_t*>(A.getMatrixData().getMatrixPtr()),
-            static_cast<int>(A.getLeadingDimension()),
-            reinterpret_cast<const int8_t*>(B.getMatrixData().getMatrixPtr()),
-            static_cast<int>(B.getLeadingDimension()), beta_s32,
-            reinterpret_cast<float*>(tempC_f32.getData()),
-            static_cast<int>(tempC_f32.getLeadingDimension()), gs_yaml,
-            a_sf.getData(), b_sf.getData(), ng, a_sf.getMatrixType());
-
-        applyPostOps(tempC_f32);
-        dlp::testing::utils::copyToMatrix<float>(
-            reinterpret_cast<const float*>(tempC_f32.getData()),
-            tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
-        return UALError::UAL_SUCCESS;
-    }
-
     // Standard path: GEMM with optional f32 intermediate for post-ops
     bool isIntegerGemm =
         ((aType == MatrixType::u8 && bType == MatrixType::s8)
@@ -366,6 +291,114 @@ RefUalPlan::execute()
                                static_cast<size_t>(tempC_f32.getRows())
                                    * tempC_f32.getCols());
         }
+        dlp::testing::utils::copyToMatrix<float>(
+            reinterpret_cast<const float*>(tempC_f32.getData()),
+            tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());
+        return UALError::UAL_SUCCESS;
+    }
+
+    // GroupScale (symmetric quantization) path:
+    // Uses specialized ref that handles per-group scale application during
+    // K-panel accumulation, which is required for correct results when
+    // group_size > 0.
+    bool isS8S8GroupScale =
+        (aType == MatrixType::s8 && bType == MatrixType::s8 && m_group_scale);
+
+    if (isS8S8GroupScale) {
+        if (!ualRef.checkValidGemmParams(A, B, C, false)) {
+            return UALError::UAL_FAILURE;
+        }
+
+        md_t M = C.getEffectiveRows();
+        md_t N = C.getEffectiveCols();
+        md_t K = A.getEffectiveCols();
+
+        md_t gs     = m_group_scale->getGroupSize();
+        md_t gs_eff = (gs == 0) ? K : gs;
+        md_t ng     = (K + gs_eff - 1) / gs_eff;
+
+        if (!m_group_scale->hasAScaleFactor()
+            || !m_group_scale->hasBScaleFactor()) {
+            return UALError::UAL_FAILURE;
+        }
+
+        const float* a_sf_src = reinterpret_cast<const float*>(
+            m_group_scale->getAScaleFactor()->getData());
+        const float* b_sf_src = reinterpret_cast<const float*>(
+            m_group_scale->getBScaleFactor()->getData());
+        md_t       a_sf_len = m_group_scale->getAScaleFactor()->getCols();
+        md_t       b_sf_len = m_group_scale->getBScaleFactor()->getCols();
+        MatrixType sf_type  = m_group_scale->getAScaleFactor()->getMatrixType();
+
+        if (sf_type != MatrixType::f32) {
+            return UALError::UAL_NOT_SUPPORTED;
+        }
+
+        // Validate supported scale factor lengths:
+        //   A: 1 (scalar), M (per-row), or M*ng (fully tiled)
+        //   B: 1 (scalar), N (per-col), or ng*N (fully tiled)
+        bool a_len_ok = (a_sf_len == 1 || a_sf_len == M || a_sf_len == M * ng);
+        bool b_len_ok = (b_sf_len == 1 || b_sf_len == N || b_sf_len == ng * N);
+        if (!a_len_ok || !b_len_ok) {
+            return UALError::UAL_NOT_SUPPORTED;
+        }
+
+        // The specialized ref indexes scale factors as 2D arrays:
+        //   a_scale[i * ng + g]  — needs M * ng elements
+        //   b_scale[g * n + j]   — needs ng * N elements
+        // Broadcast scalar/per-row/per-col to these sizes if needed.
+        std::vector<float> a_sf_buf;
+        std::vector<float> b_sf_buf;
+        const void*        a_sf_ptr = a_sf_src;
+        const void*        b_sf_ptr = b_sf_src;
+
+        if (a_sf_len != M * ng) {
+            a_sf_buf.resize(M * ng);
+            for (md_t i = 0; i < M; ++i) {
+                float val = a_sf_src[a_sf_len > 1 ? i : 0];
+                for (md_t g = 0; g < ng; ++g) {
+                    a_sf_buf[i * ng + g] = val;
+                }
+            }
+            a_sf_ptr = a_sf_buf.data();
+        }
+
+        if (b_sf_len != ng * N) {
+            b_sf_buf.resize(ng * N);
+            for (md_t g = 0; g < ng; ++g) {
+                for (md_t j = 0; j < N; ++j) {
+                    b_sf_buf[g * N + j] = b_sf_src[b_sf_len > 1 ? j : 0];
+                }
+            }
+            b_sf_ptr = b_sf_buf.data();
+        }
+
+        char    layout = (A.getLayout() == MatrixLayout::ROW_MAJOR) ? 'r' : 'c';
+        char    transA_   = A.isTransposed() ? 't' : 'n';
+        char    transB_   = B.isTransposed() ? 't' : 'n';
+        int32_t alpha_s32 = static_cast<int32_t>(m_alpha);
+        int32_t beta_s32  = static_cast<int32_t>(m_beta);
+
+        Matrix tempC_f32(M, N, MatrixType::f32, C.getLayout());
+        if (beta_s32 != 0) {
+            dlp::testing::utils::copyMatrixTo<float>(
+                C, reinterpret_cast<float*>(tempC_f32.getData()),
+                tempC_f32.getLeadingDimension(), tempC_f32.getLayout());
+        } else {
+            std::memset(tempC_f32.getData(), 0, tempC_f32.getDataSizeBytes());
+        }
+
+        dlp::testing::classic::ref::aocl_gemm_s8s8s32of32_sym_quant_ref(
+            layout, transA_, transB_, M, N, K, alpha_s32,
+            reinterpret_cast<const int8_t*>(A.getMatrixData().getMatrixPtr()),
+            static_cast<int>(A.getLeadingDimension()),
+            reinterpret_cast<const int8_t*>(B.getMatrixData().getMatrixPtr()),
+            static_cast<int>(B.getLeadingDimension()), beta_s32,
+            reinterpret_cast<float*>(tempC_f32.getData()),
+            static_cast<int>(tempC_f32.getLeadingDimension()), gs, a_sf_ptr,
+            b_sf_ptr, ng, sf_type);
+
+        applyPostOps(tempC_f32);
         dlp::testing::utils::copyToMatrix<float>(
             reinterpret_cast<const float*>(tempC_f32.getData()),
             tempC_f32.getLeadingDimension(), C, tempC_f32.getLayout());

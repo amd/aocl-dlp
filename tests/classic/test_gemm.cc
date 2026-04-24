@@ -132,11 +132,11 @@ struct GemmTestConfig
     bool         reorderA = false, reorderB = false;
     bool         packA = false, packB = false;
     std::shared_ptr<std::vector<std::unique_ptr<IOperationParam>>>
-                                   post_op_params;
-    std::shared_ptr<AQuantParam>   a_quant_param;
-    std::shared_ptr<WOQParam>      woq_param;
-    std::shared_ptr<SymQuantParam> sym_quant_param;
-    bool                           has_postops = false;
+                                     post_op_params;
+    std::shared_ptr<AQuantParam>     a_quant_param;
+    std::shared_ptr<WOQParam>        woq_param;
+    std::shared_ptr<GroupScaleParam> group_scale_param;
+    bool                             has_postops = false;
 
     // Optional fill_value configuration
     bool        has_fill_value         = false;
@@ -180,10 +180,10 @@ struct GemmTestConfig
         bool               packA_,
         bool               packB_,
         std::shared_ptr<std::vector<std::unique_ptr<IOperationParam>>>
-                                       post_op_params_  = nullptr,
-        std::shared_ptr<AQuantParam>   a_quant_param_   = nullptr,
-        std::shared_ptr<WOQParam>      woq_param_       = nullptr,
-        std::shared_ptr<SymQuantParam> sym_quant_param_ = nullptr)
+                                         post_op_params_    = nullptr,
+        std::shared_ptr<AQuantParam>     a_quant_param_     = nullptr,
+        std::shared_ptr<WOQParam>        woq_param_         = nullptr,
+        std::shared_ptr<GroupScaleParam> group_scale_param_ = nullptr)
         : name(test_name)
         , a_type(a_type_)
         , b_type(b_type_)
@@ -207,7 +207,7 @@ struct GemmTestConfig
         , post_op_params(std::move(post_op_params_))
         , a_quant_param(std::move(a_quant_param_))
         , woq_param(std::move(woq_param_))
-        , sym_quant_param(std::move(sym_quant_param_))
+        , group_scale_param(std::move(group_scale_param_))
         , has_postops(false) //
     {
         // Check if post-ops actually contain operations (not just non-null
@@ -518,8 +518,8 @@ extractPostOpsDescription(
             case OperationType::WOQ:
                 op_names.push_back("WOQ");
                 break;
-            case OperationType::SymQuant:
-                op_names.push_back("SymQuant");
+            case OperationType::GroupScale:
+                op_names.push_back("GroupScale");
                 break;
             default:
                 op_names.push_back("UnknownOp");
@@ -621,8 +621,8 @@ generateTestName(const MicroTest&   microTest,
         name << postops_desc;
     }
 
-    if (microTest.getSymQuantParam()) {
-        name << "_SymQuant";
+    if (microTest.getGroupScaleParam()) {
+        name << "_GroupScale";
     }
 
     // Add config index for uniqueness
@@ -674,12 +674,13 @@ loadTestConfigurations(const std::string& yaml_file)
                 auto woq     = microTest.getWOQParam();
                 auto a_quant_shared =
                     a_quant ? std::make_shared<AQuantParam>(*a_quant) : nullptr;
-                auto woq_shared = woq ? std::make_shared<WOQParam>(*woq)
-                                      : nullptr;
-                auto sym_quant  = microTest.getSymQuantParam();
-                auto sym_quant_shared =
-                    sym_quant ? std::make_shared<SymQuantParam>(*sym_quant)
-                              : nullptr;
+                auto woq_shared      = woq ? std::make_shared<WOQParam>(*woq)
+                                           : nullptr;
+                auto group_scale_val = microTest.getGroupScaleParam();
+                auto group_scale_shared =
+                    group_scale_val
+                        ? std::make_shared<GroupScaleParam>(*group_scale_val)
+                        : nullptr;
 
                 // Extract configuration from parser
                 GemmTestConfig config(
@@ -706,7 +707,7 @@ loadTestConfigurations(const std::string& yaml_file)
                     post_op_params_vec,           // post_op_params
                     a_quant_shared,               // a_quant_param
                     woq_shared,                   // woq_param
-                    sym_quant_shared              // sym_quant_param
+                    group_scale_shared            // group_scale_param
                 );
 
                 // Extract fill_value if present
@@ -1144,9 +1145,9 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                 std::make_unique<AQuantParam>(*config_.a_quant_param));
         if (config_.woq_param)
             test_plan->setWOQ(std::make_unique<WOQParam>(*config_.woq_param));
-        if (config_.sym_quant_param) {
-            test_plan->setSymQuant(
-                std::make_unique<SymQuantParam>(*config_.sym_quant_param));
+        if (config_.group_scale_param) {
+            test_plan->setGroupScale(
+                std::make_unique<GroupScaleParam>(*config_.group_scale_param));
         }
         test_plan->prepare();
         UALError test_status = test_plan->executeWith(A, B, C);
@@ -1170,9 +1171,9 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                 std::make_unique<AQuantParam>(*config_.a_quant_param));
         if (config_.woq_param)
             ref_plan->setWOQ(std::make_unique<WOQParam>(*config_.woq_param));
-        if (config_.sym_quant_param) {
-            ref_plan->setSymQuant(
-                std::make_unique<SymQuantParam>(*config_.sym_quant_param));
+        if (config_.group_scale_param) {
+            ref_plan->setGroupScale(
+                std::make_unique<GroupScaleParam>(*config_.group_scale_param));
         }
         ref_plan->prepare();
         UALError ref_status = ref_plan->executeWith(A_ref, B_ref, C_ref);

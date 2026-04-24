@@ -41,6 +41,7 @@ using dlp::testing::framework::postops::createBias;
 using dlp::testing::framework::postops::createClip;
 using dlp::testing::framework::postops::createGeluErf;
 using dlp::testing::framework::postops::createGeluTanh;
+using dlp::testing::framework::postops::createGroupScale;
 using dlp::testing::framework::postops::createMatrixAdd;
 using dlp::testing::framework::postops::createMatrixMul;
 using dlp::testing::framework::postops::createPrelu;
@@ -48,7 +49,6 @@ using dlp::testing::framework::postops::createRelu;
 using dlp::testing::framework::postops::createScale;
 using dlp::testing::framework::postops::createSigmoid;
 using dlp::testing::framework::postops::createSwish;
-using dlp::testing::framework::postops::createSymQuant;
 using dlp::testing::framework::postops::createTanh;
 using dlp::testing::framework::postops::createWOQ;
 
@@ -195,13 +195,14 @@ MicroTest::getWOQParam() const
     return nullptr;
 }
 
-std::unique_ptr<SymQuantParam>
-MicroTest::getSymQuantParam() const
+std::unique_ptr<GroupScaleParam>
+MicroTest::getGroupScaleParam() const
 {
     if (!m_has_postops) {
         return nullptr;
     }
 
+    // Get current combination from PostOpsIterator
     auto        combination = m_postops_iterator->getCurrentCombination();
     const auto& operations  = m_postops_iterator->getOperations();
 
@@ -213,10 +214,10 @@ MicroTest::getSymQuantParam() const
 
         auto param = createOperationParam(op_config, param_indices);
 
-        if (param->getType() == OperationType::SymQuant) {
+        if (param->getType() == OperationType::GroupScale) {
             auto cloned = param->clone();
-            return std::unique_ptr<SymQuantParam>(
-                static_cast<SymQuantParam*>(cloned.release()));
+            return std::unique_ptr<GroupScaleParam>(
+                static_cast<GroupScaleParam*>(cloned.release()));
         }
     }
 
@@ -244,10 +245,10 @@ MicroTest::configurePlan(IUalPlan& plan) const
         plan.setWOQ(std::move(woq));
     }
 
-    // Set SymQuant if present
-    auto sym_quant = getSymQuantParam();
-    if (sym_quant) {
-        plan.setSymQuant(std::move(sym_quant));
+    // Set GroupScale if present
+    auto group_scale = getGroupScaleParam();
+    if (group_scale) {
+        plan.setGroupScale(std::move(group_scale));
     }
 }
 
@@ -984,6 +985,101 @@ MicroTest::createOperationParam(
                 .setA_PostOpScaleFactor(post_quant_sf_matrix)
                 .build();
         }
+    } else if (config.type == "GroupScale") {
+        // GroupScale: Group-level symmetric quantization scale factors
+        // Parse a_scale_len
+        std::string a_sf_len    = "1"; // default
+        auto        a_sf_len_it = config.params.find("a_scale_len");
+        if (a_sf_len_it != config.params.end()
+            && !a_sf_len_it->second.empty()) {
+            auto   idx_it = param_indices.find("a_scale_len");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, a_sf_len_it->second.size() - 1);
+            a_sf_len   = std::any_cast<std::string>(a_sf_len_it->second[idx]);
+        }
+
+        // Parse a_scale_type
+        MatrixType a_sf_type    = MatrixType::f32; // default
+        auto       a_sf_type_it = config.params.find("a_scale_type");
+        if (a_sf_type_it != config.params.end()
+            && !a_sf_type_it->second.empty()) {
+            auto   idx_it = param_indices.find("a_scale_type");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, a_sf_type_it->second.size() - 1);
+            auto type_str =
+                std::any_cast<std::string>(a_sf_type_it->second[idx]);
+            a_sf_type = stringToMatrixType(type_str);
+        }
+
+        // Parse b_scale_len
+        std::string b_sf_len    = "1"; // default
+        auto        b_sf_len_it = config.params.find("b_scale_len");
+        if (b_sf_len_it != config.params.end()
+            && !b_sf_len_it->second.empty()) {
+            auto   idx_it = param_indices.find("b_scale_len");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, b_sf_len_it->second.size() - 1);
+            b_sf_len   = std::any_cast<std::string>(b_sf_len_it->second[idx]);
+        }
+
+        // Parse b_scale_type
+        MatrixType b_sf_type    = MatrixType::f32; // default
+        auto       b_sf_type_it = config.params.find("b_scale_type");
+        if (b_sf_type_it != config.params.end()
+            && !b_sf_type_it->second.empty()) {
+            auto   idx_it = param_indices.find("b_scale_type");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, b_sf_type_it->second.size() - 1);
+            auto type_str =
+                std::any_cast<std::string>(b_sf_type_it->second[idx]);
+            b_sf_type = stringToMatrixType(type_str);
+        }
+
+        // Parse group_size (0 means full k dimension)
+        md_t group_size    = 0;
+        auto group_size_it = config.params.find("group_size");
+        if (group_size_it != config.params.end()
+            && !group_size_it->second.empty()) {
+            auto   idx_it = param_indices.find("group_size");
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, group_size_it->second.size() - 1);
+            auto gs_str =
+                std::any_cast<std::string>(group_size_it->second[idx]);
+            group_size = static_cast<md_t>(std::stoul(gs_str));
+        }
+
+        // Create A scale factor matrix
+        Matrix                                a_sf_matrix;
+        std::mt19937                          gen(RANDOM_SEED);
+        std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
+        if (a_sf_len == "m") {
+            std::vector<float> a_sf_data(getM());
+            for (std::size_t i = 0; i < a_sf_data.size(); ++i) {
+                a_sf_data[i] = dist(gen);
+            }
+            a_sf_matrix = Matrix::fromVector(a_sf_data, a_sf_type);
+        } else {
+            a_sf_matrix = Matrix::fromValue(dist(gen), a_sf_type);
+        }
+
+        // Create B scale factor matrix
+        Matrix b_sf_matrix;
+        if (b_sf_len == "n") {
+            std::vector<float> b_sf_data(getN());
+            for (std::size_t i = 0; i < b_sf_data.size(); ++i) {
+                b_sf_data[i] = dist(gen);
+            }
+            b_sf_matrix = Matrix::fromVector(b_sf_data, b_sf_type);
+        } else {
+            b_sf_matrix = Matrix::fromValue(dist(gen), b_sf_type);
+        }
+
+        return createGroupScale()
+            .setAScaleFactor(a_sf_matrix)
+            .setBScaleFactor(b_sf_matrix)
+            .setGroupSize(group_size)
+            .build();
+
     } else if (config.type == "WOQ") {
         // WOQ: Weight-Only Quantization for bf16s4/bf16u4
         // Parse scale_factor_len
@@ -1070,119 +1166,6 @@ MicroTest::createOperationParam(
             // Symmetric quantization: no zero-point
             return createWOQ().setB_ScaleFactor(sf_matrix).build();
         }
-    } else if (config.type == "SymQuant") {
-        // SymQuant: Parse group_size (K-axis grouping; 0 = full-K as one group)
-        std::string gs_str = "32";
-        auto        gs_it  = config.params.find("group_size");
-        if (gs_it != config.params.end() && !gs_it->second.empty()) {
-            auto   idx_it = param_indices.find("group_size");
-            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
-            idx        = std::min(idx, gs_it->second.size() - 1);
-            gs_str     = std::any_cast<std::string>(gs_it->second[idx]);
-        }
-        md_t gs = static_cast<md_t>(std::stoul(gs_str));
-
-        // Parse sym_quant_sf_len (how random A/B scale matrices are filled;
-        // mirrors a_quant_sf_len: "full" = dense m×ng / ng×n, "1" = constant
-        // fill with reciprocal pair like pre/post scales, "m" = constant per A
-        // row)
-        std::string sf_len    = "full";
-        auto        sf_len_it = config.params.find("sym_quant_sf_len");
-        if (sf_len_it != config.params.end() && !sf_len_it->second.empty()) {
-            auto   idx_it = param_indices.find("sym_quant_sf_len");
-            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
-            idx        = std::min(idx, sf_len_it->second.size() - 1);
-            sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
-        }
-
-        // Parse scale_factor_type
-        MatrixType sf_type    = MatrixType::f32;
-        auto       sf_type_it = config.params.find("scale_factor_type");
-        if (sf_type_it != config.params.end() && !sf_type_it->second.empty()) {
-            auto   idx_it = param_indices.find("scale_factor_type");
-            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
-            idx        = std::min(idx, sf_type_it->second.size() - 1);
-            auto type_str = std::any_cast<std::string>(sf_type_it->second[idx]);
-            sf_type       = stringToMatrixType(type_str);
-        }
-
-        md_t m = getM(), n = getN(), k = getK();
-        if (k <= 0) {
-            throw std::runtime_error("SymQuant requires positive K");
-        }
-
-        md_t gs_eff = (gs == 0) ? k : gs;
-        if (gs_eff <= 0) {
-            throw std::runtime_error("SymQuant: effective group_size invalid");
-        }
-        md_t ng = (k + gs_eff - 1) / gs_eff;
-
-        // Use fixed seed for reproducible random values across DLP and REF
-        std::mt19937                          gen(RANDOM_SEED);
-        std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
-
-        Matrix a_mat;
-        Matrix b_mat;
-
-        if (sf_len == "full") {
-            std::vector<std::vector<float>> a_rows(
-                static_cast<size_t>(m),
-                std::vector<float>(static_cast<size_t>(ng)));
-            std::vector<std::vector<float>> b_rows(
-                static_cast<size_t>(ng),
-                std::vector<float>(static_cast<size_t>(n)));
-            for (md_t i = 0; i < m; ++i) {
-                for (md_t g = 0; g < ng; ++g) {
-                    a_rows[static_cast<size_t>(i)][static_cast<size_t>(g)] =
-                        dist(gen);
-                }
-            }
-            for (md_t g = 0; g < ng; ++g) {
-                for (md_t j = 0; j < n; ++j) {
-                    b_rows[static_cast<size_t>(g)][static_cast<size_t>(j)] =
-                        dist(gen);
-                }
-            }
-            a_mat = Matrix::fromData(a_rows, sf_type);
-            b_mat = Matrix::fromData(b_rows, sf_type);
-        } else if (sf_len == "1") {
-            float sf_value = dist(gen);
-            a_mat          = Matrix(m, ng, sf_type);
-            b_mat          = Matrix(ng, n, sf_type);
-            a_mat.fillValue(static_cast<double>(sf_value));
-            b_mat.fillValue(static_cast<double>(1.0f / sf_value));
-        } else if (sf_len == "m") {
-            std::vector<std::vector<float>> a_rows(
-                static_cast<size_t>(m),
-                std::vector<float>(static_cast<size_t>(ng)));
-            std::vector<std::vector<float>> b_rows(
-                static_cast<size_t>(ng),
-                std::vector<float>(static_cast<size_t>(n)));
-            for (md_t i = 0; i < m; ++i) {
-                float v = dist(gen);
-                for (md_t g = 0; g < ng; ++g) {
-                    a_rows[static_cast<size_t>(i)][static_cast<size_t>(g)] = v;
-                }
-            }
-            for (md_t g = 0; g < ng; ++g) {
-                float w = dist(gen);
-                for (md_t j = 0; j < n; ++j) {
-                    b_rows[static_cast<size_t>(g)][static_cast<size_t>(j)] = w;
-                }
-            }
-            a_mat = Matrix::fromData(a_rows, sf_type);
-            b_mat = Matrix::fromData(b_rows, sf_type);
-        } else {
-            throw std::runtime_error(
-                "SymQuant: unknown sym_quant_sf_len (use full, 1, or m): "
-                + sf_len);
-        }
-
-        return createSymQuant()
-            .setGroupSize(gs)
-            .setAScale(a_mat)
-            .setBScale(b_mat)
-            .build();
     }
     throw std::runtime_error("Unknown operation type: " + config.type);
 }

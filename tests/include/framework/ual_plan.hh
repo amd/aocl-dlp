@@ -115,9 +115,9 @@ class IUalPlan
 
     void setWOQ(std::unique_ptr<WOQParam> param) { m_woq = std::move(param); }
 
-    void setSymQuant(std::unique_ptr<SymQuantParam> param)
+    void setGroupScale(std::unique_ptr<GroupScaleParam> param)
     {
-        m_sym_quant = std::move(param);
+        m_group_scale = std::move(param);
     }
 
     // ─── Post-Operations (real fusion ops only) ─────────────────
@@ -231,7 +231,7 @@ class IUalPlan
     bool hasAQuant() const { return m_a_quant != nullptr; }
     bool hasBQuant() const { return m_b_quant != nullptr; }
     bool hasWOQ() const { return m_woq != nullptr; }
-    bool hasSymQuant() const { return m_sym_quant != nullptr; }
+    bool hasGroupScale() const { return m_group_scale != nullptr; }
 
     const std::vector<std::unique_ptr<IOperationParam>>& getPostOps() const
     {
@@ -274,10 +274,10 @@ class IUalPlan
     // Scaling
     double m_alpha = 1.0, m_beta = 0.0;
     // Quantisation (kernel config)
-    std::unique_ptr<AQuantParam>   m_a_quant;
-    std::unique_ptr<BQuantParam>   m_b_quant;
-    std::unique_ptr<WOQParam>      m_woq;
-    std::unique_ptr<SymQuantParam> m_sym_quant;
+    std::unique_ptr<AQuantParam>     m_a_quant;
+    std::unique_ptr<BQuantParam>     m_b_quant;
+    std::unique_ptr<WOQParam>        m_woq;
+    std::unique_ptr<GroupScaleParam> m_group_scale;
     // Post-ops (fusion only)
     std::vector<std::unique_ptr<IOperationParam>> m_post_ops;
 };

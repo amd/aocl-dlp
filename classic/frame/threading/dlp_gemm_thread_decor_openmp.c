@@ -1330,6 +1330,107 @@ GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
 GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
     bfloat16, int8_t, float, bf16s4f32of32, bf16bf16f32of32, 1, BF16BF16F32OF32)
 
+// FP16 batch GEMM variant (reuse bf16bf16 threading)
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    float16, float16, float16, f16f16f16of16, bf16bf16f32of32, 0, 0)
+
+// F32×FP16→F32 batch GEMM variant (reuse f32f32 threading)
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    float, float16, float, f32f16f32of32, f32f32f32of32, 0, 0)
+
+// MP batch GEMM variant (bf16u4, reuse bf16bf16 threading with MC logic)
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
+                                            uint8_t,
+                                            float,
+                                            bf16u4f32of32,
+                                            bf16bf16f32of32,
+                                            1,
+                                            BF16BF16F32OF32)
+
+// Q batch GEMM variants
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    bfloat16, int8_t, int32_t, bf16s8s32os32, u8s8s32o32, 0, 0)
+
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    float, int8_t, int32_t, f32s8s32os32, u8s8s32o32, 0, 0)
+
+/**
+ * @brief GRP batch GEMM OpenMP decorator macro (C_type != C_type_actual).
+ *
+ * For symmetric quantization where alpha/beta are int32_t but c pointer is
+ * float*.
+ */
+#define GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_GRP(                               \
+    A_type, B_type, C_type, C_type_actual, DLP_GEMM_SFX, THREADING_SFX)        \
+    void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
+        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
+        const dlp_gemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                \
+    {                                                                          \
+        md_t n_threads           = 1;                                          \
+        md_t ic_ways             = 1;                                          \
+        md_t jc_ways             = 1;                                          \
+        md_t n_gemms_in_parallel = 1;                                          \
+        md_t n_threads_per_gemm  = 1;                                          \
+                                                                               \
+        batch_dlp_gemm_##THREADING_SFX##_get_threading(                        \
+            group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
+            &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g);                     \
+                                                                               \
+        dlp_task_comm_t  static_dlp_gemm_comms[DLP_NUM_STATIC_COMMS];          \
+        dlp_task_comm_t* cur_dlp_gemm_comms = static_dlp_gemm_comms;           \
+                                                                               \
+        if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
+            cur_dlp_gemm_comms = malloc(jc_ways * n_gemms_in_parallel          \
+                                        * sizeof(dlp_task_comm_t));            \
+            if (cur_dlp_gemm_comms == NULL) {                                  \
+                return;                                                        \
+            }                                                                  \
+        }                                                                      \
+        for (iter_t i = 0; i < n_gemms_in_parallel * jc_ways; i++) {           \
+            dlp_task_comm_init(ic_ways, &cur_dlp_gemm_comms[i]);               \
+        }                                                                      \
+                                                                               \
+        _Pragma("omp parallel num_threads(n_threads)")                         \
+        {                                                                      \
+            dlp_rntm_t rntm_l = *rntm_g;                                       \
+                                                                               \
+            dlp_gemm_thrinfo_t thread;                                         \
+            thread.n_threads = n_threads_per_gemm;                             \
+            thread.tid       = omp_get_thread_num() % n_threads_per_gemm;      \
+            thread.ic_ways   = ic_ways;                                        \
+            thread.jc_ways   = jc_ways;                                        \
+            thread.comm =                                                      \
+                cur_dlp_gemm_comms                                             \
+                + (omp_get_thread_num() / n_threads_per_gemm) * jc_ways;       \
+                                                                               \
+            md_t          gemm_start, gemm_end;                                \
+            dlp_task_id_t thrinfo;                                             \
+            thrinfo.n_way   = n_gemms_in_parallel;                             \
+            thrinfo.work_id = omp_get_thread_num() / n_threads_per_gemm;       \
+            dlp_thread_task_range(&thrinfo, group_size, 1, FALSE, &gemm_start, \
+                                  &gemm_end);                                  \
+                                                                               \
+            for (iter_t i = gemm_start; i < gemm_end; i++) {                   \
+                dlp_gemm_rowvar_##DLP_GEMM_SFX(                                \
+                    *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b,      \
+                    *cs_b, *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, &rntm_l,  \
+                    &thread, lcntx, ops, c_downscale);                         \
+            }                                                                  \
+        }                                                                      \
+        if (jc_ways * n_gemms_in_parallel > DLP_NUM_STATIC_COMMS) {            \
+            free(cur_dlp_gemm_comms);                                          \
+        }                                                                      \
+    }
+
+// GRP batch GEMM variant (symmetric quantization)
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_GRP(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, s8s8s32o32)
+
 DLP_INLINE void
 dlp_gemm_eltwise_ops_bf16of32_get_threading(md_t*       n_threads,
                                             md_t*       ic_ways,
@@ -1614,6 +1715,60 @@ GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(int8_t, int8_t, int32_t, s8s8s32o32)
 
 // MP batch GEMM variant
 GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(bfloat16, int8_t, float, bf16s4f32of32)
+
+// FP16 batch GEMM variant
+GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(float16, float16, float16, f16f16f16of16)
+
+// F32×FP16→F32 batch GEMM variant
+GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(float, float16, float, f32f16f32of32)
+
+// MP batch GEMM variant (bf16u4)
+GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(bfloat16, uint8_t, float, bf16u4f32of32)
+
+// Q batch GEMM variants
+GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(bfloat16, int8_t, int32_t, bf16s8s32os32)
+GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(float, int8_t, int32_t, f32s8s32os32)
+
+/**
+ * @brief GRP non-OpenMP batch GEMM decorator macro (C_type != C_type_actual).
+ */
+#define GEN_BATCH_DLP_GEMM_DECORATOR_GRP(A_type, B_type, C_type,               \
+                                         C_type_actual, DLP_GEMM_SFX)          \
+    void batch_dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                     \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
+        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
+        const dlp_gemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                \
+    {                                                                          \
+        md_t n_threads = 1;                                                    \
+        md_t ic_ways   = 1;                                                    \
+        md_t jc_ways   = 1;                                                    \
+                                                                               \
+        dlp_task_comm_t  static_dlp_gemm_comm;                                 \
+        dlp_task_comm_t* cur_dlp_gemm_comm = &static_dlp_gemm_comm;            \
+        dlp_task_comm_init(ic_ways, cur_dlp_gemm_comm);                        \
+                                                                               \
+        dlp_gemm_thrinfo_t thread;                                             \
+        thread.n_threads = n_threads;                                          \
+        thread.tid       = 0;                                                  \
+        thread.ic_ways   = ic_ways;                                            \
+        thread.jc_ways   = jc_ways;                                            \
+        thread.comm      = cur_dlp_gemm_comm;                                  \
+                                                                               \
+        for (iter_t i = 0; i < group_size; i++) {                              \
+            dlp_gemm_rowvar_##DLP_GEMM_SFX(                                    \
+                *m, *n, *k, a[i], *rs_a, *cs_a, *mtag_a, b[i], *rs_b, *cs_b,   \
+                *mtag_b, c[i], *rs_c, *cs_c, alpha, beta, rntm_g, &thread,     \
+                lcntx, ops, c_downscale);                                      \
+        }                                                                      \
+    }
+
+// GRP batch GEMM variant (symmetric quantization)
+GEN_BATCH_DLP_GEMM_DECORATOR_GRP(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
 
 #define GEN_UTIL_ELTWISE_OPS_DECORATOR(A_type, B_type, DLP_GEMM_SFX)           \
     void dlp_gemm_eltwise_ops_##DLP_GEMM_SFX##_thread_decorator(               \

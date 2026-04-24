@@ -243,6 +243,10 @@ cloneGroups(const std::vector<BatchGroup>& groups)
         if (src.a_quant) {
             dst.a_quant = std::make_unique<AQuantParam>(*src.a_quant);
         }
+        if (src.group_scale) {
+            dst.group_scale =
+                std::make_unique<GroupScaleParam>(*src.group_scale);
+        }
         copies.push_back(std::move(dst));
     }
     return copies;
@@ -366,6 +370,14 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                     // Extract PostOps for THIS group (sized for current
                     // dimensions)
                     auto params  = microTest.getPostOpParams();
+                    auto a_quant = microTest.getAQuantParam();
+                    if (a_quant) {
+                        params.push_back(std::move(a_quant));
+                    }
+                    auto group_scale = microTest.getGroupScaleParam();
+                    if (group_scale) {
+                        params.push_back(std::move(group_scale));
+                    }
                     bool has_ops = !params.empty();
                     config.post_op_params_per_group.emplace_back(
                         std::move(params));
@@ -442,6 +454,14 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
 
                     // CARTESIAN: Extract PostOps once (single group per test)
                     auto params  = microTest.getPostOpParams();
+                    auto a_quant = microTest.getAQuantParam();
+                    if (a_quant) {
+                        params.push_back(std::move(a_quant));
+                    }
+                    auto group_scale = microTest.getGroupScaleParam();
+                    if (group_scale) {
+                        params.push_back(std::move(group_scale));
+                    }
                     bool has_ops = !params.empty();
                     config.post_op_params_per_group.emplace_back(
                         std::move(params));
@@ -573,10 +593,26 @@ configToGroups(const BatchGemmTestConfig& config,
         }
 
         // Assign PostOps (per-group to handle dimension-dependent PostOps)
+        // Separate A_Quant params from regular post-ops
         if (!postops_per_group.empty() && g < postops_per_group.size()) {
             for (const auto& p : postops_per_group[g]) {
                 if (p) {
-                    group.post_op_params.push_back(p->clone());
+                    if (p->getType() == OperationType::A_Quant) {
+                        // A_Quant goes to group.a_quant
+                        auto* aq = dynamic_cast<const AQuantParam*>(p.get());
+                        if (aq) {
+                            group.a_quant = std::make_unique<AQuantParam>(*aq);
+                        }
+                    } else if (p->getType() == OperationType::GroupScale) {
+                        auto* gs =
+                            dynamic_cast<const GroupScaleParam*>(p.get());
+                        if (gs) {
+                            group.group_scale =
+                                std::make_unique<GroupScaleParam>(*gs);
+                        }
+                    } else {
+                        group.post_op_params.push_back(p->clone());
+                    }
                 }
             }
         }
@@ -641,6 +677,7 @@ check_valid_batch_params(const BatchGemmTestConfig& config)
 
                 case MatrixType::f32:
                 case MatrixType::bf16:
+                case MatrixType::fp16:
                     break;
 
                 default:

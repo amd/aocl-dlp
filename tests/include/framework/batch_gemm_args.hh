@@ -77,6 +77,15 @@ struct PreparedBatchGemmArgs
     // Post-operation params per group (stored for lifetime management)
     std::vector<std::vector<std::unique_ptr<IOperationParam>>> post_ops;
 
+    // A_Quant params per group (stored for lifetime management)
+    std::vector<std::unique_ptr<AQuantParam>> a_quant_per_group;
+
+    // GroupScale params per group (stored for lifetime management)
+    std::vector<std::unique_ptr<GroupScaleParam>> group_scale_per_group;
+
+    // Flag indicating any group has group_scale (for sym_quant dispatch)
+    bool has_group_scale = false;
+
     // Pre-converted alpha/beta for zero-overhead type casting
     // These are populated during metadata preparation based on data types
     std::vector<float>   alpha_f32;
@@ -214,6 +223,8 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
     out.b_ptrs.reserve(total_matrices);
     out.c_ptrs.reserve(total_matrices);
     out.post_ops.reserve(groups.size());
+    out.a_quant_per_group.reserve(groups.size());
+    out.group_scale_per_group.reserve(groups.size());
 
     for (const auto& group : groups) {
         for (iter_t i = 0; i < static_cast<md_t>(group.A_matrices.size());
@@ -234,6 +245,32 @@ prepare_batch_gemm_args(const std::vector<BatchGroup>& groups,
             }
         }
         out.post_ops.push_back(std::move(cloned_params));
+
+        // Store a_quant per group
+        if (group.a_quant) {
+            out.a_quant_per_group.push_back(
+                std::make_unique<AQuantParam>(*group.a_quant));
+        } else {
+            out.a_quant_per_group.push_back(nullptr);
+        }
+
+        // Store group_scale per group
+        if (group.group_scale) {
+            out.group_scale_per_group.push_back(
+                std::make_unique<GroupScaleParam>(*group.group_scale));
+            out.has_group_scale = true;
+        } else {
+            out.group_scale_per_group.push_back(nullptr);
+        }
+    }
+
+    // Validate group_scale consistency: all-or-nothing
+    if (out.has_group_scale) {
+        for (const auto& gs : out.group_scale_per_group) {
+            if (!gs) {
+                return UALError::UAL_NOT_SUPPORTED;
+            }
+        }
     }
 
     out.total_matrices = total_matrices;

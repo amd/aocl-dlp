@@ -1057,6 +1057,11 @@ UalRef::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
                     std::make_unique<dlp::testing::framework::AQuantParam>(
                         *group.a_quant));
             }
+            if (group.group_scale) {
+                plan->setGroupScale(
+                    std::make_unique<dlp::testing::framework::GroupScaleParam>(
+                        *group.group_scale));
+            }
             plan->prepare();
             plan->setBuffers(group.A_matrices[i], group.B_matrices[i],
                              group.C_matrices[i]);

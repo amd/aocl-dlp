@@ -130,8 +130,8 @@ extractPostOpsDescription(
             case OperationType::WOQ:
                 op_names.push_back("WOQ");
                 break;
-            case OperationType::SymQuant:
-                op_names.push_back("SymQuant");
+            case OperationType::GroupScale:
+                op_names.push_back("GroupScale");
                 break;
             default:
                 op_names.push_back("UnknownOp");
@@ -175,8 +175,8 @@ generateBenchmarkName(const GemmBenchConfig& config)
     name << ",mtagA:" << mtagA;
     name << ",mtagB:" << mtagB;
 
-    if (config.sym_quant_param) {
-        name << ",sym_quant";
+    if (config.group_scale_param) {
+        name << ",group_scale";
     }
 
     // setAQuant / setWOQ (not in post_op_params; see
@@ -311,9 +311,9 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                 if (auto wq = microTest.getWOQParam()) {
                     config.woq_param = std::make_shared<WOQParam>(*wq);
                 }
-                if (auto sq = microTest.getSymQuantParam()) {
-                    config.sym_quant_param =
-                        std::make_shared<SymQuantParam>(*sq);
+                if (auto sq = microTest.getGroupScaleParam()) {
+                    config.group_scale_param =
+                        std::make_shared<GroupScaleParam>(*sq);
                 }
 
                 // Generate name after populating config

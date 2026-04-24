@@ -106,6 +106,7 @@ struct BatchGroup
 
     std::vector<std::unique_ptr<IOperationParam>> post_op_params;
     std::unique_ptr<AQuantParam>                  a_quant;
+    std::unique_ptr<GroupScaleParam>              group_scale;
 
     MatrixMemFormat memFormatA = MatrixMemFormat::Normal;
     MatrixMemFormat memFormatB = MatrixMemFormat::Normal;

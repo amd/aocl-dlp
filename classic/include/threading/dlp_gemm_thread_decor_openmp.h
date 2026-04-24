@@ -113,6 +113,50 @@ GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(bfloat16,
                                             float,
                                             bf16s4f32of32)
 
+// FP16 batch GEMM variant
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(float16,
+                                            float16,
+                                            float16,
+                                            f16f16f16of16)
+
+// F32×FP16→F32 batch GEMM variant
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(float,
+                                            float16,
+                                            float,
+                                            f32f16f32of32)
+
+// MP batch GEMM variant (bf16u4)
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(bfloat16,
+                                            uint8_t,
+                                            float,
+                                            bf16u4f32of32)
+
+// Q batch GEMM variants
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(bfloat16,
+                                            int8_t,
+                                            int32_t,
+                                            bf16s8s32os32)
+
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(float,
+                                            int8_t,
+                                            int32_t,
+                                            f32s8s32os32)
+
+// GRP batch GEMM variant (C_type != C_type_actual)
+#define GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_GRP_FN_DECL(                       \
+    A_type, B_type, C_type, C_type_actual, DLP_GEMM_SFX)                       \
+    void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
+        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
+        const dlp_gemm_ops_bundle_t* ops, DLP_TYPE c_downscale);
+
+GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_GRP_FN_DECL(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
+
 #define GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR_FN(A_type, B_type, DLP_GEMM_SFX) \
     void dlp_gemm_eltwise_ops_##DLP_GEMM_SFX##_openmp_thread_decorator(        \
         const md_t m, const md_t n, const A_type* a, const md_t rs_a,          \
@@ -184,6 +228,35 @@ GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, s8s8s32o32)
 
 // MP batch GEMM variant
 GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(bfloat16, int8_t, float, bf16s4f32of32)
+
+// FP16 batch GEMM variant
+GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(float16, float16, float16, f16f16f16of16)
+
+// F32×FP16→F32 batch GEMM variant
+GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(float, float16, float, f32f16f32of32)
+
+// MP batch GEMM variant (bf16u4)
+GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(bfloat16, uint8_t, float, bf16u4f32of32)
+
+// Q batch GEMM variants
+GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(bfloat16, int8_t, int32_t, bf16s8s32os32)
+
+GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(float, int8_t, int32_t, f32s8s32os32)
+
+// GRP batch GEMM variant (C_type != C_type_actual)
+#define GEN_BATCH_DLP_GEMM_DECORATOR_GRP_FN_DECL(A_type, B_type, C_type,       \
+                                                 C_type_actual, DLP_GEMM_SFX)  \
+    void batch_dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                     \
+        const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
+        const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
+        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
+        const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
+        const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
+        const dlp_gemm_ops_bundle_t* ops, DLP_TYPE c_downscale);
+
+GEN_BATCH_DLP_GEMM_DECORATOR_GRP_FN_DECL(
+    int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
 
 #define GEN_UTIL_ELTWISE_OPS_DECORATOR_FN(A_type, B_type, DLP_GEMM_SFX)        \
     void dlp_gemm_eltwise_ops_##DLP_GEMM_SFX##_thread_decorator(               \

@@ -157,18 +157,7 @@ DlpUalPlan::cleanupMetadata()
             delete m_metadata->b_post_quant;
         }
 
-        // Clean up manually allocated memory for B matrix WOQ quantization
-        if (m_metadata->pre_ops) {
-            if (m_metadata->pre_ops->b_scl) {
-                delete m_metadata->pre_ops->b_scl;
-            }
-            if (m_metadata->pre_ops->b_zp) {
-                delete m_metadata->pre_ops->b_zp;
-            }
-            delete m_metadata->pre_ops;
-        }
-
-        // Clean up manually allocated memory for s8s8 sym group quantization
+        // Clean up manually allocated memory for group-level scale factors
         if (m_metadata->post_op_grp) {
             if (m_metadata->post_op_grp->a_scl) {
                 delete m_metadata->post_op_grp->a_scl;
@@ -178,6 +167,17 @@ DlpUalPlan::cleanupMetadata()
             }
             delete m_metadata->post_op_grp;
             m_metadata->post_op_grp = nullptr;
+        }
+
+        // Clean up manually allocated memory for B matrix WOQ quantization
+        if (m_metadata->pre_ops) {
+            if (m_metadata->pre_ops->b_scl) {
+                delete m_metadata->pre_ops->b_scl;
+            }
+            if (m_metadata->pre_ops->b_zp) {
+                delete m_metadata->pre_ops->b_zp;
+            }
+            delete m_metadata->pre_ops;
         }
 
         // Clean up all allocated arrays
@@ -287,8 +287,8 @@ DlpUalPlan::prepare()
         convertWOQOperations();
     }
 
-    if (m_sym_quant) {
-        convertSymQuantOperations();
+    if (m_group_scale) {
+        convertGroupScaleOperations();
     }
 
     // Compute type code for dispatch
@@ -438,7 +438,7 @@ DlpUalPlan::prepare()
 
         case encodeTypes<MatrixType::s8, MatrixType::s8, MatrixType::f32,
                          MatrixType::s32>():
-            if (m_sym_quant) {
+            if (m_group_scale) {
                 m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
                                  md_t ldc) {
                     aocl_gemm_s8s8s32of32_sym_quant(
@@ -485,7 +485,7 @@ DlpUalPlan::prepare()
 
         case encodeTypes<MatrixType::s8, MatrixType::s8, MatrixType::bf16,
                          MatrixType::s32>():
-            if (m_sym_quant) {
+            if (m_group_scale) {
                 m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
                                  md_t ldc) {
                     aocl_gemm_s8s8s32obf16_sym_quant(
@@ -1150,81 +1150,6 @@ DlpUalPlan::convertB_QuantOperations()
 }
 
 void
-DlpUalPlan::convertSymQuantOperations()
-{
-    if (!m_sym_quant)
-        return;
-
-    const auto& param = *m_sym_quant;
-
-    // SymQuant uses post_op_grp (dlp_group_post_op), not a_pre_quant /
-    // a_post_quant (dlp_quant_op); same allocate / memset / assign shape as
-    // convertA_QuantOperations.
-
-    if (!param.hasAScale() || !param.hasBScale()) {
-        throw std::runtime_error("SymQuant: missing A or B scale matrix");
-    }
-
-    // Ensure the grouped post-op structure is allocated and zeroed
-    if (!m_metadata->post_op_grp) {
-        m_metadata->post_op_grp = new dlp_group_post_op;
-        std::memset(m_metadata->post_op_grp, 0, sizeof(dlp_group_post_op));
-    }
-    dlp_group_post_op* grp = m_metadata->post_op_grp;
-    md_t               gs  = param.getGroupSize();
-    // dlp_gemm_translate_to_group_postops_list rejects group_size > k; clamp so
-    // metadata matches the tail group implied by scale layout (same as ref).
-    if (gs != 0 && gs > m_k) {
-        gs = m_k;
-    }
-    grp->group_size = gs;
-    grp->seq_length = 1;
-
-    const Matrix* a_sf = param.getAScale();
-    const Matrix* b_sf = param.getBScale();
-
-    // A scale assignment
-    if (a_sf->getRows() != m_m) {
-        throw std::runtime_error(
-            "SymQuant: A scale row count must match GEMM m");
-    }
-    md_t ng     = a_sf->getCols();
-    md_t gs_eff = param.getGroupSize();
-    if (gs_eff == 0) {
-        gs_eff = m_k;
-    }
-    md_t ng_expect = (m_k + gs_eff - 1) / gs_eff;
-    if (ng != ng_expect) {
-        throw std::runtime_error(
-            "SymQuant: num_groups does not match k and group_size");
-    }
-    if (!grp->a_scl) {
-        grp->a_scl = new dlp_sf_t;
-    }
-    auto* a_scl              = grp->a_scl;
-    a_scl->scale_factor      = convertMatrixToPtr(*a_sf);
-    a_scl->scale_factor_len  = m_m * ng;
-    a_scl->scale_factor_type = getStorageType(a_sf->getMatrixType());
-
-    // B scale assignment
-    if (b_sf->getCols() != m_n) {
-        throw std::runtime_error(
-            "SymQuant: B scale column count must match GEMM n");
-    }
-    if (b_sf->getRows() != ng) {
-        throw std::runtime_error(
-            "SymQuant: A scale column count must equal B scale row count");
-    }
-    if (!grp->b_scl) {
-        grp->b_scl = new dlp_sf_t;
-    }
-    auto* b_scl              = grp->b_scl;
-    b_scl->scale_factor      = convertMatrixToPtr(*b_sf);
-    b_scl->scale_factor_len  = ng * m_n;
-    b_scl->scale_factor_type = getStorageType(b_sf->getMatrixType());
-}
-
-void
 DlpUalPlan::convertWOQOperations()
 {
     if (!m_woq)
@@ -1266,6 +1191,102 @@ DlpUalPlan::convertWOQOperations()
     m_metadata->pre_ops->seq_length = 1; // One WOQ operation
     m_metadata->pre_ops->group_size =
         0; // 0 here indicates no explicit group size for WOQ
+}
+
+void
+DlpUalPlan::convertGroupScaleOperations()
+{
+    if (!m_group_scale)
+        return;
+
+    const auto& param = *m_group_scale;
+
+    if (!param.hasAScaleFactor() || !param.hasBScaleFactor()) {
+        throw std::runtime_error(
+            "convertGroupScaleOperations: both A and B scale factors "
+            "are required");
+    }
+
+    // Allocate and zero the post_op_grp structure
+    m_metadata->post_op_grp = new dlp_group_post_op;
+    std::memset(m_metadata->post_op_grp, 0, sizeof(dlp_group_post_op));
+
+    // seq_length must be 1 so dlp_gemm_translate_to_group_postops_list()
+    // processes the a_scl/b_scl entries (seq_length=0 causes early return).
+    // group_size=0 defaults to k in the C API, which is correct for
+    // symmetric quantization over the full k dimension.
+    m_metadata->post_op_grp->seq_length = 1;
+    m_metadata->post_op_grp->group_size = m_group_scale->getGroupSize();
+
+    // The sym_quant kernel indexes scale factors as 2D arrays:
+    //   A scale: a_scale[row * num_groups + group], needing m * num_groups
+    //   elems B scale: b_scale[group * n + col],          needing num_groups *
+    //   n elems
+    // With group_size=0 (defaults to k), num_groups=1, so A needs m and B needs
+    // n elements.  When scale_factor_len=1 (scalar), we must broadcast to the
+    // full expected size so the kernel does not read out of bounds.
+    // NOTE: Broadcast only handles scalar (len=1) → per-dim expansion.
+    // Per-row/per-col → per-group tiling is not implemented here; the ref
+    // path handles that case. The DLP path relies on the kernel's own
+    // scale factor indexing for correctly-sized arrays.
+    md_t m = getM();
+    md_t n = getN();
+
+    // Set A scale factor
+    if (param.hasAScaleFactor()) {
+        m_metadata->post_op_grp->a_scl = new dlp_sf_t;
+        auto* scl                      = m_metadata->post_op_grp->a_scl;
+        md_t  a_sf_len                 = param.getAScaleFactor()->getCols();
+        scl->scale_factor_type =
+            getStorageType(param.getAScaleFactor()->getMatrixType());
+
+        if (a_sf_len == 1 && m > 1) {
+            // Broadcast scalar to m elements (one per row, single group)
+            size_t elem_size = (scl->scale_factor_type == DLP_BF16)
+                                   ? sizeof(int16_t)
+                                   : sizeof(float);
+            m_broadcast_a_scale.resize(m * elem_size);
+            const uint8_t* src = static_cast<const uint8_t*>(
+                convertMatrixToPtr(*param.getAScaleFactor()));
+            for (md_t i = 0; i < m; ++i) {
+                std::copy(src, src + elem_size,
+                          m_broadcast_a_scale.data() + i * elem_size);
+            }
+            scl->scale_factor     = m_broadcast_a_scale.data();
+            scl->scale_factor_len = m;
+        } else {
+            scl->scale_factor = convertMatrixToPtr(*param.getAScaleFactor());
+            scl->scale_factor_len = a_sf_len;
+        }
+    }
+
+    // Set B scale factor
+    if (param.hasBScaleFactor()) {
+        m_metadata->post_op_grp->b_scl = new dlp_sf_t;
+        auto* scl                      = m_metadata->post_op_grp->b_scl;
+        md_t  b_sf_len                 = param.getBScaleFactor()->getCols();
+        scl->scale_factor_type =
+            getStorageType(param.getBScaleFactor()->getMatrixType());
+
+        if (b_sf_len == 1 && n > 1) {
+            // Broadcast scalar to n elements (one per column, single group)
+            size_t elem_size = (scl->scale_factor_type == DLP_BF16)
+                                   ? sizeof(int16_t)
+                                   : sizeof(float);
+            m_broadcast_b_scale.resize(n * elem_size);
+            const uint8_t* src = static_cast<const uint8_t*>(
+                convertMatrixToPtr(*param.getBScaleFactor()));
+            for (md_t i = 0; i < n; ++i) {
+                std::copy(src, src + elem_size,
+                          m_broadcast_b_scale.data() + i * elem_size);
+            }
+            scl->scale_factor     = m_broadcast_b_scale.data();
+            scl->scale_factor_len = n;
+        } else {
+            scl->scale_factor = convertMatrixToPtr(*param.getBScaleFactor());
+            scl->scale_factor_len = b_sf_len;
+        }
+    }
 }
 
 // ─── Static Helper Methods ──────────────────────────────────────────────────

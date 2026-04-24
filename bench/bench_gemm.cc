@@ -179,9 +179,9 @@ class OptimizedGemmBenchmark : public ConcreteUAL
         if (config.woq_param) {
             plan_->setWOQ(std::make_unique<WOQParam>(*config.woq_param));
         }
-        if (config.sym_quant_param) {
-            plan_->setSymQuant(
-                std::make_unique<SymQuantParam>(*config.sym_quant_param));
+        if (config.group_scale_param) {
+            plan_->setGroupScale(
+                std::make_unique<GroupScaleParam>(*config.group_scale_param));
         }
 
         // Pre-build all backend state
