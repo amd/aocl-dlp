@@ -4,7 +4,7 @@ A Python tool that uses the **Error Propagation Model** to calculate and validat
 
 ## Overview
 
-This tool implements the error propagation mathematics in `scripts/tools/validate_postop_tolerances.py` as a standalone Python script. It helps you:
+This tool implements the error propagation mathematics in `scripts/tools/validators/validate_postop_tolerances.py` as a standalone Python script. It helps you:
 
 1. **Calculate** correct tolerance values for any post-op chain
 2. **Validate** existing YAML configurations against the model
@@ -31,7 +31,7 @@ pip install pyyaml
 Show tolerance values for all supported post-operations:
 
 ```bash
-python ./scripts/tools/validate_postop_tolerances.py --list-all
+python ./scripts/tools/validators/validate_postop_tolerances.py --list-all
 ```
 
 Output:
@@ -53,10 +53,10 @@ Calculate tolerances for specific post-ops with step-by-step error propagation:
 
 ```bash
 # Single post-op
-python ./scripts/tools/validate_postop_tolerances.py --calculate GELU_ERF --dtype bf16 --k 32
+python ./scripts/tools/validators/validate_postop_tolerances.py --calculate GELU_ERF --dtype bf16 --k 32
 
 # Chained post-ops
-python ./scripts/tools/validate_postop_tolerances.py --calculate GELU_ERF,SCALE --dtype bf16 --k 1 -v
+python ./scripts/tools/validators/validate_postop_tolerances.py --calculate GELU_ERF,SCALE --dtype bf16 --k 1 -v
 ```
 
 Output shows:
@@ -70,7 +70,7 @@ Output shows:
 Check if tolerance values in a YAML configuration are correct:
 
 ```bash
-python ./scripts/tools/validate_postop_tolerances.py tests/classic/configs/gemm_test_config_postops_basic.yaml
+python ./scripts/tools/validators/validate_postop_tolerances.py tests/classic/configs/gemm_test_config_postops_basic.yaml
 ```
 
 The tool will:
@@ -85,7 +85,7 @@ The tool will:
 Automatically update YAML files with calculated tolerances:
 
 ```bash
-python ./scripts/tools/validate_postop_tolerances.py --update tests/classic/configs/gemm_test_config_postops_basic.yaml
+python ./scripts/tools/validators/validate_postop_tolerances.py --update tests/classic/configs/gemm_test_config_postops_basic.yaml
 ```
 
 ### Verbose Mode
@@ -93,13 +93,13 @@ python ./scripts/tools/validate_postop_tolerances.py --update tests/classic/conf
 Show all test cases including correct ones:
 
 ```bash
-python ./scripts/tools/validate_postop_tolerances.py --verbose tests/classic/configs/*.yaml
+python ./scripts/tools/validators/validate_postop_tolerances.py --verbose tests/classic/configs/*.yaml
 ```
 
 ### Save Report to File
 
 ```bash
-python ./scripts/tools/validate_postop_tolerances.py --output report.txt tests/classic/configs/*.yaml
+python ./scripts/tools/validators/validate_postop_tolerances.py --output report.txt tests/classic/configs/*.yaml
 ```
 
 ## Command Line Options
@@ -164,7 +164,7 @@ Unknown post-op types will raise an `UnsupportedPostOpError` with a helpful mess
 ## Example: GELU_ERF → SCALE Chain
 
 ```bash
-$ python ./scripts/tools/validate_postop_tolerances.py --calculate GELU_ERF,SCALE --dtype bf16 --k 32
+$ python ./scripts/tools/validators/validate_postop_tolerances.py --calculate GELU_ERF,SCALE --dtype bf16 --k 32
 
 Error Propagation (Step by Step):
 ------------------------------------------------------------
@@ -199,5 +199,5 @@ The tool provides warnings for common issues:
 
 ## Files
 
-- `./scripts/tools/validate_postop_tolerances.py` - Main tool
+- `./scripts/tools/validators/validate_postop_tolerances.py` - Main tool
 - `scripts/tools/README_tolerance_validator.md` - This documentation

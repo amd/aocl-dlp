@@ -28,6 +28,12 @@
 
 #include <yaml-cpp/yaml.h>
 
+// NOTE: When adding/removing/renaming fields, values, or operation types
+// in this parser, update the validation tool at:
+//   scripts/tools/validators/validate_yaml_configs.py
+// That tool maintains a whitelist that must stay in sync with this parser
+// (and with the post-op type names checked in parser.cc).
+
 #include "classic/dlp_base_types.h"
 #include "framework/iterator.hh"
 #include "framework/range.hh"
@@ -85,7 +91,10 @@ namespace dlp { namespace testing { namespace utils {
             if (str == "column-major" || str == "column_major"
                 || str == "COLUMN_MAJOR")
                 return MatrixLayout::COLUMN_MAJOR;
-            return MatrixLayout::ROW_MAJOR; // default
+            throw std::runtime_error(
+                "Unknown storage_format: '" + str
+                + "'. Valid: row-major, row_major, ROW_MAJOR, "
+                  "column-major, column_major, COLUMN_MAJOR");
         }
 
         // Helper function to convert string to MatrixTag
