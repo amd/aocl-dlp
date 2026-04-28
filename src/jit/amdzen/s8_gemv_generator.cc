@@ -325,7 +325,7 @@ jitGEMVS8N1<KType>::updateCBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -476,6 +476,39 @@ jitGEMVS8N1<KType>::scaleYWithBetaColStored(int mSize, bool is_unit_beta)
         if (mLeft) {
             // Use zero-masking (T_z) to zero unmasked elements
             vcvtps2dq(RegType(yBaseIdx) | k2 | T_z, ptr[regTmpYptr]);
+            if (is_unit_beta) {
+                vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)) | k2,
+                       RegType(accumBaseIdx + (mSize / vnniWidth)),
+                       RegType(yBaseIdx));
+            } else {
+                vpmulld(RegType(yBaseIdx), RegType(yBaseIdx),
+                        RegType(xBaseIdx));
+                vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)),
+                       RegType(accumBaseIdx + (mSize / vnniWidth)),
+                       RegType(yBaseIdx));
+            }
+        }
+    } else if (c_downscale == DLP_F16) {
+        updateCBufferPointers();
+
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
+            vmovdqu16(Xbyak::Ymm(yBaseIdx), ptr[regTmpYptr]);
+            vcvtph2ps(RegType(yBaseIdx), Xbyak::Ymm(yBaseIdx));
+            vcvtps2dq(RegType(yBaseIdx), RegType(yBaseIdx));
+            if (is_unit_beta) {
+                vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx));
+            } else {
+                vpmulld(RegType(yBaseIdx), RegType(yBaseIdx),
+                        RegType(xBaseIdx));
+                vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx));
+            }
+        }
+        if (mLeft) {
+            vmovdqu16(Xbyak::Ymm(yBaseIdx) | k2 | T_z, ptr[regTmpYptr]);
+            vcvtph2ps(RegType(yBaseIdx), Xbyak::Ymm(yBaseIdx));
+            vcvtps2dq(RegType(yBaseIdx), RegType(yBaseIdx));
             if (is_unit_beta) {
                 vpaddd(RegType(accumBaseIdx + (mSize / vnniWidth)) | k2,
                        RegType(accumBaseIdx + (mSize / vnniWidth)),
@@ -811,6 +844,45 @@ jitGEMVS8N1<KType>::scaleYWithBetaRowStored(int mSize, bool is_unit_beta)
             vpaddd(RegType(accumBaseIdx), RegType(accumBaseIdx),
                    RegType(yBaseIdx));
         }
+    } else if (c_downscale == DLP_F16) {
+        updateCBufferPointers();
+
+        lea(regTmp3, ptr[regTmp1 + 2 * regTmp1]);
+
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+            int blockSize = ((mSize - vnniWidth * i) < vnniWidth)
+                                ? (mSize - vnniWidth * i)
+                                : vnniWidth;
+
+            regInit(tmpBaseIdx, tmpReg);
+
+            for (iter_t j = 0; j < blockSize; ++j) {
+                movsx(regKIter.cvt32(), word[regTmpYptr]);
+                int reg_idx = (j < 8) ? tmpBaseIdx : (tmpBaseIdx + 1);
+                int offset  = (j < 8) ? j : (j - 8);
+
+                vpinsrw(Xbyak::Xmm(reg_idx), Xbyak::Xmm(reg_idx),
+                        regKIter.cvt32(), offset);
+                add(regTmpYptr, regTmp1);
+            }
+
+            vinserti32x4(Xbyak::Ymm(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i),
+                         Xbyak::Xmm(tmpBaseIdx), 0);
+            vinserti32x4(Xbyak::Ymm(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i),
+                         Xbyak::Xmm(tmpBaseIdx + 1), 1);
+        }
+
+        vcvtph2ps(RegType(yBaseIdx), Xbyak::Ymm(yBaseIdx));
+        vcvtps2dq(RegType(yBaseIdx), RegType(yBaseIdx));
+
+        if (is_unit_beta) {
+            vpaddd(RegType(accumBaseIdx), RegType(accumBaseIdx),
+                   RegType(yBaseIdx));
+        } else {
+            vpmulld(RegType(yBaseIdx), RegType(yBaseIdx), RegType(xBaseIdx));
+            vpaddd(RegType(accumBaseIdx), RegType(accumBaseIdx),
+                   RegType(yBaseIdx));
+        }
     } else { // c_downscale == DLP_S32
         // Store temporary pointer for 3rd row access
         lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = 3 * rsC;
@@ -1052,6 +1124,25 @@ jitGEMVS8N1<KType>::storeYColStored(int mSize, bool hasPostOps)
             vmovups(ptr[regTmpYptr] | k2 | T_z,
                     RegType(accumBaseIdx + (mSize / vnniWidth)));
         }
+    } else if (c_downscale == DLP_F16) {
+        updateCBufferPointers();
+
+        for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
+            if (!hasPostOps) {
+                vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
+            }
+            vcvtps2ph(Xbyak::Ymm(tmpBaseIdx), RegType(accumBaseIdx + i), 0);
+            vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(tmpBaseIdx));
+        }
+        if (mLeft) {
+            if (!hasPostOps) {
+                vcvtdq2ps(RegType(accumBaseIdx + (mSize / vnniWidth)),
+                          RegType(accumBaseIdx + (mSize / vnniWidth)));
+            }
+            vcvtps2ph(Xbyak::Ymm(tmpBaseIdx),
+                      RegType(accumBaseIdx + (mSize / vnniWidth)), 0);
+            vmovdqu16(ptr[regTmpYptr] | k2 | T_z, Xbyak::Ymm(tmpBaseIdx));
+        }
     } else { // c_downscale == DLP_S32
         for (iter_t i = 0; i < mSize / vnniWidth; ++i) {
             if (hasPostOps) {
@@ -1247,6 +1338,42 @@ jitGEMVS8N1<KType>::storeYRowStored(int mSize, bool hasPostOps)
                 }
 
                 add(regTmpYptr, regTmp1); // Move to next row
+            }
+        }
+    } else if (c_downscale == DLP_F16) {
+        updateCBufferPointers();
+
+        for (iter_t i = 0; i < ((mSize + vnniWidth - 1) / vnniWidth); ++i) {
+            int elems_in_reg = (i < mSize / vnniWidth) ? vnniWidth
+                                                       : (mSize % vnniWidth);
+            if (elems_in_reg == 0)
+                break;
+
+            if (!hasPostOps) {
+                vcvtdq2ps(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i));
+            }
+
+            vcvtps2ph(Xbyak::Ymm(tmpBaseIdx), RegType(accumBaseIdx + i), 0);
+
+            for (iter_t j = 0; j < elems_in_reg; j += 8) {
+                int tmp_reg_idx = j / 8;
+                vextracti32x4(Xbyak::Xmm(tmpBaseIdx + 1 + tmp_reg_idx),
+                              Xbyak::Ymm(tmpBaseIdx), tmp_reg_idx);
+            }
+
+            for (iter_t j = 0; j < elems_in_reg; j++) {
+                int tmp_reg_idx = (j / 8) + 1;
+                int reg_idx     = j % 8;
+
+                if (reg_idx == 0) {
+                    vpextrw(ptr[regTmpYptr],
+                            Xbyak::Xmm(tmpBaseIdx + tmp_reg_idx), 0);
+                } else {
+                    vpextrw(ptr[regTmpYptr],
+                            Xbyak::Xmm(tmpBaseIdx + tmp_reg_idx), reg_idx);
+                }
+
+                add(regTmpYptr, regTmp1);
             }
         }
     } else { // c_downscale == DLP_S32
@@ -2110,7 +2237,7 @@ jitGEMVS8M1<KType>::updateYBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -2329,6 +2456,57 @@ jitGEMVS8M1<KType>::scaleYWithBeta(bool nMask)
                 // Use zero-masking (T_z) to zero unmasked elements
                 vcvtps2dq(RegType(yBaseIdx + n_iter) | k1 | T_z,
                           ptr[regTmpYptr + n_iter * RegBytes]);
+
+                if (!is_unit_beta) {
+                    vpmulld(RegType(yBaseIdx + n_iter),
+                            RegType(yBaseIdx + n_iter), RegType(xBaseIdx));
+                }
+                vpaddd(RegType(accumBaseIdx + n_iter),
+                       RegType(accumBaseIdx + n_iter),
+                       RegType(yBaseIdx + n_iter));
+            }
+        }
+    } else if (c_downscale == DLP_F16) {
+        updateYBufferPointers();
+
+        if (!nMask) {
+            int nIter = NR / vnniWidth;
+            for (iter_t i = 0; i < nIter; i++) {
+                vmovdqu16(Xbyak::Ymm(yBaseIdx + i), ptr[regTmpYptr + i * 32]);
+                vcvtph2ps(RegType(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i));
+                vcvtps2dq(RegType(yBaseIdx + i), RegType(yBaseIdx + i));
+
+                if (!is_unit_beta) {
+                    vpmulld(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                            RegType(xBaseIdx));
+                }
+                vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx + i));
+            }
+        } else {
+            int n_iter = N_LEFT / vnniWidth;
+            int n_left = N_LEFT % vnniWidth;
+
+            for (iter_t i = 0; i < n_iter; i++) {
+                vmovdqu16(Xbyak::Ymm(yBaseIdx + i), ptr[regTmpYptr + i * 32]);
+                vcvtph2ps(RegType(yBaseIdx + i), Xbyak::Ymm(yBaseIdx + i));
+                vcvtps2dq(RegType(yBaseIdx + i), RegType(yBaseIdx + i));
+
+                if (!is_unit_beta) {
+                    vpmulld(RegType(yBaseIdx + i), RegType(yBaseIdx + i),
+                            RegType(xBaseIdx));
+                }
+                vpaddd(RegType(accumBaseIdx + i), RegType(accumBaseIdx + i),
+                       RegType(yBaseIdx + i));
+            }
+
+            if (n_left) {
+                vmovdqu16(Xbyak::Ymm(yBaseIdx + n_iter) | k1 | T_z,
+                          ptr[regTmpYptr + n_iter * 32]);
+                vcvtph2ps(RegType(yBaseIdx + n_iter),
+                          Xbyak::Ymm(yBaseIdx + n_iter));
+                vcvtps2dq(RegType(yBaseIdx + n_iter),
+                          RegType(yBaseIdx + n_iter));
 
                 if (!is_unit_beta) {
                     vpmulld(RegType(yBaseIdx + n_iter),
@@ -2612,6 +2790,45 @@ jitGEMVS8M1<KType>::storeY(bool nMask, bool hasPostOps)
                 }
                 vmovups(ptr[regTmpYptr + n_iter * RegBytes] | k1 | T_z,
                         RegType(accumBaseIdx + n_iter));
+            }
+        }
+    } else if (c_downscale == DLP_F16) {
+        updateYBufferPointers();
+
+        if (!nMask) {
+            int nIter = NR / vnniWidth;
+            for (iter_t i = 0; i < nIter; i++) {
+                if (!hasPostOps) {
+                    vcvtdq2ps(RegType(accumBaseIdx + i),
+                              RegType(accumBaseIdx + i));
+                }
+                vcvtps2ph(Xbyak::Ymm(xBaseIdx + 2), RegType(accumBaseIdx + i),
+                          0);
+                vmovdqu16(ptr[regTmpYptr + i * 32], Xbyak::Ymm(xBaseIdx + 2));
+            }
+        } else {
+            int n_iter = N_LEFT / vnniWidth;
+            int n_left = N_LEFT % vnniWidth;
+
+            for (iter_t i = 0; i < n_iter; i++) {
+                if (!hasPostOps) {
+                    vcvtdq2ps(RegType(accumBaseIdx + i),
+                              RegType(accumBaseIdx + i));
+                }
+                vcvtps2ph(Xbyak::Ymm(xBaseIdx + 2), RegType(accumBaseIdx + i),
+                          0);
+                vmovdqu16(ptr[regTmpYptr + i * 32], Xbyak::Ymm(xBaseIdx + 2));
+            }
+
+            if (n_left) {
+                if (!hasPostOps) {
+                    vcvtdq2ps(RegType(accumBaseIdx + n_iter),
+                              RegType(accumBaseIdx + n_iter));
+                }
+                vcvtps2ph(Xbyak::Ymm(xBaseIdx + 2),
+                          RegType(accumBaseIdx + n_iter), 0);
+                vmovdqu16(ptr[regTmpYptr + n_iter * 32] | k1 | T_z,
+                          Xbyak::Ymm(xBaseIdx + 2));
             }
         }
     } else { // c_downscale == DLP_S32

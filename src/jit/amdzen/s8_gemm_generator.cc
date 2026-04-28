@@ -308,7 +308,7 @@ jitGEMMS8<KType>::updateCBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -320,7 +320,7 @@ jitGEMMS8<KType>::updateCBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -405,6 +405,46 @@ jitGEMMS8<KType>::scaleBeta()
                          ptr[regTmpCptr + (bFullReg * (RegBytes / 4))]);
                 vpmovzxbd(RegType(bRegIdx + bFullReg),
                           Xbyak::Xmm(bRegIdx + bFullReg));
+                vpmulld(RegType(bRegIdx + bFullReg),
+                        RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
+                vpaddd(RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(cRegIdx + i * bReg + bFullReg),
+                       RegType(bRegIdx + bFullReg));
+            }
+
+            add(regTmpCptr, regTmp1);
+        }
+
+        jmp("BETAOP_END", T_NEAR);
+        L("BETAOP");
+    } else if (c_downscale == DLP_F16) {
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
+        test(regTmp1, regTmp1);
+        je("BETAOP", T_NEAR);
+
+        RETURN_IF_ERROR(updateCBufferPointers());
+
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
+                vmovdqu16(Xbyak::Ymm(bRegIdx + j),
+                          ptr[regTmpCptr + j * (RegBytes / 2)]);
+                vcvtph2ps(RegType(bRegIdx + j), Xbyak::Ymm(bRegIdx + j));
+                vcvtps2dq(RegType(bRegIdx + j), RegType(bRegIdx + j));
+                vpmulld(RegType(bRegIdx + j), RegType(bRegIdx + j),
+                        RegType(betaRegIdx));
+                vpaddd(RegType(cRegIdx + i * bReg + j),
+                       RegType(cRegIdx + i * bReg + j), RegType(bRegIdx + j));
+            }
+
+            if (bMaskReg > 0) {
+                vmovdqu16(Xbyak::Ymm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
+                          ptr[regTmpCptr + (bFullReg * (RegBytes / 2))]);
+                vcvtph2ps(RegType(bRegIdx + bFullReg),
+                          Xbyak::Ymm(bRegIdx + bFullReg));
+                vcvtps2dq(RegType(bRegIdx + bFullReg),
+                          RegType(bRegIdx + bFullReg));
                 vpmulld(RegType(bRegIdx + bFullReg),
                         RegType(bRegIdx + bFullReg), RegType(betaRegIdx));
                 vpaddd(RegType(cRegIdx + i * bReg + bFullReg),
@@ -634,8 +674,47 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
 
         jmp(label_storeop_end, T_NEAR);
         L(label_storeop);
-    }
-    if (c_downscale == DLP_BF16) {
+    } else if (c_downscale == DLP_F16) {
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(label_storeop, T_NEAR);
+
+        RETURN_IF_ERROR(updateCBufferPointers());
+
+        for (iter_t i = 0; i < MR; ++i) {
+            for (iter_t j = 0; j < bFullReg; ++j) {
+                if (!hasPostOps) {
+                    vcvtdq2ps(RegType(cRegIdx + i * bReg + j),
+                              RegType(cRegIdx + i * bReg + j));
+                }
+
+                vcvtps2ph(Xbyak::Ymm(aRegIdx), RegType(cRegIdx + i * bReg + j),
+                          0);
+                vmovdqu16(ptr[regTmpCptr + j * (RegBytes / 2)],
+                          Xbyak::Ymm(aRegIdx));
+            }
+
+            if (bMaskReg > 0) {
+                if (!hasPostOps) {
+                    vcvtdq2ps(RegType(cRegIdx + i * bReg + bFullReg),
+                              RegType(cRegIdx + i * bReg + bFullReg));
+                }
+
+                vcvtps2ph(Xbyak::Ymm(aRegIdx),
+                          RegType(cRegIdx + i * bReg + bFullReg), 0);
+                vmovdqu16(ptr[regTmpCptr + bFullReg * (RegBytes / 2)]
+                              | mask_regs[1],
+                          Xbyak::Ymm(aRegIdx));
+            }
+
+            add(regTmpCptr, regTmp1);
+        }
+
+        jmp(label_storeop_end, T_NEAR);
+        L(label_storeop);
+    } else if (c_downscale == DLP_BF16) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);

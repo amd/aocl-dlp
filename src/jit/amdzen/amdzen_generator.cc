@@ -2162,6 +2162,7 @@ jitAmdZenS8::jitAmdZenS8()
                          dlp::kernel_frame::kernelDatatype::s8s8s32os8,
                          dlp::kernel_frame::kernelDatatype::s8s8s32obf16,
                          dlp::kernel_frame::kernelDatatype::s8s8s32of32,
+                         dlp::kernel_frame::kernelDatatype::s8s8s32of16,
                          dlp::kernel_frame::kernelDatatype::s8s8s32os32 })
     , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512vnni })
     , kType(utils::kernelInstrType::none)

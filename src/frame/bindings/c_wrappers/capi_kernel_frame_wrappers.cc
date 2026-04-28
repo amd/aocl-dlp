@@ -67,6 +67,8 @@ get_kernel_family_name(kernelDatatype kDtype)
             return "dlp_s8s8s32os32_jit_kernel";
         case kernelDatatype::s8s8s32of32:
             return "dlp_s8s8s32of32_jit_kernel";
+        case kernelDatatype::s8s8s32of16:
+            return "dlp_s8s8s32of16_jit_kernel";
         case kernelDatatype::s8s8s32obf16:
             return "dlp_s8s8s32obf16_jit_kernel";
         case kernelDatatype::s8s8s32os8:
@@ -143,6 +145,7 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
                 c_downscale, kernelRoutineType::gemm, kDType);
     } else if ((kDType == dlp::kernel_frame::kernelDatatype::s8s8s32os32)
                || (kDType == dlp::kernel_frame::kernelDatatype::s8s8s32of32)
+               || (kDType == dlp::kernel_frame::kernelDatatype::s8s8s32of16)
                || (kDType == dlp::kernel_frame::kernelDatatype::s8s8s32obf16)
                || (kDType == dlp::kernel_frame::kernelDatatype::s8s8s32os8)
                || (kDType == dlp::kernel_frame::kernelDatatype::s8s8s32ou8)) {

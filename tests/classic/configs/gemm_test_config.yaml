@@ -181,6 +181,37 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none", "reorder"]   # Matrix B reordering can improve performance
 
+  - name: "small_matrix_s8s8_fp16"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["fp16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m:
+      lb: 1
+      ub: 10
+      step: 1
+    n:
+      lb: 1
+      ub: 20
+      step: 4
+    k:
+      lb: 1
+      ub: 10
+      step: 2
+    alpha: [1]
+    beta: [1]
+    lda: [10, 20]
+    ldb:
+      lb: 10
+      ub: 20
+      step: 2
+    ldc: 20
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+
 # To test unpack B routine when bf16 fallbacks to f32 on avx2 machines
   - name: "bf16_reorderB_for_avx2"
     a_type: ["bf16"]

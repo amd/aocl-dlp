@@ -64,6 +64,7 @@ enum class kernelDatatype : uint8_t
     s8s8s32os8,
     s8s8s32obf16,
     s8s8s32of32,
+    s8s8s32of16,
     s8s8s32os32,
     bf16bf16f32obf16,
     bf16bf16f32of32,

@@ -576,6 +576,26 @@ aocl_gemm_s8s8s32of32(const char      order,
 
 /// Refer to @ref aocl_gemm_s8s8s32os32 for info on parameters.
 DLP_CLASSIC_EXPORT void
+aocl_gemm_s8s8s32of16(const char      order,
+                      const char      transa,
+                      const char      transb,
+                      const md_t      m,
+                      const md_t      n,
+                      const md_t      k,
+                      const int32_t   alpha,
+                      const int8_t*   a,
+                      const md_t      lda,
+                      const char      mem_format_a,
+                      const int8_t*   b,
+                      const md_t      ldb,
+                      const char      mem_format_b,
+                      const int32_t   beta,
+                      float16*        c,
+                      const md_t      ldc,
+                      dlp_metadata_t* metadata);
+
+/// Refer to @ref aocl_gemm_s8s8s32os32 for info on parameters.
+DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32obf16(const char      order,
                        const char      transa,
                        const char      transb,
