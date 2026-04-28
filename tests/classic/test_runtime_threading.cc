@@ -342,7 +342,73 @@ TEST_F(ThreadingPrecedenceTest, UnsetLocalRestoresLibrary)
 }
 
 // ============================================================================
-// CATEGORY 3: OPENMP THREAD-LOCAL TESTS
+// CATEGORY 3: ENVIRONMENT VARIABLE ALIAS TESTS
+// ============================================================================
+
+/**
+ * Test: Thread count env var alias resolution
+ *
+ * Verifies the priority chain:
+ *   DLP_NUM_THREADS > MKL_NUM_THREADS > OMP_NUM_THREADS
+ *
+ * This single test covers all alias scenarios by checking which env vars
+ * are currently set and asserting the correct resolved value. Run via
+ * BUCK targets that set specific env var combinations.
+ */
+TEST(EnvVarAliasTest, ThreadCountAliasResolution)
+{
+    bool has_dlp = isEnvVarDefined("DLP_NUM_THREADS");
+    bool has_mkl = isEnvVarDefined("MKL_NUM_THREADS");
+    bool has_omp = isEnvVarDefined("OMP_NUM_THREADS");
+
+    if (!has_dlp && !has_mkl && !has_omp) {
+        // No thread-count alias env vars set — nothing to verify.
+        return;
+    }
+
+    md_t actual = dlp_thread_get_num_threads_active();
+
+    if (has_dlp) {
+        // Primary always wins over aliases.
+        EXPECT_EQ(actual, getEnvVarValue("DLP_NUM_THREADS"))
+            << "DLP_NUM_THREADS should take priority over MKL/OMP aliases";
+    } else if (has_mkl) {
+        // MKL alias takes priority over OMP.
+        EXPECT_EQ(actual, getEnvVarValue("MKL_NUM_THREADS"))
+            << "MKL_NUM_THREADS should take priority over OMP_NUM_THREADS";
+    } else {
+        // OMP is the lowest-priority alias.
+        EXPECT_EQ(actual, getEnvVarValue("OMP_NUM_THREADS"))
+            << "OMP_NUM_THREADS should be used as fallback";
+    }
+}
+
+/**
+ * Test: Instruction env var alias resolution
+ *
+ * Verifies: AOCL_ENABLE_INSTRUCTIONS resolves into
+ *           AOCL_DLP_ENABLE_INSTRUCTIONS when the primary is unset.
+ *
+ * Run via BUCK target with env = {"AOCL_ENABLE_INSTRUCTIONS": "avx2"}
+ */
+TEST(EnvVarAliasTest, InstructionAliasResolution)
+{
+    bool has_primary = isEnvVarDefined("AOCL_DLP_ENABLE_INSTRUCTIONS");
+    bool has_alias   = isEnvVarDefined("AOCL_ENABLE_INSTRUCTIONS");
+
+    if (!has_primary && !has_alias) {
+        // No instruction env vars set — nothing to verify.
+        return;
+    }
+
+    // If either the primary or the alias is set, the env cache should have
+    // resolved AOCL_DLP_ENABLE_INSTRUCTIONS, so this query returns true.
+    EXPECT_TRUE(dlp_aocl_enable_instruction_query())
+        << "Instruction env var should be resolved (primary or alias)";
+}
+
+// ============================================================================
+// CATEGORY 4: OPENMP THREAD-LOCAL TESTS
 // ============================================================================
 
 #ifdef DLP_ENABLE_OPENMP

@@ -49,3 +49,38 @@ foreach(test_source ${TEST_SOURCES})
     endif()
     dlp_set_global_compile_flags(${test_name} VISIBILITY PUBLIC)
 endforeach()
+
+#
+# Runtime threading tests with specific env var combos for alias resolution.
+# Each variant invokes the same test_runtime_threading binary under a
+# different environment, exercising the EnvVarAliasTest cases that key off
+# DLP_NUM_THREADS / MKL_NUM_THREADS / OMP_NUM_THREADS / AOCL_ENABLE_INSTRUCTIONS.
+# CTest ENVIRONMENT property takes a CMake list (semicolon-separated) of
+# KEY=VAL entries.
+#
+if(TARGET test_runtime_threading)
+    add_test(NAME test_runtime_threading_omp_alias
+             COMMAND test_runtime_threading)
+    set_tests_properties(test_runtime_threading_omp_alias PROPERTIES
+        ENVIRONMENT "OMP_NUM_THREADS=7")
+
+    add_test(NAME test_runtime_threading_mkl_alias
+             COMMAND test_runtime_threading)
+    set_tests_properties(test_runtime_threading_mkl_alias PROPERTIES
+        ENVIRONMENT "MKL_NUM_THREADS=5")
+
+    add_test(NAME test_runtime_threading_mkl_over_omp
+             COMMAND test_runtime_threading)
+    set_tests_properties(test_runtime_threading_mkl_over_omp PROPERTIES
+        ENVIRONMENT "MKL_NUM_THREADS=8;OMP_NUM_THREADS=16")
+
+    add_test(NAME test_runtime_threading_primary_wins
+             COMMAND test_runtime_threading)
+    set_tests_properties(test_runtime_threading_primary_wins PROPERTIES
+        ENVIRONMENT "DLP_NUM_THREADS=2;MKL_NUM_THREADS=8;OMP_NUM_THREADS=16")
+
+    add_test(NAME test_runtime_threading_instr_alias
+             COMMAND test_runtime_threading)
+    set_tests_properties(test_runtime_threading_instr_alias PROPERTIES
+        ENVIRONMENT "AOCL_ENABLE_INSTRUCTIONS=avx2")
+endif()

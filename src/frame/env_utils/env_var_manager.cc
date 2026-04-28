@@ -99,6 +99,21 @@ constexpr std::array<std::string_view, 1> DLP_ARCH_ENV_VAR_STRINGS = {
     "AOCL_DLP_ENABLE_INSTRUCTIONS"
 };
 
+// Alias mappings: {primary, alias}
+// Iteration order encodes priority — higher-priority aliases come first.
+// If a higher-priority alias resolves, the primary key is cached and
+// lower-priority aliases are skipped.
+constexpr std::array<std::pair<std::string_view, std::string_view>, 2>
+    DLP_ENV_VAR_ALIASES = { {
+        { "DLP_NUM_THREADS", "MKL_NUM_THREADS" },
+        { "DLP_NUM_THREADS", "OMP_NUM_THREADS" },
+    } };
+
+constexpr std::array<std::pair<std::string_view, std::string_view>, 1>
+    DLP_ARCH_ENV_VAR_ALIASES = { {
+        { "AOCL_DLP_ENABLE_INSTRUCTIONS", "AOCL_ENABLE_INSTRUCTIONS" },
+    } };
+
 EnvironmentVariableManager::EnvironmentVariableManager()
 {
     for (const auto& env_var_name : DLP_ENV_VAR_STRINGS) {
@@ -117,6 +132,29 @@ EnvironmentVariableManager::EnvironmentVariableManager()
             // The arch env variable values are made case insensitive to
             // speed up its corresponding arch enum lookup.
             toLowerInPlace(env_cache_[std::string{ env_var_name }]);
+        }
+    }
+
+    // Resolve aliases for regular env vars.
+    for (const auto& [primary, alias] : DLP_ENV_VAR_ALIASES) {
+        if (env_cache_.find(std::string{ primary }) != env_cache_.end()) {
+            continue; // Primary already set, skip alias.
+        }
+        auto optVal = getRawEnvVar(alias);
+        if (optVal.has_value()) {
+            env_cache_[std::string{ primary }] = optVal.value();
+        }
+    }
+
+    // Resolve aliases for arch env vars (values lowered for lookup).
+    for (const auto& [primary, alias] : DLP_ARCH_ENV_VAR_ALIASES) {
+        if (env_cache_.find(std::string{ primary }) != env_cache_.end()) {
+            continue; // Primary already set, skip alias.
+        }
+        auto optVal = getRawEnvVar(alias);
+        if (optVal.has_value()) {
+            env_cache_[std::string{ primary }] = optVal.value();
+            toLowerInPlace(env_cache_[std::string{ primary }]);
         }
     }
 }
