@@ -57,6 +57,9 @@ getStorageDtFromDlpKernelDatatype(dlp::kernel_frame::kernelDatatype kDtype)
         case dlp::kernel_frame::kernelDatatype::u8s8s32ou8:
             retType = dlp::kernel_frame::DataType::s32;
             break;
+        case dlp::kernel_frame::kernelDatatype::u8s8s32of16:
+            retType = dlp::kernel_frame::DataType::f16;
+            break;
         case dlp::kernel_frame::kernelDatatype::u8s8s32obf16:
         case dlp::kernel_frame::kernelDatatype::u8s8s32of32:
             retType = dlp::kernel_frame::DataType::f32;

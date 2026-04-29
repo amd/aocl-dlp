@@ -1661,6 +1661,7 @@ jitAmdZenBF16::executeKernel(dlp::kernels::kernelParams* _params)
 jitAmdZenU8S8::jitAmdZenU8S8()
     : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::u8s8s32os32,
                          dlp::kernel_frame::kernelDatatype::u8s8s32of32,
+                         dlp::kernel_frame::kernelDatatype::u8s8s32of16,
                          dlp::kernel_frame::kernelDatatype::u8s8s32obf16,
                          dlp::kernel_frame::kernelDatatype::u8s8s32ou8,
                          dlp::kernel_frame::kernelDatatype::u8s8s32os8 })

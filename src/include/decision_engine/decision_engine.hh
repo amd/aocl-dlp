@@ -87,6 +87,10 @@ class decisionEngine
             kernel_frame::kernelDatatype::u8s8s32of32);
         backends[kTypeIdx][u8s8of32DtIdx] = new gemmU8S8DEBackend;
 
+        auto u8s8of16DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::u8s8s32of16);
+        backends[kTypeIdx][u8s8of16DtIdx] = new gemmU8S8DEBackend;
+
         // Support U8S8OBF16 decision engine
         auto u8s8obf16DtIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelDatatype::u8s8s32obf16);

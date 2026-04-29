@@ -193,6 +193,11 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeResultF32();
 
     /**
+     * @brief Store results as float16
+     */
+    dlp::jit::jitGeneratorError storeResultF16();
+
+    /**
      * @brief Store results as bfloat16
      */
     dlp::jit::jitGeneratorError storeResultBF16();

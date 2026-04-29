@@ -214,6 +214,11 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError rearrangeY_rowStored_F32(int mSize);
 
     /**
+     * @brief Rearrange Y vector for F16 row-major storage format
+     */
+    dlp::jit::jitGeneratorError rearrangeY_rowStored_F16(int mSize);
+
+    /**
      * @brief Rearrange Y vector for BF16 row-major storage format
      */
     dlp::jit::jitGeneratorError rearrangeY_rowStored_BF16(int mSize);
@@ -250,6 +255,11 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
      * @brief Scale Y vector with beta factor for float32 data type
      */
     dlp::jit::jitGeneratorError scaleYWithBeta_F32(int mSize, bool isRowStored);
+
+    /**
+     * @brief Scale Y vector with beta factor for float16 data type
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta_F16(int mSize, bool isRowStored);
 
     /**
      * @brief Scale Y vector with beta factor for bfloat16 data type
@@ -298,6 +308,11 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeResult_F32(int mSize, bool isRowStored);
 
     /**
+     * @brief Store results for F16 data type (unified row/column storage)
+     */
+    dlp::jit::jitGeneratorError storeResult_F16(int mSize, bool isRowStored);
+
+    /**
      * @brief Store results for BF16 data type (unified row/column storage)
      */
     dlp::jit::jitGeneratorError storeResult_BF16(int mSize, bool isRowStored);
@@ -321,6 +336,11 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
      * @brief Store results for F32 row-major storage format
      */
     dlp::jit::jitGeneratorError storeY_rowStored_F32(int mSize);
+
+    /**
+     * @brief Store results for F16 row-major storage format
+     */
+    dlp::jit::jitGeneratorError storeY_rowStored_F16(int mSize);
 
     /**
      * @brief Store results for BF16 row-major storage format
@@ -559,6 +579,11 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError scaleYWithBeta_F32(bool nMask, bool isBetaOne);
 
     /**
+     * @brief Scale Y with beta factor for F16 data type
+     */
+    dlp::jit::jitGeneratorError scaleYWithBeta_F16(bool nMask, bool isBetaOne);
+
+    /**
      * @brief Scale Y with beta factor for BF16 data type
      */
     dlp::jit::jitGeneratorError scaleYWithBeta_BF16(bool nMask, bool isBetaOne);
@@ -582,6 +607,11 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
      * @brief Scale Y with beta for fringe case (F32)
      */
     dlp::jit::jitGeneratorError scaleYWithBetaFringe_F32(bool isBetaOne);
+
+    /**
+     * @brief Scale Y with beta for fringe case (F16)
+     */
+    dlp::jit::jitGeneratorError scaleYWithBetaFringe_F16(bool isBetaOne);
 
     /**
      * @brief Scale Y with beta for fringe case (BF16)
@@ -628,6 +658,11 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeYValues_F32(bool nMask);
 
     /**
+     * @brief Store Y values for F16 data type
+     */
+    dlp::jit::jitGeneratorError storeYValues_F16(bool nMask);
+
+    /**
      * @brief Store Y values for BF16 data type
      */
     dlp::jit::jitGeneratorError storeYValues_BF16(bool nMask);
@@ -651,6 +686,11 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
      * @brief Store Y values for fringe case (F32)
      */
     dlp::jit::jitGeneratorError storeYValuesFringe_F32();
+
+    /**
+     * @brief Store Y values for fringe case (F16)
+     */
+    dlp::jit::jitGeneratorError storeYValuesFringe_F16();
 
     /**
      * @brief Store Y values for fringe case (BF16)

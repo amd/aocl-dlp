@@ -230,6 +230,9 @@ jitU8S8VNNI_GEMM<KType>::storeResult()
         } else if (c_downscale == DLP_F32) {
             storeResultF32();
             jmp(".END_STORE", T_NEAR);
+        } else if (c_downscale == DLP_F16) {
+            storeResultF16();
+            jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_BF16) {
             storeResultBF16();
             jmp(".END_STORE", T_NEAR);
@@ -430,6 +433,40 @@ jitU8S8VNNI_GEMM<KType>::storeResultF32()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMM<KType>::storeResultF16()
+{
+    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+        updateCBufferPointers();
+
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
+                if (accumulatorsAreF32) {
+                    vmovups(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
+                } else {
+                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
+                }
+                vcvtps2ph(Ymm(aRegIdx + 1), Zmm(aRegIdx), 0);
+                vmovdqu16(ptr[regTmpCptr + j * 32], Ymm(aRegIdx + 1));
+            }
+            if (bMaskReg > 0) {
+                if (accumulatorsAreF32) {
+                    vmovups(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
+                } else {
+                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
+                }
+                vcvtps2ph(Ymm(aRegIdx + 1), Zmm(aRegIdx), 0);
+                vmovdqu16(ptr[regTmpCptr + bFullReg * 32] | mask_regs[1],
+                          Ymm(aRegIdx + 1));
+            }
+            add(regTmpCptr, regTmp1);
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::storeResultBF16()
 {
 
@@ -533,7 +570,7 @@ jitU8S8VNNI_GEMM<KType>::updateCBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -545,7 +582,7 @@ jitU8S8VNNI_GEMM<KType>::updateCBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -661,6 +698,40 @@ jitU8S8VNNI_GEMM<KType>::scaleBeta()
             if (bMaskReg > 0) {
                 vcvtps2dq(Zmm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
                           ptr[regTmpCptr + bFullReg * RegBytes]);
+                vpmulld(Zmm(bRegIdx + bFullReg), Zmm(bRegIdx + bFullReg),
+                        Zmm(betaRegIdx));
+                vpaddd(Zmm(cRegIdx + i * bReg + bFullReg),
+                       Zmm(cRegIdx + i * bReg + bFullReg),
+                       Zmm(bRegIdx + bFullReg));
+            }
+            add(regTmpCptr, regTmp1);
+        }
+
+        jmp("BETA_END", T_NEAR);
+        L("BETA_S32");
+    } else if (c_downscale == DLP_F16) {
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_first_k)]);
+        test(regTmp1, regTmp1);
+        je("BETA_S32", T_NEAR);
+
+        updateCBufferPointers();
+
+        for (iter_t i = 0; i < MR; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
+                vmovdqu16(Ymm(bRegIdx + j), ptr[regTmpCptr + j * 32]);
+                vcvtph2ps(Zmm(bRegIdx + j), Ymm(bRegIdx + j));
+                vcvtps2dq(Zmm(bRegIdx + j), Zmm(bRegIdx + j));
+                vpmulld(Zmm(bRegIdx + j), Zmm(bRegIdx + j), Zmm(betaRegIdx));
+                vpaddd(Zmm(cRegIdx + i * bReg + j), Zmm(cRegIdx + i * bReg + j),
+                       Zmm(bRegIdx + j));
+            }
+            if (bMaskReg > 0) {
+                vmovdqu16(Ymm(bRegIdx + bFullReg) | mask_regs[1] | T_z,
+                          ptr[regTmpCptr + bFullReg * 32]);
+                vcvtph2ps(Zmm(bRegIdx + bFullReg), Ymm(bRegIdx + bFullReg));
+                vcvtps2dq(Zmm(bRegIdx + bFullReg), Zmm(bRegIdx + bFullReg));
                 vpmulld(Zmm(bRegIdx + bFullReg), Zmm(bRegIdx + bFullReg),
                         Zmm(betaRegIdx));
                 vpaddd(Zmm(cRegIdx + i * bReg + bFullReg),

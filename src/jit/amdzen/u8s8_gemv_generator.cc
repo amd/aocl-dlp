@@ -184,7 +184,7 @@ jitU8S8VNNI_GEMVN1<KType>::updateCBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -360,6 +360,42 @@ jitU8S8VNNI_GEMVN1<KType>::storeResult_F32(int mSize, bool isRowStored)
                           Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
                 vmovups(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
             }
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVN1<KType>::storeResult_F16(int mSize, bool isRowStored)
+{
+    if (isRowStored) {
+        RETURN_IF_ERROR(storeY_rowStored_F16(mSize));
+    } else {
+        updateCBufferPointers();
+
+        for (iter_t i = 0; i < mSize / nElemsPerReg; i += 1) {
+            if (accumulatorsAreF32) {
+                vmovups(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
+            } else {
+                vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
+            }
+            vcvtps2ph(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx), 0);
+            vmovdqu16(ptr[regTmpYptr], Ymm(tmpBaseIdx + 1));
+            add(regTmpYptr, regTmp1);
+        }
+
+        if (mSize % nElemsPerReg) {
+            if (accumulatorsAreF32) {
+                vmovups(Zmm(tmpBaseIdx),
+                        Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
+            } else {
+                vcvtdq2ps(Zmm(tmpBaseIdx),
+                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
+            }
+            vcvtps2ph(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx), 0);
+            vmovdqu16(ptr[regTmpYptr] | mask_regs[1], Ymm(tmpBaseIdx + 1));
         }
     }
 
@@ -622,6 +658,43 @@ jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_F32(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_F16(int mSize)
+{
+    updateCBufferPointers();
+
+    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
+        int elems_in_reg = (i < mSize / nElemsPerReg) ? nElemsPerReg
+                                                      : (mSize % nElemsPerReg);
+        if (elems_in_reg == 0)
+            break;
+
+        if (accumulatorsAreF32) {
+            vmovups(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
+        } else {
+            vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
+        }
+
+        vcvtps2ph(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx), 0);
+
+        for (iter_t j = 0; j < elems_in_reg; j += 8) {
+            vextracti32x4(Xmm(tmpBaseIdx + 2 + j / 8), Ymm(tmpBaseIdx + 1),
+                          j / 8);
+        }
+
+        for (iter_t j = 0; j < elems_in_reg; j++) {
+            int tmp_reg    = j / 8 + 2;
+            int pos_in_reg = j % 8;
+            vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
+                    pos_in_reg);
+            add(regTmpYptr, regTmp1);
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_BF16(int mSize)
 {
     updateCBufferPointers();
@@ -704,6 +777,8 @@ jitU8S8VNNI_GEMVN1<KType>::storeResult(int mSize)
         RETURN_IF_ERROR(storeResult_S8(mSize, isRowStored));
     } else if (c_downscale == DLP_F32) {
         RETURN_IF_ERROR(storeResult_F32(mSize, isRowStored));
+    } else if (c_downscale == DLP_F16) {
+        RETURN_IF_ERROR(storeResult_F16(mSize, isRowStored));
     } else if (c_downscale == DLP_BF16) {
         RETURN_IF_ERROR(storeResult_BF16(mSize, isRowStored));
     }
@@ -774,9 +849,9 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_U8(int mSize, bool isRowStored)
             vmovdqu8(Xmm(yBaseIdx) | mask_regs[1] | T_z, ptr[regTmpYptr]);
             vpmovzxbd(Zmm(yBaseIdx), Xmm(yBaseIdx));
             if (is_unit_beta) {
-                vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)) | k2,
-                       Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
-                       Zmm(yBaseIdx));
+                vpaddd(
+                    Zmm(accumBaseIdx + (mSize / nElemsPerReg)) | mask_regs[1],
+                    Zmm(accumBaseIdx + (mSize / nElemsPerReg)), Zmm(yBaseIdx));
             } else {
                 vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
                 vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
@@ -839,6 +914,39 @@ jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_F32(int mSize, bool isRowStored)
         if (mLeft) {
             // Use zero-masking (T_z) to zero unmasked elements
             vcvtps2dq(Zmm(yBaseIdx) | mask_regs[1] | T_z, ptr[regTmpYptr]);
+            vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
+            vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
+                   Zmm(accumBaseIdx + (mSize / nElemsPerReg)), Zmm(yBaseIdx));
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVN1<KType>::scaleYWithBeta_F16(int mSize, bool isRowStored)
+{
+    int mLeft = mSize % nElemsPerReg;
+
+    if (isRowStored) {
+        vcvtph2ps(Zmm(yBaseIdx), Ymm(yBaseIdx));
+        vcvtps2dq(Zmm(yBaseIdx), Zmm(yBaseIdx));
+        vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
+        vpaddd(Zmm(accumBaseIdx), Zmm(accumBaseIdx), Zmm(yBaseIdx));
+    } else {
+        updateCBufferPointers();
+        for (iter_t i = 0; i < mSize / nElemsPerReg; i++) {
+            vmovdqu16(Ymm(yBaseIdx), ptr[regTmpYptr]);
+            vcvtph2ps(Zmm(yBaseIdx), Ymm(yBaseIdx));
+            vcvtps2dq(Zmm(yBaseIdx), Zmm(yBaseIdx));
+            vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
+            vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i), Zmm(yBaseIdx));
+        }
+        if (mLeft) {
+            vmovdqu16(Ymm(yBaseIdx) | mask_regs[1] | T_z, ptr[regTmpYptr]);
+            vcvtph2ps(Zmm(yBaseIdx), Ymm(yBaseIdx));
+            vcvtps2dq(Zmm(yBaseIdx), Zmm(yBaseIdx));
             vpmulld(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(xBaseIdx));
             vpaddd(Zmm(accumBaseIdx + (mSize / nElemsPerReg)),
                    Zmm(accumBaseIdx + (mSize / nElemsPerReg)), Zmm(yBaseIdx));
@@ -1112,6 +1220,41 @@ jitU8S8VNNI_GEMVN1<KType>::rearrangeY_rowStored_F32(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVN1<KType>::rearrangeY_rowStored_F16(int mSize)
+{
+    updateCBufferPointers();
+
+    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
+        int blockSize = (mSize - nElemsPerReg * i) < nElemsPerReg
+                            ? (mSize - nElemsPerReg * i)
+                            : nElemsPerReg;
+
+        vpxord(Xmm(tmpBaseIdx), Xmm(tmpBaseIdx), Xmm(tmpBaseIdx));
+        vpxord(Xmm(tmpBaseIdx + 1), Xmm(tmpBaseIdx + 1), Xmm(tmpBaseIdx + 1));
+
+        for (iter_t j = 0; j < 8 && j < blockSize; j++) {
+            movzx(regKIter.cvt32(), word[regTmpYptr]);
+            vpinsrw(Xmm(tmpBaseIdx), Xmm(tmpBaseIdx), regKIter.cvt32(), j);
+            add(regTmpYptr, regTmp1);
+        }
+
+        for (iter_t j = 8; j < blockSize; j++) {
+            movzx(regKIter.cvt32(), word[regTmpYptr]);
+            vpinsrw(Xmm(tmpBaseIdx + 1), Xmm(tmpBaseIdx + 1), regKIter.cvt32(),
+                    j - 8);
+            add(regTmpYptr, regTmp1);
+        }
+
+        vinserti32x4(Ymm(yBaseIdx + i), Ymm(yBaseIdx + i), Xmm(tmpBaseIdx), 0);
+        vinserti32x4(Ymm(yBaseIdx + i), Ymm(yBaseIdx + i), Xmm(tmpBaseIdx + 1),
+                     1);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVN1<KType>::rearrangeY_rowStored_BF16(int mSize)
 {
     updateCBufferPointers();
@@ -1181,6 +1324,8 @@ jitU8S8VNNI_GEMVN1<KType>::scaleBeta(int mSize)
             RETURN_IF_ERROR(rearrangeY_rowStored_S8(mSize));
         } else if (c_downscale == DLP_F32) {
             RETURN_IF_ERROR(rearrangeY_rowStored_F32(mSize));
+        } else if (c_downscale == DLP_F16) {
+            RETURN_IF_ERROR(rearrangeY_rowStored_F16(mSize));
         } else if (c_downscale == DLP_BF16) {
             RETURN_IF_ERROR(rearrangeY_rowStored_BF16(mSize));
         }
@@ -1201,6 +1346,9 @@ jitU8S8VNNI_GEMVN1<KType>::scaleBeta(int mSize)
             mSize, yFormat == dlp::kernel_frame::storageFormat::rowMajor));
     } else if (c_downscale == DLP_F32) {
         RETURN_IF_ERROR(scaleYWithBeta_F32(
+            mSize, yFormat == dlp::kernel_frame::storageFormat::rowMajor));
+    } else if (c_downscale == DLP_F16) {
+        RETURN_IF_ERROR(scaleYWithBeta_F16(
             mSize, yFormat == dlp::kernel_frame::storageFormat::rowMajor));
     } else if (c_downscale == DLP_BF16) {
         RETURN_IF_ERROR(scaleYWithBeta_BF16(
@@ -1951,6 +2099,8 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBeta(bool nMask)
         return scaleYWithBeta_S8(nMask, isBetaOne);
     } else if (c_downscale == DLP_F32) {
         return scaleYWithBeta_F32(nMask, isBetaOne);
+    } else if (c_downscale == DLP_F16) {
+        return scaleYWithBeta_F16(nMask, isBetaOne);
     } else if (c_downscale == DLP_BF16) {
         return scaleYWithBeta_BF16(nMask, isBetaOne);
     }
@@ -2052,6 +2202,31 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBeta_F32(bool nMask, bool isBetaOne)
         }
     } else {
         scaleYWithBetaFringe_F32(isBetaOne);
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVM1<KType>::scaleYWithBeta_F16(bool nMask, bool isBetaOne)
+{
+    updateYBufferPointers();
+
+    if (!nMask) {
+        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
+            vmovdqu16(Ymm(yBaseIdx + i), ptr[regTmpYptr + i * 32]);
+            vcvtph2ps(Zmm(yBaseIdx + i), Ymm(yBaseIdx + i));
+            vcvtps2dq(Zmm(yBaseIdx + i), Zmm(yBaseIdx + i));
+
+            if (!isBetaOne) {
+                vpmulld(Zmm(yBaseIdx + i), Zmm(yBaseIdx + i), Zmm(xBaseIdx));
+            }
+            vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
+                   Zmm(yBaseIdx + i));
+        }
+    } else {
+        scaleYWithBetaFringe_F16(isBetaOne);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -2227,6 +2402,43 @@ jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_F32(bool isBetaOne)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_F16(bool isBetaOne)
+{
+    updateYBufferPointers();
+
+    int n_iter = N_LEFT / nElemsPerReg;
+    int n_left = N_LEFT % nElemsPerReg;
+
+    for (iter_t i = 0; i < n_iter; i++) {
+        vmovdqu16(Ymm(yBaseIdx + i), ptr[regTmpYptr + i * 32]);
+        vcvtph2ps(Zmm(yBaseIdx + i), Ymm(yBaseIdx + i));
+        vcvtps2dq(Zmm(yBaseIdx + i), Zmm(yBaseIdx + i));
+
+        if (!isBetaOne) {
+            vpmulld(Zmm(yBaseIdx + i), Zmm(yBaseIdx + i), Zmm(xBaseIdx));
+        }
+        vpaddd(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i), Zmm(yBaseIdx + i));
+    }
+
+    if (n_left) {
+        vmovdqu16(Ymm(yBaseIdx + n_iter) | mask_regs[0] | T_z,
+                  ptr[regTmpYptr + n_iter * 32]);
+        vcvtph2ps(Zmm(yBaseIdx + n_iter), Ymm(yBaseIdx + n_iter));
+        vcvtps2dq(Zmm(yBaseIdx + n_iter), Zmm(yBaseIdx + n_iter));
+
+        if (!isBetaOne) {
+            vpmulld(Zmm(yBaseIdx + n_iter), Zmm(yBaseIdx + n_iter),
+                    Zmm(xBaseIdx));
+        }
+        vpaddd(Zmm(accumBaseIdx + n_iter), Zmm(accumBaseIdx + n_iter),
+               Zmm(yBaseIdx + n_iter));
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVM1<KType>::scaleYWithBetaFringe_BF16(bool isBetaOne)
 {
     updateYBufferPointers();
@@ -2276,7 +2488,7 @@ jitU8S8VNNI_GEMVM1<KType>::updateYBufferPointers()
         ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
             + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
 
-    if (c_downscale == DLP_BF16) {
+    if (c_downscale == DLP_BF16 || c_downscale == DLP_F16) {
         lea(regTmp1, ptr[regTmp1 * 2]);
     } else if (c_downscale == DLP_F32) {
         lea(regTmp1, ptr[regTmp1 * 4]);
@@ -2298,6 +2510,8 @@ jitU8S8VNNI_GEMVM1<KType>::storeYValues(bool nMask)
         return storeYValues_S8(nMask);
     } else if (c_downscale == DLP_F32) {
         return storeYValues_F32(nMask);
+    } else if (c_downscale == DLP_F16) {
+        return storeYValues_F16(nMask);
     } else if (c_downscale == DLP_BF16) {
         return storeYValues_BF16(nMask);
     }
@@ -2411,6 +2625,29 @@ jitU8S8VNNI_GEMVM1<KType>::storeYValues_F32(bool nMask)
         }
     } else {
         storeYValuesFringe_F32();
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVM1<KType>::storeYValues_F16(bool nMask)
+{
+    updateYBufferPointers();
+
+    if (!nMask) {
+        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
+            if (accumulatorsAreF32) {
+                vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
+            } else {
+                vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
+            }
+            vcvtps2ph(Ymm(xBaseIdx + 1), Zmm(xBaseIdx), 0);
+            vmovdqu16(ptr[regTmpYptr + i * 32], Ymm(xBaseIdx + 1));
+        }
+    } else {
+        storeYValuesFringe_F16();
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -2617,6 +2854,39 @@ jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_F32()
             vmovups(ptr[regTmpYptr + n_iter * RegBytes] | mask_regs[0],
                     Zmm(xBaseIdx));
         }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_F16()
+{
+    updateYBufferPointers();
+
+    int n_iter = N_LEFT / nElemsPerReg;
+    int n_left = N_LEFT % nElemsPerReg;
+
+    for (iter_t i = 0; i < n_iter; i++) {
+        if (accumulatorsAreF32) {
+            vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
+        } else {
+            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
+        }
+        vcvtps2ph(Ymm(xBaseIdx + 1), Zmm(xBaseIdx), 0);
+        vmovdqu16(ptr[regTmpYptr + i * 32], Ymm(xBaseIdx + 1));
+    }
+
+    if (n_left) {
+        if (accumulatorsAreF32) {
+            vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
+        } else {
+            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
+        }
+        vcvtps2ph(Ymm(xBaseIdx + 1), Zmm(xBaseIdx), 0);
+        vmovdqu16(ptr[regTmpYptr + n_iter * 32] | mask_regs[0],
+                  Ymm(xBaseIdx + 1));
     }
 
     return dlp::jit::jitGeneratorError::success;

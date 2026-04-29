@@ -412,6 +412,18 @@ DlpUalPlan::prepare()
             };
             break;
 
+        case encodeTypes<MatrixType::u8, MatrixType::s8, MatrixType::fp16,
+                         MatrixType::s32>():
+            m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                             md_t ldc) {
+                aocl_gemm_u8s8s32of16(
+                    layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
+                    reinterpret_cast<uint8_t*>(a), lda, memA,
+                    reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
+                    reinterpret_cast<float16*>(c), ldc, meta);
+            };
+            break;
+
         case encodeTypes<MatrixType::u8, MatrixType::s8, MatrixType::u8,
                          MatrixType::s32>():
             m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,

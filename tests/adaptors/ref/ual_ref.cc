@@ -711,6 +711,33 @@ UalRef::gemm(const Matrix& A,
             return true;
         }
 
+        case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::fp16,
+                          MatrixType::s32>(): {
+            int32_t alpha_s32 = static_cast<int32_t>(alpha);
+            int32_t beta_s32  = static_cast<int32_t>(beta);
+
+            Matrix tempC_s32 =
+                createAndInitializeTempMatrix<int32_t>(C, beta_s32);
+
+            dlp::testing::classic::ref::aocl_gemm_u8s8s32os32_ref(
+                layoutA, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), alpha_s32,
+                reinterpret_cast<const uint8_t*>(
+                    A.getMatrixData().getMatrixPtr()),
+                static_cast<int>(A.getLeadingDimension()),
+                reinterpret_cast<const int8_t*>(
+                    B.getMatrixData().getMatrixPtr()),
+                static_cast<int>(B.getLeadingDimension()), beta_s32,
+                reinterpret_cast<int32_t*>(tempC_s32.getData()),
+                static_cast<int>(tempC_s32.getLeadingDimension()), nullptr);
+
+            dlp::testing::utils::copyToMatrix<int32_t>(
+                reinterpret_cast<const int32_t*>(tempC_s32.getData()),
+                tempC_s32.getLeadingDimension(), C, tempC_s32.getLayout());
+
+            return true;
+        }
+
         case encode_types<MatrixType::u8, MatrixType::s8, MatrixType::s8,
                           MatrixType::s32>(): {
             int32_t alpha_s32 = static_cast<int32_t>(alpha);

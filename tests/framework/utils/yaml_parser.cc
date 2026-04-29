@@ -605,6 +605,11 @@ namespace dlp { namespace testing { namespace utils {
             if (node["tolerances"]) {
                 iterators.has_tolerances = true;
                 auto tol_node            = node["tolerances"];
+                // Tolerances are generally interpreted as multipliers for
+                // floating-point comparisons. For integer output tests with
+                // post-ops, the harness treats `absolute` as the meaningful
+                // control knob for enabling a small absolute-difference
+                // allowance after float-domain post-op rounding.
 
                 // Extract relative tolerance multiplier
                 if (tol_node["relative"]) {
