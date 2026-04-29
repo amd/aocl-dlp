@@ -38,9 +38,10 @@ namespace dlp::env_utils {
 // Static lookup table for architecture string mappings
 // Using std::array for compile-time initialization and better cache locality
 constexpr std::array<std::pair<std::string_view, arch_utils::ArchitectureType>,
-                     19>
+                     20>
     ARCH_STRING_MAP = {
         { // Primary AMD architecture names
+          { "zen6", arch_utils::ArchitectureType::Zen6 },
           { "zen5", arch_utils::ArchitectureType::Zen5 },
           { "zen4", arch_utils::ArchitectureType::Zen4 },
           { "zen3", arch_utils::ArchitectureType::Zen3 },
@@ -70,9 +71,10 @@ constexpr std::array<std::pair<std::string_view, arch_utils::ArchitectureType>,
 // Using std::array for compile-time initialization and better cache locality
 constexpr std::array<
     std::pair<std::string_view, kernel_frame::kernelInstrPreference>,
-    9>
+    10>
     INSTR_PREF_STRING_MAP = {
-        { { "zen5", kernel_frame::kernelInstrPreference::avx512_zmm_favour },
+        { { "zen6", kernel_frame::kernelInstrPreference::avx512_zmm_favour },
+          { "zen5", kernel_frame::kernelInstrPreference::avx512_zmm_favour },
           { "zen4", kernel_frame::kernelInstrPreference::avx512_zmm_favour },
           { "zen3", kernel_frame::kernelInstrPreference::avx2_ymm_favour },
           { "zen2", kernel_frame::kernelInstrPreference::avx2_ymm_favour },

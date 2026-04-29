@@ -354,7 +354,8 @@ aocl_gemm_bf16bf16f32of32(const char      order,
      * tiny path and result in seg fault as the tiny path for DLP_BF16->FP32 is
      * not available. Hence the arch_id also has to be verified here.
      */
-    if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5))
+    if (((arch_id == DLP_ARCH_ZEN4) || (arch_id == DLP_ARCH_ZEN5)
+         || (arch_id == DLP_ARCH_ZEN6))
         && (dlp_cpuid_is_avx512bf16_supported() == TRUE)
         && (is_tiny_input_bf16of32(m_use, n_use, k, &lcntx_l) == TRUE)
         && (dlp_is_single_thread(&rntm_g) == TRUE) && (is_row_major == TRUE)) {

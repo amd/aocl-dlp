@@ -43,7 +43,12 @@ dlp_env_get_var_arch_type(const char* env_var_name)
         auto& manager =
             dlp::env_utils::EnvironmentVariableManager::getInstance();
         auto arch_type = manager.getArchitectureFromEnv(env_var_name);
+        // Only these archs are considered since the the other archs like
+        // GenericAvx512Fp16, GenericAvx512Bf16 cannot be configured via
+        // env parameters like AOCL_DLP_ENABLE_INSTRUCTIONS.
         switch (arch_type) {
+            case dlp::arch_utils::ArchitectureType::Zen6:
+                return DLP_ARCH_ZEN6;
             case dlp::arch_utils::ArchitectureType::Zen5:
                 return DLP_ARCH_ZEN5;
             case dlp::arch_utils::ArchitectureType::Zen4:

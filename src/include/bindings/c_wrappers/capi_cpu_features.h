@@ -50,6 +50,7 @@ typedef enum
     DLP_ARCH_GENERIC,
 
     // AMD
+    DLP_ARCH_ZEN6,
     DLP_ARCH_ZEN5,
     DLP_ARCH_ZEN4,
     DLP_ARCH_ZEN3,

@@ -78,6 +78,7 @@ class EnvironmentVariableManager final
      * parsing fails
      *
      * Supports the following string mappings (case-insensitive):
+     * - "zen6" -> ArchitectureType::Zen6
      * - "zen5" -> ArchitectureType::Zen5
      * - "zen4" -> ArchitectureType::Zen4
      * - "zen3" -> ArchitectureType::Zen3

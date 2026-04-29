@@ -26,6 +26,7 @@
  *
  */
 
+#include <unordered_map>
 #include <vector>
 
 #include "arch_utils/arch_config_manager.hh"
@@ -38,84 +39,35 @@ namespace dlp::arch_utils {
 
 archConfigManager::archConfigManager()
 {
+    // Actual hardware support.
     setIsAvx2Fma3Supported();
     setIsAvx512Supported();
     setIsAvx512VnniSupported();
     setIsAvx512Bf16Supported();
     setIsAvx512Fp16Supported();
     setFpDatapathWidth();
+    setIsZen6();
     setIsZen5();
     setIsZen4();
     setIsZen();
+
+    // setArch should only be called post the above feature detections as it
+    // relies on the results of those detections to set the arch correctly.
+    // This function call sequence should not be modified. As a thumb rule any
+    // actual hardware detection should be done before setArch is called, and
+    // any configured arch determination should be done inside/after setArch.
     setArch();
-}
 
-archConfigManager&
-archConfigManager::getInstance()
-{
-    // C++11 guarantees thread-safe static local initialization
-    static archConfigManager instance;
-    return instance;
-}
-
-bool
-archConfigManager::isAvx2Fma3SupportedByArch() const noexcept
-{
-    return isAvx2Fma3Supported;
-}
-
-bool
-archConfigManager::isAvx512SupportedByArch() const noexcept
-{
-    return isAvx512Supported;
-}
-
-bool
-archConfigManager::isAvx512VnniSupportedByArch() const noexcept
-{
-    return isAvx512VnniSupported;
-}
-
-bool
-archConfigManager::isAvx512Bf16SupportedByArch() const noexcept
-{
-    return isAvx512Bf16Supported;
-}
-
-bool
-archConfigManager::isAvx512Fp16SupportedByArch() const noexcept
-{
-    return isAvx512Fp16Supported;
-}
-
-std::uint32_t
-archConfigManager::getFpDatapathWidthOfArch() const noexcept
-{
-    return fpDatapathWidth;
-}
-
-bool
-archConfigManager::isZen5SimilarArch() const noexcept
-{
-    return isZen5;
-}
-
-bool
-archConfigManager::isZen4SimilarArch() const noexcept
-{
-    return isZen4;
-}
-
-bool
-archConfigManager::isZenSimilarArch() const noexcept
-{
-    return isZen;
-}
-
-ArchitectureType
-archConfigManager::getArch() const noexcept
-{
-    return thisArch;
+    // Configured hardware support.
+    setIsAvx2Fma3Configured();
+    setIsAvx512Configured();
+    setIsAvx512VnniConfigured();
+    setIsAvx512Bf16Configured();
+    setIsAvx512Fp16Configured();
+    setIsZen6Configured();
+    setIsZen5Configured();
+    setIsZen4Configured();
+    setIsZenConfigured();
 }
 
 void
@@ -200,6 +152,8 @@ archConfigManager::setIsAvx512Fp16Supported()
             dlp::cpu_utils::isaFeature::avx512cd,
             dlp::cpu_utils::isaFeature::avx512bw,
             dlp::cpu_utils::isaFeature::avx512vl,
+            dlp::cpu_utils::isaFeature::avx512vnni,
+            dlp::cpu_utils::isaFeature::avx512bf16,
             dlp::cpu_utils::isaFeature::avx512fp16
         };
         return dlp::cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeatures);
@@ -226,6 +180,35 @@ archConfigManager::setFpDatapathWidth()
             }
         }
         return DATAPATH_INVALID;
+    }();
+}
+
+void
+archConfigManager::setIsZen6()
+{
+    isZen6 = [&]() -> bool {
+        std::vector<dlp::cpu_utils::isaFeature> reqFeatures{
+            dlp::cpu_utils::isaFeature::sse3,
+            dlp::cpu_utils::isaFeature::ssse3,
+            dlp::cpu_utils::isaFeature::sse41,
+            dlp::cpu_utils::isaFeature::sse42,
+            dlp::cpu_utils::isaFeature::avx,
+            dlp::cpu_utils::isaFeature::fma3,
+            dlp::cpu_utils::isaFeature::avx2,
+            dlp::cpu_utils::isaFeature::avx512f,
+            dlp::cpu_utils::isaFeature::avx512dq,
+            dlp::cpu_utils::isaFeature::avx512cd,
+            dlp::cpu_utils::isaFeature::avx512bw,
+            dlp::cpu_utils::isaFeature::avx512vl,
+            dlp::cpu_utils::isaFeature::avx512vnni,
+            dlp::cpu_utils::isaFeature::avx512bf16,
+            dlp::cpu_utils::isaFeature::movdiri,
+            dlp::cpu_utils::isaFeature::movdir64b,
+            dlp::cpu_utils::isaFeature::avx512vp2intersect,
+            dlp::cpu_utils::isaFeature::avxvnni,
+            dlp::cpu_utils::isaFeature::avx512fp16
+        };
+        return dlp::cpu_utils::cpuFeaturesInstance().hasFeatures(reqFeatures);
     }();
 }
 
@@ -302,7 +285,9 @@ archConfigManager::queryUnderlyingArch(void)
     if (vendor == cpu_utils::cpuVendor::intel) {
         // Map non amd x86_64 machines to generic variants that can be used to
         // convey arch ISA properties.
-        if (isAvx512Bf16Supported) {
+        if (isAvx512Fp16Supported) {
+            archId = ArchitectureType::GenericAvx512Fp16;
+        } else if (isAvx512Bf16Supported) {
             archId = ArchitectureType::GenericAvx512Bf16;
         } else if (isAvx512VnniSupported) {
             archId = ArchitectureType::GenericAvx512Vnni;
@@ -315,7 +300,9 @@ archConfigManager::queryUnderlyingArch(void)
         // The ARCH is decided based on the dlp config set during compile
         // time and the ISA supported. The model and family id is NOT used
         // for determining the same.
-        if (isZen5) {
+        if (isZen6) {
+            archId = ArchitectureType::Zen6;
+        } else if (isZen5) {
             archId = ArchitectureType::Zen5;
         } else if (isZen4) {
             archId = ArchitectureType::Zen4;
@@ -327,8 +314,9 @@ archConfigManager::queryUnderlyingArch(void)
 #ifdef DLP_CONFIG_ZEN
             archId = ArchitectureType::Zen;
 #endif
+        } else if (isAvx512Fp16Supported) {
+            archId = ArchitectureType::Zen6;
         } else if (isAvx512Bf16Supported) {
-            // Fallback test for future AMD processors
             // Assume zen5 (if available) is preferable to zen4.
             archId = ArchitectureType::Zen5;
 #ifdef DLP_CONFIG_ZEN4
@@ -348,11 +336,47 @@ archConfigManager::queryUnderlyingArch(void)
     return archId;
 }
 
+// Explicit requirements table: each architecture declares exactly which
+// ISA features it needs. If any required feature is absent on hardware,
+// fall back to actualArch.
+//
+// To add a new architecture: add one row to the table below.
+// To add a new feature dimension: add one bool column and one clause
+// to the 'unsatisfied' check.
+struct ArchFeatureRequirements
+{
+    bool requiresAvx2Fma3;
+    bool requiresAvx512;
+    bool requiresAvx512Vnni;
+    bool requiresAvx512Bf16;
+    bool requiresAvx512Fp16;
+};
+
+static const std::unordered_map<ArchitectureType, ArchFeatureRequirements>
+    archRequirements = {
+        // Format: ArchType req_avx2 req_avx512 req_vnni req_bf16 req_fp16
+        { ArchitectureType::Zen6, { true, true, true, true, true } },
+        { ArchitectureType::Zen5, { true, true, true, true, false } },
+        { ArchitectureType::Zen4, { true, true, true, true, false } },
+        { ArchitectureType::Zen3, { true, false, false, false, false } },
+        { ArchitectureType::Zen2, { true, false, false, false, false } },
+        { ArchitectureType::Zen, { true, false, false, false, false } },
+        { ArchitectureType::GenericAvx512Fp16,
+          { true, true, true, true, true } },
+        { ArchitectureType::GenericAvx512Bf16,
+          { true, true, true, true, false } },
+        { ArchitectureType::GenericAvx512Vnni,
+          { true, true, true, false, false } },
+        { ArchitectureType::GenericAvx512,
+          { true, true, false, false, false } },
+        { ArchitectureType::GenericAvx2, { true, false, false, false, false } },
+    };
+
 void
 archConfigManager::setArch(void)
 {
     // Get actual hardware arch and model ids.
-    auto actualArch = queryUnderlyingArch();
+    actualArch = queryUnderlyingArch();
 
     auto& manager = dlp::env_utils::EnvironmentVariableManager::getInstance();
     thisArch = manager.getArchitectureFromEnv("AOCL_DLP_ENABLE_INSTRUCTIONS");
@@ -367,39 +391,102 @@ archConfigManager::setArch(void)
     ArchitectureType origThisArch = thisArch;
 
     if ((origThisArch != ArchitectureType::Error) && (aocl_e_i == true)) {
-        // If AVX2 test fails here we assume that the arch was configured as
-        // zen, zen2, zen3, zen4, zen5 and should be reset to actual arch.
-        if (!isAvx2Fma3Supported) {
-            // Falling over the possible values for "thisArch" that has to be
-            // downgraded.
-            switch (origThisArch) {
-                case ArchitectureType::Zen5:
-                case ArchitectureType::Zen4:
-                case ArchitectureType::Zen3:
-                case ArchitectureType::Zen2:
-                case ArchitectureType::Zen:
-                    thisArch = actualArch;
-                    break;
-                default:
-                    break;
-            }
-        }
-
-        // If AVX512 test fails here we assume that the arch was configured
-        // as zen4, zen5 and should be reset to actual arch.
-        if (!isAvx512Supported) {
-            // Falling over the possible values for "thisArch" that has to be
-            // downgraded.
-            switch (origThisArch) {
-                case ArchitectureType::Zen5:
-                case ArchitectureType::Zen4:
-                    thisArch = actualArch;
-                    break;
-                default:
-                    break;
+        // Validate if the configured architecture's ISA requirements are
+        // satisfied by the underlying hardware.
+        auto it = archRequirements.find(origThisArch);
+        if (it != archRequirements.end()) {
+            const auto& req = it->second;
+            bool        unsatisfied =
+                (req.requiresAvx2Fma3 && !isAvx2Fma3Supported)
+                || (req.requiresAvx512 && !isAvx512Supported)
+                || (req.requiresAvx512Vnni && !isAvx512VnniSupported)
+                || (req.requiresAvx512Bf16 && !isAvx512Bf16Supported)
+                || (req.requiresAvx512Fp16 && !isAvx512Fp16Supported);
+            if (unsatisfied) {
+                thisArch = actualArch;
             }
         }
     }
+}
+
+void
+archConfigManager::setIsAvx2Fma3Configured()
+{
+    isAvx2Fma3Configured =
+        ((thisArch != ArchitectureType::Error)
+         && (thisArch != ArchitectureType::Generic) && isAvx2Fma3Supported);
+}
+
+void
+archConfigManager::setIsAvx512Configured()
+{
+    isAvx512Configured = (((thisArch == ArchitectureType::GenericAvx512)
+                           || (thisArch == ArchitectureType::GenericAvx512Vnni)
+                           || (thisArch == ArchitectureType::GenericAvx512Bf16)
+                           || (thisArch == ArchitectureType::GenericAvx512Fp16)
+                           || (thisArch == ArchitectureType::Zen6)
+                           || (thisArch == ArchitectureType::Zen5)
+                           || (thisArch == ArchitectureType::Zen4))
+                          && isAvx512Supported);
+}
+
+void
+archConfigManager::setIsAvx512VnniConfigured()
+{
+    isAvx512VnniConfigured =
+        (((thisArch == ArchitectureType::GenericAvx512Vnni)
+          || (thisArch == ArchitectureType::GenericAvx512Bf16)
+          || (thisArch == ArchitectureType::GenericAvx512Fp16)
+          || (thisArch == ArchitectureType::Zen6)
+          || (thisArch == ArchitectureType::Zen5)
+          || (thisArch == ArchitectureType::Zen4))
+         && isAvx512VnniSupported);
+}
+
+void
+archConfigManager::setIsAvx512Bf16Configured()
+{
+    isAvx512Bf16Configured =
+        (((thisArch == ArchitectureType::GenericAvx512Bf16)
+          || (thisArch == ArchitectureType::GenericAvx512Fp16)
+          || (thisArch == ArchitectureType::Zen6)
+          || (thisArch == ArchitectureType::Zen5)
+          || (thisArch == ArchitectureType::Zen4))
+         && isAvx512Bf16Supported);
+}
+
+void
+archConfigManager::setIsAvx512Fp16Configured()
+{
+    isAvx512Fp16Configured = (((thisArch == ArchitectureType::GenericAvx512Fp16)
+                               || (thisArch == ArchitectureType::Zen6))
+                              && isAvx512Fp16Supported);
+}
+
+void
+archConfigManager::setIsZen6Configured()
+{
+    isZen6Configured = (thisArch == ArchitectureType::Zen6);
+}
+
+void
+archConfigManager::setIsZen5Configured()
+{
+    isZen5Configured = (thisArch == ArchitectureType::Zen5);
+}
+
+void
+archConfigManager::setIsZen4Configured()
+{
+    isZen4Configured = (thisArch == ArchitectureType::Zen4);
+}
+
+void
+archConfigManager::setIsZenConfigured()
+{
+    isZenConfigured = ((thisArch == ArchitectureType::Zen3)
+                       || (thisArch == ArchitectureType::Zen2)
+                       || (thisArch == ArchitectureType::Zen));
 }
 
 } // namespace dlp::arch_utils

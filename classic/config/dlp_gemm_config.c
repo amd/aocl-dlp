@@ -198,7 +198,8 @@ _dlp_gemm_eltwise_ops_cntx_init_func_map()
         DLP_GEMM_KERN_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;                   \
         DLP_GEMM_PACKA_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;                  \
         DLP_GEMM_PACKB_FUNC_UPD_MAP_AVX512_VNNI_BF16_TO_AVX2;                  \
-    } else if (((global_dlp_gemmenable_arch == DLP_ARCH_ZEN5)                  \
+    } else if (((global_dlp_gemmenable_arch == DLP_ARCH_ZEN6)                  \
+                || (global_dlp_gemmenable_arch == DLP_ARCH_ZEN5)               \
                 || (global_dlp_gemmenable_arch == DLP_ARCH_ZEN4))              \
                && (global_dlp_gemmenable_instr_pref                            \
                    == DLP_INSTR_PREF_AVX512_YMM_FAVOUR)) {                     \

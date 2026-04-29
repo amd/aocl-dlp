@@ -105,13 +105,25 @@ dlp_arch_t
 dlp_get_arch(void)
 {
     static const dlp_arch_t arch_id = []() -> dlp_arch_t {
-        ArchitectureType thisArch = archConfigManager::getInstance().getArch();
+        ArchitectureType thisArch =
+            archConfigManager::getInstance().getConfiguredArch();
+        // arch is generally used for setting block params and NOT to decide
+        // micro-kernels. Hence the approximate mapping for generic archs to
+        // zen similar archs is expected to work for now. To be revisited
+        // when other vendor archs are added and requires custom handling.
         switch (thisArch) {
+            case dlp::arch_utils::ArchitectureType::Zen6:
+            case dlp::arch_utils::ArchitectureType::GenericAvx512Fp16:
+                return DLP_ARCH_ZEN6;
             case dlp::arch_utils::ArchitectureType::Zen5:
+            case dlp::arch_utils::ArchitectureType::GenericAvx512Bf16:
                 return DLP_ARCH_ZEN5;
             case dlp::arch_utils::ArchitectureType::Zen4:
+            case dlp::arch_utils::ArchitectureType::GenericAvx512Vnni:
+            case dlp::arch_utils::ArchitectureType::GenericAvx512:
                 return DLP_ARCH_ZEN4;
             case dlp::arch_utils::ArchitectureType::Zen3:
+            case dlp::arch_utils::ArchitectureType::GenericAvx2:
                 return DLP_ARCH_ZEN3;
             case dlp::arch_utils::ArchitectureType::Zen2:
                 return DLP_ARCH_ZEN2;

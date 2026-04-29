@@ -49,14 +49,16 @@ gemmF32DEBackend::gemmF32DEBackend()
                           .getKernelInstructionPreferenceFromEnv(
                               "AOCL_DLP_ENABLE_INSTRUCTIONS");
 
-    isAvx512 =
+    isAvx512 = arch_utils::archConfigManager::getInstance()
+                   .isAvx512SupportedByConfiguredArch();
+    bool isActualAvx512 =
         arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
 
-    // isAvx2 is only checked for and set to true if machine is guaranteed
-    // to not support Avx512 isa.
+    // isAvx2 is only checked for and set to true if machine is guaranteed/
+    // configured to not support Avx512 isa.
     if (!isAvx512) {
         isAvx2 = arch_utils::archConfigManager::getInstance()
-                     .isAvx2Fma3SupportedByArch();
+                     .isAvx2Fma3SupportedByConfiguredArch();
     }
 
     // This needs to be downgraded if the actual cpu is avx512 but is
@@ -65,65 +67,31 @@ gemmF32DEBackend::gemmF32DEBackend()
     numVectorMaskRegisters =
         cpu_utils::cpuFeaturesInstance().getNumVectorMaskRegisters();
 
-    // Check if the DE can be enabled depending on the underlying ISA
-    // and the configured arch.
-    auto thisArch = arch_utils::archConfigManager::getInstance().getArch();
-
-    // Checking if the underlying architecture supports AVX512, and if
-    // thisArch(configured architecture) demands a different ISA not as part of
-    // the default codepath.
-    if (isAvx512 && (thisArch != arch_utils::ArchitectureType::Zen5)
-        && (thisArch != arch_utils::ArchitectureType::Zen4)
-        && (thisArch != arch_utils::ArchitectureType::GenericAvx512Bf16)
-        && (thisArch != arch_utils::ArchitectureType::GenericAvx512Vnni)
-        && (thisArch != arch_utils::ArchitectureType::GenericAvx512)) {
-        // Switch to Avx2 if the arch is selected as such.
-        if ((thisArch != arch_utils::ArchitectureType::Generic)
-            && (thisArch != arch_utils::ArchitectureType::Error)) {
-
-            // Double check if avx2 also is supported by machine.
-            isAvx2 = arch_utils::archConfigManager::getInstance()
-                         .isAvx2Fma3SupportedByArch();
-            if (!isAvx2) {
-                canGenerateKernelInfo = false;
-            } else {
-                numRegisters = numRegisters / 2;
+    // Checking if underlying architecture supports AVX512, and if thisArch
+    // (configured architecture) demands a different ISA not as part of the
+    // default codepath.
+    if (!isAvx512) {
+        if (isAvx2) {
+            if (isActualAvx512) {
+                // The underlying machine supports avx512, but the arch is
+                // configured as avx2. In that case the previously queried
+                // register details will be invalid since those would be based
+                // on avx512 support. We need to downgrade the register
+                // details to reflect the configured avx2 support.
+                numRegisters           = numRegisters / 2;
+                numVectorMaskRegisters = 0; // No mask registers in avx2
             }
-            numVectorMaskRegisters = 0; // No mask registers in avx2
-        } else {
-            // This is an invalid case, disable jit kernel generation.
-            canGenerateKernelInfo = false;
-        }
-    }
-    // This condition can be taken in two cases :
-    // - isAvx512 is false, but isAvx2 is true.
-    // - Both isAvx512 and isAvx2 are true, but the configured arch demands that
-    //   we run Avx2 kernels.
-    if (isAvx2) {
-        // This conditional block facilitates downgrading of eKernelInstPref on
-        // an avx2 machine. For now, we do not downgrade to avx2 on avx512
-        // machines, since the "classic" framework demands that we run the
-        // avx512_256 path in such cases(refer to the code-section from line
-        // 61-70).
-        if ((thisArch != arch_utils::ArchitectureType::Generic)
-            && (thisArch != arch_utils::ArchitectureType::Error)) {
-            if (!isAvx512) {
-                if ((eKernelInstPref
-                     != dlp::kernel_frame::kernelInstrPreference::
-                         avx2_xmm_favour)
-                    && (eKernelInstPref
-                        != dlp::kernel_frame::kernelInstrPreference::
-                            avx2_ymm_favour)
-                    && (eKernelInstPref
-                        != dlp::kernel_frame::kernelInstrPreference::none)) {
-                    eKernelInstPref =
-                        dlp::kernel_frame::kernelInstrPreference::none;
-                }
+
+            if ((eKernelInstPref
+                 != dlp::kernel_frame::kernelInstrPreference::avx2_xmm_favour)
+                && (eKernelInstPref
+                    != dlp::kernel_frame::kernelInstrPreference::
+                        avx2_ymm_favour)
+                && (eKernelInstPref
+                    != dlp::kernel_frame::kernelInstrPreference::none)) {
+                eKernelInstPref =
+                    dlp::kernel_frame::kernelInstrPreference::none;
             }
-            // This would be false already if it's an avx2 machine.
-            // If it is originally an avx512 machine, we set it to false here,
-            // since the configured hardware is avx2.
-            isAvx512 = false;
         } else {
             canGenerateKernelInfo = false;
         }
