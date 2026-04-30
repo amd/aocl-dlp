@@ -90,7 +90,6 @@ class jitF32GEMVN1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regKIter;            // K-loop iterator
     Xbyak::Reg64 regTmp1;             // General purpose temporary register 1
     Xbyak::Reg64 regTmp2;             // General purpose temporary register 2
-    Xbyak::Reg64 regTmp3;             // General purpose temporary register 3
 
     Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
@@ -226,9 +225,22 @@ class jitF32GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regTmp2;
     Xbyak::Reg64 regIncN;
-    Xbyak::Reg64 regIncK;
 
-    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
+    // Local stack layout used by this JIT generator.
+    // Keep all stack slot offsets centralized here so future changes to the
+    // BF16 conversion constants/scratch area do not accidentally overlap
+    // other spills.
+    //
+    // Known stack usage in this class:
+    //   [rsp +  0] : BF16 conversion constants / scratch
+    //   [rsp + 16] : BF16 conversion constants / scratch
+    //   [rsp + 20] : BF16 conversion constants / scratch
+    //   [rsp + 40] : reserved spill slot for regIncK
+    static constexpr int kBF16Scratch0Offset = 0;
+    static constexpr int kBF16Scratch1Offset = 16;
+    static constexpr int kBF16Scratch2Offset = 20;
+    static constexpr int kIncKOffset         = 40;
+    Xbyak::Opmask        mask_regs[utils::NUM_USABLE_MASKS];
 
     Xbyak::Label label_n_loop_start;
     Xbyak::Label label_n_loop_end;

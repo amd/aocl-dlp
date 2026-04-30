@@ -57,7 +57,6 @@ jitF32GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regKIter   = frame.t[9];
     regTmp1    = frame.t[10];
     regTmp2    = frame.t[11];
-    regTmp3    = frame.t[12];
 }
 
 template<utils::kernelInstrType KType>
@@ -598,8 +597,8 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
         add(regTmpYptr, regKIter);
 
         // regTmp2 now contains BF16 stride, regTmpYptr points to downscale
-        // buffer
-        lea(regTmp3, ptr[regTmp2 + 2 * regTmp2]); // regTmp3 = stride + 2*stride
+        // buffer. Keep regCsA intact for the next m-loop iteration.
+        lea(regTmp1, ptr[regTmp2 + 2 * regTmp2]); // regTmp1 = stride + 2*stride
 
         if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
             for (iter_t i = 0; i < (mSize + simdWidth - 1) / simdWidth;
@@ -643,7 +642,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                            Xbyak::Xmm(tmpBaseIdx + 3));
                     vpinsrw(Xbyak::Xmm(tmpBaseIdx + 3),
                             Xbyak::Xmm(tmpBaseIdx + 3),
-                            ptr[regTmpYptr + regTmp3], 1);
+                            ptr[regTmpYptr + regTmp1], 1);
                     vbroadcastss(RegType(tmpBaseIdx + 3),
                                  Xbyak::Xmm(tmpBaseIdx + 3));
 
@@ -770,7 +769,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                            Xbyak::Xmm(tmpBaseIdx + 3));
                     vpinsrw(Xbyak::Xmm(tmpBaseIdx + 3),
                             Xbyak::Xmm(tmpBaseIdx + 3),
-                            ptr[regTmpYptr + regTmp3], 1);
+                            ptr[regTmpYptr + regTmp1], 1);
                     vbroadcastss(RegType(tmpBaseIdx + 3),
                                  Xbyak::Xmm(tmpBaseIdx + 3));
 
@@ -852,7 +851,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
 
     // F32 path (original code)
     // Store offsets for Y, using it's row-stride
-    lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = rsC + 2*rsC
+    lea(regTmp1, ptr[regRsC + 2 * regRsC]); // regTmp1 = rsC + 2*rsC
     for (iter_t i = 0; i < (mSize + simdWidth - 1) / simdWidth; i += 1) {
         int blockSize  = (mSize - i * simdWidth) < simdWidth
                              ? (mSize - i * simdWidth)
@@ -864,7 +863,7 @@ jitF32GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
             vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
             vbroadcastss(RegType(tmpBaseIdx + 1), ptr[regTmpYptr + regRsC]);
             vbroadcastss(RegType(tmpBaseIdx + 2), ptr[regTmpYptr + 2 * regRsC]);
-            vbroadcastss(RegType(tmpBaseIdx + 3), ptr[regTmpYptr + regTmp3]);
+            vbroadcastss(RegType(tmpBaseIdx + 3), ptr[regTmpYptr + regTmp1]);
             vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
                       RegType(tmpBaseIdx + 1));
             vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
@@ -1356,7 +1355,8 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
 
-    Xbyak::util::StackFrame frame(this, 1, 13, 48);
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 48);
     initializeStackFrame(frame);
 
     initializeParameters(params);
@@ -1666,7 +1666,8 @@ jitF32GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regTmp1     = frame.t[9];
     regTmp2     = frame.t[10];
     regIncN     = frame.t[11];
-    regIncK     = frame.t[12];
+    // regIncK spilled to stack at [rsp + kIncKOffset] since frame
+    // pointer mode reserves RBP, leaving only 12 temp registers.
 }
 
 template<utils::kernelInstrType KType>
@@ -2665,7 +2666,8 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
 
     // Using Xbyak's utility for managing the stack frame
-    Xbyak::util::StackFrame frame(this, 1, 13, 48);
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 48);
     initializeStackFrame(frame);
 
     // Initializing the parameters
@@ -2703,10 +2705,10 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         // Zero out accumulator registers for this n iteration
         regInit(accumBaseIdx, accumReg);
-        xor_(regIncK,
-             regIncK); // regIncK is used to increment
-                       // the pointer for K dimension(zeroed before the
-                       // kloop)
+        mov(qword[rsp + kIncKOffset],
+            0); // regIncK is used to increment
+                // the pointer for K dimension(zeroed before the
+                // kloop)
 
         // K-loop is not needed if alpha is zero
         if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -2742,7 +2744,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                      + offsetof(dlp::kernels::gemvM1Params,
                                                 n_sub_updated)]);
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
                     lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2751,12 +2753,11 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     mov(regPsB, 1);
                     lea(regPsB, ptr[regPsB * sizeof(float)]);
                     mov(regTmp2, regRsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
 
                     add(regBptr, regTmp2);
                 }
 
-                // Set the base pointer for the iteration
                 mov(regTmp2, regIncN);
                 imul(regTmp2, regPsB);
 
@@ -2775,7 +2776,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Decrement the k-loop iterator
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
-                add(regIncK, regTmp2);
+                add(qword[rsp + kIncKOffset], regTmp2);
                 sub(regKIter, 1);
                 jnz(label_n_loop_k_loop_start, T_NEAR);
             }
@@ -2806,7 +2807,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                      + offsetof(dlp::kernels::gemvM1Params,
                                                 n_sub_updated)]);
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
                     lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2816,7 +2817,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     lea(regPsB, ptr[regPsB * sizeof(float)]);
 
                     mov(regTmp2, regRsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
 
                     add(regBptr, regTmp2);
                 }
@@ -2922,7 +2923,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         // Zero out accumulator registers for this n iteration
         regInit(accumBaseIdx, accumReg);
-        xor_(regIncK, regIncK);
+        mov(qword[rsp + kIncKOffset], 0);
 
         // K-loop is not needed if alpha is zero
         if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -2954,7 +2955,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                      + offsetof(dlp::kernels::gemvM1Params,
                                                 n_sub_updated)]);
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
                     lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2964,7 +2965,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     lea(regPsB, ptr[regPsB * sizeof(float)]);
 
                     mov(regTmp2, regRsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
 
                     add(regBptr, regTmp2);
                 }
@@ -2981,7 +2982,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Decrement the k-loop iterator
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
-                add(regIncK, regTmp2);
+                add(qword[rsp + kIncKOffset], regTmp2);
                 sub(regKIter, 1);
                 jnz(label_n_fringe_k_loop_start, T_NEAR);
             }
@@ -3012,7 +3013,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                                      + offsetof(dlp::kernels::gemvM1Params,
                                                 n_sub_updated)]);
                     imul(regTmpYptr, regPsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
                     lea(regTmp2, ptr[regTmp2 * sizeof(float)]);
 
                     lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -3022,7 +3023,7 @@ jitF32GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     lea(regPsB, ptr[regPsB * sizeof(float)]);
 
                     mov(regTmp2, regRsB);
-                    imul(regTmp2, regIncK);
+                    imul(regTmp2, qword[rsp + kIncKOffset]);
 
                     add(regBptr, regTmp2);
                 }

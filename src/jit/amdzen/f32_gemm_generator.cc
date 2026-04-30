@@ -672,7 +672,11 @@ jitGEMMF32<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
     regAPtr    = stackFrame.t[9];
     regTmp1    = stackFrame.t[10];
     regTmp2    = stackFrame.t[11];
-    regTmp3    = stackFrame.t[12];
+    // regTmp3 aliases regCsA: safe because regTmp3 is only used after the
+    // K-loop (BF16 store paths, N-kernel C pointer advance) where regCsA
+    // is no longer live. For K=1 kernels, regCsA is loaded but never read
+    // (no column advancement needed with a single K iteration).
+    regTmp3 = regCsA;
 }
 
 template<utils::kernelInstrType KType>
@@ -1400,7 +1404,8 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
     // - [20-23]: 0x00010000 for bit 16 extraction
     // - [24-27]: 0x00007FFF for rounding
     // - [28-63]: 36 bytes padding/reserved
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 64);
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 64);
     initializeStackFrame(stackFrame);
     initializeParameters(params.mLoop);
     loadMasks();
@@ -1572,7 +1577,8 @@ jitGEMMF32<KType>::generateKernel_JR_IR(utils::generatorParams& params)
     // Allocate 48 bytes of local stack space:
     // - 32 bytes for mask storage (fringe BF16 stores)
     // - 16 bytes for F32→BF16 conversion constants
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 48);
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 48);
     initializeStackFrame(stackFrame);
     regNiter = regTmp2;
     regNLeft = regKIter;
@@ -1808,7 +1814,8 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
     // Allocate 48 bytes of local stack space:
     // - 32 bytes for mask storage (fringe BF16 stores)
     // - 16 bytes for F32→BF16 conversion constants
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 48);
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 48);
     initializeStackFrame(stackFrame);
     regNiter = regTmp2;
     regNLeft = regKIter;
