@@ -658,6 +658,34 @@ template<utils::kernelInstrType KType>
 void
 jitGEMMF32<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.  Several logical register names in the header are
+    // aliases — they share the same physical register with non-overlapping
+    // lifetimes.  The physical→logical mapping and alias table:
+    //
+    //  Slot       Phys (Linux)   Primary name     Aliases
+    //  ─────────  ─────────────  ──────────────   ──────────────────────
+    //  p[0]       rdi            stackPtr
+    //  t[0]       rsi            regTmpCptr
+    //  t[1]       rdx            regTmpAptr       regTmp3  (post-K-loop)
+    //  t[2]       rcx            regBptr
+    //  t[3]       r8             regRsA
+    //  t[4]       r9             regCsA
+    //  t[5]       r10            regRsB
+    //  t[6]       r11            regRsC
+    //  t[7]       rbx            regKIter
+    //  t[8]       r12            regCPtr
+    //  t[9]       r13            regAPtr
+    //  t[10]      r14            regTmp1
+    //  t[11]      r15            regTmp2
+    //
+    // Additional aliases set outside this function (K1 paths only):
+    //   regNiter  = regTmp2   (t[11])
+    //   regNLeft  = regKIter  (t[7])
+    //   regMiter  = loaded separately into one of the above at IR-loop
+    //               entry (shares regKIter or regTmp2 depending on path)
+
     stackPtr = stackFrame.p[0];
 
     regTmpCptr = stackFrame.t[0];
@@ -672,11 +700,14 @@ jitGEMMF32<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
     regAPtr    = stackFrame.t[9];
     regTmp1    = stackFrame.t[10];
     regTmp2    = stackFrame.t[11];
-    // regTmp3 aliases regCsA: safe because regTmp3 is only used after the
-    // K-loop (BF16 store paths, N-kernel C pointer advance) where regCsA
-    // is no longer live. For K=1 kernels, regCsA is loaded but never read
-    // (no column advancement needed with a single K iteration).
-    regTmp3 = regCsA;
+
+    // regTmp3 aliases regTmpAptr (t[1]):
+    //   regTmpAptr is live only during the K-loop (broadcasting A values).
+    //   regTmp3 is used only after the K-loop (BF16 store / beta-scale
+    //   paths, and N-kernel C-pointer advance in the K1 generators).
+    //   regTmpAptr is unconditionally reset from regAPtr at the top of
+    //   each M-iteration, so clobbering it via regTmp3 is safe.
+    regTmp3 = regTmpAptr;
 }
 
 template<utils::kernelInstrType KType>
