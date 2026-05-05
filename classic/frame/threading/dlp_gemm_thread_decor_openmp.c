@@ -1570,7 +1570,7 @@ dlp_gemm_eltwise_ops_f32of32_get_threading(md_t*       n_threads,
 GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(bfloat16, float, bf16of32)
 GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
 
-#else
+#endif // ifdef DLP_ENABLE_OPENMP
 
 /**
  * @brief Unified non-OpenMP thread decorator macro for DLP_GEMM variants.
@@ -1805,5 +1805,3 @@ GEN_BATCH_DLP_GEMM_DECORATOR_GRP(
 
 GEN_UTIL_ELTWISE_OPS_DECORATOR(bfloat16, float, bf16of32)
 GEN_UTIL_ELTWISE_OPS_DECORATOR(float, float, f32of32)
-
-#endif

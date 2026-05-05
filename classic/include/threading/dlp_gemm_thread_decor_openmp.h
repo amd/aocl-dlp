@@ -167,7 +167,7 @@ GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_GRP_FN_DECL(
 GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR_FN(bfloat16, float, bf16of32)
 GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR_FN(float, float, f32of32)
 
-#else
+#endif // ifdef DLP_ENABLE_OPENMP
 
 /**
  * @brief Unified decorator function declaration macro for non-OpenMP builds.
@@ -267,7 +267,5 @@ GEN_BATCH_DLP_GEMM_DECORATOR_GRP_FN_DECL(
 
 GEN_UTIL_ELTWISE_OPS_DECORATOR_FN(bfloat16, float, bf16of32)
 GEN_UTIL_ELTWISE_OPS_DECORATOR_FN(float, float, f32of32)
-
-#endif
 
 #endif // DLP_GEMM_THREAD_DECOR_OPENMP_H

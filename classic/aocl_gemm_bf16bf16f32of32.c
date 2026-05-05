@@ -371,16 +371,19 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-    dlp_gemm_bf16bf16f32of32_openmp_thread_decorator(
-        m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
-        cs_b_use, mtag_b_use, c, rs_c_use, cs_c_use, alpha, beta, &rntm_g,
-        &lcntx_l, &ops, DLP_F32);
-#else
-    dlp_gemm_bf16bf16f32of32_thread_decorator(
-        m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use, rs_b_use,
-        cs_b_use, mtag_b_use, c, rs_c_use, cs_c_use, alpha, beta, &rntm_g,
-        &lcntx_l, &ops, DLP_F32);
+    if (dlp_is_single_thread(&rntm_g) == FALSE) {
+        dlp_gemm_bf16bf16f32of32_openmp_thread_decorator(
+            m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+            rs_b_use, cs_b_use, mtag_b_use, c, rs_c_use, cs_c_use, alpha, beta,
+            &rntm_g, &lcntx_l, &ops, DLP_F32);
+    } else
 #endif
+    {
+        dlp_gemm_bf16bf16f32of32_thread_decorator(
+            m_use, n_use, k, a_use, rs_a_use, cs_a_use, mtag_a_use, b_use,
+            rs_b_use, cs_b_use, mtag_b_use, c, rs_c_use, cs_c_use, alpha, beta,
+            &rntm_g, &lcntx_l, &ops, DLP_F32);
+    }
 
 err_hndl:;
     DLP_GEMM_STOP_LOGGER();
