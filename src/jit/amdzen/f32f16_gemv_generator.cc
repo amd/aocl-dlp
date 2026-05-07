@@ -396,10 +396,24 @@ jitF32FP16GEMVM1<KType>::scaleYWithBeta(bool nMask)
     int  regsPerPanel = NR / nElemsPerReg;
     bool isBetaOne = (betaScalingType == dlp::kernel_frame::scalingType::one);
 
+    if (betaScalingType == dlp::kernel_frame::scalingType::zero) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    Xbyak::Label betaZeroEnd;
+
     if (!isBetaOne) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
         vbroadcastss(Zmm(bBaseIdx + 1), ptr[regTmp1]);
+
+        // NOTE: The Decision Engine will pass betaScalingType as generic
+        // for k > KC even when beta = 0. Hence, broadcasting beta and
+        // checking if it is actually zero during run-time. This conforms
+        // to the standard of avoiding accesses to Y when beta = 0.
+        vpxord(Zmm(bBaseIdx), Zmm(bBaseIdx), Zmm(bBaseIdx));
+        vucomiss(Xmm(bBaseIdx + 1), Xmm(bBaseIdx));
+        je(betaZeroEnd, T_NEAR);
     }
 
     // Load Y values (F32), scale by beta, add to accumulators
@@ -415,6 +429,7 @@ jitF32FP16GEMVM1<KType>::scaleYWithBeta(bool nMask)
         }
     }
 
+    L(betaZeroEnd);
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -426,10 +441,20 @@ jitF32FP16GEMVM1<KType>::scaleYWithBetaFringe()
     int  partialLeft = N_LEFT % nElemsPerReg;
     bool isBetaOne   = (betaScalingType == dlp::kernel_frame::scalingType::one);
 
+    if (betaScalingType == dlp::kernel_frame::scalingType::zero) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    Xbyak::Label betaZeroEnd;
+
     if (!isBetaOne) {
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
         vbroadcastss(Zmm(bBaseIdx + 1), ptr[regTmp1]);
+
+        vpxord(Zmm(bBaseIdx), Zmm(bBaseIdx), Zmm(bBaseIdx));
+        vucomiss(Xmm(bBaseIdx + 1), Xmm(bBaseIdx));
+        je(betaZeroEnd, T_NEAR);
     }
 
     for (iter_t i = 0; i < fullRegs; i++) {
@@ -455,6 +480,7 @@ jitF32FP16GEMVM1<KType>::scaleYWithBetaFringe()
         }
     }
 
+    L(betaZeroEnd);
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -1082,10 +1108,20 @@ jitF32FP16GEMVN1<KType>::scaleYWithBeta(int mSize)
     bool isRowStored = (yFormat == dlp::kernel_frame::storageFormat::rowMajor);
     int  mLeft       = mSize % simdWidth;
 
+    Xbyak::Label betaZeroEnd;
+
     if (!isBetaOne) {
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
         vbroadcastss(Zmm(xBaseIdx), ptr[regKIter]);
+
+        // NOTE: The Decision Engine will pass betaScalingType as generic
+        // for k > KC even when beta = 0. Hence, broadcasting beta and
+        // checking if it is actually zero during run-time. This conforms
+        // to the standard of avoiding accesses to Y when beta = 0.
+        vpxord(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx));
+        vucomiss(Xmm(xBaseIdx), Xmm(tmpBaseIdx));
+        je(betaZeroEnd, T_NEAR);
     }
 
     if (isRowStored) {
@@ -1174,6 +1210,7 @@ jitF32FP16GEMVN1<KType>::scaleYWithBeta(int mSize)
         }
     }
 
+    L(betaZeroEnd);
     return dlp::jit::jitGeneratorError::success;
 }
 

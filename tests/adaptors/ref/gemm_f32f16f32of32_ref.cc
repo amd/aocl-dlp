@@ -96,7 +96,11 @@ aocl_gemm_f32f16f32of32_ref(const char     order,
             for (iter_t p = 0; p < k; p++) {
                 sum += getA(i, p) * getB(p, j);
             }
-            getC(i, j) = alpha * sum + beta * getC(i, j);
+            if (beta != 0.0f) {
+                getC(i, j) = alpha * sum + beta * getC(i, j);
+            } else {
+                getC(i, j) = alpha * sum;
+            }
         }
     }
 }

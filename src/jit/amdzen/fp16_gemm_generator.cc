@@ -263,9 +263,22 @@ jitFP16_GEMM<KType>::scaleBeta()
 {
     int betaRegIdx = aRegIdx;
 
+    Xbyak::Label betaZeroEnd;
+
     // Load beta scaling factor (FP16)
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
     vpbroadcastw(RegType(betaRegIdx), ptr[regTmp1]);
+
+    // NOTE: The Decision Engine will pass betaScalingType as generic for
+    // k > KC even when beta = 0. Hence, broadcasting beta and checking if
+    // it is actually zero during run-time. This conforms to the standard of
+    // avoiding accesses to C when beta = 0.
+    // Use bRegIdx as scratch for the zero-comparison; it is not yet loaded
+    // with B data and will be overwritten by vmovdqu16 in the loop body.
+    vpxord(RegType(bRegIdx), RegType(bRegIdx), RegType(bRegIdx));
+    vucomish(Xmm(betaRegIdx), Xmm(bRegIdx));
+    je(betaZeroEnd, T_NEAR);
+
     mov(regTmpCptr, regCPtr);
 
     // Load existing C values, scale by beta, and add to accumulators
@@ -293,6 +306,7 @@ jitFP16_GEMM<KType>::scaleBeta()
         add(regTmpCptr, regRsC);
     }
 
+    L(betaZeroEnd);
     return dlp::jit::jitGeneratorError::success;
 }
 

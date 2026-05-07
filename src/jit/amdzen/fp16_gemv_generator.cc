@@ -499,6 +499,9 @@ jitFP16GEMVM1<KType>::scaleYWithBeta(bool nMask)
         return dlp::jit::jitGeneratorError::success;
     }
 
+    Xbyak::Label betaZeroEnd;
+    Xbyak::Label betaZeroRuntime;
+
     mov(regTmpYptr, regYptr);
 
     // Combined alpha*acc + beta*Y computation to avoid intermediate FP16
@@ -517,6 +520,28 @@ jitFP16GEMVM1<KType>::scaleYWithBeta(bool nMask)
         mov(regKSubIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
         vpbroadcastw(Zmm(xBaseIdx + 1), ptr[regKSubIter]);
+
+        // NOTE: The Decision Engine will pass betaScalingType as generic
+        // for k > KC even when beta = 0. Hence, broadcasting beta and
+        // checking if it is actually zero during run-time. This conforms
+        // to the standard of avoiding accesses to Y when beta = 0.
+        vpxord(Zmm(bBaseIdx), Zmm(bBaseIdx), Zmm(bBaseIdx));
+        vucomish(Xmm(xBaseIdx + 1), Xmm(bBaseIdx));
+        // Jump over the cold (beta==0) block so the hot path
+        // (beta!=0, combined alpha+beta) falls through without
+        // an extra unconditional branch.
+        jne(betaZeroEnd, T_NEAR);
+
+        // Beta is 0 at runtime: apply alpha only (don't touch Y)
+        if (!isAlphaOne) {
+            for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
+                vmulph(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i),
+                       Zmm(xBaseIdx));
+            }
+        }
+        jmp(betaZeroRuntime, T_NEAR);
+
+        L(betaZeroEnd);
     }
 
     if (!nMask) {
@@ -544,6 +569,10 @@ jitFP16GEMVM1<KType>::scaleYWithBeta(bool nMask)
         }
     } else {
         scaleYWithBetaFringe();
+    }
+
+    if (!isBetaOne) {
+        L(betaZeroRuntime);
     }
 
     return dlp::jit::jitGeneratorError::success;
@@ -1318,10 +1347,20 @@ jitFP16GEMVN1<KType>::scaleYWithBeta_FP16(int mSize, bool isRowStored)
 {
     bool isBetaOne = (betaScalingType == dlp::kernel_frame::scalingType::one);
 
+    Xbyak::Label betaZeroEnd;
+
     if (!isBetaOne) {
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
         vpbroadcastw(Zmm(tmpBaseIdx + 2), ptr[regKIter]);
+
+        // NOTE: The Decision Engine will pass betaScalingType as generic
+        // for k > KC even when beta = 0. Hence, broadcasting beta and
+        // checking if it is actually zero during run-time. This conforms
+        // to the standard of avoiding accesses to Y when beta = 0.
+        vpxord(Zmm(tmpBaseIdx + 3), Zmm(tmpBaseIdx + 3), Zmm(tmpBaseIdx + 3));
+        vucomish(Xmm(tmpBaseIdx + 2), Xmm(tmpBaseIdx + 3));
+        je(betaZeroEnd, T_NEAR);
     }
 
     if (isRowStored) {
@@ -1355,6 +1394,7 @@ jitFP16GEMVN1<KType>::scaleYWithBeta_FP16(int mSize, bool isRowStored)
         }
     }
 
+    L(betaZeroEnd);
     return dlp::jit::jitGeneratorError::success;
 }
 

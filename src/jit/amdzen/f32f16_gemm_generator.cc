@@ -250,9 +250,20 @@ jitF32FP16_GEMM<KType>::scaleBeta()
 {
     int betaRegIdx = aRegIdx;
 
+    Xbyak::Label betaZeroEnd;
+
     // Load F32 beta and broadcast
     mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
     vbroadcastss(RegType(betaRegIdx), ptr[regTmp1]);
+
+    // NOTE: The Decision Engine will pass betaScalingType as generic for
+    // k > KC even when beta = 0. Hence, broadcasting beta and checking if
+    // it is actually zero during run-time. This conforms to the standard of
+    // avoiding accesses to C when beta = 0.
+    vpxord(RegType(bRegIdx), RegType(bRegIdx), RegType(bRegIdx));
+    vucomiss(Xmm(betaRegIdx), Xmm(bRegIdx));
+    je(betaZeroEnd, T_NEAR);
+
     mov(regTmpCptr, regCPtr);
 
     // Load existing F32 C values, scale by beta, add to accumulators
@@ -277,6 +288,7 @@ jitF32FP16_GEMM<KType>::scaleBeta()
         add(regTmpCptr, regRsC);
     }
 
+    L(betaZeroEnd);
     return dlp::jit::jitGeneratorError::success;
 }
 
