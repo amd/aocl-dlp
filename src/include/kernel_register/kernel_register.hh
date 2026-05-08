@@ -31,6 +31,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <type_traits>
 
 #include "aocl_dlp_config.h"
 #include "cpu_utils/cpu_features.hh"
@@ -70,6 +71,44 @@ struct gemmKeyComparator
     {
         auto tKI1 = static_cast<kernelInfo*>(kI1);
         auto tKI2 = static_cast<kernelInfo*>(kI2);
+        return *tKI1 == *tKI2;
+    }
+};
+
+struct packHashKeyGetter
+{
+    /**
+     * @brief Extracts hash key tuple from packKernelInfo for pack kernels.
+     *
+     * Hashes on (panel_dim, k_factor) to select the bucket, mirroring
+     * the GEMM pattern of (mr, nr). Any collisions from kernels that
+     * share the same (panel_dim, k_factor) but differ in kInstPref,
+     * src_type, or dst_type are resolved by the in-bucket comparator
+     * (packKeyComparator) which checks all five fields via operator==.
+     *
+     * @param kI Pointer to packKernelInfo object
+     * @return Tuple of (panel_dim, k_factor) used as hash key
+     */
+    std::tuple<uint64_t, uint64_t> operator()(void* kI) const
+    {
+        auto tKI = static_cast<packKernelInfo*>(kI);
+        return std::make_tuple(static_cast<uint64_t>(tKI->panel_dim),
+                               static_cast<uint64_t>(tKI->k_factor));
+    }
+};
+
+struct packKeyComparator
+{
+    /**
+     * @brief Compares two packKernelInfo objects for equality
+     * @param kI1 First packKernelInfo pointer
+     * @param kI2 Second packKernelInfo pointer
+     * @return True if pack kernel infos are equal, false otherwise
+     */
+    bool operator()(void* kI1, void* kI2) const
+    {
+        auto tKI1 = static_cast<packKernelInfo*>(kI1);
+        auto tKI2 = static_cast<packKernelInfo*>(kI2);
         return *tKI1 == *tKI2;
     }
 };
@@ -115,6 +154,8 @@ class storedKernelWatcher
 class emptyKernel : public kernels::kernelBase
 {
     kernel_frame::kernelInfo                  kInfo;
+    kernel_frame::packKernelInfo              packKInfo;
+    bool                                      hasPackKInfo = false;
     std::vector<cpu_utils::isaFeature>        isaVec;
     std::vector<kernel_frame::kernelDatatype> dTypeVec;
 
@@ -125,19 +166,30 @@ class emptyKernel : public kernels::kernelBase
         isValid = false;
     }
 
+    emptyKernel(const kernel_frame::packKernelInfo& pKI)
+        : packKInfo(pKI)
+        , hasPackKInfo(true)
+    {
+        isValid = false;
+    }
+
     emptyKernel(const emptyKernel&)            = delete;
     emptyKernel& operator=(const emptyKernel&) = delete;
 
     emptyKernel(emptyKernel&& other)
     {
-        this->isValid = false;
-        this->kInfo   = std::move(other.kInfo);
+        this->isValid      = false;
+        this->kInfo        = std::move(other.kInfo);
+        this->packKInfo    = std::move(other.packKInfo);
+        this->hasPackKInfo = other.hasPackKInfo;
     }
 
     emptyKernel& operator=(emptyKernel&& other)
     {
-        this->isValid = false;
-        this->kInfo   = std::move(other.kInfo);
+        this->isValid      = false;
+        this->kInfo        = std::move(other.kInfo);
+        this->packKInfo    = std::move(other.packKInfo);
+        this->hasPackKInfo = other.hasPackKInfo;
         return *this;
     }
 
@@ -150,6 +202,11 @@ class emptyKernel : public kernels::kernelBase
     virtual kernel_frame::kernelInfo* getKernelInfo() override final
     {
         return std::addressof(kInfo);
+    }
+
+    virtual kernel_frame::packKernelInfo* getPackKernelInfo() override final
+    {
+        return hasPackKInfo ? std::addressof(packKInfo) : nullptr;
     }
 
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes()
@@ -284,7 +341,13 @@ class kernelRegister
         }
 
         kernels::kernelBase* kB = _kB.release();
-        kernelInfo*          kI = kB->getKernelInfo();
+
+        KEY_TYPE* keyPtr = nullptr;
+        if constexpr (std::is_same_v<KEY_TYPE, packKernelInfo>) {
+            keyPtr = kB->getPackKernelInfo();
+        } else {
+            keyPtr = kB->getKernelInfo();
+        }
 
         // This boolean will be used to track if the kernel was inserted
         // at least once, and if not to free the kernel pointer. Insertion
@@ -297,7 +360,7 @@ class kernelRegister
             auto retPtr =
                 vecKDTs[routineIdx][idx]
                     .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                                     VALUE_WATCHER, kernels::kernelBase>(kI,
+                                     VALUE_WATCHER, kernels::kernelBase>(keyPtr,
                                                                          kB);
 
             // If insertion in tier 1 dispatch table fails, attempt to insert in
@@ -351,7 +414,12 @@ class kernelRegister
 
         kernels::kernelBase* kB = _kB.release();
 
-        kernelInfo* kI = kB->getKernelInfo();
+        KEY_TYPE* keyPtr = nullptr;
+        if constexpr (std::is_same_v<KEY_TYPE, packKernelInfo>) {
+            keyPtr = kB->getPackKernelInfo();
+        } else {
+            keyPtr = kB->getKernelInfo();
+        }
 
         auto routineIdx = utils::getUnderlyingValueOfEnum(kType);
         auto idx        = utils::getUnderlyingValueOfEnum(kDtype);
@@ -359,7 +427,8 @@ class kernelRegister
         auto kernPtr =
             vecKDTs[routineIdx][idx]
                 .template insert<HASH_KEY_GETTER, KEY_COMPARATOR, KEY_TYPE,
-                                 VALUE_WATCHER, kernels::kernelBase>(kI, kB);
+                                 VALUE_WATCHER, kernels::kernelBase>(keyPtr,
+                                                                     kB);
 
         // If insertion in tier 1 dispatch table fails, attempt to insert in
         // tier 2 fallback storage. The kernel is guaranteed to be inserted
@@ -548,6 +617,45 @@ class kernelRegister
             delete eK;
         }
     }
+
+    // ---- Pack-B kernel registration and query ----
+    //
+    // Pack B uses packKernelInfo as the key type. The generic registerKernel
+    // template handles this via if constexpr on KEY_TYPE: when KEY_TYPE is
+    // packKernelInfo, it calls getPackKernelInfo() instead of getKernelInfo().
+
+    [[nodiscard]] kernelFrameError registerPackBKernel(
+        std::unique_ptr<kernels::kernelBase> _kB, std::string&& kernelFamily)
+    {
+        return registerKernel<packHashKeyGetter, packKeyComparator,
+                              packKernelInfo, storedKernelWatcher>(
+            std::move(_kB), std::move(kernelFamily), kernelRoutineType::pack_b);
+    }
+
+    [[nodiscard]] kernelBaseRef getPackBKernel(packKernelInfo* pKI,
+                                               kernelDatatype  kDtype)
+    {
+        return getKernel<packHashKeyGetter, packKeyComparator, packKernelInfo>(
+            pKI, kernelRoutineType::pack_b, kDtype);
+    }
+
+    void registerEmptyPackBKernel(const packKernelInfo& pKI,
+                                  kernelDatatype        kDtype)
+    {
+        auto eK = new emptyKernel(pKI);
+        auto routineIdx =
+            utils::getUnderlyingValueOfEnum(kernelRoutineType::pack_b);
+        auto idx = utils::getUnderlyingValueOfEnum(kDtype);
+
+        auto retPtr = vecKDTs[routineIdx][idx]
+                          .template insert<packHashKeyGetter, packKeyComparator,
+                                           packKernelInfo, storedKernelWatcher>(
+                              eK->getPackKernelInfo(), eK);
+
+        if (!retPtr) {
+            delete eK;
+        }
+    }
 };
 
 // DLP_KDT_TABLE_SIZE and DLP_KDT_CHAIN_SIZE are set to 16 and 128 by default,
@@ -614,5 +722,16 @@ dlpKernelRegisterInstance()
     static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_kernel_reg_var_,           \
                                      className, __LINE__) =                    \
         dlp::kernel_frame::dlpKernelRegisterInstance().registerGemmKernel(     \
+            std::move(std::make_unique<className>()),                          \
+            std::string{ kernelFamily });
+
+#define DLP_REGISTER_STATIC_PACKB_KERNEL(className, kernelFamily)              \
+    static_assert(std::is_default_constructible_v<className>,                  \
+                  "Requires trivially constructible classes for kernels.");    \
+    static_assert(std::is_base_of_v<kernelBase, className>,                    \
+                  "Requires classes derived from kernelBase.");                \
+    static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_packb_reg_var_, className, \
+                                     __LINE__) =                               \
+        dlp::kernel_frame::dlpKernelRegisterInstance().registerPackBKernel(    \
             std::move(std::make_unique<className>()),                          \
             std::string{ kernelFamily });

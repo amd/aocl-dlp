@@ -132,6 +132,29 @@ typedef struct
     bool              invokeRD;
 } dlp_kernel_hndl_t;
 
+typedef struct
+{
+    void*             kernel_base;
+    md_t              panel_dim;
+    md_t              k_factor;
+    kernel_datatype_t kDtype;
+    uint8_t           src_type;
+    uint8_t           dst_type;
+} dlp_pack_info_hndl_t;
+
+typedef enum
+{
+    DLP_PACK_A    = 0x1,
+    DLP_PACK_B    = 0x2,
+    DLP_PACK_BOTH = 0x3
+} dlp_pack_request_t;
+
+typedef struct
+{
+    dlp_pack_info_hndl_t pack_a_hndl;
+    dlp_pack_info_hndl_t pack_b_hndl;
+} dlp_pack_kernel_hndl_t;
+
 // C linkage for function declarations only
 DLP_BEGIN_EXTERN_C
 
@@ -157,6 +180,26 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t   k_dtype,
                              md_t                kc_hint,
                              md_t                c_downscale,
                              dlp_kernel_hndl_t*  kernel_hndl);
+
+void
+dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t     k_dtype,
+                                   md_t                  nc,
+                                   md_t                  kc,
+                                   md_t                  rs_src,
+                                   md_t                  cs_src,
+                                   md_t                  nr_hint,
+                                   dlp_pack_info_hndl_t* kernel_hndl);
+
+void
+dlp_execute_packb_kernel(dlp_pack_info_hndl_t kernel_hndl,
+                         void*                src,
+                         void*                dst,
+                         md_t                 n,
+                         md_t                 k,
+                         md_t                 rs_src,
+                         md_t                 cs_src,
+                         md_t*                rs_dst,
+                         md_t*                cs_dst);
 
 void
 dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,

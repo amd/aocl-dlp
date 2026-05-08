@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "cpu_utils/cpu_features.hh"
 #include "jit_register/jit_register.hh"
 #include "kernels/kernel_base.hh"
@@ -74,6 +76,23 @@ class jitKernelAdapter : public kernels::kernelBase
         }
     }
 
+    jitKernelAdapter(const kernel_frame::packKernelInfo& pKI,
+                     jitGeneratorBaseRef                 jitGen,
+                     bool shouldGenerateKernels = true)
+        : mPackKernelInfo(pKI)
+        , mHasPackKernelInfo(true)
+        , mJitGen(jitGen ? jitGen->clone() : nullptr)
+        , mIsJitGenerated(false)
+    {
+        if ((shouldGenerateKernels) && (mJitGen)) {
+            jitGeneratorContext jC{ mKernelInfo, pKI };
+            auto                ret = mJitGen->operator()(jC);
+            if (ret == jitGeneratorError::success) {
+                mIsJitGenerated = true;
+            }
+        }
+    }
+
     ~jitKernelAdapter() {}
 
     jitKernelAdapter(const jitKernelAdapter& other)            = delete;
@@ -81,6 +100,8 @@ class jitKernelAdapter : public kernels::kernelBase
 
     jitKernelAdapter(jitKernelAdapter&& other)
         : mKernelInfo{ std::move(other.mKernelInfo) }
+        , mPackKernelInfo{ std::move(other.mPackKernelInfo) }
+        , mHasPackKernelInfo(other.mHasPackKernelInfo)
         , mJitGen(std::move(other.mJitGen))
         , mIsJitGenerated(std::move(other.mIsJitGenerated))
     {
@@ -91,6 +112,8 @@ class jitKernelAdapter : public kernels::kernelBase
     jitKernelAdapter& operator=(jitKernelAdapter&& other)
     {
         mKernelInfo           = std::move(other.mKernelInfo);
+        mPackKernelInfo       = std::move(other.mPackKernelInfo);
+        mHasPackKernelInfo    = other.mHasPackKernelInfo;
         mJitGen               = std::move(other.mJitGen);
         mIsJitGenerated       = std::move(other.mIsJitGenerated);
         other.mIsJitGenerated = false;
@@ -112,6 +135,11 @@ class jitKernelAdapter : public kernels::kernelBase
     virtual kernel_frame::kernelInfo* getKernelInfo() override
     {
         return std::addressof(mKernelInfo);
+    }
+
+    virtual kernel_frame::packKernelInfo* getPackKernelInfo() override
+    {
+        return mHasPackKernelInfo ? std::addressof(mPackKernelInfo) : nullptr;
     }
 
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes()
@@ -143,6 +171,8 @@ class jitKernelAdapter : public kernels::kernelBase
 
   private:
     kernel_frame::kernelInfo          mKernelInfo;
+    kernel_frame::packKernelInfo      mPackKernelInfo;
+    bool                              mHasPackKernelInfo = false;
     std::unique_ptr<jitGeneratorBase> mJitGen;
     bool                              mIsJitGenerated;
 };

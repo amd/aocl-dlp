@@ -344,10 +344,12 @@ DLP_GEMV(float, float, float, f32f32f32of32)
                     rs_b_use = NR;
                     cs_b_use = 1;
 
-                    ((dlp_gemm_pack_f32)lcntx->packb_fun_ptr)(
-                        pack_b_buffer_f32f32f32of32 + (n_sub_updated * pc),
-                        b + (rs_b * pc) + (cs_b * jc), rs_b, cs_b, nc0, kc0,
-                        &rs_b_use, &cs_b_use);
+                    dlp_execute_packb_kernel(
+                        lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                        (void*)(b + (rs_b * pc) + (cs_b * jc)),
+                        (void*)(pack_b_buffer_f32f32f32of32
+                                + (n_sub_updated * pc)),
+                        nc0, kc0, rs_b, cs_b, &rs_b_use, &cs_b_use);
                 }
                 b_use = pack_b_buffer_f32f32f32of32;
             } else {
@@ -591,10 +593,13 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                 // no: of B panel NR chunks.
                 if ((jc_packb_end > jc_packb_start)
                     && (jc_packb_start < (jc + nc0))) {
-                    ((dlp_gemm_pack_f32)lcntx->packb_fun_ptr)(
-                        pack_b_buffer_f32f32f32of32 + (jc_packb_start * kc0),
-                        b + (rs_b * pc) + (cs_b * jc) + (cs_b * jc_packb_start),
-                        rs_b, cs_b, (jc_packb_end - jc_packb_start), kc0,
+                    dlp_execute_packb_kernel(
+                        lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                        (void*)(b + (rs_b * pc) + (cs_b * jc)
+                                + (cs_b * jc_packb_start)),
+                        (void*)(pack_b_buffer_f32f32f32of32
+                                + (jc_packb_start * kc0)),
+                        (jc_packb_end - jc_packb_start), kc0, rs_b, cs_b,
                         &rs_b_use, &cs_b_use);
                 } else {
                     dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);

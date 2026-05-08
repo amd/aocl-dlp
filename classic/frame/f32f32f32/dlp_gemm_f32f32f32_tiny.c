@@ -266,9 +266,10 @@ DLP_GEMV_TINY(float, float, float, f32f32f32of32)
 
             n_sub_updated = nc0_updated;
 
-            ((dlp_gemm_pack_f32)lcntx->packb_fun_ptr)(
-                pack_b_buffer_f32f32f32of32, b, rs_b, cs_b, n, k, &rs_b_use,
-                &cs_b_use);
+            dlp_execute_packb_kernel(lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                                     (void*)b,
+                                     (void*)pack_b_buffer_f32f32f32of32, n, k,
+                                     rs_b, cs_b, &rs_b_use, &cs_b_use);
 
             rs_b_use = NR;
             cs_b_use = 1;
@@ -401,9 +402,9 @@ DLP_GEMM_TINY(float, float, float, f32f32f32of32)
         pack_b_buffer_f32f32f32of32 =
             (float*)dlp_malloc_page_aligned(mem_b_size_req, &err);
 
-        ((dlp_gemm_pack_f32)lcntx->packb_fun_ptr)(pack_b_buffer_f32f32f32of32,
-                                                  b, rs_b, cs_b, n, k,
-                                                  &rs_b_use, &cs_b_use);
+        dlp_execute_packb_kernel(lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                                 (void*)b, (void*)pack_b_buffer_f32f32f32of32,
+                                 n, k, rs_b, cs_b, &rs_b_use, &cs_b_use);
 
         rs_b_use = NR;
         cs_b_use = 1;

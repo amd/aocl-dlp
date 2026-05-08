@@ -292,6 +292,161 @@ struct gemmParams : public kernelParams
     }
 };
 
+struct packBParams : public kernelParams
+{
+    void* src;
+    void* dst;
+    md_t  n;
+    md_t  k;
+    md_t  rs_src;
+    md_t  cs_src;
+    md_t  rs_dst;
+    md_t  cs_dst;
+
+    md_t n_full_pieces_limit;
+    md_t n_partial;
+
+    // AVX-512 K-fringe mask (opmask bit pattern)
+    uint32_t k_fringe_mask;
+
+    // AVX2 K-fringe mask (per-lane sign-bit mask for vmaskmovps)
+    alignas(32) std::array<int32_t, 8> kMaskArray;
+
+    // Per-SIMD-block N-fringe masks (lt-NR kernel).
+    // Row-major: one mask per block so each load uses a distinct register.
+    // Column-major: only slot 0 is used (single tail mask).
+    static constexpr int                         MAX_PACK_AVX512_BLOCKS = 7;
+    static constexpr int                         MAX_PACK_AVX2_BLOCKS   = 8;
+    std::array<uint32_t, MAX_PACK_AVX512_BLOCKS> nFringeMaskPerBlock{};
+    alignas(32) std::array<std::array<int32_t, 8>,
+                           MAX_PACK_AVX2_BLOCKS> nMaskPerBlock{};
+
+    packBParams()
+        : src(nullptr)
+        , dst(nullptr)
+        , n(0)
+        , k(0)
+        , rs_src(0)
+        , cs_src(0)
+        , rs_dst(0)
+        , cs_dst(0)
+        , n_full_pieces_limit(0)
+        , n_partial(0)
+        , k_fringe_mask(0)
+        , kMaskArray{ 0, 0, 0, 0, 0, 0, 0, 0 }
+        , nFringeMaskPerBlock{}
+        , nMaskPerBlock{}
+    {
+    }
+
+    packBParams(
+        void* _src, void* _dst, md_t _n, md_t _k, md_t _rs_src, md_t _cs_src)
+        : src(_src)
+        , dst(_dst)
+        , n(_n)
+        , k(_k)
+        , rs_src(_rs_src)
+        , cs_src(_cs_src)
+        , rs_dst(0)
+        , cs_dst(0)
+        , n_full_pieces_limit(0)
+        , n_partial(0)
+        , k_fringe_mask(0)
+        , kMaskArray{ 0, 0, 0, 0, 0, 0, 0, 0 }
+        , nFringeMaskPerBlock{}
+        , nMaskPerBlock{}
+    {
+    }
+
+    packBParams(const packBParams& other)
+        : src(other.src)
+        , dst(other.dst)
+        , n(other.n)
+        , k(other.k)
+        , rs_src(other.rs_src)
+        , cs_src(other.cs_src)
+        , rs_dst(other.rs_dst)
+        , cs_dst(other.cs_dst)
+        , n_full_pieces_limit(other.n_full_pieces_limit)
+        , n_partial(other.n_partial)
+        , k_fringe_mask(other.k_fringe_mask)
+        , kMaskArray(other.kMaskArray)
+        , nFringeMaskPerBlock(other.nFringeMaskPerBlock)
+        , nMaskPerBlock(other.nMaskPerBlock)
+    {
+    }
+
+    packBParams(packBParams&& other)
+        : src(other.src)
+        , dst(other.dst)
+        , n(other.n)
+        , k(other.k)
+        , rs_src(other.rs_src)
+        , cs_src(other.cs_src)
+        , rs_dst(other.rs_dst)
+        , cs_dst(other.cs_dst)
+        , n_full_pieces_limit(other.n_full_pieces_limit)
+        , n_partial(other.n_partial)
+        , k_fringe_mask(other.k_fringe_mask)
+        , kMaskArray(other.kMaskArray)
+        , nFringeMaskPerBlock(other.nFringeMaskPerBlock)
+        , nMaskPerBlock(other.nMaskPerBlock)
+    {
+        other.src = nullptr;
+        other.dst = nullptr;
+    }
+
+    packBParams& operator=(const packBParams& other)
+    {
+        if (this != &other) {
+            src                 = other.src;
+            dst                 = other.dst;
+            n                   = other.n;
+            k                   = other.k;
+            rs_src              = other.rs_src;
+            cs_src              = other.cs_src;
+            rs_dst              = other.rs_dst;
+            cs_dst              = other.cs_dst;
+            n_full_pieces_limit = other.n_full_pieces_limit;
+            n_partial           = other.n_partial;
+            k_fringe_mask       = other.k_fringe_mask;
+            kMaskArray          = other.kMaskArray;
+            nFringeMaskPerBlock = other.nFringeMaskPerBlock;
+            nMaskPerBlock       = other.nMaskPerBlock;
+        }
+        return *this;
+    }
+
+    packBParams& operator=(packBParams&& other)
+    {
+        if (this != &other) {
+            src                 = other.src;
+            dst                 = other.dst;
+            n                   = other.n;
+            k                   = other.k;
+            rs_src              = other.rs_src;
+            cs_src              = other.cs_src;
+            rs_dst              = other.rs_dst;
+            cs_dst              = other.cs_dst;
+            n_full_pieces_limit = other.n_full_pieces_limit;
+            n_partial           = other.n_partial;
+            k_fringe_mask       = other.k_fringe_mask;
+            kMaskArray          = other.kMaskArray;
+            nFringeMaskPerBlock = other.nFringeMaskPerBlock;
+            nMaskPerBlock       = other.nMaskPerBlock;
+            other.src           = nullptr;
+            other.dst           = nullptr;
+        }
+        return *this;
+    }
+
+    ~packBParams()
+    {
+        src = nullptr;
+        dst = nullptr;
+    }
+};
+
 // Runtime parameters for GEMV N1 kernel
 struct gemvN1Params : public kernelParams
 {
@@ -776,8 +931,12 @@ class kernelBase
   public:
     virtual ~kernelBase() {}
 
-    virtual std::vector<cpu_utils::isaFeature>& getIsaFeaturesForKernel()   = 0;
-    virtual kernel_frame::kernelInfo*           getKernelInfo()             = 0;
+    virtual std::vector<cpu_utils::isaFeature>& getIsaFeaturesForKernel() = 0;
+    virtual kernel_frame::kernelInfo*           getKernelInfo()           = 0;
+    virtual kernel_frame::packKernelInfo*       getPackKernelInfo()
+    {
+        return nullptr;
+    }
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes() = 0;
     virtual kernels::kernelError operator()(kernels::kernelParams* kP)      = 0;
 

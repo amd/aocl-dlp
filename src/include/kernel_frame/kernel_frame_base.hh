@@ -49,6 +49,8 @@ enum class kernelRoutineType : uint8_t
 {
     gemm = 0,
     reorder,
+    pack_a,
+    pack_b,
     max_kernel_routines
 };
 
@@ -569,5 +571,57 @@ struct kernelInfo
         }
     }
 };
+
+struct packKernelInfo
+{
+    md_t                  panel_dim;
+    md_t                  k_factor;
+    kernelInstrPreference kInstPref;
+    DataType              src_type;
+    DataType              dst_type;
+    bool                  isColMajor;
+
+    packKernelInfo()
+        : panel_dim(0)
+        , k_factor(0)
+        , kInstPref(kernelInstrPreference::none)
+        , src_type(DataType::invalid)
+        , dst_type(DataType::invalid)
+        , isColMajor(false)
+    {
+    }
+
+    packKernelInfo(md_t                  _panel_dim,
+                   md_t                  _k_factor,
+                   kernelInstrPreference _kInstPref,
+                   DataType              _src_type   = DataType::invalid,
+                   DataType              _dst_type   = DataType::invalid,
+                   bool                  _isColMajor = false)
+        : panel_dim(_panel_dim)
+        , k_factor(_k_factor)
+        , kInstPref(_kInstPref)
+        , src_type(_src_type)
+        , dst_type(_dst_type)
+        , isColMajor(_isColMajor)
+    {
+    }
+
+    ~packKernelInfo()                                    = default;
+    packKernelInfo(const packKernelInfo&)                = default;
+    packKernelInfo(packKernelInfo&&) noexcept            = default;
+    packKernelInfo& operator=(const packKernelInfo&)     = default;
+    packKernelInfo& operator=(packKernelInfo&&) noexcept = default;
+
+    bool operator==(const packKernelInfo& rhs) const
+    {
+        return (panel_dim == rhs.panel_dim) && (k_factor == rhs.k_factor)
+               && (kInstPref == rhs.kInstPref) && (src_type == rhs.src_type)
+               && (dst_type == rhs.dst_type) && (isColMajor == rhs.isColMajor);
+    }
+
+    bool operator!=(const packKernelInfo& rhs) const { return !(*this == rhs); }
+};
+
+inline const packKernelInfo INVALID_PACK_KERNEL_INFO{};
 
 } // namespace dlp::kernel_frame

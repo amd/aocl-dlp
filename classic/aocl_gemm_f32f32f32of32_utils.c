@@ -178,6 +178,17 @@ aocl_reorder_f32f32f32of32(const char      order,
         return;
     }
 
+    // JIT pack B: required for F32 GEMM reorder path.
+    dlp_pack_info_hndl_t pack_b_hndl;
+    pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_F32F32F32OF32, n, KC, rs_b,
+                                       cs_b, NR, &pack_b_hndl);
+
+    if (pack_b_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        return;
+    }
+
 #ifdef DLP_ENABLE_OPENMP
     _Pragma("omp parallel num_threads(n_threads)")
     {
@@ -245,11 +256,12 @@ aocl_reorder_f32f32f32of32(const char      order,
                 // st = ( jc_cur_loop * k )    <traverse blocks 1,2,3,4>
                 //    + ( n_sub_updated * pc ) <traverse block 5>
                 //    + ( NC' * kc0_updated)   <traverse block 6>
-                ((dlp_gemm_pack_f32)lcntx->packb_fun_ptr)(
-                    reorder_buf_addr + (jc_cur_loop * k) + (n_sub_updated * pc)
-                        + (jc_cur_loop_rem * kc0),
-                    input_buf_addr + (rs_b * pc) + (cs_b * jc), rs_b, cs_b, nc0,
-                    kc0, &rs_b_reorder, &cs_b_reorder);
+                dlp_execute_packb_kernel(
+                    pack_b_hndl,
+                    (void*)(input_buf_addr + (rs_b * pc) + (cs_b * jc)),
+                    (void*)(reorder_buf_addr + (jc_cur_loop * k)
+                            + (n_sub_updated * pc) + (jc_cur_loop_rem * kc0)),
+                    nc0, kc0, rs_b, cs_b, &rs_b_reorder, &cs_b_reorder);
             }
 
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);

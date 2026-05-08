@@ -33,6 +33,7 @@
 #include <mutex>
 #include <set>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 #include "jit/jit_generator_base.hh"
@@ -269,6 +270,19 @@ class jitGeneratorRegister
     {
         return getJitGenerator(kernel_frame::kernelRoutineType::gemm, kDtype);
     }
+
+    [[nodiscard]] jitGeneratorFrameError registerPackBJitGenerator(
+        std::unique_ptr<jitGeneratorBase> jitGen, std::string&& kernelFamily)
+    {
+        return registerJitGenerator(std::move(jitGen), std::move(kernelFamily),
+                                    kernel_frame::kernelRoutineType::pack_b);
+    }
+
+    [[nodiscard]] jitGeneratorBaseRef getPackBJitGenerator(
+        kernel_frame::kernelDatatype kDtype)
+    {
+        return getJitGenerator(kernel_frame::kernelRoutineType::pack_b, kDtype);
+    }
 };
 
 /**
@@ -314,4 +328,15 @@ dlpJitGeneratorRegisterInstance()
     static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_jit_reg_var_, className,   \
                                      __LINE__) =                               \
         dlp::jit::dlpJitGeneratorRegisterInstance().registerGemmJitGenerator(  \
+            std::make_unique<className>(), std::string{ kernelFamily });
+
+#define DLP_REGISTER_STATIC_PACKB_JIT_GENERATOR(className, kernelFamily)       \
+    static_assert(                                                             \
+        std::is_default_constructible_v<className>,                            \
+        "Requires trivially constructible classes for jit generators.");       \
+    static_assert(std::is_base_of_v<dlp::jit::jitGeneratorBase, className>,    \
+                  "Requires classes derived from jitGeneratorBase.");          \
+    static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_packb_jit_reg_var_,        \
+                                     className, __LINE__) =                    \
+        dlp::jit::dlpJitGeneratorRegisterInstance().registerPackBJitGenerator( \
             std::make_unique<className>(), std::string{ kernelFamily });

@@ -1,0 +1,475 @@
+# Thread factorization stress test: data points where MR=6, NR=64
+# underperforms vs MR=8, NR=48 due to thread utilization issues.
+#
+# Two mechanisms:
+#
+# A) mrxnr fast-path thread truncation (ic_ways = mr_blks, nt truncated)
+#    Root cause: the mrxnr fast path sets ic_ways = ceil(M/MR), then
+#    jc_ways = floor(nt / ic_ways), n_threads = ic_ways * jc_ways.
+#    MR=6 produces non-power-of-2 mr_blks => nt % mr_blks > 0 => waste.
+#
+# B) N-panel load imbalance at low thread counts
+#    NR=64 produces fewer N-panels than NR=48 for the same N, leading to
+#    worse distribution across jc_ways threads. Both configs use all threads,
+#    but work is unevenly split.
+#
+# =====================================================================
+# Section 1: 128-thread mrxnr truncation (Mechanism A)
+# =====================================================================
+#
+# Waste breakdown (128 threads):
+#   5 threads wasted: M in [241..246], mr_blks=41 (prime), 128 = 41*3 + 5
+#   4 threads wasted: M in [181..186], mr_blks=31 (prime), 128 = 31*4 + 4
+#   4 threads wasted: M in [367..372], mr_blks=62,          128 = 62*2 + 4
+#   3 threads wasted: M in [25..30],   mr_blks=5,           128 = 5*25 + 3
+#   2 threads wasted: M in [31..36],   mr_blks=6,           128 = 6*21 + 2
+#   2 threads wasted: M in [121..126], mr_blks=21,          128 = 21*6 + 2
+#   2 threads wasted: M in [247..252], mr_blks=42,          128 = 42*3 + 2
+
+gemm_tests:
+
+  # # =========================================================================
+  # # 128T | Waste = 5 threads:  mr_blks(6) = 41 (prime), 128 = 41*3 + 5
+  # # 6x64: ic=41, jc=3,  nt=123
+  # # 8x48: nt=128 (via 2x2 or mrxnr)
+  # # =========================================================================
+
+  # - name: "128t_waste5_M244_N_sweep"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [241, 244, 246]
+  #   n: [128, 192, 256, 384, 512, 768, 1024, 1280]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # - name: "128t_waste5_M244_transB"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: true
+  #   m: [241, 244, 246]
+  #   n: [128, 256, 512, 768, 1024]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "none"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # # =========================================================================
+  # # 128T | Waste = 4 threads:  mr_blks(6) = 31 (prime), 128 = 31*4 + 4
+  # # 6x64: ic=31, jc=4,  nt=124
+  # # 8x48: nt=128
+  # # =========================================================================
+
+  # - name: "128t_waste4_M186_N_sweep"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [181, 184, 186]
+  #   n: [128, 192, 256, 384, 512, 768, 1024, 1536]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # - name: "128t_waste4_M186_transB"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: true
+  #   m: [181, 184, 186]
+  #   n: [128, 256, 512, 768, 1024]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "none"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # # =========================================================================
+  # # 128T | Waste = 4 threads:  mr_blks(6) = 62, 128 = 62*2 + 4
+  # # 6x64: ic=62, jc=2,  nt=124
+  # # 8x48: nt=128
+  # # =========================================================================
+
+  # - name: "128t_waste4_M370_N_sweep"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [367, 370, 372]
+  #   n: [128, 256, 384, 512, 768, 1024]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # # =========================================================================
+  # # 128T | Waste = 3 threads:  mr_blks(6) = 5, 128 = 5*25 + 3
+  # # 6x64: ic=5, jc=25,  nt=125
+  # # 8x48: ic=4, jc=32,  nt=128
+  # # =========================================================================
+
+  # - name: "128t_waste3_M30_N_sweep"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [25, 28, 30]
+  #   n: [128, 192, 256, 384, 512, 640, 768, 960, 1024, 1280]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # - name: "128t_waste3_M30_transB"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: true
+  #   m: [25, 28, 30]
+  #   n: [128, 256, 384, 512, 768, 1024]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "none"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # # =========================================================================
+  # # 128T | Waste = 2 threads:  mr_blks(6) = 6, 128 = 6*21 + 2
+  # # 6x64: ic=6, jc=21,  nt=126
+  # # 8x48: ic=4, jc=32,  nt=128
+  # # =========================================================================
+
+  # - name: "128t_waste2_M32_N_sweep"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [32, 34, 36]
+  #   n: [192, 384, 576, 768, 960, 1024, 1152, 1344]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # - name: "128t_waste2_M32_transB"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: true
+  #   m: [32, 34, 36]
+  #   n: [192, 384, 768, 1024]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "none"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # # =========================================================================
+  # # 128T | Waste = 2 threads:  mr_blks(6) = 21, 128 = 21*6 + 2
+  # # 6x64: ic=21, jc=6,  nt=126
+  # # 8x48: nt=128
+  # # =========================================================================
+
+  # - name: "128t_waste2_M126_N_sweep"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [121, 124, 126]
+  #   n: [128, 256, 384, 512, 768, 1024]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # # =========================================================================
+  # # 128T | BERT / LLM-style shapes
+  # # 6x64: M=32 -> mr_blks=6, nt=126
+  # # 8x48: M=32 -> mr_blks=4, nt=128
+  # # =========================================================================
+
+  # - name: "128t_BERT_thread_waste"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m:     [32,  32,   32,   32,   32,  32,   32,   32]
+  #   n:     [768, 2304, 3072, 768,  768, 2304, 3072, 768]
+  #   k:     [768, 768,  768,  3072, 768, 768,  768,  3072]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "simple"
+
+  # =====================================================================
+  # Section 2: 8-thread N-panel load imbalance (Mechanism B)
+  # =====================================================================
+  #
+  # With 8 threads, both configs use all 8 threads (2x2 path), but
+  # NR=64 creates fewer N-panels than NR=48, causing uneven jc splits.
+  #
+  # Key examples (ic=1, jc=8 for both):
+  #   N=192: nr_blks(64)=3, 3/8 -> 5 idle;  nr_blks(48)=4, 4/8 -> 4 idle
+  #   N=256: nr_blks(64)=4, 4/8 -> 100% waste; nr_blks(48)=6, 6/8 -> 33%
+  #   N=576: nr_blks(64)=9, 9/8 -> 78% waste;  nr_blks(48)=12, 12/8 -> 33%
+  #   N=640: nr_blks(64)=10, 10/8 -> 60% waste; nr_blks(48)=14, 14/8 -> 14%
+  #
+  # Also: M in [13..18] with N=128 triggers mrxnr truncation (6->8 waste=2)
+
+  # ---- N-panel imbalance: N=192 (nr=3 vs 4) ----
+  # 6x64: ceil(192/64)=3 panels across 8 jc-threads -> 167% N-waste
+  # 8x48: ceil(192/48)=4 panels across 8 jc-threads -> 100% N-waste
+
+  - name: "8t_panel_imbalance_N192"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [25, 30, 32, 36, 48, 64]
+    n: [192]
+    k: [768, 1024]
+    alpha: 1.0
+    beta: 0.0
+    mtagA: "none"
+    mtagB: "reorder"
+    tolerances:
+      float: 1.0e-5
+    product_type: "cartesian"
+
+  # # ---- N-panel imbalance: N=256 (nr=4 vs 6) ----
+  # # 6x64: ceil(256/64)=4 panels across 8 jc-threads -> 100% N-waste
+  # # 8x48: ceil(256/48)=6 panels across 8 jc-threads ->  33% N-waste
+
+  # - name: "8t_panel_imbalance_N256"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [25, 30, 32, 36, 48, 64]
+  #   n: [256]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # # ---- N-panel imbalance: N=576 (nr=9 vs 12) ----
+  # # 6x64: ceil(576/64)=9 panels across 8 jc-threads -> 78% N-waste
+  # # 8x48: ceil(576/48)=12 panels across 8 jc-threads -> 33% N-waste
+
+  - name: "8t_panel_imbalance_N576"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [25, 30, 32, 48, 64, 96, 120, 128]
+    n: [576]
+    k: [768, 1024]
+    alpha: 1.0
+    beta: 0.0
+    mtagA: "none"
+    mtagB: "reorder"
+    tolerances:
+      float: 1.0e-5
+    product_type: "cartesian"
+
+  # # ---- N-panel imbalance: N=640 (nr=10 vs 14) ----
+  # # 6x64: ceil(640/64)=10 panels across 8 jc-threads -> 60% N-waste
+  # # 8x48: ceil(640/48)=14 panels across 8 jc-threads -> 14% N-waste
+
+  # - name: "8t_panel_imbalance_N640"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: false
+  #   m: [25, 30, 32, 48, 64, 96, 120, 128, 160]
+  #   n: [640]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "reorder"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # ---- N-panel imbalance: multi-N sweep (best cases) ----
+  # Covers all N values where 8x48 has significantly better panel balance
+
+  - name: "8t_panel_imbalance_multi_N"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [32, 64, 128]
+    n: [192, 256, 576, 640]
+    k: [768, 1024]
+    alpha: 1.0
+    beta: 0.0
+    mtagA: "none"
+    mtagB: "reorder"
+    tolerances:
+      float: 1.0e-5
+    product_type: "cartesian"
+
+  # - name: "8t_panel_imbalance_multi_N_transB"
+  #   a_type: "f32"
+  #   b_type: "f32"
+  #   c_type: "f32"
+  #   acc_type: "f32"
+  #   storage_format: "row-major"
+  #   transA: false
+  #   transB: true
+  #   m: [32, 64, 128]
+  #   n: [192, 256, 576, 640]
+  #   k: [768, 1024]
+  #   alpha: 1.0
+  #   beta: 0.0
+  #   mtagA: "none"
+  #   mtagB: "none"
+  #   tolerances:
+  #     float: 1.0e-5
+  #   product_type: "cartesian"
+
+  # ---- Perfect panel alignment for 8x48 at 8T ----
+  # N=192: nr(48)=4 -> jc=4,ic=2 or jc=8,ic=1 -> perfect split
+  # N=384: nr(48)=8 -> jc=8,ic=1 -> perfect 1 panel/thread
+  # vs 6x64 where nr(64)=3 or 6 -> poor jc-division
+
+  - name: "8t_perfect_48_alignment"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [32, 64, 128, 160, 192]
+    n: [192, 384]
+    k: [768, 1024]
+    alpha: 1.0
+    beta: 0.0
+    mtagA: "none"
+    mtagB: "reorder"
+    tolerances:
+      float: 1.0e-5
+    product_type: "cartesian"
+
+  # ---- 8T mrxnr truncation: M in [13..18], N=128 ----
+  # 6x64: mr_blks=3, ic=3, jc=2, nt=6 (2 threads wasted)
+  # 8x48: takes 2x2 path, nt=8 (all threads used)
+
+  - name: "8t_mrxnr_truncation_M16_N128"
+    a_type: "f32"
+    b_type: "f32"
+    c_type: "f32"
+    acc_type: "f32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [13, 15, 16, 18]
+    n: [128]
+    k: [768, 1024]
+    alpha: 1.0
+    beta: 0.0
+    mtagA: "none"
+    mtagB: "reorder"
+    tolerances:
+      float: 1.0e-5
+    product_type: "cartesian"

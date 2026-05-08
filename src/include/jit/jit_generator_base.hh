@@ -58,11 +58,20 @@ struct jitGeneratorContext
 {
     const kernel_frame::kernelInfo& kI;
 
+    const kernel_frame::packKernelInfo* packKI = nullptr;
+
     // Can expand to more entities in future, like profiler, compilation
     // target, etc.
 
     jitGeneratorContext(const kernel_frame::kernelInfo& kernelInfo)
         : kI(kernelInfo)
+    {
+    }
+
+    jitGeneratorContext(const kernel_frame::kernelInfo&     kernelInfo,
+                        const kernel_frame::packKernelInfo& packInfo)
+        : kI(kernelInfo)
+        , packKI(&packInfo)
     {
     }
 

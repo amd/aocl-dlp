@@ -315,6 +315,26 @@ class decisionEngine
 
         return INVALID_KERNEL_INFO;
     }
+
+    template<typename T>
+    DLP_ALWAYS_INLINE dlp::kernel_frame::packKernelInfo
+                      getGemmPackBInfoForInputFastPath(md_t                              nc,
+                                                       md_t                              kc,
+                                                       md_t                              cs_src,
+                                                       md_t                              nr_hint,
+                                                       dlp::kernel_frame::kernelDatatype dt)
+    {
+        auto kTypeIdx = utils::getUnderlyingValueOfEnum(
+            dlp::kernel_frame::kernelRoutineType::gemm);
+        auto dtIdx = utils::getUnderlyingValueOfEnum(dt);
+        if (backends[kTypeIdx][dtIdx] != nullptr) {
+            T* backend = static_cast<T*>(backends[kTypeIdx][dtIdx]);
+            return backend->T::getGemmPackBInfoForInputFastPath(nc, kc, cs_src,
+                                                                nr_hint);
+        }
+
+        return kernel_frame::INVALID_PACK_KERNEL_INFO;
+    }
 };
 
 /**

@@ -42,6 +42,7 @@ gemmF32DEBackend::gemmF32DEBackend()
     : isAvx512(false)
     , isAvx2(false)
     , canGenerateKernelInfo(true)
+    , canGeneratePackBKernelInfo(true)
 {
     // Use this eKernelInstPref to generate kernelInfo for the 32 Ymm register
     // based f32 kernel generation.
@@ -93,7 +94,8 @@ gemmF32DEBackend::gemmF32DEBackend()
                     dlp::kernel_frame::kernelInstrPreference::none;
             }
         } else {
-            canGenerateKernelInfo = false;
+            canGenerateKernelInfo      = false;
+            canGeneratePackBKernelInfo = false;
         }
     }
 }

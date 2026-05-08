@@ -469,6 +469,17 @@ aocl_gemm_f32f32f32of32(const char      order,
         goto err_hndl;
     }
 
+    // JIT pack B: required for F32 GEMM path.
+    lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(
+        DLP_KERNEL_F32F32F32OF32, n_use, lcntx_l.blksz.KC, rs_b_use, cs_b_use,
+        lcntx_l.blksz.NR, &lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl);
+
+    if (lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
+
     if (dlp_is_single_thread(&rntm_g) == TRUE) {
         if (is_tiny_input_f32(m_use, n_use, k_use, &lcntx_l) == TRUE) {
             dlp_gemm_rowvar_tiny_f32f32f32of32(

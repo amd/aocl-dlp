@@ -110,6 +110,15 @@ class iDEBackend
         md_t                              kc_hint,
         md_t                              c_downscale,
         bool                              rerouted_from_other_backend) = 0;
+
+    virtual dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
+        [[maybe_unused]] md_t nc,
+        [[maybe_unused]] md_t kc,
+        [[maybe_unused]] md_t cs_src,
+        [[maybe_unused]] md_t nr_hint)
+    {
+        return kernel_frame::INVALID_PACK_KERNEL_INFO;
+    }
 };
 
 class gemmF32DEBackend : public iDEBackend
@@ -120,6 +129,7 @@ class gemmF32DEBackend : public iDEBackend
     int32_t                             numVectorMaskRegisters;
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
+    bool                                canGeneratePackBKernelInfo;
 
   public:
     gemmF32DEBackend();
@@ -374,13 +384,45 @@ class gemmF32DEBackend : public iDEBackend
                 || (m <= 6 && n <= 72))
             && (cs_b != 1) && (mtag_b == PACK) && (mtag_a == UNPACKED)) {
             invokeRD = true;
-            k_unroll = 4; // equal to intrinsics kernel. To be tuned later.
+            k_unroll = 4;
         }
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, allLtFringeKernels, invokeRD,
             anyKOpsOrder, kInstPref, c_downscale, k_dtype, rs_c, cs_c,
             metadata);
+    }
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
+        [[maybe_unused]] md_t nc,
+        [[maybe_unused]] md_t kc,
+        md_t                  cs_src,
+        md_t                  nr_hint) override final
+    {
+        if (!canGeneratePackBKernelInfo) {
+            return kernel_frame::INVALID_PACK_KERNEL_INFO;
+        }
+
+        if (!isAvx512 && !isAvx2) {
+            return kernel_frame::INVALID_PACK_KERNEL_INFO;
+        }
+
+        bool colMajor = (cs_src != 1);
+
+        kernel_frame::kernelInstrPreference kInstPref =
+            kernel_frame::kernelInstrPreference::none;
+
+        if (isAvx512) {
+            kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+        } else if (isAvx2) {
+            kInstPref = kernel_frame::kernelInstrPreference::avx2_ymm_favour;
+        }
+
+        return dlp::kernel_frame::packKernelInfo(
+            nr_hint, 1, kInstPref, kernel_frame::DataType::f32,
+            kernel_frame::DataType::f32, colMajor);
     }
 };
 

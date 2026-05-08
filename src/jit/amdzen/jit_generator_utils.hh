@@ -61,6 +61,7 @@ namespace amdzen::utils {
 typedef void (*jit_kernel)(dlp::kernels::gemmParams*);
 using jit_gemv_n1_kernel = void (*)(dlp::kernels::gemvN1Params*);
 using jit_gemv_m1_kernel = void (*)(dlp::kernels::gemvM1Params*);
+using jit_pack_b_kernel  = void (*)(dlp::kernels::packBParams*);
 
 // This size is used to allocate the memory for the JIT code generator, where
 // xbyak in autogrow mode will automatically grow the buffer size if needed.
@@ -512,6 +513,30 @@ struct gemvM1GeneratorParams
 
     // Destructor
     ~gemvM1GeneratorParams() = default;
+};
+
+struct packBGeneratorParams
+{
+    md_t            NR;
+    md_t            K_FACTOR;
+    kernelInstrType kType;
+    bool            useMask;
+    int             numMaskRegs;
+
+    packBGeneratorParams(md_t            _NR,
+                         md_t            _K_FACTOR,
+                         kernelInstrType _kType,
+                         bool            _useMask     = false,
+                         int             _numMaskRegs = 0)
+        : NR(_NR)
+        , K_FACTOR(_K_FACTOR)
+        , kType(_kType)
+        , useMask(_useMask)
+        , numMaskRegs(_numMaskRegs)
+    {
+    }
+
+    ~packBGeneratorParams() = default;
 };
 
 inline int

@@ -157,6 +157,7 @@ typedef struct
     dlp_gemm_pack_strides_t pack_s;
     dlp_gemm_sup_thres_t    sup_thres;
     dlp_kernel_hndl_t       dlp_kernel_hndl;
+    dlp_pack_kernel_hndl_t  dlp_pack_kernel_hndl;
 } dlp_gemm_cntx_t;
 
 typedef struct

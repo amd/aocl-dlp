@@ -275,6 +275,122 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t   k_dtype,
     kernel_hndl->invokeRD    = fastKI.invokeRD;
 }
 
+[[gnu::noinline]] static dlp::kernel_frame::kernelBaseRef
+dlp_generate_packb_jit_kernel(dlp::kernel_frame::packKernelInfo& packKI,
+                              kernelDatatype                     kDType)
+{
+    auto jitGen =
+        dlpJitGeneratorRegisterInstance().getPackBJitGenerator(kDType);
+    if (!jitGen) {
+        dlpKernelRegisterInstance().registerEmptyPackBKernel(packKI, kDType);
+        return dlp::kernel_frame::kernelBaseRef(nullptr);
+    }
+
+    auto kB =
+        std::make_unique<jitKernelAdapter>(packKI, std::move(jitGen), true);
+
+    if (!kB->isJitGenerated()) {
+        dlpKernelRegisterInstance().registerEmptyPackBKernel(packKI, kDType);
+    } else {
+        std::string kernelName = get_kernel_family_name(kDType);
+        auto        retVal = dlpKernelRegisterInstance().registerPackBKernel(
+            std::move(kB), std::move(kernelName));
+        if (retVal != kernelFrameError::success) {
+            std::cerr << "PackB JIT kernel registration failed for datatype: "
+                      << static_cast<int>(kDType) << std::endl;
+        }
+    }
+
+    return dlpKernelRegisterInstance().getPackBKernel(&packKI, kDType);
+}
+
+DLP_ALWAYS_INLINE static dlp::kernel_frame::packKernelInfo
+dlp_get_packb_kernelInfo_by_dtype(
+    kernelDatatype kDType, md_t nc, md_t kc, md_t cs_src, md_t nr_hint)
+{
+    if (kDType == kernelDatatype::f32f32f32of32) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmPackBInfoForInputFastPath<dlp::de::gemmF32DEBackend>(
+                nc, kc, cs_src, nr_hint, kDType);
+    }
+
+    return dlp::kernel_frame::packKernelInfo();
+}
+
+void
+dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t     k_dtype,
+                                   md_t                  nc,
+                                   md_t                  kc,
+                                   md_t                  rs_src,
+                                   md_t                  cs_src,
+                                   md_t                  nr_hint,
+                                   dlp_pack_info_hndl_t* kernel_hndl)
+{
+    (void)rs_src;
+
+    if (!kernel_hndl) {
+        return;
+    }
+
+    kernelDatatype kDType = getKernelDatatype(k_dtype);
+    if (kDType == kernelDatatype::invalid) {
+        kernel_hndl->kernel_base = nullptr;
+        return;
+    }
+
+    dlp::kernel_frame::packKernelInfo packKI =
+        dlp_get_packb_kernelInfo_by_dtype(kDType, nc, kc, cs_src, nr_hint);
+
+    if (packKI.panel_dim <= 0) {
+        kernel_hndl->kernel_base = nullptr;
+        return;
+    }
+
+    auto kernPtr = dlpKernelRegisterInstance().getPackBKernel(&packKI, kDType);
+
+    if (!kernPtr) {
+        kernPtr = dlp_generate_packb_jit_kernel(packKI, kDType);
+    }
+
+    auto* rawPtr             = (kernPtr.isValid() && kernPtr.getPtr()->isValid)
+                                   ? kernPtr.getPtr()
+                                   : nullptr;
+    kernel_hndl->kernel_base = static_cast<void*>(rawPtr);
+    kernel_hndl->panel_dim   = packKI.panel_dim;
+    kernel_hndl->k_factor    = packKI.k_factor;
+    kernel_hndl->kDtype      = k_dtype;
+    kernel_hndl->src_type    = static_cast<uint8_t>(packKI.src_type);
+    kernel_hndl->dst_type    = static_cast<uint8_t>(packKI.dst_type);
+}
+
+[[gnu::aligned(64)]] void
+dlp_execute_packb_kernel(dlp_pack_info_hndl_t kernel_hndl,
+                         void*                src,
+                         void*                dst,
+                         md_t                 n,
+                         md_t                 k,
+                         md_t                 rs_src,
+                         md_t                 cs_src,
+                         md_t*                rs_dst,
+                         md_t*                cs_dst)
+{
+    if (kernel_hndl.kernel_base == nullptr) {
+        return;
+    }
+
+    packBParams packBParamsIn(src, dst, n, k, rs_src, cs_src);
+
+    kernelBase* kB = static_cast<kernelBase*>(kernel_hndl.kernel_base);
+    kB->operator()(std::addressof(packBParamsIn));
+
+    if (rs_dst != nullptr) {
+        *rs_dst = packBParamsIn.rs_dst;
+    }
+    if (cs_dst != nullptr) {
+        *cs_dst = packBParamsIn.cs_dst;
+    }
+}
+
 // Experimentally derived alignment, needs further analysis but gives
 // consistent good performance on zen5 machines.
 [[gnu::aligned(64)]]
