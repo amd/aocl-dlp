@@ -85,12 +85,9 @@ jitGEMMBF16<KType>::initializeParameters(bool addIrLoop)
     } else {
         mov(regTmpAptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
     }
-    // Load post_op_c_i into regTmp2 (used for M-loop post-op updates)
-    // This is needed for both obf16 and of32 since M-loop updates
-    // post_op_c_i
-    mov(regTmp2,
-        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
+    // post_op_c_i is reloaded from memory at each use site rather than
+    // being held in a dedicated register, since UseRBPAsFramePointer
+    // limits us to 12 temp registers.
 
     if (c_downscale < DLP_F32) {
         // Broadcast the left shift offset onto a ZMM register
@@ -179,6 +176,13 @@ template<utils::kernelInstrType KType>
 void
 jitGEMMBF16<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 {
+    // StackFrame gives us 1 param register (p[0]) and 12 temp registers
+    // (t[0]–t[11]).  With UseRBPAsFramePointer, rbp is reserved so 12
+    // is the maximum.
+    //
+    // post_op_c_i is not held in a dedicated register; it is reloaded
+    // from memory (gemmParams::kernelOpsAttr.post_op_c_i) at each use
+    // site and written back after updates.
     stackPtr = stackFrame.p[0];
 
     regTmpAptr = stackFrame.t[0];
@@ -193,7 +197,6 @@ jitGEMMBF16<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
     regCPtr    = stackFrame.t[9];
     regAPtr    = stackFrame.t[10];
     regTmp1    = stackFrame.t[11];
-    regTmp2    = stackFrame.t[12];
 }
 
 template<utils::kernelInstrType KType>
@@ -298,7 +301,9 @@ jitGEMMBF16<KType>::scaleBeta()
                 + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]); // BF16 stride
 
-        mov(regKIter, regTmp2);
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         imul(regKIter, regTmp1);
         add(regTmpCptr, regKIter);
 
@@ -386,7 +391,9 @@ jitGEMMBF16<KType>::storeResult()
                 + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]); // BF16 stride
 
-        mov(regKIter, regTmp2);
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
         imul(regKIter, regTmp1);
         add(regTmpCptr, regKIter);
 
@@ -558,13 +565,16 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
         imul(regTmp1, regTmp1, MR);
         lea(regAPtr, ptr[regAPtr + regTmp1]);
 
-        // Update post_op_c_i for the next m-iteration
-        add(regTmp2, MR);
-        // write back the updated post_op_c_i offset to memory since,
-        // kernel-ops module reads this offset from memory.
+        // Update post_op_c_i for the next m-iteration.
+        // Reload from memory, increment, and write back (no dedicated
+        // register — freed for UseRBPAsFramePointer).
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
+        add(regTmp1, MR);
         mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
-            regTmp2);
+            regTmp1);
 
         moveCPtr();
 
@@ -611,7 +621,8 @@ jitGEMMBF16<KType>::generateKernel(utils::generatorParams& params)
 
     // Initialize stack frame and parameters
     // Allocate 16 bytes of local stack space for temporary constants
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 16);
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 16);
     initializeStackFrame(stackFrame);
     initializeParameters(params.mLoop);
 

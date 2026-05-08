@@ -57,7 +57,6 @@ jitBF16GEMVN1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regKIter   = frame.t[9];
     regTmp1    = frame.t[10];
     regTmp2    = frame.t[11];
-    regTmp3    = frame.t[12];
 }
 
 template<utils::kernelInstrType KType>
@@ -413,7 +412,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
 
         // regTmp2 now contains BF16 stride, regTmpYptr points to downscale
         // buffer
-        lea(regTmp3, ptr[regTmp2 + 2 * regTmp2]); // regTmp3 = stride + 2*stride
+        lea(regTmp1, ptr[regTmp2 + 2 * regTmp2]); // regTmp1 = stride + 2*stride
 
         for (iter_t i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32;
              i += 1) {
@@ -450,7 +449,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
                 vxorps(Xbyak::Xmm(tmpBaseIdx + 3), Xbyak::Xmm(tmpBaseIdx + 3),
                        Xbyak::Xmm(tmpBaseIdx + 3));
                 vpinsrw(Xbyak::Xmm(tmpBaseIdx + 3), Xbyak::Xmm(tmpBaseIdx + 3),
-                        ptr[regTmpYptr + regTmp3], 1);
+                        ptr[regTmpYptr + regTmp1], 1);
                 vbroadcastss(RegType(tmpBaseIdx + 3),
                              Xbyak::Xmm(tmpBaseIdx + 3));
 
@@ -531,7 +530,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
 
     // F32 path (original code)
     // Store offsets for Y, using it's row-stride
-    lea(regTmp3, ptr[regRsC + 2 * regRsC]); // regTmp3 = rsC + 2*rsC
+    lea(regTmp1, ptr[regRsC + 2 * regRsC]); // regTmp1 = rsC + 2*rsC
     for (iter_t i = 0; i < (mSize + simdWidthF32 - 1) / simdWidthF32; i += 1) {
         int blockSize  = ((mSize - i * simdWidthF32) < simdWidthF32)
                              ? (mSize - i * simdWidthF32)
@@ -543,7 +542,7 @@ jitBF16GEMVN1<KType>::scaleYWithBetaRowStored(int mSize, bool betaOne)
             vbroadcastss(RegType(tmpBaseIdx), ptr[regTmpYptr]);
             vbroadcastss(RegType(tmpBaseIdx + 1), ptr[regTmpYptr + regRsC]);
             vbroadcastss(RegType(tmpBaseIdx + 2), ptr[regTmpYptr + 2 * regRsC]);
-            vbroadcastss(RegType(tmpBaseIdx + 3), ptr[regTmpYptr + regTmp3]);
+            vbroadcastss(RegType(tmpBaseIdx + 3), ptr[regTmpYptr + regTmp1]);
             vunpcklps(RegType(tmpBaseIdx), RegType(tmpBaseIdx),
                       RegType(tmpBaseIdx + 1));
             vunpcklps(RegType(tmpBaseIdx + 2), RegType(tmpBaseIdx + 2),
@@ -969,7 +968,8 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
 
-    Xbyak::util::StackFrame frame(this, 1, 13, 16);
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 16);
     initializeStackFrame(frame);
     // Initializes generator params
     initializeParameters(params);
@@ -1253,7 +1253,8 @@ jitBF16GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
     regTmp1     = frame.t[9];
     regTmp2     = frame.t[10];
     regIncN     = frame.t[11];
-    regIncK     = frame.t[12];
+    // regIncK spilled to stack at [rsp + kIncKOffset] since frame
+    // pointer mode reserves RBP, leaving only 12 temp registers.
 }
 
 template<utils::kernelInstrType KType>
@@ -1882,7 +1883,8 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     RETURN_IF_ERROR(checkValidBF16GemvM1NLeftParams(params));
 
     // Using Xbyak's utility for managing the stack frame
-    Xbyak::util::StackFrame frame(this, 1, 13, 0);
+    Xbyak::util::StackFrame frame(this, 1,
+                                  12 | Xbyak::util::UseRBPAsFramePointer, 8);
     initializeStackFrame(frame);
 
     // Initializing the parameters
@@ -1921,10 +1923,8 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         // Zero out accumulator registers for this n iteration
         regInit(accumBaseIdx, accumReg);
-        xor_(regIncK,
-             regIncK); // regIncK is used to increment
-                       // the pointer for K dimension(zeroed before the
-                       // kloop)
+        mov(qword[rsp + kIncKOffset],
+            0); // K-pointer offset (zeroed before the kloop)
 
         // K-loop is not needed if alpha is zero
         if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -1961,7 +1961,8 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 mov(regTmp2,
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
-                imul(regTmp2, regIncK); //(kc loop iter)pc*n_sub_updated
+                imul(regTmp2,
+                     qword[rsp + kIncKOffset]); //(kc loop iter)pc*n_sub_updated
                 lea(regTmp2,
                     ptr[regTmp2 * sizeof(bfloat16)]); // multiply by 2 bytes
 
@@ -1989,7 +1990,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Decrement the k-loop iterator
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
-                add(regIncK, regTmp2);
+                add(qword[rsp + kIncKOffset], regTmp2);
                 sub(regKIter, 1);
                 jnz(label_n_loop_k_loop_start, T_NEAR);
             }
@@ -2030,7 +2031,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
                 lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
                 lea(regBptr,
@@ -2130,7 +2131,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         // Zero out accumulator registers for this n iteration
         regInit(accumBaseIdx, accumReg);
-        xor_(regIncK, regIncK);
+        mov(qword[rsp + kIncKOffset], 0);
 
         // B matrix is packed by default for bf16, row stride varies based on
         // n_left
@@ -2167,7 +2168,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
                 lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2185,7 +2186,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Decrement the k-loop iterator
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
-                add(regIncK, regTmp2);
+                add(qword[rsp + kIncKOffset], regTmp2);
                 sub(regKIter, 1);
                 jnz(label_n_fringe_main_k_loop_start, T_NEAR);
             }
@@ -2226,7 +2227,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
                 lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2314,7 +2315,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 
         // Zero out accumulator registers for this n iteration
         regInit(accumBaseIdx, accumReg);
-        xor_(regIncK, regIncK);
+        mov(qword[rsp + kIncKOffset], 0);
 
         // B matrix is packed by default for bf16,
         //  packing is done in a way, that row stride varies based on n_left
@@ -2351,7 +2352,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
                 lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);
@@ -2369,7 +2370,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 // Decrement the k-loop iterator
                 // Also, increment the pointer offset
                 mov(regTmp2, KC);
-                add(regIncK, regTmp2);
+                add(qword[rsp + kIncKOffset], regTmp2);
                 sub(regKIter, 1);
                 jnz(label_n_fringe_left_k_loop_start, T_NEAR);
             }
@@ -2414,7 +2415,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     ptr[stackPtr
                         + offsetof(dlp::kernels::gemvM1Params, n_sub_updated)]);
                 imul(regTmpYptr, regPsB);
-                imul(regTmp2, regIncK);
+                imul(regTmp2, qword[rsp + kIncKOffset]);
                 lea(regTmp2, ptr[regTmp2 * sizeof(bfloat16)]);
 
                 lea(regBptr, ptr[regBptr + regTmpYptr]);

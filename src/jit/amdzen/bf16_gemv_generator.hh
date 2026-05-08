@@ -84,7 +84,6 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regKIter;            // K-loop iterator
     Xbyak::Reg64 regTmp1;             // General purpose temporary register 1
     Xbyak::Reg64 regTmp2;             // General purpose temporary register 2
-    Xbyak::Reg64 regTmp3;             // General purpose temporary register 3
 
     Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
 
@@ -215,9 +214,11 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regTmp2;
     Xbyak::Reg64 regIncN;
-    Xbyak::Reg64 regIncK;
 
-    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
+    // regIncK spilled to stack at [rsp + kIncKOffset] since frame
+    // pointer mode reserves RBP, leaving only 12 temp registers.
+    static constexpr int kIncKOffset = 0;
+    Xbyak::Opmask        mask_regs[utils::NUM_USABLE_MASKS];
 
     Xbyak::Label label_n_loop_start;
     Xbyak::Label label_n_loop_end;

@@ -76,7 +76,7 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
     Xbyak::Reg64 regTmpAptr, regBptr, regTmpCptr, regRsA, regCsA, regRsB,
         regRsC, regKIter;
     Xbyak::Reg64 regMiter;
-    Xbyak::Reg64 regTmp1, regTmp2;
+    Xbyak::Reg64 regTmp1;
     Xbyak::Reg64 regCPtr, regAPtr;
     Xbyak::Reg64 stackPtr;
 
