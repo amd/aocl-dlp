@@ -26,6 +26,7 @@
 
 function(dlp_parse_threading_model DLP_THREADING_MODEL)
     set(THREADING_MODELS ${DLP_THREADING_MODEL})
+    set(DLP_ENABLE_ST OFF)
     set(DLP_ENABLE_OPENMP OFF)
     set(DLP_ENABLE_PTHREAD OFF)
 
@@ -35,7 +36,7 @@ function(dlp_parse_threading_model DLP_THREADING_MODEL)
 
     foreach(THREADING_MODEL IN LISTS THREADING_MODELS)
         if (THREADING_MODEL STREQUAL "none")
-            # Do nothing, 'none' is a valid option but doesn't enable anything
+            set(DLP_ENABLE_ST ON)
         elseif (THREADING_MODEL STREQUAL "openmp")
             set(DLP_ENABLE_OPENMP ON)
         elseif (THREADING_MODEL STREQUAL "pthread")
@@ -45,6 +46,7 @@ function(dlp_parse_threading_model DLP_THREADING_MODEL)
         endif()
     endforeach()
 
+    set(DLP_ENABLE_ST ${DLP_ENABLE_ST} PARENT_SCOPE)
     set(DLP_ENABLE_OPENMP ${DLP_ENABLE_OPENMP} PARENT_SCOPE)
     set(DLP_ENABLE_PTHREAD ${DLP_ENABLE_PTHREAD} PARENT_SCOPE)
 endfunction()
@@ -74,6 +76,7 @@ function(dlp_define_core_options)
     set(DLP_ENABLE_LOGGING ${DLP_ENABLE_LOGGING} PARENT_SCOPE)
     set(DLP_ENABLE_JIT_DEBUGGING ${DLP_ENABLE_JIT_DEBUGGING} PARENT_SCOPE)
     set(DLP_THREADING_MODEL ${DLP_THREADING_MODEL} PARENT_SCOPE)
+    set(DLP_ENABLE_ST ${DLP_ENABLE_ST} PARENT_SCOPE)
     set(DLP_ENABLE_OPENMP ${DLP_ENABLE_OPENMP} PARENT_SCOPE)
     set(DLP_ENABLE_PTHREAD ${DLP_ENABLE_PTHREAD} PARENT_SCOPE)
     set(DLP_KDT_TABLE_SIZE ${DLP_KDT_TABLE_SIZE} PARENT_SCOPE)

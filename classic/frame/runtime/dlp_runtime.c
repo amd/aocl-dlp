@@ -185,12 +185,26 @@ dlp_init_threading(void)
         jc = -1;
 #endif
     } else {
-        md_t num_cores = dlp_get_num_cores();
+        // Reaching this branch implies openmp_enabled == FALSE (the
+        // preceding else-if would have consumed the OpenMP case). In a
+        // single-thread build (DLP_ENABLE_ST / threading model "none"),
+        // the executor is hard-wired to a single thread, so advertising
+        // num_cores here would be fictional. It would also have a real
+        // downside: it makes dlp_is_single_thread() return FALSE and
+        // silently disables the tiny-input fast path unless the caller
+        // explicitly sets DLP_NUM_THREADS=1. Default to nt = 1 in that
+        // build to match the executor. In other non-OpenMP builds, use
+        // num_cores as the default.
         // Always safe to set nt = 1 instead of ic or jc. Otherwise if post
         // this the dlp_thread_set_num_threads_library API is called, the
         // library will ignore nt, since ic and jc are already set and have
         // higher precedence.
-        nt = (num_cores > 0) ? num_cores : 1;
+#ifdef DLP_ENABLE_ST
+        nt = 1;
+#else
+        md_t num_cores = dlp_get_num_cores();
+        nt             = (num_cores > 0) ? num_cores : 1;
+#endif
         ic = -1;
         jc = -1;
     }
@@ -351,12 +365,22 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
 #endif
 
     // If none of the thread control parameters have been set till now,
-    // default to system cores as number of threads.
+    // default to system cores as number of threads in OpenMP builds.
+    // When built without OpenMP the executor can only run single-threaded
+    // (see the non-OpenMP _thread_decorator in
+    // dlp_gemm_thread_decor_openmp.c), so default to nt = 1 instead. This
+    // keeps dlp_is_single_thread() == TRUE by default and prevents the
+    // tiny-input fast path from being silently disabled in non-OpenMP
+    // builds when the caller has not explicitly set DLP_NUM_THREADS=1.
     if ((act_nt == -1) && (act_ic == -1) && (act_jc == -1)) {
+#ifdef DLP_ENABLE_ST
+        act_nt = 1;
+#else
         md_t num_cores = dlp_get_num_cores();
         act_nt         = (num_cores > 0) ? num_cores : 1;
-        act_ic         = -1;
-        act_jc         = -1;
+#endif
+        act_ic = -1;
+        act_jc = -1;
     }
 
 #ifdef DLP_ENABLE_OPENMP

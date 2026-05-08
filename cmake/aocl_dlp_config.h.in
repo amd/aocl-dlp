@@ -15,6 +15,7 @@
 #define AOCL_DLP_VERSION_STRING    "@PROJECT_VERSION@"
 
 // Build configuration
+#cmakedefine DLP_ENABLE_ST
 #cmakedefine DLP_ENABLE_OPENMP
 #cmakedefine DLP_ENABLE_PTHREAD
 

@@ -342,7 +342,45 @@ TEST_F(ThreadingPrecedenceTest, UnsetLocalRestoresLibrary)
 }
 
 // ============================================================================
-// CATEGORY 3: OPENMP THREAD-LOCAL TESTS
+// CATEGORY 3: NON-OPENMP DEFAULT TESTS
+// ============================================================================
+
+#ifndef DLP_ENABLE_OPENMP
+
+/**
+ * Test: Without OpenMP, default num_threads must be 1 (not system cores).
+ *
+ * Regression test for a bug where dlp_init_threading() / dlp_update_threading
+ * _priority_order() advertised num_threads = dlp_get_num_cores() even when
+ * OpenMP was disabled at build time. Because the non-OpenMP _thread_decorator
+ * is hard-wired to single-threaded execution, advertising > 1 was fictional
+ * and had the side effect of making dlp_is_single_thread() return FALSE,
+ * which silently disabled the tiny-input fast path in every GEMM dispatcher
+ * unless the caller explicitly set DLP_NUM_THREADS=1.
+ */
+TEST_F(ThreadingPrecedenceTest, NoOpenMPDefaultsToSingleThread)
+{
+    bool has_env_ic = isEnvVarDefined("DLP_IC_NT");
+    bool has_env_jc = isEnvVarDefined("DLP_JC_NT");
+    bool has_env_nt = isEnvVarDefined("DLP_NUM_THREADS");
+
+    if (has_env_ic || has_env_jc || has_env_nt) {
+        GTEST_SKIP() << "DLP threading env vars are set; this test verifies "
+                     << "the no-env, no-OpenMP default of nt = 1.";
+    }
+
+    // SetUp() has cleared all library/local state. With OpenMP disabled
+    // and no env vars, the active config must default to a single thread
+    // so that the tiny-input fast path remains eligible.
+    EXPECT_EQ(dlp_thread_get_num_threads_active(), 1);
+    EXPECT_EQ(dlp_thread_get_ic_ways_active(), -1);
+    EXPECT_EQ(dlp_thread_get_jc_ways_active(), -1);
+}
+
+#endif // !DLP_ENABLE_OPENMP
+
+// ============================================================================
+// CATEGORY 4: OPENMP THREAD-LOCAL TESTS
 // ============================================================================
 
 #ifdef DLP_ENABLE_OPENMP
