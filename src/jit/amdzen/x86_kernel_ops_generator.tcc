@@ -460,16 +460,13 @@ kernelOpsGeneratorX86<KType>::loadVectorFP16andConvertToF32(
         }
     } else {
         if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-           return jitGeneratorError::notSupported;
+            jit->vmovdqu(halfRegType(dest.getIdx()), addr);
         } else {
             jit->vmovdqu16(halfRegType(dest.getIdx()), addr);
         }
     }
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-        jit->vcvtph2ps(dest, halfRegType(dest.getIdx()));
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+
+    jit->vcvtph2ps(dest, halfRegType(dest.getIdx()));
     return jitGeneratorError::success;
 }
 
@@ -594,16 +591,13 @@ jitGeneratorError
 kernelOpsGeneratorX86<KType>::broadcastScalarFP16andConvertToF32(
     const Xbyak::Address& addr, const RegType& dest)
 {
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-        utils::registerGuard<RegType> tmpGuard;
-        RETURN_IF_ERROR(vecPool->acquireGuard(tmpGuard));
-        int tmpRegIdx = tmpGuard.idx();
-        jit->vpbroadcastw(RegType(tmpRegIdx), addr);
-        jit->vcvtph2ps(dest, halfRegType(tmpRegIdx));
-        return jitGeneratorError::success;
-    } else {
-        return jitGeneratorError::notSupported;
-    }
+    utils::registerGuard<RegType> tmpGuard;
+    RETURN_IF_ERROR(vecPool->acquireGuard(tmpGuard));
+    int tmpRegIdx = tmpGuard.idx();
+
+    jit->vpbroadcastw(RegType(tmpRegIdx), addr);
+    jit->vcvtph2ps(dest, halfRegType(tmpRegIdx));
+    return jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>

@@ -619,6 +619,33 @@ UalRef::gemm(const Matrix& A,
             return true;
         }
 
+        // A=fp16, B=fp16, C=f32, accum=fp16 (native FP16 fma; F32 only at
+        // the post-ops boundary). alpha/beta arrive as f32 from the test
+        // harness and must be widened via f32_to_fp16 (NOT
+        // static_cast<float16>) to match the kernel's FP16 alpha/beta
+        // contract bit-for-bit.
+        case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::f32,
+                          MatrixType::fp16>(): {
+            float16 alpha_fp16 =
+                dlp::testing::utils::f32_to_fp16(static_cast<float>(alpha));
+            float16 beta_fp16 =
+                dlp::testing::utils::f32_to_fp16(static_cast<float>(beta));
+
+            dlp::testing::classic::ref::aocl_gemm_f16f16f16of32_ref(
+                layoutA, transA, transB, A.getEffectiveRows(),
+                B.getEffectiveCols(), A.getEffectiveCols(), alpha_fp16,
+                reinterpret_cast<const float16*>(
+                    A.getMatrixData().getMatrixPtr()),
+                static_cast<int>(A.getLeadingDimension()),
+                reinterpret_cast<const float16*>(
+                    B.getMatrixData().getMatrixPtr()),
+                static_cast<int>(B.getLeadingDimension()), beta_fp16,
+                reinterpret_cast<float*>(C.getMatrixData().getMatrixPtr()),
+                static_cast<int>(C.getLeadingDimension()), nullptr);
+
+            return true;
+        }
+
         case encode_types<MatrixType::f32, MatrixType::fp16, MatrixType::f32,
                           MatrixType::f32>(): {
             // F32×FP16→F32 mixed-precision reference

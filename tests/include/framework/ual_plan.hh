@@ -31,6 +31,7 @@
 #include "framework/matrix.hh"
 #include "framework/operation.hh"
 #include "framework/ual.hh"
+#include "utils/conversion_utils.hh"
 #include <cassert>
 #include <memory>
 #include <stdexcept>
@@ -99,8 +100,18 @@ class IUalPlan
     }
 
     // ─── Scaling ────────────────────────────────────────────────
-    void setAlpha(double alpha) { m_alpha = alpha; }
-    void setBeta(double beta) { m_beta = beta; }
+    void setAlpha(double alpha)
+    {
+        m_alpha = alpha;
+        m_alpha_fp16 =
+            dlp::testing::utils::f32_to_fp16(static_cast<float>(alpha));
+    }
+    void setBeta(double beta)
+    {
+        m_beta = beta;
+        m_beta_fp16 =
+            dlp::testing::utils::f32_to_fp16(static_cast<float>(beta));
+    }
 
     // ─── Quantisation (kernel config, NOT post-ops) ─────────────
     void setAQuant(std::unique_ptr<AQuantParam> param)
@@ -271,8 +282,9 @@ class IUalPlan
     md_t m_lda = 0, m_ldb = 0, m_ldc = 0;
     // Memory formats
     char m_memFormatA = 'n', m_memFormatB = 'n';
-    // Scaling
-    double m_alpha = 1.0, m_beta = 0.0;
+    // Scaling (double for generic rails, fp16 pre-converted for FP16 rails)
+    double  m_alpha = 1.0, m_beta = 0.0;
+    float16 m_alpha_fp16 = FP16_ONE, m_beta_fp16 = FP16_ZERO;
     // Quantisation (kernel config)
     std::unique_ptr<AQuantParam>     m_a_quant;
     std::unique_ptr<BQuantParam>     m_b_quant;

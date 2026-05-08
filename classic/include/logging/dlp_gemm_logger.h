@@ -31,6 +31,7 @@
 
 #include <float.h>
 
+#include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
 #include "dlp_gemm_types.h"
 #include "sys_utils/dlp_gemm_sys.h"
@@ -67,6 +68,7 @@ dlp_gemm_write_logger_gemm_fn(FILE*           fd,
                               const float     beta,
                               const md_t      ldc,
                               dlp_metadata_t* metadata);
+
 void
 batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
                                     const char*      op_type,

@@ -82,7 +82,12 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, bfloat16, float, float, bf16bf16f32of32,
 DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
                        /* mutable */);
 
-// FP16 variant
+// FP16 variant. The same 5-loop body serves both the of16 (C is float16,
+// alpha/beta are float16) and of32 (C is float, alpha/beta are float16,
+// carried via the shared float16* C handle and re-cast to float* inside
+// the JIT post-ops rail under c_downscale = DLP_F32). The of32 entry-point
+// passes its float* C as (float16*) at the dispatch site; the 5-loop
+// performs type-aware C-pointer arithmetic on the of32 branch.
 DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                        /* mutable */);
 

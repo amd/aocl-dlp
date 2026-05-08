@@ -83,7 +83,9 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
     char m_transB_char     = 'n';
     char m_transB_resolved = 'n';
 
-    // Pre-cast alpha/beta
+    // Pre-cast alpha/beta. FP16 forms live in the base class (IUalPlan)
+    // and are populated by setAlpha/setBeta via f32_to_fp16 once at
+    // configuration time — no extra conversion in prepare().
     float   m_alpha_f32 = 1.0f;
     float   m_beta_f32  = 0.0f;
     int32_t m_alpha_s32 = 1;

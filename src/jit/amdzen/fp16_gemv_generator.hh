@@ -75,7 +75,9 @@ class jitFP16GEMVN1 : public Xbyak::CodeGenerator
     // =================================================================
     // FP16-SPECIFIC CONSTANTS
     // =================================================================
-    static constexpr int FP16_PER_ZMM = FP16Types::elemsPerZmm;
+    static constexpr int FP16_PER_ZMM   = FP16Types::elemsPerZmm;
+    static constexpr int FP16_ELEM_SIZE = 2;
+    static constexpr int F32_ELEM_SIZE  = 4;
 
     // =================================================================
     // KERNEL CONFIGURATION
@@ -86,6 +88,7 @@ class jitFP16GEMVN1 : public Xbyak::CodeGenerator
     int nElemsPerReg; // = 32 for FP16
     int MR;           // = 16 for FP16 GEMV N=1
     int M_LEFT;
+    int c_downscale; // DLP_F16 (of16) or DLP_F32 (of32 in-place)
 
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
@@ -162,8 +165,16 @@ class jitFP16GEMVN1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeY_rowStored_FP16(int mSize);
     dlp::jit::jitGeneratorError storeY_colStored_FP16(int mSize);
 
+    /* of32 in-place store: the F32 reduction lives in lanes 0..mSize-1 of
+       a single ZMM (built by convertAndPackFP16ToF32Zmm); spill it to
+       individual scalar F32 stores at byte stride regRsC (byte-scaled
+       once at init). For the of32 rail this replaces the FP16 narrow +
+       vpextrw final store. */
+    dlp::jit::jitGeneratorError storeY_rowStored_F32(int mSize, int srcZmmIdx);
+    dlp::jit::jitGeneratorError storeY_colStored_F32(int mSize, int srcZmmIdx);
+
     // =================================================================
-    // POST-OPS SUPPORT (FP16 scalar -> F32 -> PostOps -> FP16)
+    // POST-OPS SUPPORT (FP16 scalar -> F32 -> PostOps -> FP16/F32)
     // =================================================================
     dlp::jit::jitGeneratorError applyPostOps(
         utils::gemvN1GeneratorParams& params,
@@ -216,7 +227,9 @@ class jitFP16GEMVM1 : public Xbyak::CodeGenerator
     // =================================================================
     // FP16-SPECIFIC CONSTANTS
     // =================================================================
-    static constexpr int FP16_PER_ZMM = FP16Types::elemsPerZmm;
+    static constexpr int FP16_PER_ZMM   = FP16Types::elemsPerZmm;
+    static constexpr int FP16_ELEM_SIZE = 2;
+    static constexpr int F32_ELEM_SIZE  = 4;
 
     // =================================================================
     // KERNEL CONFIGURATION
@@ -229,6 +242,7 @@ class jitFP16GEMVM1 : public Xbyak::CodeGenerator
     int N_LEFT;
     int KC;
     int K_SUB_ITER;
+    int c_downscale; // DLP_F16 (of16) or DLP_F32 (of32 in-place)
 
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
@@ -304,14 +318,30 @@ class jitFP16GEMVM1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError scaleYWithBeta(bool nMask);
     dlp::jit::jitGeneratorError scaleYWithBetaFringe();
 
+    /* of32 β-combine: Y is F32; load 2 ZMMs of F32 per FP16-accumulator
+       lane (lo+hi via mask_regs[1..2] for fringe), apply alpha*acc + beta*Y
+       in F32, leave the result in the F32 register pair so storeYValues_F32
+       can spill directly to user C. */
+    dlp::jit::jitGeneratorError applyBetaCombineF32(int  numAccumRegs,
+                                                    bool nMask,
+                                                    int  f32RegStart);
+
     // =================================================================
     // RESULT STORAGE
     // =================================================================
     dlp::jit::jitGeneratorError storeYValues(bool nMask);
     dlp::jit::jitGeneratorError storeYValuesFringe();
 
+    /* of32 in-place store: F32 reduction lives in 2*numAccumRegs ZMMs
+       (lo+hi). vmovups for full ZMMs, masked store for the fringe ZMM
+       using mask_regs[1..2] (32-element FP16 mask split into two 16-bit
+       halves). */
+    dlp::jit::jitGeneratorError storeYValues_F32(int  numAccumRegs,
+                                                 bool nMask,
+                                                 int  f32RegStart);
+
     // =================================================================
-    // POST-OPS SUPPORT (FP16 -> F32 -> PostOps -> FP16)
+    // POST-OPS SUPPORT (FP16 -> F32 -> PostOps -> FP16/F32)
     // =================================================================
     dlp::jit::jitGeneratorError applyPostOps(
         utils::gemvM1GeneratorParams& params,
@@ -322,6 +352,7 @@ class jitFP16GEMVM1 : public Xbyak::CodeGenerator
 
     void convertFP16AccumToF32(int numAccumRegs, int f32RegStart);
     void convertF32ToFP16Accum(int numAccumRegs, int f32RegStart);
+    void populateF32MasksFromFP16();
 
     // =================================================================
     // HELPER METHODS

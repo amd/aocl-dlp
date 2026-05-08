@@ -898,11 +898,15 @@ aocl_gemm_f32f16f32of32(const char      order,
                         dlp_metadata_t* metadata);
 
 /**
- * @brief FP16×FP16 GEMM with native FP16 accumulation and FP16 output
+ * @brief FP16xFP16 GEMM with native FP16 accumulation and FP16 output
  *
  * Uses native FP16 FMA operations for both accumulation and output.
  * Provides maximum performance but with lower precision than F32
  * accumulation.
+ *
+ * Note: alpha and beta are float16 (NATIVE_FP16) so the JIT kernel can
+ * consume them directly via vpbroadcastw + vmulph without a runtime widen.
+ * This matches the FP16-end-to-end character of this API.
  *
  * @param[in] order Memory layout (row-major or column-major).
  * @param[in] transa Transpose option for matrix A.
@@ -910,14 +914,15 @@ aocl_gemm_f32f16f32of32(const char      order,
  * @param[in] m Row dimensions.
  * @param[in] n Column dimensions.
  * @param[in] k Inner dimensions.
- * @param[in] alpha Scalar multiplier for the product of matrices A and B.
+ * @param[in] alpha Scalar multiplier for the product of matrices A and B
+ * (FP16).
  * @param[in] a Pointer to matrix A (FP16).
  * @param[in] lda Leading dimension of matrix A.
  * @param[in] mem_format_a Memory format of matrix A.
  * @param[in] b Pointer to matrix B (FP16).
  * @param[in] ldb Leading dimension of matrix B.
  * @param[in] mem_format_b Memory format of matrix B.
- * @param[in] beta Scalar multiplier for matrix C.
+ * @param[in] beta Scalar multiplier for matrix C (FP16).
  * @param[in,out] c Pointer to matrix C (FP16 output).
  * @param[in] ldc Leading dimension of matrix C.
  * @param[in] metadata Pointer to post-operation structures.
@@ -929,15 +934,64 @@ aocl_gemm_f16f16f16of16(const char      order,
                         const md_t      m,
                         const md_t      n,
                         const md_t      k,
-                        const float     alpha,
+                        const float16   alpha,
                         const float16*  a,
                         const md_t      lda,
                         const char      mem_format_a,
                         const float16*  b,
                         const md_t      ldb,
                         const char      mem_format_b,
-                        const float     beta,
+                        const float16   beta,
                         float16*        c,
+                        const md_t      ldc,
+                        dlp_metadata_t* metadata);
+
+/**
+ * @brief FP16xFP16 GEMM with native FP16 accumulation and F32 output
+ *
+ * Inputs A and B are FP16; C is float (32-bit). The JIT kernel accumulates
+ * the AB product in native FP16 via vfmadd231ph, then converts the
+ * accumulator to F32 at the post-ops boundary so beta*C (F32) and
+ * alpha*(AB) (widened to F32) combine without precision loss on the C
+ * side. The combine and store-back run in place every KC against user C
+ * (no scratch buffer); alpha is FP16 in the public API, beta is widened
+ * to float once before each kernel call.
+ *
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] transa Transpose option for matrix A.
+ * @param[in] transb Transpose option for matrix B.
+ * @param[in] m Row dimensions.
+ * @param[in] n Column dimensions.
+ * @param[in] k Inner dimensions.
+ * @param[in] alpha Scalar multiplier for the product of matrices A and B
+ * (FP16).
+ * @param[in] a Pointer to matrix A (FP16).
+ * @param[in] lda Leading dimension of matrix A.
+ * @param[in] mem_format_a Memory format of matrix A.
+ * @param[in] b Pointer to matrix B (FP16).
+ * @param[in] ldb Leading dimension of matrix B.
+ * @param[in] mem_format_b Memory format of matrix B.
+ * @param[in] beta Scalar multiplier for matrix C (FP16).
+ * @param[in,out] c Pointer to matrix C (F32 output).
+ * @param[in] ldc Leading dimension of matrix C.
+ * @param[in] metadata Pointer to post-operation structures.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_gemm_f16f16f16of32(const char      order,
+                        const char      transa,
+                        const char      transb,
+                        const md_t      m,
+                        const md_t      n,
+                        const md_t      k,
+                        const float16   alpha,
+                        const float16*  a,
+                        const md_t      lda,
+                        const char      mem_format_a,
+                        const float16*  b,
+                        const md_t      ldb,
+                        const char      mem_format_b,
+                        const float16   beta,
+                        float*          c,
                         const md_t      ldc,
                         dlp_metadata_t* metadata);
 

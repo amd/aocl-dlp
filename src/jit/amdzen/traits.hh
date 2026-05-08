@@ -81,6 +81,24 @@ struct kernel_types<dlp::kernel_frame::kernelDatatype::f16f16f16of16>
     static constexpr int elemsPerZmm = 32; // 64 bytes / 2 = 32 FP16 per ZMM
 };
 
+// FP16×FP16 → F32 kernel_types specialization - shares the of16 compute
+// tile (native FP16 fma, 32 elems/ZMM on the K loop) but emits F32 on the
+// C side at the post-ops rail. elemSize is kept as the on-register
+// compute-tile stride (2 B / FP16) so JIT book-keeping matches of16;
+// the post-ops rail uses its own 4-B F32 stride for loads/stores.
+template<>
+struct kernel_types<dlp::kernel_frame::kernelDatatype::f16f16f16of32>
+{
+    using aType        = dlp::float16;
+    using bType        = dlp::float16;
+    using cType        = float;
+    using accumType    = dlp::float16; // Native FP16 fma (as on of16)
+    using kernelOpType = dlp::float16;
+
+    static constexpr int elemSize    = 2;  // bytes per FP16 compute element
+    static constexpr int elemsPerZmm = 32; // 64 bytes / 2 = 32 FP16 per ZMM
+};
+
 /**
  * ArchitectureTraits provides a set of type and constant definitions describing
  * the properties of a given instruction set architecture, as identified by

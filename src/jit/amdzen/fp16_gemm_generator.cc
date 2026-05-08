@@ -42,30 +42,27 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16_GEMM<KType>::allocateRegisters()
 {
-    // Check if MR is valid
     if (MR <= 0) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
-    // For FP16: each ZMM register holds 32 FP16 elements (64 bytes / 2)
-    int nElemsPerReg = FP16_PER_ZMM; // 32
-    bFullReg         = (NR / nElemsPerReg);
-    bMaskReg         = (useMask ? 1 : 0);
-    bReg             = bFullReg + bMaskReg;
-    cReg             = MR * bReg;
+    // Each ZMM holds FP16_PER_ZMM (=32) FP16 elements (64 bytes / 2 bytes).
+    bFullReg = (NR / FP16_PER_ZMM);
+    bMaskReg = (useMask ? 1 : 0);
+    bReg     = bFullReg + bMaskReg;
+    cReg     = MR * bReg;
+    aReg     = numRegs - cReg - bReg;
 
-    // Calculate available A registers
-    aReg = numRegs - cReg - bReg;
-
-    // Check if we have enough registers
     if (aReg < 1) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
 
-    // Register index assignment
-    aRegIdx = 0;           // A registers start at index 0
-    bRegIdx = aReg;        // B registers follow A registers
-    cRegIdx = aReg + bReg; // C registers follow B registers
+    // C is anchored at the top of the file, B sits immediately below it,
+    // and A takes index 0 (the FP16 generator only uses one broadcast
+    // slot). Same anchor-from-top pattern as the BF16/U8S8 generators.
+    cRegIdx = numRegs - cReg;
+    bRegIdx = cRegIdx - bReg;
+    aRegIdx = 0;
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -102,16 +99,31 @@ jitFP16_GEMM<KType>::initializeParameters(bool mLoop)
     lea(regCsA, ptr[regCsA * FP16_ELEM_SIZE]);
     // B matrix stride (rs_b)
     lea(regRsB, ptr[regRsB * FP16_ELEM_SIZE]);
-    // C matrix row stride
-    lea(regRsC, ptr[regRsC * FP16_ELEM_SIZE]);
+    /* Byte-scale rsC once per kernel build so every downstream consumer
+       (storeResult, scaleBeta, the of32 F32 store/combine, moveCPtr)
+       treats regRsC uniformly as a byte stride. The rail is a build-time
+       constant (one kernel per c_downscale), so this is a codegen-time
+       branch. */
+    if (c_downscale == DLP_F32) {
+        lea(regRsC, ptr[regRsC * F32_ELEM_SIZE]);
+    } else {
+        lea(regRsC, ptr[regRsC * FP16_ELEM_SIZE]);
+    }
 
     mov(regTmpCptr, regCPtr);
 
+    /* Bind mask_regs[i] -> kN aliases (k1..k7). MASK_START_IDX = 1 keeps
+       k0 reserved by hardware. The fp16 generator uses three slots:
+         mask_regs[0] = k1 - NR-fringe mask (FP16 B-load, FP16 C-store)
+         mask_regs[1] = k2 - F32 lane mask (low half) for the of32 rail
+         mask_regs[2] = k3 - F32 lane mask (high half) for the of32 rail
+       The two F32 masks double as the partial-spill path's tail mask. */
+    for (iter_t i = 0; i < utils::NUM_USABLE_MASKS; i++) {
+        mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
+    }
+
     if (useMask) {
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            for (int i = 0; i < utils::NUM_USABLE_MASKS; i++) {
-                mask_regs[i] = Xbyak::Opmask(utils::MASK_START_IDX + i);
-            }
             kmovd(mask_regs[0],
                   ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskFP16)]);
         }
@@ -199,7 +211,6 @@ jitFP16_GEMM<KType>::loadBValues()
         }
 
         if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-            // Masked load for FP16 fringe
             vmovdqu16(RegType(maskRegIndex) | mask_regs[0] | T_z,
                       ptr[regBptr + bFullReg * RegBytes]);
         }
@@ -259,36 +270,31 @@ jitFP16_GEMM<KType>::scaleAlpha()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitFP16_GEMM<KType>::scaleBeta()
+jitFP16_GEMM<KType>::scaleBeta(bool betaIsOne)
 {
     int betaRegIdx = aRegIdx;
 
     Xbyak::Label betaZeroEnd;
 
-    // Load beta scaling factor (FP16)
-    mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
-    vpbroadcastw(RegType(betaRegIdx), ptr[regTmp1]);
+    if (!betaIsOne) {
+        mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
+        vpbroadcastw(RegType(betaRegIdx), ptr[regTmp1]);
 
-    // NOTE: The Decision Engine will pass betaScalingType as generic for
-    // k > KC even when beta = 0. Hence, broadcasting beta and checking if
-    // it is actually zero during run-time. This conforms to the standard of
-    // avoiding accesses to C when beta = 0.
-    // Use bRegIdx as scratch for the zero-comparison; it is not yet loaded
-    // with B data and will be overwritten by vmovdqu16 in the loop body.
-    vpxord(RegType(bRegIdx), RegType(bRegIdx), RegType(bRegIdx));
-    vucomish(Xmm(betaRegIdx), Xmm(bRegIdx));
-    je(betaZeroEnd, T_NEAR);
-
+        // The Decision Engine passes betaScalingType as generic for k > KC
+        // even when beta = 0. Check at runtime to avoid C accesses when
+        // beta = 0, preventing NaN propagation from uninitialized C.
+        vpxord(RegType(bRegIdx), RegType(bRegIdx), RegType(bRegIdx));
+        vucomish(Xmm(betaRegIdx), Xmm(bRegIdx));
+        je(betaZeroEnd, T_NEAR);
+    }
     mov(regTmpCptr, regCPtr);
 
-    // Load existing C values, scale by beta, and add to accumulators
     for (iter_t i = 0; i < MR; i++) {
         for (iter_t j = 0; j < bFullReg; j++) {
-            // Load existing C values
             vmovdqu16(RegType(bRegIdx + j), ptr[regTmpCptr + j * RegBytes]);
-            // Scale by beta using vmulph
-            vmulph(Zmm(bRegIdx + j), Zmm(bRegIdx + j), Zmm(betaRegIdx));
-            // Add to accumulator using vaddph
+            if (!betaIsOne) {
+                vmulph(Zmm(bRegIdx + j), Zmm(bRegIdx + j), Zmm(betaRegIdx));
+            }
             vaddph(Zmm(cRegIdx + i * bReg + j), Zmm(cRegIdx + i * bReg + j),
                    Zmm(bRegIdx + j));
         }
@@ -296,8 +302,10 @@ jitFP16_GEMM<KType>::scaleBeta()
             if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 vmovdqu16(RegType(bRegIdx + bFullReg) | mask_regs[0] | T_z,
                           ptr[regTmpCptr + bFullReg * RegBytes]);
-                vmulph(Zmm(bRegIdx + bFullReg), Zmm(bRegIdx + bFullReg),
-                       Zmm(betaRegIdx));
+                if (!betaIsOne) {
+                    vmulph(Zmm(bRegIdx + bFullReg), Zmm(bRegIdx + bFullReg),
+                           Zmm(betaRegIdx));
+                }
                 vaddph(Zmm(cRegIdx + i * bReg + bFullReg),
                        Zmm(cRegIdx + i * bReg + bFullReg),
                        Zmm(bRegIdx + bFullReg));
@@ -314,247 +322,484 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16_GEMM<KType>::generatePostOps(utils::generatorParams& params)
 {
-    Xbyak::Label local_store_fp16;
-    Xbyak::Label local_end_postops;
-
-    // Handle alpha scaling (skip for both alpha=1 and alpha=0)
+    /* Apply FP16 alpha (both rails consume alpha as FP16; the public
+       APIs / 5-loop narrow it before dispatch). */
     if (params.alphaScalingType != dlp::kernel_frame::scalingType::one
         && params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
         RETURN_IF_ERROR(scaleAlpha());
     }
 
-    // Handle beta scaling
-    if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
-        RETURN_IF_ERROR(scaleBeta());
+    /* Tile shape for the partial-spill 64-col chunks (NR=96 / NR=128). The
+       head chunk widens FIRST_FP16_REGS_ROW = 2 FP16 ZMMs per row to
+       F32_REGS_PER_ROW = 4 F32 ZMMs per row; the tail chunk reuses the
+       same F32 row stride and zero-pads for NR=96 (tailFp16Regs == 1) so
+       the masked store/combine emission is geometry-uniform. */
+    static constexpr int FIRST_FP16_REGS_ROW = 2;
+    static constexpr int CHUNK_COLS       = FIRST_FP16_REGS_ROW * FP16_PER_ZMM;
+    static constexpr int F32_REGS_PER_ROW = FIRST_FP16_REGS_ROW * 2;
+
+    const bool needsPartialSpill =
+        (!useMask && (bFullReg == 3 || bFullReg == 4));
+    const bool hasKernelOps = !params.kernelOps.empty();
+
+    /* dstRegStart anchors the F32 tile at ZMM 0..N-1. scratchRegStart
+       reserves the top two ZMMs for the of32 beta broadcast and the
+       user-C tmp load. allocateRegisters has verified the FP16
+       accumulator (cRegIdx..numRegs-1) does not overlap these slots. */
+    const int dstRegStart     = 0;
+    const int scratchRegStart = numRegs - 2;
+
+    /* Of16 short-circuits before the chunk path:
+         - no kernelOps:           scaleBeta -> storeResult, return
+         - kernelOps + !is_last_k: scaleBeta -> storeResult, return
+         - kernelOps + is_last_k:  scaleBeta -> chunk path
+       Of32 enters the chunk path every KC and folds beta + the F32
+       store inside processChunk; kernelOps is is_last_k-gated within
+       the chunk. */
+    Xbyak::Label local_intermediate_store;
+    Xbyak::Label local_postops_end;
+
+    if (c_downscale != DLP_F32) {
+        if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
+            const bool betaIsOne =
+                (params.betaScalingType == dlp::kernel_frame::scalingType::one);
+            RETURN_IF_ERROR(scaleBeta(betaIsOne));
+        }
+        if (!hasKernelOps) {
+            return storeResult();
+        }
+
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(local_intermediate_store, T_NEAR);
     }
 
-    if (params.kernelOps.empty()) {
-        RETURN_IF_ERROR(storeResult());
-        return dlp::jit::jitGeneratorError::success;
-    }
+    /* Build chunk descriptors. The partial-spill path emits a shared
+       kernelOps subroutine after the chunks (if hasKernelOps) and points
+       both chunk configs at it; the register-only path emits the
+       handler body inline inside processChunk. */
+    Xbyak::Label  kernelOpsSub;
+    Xbyak::Label* sharedSub =
+        (needsPartialSpill && hasKernelOps) ? &kernelOpsSub : nullptr;
 
-    mov(regTmp1,
-        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
-    test(regTmp1, regTmp1);
-    je(local_store_fp16, T_NEAR);
+    auto buildHeadChunk = [&]() {
+        ChunkConfig cfg;
+        cfg.source           = ChunkConfig::Source::Registers;
+        cfg.fp16SrcOffset    = 0;
+        cfg.fp16RegsPerRow   = needsPartialSpill ? FIRST_FP16_REGS_ROW
+                                                 : (useMask ? 1 : bFullReg);
+        cfg.dstRegStart      = dstRegStart;
+        cfg.scratchRegStart  = scratchRegStart;
+        cfg.numFullF32Pairs  = needsPartialSpill ? 1 : (useMask ? 0 : bFullReg);
+        cfg.hasMaskedF32Pair = needsPartialSpill || useMask;
+        cfg.numFullColsF32   = needsPartialSpill ? (CHUNK_COLS / 2)
+                                                 : (useMask ? 0 : NR);
+        cfg.colElemOffset    = 0;
+        cfg.maskedFp16Store  = useMask;
+        cfg.zeroUpperF32Pair = false;
+        if (needsPartialSpill) {
+            cfg.maskSource = ChunkConfig::MaskSource::ConstantAllOnes;
+        } else if (useMask) {
+            cfg.maskSource = ChunkConfig::MaskSource::FromFp16Mask;
+        } else {
+            cfg.maskSource = ChunkConfig::MaskSource::None;
+        }
+        cfg.kernelOpsSubroutine = sharedSub;
+        return cfg;
+    };
 
-    if (useMask || bFullReg <= 2) {
-        RETURN_IF_ERROR(generatePostOpsRegisterOnly(params));
-    } else if (bFullReg == 3 || bFullReg == 4) {
-        RETURN_IF_ERROR(generatePostOpsPartialSpill(params));
+    auto buildTailChunk = [&](int tailFp16Regs, int tailCols) {
+        ChunkConfig cfg;
+        cfg.source              = ChunkConfig::Source::Stack;
+        cfg.fp16SrcOffset       = 0;
+        cfg.fp16RegsPerRow      = tailFp16Regs;
+        cfg.dstRegStart         = dstRegStart;
+        cfg.scratchRegStart     = scratchRegStart;
+        cfg.numFullF32Pairs     = 1;
+        cfg.hasMaskedF32Pair    = true;
+        cfg.numFullColsF32      = CHUNK_COLS / 2;
+        cfg.colElemOffset       = CHUNK_COLS;
+        cfg.maskedFp16Store     = false;
+        cfg.zeroUpperF32Pair    = (tailFp16Regs < FIRST_FP16_REGS_ROW);
+        cfg.maskSource          = (tailCols == CHUNK_COLS)
+                                      ? ChunkConfig::MaskSource::ConstantAllOnes
+                                      : ChunkConfig::MaskSource::ConstantTailHalfOnly;
+        cfg.kernelOpsSubroutine = sharedSub;
+        return cfg;
+    };
 
+    /* Run the chunk(s). Register-only paths emit one chunk; partial-spill
+       paths emit two chunks bracketed by stack spill/restore and the
+       post_op_c_j +/- CHUNK_COLS dance the kernelOpsHandler needs. */
+    if (!needsPartialSpill) {
+        RETURN_IF_ERROR(processChunk(params, buildHeadChunk()));
     } else {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
+        const int tailFp16Regs = bFullReg - FIRST_FP16_REGS_ROW;
+        const int tailCols     = tailFp16Regs * FP16_PER_ZMM;
+        const int tailStackSz  = MR * tailFp16Regs * RegBytes;
+
+        sub(rsp, tailStackSz);
+        for (iter_t row = 0; row < MR; row++) {
+            int rowBase = cRegIdx + row * bReg + FIRST_FP16_REGS_ROW;
+            for (int j = 0; j < tailFp16Regs; j++) {
+                int stackOff = (row * tailFp16Regs + j) * RegBytes;
+                vmovups(ptr[rsp + stackOff], RegType(rowBase + j));
+            }
+        }
+
+        RETURN_IF_ERROR(processChunk(params, buildHeadChunk()));
+
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp1, ptr[regTmp1 + CHUNK_COLS]);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
+            regTmp1);
+
+        RETURN_IF_ERROR(
+            processChunk(params, buildTailChunk(tailFp16Regs, tailCols)));
+
+        add(rsp, tailStackSz);
+
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+        lea(regTmp1, ptr[regTmp1 - CHUNK_COLS]);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
+            regTmp1);
     }
 
-    jmp(local_end_postops, T_NEAR);
+    /* Of16 join: the chunk path falls through here on is_last_k; the
+       intermediate-KC FP16 spill jumps in below. */
+    if (c_downscale != DLP_F32) {
+        jmp(local_postops_end, T_NEAR);
+        L(local_intermediate_store);
+        RETURN_IF_ERROR(storeResult());
+        L(local_postops_end);
+    }
 
-    L(local_store_fp16);
-    RETURN_IF_ERROR(storeResult());
-
-    L(local_end_postops);
+    /* Emit the shared kernelOps subroutine after the chunks (jumped over
+       at runtime). Only the partial-spill path needs it - the
+       register-only chunk emits the handler body inline. */
+    if (sharedSub != nullptr) {
+        const int chunkNumCRegs = MR * F32_REGS_PER_ROW;
+        RETURN_IF_ERROR(emitKernelOpsSubroutine(
+            params, kernelOpsSub, dstRegStart, chunkNumCRegs, CHUNK_COLS / 2,
+            /*hasMaskedF32Pair=*/true));
+    }
 
     return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitFP16_GEMM<KType>::generatePostOpsRegisterOnly(utils::generatorParams& params)
+jitFP16_GEMM<KType>::processChunk(utils::generatorParams& params,
+                                  const ChunkConfig&      cfg)
+{
+    /* Step 0: seed the of32 lane masks (maskF32[0..1]) and load
+       mask_regs[1..2] from them. The seed source comes from
+       cfg.maskSource:
+         - FromFp16Mask:         split the FP16 NR-fringe mask in two
+         - ConstantAllOnes:      full 32-col F32 chunk
+         - ConstantTailHalfOnly: 32-col tail (NR=96), upper half disabled
+         - None:                 no masked F32 pair, masks unused
+       k2/k3 are loaded only on the of32 rail because applyBetaCombineF32
+       and storeResultF32_inplace read them directly; the
+       kernelOpsHandler loads them itself on of16 when it needs them. */
+    if (cfg.hasMaskedF32Pair) {
+        switch (cfg.maskSource) {
+            case ChunkConfig::MaskSource::FromFp16Mask:
+                populateF32MasksFromFP16();
+                break;
+            case ChunkConfig::MaskSource::ConstantAllOnes:
+                mov(dword[stackPtr
+                          + offsetof(dlp::kernels::gemmParams, maskF32[0])],
+                    0xFFFFFFFF);
+                break;
+            case ChunkConfig::MaskSource::ConstantTailHalfOnly:
+                mov(dword[stackPtr
+                          + offsetof(dlp::kernels::gemmParams, maskF32[0])],
+                    0x00000000);
+                break;
+            case ChunkConfig::MaskSource::None:
+                break;
+        }
+        if (c_downscale == DLP_F32) {
+            kmovw(mask_regs[1],
+                  ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)]);
+            kmovw(mask_regs[2],
+                  ptr[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32)
+                      + sizeof(uint16_t)]);
+        }
+    }
+
+    /* Step 1: widen the FP16 chunk into the F32 tile starting at
+       cfg.dstRegStart. F32 row stride is f32RegsPerRow; for the
+       NR=96 partial-spill tail we have fp16RegsPerRow == 1 but
+       f32RegsPerRow == 2, and zeroUpperF32Pair zero-pads the upper F32
+       pair so the masked store path is geometry-uniform. */
+    const int fp16RegsPerRow = cfg.fp16RegsPerRow;
+    const int totalPairs = cfg.numFullF32Pairs + (cfg.hasMaskedF32Pair ? 1 : 0);
+    const int f32RegsPerRow = totalPairs * 2;
+
+    if (cfg.source == ChunkConfig::Source::Registers) {
+        /* convertChunkFromRegsToF32 uses fp16RegsPerRow*2 as its row
+           stride, which equals f32RegsPerRow on every register-source
+           chunk (head chunks always widen FIRST_FP16_REGS_ROW; the
+           register-only single chunk has fp16RegsPerRow*2 == f32RegsPerRow
+           by construction). */
+        convertChunkFromRegsToF32(cfg.fp16SrcOffset, fp16RegsPerRow,
+                                  cfg.dstRegStart);
+    } else {
+        for (iter_t row = 0; row < MR; row++) {
+            int dstBase = cfg.dstRegStart + row * f32RegsPerRow;
+            for (int j = 0; j < fp16RegsPerRow; j++) {
+                int stackOff = (row * fp16RegsPerRow + j) * RegBytes;
+                int dstLo    = dstBase + j * 2;
+                int dstHi    = dstLo + 1;
+
+                vmovdqu16(Ymm(dstLo), ptr[rsp + stackOff]);
+                vcvtph2ps(Zmm(dstLo), Ymm(dstLo));
+                vmovdqu16(Ymm(dstHi), ptr[rsp + stackOff + 32]);
+                vcvtph2ps(Zmm(dstHi), Ymm(dstHi));
+            }
+            if (cfg.zeroUpperF32Pair) {
+                for (int j = fp16RegsPerRow * 2; j < f32RegsPerRow; j++) {
+                    vpxord(Zmm(dstBase + j), Zmm(dstBase + j),
+                           Zmm(dstBase + j));
+                }
+            }
+        }
+    }
+
+    /* Step 2: of32 F32 beta-combine with user C from regCPtr. No-op on
+       of16 (FP16 scaleBeta already ran inside generatePostOps). */
+    if (c_downscale == DLP_F32
+        && params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
+        RETURN_IF_ERROR(applyBetaCombineF32(
+            params, cfg.numFullF32Pairs, cfg.hasMaskedF32Pair, cfg.dstRegStart,
+            cfg.scratchRegStart, cfg.colElemOffset));
+    }
+
+    /* Step 3: kernelOpsHandler chain (gated on is_last_k at runtime so
+       intermediate-KC of32 chunks skip it). The shared subroutine path
+       CALLs cfg.kernelOpsSubroutine; the inline path emits the body in
+       place. */
+    if (!params.kernelOps.empty()) {
+        Xbyak::Label local_skip;
+
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(local_skip, T_NEAR);
+
+        if (cfg.kernelOpsSubroutine != nullptr) {
+            call(*cfg.kernelOpsSubroutine);
+        } else {
+            const int chunkNumCRegs = MR * f32RegsPerRow;
+            RETURN_IF_ERROR(emitKernelOpsBody(params, cfg.dstRegStart,
+                                              chunkNumCRegs, cfg.numFullColsF32,
+                                              cfg.hasMaskedF32Pair));
+        }
+
+        L(local_skip);
+    }
+
+    /* Step 4: store. Of32 streams the F32 tile in place to user C; of16
+       narrows row-by-row back to FP16 and stores. */
+    if (c_downscale == DLP_F32) {
+        RETURN_IF_ERROR(
+            storeResultF32_inplace(cfg.numFullF32Pairs, cfg.hasMaskedF32Pair,
+                                   cfg.dstRegStart, cfg.colElemOffset));
+    } else {
+        for (iter_t row = 0; row < MR; row++) {
+            convertF32ChunkToFP16AndStoreRow(
+                cfg.dstRegStart + row * f32RegsPerRow, row, cfg.colElemOffset,
+                fp16RegsPerRow, cfg.maskedFp16Store);
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16_GEMM<KType>::emitKernelOpsBody(utils::generatorParams& params,
+                                       int                     dstRegStart,
+                                       int                     numCRegs,
+                                       int                     numFullColsF32,
+                                       bool                    hasMaskedF32Pair)
 {
     using VecPoolType =
         utils::registerPool<typename Traits::RegType, Traits::numRegs>;
     using MaskPoolType =
         utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
-
-    int fp16RegsPerRow = useMask ? 1 : bFullReg;
-    int f32RegsPerRow  = fp16RegsPerRow * 2;
-    int numMaskRegsF32 = useMask ? 2 : 0;
-    int dstRegStart    = 0;
-    int numCRegs       = MR * f32RegsPerRow;
-    int effectiveNR    = useMask ? 0 : NR;
-
-    if (useMask) {
-        populateF32MasksFromFP16();
-    }
-
-    convertChunkFromRegsToF32(0, fp16RegsPerRow, dstRegStart);
 
     VecPoolType vecPool;
     vecPool.setAccumulators(dstRegStart, numCRegs);
     RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
+    /* Preserve the masks we own across this generator (k1 for the FP16
+       fringe and, on the of32 rail, k2/k3 for the F32 lane masks loaded
+       in applyBetaCombineF32) so the handler's fringe-mask allocator
+       skips them - that's how every other GEMM/GEMV generator in the
+       suite hands locally-loaded masks to the post-op chain (see
+       u8s8/s8/bf16/f32f16). */
     MaskPoolType maskPool;
-    maskPool.addPreserve(utils::MASK_START_IDX, useMask ? 1 : 0);
+    int          numPreserved = 1 + (hasMaskedF32Pair ? 2 : 0);
+    maskPool.addPreserve(utils::MASK_START_IDX, numPreserved);
     RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
                                   Traits::reservedMaskBits));
 
     gen::kernelOpsHandler<KType> kernelOpsHandler(this);
+    int                          numMaskRegsF32 = hasMaskedF32Pair ? 2 : 0;
     int                          maskOffset =
-        useMask
+        hasMaskedF32Pair
                                      ? static_cast<int>(offsetof(dlp::kernels::gemmParams, maskF32[0]))
                                      : -1;
 
-    RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
+    return kernelOpsHandler.generateKernelOps(
         params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, MR,
-        effectiveNR, useMask, numMaskRegsF32, dstRegStart, numCRegs, vecPool,
-        maskPool, maskOffset));
+        numFullColsF32, hasMaskedF32Pair, numMaskRegsF32, dstRegStart, numCRegs,
+        vecPool, maskPool, maskOffset);
+}
 
-    for (iter_t row = 0; row < MR; row++) {
-        convertF32ChunkToFP16AndStoreRow(dstRegStart + row * f32RegsPerRow, row,
-                                         0, fp16RegsPerRow, useMask);
-    }
-
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16_GEMM<KType>::emitKernelOpsSubroutine(utils::generatorParams& params,
+                                             Xbyak::Label&           label,
+                                             int  dstRegStart,
+                                             int  numCRegs,
+                                             int  numFullColsF32,
+                                             bool hasMaskedF32Pair)
+{
+    Xbyak::Label endLabel;
+    jmp(endLabel, T_NEAR);
+    L(label);
+    RETURN_IF_ERROR(emitKernelOpsBody(params, dstRegStart, numCRegs,
+                                      numFullColsF32, hasMaskedF32Pair));
+    ret();
+    L(endLabel);
     return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitFP16_GEMM<KType>::generatePostOpsPartialSpill(utils::generatorParams& params)
+jitFP16_GEMM<KType>::applyBetaCombineF32(utils::generatorParams& params,
+                                         int  numFullF32Pairs,
+                                         bool hasMaskedF32Pair,
+                                         int  dstRegStart,
+                                         int  scratchRegStart,
+                                         int  colElemOffsetF32)
 {
-    // First chunk is always 64 cols (2 FP16 ZMMs), processed from registers.
-    // Tail chunk is the remainder (32 or 64 cols), spilled to stack.
-    // A single 64-col subroutine with masking on the upper 2 F32 ZMMs
-    // handles both: mask=0xFFFF for full 64-col, mask=0x0000 for 32-col tail.
-    static constexpr int FIRST_FP16_REGS_ROW = 2;
-    static constexpr int CHUNK_COLS       = FIRST_FP16_REGS_ROW * FP16_PER_ZMM;
-    static constexpr int F32_REGS_PER_ROW = FIRST_FP16_REGS_ROW * 2; // 4
-    static constexpr int NUM_MASK_F32     = 2; // masked F32 ZMMs per row
+    /* Of32 F32 beta-combine: load user C row -> Zmm(tmpReg), broadcast
+       beta -> Zmm(betaRegIdx), then combine with the F32 accumulator
+       (vfmadd231ps, or vaddps when beta == 1.0). Both scratch ZMMs live
+       above the F32 tile and are dead after this function returns. */
+    int tmpReg     = scratchRegStart + 1;
+    int betaRegIdx = scratchRegStart;
 
-    using VecPoolType =
-        utils::registerPool<typename Traits::RegType, Traits::numRegs>;
-    using MaskPoolType =
-        utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+    Xbyak::Label betaZeroEnd;
 
-    int dstRegStart = 0;
-    int numCRegs    = MR * F32_REGS_PER_ROW;
-    int tailFp16Regs =
-        bFullReg - FIRST_FP16_REGS_ROW; // 1 for NR=96, 2 for NR=128
-    int tailCols      = tailFp16Regs * FP16_PER_ZMM; // 32 or 64
-    int tailStackSize = MR * tailFp16Regs * RegBytes;
+    if (params.betaScalingType != dlp::kernel_frame::scalingType::one) {
+        mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, beta)]);
+        vbroadcastss(Zmm(betaRegIdx), ptr[regTmp1]);
 
-    Xbyak::Label postOpsSubroutine;
-    Xbyak::Label postOpsSubroutineEnd;
-
-    // Step 1: Spill only the tail chunk to stack.
-    sub(rsp, tailStackSize);
-    for (iter_t row = 0; row < MR; row++) {
-        int rowBase = cRegIdx + row * bReg + FIRST_FP16_REGS_ROW;
-        for (int j = 0; j < tailFp16Regs; j++) {
-            int stackOff = (row * tailFp16Regs + j) * RegBytes;
-            vmovups(ptr[rsp + stackOff], RegType(rowBase + j));
-        }
+        // Runtime beta=0 check: the Decision Engine passes betaScalingType
+        // as generic for k > KC even when beta = 0. Skip C accesses to
+        // avoid NaN/Inf propagation from uninitialized C.
+        vpxord(Zmm(tmpReg), Zmm(tmpReg), Zmm(tmpReg));
+        vucomiss(Xmm(betaRegIdx), Xmm(tmpReg));
+        je(betaZeroEnd, T_NEAR);
     }
 
-    // Step 2: Process first chunk (64 cols) from accumulator registers.
-    // Set masks to 0xFFFF (all lanes active) for the upper 2 F32 ZMMs.
-    mov(dword[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32[0])],
-        0xFFFFFFFF);
+    int totalPairs    = numFullF32Pairs + (hasMaskedF32Pair ? 1 : 0);
+    int f32RegsPerRow = totalPairs * 2;
+    int baseColBytes  = colElemOffsetF32 * F32_ELEM_SIZE;
 
-    convertChunkFromRegsToF32(0, FIRST_FP16_REGS_ROW, dstRegStart);
-    call(postOpsSubroutine);
-
-    for (iter_t row = 0; row < MR; row++) {
-        convertF32ChunkToFP16AndStoreRow(dstRegStart + row * F32_REGS_PER_ROW,
-                                         row, 0, FIRST_FP16_REGS_ROW);
+    mov(regTmpCptr, regCPtr);
+    if (colElemOffsetF32 > 0) {
+        add(regTmpCptr, baseColBytes);
     }
 
-    // Step 3: Process tail chunk from stack.
-    // Advance post_op_c_j by 64.
-    mov(regTmp1,
-        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
-    lea(regTmp1, ptr[regTmp1 + CHUNK_COLS]);
-    mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
-        regTmp1);
+    for (iter_t i = 0; i < MR; i++) {
+        int rowDst = dstRegStart + i * f32RegsPerRow;
+        for (iter_t j = 0; j < f32RegsPerRow; j++) {
+            int colByteOff = j * RegBytes;
+            int dstReg     = rowDst + j;
+            int pairIdx    = j / 2; // which F32 pair
+            int laneInPair = j & 1; // lo (0) or hi (1)
 
-    // Set masks based on tail width.
-    // For 64-col tail (NR=128): mask = 0xFFFF,0xFFFF (all active)
-    // For 32-col tail (NR=96):  mask = 0x0000,0x0000 (upper half inactive)
-    if (tailCols == CHUNK_COLS) {
-        mov(dword[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32[0])],
-            0xFFFFFFFF);
-    } else {
-        mov(dword[stackPtr + offsetof(dlp::kernels::gemmParams, maskF32[0])],
-            0x00000000);
-    }
+            bool inMaskedPair =
+                hasMaskedF32Pair && (pairIdx == numFullF32Pairs);
 
-    // Load tail chunk from stack and convert to F32.
-    // For 32-col tail: only the first 2 F32 ZMMs per row get real data,
-    // the upper 2 are zeroed (will be masked out by the subroutine).
-    for (iter_t row = 0; row < MR; row++) {
-        int dstBase = dstRegStart + row * F32_REGS_PER_ROW;
-        for (int j = 0; j < tailFp16Regs; j++) {
-            int stackOff = (row * tailFp16Regs + j) * RegBytes;
-            int dstLo    = dstBase + j * 2;
-            int dstHi    = dstLo + 1;
+            if (inMaskedPair) {
+                Xbyak::Opmask kMask = (laneInPair == 0) ? mask_regs[1]
+                                                        : mask_regs[2];
+                vmovups(Zmm(tmpReg) | kMask | T_z,
+                        ptr[regTmpCptr + colByteOff]);
+            } else {
+                vmovups(Zmm(tmpReg), ptr[regTmpCptr + colByteOff]);
+            }
 
-            vmovdqu16(Ymm(dstLo), ptr[rsp + stackOff]);
-            vcvtph2ps(Zmm(dstLo), Ymm(dstLo));
-
-            vmovdqu16(Ymm(dstHi), ptr[rsp + stackOff + 32]);
-            vcvtph2ps(Zmm(dstHi), Ymm(dstHi));
-        }
-        // Zero the upper F32 ZMMs if tail is narrower than 64 cols
-        if (tailFp16Regs < FIRST_FP16_REGS_ROW) {
-            for (int j = tailFp16Regs * 2; j < F32_REGS_PER_ROW; j++) {
-                vpxord(Zmm(dstBase + j), Zmm(dstBase + j), Zmm(dstBase + j));
+            if (params.betaScalingType == dlp::kernel_frame::scalingType::one) {
+                vaddps(Zmm(dstReg), Zmm(dstReg), Zmm(tmpReg));
+            } else {
+                vfmadd231ps(Zmm(dstReg), Zmm(tmpReg), Zmm(betaRegIdx));
             }
         }
+        add(regTmpCptr, regRsC);
     }
 
-    call(postOpsSubroutine);
+    L(betaZeroEnd);
+    return dlp::jit::jitGeneratorError::success;
+}
 
-    // Store only the valid tail columns
-    for (iter_t row = 0; row < MR; row++) {
-        convertF32ChunkToFP16AndStoreRow(dstRegStart + row * F32_REGS_PER_ROW,
-                                         row, CHUNK_COLS, tailFp16Regs);
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16_GEMM<KType>::storeResultF32_inplace(int  numFullF32Pairs,
+                                            bool hasMaskedF32Pair,
+                                            int  dstRegStart,
+                                            int  colElemOffsetF32)
+{
+    /* mask_regs[1..2] are still live from applyBetaCombineF32 (and
+       preserved across kernelOpsHandler by the mask-pool's preserve
+       list), so no reload is needed here. */
+    int totalPairs    = numFullF32Pairs + (hasMaskedF32Pair ? 1 : 0);
+    int f32RegsPerRow = totalPairs * 2;
+    int baseColBytes  = colElemOffsetF32 * F32_ELEM_SIZE;
+
+    mov(regTmpCptr, regCPtr);
+    if (colElemOffsetF32 > 0) {
+        add(regTmpCptr, baseColBytes);
     }
 
-    // Step 4: Restore stack and post_op_c_j
-    add(rsp, tailStackSize);
+    for (iter_t i = 0; i < MR; i++) {
+        int rowDst = dstRegStart + i * f32RegsPerRow;
+        for (iter_t j = 0; j < f32RegsPerRow; j++) {
+            int colByteOff = j * RegBytes;
+            int dstReg     = rowDst + j;
+            int pairIdx    = j / 2;
+            int laneInPair = j & 1;
 
-    mov(regTmp1,
-        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
-    lea(regTmp1, ptr[regTmp1 - CHUNK_COLS]);
-    mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
-            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
-        regTmp1);
+            bool inMaskedPair =
+                hasMaskedF32Pair && (pairIdx == numFullF32Pairs);
 
-    // Jump over the subroutine body
-    jmp(postOpsSubroutineEnd, T_NEAR);
-
-    // Post-ops subroutine: 64-col with masking on upper 2 F32 ZMMs.
-    // Emitted once, called for each chunk. Masks loaded from maskF32[0..1].
-    L(postOpsSubroutine);
-    {
-        VecPoolType vecPool;
-        vecPool.setAccumulators(dstRegStart, numCRegs);
-        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
-
-        // The partial-spill path is only reached when useMask is false
-        // (dispatcher in generatePostOps), so mask_regs[0] is not live here
-        // and nothing needs preserving. The addPreserve() below is written
-        // defensively in case the dispatch conditions change.
-        MaskPoolType maskPool;
-        maskPool.addPreserve(utils::MASK_START_IDX, useMask ? 1 : 0);
-        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
-                                      Traits::reservedMaskBits));
-
-        gen::kernelOpsHandler<KType> kernelOpsHandler(this);
-
-        int maskOffset =
-            static_cast<int>(offsetof(dlp::kernels::gemmParams, maskF32[0]));
-
-        RETURN_IF_ERROR(kernelOpsHandler.generateKernelOps(
-            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm, MR,
-            CHUNK_COLS / 2, true, NUM_MASK_F32, dstRegStart, numCRegs, vecPool,
-            maskPool, maskOffset));
+            if (inMaskedPair) {
+                Xbyak::Opmask kMask = (laneInPair == 0) ? mask_regs[1]
+                                                        : mask_regs[2];
+                vmovups(ptr[regTmpCptr + colByteOff] | kMask, Zmm(dstReg));
+            } else {
+                vmovups(ptr[regTmpCptr + colByteOff], Zmm(dstReg));
+            }
+        }
+        add(regTmpCptr, regRsC);
     }
-    ret();
-    L(postOpsSubroutineEnd);
 
     return dlp::jit::jitGeneratorError::success;
 }
@@ -725,27 +970,6 @@ jitFP16_GEMM<KType>::convertChunkFromRegsToF32(int srcRegOffset,
 
             vextractf32x8(Ymm(dstHi), Zmm(srcReg), 1);
             vcvtph2ps(Zmm(dstLo), Ymm(srcReg));
-            vcvtph2ps(Zmm(dstHi), Ymm(dstHi));
-        }
-    }
-}
-
-template<utils::kernelInstrType KType>
-void
-jitFP16_GEMM<KType>::convertChunkFromStackToF32(int fp16RegsPerRow,
-                                                int dstRegStart)
-{
-    for (iter_t row = 0; row < MR; row++) {
-        int dstBase = dstRegStart + row * fp16RegsPerRow * 2;
-        for (iter_t j = 0; j < fp16RegsPerRow; j++) {
-            int stackOff = (row * fp16RegsPerRow + j) * RegBytes;
-            int dstLo    = dstBase + j * 2;
-            int dstHi    = dstLo + 1;
-
-            vmovdqu16(Ymm(dstLo), ptr[rsp + stackOff]);
-            vcvtph2ps(Zmm(dstLo), Ymm(dstLo));
-
-            vmovdqu16(Ymm(dstHi), ptr[rsp + stackOff + 32]);
             vcvtph2ps(Zmm(dstHi), Ymm(dstHi));
         }
     }

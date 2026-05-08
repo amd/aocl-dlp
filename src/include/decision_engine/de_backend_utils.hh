@@ -97,7 +97,18 @@ class gemmDEBackendUtils
 
         kernel_frame::scalingType betaScalingType =
             kernel_frame::scalingType::generic;
-        if ((*(static_cast<uint16_t*>(beta)) == FP16_ZERO) && (k <= kc_hint)) {
+        uint16_t beta_val = *(static_cast<uint16_t*>(beta));
+        if (beta_val == FP16_ONE) {
+            /* Safe for both single-KC and multi-KC: user beta = 1.0 means
+               every KC iteration has beta = 1.0 (the 5-loop passes 1.0 for
+               intermediate KCs either way), so the same JIT `::one`
+               fast-path is correct across all iterations. */
+            betaScalingType = kernel_frame::scalingType::one;
+        } else if ((beta_val == FP16_ZERO) && (k <= kc_hint)) {
+            /* Only emit `::zero` for single-KC (k <= kc_hint). Multi-KC
+               beta = 0 needs beta = 1.0 on intermediate iterations to
+               preserve accumulation, which a JIT built with `::zero`
+               would overwrite; keep it `::generic` in that case. */
             betaScalingType = kernel_frame::scalingType::zero;
         }
 

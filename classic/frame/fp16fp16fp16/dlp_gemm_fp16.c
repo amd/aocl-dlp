@@ -42,6 +42,7 @@
  */
 
 #include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
+#include "classic/aocl_fp16_convert.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_5loop_interface_apis.h"
 #include "dlp_gemm_ops_bundle.h"
@@ -87,6 +88,18 @@ DLP_GEMV(float16, float16, float16, f16f16f16of16)
     msz_t mem_b_size_req = 0;
 
     md_t packb_min_NR = 32;
+
+    /* C element byte-size: 2 for of16 (float16), 4 for of32 (in-place
+       float). The GEMV signature pins C to float16* (rail-shared) but on
+       the of32 rail the user buffer is actually float*; advance pointers
+       by element-count using this byte-size factor so identical math
+       drives both rails (mirrors the GEMM 5-loop's c_elem_size). */
+    const msz_t c_elem_size = (c_downscale == DLP_F32) ? sizeof(float)
+                                                       : sizeof(float16);
+
+    /* Beta widened once at entry — the GEMV M1/N1 of32 JIT path reads
+       beta via vbroadcastss in F32 (just like the GEMM of32 rail). */
+    const float beta_f32 = fp16_to_f32(beta);
 
     dlp_gemm_post_op_attr post_ops_attr;
     post_ops_attr.c_stor_type       = c_downscale;
@@ -148,9 +161,10 @@ DLP_GEMV(float16, float16, float16, f16f16f16of16)
 
         /* IC loop */
         for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
-            md_t           mc0           = dlp_min((ic_end - ic), MC);
-            const float16* a_ic          = a + ic * rs_a;
-            c_use                        = c + ic * rs_c;
+            md_t           mc0  = dlp_min((ic_end - ic), MC);
+            const float16* a_ic = a + ic * rs_a;
+            /* Type-aware C-pointer arithmetic — see c_elem_size note. */
+            c_use = (float16*)((char*)c + ic * rs_c * c_elem_size);
             post_ops_attr.post_op_c_i    = ic;
             post_ops_attr.post_op_c_j    = 0;
             post_ops_attr.rs_c_downscale = rs_c;
@@ -170,11 +184,16 @@ DLP_GEMV(float16, float16, float16, f16f16f16of16)
                 a_ic = pack_a_buffer_fp16;
             }
 
-            /* Call GEMV n=1 kernel - JIT only, no intrinsic fallback */
+            /* Beta-pointer is rail-aware: of32 reads f32 (vbroadcastss),
+               of16 reads f16 (vpbroadcastw). Alpha stays as f16 because
+               the kernel widens it internally on of32 (vcvtph2ps). */
+            const void* beta_arg = (c_downscale == DLP_F32)
+                                       ? (const void*)&beta_f32
+                                       : (const void*)&beta;
             dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
                                (float16*)a_ic, rs_a_use, cs_a_use, 1,
                                (float16*)b_use, rs_b_use, cs_b_use, 0, 0, c_use,
-                               rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                               rs_c, cs_c, (void*)&alpha, (void*)beta_arg,
                                post_op_list, post_ops_attr);
         }
 
@@ -228,7 +247,8 @@ DLP_GEMV(float16, float16, float16, f16f16f16of16)
         /* JC loop */
         for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             md_t nc0 = dlp_min((jc_end - jc), NC);
-            c_use    = c + jc * cs_c;
+            /* Type-aware C-pointer arithmetic — see c_elem_size note. */
+            c_use = (float16*)((char*)c + jc * cs_c * c_elem_size);
 
             md_t jc_cur_loop     = jc;
             md_t jc_cur_loop_rem = 0;
@@ -285,11 +305,14 @@ DLP_GEMV(float16, float16, float16, f16f16f16of16)
              * Call GEMV m=1 kernel with FULL k (no KC blocking in framework)
              * JIT only - no intrinsic fallback
              */
+            const void* beta_arg = (c_downscale == DLP_F32)
+                                       ? (const void*)&beta_f32
+                                       : (const void*)&beta;
             dlp_execute_kernel(
                 &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float16*)a_use, rs_a_use,
                 cs_a_use, 1, (float16*)b_use, rs_b_use, cs_b_use, n_sub_updated,
-                jc_cur_loop_rem, c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
-                post_op_list, post_ops_attr);
+                jc_cur_loop_rem, c_use, rs_c, cs_c, (void*)&alpha,
+                (void*)beta_arg, post_op_list, post_ops_attr);
 
             if (mtag_b == REORDERED) {
                 dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
@@ -312,7 +335,15 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
     // Extract operations from bundle into local variables
     DLP_GEMM_OPS_EXTRACT(ops);
 
-    /* Handle GEMV case when m or n equals 1 */
+    // The of32 JIT post-ops read beta through vbroadcastss + vfmadd231ps,
+    // which expects a 32-bit float; on the of16 rail beta stays FP16
+    // (vpbroadcastw + vmulph). Widen beta once here for of32 and pick the
+    // right pointer at the kernel call site below.
+    const float beta_f32 = fp16_to_f32(beta);
+
+    // GEMV-shaped redirect: the dedicated FP16 GEMV kernels handle both
+    // output rails - see the c_downscale handling inside
+    // dlp_gemv_rowvar_f16f16f16of16.
     if ((n == 1) || (m == 1)) {
         dlp_gemv_rowvar_f16f16f16of16(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, c, rs_c,
@@ -336,6 +367,14 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
     md_t           cs_b_use = cs_b;
     md_t           ps_b_use = 0; /* Panel stride for JR loop B offset */
 
+    /* C element byte-size: 2 for of16 (float16), 4 for of32 (float). The
+       5-loop signature pins C to float16* but on the of32 rail the user
+       buffer is actually float*; advance pointers by element-count using
+       this byte-size factor so the math is identical for both rails and
+       follows the same pattern as the f32f32f32 5-loop (cs_c_use). */
+    const msz_t c_elem_size = (c_downscale == DLP_F32) ? sizeof(float)
+                                                       : sizeof(float16);
+
     float16* c_use_jc = NULL;
     float16* c_use_ic = NULL;
     md_t     rs_c_use = rs_c;
@@ -348,19 +387,29 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
 
     md_t k_updated = k;
 
-    float16 one_fp16 = FP16_ONE;
+    /* Per-rail KC-block-1 beta-suppress sentinels. On the of16 rail beta is
+       fp16 and the kernel reads vpbroadcastw; on of32 beta is widened to
+       f32 once at entry and the kernel reads vbroadcastss. Pre-compute one
+       sentinel of each type and select per-pc below. */
+    const float16 one_fp16 = FP16_ONE;
+    const float   one_f32  = 1.0f;
 
     bool is_last_k  = FALSE;
     bool is_first_k = FALSE;
 
     dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type       = DLP_F16;
+    post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
     post_ops_attr.cs_c_downscale    = cs_c;
     post_ops_attr.b_sum_offset      = 0;
     post_ops_attr.b_col_sum_vec     = NULL;
     post_ops_attr.b_col_sum_vec_s16 = NULL;
-    post_ops_attr.buf_downscale     = c;
+    // The of32 post-ops rail writes user F32 C in place through regCPtr
+    // (the kernel signature's float16* C handle, re-cast to float* by the
+    // JIT under c_downscale = DLP_F32). buf_downscale is unused on this
+    // rail - we forward the C pointer for symmetry with the of16 path and
+    // for any downstream post-op helpers that read it.
+    post_ops_attr.buf_downscale = c;
 
     dlp_task_id_t thread_jc;
     dlp_task_id_t thread_ic;
@@ -387,13 +436,20 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                 &n_sub_updated);
         }
 
-        c_use_jc = c + jc;
+        /* C-pointer advance in C-elements: byte-scale by c_elem_size so
+           the same math works for of16 (2B) and of32 (4B). */
+        c_use_jc = (float16*)((char*)c + jc * c_elem_size);
         rs_c_use = rs_c;
 
         /* PC loop: iterate over K in KC blocks */
         for (iter_t pc = 0; pc < k; pc += KC) {
-            float16 beta0 = (pc == 0) ? beta : one_fp16;
-            md_t    kc0   = dlp_min((k - pc), KC);
+            /* Per-KC beta selection (mirrors f32f32f32 / bf16 5-loops):
+               first KC uses the user beta, intermediate KCs use 1.0 so the
+               accumulator carried in C across KC blocks is preserved
+               (additive only, never re-scaled by user beta). */
+            const float16 beta0_fp16 = (pc == 0) ? beta : one_fp16;
+            const float   beta0_f32  = (pc == 0) ? beta_f32 : one_f32;
+            md_t          kc0        = dlp_min((k - pc), KC);
 
             is_first_k               = (pc == 0) ? TRUE : FALSE;
             post_ops_attr.is_first_k = is_first_k;
@@ -477,7 +533,10 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
             for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
                 md_t mc0 = dlp_min((ic_end - ic), MC);
 
-                c_use_ic = c_use_jc + (rs_c_use * ic);
+                /* IC step in C-elements (rs_c_use = ldc), byte-scaled by
+                   c_elem_size for rail-agnostic pointer math. */
+                c_use_ic =
+                    (float16*)((char*)c_use_jc + (rs_c_use * ic) * c_elem_size);
 
                 if (mtag_a == UNPACKED) {
                     a_use    = a + (rs_a * ic) + (cs_a * pc);
@@ -489,11 +548,9 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
                      * PACK: Allocate pack buffer, pack A into M-MAJOR layout.
                      * PackA uses MR=32 blocks and pads mc0 to MR boundary.
                      * Buffer size: ((mc0 + MR - 1) / MR) * MR * KC
-                     * Use KC (not kc0) to ensure buffer is large enough for all
-                     * PC iterations.
                      */
                     md_t mc0_padded = ((mc0 + MR - 1) / MR) * MR;
-                    mem_a_size_req  = sizeof(float16) * mc0_padded * KC;
+                    mem_a_size_req  = sizeof(float16) * mc0_padded * kc0;
 
                     if (pack_a_buffer_fp16 == NULL) {
                         dlp_clsc_err_t ret_err;
@@ -529,12 +586,23 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
 
                     const float16* b_jr = b_use + (jr * ps_b_use);
 
-                    dlp_execute_kernel(
-                        &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
-                        (float16*)a_use, rs_a_use, cs_a_use, ps_a_use,
-                        (float16*)b_jr, rs_b_use, cs_b_use, 0, 0,
-                        (float16*)c_use_ic + jr, rs_c_use, 1, (void*)&alpha,
-                        (void*)&beta0, post_op_list, post_ops_attr);
+                    /* JR step in C-elements, byte-scaled. */
+                    float16* c_jr =
+                        (float16*)((char*)c_use_ic + jr * c_elem_size);
+
+                    /* Per-rail beta pointer: kernel reads it via
+                       vpbroadcastw (of16) or vbroadcastss (of32). Both
+                       point at the per-KC-suppressed value. */
+                    void* beta_arg = (c_downscale == DLP_F32)
+                                         ? (void*)&beta0_f32
+                                         : (void*)&beta0_fp16;
+
+                    dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
+                                       (float16*)a_use, rs_a_use, cs_a_use,
+                                       ps_a_use, (float16*)b_jr, rs_b_use,
+                                       cs_b_use, 0, 0, c_jr, rs_c_use, 1,
+                                       (void*)&alpha, beta_arg, post_op_list,
+                                       post_ops_attr);
                 }
             }
         }

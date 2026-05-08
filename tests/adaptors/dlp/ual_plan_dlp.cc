@@ -302,7 +302,9 @@ DlpUalPlan::prepare()
     // Resolve transB: if B is reordered, force to 'n'
     m_transB_resolved = (m_memFormatB == 'r') ? 'n' : m_transB_char;
 
-    // Pre-cast alpha/beta
+    // Pre-cast alpha/beta for non-FP16 rails. The FP16 forms
+    // (m_alpha_fp16, m_beta_fp16) are populated once in the base class
+    // setAlpha/setBeta via f32_to_fp16 — no extra conversion here.
     m_alpha_f32 = static_cast<float>(m_alpha);
     m_beta_f32  = static_cast<float>(m_beta);
     m_alpha_s32 = static_cast<int32_t>(m_alpha);
@@ -311,19 +313,21 @@ DlpUalPlan::prepare()
     // Resolve dispatch function - captures all pre-computed args.
     // Only a_ptr/b_ptr/c_ptr and lda/ldb/ldc come from setBuffers().
     // Local copies for lambda capture (avoids capturing 'this')
-    char            layout  = m_layout_char;
-    char            transA  = m_transA_char;
-    char            transB  = m_transB_resolved;
-    md_t            m_dim   = m_m;
-    md_t            n_dim   = m_n;
-    md_t            k_dim   = m_k;
-    float           alpha_f = m_alpha_f32;
-    float           beta_f  = m_beta_f32;
-    int32_t         alpha_i = m_alpha_s32;
-    int32_t         beta_i  = m_beta_s32;
-    char            memA    = m_memFormatA;
-    char            memB    = m_memFormatB;
-    dlp_metadata_t* meta    = m_metadata;
+    char            layout     = m_layout_char;
+    char            transA     = m_transA_char;
+    char            transB     = m_transB_resolved;
+    md_t            m_dim      = m_m;
+    md_t            n_dim      = m_n;
+    md_t            k_dim      = m_k;
+    float           alpha_f    = m_alpha_f32;
+    float           beta_f     = m_beta_f32;
+    int32_t         alpha_i    = m_alpha_s32;
+    int32_t         beta_i     = m_beta_s32;
+    float16         alpha_fp16 = m_alpha_fp16;
+    float16         beta_fp16  = m_beta_fp16;
+    char            memA       = m_memFormatA;
+    char            memB       = m_memFormatB;
+    dlp_metadata_t* meta       = m_metadata;
 
     m_dispatch = nullptr;
 
@@ -547,10 +551,22 @@ DlpUalPlan::prepare()
             m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
                              md_t ldc) {
                 aocl_gemm_f16f16f16of16(
-                    layout, transA, transB, m_dim, n_dim, k_dim, alpha_f,
+                    layout, transA, transB, m_dim, n_dim, k_dim, alpha_fp16,
                     reinterpret_cast<float16*>(a), lda, memA,
-                    reinterpret_cast<float16*>(b), ldb, memB, beta_f,
+                    reinterpret_cast<float16*>(b), ldb, memB, beta_fp16,
                     reinterpret_cast<float16*>(c), ldc, meta);
+            };
+            break;
+
+        case encodeTypes<MatrixType::fp16, MatrixType::fp16, MatrixType::f32,
+                         MatrixType::fp16>():
+            m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                             md_t ldc) {
+                aocl_gemm_f16f16f16of32(
+                    layout, transA, transB, m_dim, n_dim, k_dim, alpha_fp16,
+                    reinterpret_cast<float16*>(a), lda, memA,
+                    reinterpret_cast<float16*>(b), ldb, memB, beta_fp16,
+                    reinterpret_cast<float*>(c), ldc, meta);
             };
             break;
 

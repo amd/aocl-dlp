@@ -676,9 +676,17 @@ dlp_gemm_f16f16f16of16_get_threading(md_t*       n_threads,
         } else {
             // If DLP_NUM_THREADS are set, generate jc,ic from the same.
             dlp_thread_partition_2x2((*n_threads), m, n, ic_ways, jc_ways);
-            if ((mr_blks >= (*ic_ways)) && (nr_blks >= (*jc_ways))) {
+
+            // Adjust ic/jc ways based on panel work heuristics.
+            if (mr_blks >= (*ic_ways)) {
                 dlp_gemm_pnl_wrk_heur_adjust_ic_jc_ways(MR, NR, m, n, n_threads,
                                                         ic_ways, jc_ways);
+            }
+
+            // Handle prime number of threads.
+            if (dlp_is_prime(*n_threads)) {
+                dlp_gemm_pnl_wrk_heur_adjust_threading_for_prime_nt(
+                    MR, NR, m, n, n_threads, ic_ways, jc_ways);
             }
         }
     } else {

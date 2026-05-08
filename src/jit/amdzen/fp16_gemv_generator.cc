@@ -70,6 +70,7 @@ jitFP16GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
     N_LEFT           = params.N_LEFT;
     KC               = params.KC;
     K_SUB_ITER       = params.K_SUB_ITER;
+    c_downscale      = params.c_downscale;
     yFormat          = params.yFormat;
     alphaScalingType = params.alphaScalingType;
     betaScalingType  = params.betaScalingType;
@@ -673,6 +674,17 @@ jitFP16GEMVM1<KType>::storeYValuesFringe()
 
 template<utils::kernelInstrType KType>
 void
+jitFP16GEMVM1<KType>::populateF32MasksFromFP16()
+{
+    kmovd(Reg32(regTmp1.getIdx()), mask_regs[0]);
+    mov(Reg16(regTmp2.getIdx()), Reg16(regTmp1.getIdx()));
+    kmovw(mask_regs[1], Reg32(regTmp2.getIdx()));
+    shr(Reg32(regTmp1.getIdx()), 16);
+    kmovw(mask_regs[2], Reg32(regTmp1.getIdx()));
+}
+
+template<utils::kernelInstrType KType>
+void
 jitFP16GEMVM1<KType>::convertFP16AccumToF32(int numAccumRegs, int f32RegStart)
 {
     for (iter_t i = 0; i < numAccumRegs; i++) {
@@ -702,6 +714,178 @@ jitFP16GEMVM1<KType>::convertF32ToFP16Accum(int numAccumRegs, int f32RegStart)
     }
 }
 
+/* of32 β-combine.
+   The accumulator pairs in (f32RegStart + 2i, f32RegStart + 2i + 1)
+   already hold the F32 widening of FP16 acc · alpha-eligible.
+   We compute acc = alpha*acc + beta*Y entirely in F32, with Y read
+   directly from user C (float*).
+   Memory layout: each FP16 accumulator covers 32 N-lanes => 2 ZMMs of F32
+   (16 lanes each) starting at byte offset i * 32 * F32_ELEM_SIZE.
+   Fringe (nMask=true): the n_iter full ZMMs and one masked tail ZMM
+   sourced from mask_regs[1..2] (lower-16 then upper-16 halves of the
+   FP16 N-mask). */
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16GEMVM1<KType>::applyBetaCombineF32(int  numAccumRegs,
+                                          bool nMask,
+                                          int  f32RegStart)
+{
+    bool isBetaZero = (betaScalingType == dlp::kernel_frame::scalingType::zero);
+    bool isBetaOne  = (betaScalingType == dlp::kernel_frame::scalingType::one);
+    bool isAlphaOne = (alphaScalingType == dlp::kernel_frame::scalingType::one);
+
+    if (!isAlphaOne) {
+        /* Alpha is FP16 in the public API; widen on the fly to F32 and
+           splat across the ZMM. */
+        mov(regKSubIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, alpha)]);
+        vpbroadcastw(Xmm(xBaseIdx), ptr[regKSubIter]);
+        vcvtph2ps(Xmm(xBaseIdx), Xmm(xBaseIdx));
+        vbroadcastss(Zmm(xBaseIdx), Xmm(xBaseIdx));
+
+        for (iter_t i = 0; i < numAccumRegs; i++) {
+            int lo = f32RegStart + i * 2;
+            int hi = f32RegStart + i * 2 + 1;
+            vmulps(Zmm(lo), Zmm(lo), Zmm(xBaseIdx));
+            vmulps(Zmm(hi), Zmm(hi), Zmm(xBaseIdx));
+        }
+    }
+
+    if (isBetaZero) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    Xbyak::Label betaZeroEnd;
+
+    if (!isBetaOne) {
+        /* On of32 the framework passes &beta_f32 (4-byte float), so
+           broadcast directly with vbroadcastss. */
+        mov(regKSubIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, beta)]);
+        vbroadcastss(Zmm(xBaseIdx + 1), ptr[regKSubIter]);
+
+        // Runtime beta=0 check: the Decision Engine passes betaScalingType
+        // as generic for k > KC even when beta = 0. Skip Y accesses to
+        // avoid NaN/Inf propagation from uninitialized Y.
+        vpxord(Zmm(yBaseIdx), Zmm(yBaseIdx), Zmm(yBaseIdx));
+        vucomiss(Xmm(xBaseIdx + 1), Xmm(yBaseIdx));
+        je(betaZeroEnd, T_NEAR);
+    }
+
+    mov(regTmpYptr, regYptr);
+
+    int n_iter = nMask ? (N_LEFT / nElemsPerReg) : numAccumRegs;
+    int n_left = nMask ? (N_LEFT % nElemsPerReg) : 0;
+
+    for (iter_t i = 0; i < n_iter; i++) {
+        int lo = f32RegStart + i * 2;
+        int hi = f32RegStart + i * 2 + 1;
+        // Load 2 ZMMs of F32 Y per accumulator (32 lanes = 2 * 16 F32)
+        vmovups(Zmm(yBaseIdx + 0),
+                ptr[regTmpYptr + (i * nElemsPerReg) * F32_ELEM_SIZE]);
+        vmovups(Zmm(yBaseIdx + 1),
+                ptr[regTmpYptr + (i * nElemsPerReg + 16) * F32_ELEM_SIZE]);
+
+        if (isBetaOne) {
+            vaddps(Zmm(lo), Zmm(lo), Zmm(yBaseIdx + 0));
+            vaddps(Zmm(hi), Zmm(hi), Zmm(yBaseIdx + 1));
+        } else {
+            vfmadd231ps(Zmm(lo), Zmm(yBaseIdx + 0), Zmm(xBaseIdx + 1));
+            vfmadd231ps(Zmm(hi), Zmm(yBaseIdx + 1), Zmm(xBaseIdx + 1));
+        }
+    }
+
+    if (n_left) {
+        int lo         = f32RegStart + n_iter * 2;
+        int hi         = f32RegStart + n_iter * 2 + 1;
+        int low_lanes  = (n_left >= 16) ? 16 : n_left;
+        int high_lanes = (n_left >= 16) ? (n_left - 16) : 0;
+
+        if (low_lanes == 16) {
+            vmovups(Zmm(yBaseIdx + 0),
+                    ptr[regTmpYptr + (n_iter * nElemsPerReg) * F32_ELEM_SIZE]);
+        } else {
+            vmovups(Zmm(yBaseIdx + 0) | mask_regs[1] | T_z,
+                    ptr[regTmpYptr + (n_iter * nElemsPerReg) * F32_ELEM_SIZE]);
+        }
+
+        if (isBetaOne) {
+            vaddps(Zmm(lo), Zmm(lo), Zmm(yBaseIdx + 0));
+        } else {
+            vfmadd231ps(Zmm(lo), Zmm(yBaseIdx + 0), Zmm(xBaseIdx + 1));
+        }
+
+        if (high_lanes > 0) {
+            vmovups(
+                Zmm(yBaseIdx + 1) | mask_regs[2] | T_z,
+                ptr[regTmpYptr + (n_iter * nElemsPerReg + 16) * F32_ELEM_SIZE]);
+            if (isBetaOne) {
+                vaddps(Zmm(hi), Zmm(hi), Zmm(yBaseIdx + 1));
+            } else {
+                vfmadd231ps(Zmm(hi), Zmm(yBaseIdx + 1), Zmm(xBaseIdx + 1));
+            }
+        }
+    }
+
+    L(betaZeroEnd);
+    return dlp::jit::jitGeneratorError::success;
+}
+
+/* of32 in-place F32 store, mirror of applyBetaCombineF32 layout. */
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16GEMVM1<KType>::storeYValues_F32(int  numAccumRegs,
+                                       bool nMask,
+                                       int  f32RegStart)
+{
+    mov(regTmpYptr, regYptr);
+
+    int n_iter = nMask ? (N_LEFT / nElemsPerReg) : numAccumRegs;
+    int n_left = nMask ? (N_LEFT % nElemsPerReg) : 0;
+
+    for (iter_t i = 0; i < n_iter; i++) {
+        int lo = f32RegStart + i * 2;
+        int hi = f32RegStart + i * 2 + 1;
+        vmovups(ptr[regTmpYptr + (i * nElemsPerReg) * F32_ELEM_SIZE], Zmm(lo));
+        vmovups(ptr[regTmpYptr + (i * nElemsPerReg + 16) * F32_ELEM_SIZE],
+                Zmm(hi));
+    }
+
+    if (n_left) {
+        int lo         = f32RegStart + n_iter * 2;
+        int hi         = f32RegStart + n_iter * 2 + 1;
+        int low_lanes  = (n_left >= 16) ? 16 : n_left;
+        int high_lanes = (n_left >= 16) ? (n_left - 16) : 0;
+
+        if (low_lanes == 16) {
+            vmovups(ptr[regTmpYptr + (n_iter * nElemsPerReg) * F32_ELEM_SIZE],
+                    Zmm(lo));
+        } else {
+            vmovups(ptr[regTmpYptr + (n_iter * nElemsPerReg) * F32_ELEM_SIZE]
+                        | mask_regs[1],
+                    Zmm(lo));
+        }
+
+        if (high_lanes > 0) {
+            vmovups(
+                ptr[regTmpYptr + (n_iter * nElemsPerReg + 16) * F32_ELEM_SIZE]
+                    | mask_regs[2],
+                Zmm(hi));
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+/* M1 post-op tail.
+   On the of16 rail it widens the FP16 accumulator to F32 lane-pairs
+   (lo/hi), runs the kernelOps handler in F32, then narrows back to FP16
+   so storeYValues can spill via vmovdqu16.
+   On the of32 rail (in-place float* y) we do not narrow; we run
+   applyBetaCombineF32 in F32 (alpha is folded in here on this rail
+   instead of in scaleWithAlpha) and then spill 32-lane F32 results
+   directly to user C via storeYValues_F32. The kernel main skips
+   scaleWithAlpha/scaleYWithBeta/storeYValues on of32. */
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16GEMVM1<KType>::applyPostOps(utils::gemvM1GeneratorParams& params,
@@ -716,6 +900,8 @@ jitFP16GEMVM1<KType>::applyPostOps(utils::gemvM1GeneratorParams& params,
     using MaskPoolType =
         utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
 
+    const bool isF32Rail = (c_downscale == DLP_F32);
+
     int  f32RegStart    = 0;
     int  nCols          = (nActual > 0) ? nActual : numAccumRegs * nElemsPerReg;
     int  f32FullRegs    = nCols / F32_PER_ZMM;
@@ -726,23 +912,57 @@ jitFP16GEMVM1<KType>::applyPostOps(utils::gemvM1GeneratorParams& params,
 
     convertFP16AccumToF32(numAccumRegs, f32RegStart);
 
-    VecPoolType vecPool;
-    vecPool.setAccumulators(f32RegStart, numCRegs);
-    RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+    /* Pre-populate the F32 mask halves (mask_regs[1..2]) once so both
+       applyBetaCombineF32 and storeYValues_F32 can rely on them. The FP16
+       fringe mask in mask_regs[0] (32-bit) is the source of truth. */
+    if (isF32Rail && nMask) {
+        populateF32MasksFromFP16();
+    }
 
-    MaskPoolType maskPool;
-    maskPool.addPreserve(utils::MASK_START_IDX, 1);
-    RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
-                                  Traits::reservedMaskBits));
+    if (isF32Rail) {
+        RETURN_IF_ERROR(applyBetaCombineF32(numAccumRegs, nMask, f32RegStart));
+    }
 
-    int maskOffset = f32HasMask ? static_cast<int>(offsetof(
-                                      dlp::kernels::gemvM1Params, nmask_avx512))
-                                : -1;
+    if (!params.kernelOps.empty()) {
+        VecPoolType vecPool;
+        vecPool.setAccumulators(f32RegStart, numCRegs);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
-    RETURN_IF_ERROR(handler.generateKernelOps(
-        params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1, nCols,
-        f32HasMask, f32NumMaskRegs, f32RegStart, numCRegs, vecPool, maskPool,
-        maskOffset));
+        MaskPoolType maskPool;
+        /* Preserve 1 (FP16 fringe k1) on of16; 3 (k1 FP16 fringe + k2/k3
+           F32 mask halves) on of32 so kernelOpsHandler does not clobber
+           them before storeYValues_F32. */
+        const int numPreserved = isF32Rail ? 3 : 1;
+        maskPool.addPreserve(utils::MASK_START_IDX, numPreserved);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset =
+            f32HasMask ? static_cast<int>(
+                             offsetof(dlp::kernels::gemvM1Params, nmask_avx512))
+                       : -1;
+
+        RETURN_IF_ERROR(handler.generateKernelOps(
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
+            nCols, f32HasMask, f32NumMaskRegs, f32RegStart, numCRegs, vecPool,
+            maskPool, maskOffset));
+
+        /* The postops handler may have overwritten k1 (mask_regs[0]) with
+           the F32 fringe mask (nmask_avx512). Reload the FP16 fringe mask
+           on the of16 rail so storeYValuesFringe sees the right 32-bit
+           mask. The of32 rail uses mask_regs[1..2] for F32 stores; both
+           are addPreserve-protected. */
+        if (!isF32Rail && nMask) {
+            kmovd(
+                mask_regs[0],
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, nmask_fp16_avx512)]);
+        }
+    }
+
+    if (isF32Rail) {
+        return storeYValues_F32(numAccumRegs, nMask, f32RegStart);
+    }
 
     convertF32ToFP16Accum(numAccumRegs, f32RegStart);
 
@@ -910,21 +1130,40 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 L(label_n_loop_k_fringe_end);
 
                 finalAccumulate();
-                scaleWithAlpha();
+                if (c_downscale != DLP_F32) {
+                    scaleWithAlpha();
+                }
             }
 
-            scaleYWithBeta(false);
-
-            if (kernelOpsHandlerPtr) {
-                RETURN_IF_ERROR(applyPostOps(params, *kernelOpsHandlerPtr,
-                                             NR / nElemsPerReg, false));
+            if (c_downscale != DLP_F32) {
+                scaleYWithBeta(false);
             }
 
-            storeYValues(false);
+            /* On of32 we must always reach the F32 tail (β-combine +
+               F32 store), even when no kernelOps are present, since Y
+               is float* and beta is in F32. applyPostOps owns the rail
+               selection. */
+            if (kernelOpsHandlerPtr || c_downscale == DLP_F32) {
+                std::unique_ptr<gen::kernelOpsHandler<KType>> emptyHandler;
+                gen::kernelOpsHandler<KType>* h = kernelOpsHandlerPtr.get();
+                if (!h) {
+                    emptyHandler =
+                        std::make_unique<gen::kernelOpsHandler<KType>>(this);
+                    h = emptyHandler.get();
+                }
+                RETURN_IF_ERROR(
+                    applyPostOps(params, *h, NR / nElemsPerReg, false));
+            }
 
+            if (c_downscale != DLP_F32) {
+                storeYValues(false);
+            }
+
+            const int cElemSize = (c_downscale == DLP_F32) ? F32_ELEM_SIZE
+                                                           : FP16_ELEM_SIZE;
             mov(regTmp2, NR);
             add(regIncN, regTmp2);
-            lea(regYptr, ptr[regYptr + regTmp2 * sizeof(uint16_t)]);
+            lea(regYptr, ptr[regYptr + regTmp2 * cElemSize]);
 
             if (!params.kernelOps.empty()) {
                 mov(regTmp1,
@@ -1096,19 +1335,32 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 L(label_n_fringe_k_fringe_end);
 
                 finalAccumulate();
-                scaleWithAlpha();
+                if (c_downscale != DLP_F32) {
+                    scaleWithAlpha();
+                }
             }
 
-            scaleYWithBeta(true);
+            if (c_downscale != DLP_F32) {
+                scaleYWithBeta(true);
+            }
 
-            if (kernelOpsHandlerPtr) {
+            if (kernelOpsHandlerPtr || c_downscale == DLP_F32) {
                 int nFringeAccumRegs =
                     (N_LEFT + nElemsPerReg - 1) / nElemsPerReg;
-                RETURN_IF_ERROR(applyPostOps(params, *kernelOpsHandlerPtr,
-                                             nFringeAccumRegs, true, N_LEFT));
+                std::unique_ptr<gen::kernelOpsHandler<KType>> emptyHandler;
+                gen::kernelOpsHandler<KType>* h = kernelOpsHandlerPtr.get();
+                if (!h) {
+                    emptyHandler =
+                        std::make_unique<gen::kernelOpsHandler<KType>>(this);
+                    h = emptyHandler.get();
+                }
+                RETURN_IF_ERROR(
+                    applyPostOps(params, *h, nFringeAccumRegs, true, N_LEFT));
             }
 
-            storeYValues(true);
+            if (c_downscale != DLP_F32) {
+                storeYValues(true);
+            }
         }
 
         L(label_n_fringe_end);
@@ -1160,11 +1412,17 @@ jitFP16GEMVN1<KType>::initializeParameters()
     mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, csA)]);
     mov(regRsC, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, rsC)]);
 
-    // Scale strides by FP16 element size (2 bytes per element)
-    // Following F32 pattern where strides are scaled by sizeof(float)
-    lea(regRsA, ptr[regRsA * sizeof(uint16_t)]);
-    lea(regCsA, ptr[regCsA * sizeof(uint16_t)]);
-    lea(regRsC, ptr[regRsC * sizeof(uint16_t)]);
+    /* Scale strides to bytes once at init.
+       A is FP16; C/Y is rail-dependent (FP16 on of16, F32 on of32). */
+    lea(regRsA, ptr[regRsA * FP16_ELEM_SIZE]);
+    lea(regCsA, ptr[regCsA * FP16_ELEM_SIZE]);
+    const int cElemSize = (c_downscale == DLP_F32) ? F32_ELEM_SIZE
+                                                   : FP16_ELEM_SIZE;
+    if (cElemSize == FP16_ELEM_SIZE) {
+        lea(regRsC, ptr[regRsC * FP16_ELEM_SIZE]);
+    } else {
+        lea(regRsC, ptr[regRsC * F32_ELEM_SIZE]);
+    }
 
     mov(regAptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, a)]);
     mov(regYptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, y)]);
@@ -1438,6 +1696,76 @@ jitFP16GEMVN1<KType>::storeY_colStored_FP16(int mSize)
     return dlp::jit::jitGeneratorError::success;
 }
 
+/* of32 in-place store for N1.
+   The F32 results live in lanes 0..mSize-1 of Zmm(srcZmmIdx) (packed by
+   convertAndPackFP16ToF32Zmm). For row-major Y we spill scalar-by-scalar
+   at byte stride regRsC; for col-major Y the lanes are contiguous so we
+   issue masked / full ZMM stores. */
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16GEMVN1<KType>::storeY_rowStored_F32(int mSize, int srcZmmIdx)
+{
+    int src = srcZmmIdx;
+    int t0  = tmpBaseIdx;
+
+    for (int i = 0; i < mSize; i++) {
+        int chunk = i / 4;
+        int lane  = i % 4;
+
+        if (chunk == 0) {
+            if (lane == 0) {
+                vmovaps(Xmm(t0), Xmm(src));
+            } else {
+                vshufps(Xmm(t0), Xmm(src), Xmm(src),
+                        lane | (lane << 2) | (lane << 4) | (lane << 6));
+            }
+        } else {
+            if (lane == 0) {
+                vextractf32x4(Xmm(t0), Zmm(src), chunk);
+            } else {
+                /* tmpBaseIdx+1 holds the chunk extracted on lane==0 above
+                   (we re-extract per-lane since we only have one register;
+                   simpler: redo extract here). */
+                vextractf32x4(Xmm(t0 + 1), Zmm(src), chunk);
+                vshufps(Xmm(t0), Xmm(t0 + 1), Xmm(t0 + 1),
+                        lane | (lane << 2) | (lane << 4) | (lane << 6));
+            }
+        }
+
+        mov(regTmp1, i);
+        imul(regTmp1, regRsC);
+        vmovss(ptr[regTmpYptr + regTmp1], Xmm(t0));
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitFP16GEMVN1<KType>::storeY_colStored_F32(int mSize, int srcZmmIdx)
+{
+    /* mSize <= MR (16). Y is contiguous F32 starting at regTmpYptr. */
+    int src = srcZmmIdx;
+
+    if (mSize == 16) {
+        vmovups(ptr[regTmpYptr], Zmm(src));
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    /* Build a 16-bit mask covering the low mSize lanes via mask_regs[2]
+       (k3 — already inside addPreserve range used by the post-op pool).
+       We reuse a temp scalar reg for the immediate mask value. */
+    if (mSize == 0) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+    const uint32_t imm = (mSize >= 16) ? 0xFFFFu : ((1u << mSize) - 1u);
+    mov(Reg32(regTmp1.getIdx()), imm);
+    kmovw(mask_regs[2], Reg32(regTmp1.getIdx()));
+    vmovups(ptr[regTmpYptr] | mask_regs[2], Zmm(src));
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16GEMVN1<KType>::storeResult(int mSize)
@@ -1554,6 +1882,13 @@ jitFP16GEMVN1<KType>::unpackAndConvertF32ZmmToFP16(int mSize, int srcZmmIdx)
     }
 }
 
+/* N1 post-op tail.
+   On of16: widen FP16 acc -> packed F32 ZMM, run kernelOps, narrow back to
+   FP16 lanes so storeResult can vpextrw at byte-stride regRsC.
+   On of32: widen, then apply alpha + beta in F32 (Y is float* at byte
+   stride regRsC), then optional kernelOps, then spill packed F32 ZMM
+   directly to user C via storeY_*_F32. Caller skips scaleAlpha/scaleBeta
+   and the FP16 storeResult on of32. */
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitFP16GEMVN1<KType>::applyPostOps(utils::gemvN1GeneratorParams& params,
@@ -1566,6 +1901,8 @@ jitFP16GEMVN1<KType>::applyPostOps(utils::gemvN1GeneratorParams& params,
     using MaskPoolType =
         utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
 
+    const bool isF32Rail = (c_downscale == DLP_F32);
+
     int  f32FullRegs    = mSize / F32_PER_ZMM;
     int  f32FringeElems = mSize % F32_PER_ZMM;
     bool f32HasMask     = (f32FringeElems > 0);
@@ -1573,30 +1910,137 @@ jitFP16GEMVN1<KType>::applyPostOps(utils::gemvN1GeneratorParams& params,
     int  numCRegs       = f32FullRegs + f32MaskRegs;
     int  packRegIdx     = yBaseIdx + yReg;
 
-    // Convert FP16 scalars to F32 and pack into contiguous ZMM (no stack)
     convertAndPackFP16ToF32Zmm(mSize, packRegIdx);
 
-    VecPoolType vecPool;
-    vecPool.setAccumulators(packRegIdx, numCRegs);
-    RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+    /* On of32: apply alpha and beta in F32 lanes 0..mSize-1 of the packed
+       ZMM. We use one Xmm broadcast scalar for alpha and one for beta, and
+       gather Y lanes either from row-stored (regRsC stride) or col-stored
+       (contiguous) F32 memory. */
+    if (isF32Rail) {
+        const bool isAlphaOne =
+            (alphaScalingType == dlp::kernel_frame::scalingType::one);
+        const bool isAlphaZero =
+            (alphaScalingType == dlp::kernel_frame::scalingType::zero);
+        const bool isBetaZero =
+            (betaScalingType == dlp::kernel_frame::scalingType::zero);
+        const bool isBetaOne =
+            (betaScalingType == dlp::kernel_frame::scalingType::one);
 
-    MaskPoolType maskPool;
-    maskPool.addPreserve(utils::MASK_START_IDX, 2);
-    RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
-                                  Traits::reservedMaskBits));
+        if (!isAlphaOne && !isAlphaZero) {
+            /* Alpha is FP16 in the public API (the framework hasn't widened
+               it). Broadcast 16-bit, convert to F32, then splat across the
+               ZMM. */
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, alpha)]);
+            vpbroadcastw(Xmm(tmpBaseIdx + 1), ptr[regKIter]);
+            vcvtph2ps(Xmm(tmpBaseIdx + 1), Xmm(tmpBaseIdx + 1));
+            vbroadcastss(Zmm(tmpBaseIdx + 1), Xmm(tmpBaseIdx + 1));
+            vmulps(Zmm(packRegIdx), Zmm(packRegIdx), Zmm(tmpBaseIdx + 1));
+        }
 
-    int maskOffset = f32HasMask ? static_cast<int>(offsetof(
-                                      dlp::kernels::gemvN1Params, mmask_avx512))
-                                : -1;
+        if (!isBetaZero) {
+            Xbyak::Label betaZeroRuntimeEnd;
 
-    RETURN_IF_ERROR(handler.generateKernelOps(
-        params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1, mSize, 1,
-        f32HasMask, f32MaskRegs, packRegIdx, numCRegs, vecPool, maskPool,
-        maskOffset));
+            if (!isBetaOne) {
+                // Broadcast beta early for runtime zero check.
+                // The Decision Engine passes betaScalingType as generic
+                // for k > KC even when beta = 0. Skip Y accesses to
+                // avoid NaN/Inf propagation from uninitialized Y.
+                mov(regKIter,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, beta)]);
+                vbroadcastss(Zmm(tmpBaseIdx + 2), ptr[regKIter]);
 
-    // Unpack ZMM lanes back to FP16 scalars (no stack)
+                vpxord(Zmm(tmpBaseIdx + 3), Zmm(tmpBaseIdx + 3),
+                       Zmm(tmpBaseIdx + 3));
+                vucomiss(Xmm(tmpBaseIdx + 2), Xmm(tmpBaseIdx + 3));
+                je(betaZeroRuntimeEnd, T_NEAR);
+            }
+
+            mov(regTmpYptr, regYptr);
+            // Pack mSize F32 lanes of Y into Zmm(yBaseIdx)
+            if (yFormat == dlp::kernel_frame::storageFormat::rowMajor) {
+                int t0  = tmpBaseIdx;
+                int dst = yBaseIdx;
+                vpxord(Zmm(dst), Zmm(dst), Zmm(dst));
+                for (int i = 0; i < mSize; i++) {
+                    mov(regTmp1, i);
+                    imul(regTmp1, regRsC);
+                    vmovss(Xmm(t0), ptr[regTmpYptr + regTmp1]);
+                    if (i == 0) {
+                        vmovaps(Xmm(dst), Xmm(t0));
+                    } else if (i < 4) {
+                        vinsertps(Xmm(dst), Xmm(dst), Xmm(t0), (i << 4));
+                    } else {
+                        // Build chunks of 4 in t0+1, then vinserti32x4
+                        int lane = i % 4;
+                        if (lane == 0) {
+                            vmovaps(Xmm(t0 + 1), Xmm(t0));
+                        } else {
+                            vinsertps(Xmm(t0 + 1), Xmm(t0 + 1), Xmm(t0),
+                                      (lane << 4));
+                        }
+                        if (lane == 3 || i == mSize - 1) {
+                            vinserti32x4(Zmm(dst), Zmm(dst), Xmm(t0 + 1),
+                                         i / 4);
+                        }
+                    }
+                }
+            } else {
+                // Col-major: Y is contiguous F32
+                if (mSize == 16) {
+                    vmovups(Zmm(yBaseIdx), ptr[regTmpYptr]);
+                } else {
+                    const uint32_t imm = (mSize >= 16) ? 0xFFFFu
+                                                       : ((1u << mSize) - 1u);
+                    mov(Reg32(regTmp1.getIdx()), imm);
+                    kmovw(mask_regs[2], Reg32(regTmp1.getIdx()));
+                    vmovups(Zmm(yBaseIdx) | mask_regs[2] | T_z,
+                            ptr[regTmpYptr]);
+                }
+            }
+
+            if (isBetaOne) {
+                vaddps(Zmm(packRegIdx), Zmm(packRegIdx), Zmm(yBaseIdx));
+            } else {
+                // Beta already broadcast above
+                vfmadd231ps(Zmm(packRegIdx), Zmm(yBaseIdx),
+                            Zmm(tmpBaseIdx + 2));
+            }
+
+            L(betaZeroRuntimeEnd);
+        }
+    }
+
+    if (!params.kernelOps.empty()) {
+        VecPoolType vecPool;
+        vecPool.setAccumulators(packRegIdx, numCRegs);
+        RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+        MaskPoolType maskPool;
+        maskPool.addPreserve(utils::MASK_START_IDX, 2);
+        RETURN_IF_ERROR(maskPool.init(this, utils::maskSaveWidth<KType>(),
+                                      Traits::reservedMaskBits));
+
+        int maskOffset =
+            f32HasMask ? static_cast<int>(
+                             offsetof(dlp::kernels::gemvN1Params, mmask_avx512))
+                       : -1;
+
+        RETURN_IF_ERROR(handler.generateKernelOps(
+            params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1, mSize,
+            1, f32HasMask, f32MaskRegs, packRegIdx, numCRegs, vecPool, maskPool,
+            maskOffset));
+    }
+
+    if (c_downscale == DLP_F32) {
+        mov(regTmpYptr, regYptr);
+        if (yFormat == dlp::kernel_frame::storageFormat::rowMajor) {
+            return storeY_rowStored_F32(mSize, packRegIdx);
+        }
+        return storeY_colStored_F32(mSize, packRegIdx);
+    }
+
     unpackAndConvertF32ZmmToFP16(mSize, packRegIdx);
-
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -1649,20 +2093,30 @@ jitFP16GEMVN1<KType>::generateIrLoop(utils::gemvN1GeneratorParams& params,
         RETURN_IF_ERROR(reduceAccumulation(mSize));
     }
 
-    if (alphaScalingType != dlp::kernel_frame::scalingType::one
-        && alphaScalingType != dlp::kernel_frame::scalingType::zero) {
-        RETURN_IF_ERROR(scaleAlpha(mSize));
+    /* On of32 the alpha/beta and Y read happen in F32 inside applyPostOps;
+       the FP16 scalar paths below would corrupt the FP16 acc lanes that
+       feed convertAndPackFP16ToF32Zmm. */
+    if (c_downscale != DLP_F32) {
+        if (alphaScalingType != dlp::kernel_frame::scalingType::one
+            && alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+            RETURN_IF_ERROR(scaleAlpha(mSize));
+        }
+
+        if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
+            RETURN_IF_ERROR(scaleBeta(mSize));
+        }
     }
 
-    if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
-        RETURN_IF_ERROR(scaleBeta(mSize));
-    }
-
-    if (handler) {
+    /* applyPostOps owns the F32 tail on of32 (β-combine + optional
+       kernelOps + F32 store); call it unconditionally on of32 even when
+       kernelOps is empty. On of16 it only runs when kernelOps is present. */
+    if (handler && (!params.kernelOps.empty() || c_downscale == DLP_F32)) {
         RETURN_IF_ERROR(applyPostOps(params, *handler, mSize));
     }
 
-    RETURN_IF_ERROR(storeResult(mSize));
+    if (c_downscale != DLP_F32) {
+        RETURN_IF_ERROR(storeResult(mSize));
+    }
 
     outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
@@ -1723,6 +2177,7 @@ jitFP16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
     MR               = params.MR;
     M_LEFT           = params.M_LEFT;
+    c_downscale      = params.c_downscale;
     yFormat          = params.yFormat;
     alphaScalingType = params.alphaScalingType;
     betaScalingType  = params.betaScalingType;
@@ -1736,8 +2191,10 @@ jitFP16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
         loadMasks();
 
+        /* On of32 we always need the F32 tail (β-combine + F32 store), so
+           a handler instance must exist regardless of kernelOps presence. */
         std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
-        if (!params.kernelOps.empty()) {
+        if (!params.kernelOps.empty() || c_downscale == DLP_F32) {
             kernelOpsHandlerPtr =
                 std::make_unique<gen::kernelOpsHandler<KType>>(this);
         }

@@ -61,7 +61,10 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(float, float, float, float, f32f32f32of32)
 GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
 
-// FP16 variant
+// FP16 variant. α/β are float16 — the public API contract; the 5-loop
+// widens β to F32 only at the of32 dispatch boundary so the kernel's F32
+// post-ops rail can broadcast it directly with vbroadcastss. α stays
+// FP16 on every rail (the JIT consumes it natively via vpbroadcastw).
 GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     float16, float16, float16, float16, f16f16f16of16)
 
@@ -190,7 +193,7 @@ GEN_DLP_GEMM_DECORATOR_FN_DECL(
 GEN_DLP_GEMM_DECORATOR_FN_DECL(float, float, float, float, f32f32f32of32)
 GEN_DLP_GEMM_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, int32_t, s8s8s32o32)
 
-// FP16 variant
+// FP16 variant. α/β are float16 — see OpenMP branch above for rationale.
 GEN_DLP_GEMM_DECORATOR_FN_DECL(
     float16, float16, float16, float16, f16f16f16of16)
 

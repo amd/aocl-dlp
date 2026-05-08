@@ -135,10 +135,20 @@ class decisionEngine
             kernel_frame::kernelDatatype::s8s8s32of16);
         backends[kTypeIdx][s8s8s32of16DtIdx] = new gemmS8DEBackend;
 
-        // Register FP16 decision engine
+        // Register FP16 decision engine. Both the of16 and of32 rails use
+        // the same gemmFP16DEBackend class (same JIT generator, same kernel
+        // selection), but each datatype gets its OWN instance so the
+        // 2D-array-by-datatype dispatch model stays uniform across all
+        // datatypes (cosmetic uniformity with the bf16/u8s8/s8 backends
+        // which also instantiate per-datatype). The destructor uses a
+        // pointer-set to avoid double-deletion.
         auto f16f16f16of16DtIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelDatatype::f16f16f16of16);
         backends[kTypeIdx][f16f16f16of16DtIdx] = new gemmFP16DEBackend;
+
+        auto f16f16f16of32DtIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelDatatype::f16f16f16of32);
+        backends[kTypeIdx][f16f16f16of32DtIdx] = new gemmFP16DEBackend;
 
         // Register F32×FP16→F32 mixed-precision decision engine
         auto f32f16f32of32DtIdx = utils::getUnderlyingValueOfEnum(
@@ -298,19 +308,17 @@ class decisionEngine
         auto dtIdx    = utils::getUnderlyingValueOfEnum(dt);
         if (backends[kTypeIdx][dtIdx] != nullptr) {
             T* backend = static_cast<T*>(backends[kTypeIdx][dtIdx]);
+            // Explicitly scope calls to bypass the vtable.
             if ((m == 1) || (n == 1)) {
-                // Explicitly scope call to bypass vtable.
                 return backend->T::getGemvKernelInfoForInputFastPath(
                     dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
                     beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
                     c_downscale, false);
-            } else {
-                // Explicitly scope call to bypass vtable.
-                return backend->T::getGemmKernelInfoForInputFastPath(
-                    dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
-                    beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                    c_downscale, false);
             }
+            return backend->T::getGemmKernelInfoForInputFastPath(
+                dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale, false);
         }
 
         return INVALID_KERNEL_INFO;

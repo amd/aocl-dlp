@@ -67,6 +67,28 @@ aocl_gemm_f16f16f16of16_ref(const char      order,
                             int             ldc,
                             dlp_metadata_t* post_ops);
 
+// FP16xFP16 -> F32 reference (in-place): same alpha/beta-FP16 contract as
+// the of16 API; output C is float (F32). The implementation lives in
+// gemm_fp16fp16fp16of32_ref.cc and supports a USE_GOLD_STANDARD compile-time
+// switch (gold-standard sequential simulator vs kernel-matching tile-walk
+// in F32 per-KC) for tolerance-vs-realism trade-offs.
+void
+aocl_gemm_f16f16f16of32_ref(const char      order,
+                            const char      transa,
+                            const char      transb,
+                            const md_t      m,
+                            const md_t      n,
+                            const md_t      k,
+                            float16         alpha,
+                            const float16*  A,
+                            int             lda,
+                            const float16*  B,
+                            int             ldb,
+                            float16         beta,
+                            float*          C,
+                            int             ldc,
+                            dlp_metadata_t* post_ops);
+
 void
 aocl_gemm_f32f16f32of32_ref(const char      order,
                             const char      transa,

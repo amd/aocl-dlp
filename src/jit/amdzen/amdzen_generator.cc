@@ -2714,7 +2714,8 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
 
 // FP16 JIT Generator
 jitAmdZenFP16::jitAmdZenFP16()
-    : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f16f16f16of16 })
+    : mKernelDatatypes({ dlp::kernel_frame::kernelDatatype::f16f16f16of16,
+                         dlp::kernel_frame::kernelDatatype::f16f16f16of32 })
     , mIsaFeaturesRequired({ dlp::cpu_utils::isaFeature::avx512fp16 })
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1) // Initializing with 1 to avoid div by zero
@@ -3079,6 +3080,13 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
     dlp::float16* cPtr = static_cast<dlp::float16*>(params->c);
     dlp::float16* c_jr = cPtr;
 
+    // On the of32 rail params->c aliases user F32 C, so any element-typed
+    // advance (M-step, JR-step, remainder pass) must scale by
+    // sizeof(float) instead of sizeof(float16). c_downscale is a
+    // build-time constant per kernel, so we cache the rail bool once here
+    // and the conditional casts below are zero-cost on the hot path.
+    bool cIsF32 = ((params->kernelOpsAttr).c_stor_type == DLP_F32);
+
     md_t rsB            = params->rsB;
     md_t n              = params->n;
     md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
@@ -3114,8 +3122,16 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
             // psA already contains MR * rs_a, so don't multiply by MR again
             (params->a) =
                 (dlp::float16*)(params->a) + mFullPieces * params->psA;
-            (params->c) =
-                (dlp::float16*)(params->c) + MR * mFullPieces * params->rsC;
+            // Type-aware M-step on params->c: of32 advances by float
+            // elements; of16 by float16 elements. params->rsC is the
+            // element-typed user ldc passed through unchanged.
+            if (cIsF32) {
+                params->c = (dlp::float16*)((float*)(params->c)
+                                            + MR * mFullPieces * params->rsC);
+            } else {
+                params->c =
+                    (dlp::float16*)(params->c) + MR * mFullPieces * params->rsC;
+            }
         }
 
         if (mPartialPieces) {
@@ -3138,7 +3154,12 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
         } else {
             params->b = (dlp::float16*)(params->b) + elementsToProcess;
         }
-        c_jr                                = c_jr + elementsToProcess;
+        // Type-aware JR-step on c_jr: of32 advances by F32 elements.
+        if (cIsF32) {
+            c_jr = (dlp::float16*)((float*)c_jr + elementsToProcess);
+        } else {
+            c_jr = c_jr + elementsToProcess;
+        }
         (params->kernelOpsAttr).post_op_c_i = og_post_op_c_i;
         (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
         n -= elementsToProcess;
@@ -3174,8 +3195,14 @@ jitAmdZenFP16::executeKernel(dlp::kernels::kernelParams* _params)
             // psA already contains MR * rs_a, so don't multiply by MR again
             (params->a) =
                 (dlp::float16*)(params->a) + mFullPieces * params->psA;
-            (params->c) =
-                (dlp::float16*)(params->c) + MR * mFullPieces * params->rsC;
+            // Type-aware M-step (remainder pass), same contract as above.
+            if (cIsF32) {
+                params->c = (dlp::float16*)((float*)(params->c)
+                                            + MR * mFullPieces * params->rsC);
+            } else {
+                params->c =
+                    (dlp::float16*)(params->c) + MR * mFullPieces * params->rsC;
+            }
         }
 
         if (mPartialPieces) {

@@ -79,6 +79,8 @@ get_kernel_family_name(kernelDatatype kDtype)
             return "dlp_s8s8s32ou8_jit_kernel";
         case kernelDatatype::f16f16f16of16:
             return "dlp_f16f16f16of16_jit_kernel";
+        case kernelDatatype::f16f16f16of32:
+            return "dlp_f16f16f16of32_jit_kernel";
         case kernelDatatype::f32f16f32of32:
             return "dlp_f32f16f32of32_jit_kernel";
         default:
@@ -114,6 +116,18 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
                 c_downscale, kernelRoutineType::gemm, kDType);
     } else if (kDType == dlp::kernel_frame::kernelDatatype::f16f16f16of16) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmKernelInfoForInputFastPath<dlp::de::gemmFP16DEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
+                c_downscale, kernelRoutineType::gemm, kDType);
+    } else if (kDType == dlp::kernel_frame::kernelDatatype::f16f16f16of32) {
+        // Of32: GEMV-shaped (m=1 or n=1) inputs route through the
+        // dedicated FP16 GEMV kernels which carry a c_downscale-aware F32
+        // store rail (beta-combine + F32 store directly to the user's
+        // float* C). The framework half of the contract lives in
+        // dlp_gemv_rowvar_f16f16f16of16 (type-aware C-pointer arithmetic
+        // via c_elem_size and beta widened with fp16_to_f32).
         return dlp::de::decisionEngineInstance()
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmFP16DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
