@@ -62,6 +62,7 @@ typedef enum
     POST_OPS_SIGMOID    = 12,
     POST_OPS_SUM        = 13,
     POST_OPS_ADQUANTIZE = 14,
+    POST_OPS_MISH       = 15,
     POST_OPS_MAX
 } DLP_GEMM_POST_OP_CODE;
 

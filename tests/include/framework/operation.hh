@@ -95,7 +95,8 @@ enum class ElementWiseOperation : uint8_t
     Clip      = 4,
     Swish     = 5,
     Tanh      = 6,
-    Sigmoid   = 7
+    Sigmoid   = 7,
+    Mish      = 8
 };
 
 /**
@@ -652,6 +653,13 @@ struct ElementWiseTraits<ElementWiseOperation::Sigmoid>
     static constexpr bool supports_beta  = false;
 };
 
+template<>
+struct ElementWiseTraits<ElementWiseOperation::Mish>
+{
+    static constexpr bool supports_alpha = false;
+    static constexpr bool supports_beta  = false;
+};
+
 // (No traits needed for Scale)
 
 // TYPE-SAFE BUILDER CLASSES
@@ -820,6 +828,19 @@ class SigmoidBuilder
     {
         return std::make_unique<ElementWiseParam>(
             ElementWiseOperation::Sigmoid);
+    }
+};
+
+/**
+ * @class MishBuilder
+ * @brief Type-safe builder for Mish operations: x * tanh(softplus(x))
+ */
+class MishBuilder
+{
+  public:
+    std::unique_ptr<IOperationParam> build()
+    {
+        return std::make_unique<ElementWiseParam>(ElementWiseOperation::Mish);
     }
 };
 
@@ -1222,13 +1243,15 @@ namespace postops {
     {
         return SigmoidBuilder{};
     }
-
+    inline MishBuilder createMish()
+    {
+        return MishBuilder{};
+    }
     // Scale operation factories
     inline ScaleBuilder createScale()
     {
         return ScaleBuilder{};
     }
-
     // Other operation factories
     inline BiasBuilder createBias()
     {

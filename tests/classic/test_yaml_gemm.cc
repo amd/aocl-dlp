@@ -496,7 +496,7 @@ TEST(YamlParserTest, ParseListOnlyConfig)
         //
         // PostOps (3 operations with cartesian=true):
         // With corrected logic: cartesian=true generates all permutations of
-        // the full sequence For 3 operations ["Elementwise-PRELU", "Bias",
+        // the full sequence For 3 operations ["Elementwise-RELU", "Bias",
         // "Scale"]:
         // PostOps (3 operations with cartesian=true):
         // All subsets and their permutations:
@@ -1075,6 +1075,31 @@ TEST(YamlParserTest, ElementwiseParametersComprehensiveTest)
         EXPECT_FALSE(postop_params.empty())
             << "PostOp should be created with bf16 types";
         std::cout << "✓ Different data types test passed" << std::endl;
+
+        // Test 4: Mish standalone (no-parameter elementwise)
+        parser.next();
+        MicroTest& mishTest = const_cast<MicroTest&>(parser.getMicroTest());
+        advanceToNonEmpty(mishTest);
+
+        std::cout << "Test 4: Mish standalone..." << std::endl;
+        postop_params = mishTest.getPostOpParams();
+
+        EXPECT_FALSE(postop_params.empty())
+            << "PostOp should be created for Mish";
+        std::cout << "✓ Mish standalone test passed" << std::endl;
+
+        // Test 5: Mish chained with Bias
+        parser.next();
+        MicroTest& mishChainTest =
+            const_cast<MicroTest&>(parser.getMicroTest());
+        advanceToNonEmpty(mishChainTest);
+
+        std::cout << "Test 5: Mish chained with Bias..." << std::endl;
+        postop_params = mishChainTest.getPostOpParams();
+
+        EXPECT_FALSE(postop_params.empty())
+            << "PostOp should be created for Bias+Mish chain";
+        std::cout << "✓ Mish chained test passed" << std::endl;
 
         std::cout << "✓ All Tests PASSED - Comprehensive parameter support "
                      "works correctly"

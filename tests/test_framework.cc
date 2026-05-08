@@ -914,6 +914,10 @@ TEST_F(PostOpsTest, ElementWiseBuilders)
     auto  swish       = postops::createSwish().build();
     auto& swish_param = static_cast<const ElementWiseParam&>(*swish);
     EXPECT_EQ(swish_param.getOperation(), ElementWiseOperation::Swish);
+
+    auto  mish       = postops::createMish().build();
+    auto& mish_param = static_cast<const ElementWiseParam&>(*mish);
+    EXPECT_EQ(mish_param.getOperation(), ElementWiseOperation::Mish);
 }
 
 // Test PReLU validation

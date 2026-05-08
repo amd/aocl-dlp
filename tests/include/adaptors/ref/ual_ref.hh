@@ -244,6 +244,7 @@ class UalRef : public IUal
     void applySwish(Matrix& matrix, const Matrix* alpha);
     void applyTanh(Matrix& matrix);
     void applySigmoid(Matrix& matrix);
+    void applyMish(Matrix& matrix);
     void applyScale(Matrix&       matrix,
                     const Matrix* scaleFactor,
                     const Matrix* zeroPoint);

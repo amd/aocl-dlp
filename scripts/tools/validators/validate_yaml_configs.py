@@ -76,6 +76,7 @@ VALID_OPERATION_TYPES = {
     "Elementwise-GELU-TANH",
     "Elementwise-GELU-ERF",
     "Elementwise-SWISH",
+    "Elementwise-MISH",
     "Elementwise-TANH",
     "Elementwise-SIGMOID",
     "Elementwise-CLIP",

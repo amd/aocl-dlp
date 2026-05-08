@@ -1005,6 +1005,9 @@ UalRef::applyPostOperation(Matrix& matrix,
         case dlp::testing::framework::ElementWiseOperation::Sigmoid:
             applySigmoid(matrix);
             break;
+        case dlp::testing::framework::ElementWiseOperation::Mish:
+            applyMish(matrix);
+            break;
         default:
             break;
     }
@@ -1544,6 +1547,26 @@ UalRef::applySigmoid(Matrix& matrix)
     applyUnifiedPostOp(matrix, [](float* data, size_t size) {
         for (std::size_t i = 0; i < size; ++i) {
             data[i] = 1.0f / (1.0f + std::exp(-data[i]));
+        }
+    });
+}
+
+/**
+ * @brief Apply Mish activation function to matrix elements
+ *
+ * Mish: mish(x) = x * tanh(softplus(x))
+ *      softplus(x) = max(x, 0) + log1p(exp(-|x|))   (numerically stable)
+ *
+ * @param matrix Matrix on which Mish activation function is to be applied
+ */
+void
+UalRef::applyMish(Matrix& matrix)
+{
+    applyUnifiedPostOp(matrix, [](float* data, size_t size) {
+        for (std::size_t i = 0; i < size; ++i) {
+            float x  = data[i];
+            float sp = std::fmax(x, 0.f) + std::log1p(std::exp(-std::fabs(x)));
+            data[i]  = x * std::tanh(sp);
         }
     });
 }

@@ -1362,6 +1362,8 @@ DlpUalPlan::getElementWiseAlgoType(ElementWiseOperation op)
             return TANH;
         case ElementWiseOperation::Sigmoid:
             return SIGMOID;
+        case ElementWiseOperation::Mish:
+            return MISH;
         default:
             throw std::runtime_error("Unsupported element-wise operation");
     }

@@ -44,6 +44,7 @@ using dlp::testing::framework::postops::createGeluTanh;
 using dlp::testing::framework::postops::createGroupScale;
 using dlp::testing::framework::postops::createMatrixAdd;
 using dlp::testing::framework::postops::createMatrixMul;
+using dlp::testing::framework::postops::createMish;
 using dlp::testing::framework::postops::createPrelu;
 using dlp::testing::framework::postops::createRelu;
 using dlp::testing::framework::postops::createScale;
@@ -485,6 +486,10 @@ MicroTest::createOperationParam(
     } else if (config.type == "Elementwise-SIGMOID") {
         // SIGMOID requires no parameters
         return createSigmoid().build();
+
+    } else if (config.type == "Elementwise-MISH") {
+        // MISH requires no parameters: x * tanh(softplus(x))
+        return createMish().build();
 
     } else if (config.type == "Elementwise-CLIP") {
         // CLIP: Parse alpha (lower bound) and beta (upper bound) parameters

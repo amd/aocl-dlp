@@ -307,3 +307,41 @@ yaml_test:
       cartesian: false
       operations: []
     # Expected: 1 (GEMM) × 1 (empty PostOps) = 1 combination
+
+  # Test Case 9: Chained post-op with mixed parameterisation
+  # A parameterised op followed by two zero-parameter elementwise ops.
+  # Verifies that ops without parameters contribute a factor of one and
+  # do not inflate the combination count produced by the parameterised op.
+  #   Bias:     bias_type [f32, bf16] × bias_dim [n, 1]  → 2×2 = 4 variants
+  #   zero-param ops:                                     → 1 variant each
+  # Total: 4 combinations
+  - name: "mish_chained_postop"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 8
+    n: 16
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    lda: 16
+    ldb: 16
+    ldc: 16
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      relative: 132.5
+      absolute: 53.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32", "bf16"]   # 2 values
+            bias_dim: ["n", "1"]         # 2 values
+        - type: "Elementwise-MISH"
+        - type: "Elementwise-GELU-ERF"

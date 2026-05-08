@@ -100,3 +100,55 @@ yaml_test:
             alpha_type: ["bf16"]
             beta: [3.5]
             beta_type: ["bf16"]
+
+  # Test case 4: Elementwise-MISH standalone — non-square dims, both layouts
+  - name: "elementwise_mish"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 8
+    n: 16
+    k: 12
+    alpha: 1.0
+    beta: 0.0
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      relative: 132.5
+      absolute: 53.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-MISH"
+
+  # Test case 5: Elementwise-MISH chained with Bias — non-square dims, both layouts
+  - name: "elementwise_mish_chained"
+    a_type: ["f32"]
+    b_type: ["f32"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major", "column-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: 12
+    n: 8
+    k: 16
+    alpha: 1.0
+    beta: 0.0
+    mtagA: "none"
+    mtagB: "none"
+    tolerances:
+      relative: 132.5
+      absolute: 53.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Elementwise-MISH"

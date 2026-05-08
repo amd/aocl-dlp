@@ -493,6 +493,9 @@ extractPostOpsDescription(
                     case ElementWiseOperation::Sigmoid:
                         op_name = "Sigmoid";
                         break;
+                    case ElementWiseOperation::Mish:
+                        op_name = "Mish";
+                        break;
                     default:
                         op_name = "UnknownEltwise";
                         break;

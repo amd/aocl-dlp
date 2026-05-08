@@ -586,3 +586,59 @@ TEST_F(PostOpsMultipleParamsTest, IteratorResetCorrectness)
         FAIL() << "Test threw exception: " << e.what();
     }
 }
+
+/**
+ * TEST 11: Chained PostOp Combination Count with Mixed Parameterisation
+ *
+ * Verifies that the combination count for a chained post-op is driven solely
+ * by the ops that carry parameters; ops with no parameters contribute a factor
+ * of one and do not inflate the total.
+ * Expected combinations: parameterised op variants × 1 × 1 = 4
+ */
+TEST_F(PostOpsMultipleParamsTest, ChainedPostOpMixedParamExpansion)
+{
+    try {
+        YamlParser parser(getConfigPath(), "yaml_test");
+
+        for (iter_t i = 0; i < 8; i++)
+            parser.next();
+        const MicroTest& microTest = parser.getMicroTest();
+
+        std::cout << "\n=== TEST 11: Chained PostOp Mixed Parameterisation ==="
+                  << std::endl;
+        std::cout << "Testing combination count with parameterised and "
+                     "non-parameterised ops in chain"
+                  << std::endl;
+
+        size_t expected_combinations = 4;
+        size_t actual_combinations   = microTest.getSize();
+
+        std::cout << "Expected combinations: " << expected_combinations
+                  << std::endl;
+        std::cout << "Actual combinations: " << actual_combinations
+                  << std::endl;
+
+        ASSERT_EQ(actual_combinations, expected_combinations)
+            << "Combination count should be driven by the parameterised op "
+               "only";
+
+        auto& mutableMicroTest = const_cast<MicroTest&>(microTest);
+        int   combo_count      = 0;
+
+        do {
+            EXPECT_TRUE(!microTest.getPostOpParams().empty())
+                << "PostOps should be present on combination " << combo_count;
+
+            combo_count++;
+            if (!mutableMicroTest.hasNext())
+                break;
+            mutableMicroTest.next();
+        } while (combo_count < 10);
+
+        std::cout << "✓ Chained post-op mixed parameterisation verified"
+                  << std::endl;
+
+    } catch (const std::exception& e) {
+        FAIL() << "Test threw exception: " << e.what();
+    }
+}

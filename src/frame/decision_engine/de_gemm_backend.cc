@@ -428,6 +428,9 @@ gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
         case POST_OPS_SIGMOID:
             metaData->type = kernel_frame::kernelOps::sigmoid;
             break;
+        case POST_OPS_MISH:
+            metaData->type = kernel_frame::kernelOps::mish;
+            break;
         case POST_OPS_DOWNSCALE: {
             metaData->type = kernel_frame::kernelOps::downscale;
             char storFormatC =

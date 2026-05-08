@@ -1687,6 +1687,94 @@ GeluTanh<KType>::generateImpl(kernelOpsMetaData& op)
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Op: Mish -- x * tanh(softplus(x))
+//
+// Derivation. With y = softplus(x) = ln(1+e^x), the identity
+// tanh(y) = (e^(2y) - 1) / (e^(2y) + 1) and e^(2y) = (1+e^x)² collapse
+// Mish to a rational in e^x. Substituting u = exp(-|x|) ∈ (0, 1] then
+// splits the factor by sign:
+//     x >= 0:  factor = (2u + 1)  / (2u² + 2u + 1)
+//     x <  0:  factor = (u² + 2u) / (u² + 2u + 2)
+// Both share N₀ = u²+2u, D₀ = N₀+2 and differ only by δ = 1 - u²:
+//     (N_pos, D_pos) = (N₀+δ, D₀-δ),   (N_neg, D_neg) = (N₀, D₀).
+// A masked add/sub picks the correct branch per lane; mish = x * N/D
+// restores the sign through the original operand.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+template<utils::kernelInstrType KType>
+void
+Mish<KType>::mishF32(
+    int reg, int const1, int const2, int x,
+    int r, int r2, int z, int dn, int q)
+{
+    auto* jit = this->jit;
+
+    // Absolute value and negation: x = -|reg|, reg preserved
+    jit->vbroadcastss(RegType(const2),
+                      this->geluAddr(7 * (int)sizeof(float)));   // -0.0f
+    jit->vorps(RegType(x), RegType(reg), RegType(const2));
+
+    // Bounded exponential: q = u = exp(-|reg|) ∈ (0, 1]
+    this->expF(x, const1, const2, r, r2, z, dn, q, expCmpMaskIdx);
+
+    // Shared rational pair: r2 = N₀ = u² + 2u, z = D₀ = N₀ + 2
+    jit->vbroadcastss(RegType(const1),
+                      this->geluAddr(5 * (int)sizeof(float))); // 2.0f
+    jit->vmulps(RegType(r),   RegType(q),  RegType(q));        // r  = u²
+    jit->vmovups(RegType(r2), RegType(r));                     // r2 = u²
+    jit->vfmadd231ps(RegType(r2), RegType(q), RegType(const1)); // r2 = u² + 2u (N₀)
+    jit->vaddps(RegType(z),  RegType(r2), RegType(const1));    // z  = N₀ + 2  (D₀)
+
+    // Bridge term: dn = δ = 1 - u²
+    jit->vbroadcastss(RegType(const2),
+                      this->geluAddr(6 * (int)sizeof(float))); // 1.0f
+    jit->vsubps(RegType(dn), RegType(const2), RegType(r));     // dn = 1 - u² (δ)
+
+    // Positive-domain fold: where reg >= 0, N += δ and D -= δ
+    if constexpr (Traits::hasMaskSupport) {
+        Xbyak::Opmask posMask(expCmpMaskIdx);
+        jit->vxorps(RegType(const1), RegType(const1), RegType(const1));
+        jit->vcmpps(posMask, RegType(reg), RegType(const1), 0x0D); // GE_OQ
+        jit->vaddps(RegType(r2) | posMask, RegType(r2), RegType(dn));
+        jit->vsubps(RegType(z)  | posMask, RegType(z),  RegType(dn));
+    } else {
+        // AVX2: vector-mask + blendvps in place of opmask
+        jit->vxorps(RegType(const1), RegType(const1), RegType(const1));
+        jit->vcmpps(RegType(const2), RegType(reg), RegType(const1), 0x0D);
+        jit->vaddps(RegType(const1), RegType(r2), RegType(dn));
+        jit->vblendvps(RegType(r2), RegType(r2), RegType(const1), RegType(const2));
+        jit->vsubps(RegType(const1), RegType(z), RegType(dn));
+        jit->vblendvps(RegType(z),  RegType(z),  RegType(const1), RegType(const2));
+    }
+
+    // Apply factor: mish = reg * (N / D)
+    jit->vdivps(RegType(z),   RegType(r2),  RegType(z));
+    jit->vmulps(RegType(reg), RegType(reg), RegType(z));
+}
+
+template<utils::kernelInstrType KType>
+jitGeneratorError
+Mish<KType>::generateImpl(kernelOpsMetaData& op)
+{
+    if constexpr (Traits::hasMaskSupport) {
+        if (expCmpMaskIdx < 0)
+            return jitGeneratorError::notSupported;
+    }
+
+    this->requestTable(this->TABLE_GELU | this->TABLE_EXP);
+
+    RETURN_IF_ERROR(this->vecPool->applyOp(NUM_SCRATCH_NEEDED, nullptr,
+        [this](int reg, const int* s, int) {
+            int c1 = s[0], c2 = s[1], x = s[2];
+            int r  = s[3], r2 = s[4], z = s[5], dn = s[6], q = s[7];
+            mishF32(reg, c1, c2, x, r, r2, z, dn, q);
+        }));
+
+    return jitGeneratorError::success;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // Op: Tanh -- tanh(x) via expF
 // ═══════════════════════════════════════════════════════════════════════════════
 

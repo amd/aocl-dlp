@@ -57,6 +57,7 @@ typedef enum
     SWISH     = 5, /**< Swish activation: x * sigmoid(x) */
     TANH      = 6, /**< Hyperbolic tangent activation */
     SIGMOID   = 7, /**< Sigmoid activation: 1 / (1 + exp(-x)) */
+    MISH      = 8, /**< Mish activation: x * tanh(softplus(x)) */
 } DLP_ELT_ALGO_TYPE;
 
 /**

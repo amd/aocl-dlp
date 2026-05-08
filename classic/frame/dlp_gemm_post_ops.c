@@ -533,6 +533,9 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     case SIGMOID:
                         tmp_code = POST_OPS_SIGMOID;
                         break;
+                    case MISH:
+                        tmp_code = POST_OPS_MISH;
+                        break;
                     default:
                         break;
                 }

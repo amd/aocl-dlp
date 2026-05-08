@@ -294,6 +294,43 @@ class GeluTanh : public kernelopsBase<GeluTanh<KType>, KType>
         dlp::kernel_frame::kernelOpsMetaData& op);
 };
 
+// Mish: x * tanh(softplus(x)) -- sign-aware rational form
+template<utils::kernelInstrType KType>
+class Mish : public kernelopsBase<Mish<KType>, KType>
+{
+    using opBase = kernelopsBase<Mish<KType>, KType>;
+    using typename opBase::RegType;
+    using typename opBase::Traits;
+
+    static constexpr int NUM_SCRATCH_NEEDED = 8;
+
+    void mishF32(int reg,
+                 int const1,
+                 int const2,
+                 int x,
+                 int r,
+                 int r2,
+                 int z,
+                 int dn,
+                 int q);
+
+    int                                 expCmpMaskIdx = -1;
+    utils::registerGuard<Xbyak::Opmask> expMaskGuard;
+
+  public:
+    explicit Mish(kernelOpsGeneratorX86<KType>& base)
+        : opBase(base)
+    {
+        if constexpr (Traits::hasMaskSupport) {
+            expMaskGuard  = this->maskPool->acquireGuard();
+            expCmpMaskIdx = expMaskGuard.idx();
+        }
+    }
+
+    dlp::jit::jitGeneratorError generateImpl(
+        dlp::kernel_frame::kernelOpsMetaData& op);
+};
+
 // Tanh: tanh(x) via EXPF
 template<utils::kernelInstrType KType>
 class Tanh : public kernelopsBase<Tanh<KType>, KType>
@@ -616,6 +653,10 @@ generateKernelOp(kernelOpsGeneratorX86<KType>&         base,
         case dlp::kernel_frame::kernelOps::aDQuantize: {
             ADQuantize<KType> adQuantImpl(base);
             return adQuantImpl.generate(op);
+        }
+        case dlp::kernel_frame::kernelOps::mish: {
+            Mish<KType> mishImpl(base);
+            return mishImpl.generate(op);
         }
         default:
             return dlp::jit::jitGeneratorError::notSupported;
