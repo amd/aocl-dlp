@@ -385,11 +385,12 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                 &n_sub_updated);
         }
 
-        if (c_downscale == DLP_F32) {
-            c_use_jc = c + jc;
-        }
+        // This is for c_downscale == DLP_F32. When c_downscale < DLP_F32,
+        // this value will not be used.
+        c_use_jc = c + jc;
+
         // Temp accumulaton buffer for C allocation.
-        else if (c_downscale < DLP_F32) {
+        if (c_downscale < DLP_F32) {
             // Buffer memory is only required if output needs to be
             // persisted across iterations of the pc/KC loop.
             // It was observed that the locks used while checking out
@@ -1067,11 +1068,12 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                 &n_sub_updated);
         }
 
-        if (c_downscale == DLP_F32) {
-            c_use_jc = c + jc;
-        }
+        // This is for c_downscale == DLP_F32. When c_downscale < DLP_F32,
+        // this value will not be used.
+        c_use_jc = c + jc;
+
         // Temp accumulaton buffer for C allocation.
-        else if (c_downscale < DLP_F32) {
+        if (c_downscale < DLP_F32) {
             // Buffer memory is only required if output needs to be
             // persisted across iterations of the pc/KC loop.
             // It was observed that the locks used while checking out
