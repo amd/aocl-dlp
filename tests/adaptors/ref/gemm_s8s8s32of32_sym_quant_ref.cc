@@ -181,7 +181,8 @@ aocl_gemm_s8s8s32of32_sym_quant_ref(const char    order,
         KC = gs;
     }
 
-    const float alpha_f = static_cast<float>(alpha);
+    const bool  is_col_major = (order == 'c' || order == 'C');
+    const float alpha_f      = static_cast<float>(alpha);
 
     for (md_t i = 0; i < m; ++i) {
         for (md_t j = 0; j < n; ++j) {
@@ -218,7 +219,11 @@ aocl_gemm_s8s8s32of32_sym_quant_ref(const char    order,
                         read_scale_as_f32(b_scale, g * n + j, scale_stor_type);
                     // Match Zen4 sym_quant kernels: (cvt_s32_to_f32(corr) *
                     // b_scl) * a_scl (CVT_ACCUM_REG_APPLY_SCALES_M_N).
-                    chunk_acc += (static_cast<float>(corr) * sb) * sa;
+                    if (is_col_major) {
+                        chunk_acc += (static_cast<float>(corr) * sa) * sb;
+                    } else {
+                        chunk_acc += (static_cast<float>(corr) * sb) * sa;
+                    }
                 }
 
                 const int32_t beta0 = (pc == 0) ? beta : 1;

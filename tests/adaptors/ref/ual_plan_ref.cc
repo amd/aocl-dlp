@@ -305,7 +305,9 @@ RefUalPlan::execute()
         (aType == MatrixType::s8 && bType == MatrixType::s8 && m_group_scale);
 
     if (isS8S8GroupScale) {
-        if (!ualRef.checkValidGemmParams(A, B, C, false)) {
+        md_t gs = m_group_scale->getGroupSize();
+
+        if (!ualRef.checkValidGemmParams(A, B, C, false, gs)) {
             return UALError::UAL_FAILURE;
         }
 
@@ -313,7 +315,6 @@ RefUalPlan::execute()
         md_t N = C.getEffectiveCols();
         md_t K = A.getEffectiveCols();
 
-        md_t gs     = m_group_scale->getGroupSize();
         md_t gs_eff = (gs == 0) ? K : gs;
         md_t ng     = (K + gs_eff - 1) / gs_eff;
 

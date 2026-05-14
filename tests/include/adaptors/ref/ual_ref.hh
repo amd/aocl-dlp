@@ -173,12 +173,15 @@ class UalRef : public IUal
      * @param A First input matrix
      * @param B Second input matrix
      * @param C Output matrix
+     * @param hasMetadata Whether the plan has post-ops metadata
+     * @param group_size group_size for sym_quant API
      * @return bool True if parameters are valid, false otherwise
      */
     bool checkValidGemmParams(const Matrix& A,
                               const Matrix& B,
                               const Matrix& C,
-                              bool          hasMetadata);
+                              bool          hasMetadata,
+                              md_t          group_size = 0);
 
     /**
      * @brief Internal implementation of reorder with layout and

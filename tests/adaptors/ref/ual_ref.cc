@@ -368,13 +368,16 @@ UalRef::reorder(void*        A,
  * @param A First input matrix
  * @param B Second input matrix
  * @param C Output matrix
+ * @param hasMetadata Whether the plan has post-ops metadata
+ * @param group_size group_size for sym_quant API
  * @return bool True if parameters are valid, false otherwise
  */
 bool
 UalRef::checkValidGemmParams(const Matrix& A,
                              const Matrix& B,
                              const Matrix& C,
-                             bool          hasMetadata)
+                             bool          hasMetadata,
+                             md_t          group_size)
 {
     // Get GEMM operation dimensions (logical dimensions)
     uint32_t m = A.getEffectiveRows(); // Rows of A (and C)
@@ -480,6 +483,14 @@ UalRef::checkValidGemmParams(const Matrix& A,
         return false;
     }
     if (col_stored && (C.getLeadingDimension() < m)) {
+        return false;
+    }
+
+    // group_size conditions:
+    // 1. group_size must be less than or equal to k.
+    // 2. group_size = 0 is valid and implies one group over full k.
+    // 3. group_size < 0 (-ve) is invalid.
+    if ((group_size > k) || (group_size < 0)) {
         return false;
     }
 

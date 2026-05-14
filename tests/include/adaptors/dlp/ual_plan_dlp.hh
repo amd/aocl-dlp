@@ -62,13 +62,6 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
 
     dlp_metadata_t* getMetadata() const { return m_metadata; }
 
-    void setGroupScale(std::unique_ptr<GroupScaleParam> param)
-    {
-        m_group_scale = std::move(param);
-    }
-
-    bool hasGroupScale() const { return m_group_scale != nullptr; }
-
   private:
     // Pre-built metadata (ONE struct for everything)
     dlp_metadata_t* m_metadata = nullptr;
@@ -136,9 +129,6 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
                | (static_cast<uint64_t>(B) << 32)
                | (static_cast<uint64_t>(C) << 16) | static_cast<uint64_t>(Acc);
     }
-
-    // Group-level symmetric quantization (group_scale)
-    std::unique_ptr<GroupScaleParam> m_group_scale;
 
     // Broadcast buffers for scalar scale factors (kept alive for metadata
     // lifetime). When scale_factor_len=1 the kernel still indexes per-channel,

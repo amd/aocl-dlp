@@ -1256,14 +1256,16 @@ DlpUalPlan::convertGroupScaleOperations()
     // group_size=0 defaults to k in the C API, which is correct for
     // symmetric quantization over the full k dimension.
     m_metadata->post_op_grp->seq_length = 1;
-    m_metadata->post_op_grp->group_size = m_group_scale->getGroupSize();
+
+    md_t gs                             = m_group_scale->getGroupSize();
+    m_metadata->post_op_grp->group_size = gs;
 
     // The sym_quant kernel indexes scale factors as 2D arrays:
     //   A scale: a_scale[row * num_groups + group], needing m * num_groups
     //   elems B scale: b_scale[group * n + col],          needing num_groups *
     //   n elems
     // With group_size=0 (defaults to k), num_groups=1, so A needs m and B needs
-    // n elements.  When scale_factor_len=1 (scalar), we must broadcast to the
+    // n elements. When scale_factor_len=1 (scalar), we must broadcast to the
     // full expected size so the kernel does not read out of bounds.
     // NOTE: Broadcast only handles scalar (len=1) → per-dim expansion.
     // Per-row/per-col → per-group tiling is not implemented here; the ref
@@ -1271,6 +1273,14 @@ DlpUalPlan::convertGroupScaleOperations()
     // scale factor indexing for correctly-sized arrays.
     md_t m = getM();
     md_t n = getN();
+    md_t k = getK();
+
+    // DLP converts group_size=0 to a group_size of K internally, hence using
+    // eff_gs for calculating expected scale factor lengths.
+    // NOTE: The metadata passed to DLP still receives the original group_size
+    // and not the effective group size.
+    md_t eff_gs = (gs == 0) ? k : gs;
+    md_t ng     = (k + eff_gs - 1) / eff_gs; // number of groups
 
     // Set A scale factor
     if (param.hasAScaleFactor()) {
@@ -1280,20 +1290,21 @@ DlpUalPlan::convertGroupScaleOperations()
         scl->scale_factor_type =
             getStorageType(param.getAScaleFactor()->getMatrixType());
 
-        if (a_sf_len == 1 && m > 1) {
+        md_t eff_a_sf_len = m * ng;
+        if (a_sf_len == 1 && eff_a_sf_len > 1) {
             // Broadcast scalar to m elements (one per row, single group)
             size_t elem_size = (scl->scale_factor_type == DLP_BF16)
                                    ? sizeof(int16_t)
                                    : sizeof(float);
-            m_broadcast_a_scale.resize(m * elem_size);
+            m_broadcast_a_scale.resize(eff_a_sf_len * elem_size);
             const uint8_t* src = static_cast<const uint8_t*>(
                 convertMatrixToPtr(*param.getAScaleFactor()));
-            for (md_t i = 0; i < m; ++i) {
+            for (md_t i = 0; i < eff_a_sf_len; ++i) {
                 std::copy(src, src + elem_size,
                           m_broadcast_a_scale.data() + i * elem_size);
             }
             scl->scale_factor     = m_broadcast_a_scale.data();
-            scl->scale_factor_len = m;
+            scl->scale_factor_len = eff_a_sf_len;
         } else {
             scl->scale_factor = convertMatrixToPtr(*param.getAScaleFactor());
             scl->scale_factor_len = a_sf_len;
@@ -1308,20 +1319,21 @@ DlpUalPlan::convertGroupScaleOperations()
         scl->scale_factor_type =
             getStorageType(param.getBScaleFactor()->getMatrixType());
 
-        if (b_sf_len == 1 && n > 1) {
+        md_t eff_b_sf_len = n * ng;
+        if (b_sf_len == 1 && eff_b_sf_len > 1) {
             // Broadcast scalar to n elements (one per column, single group)
             size_t elem_size = (scl->scale_factor_type == DLP_BF16)
                                    ? sizeof(int16_t)
                                    : sizeof(float);
-            m_broadcast_b_scale.resize(n * elem_size);
+            m_broadcast_b_scale.resize(eff_b_sf_len * elem_size);
             const uint8_t* src = static_cast<const uint8_t*>(
                 convertMatrixToPtr(*param.getBScaleFactor()));
-            for (md_t i = 0; i < n; ++i) {
+            for (md_t i = 0; i < eff_b_sf_len; ++i) {
                 std::copy(src, src + elem_size,
                           m_broadcast_b_scale.data() + i * elem_size);
             }
             scl->scale_factor     = m_broadcast_b_scale.data();
-            scl->scale_factor_len = n;
+            scl->scale_factor_len = eff_b_sf_len;
         } else {
             scl->scale_factor = convertMatrixToPtr(*param.getBScaleFactor());
             scl->scale_factor_len = b_sf_len;

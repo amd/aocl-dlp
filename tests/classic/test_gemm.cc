@@ -356,6 +356,17 @@ check_valid_params(const GemmTestConfig& config)
         return false;
     }
 
+    // group_size conditions:
+    // 1. group_size must be less than or equal to k.
+    // 2. group_size = 0 is valid and implies one group over full k.
+    // 3. group_size < 0 (-ve) is invalid.
+    if (config.group_scale_param) {
+        md_t gs = config.group_scale_param->getGroupSize();
+        if ((gs > k) || (gs < 0)) {
+            return false;
+        }
+    }
+
     return true;
 }
 
