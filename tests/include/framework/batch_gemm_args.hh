@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "classic/aocl_fp16_type.h"
 #include "framework/ual.hh"
 #include <limits>
 #include <vector>
@@ -90,6 +91,8 @@ struct PreparedBatchGemmArgs
     // These are populated during metadata preparation based on data types
     std::vector<float>   alpha_f32;
     std::vector<float>   beta_f32;
+    std::vector<float16> alpha_fp16;
+    std::vector<float16> beta_fp16;
     std::vector<int32_t> alpha_s32;
     std::vector<int32_t> beta_s32;
 

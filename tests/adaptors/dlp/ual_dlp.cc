@@ -45,6 +45,7 @@
 #include <vector>
 
 #include "aocl_dlp.h" // IWYU pragma: keep
+#include "classic/aocl_fp16_convert.h"
 #include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
 #include "classic/dlp_errors.h"
@@ -1137,12 +1138,14 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
 
         case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::fp16,
                           MatrixType::fp16>(): {
-            std::vector<float> alpha_f32(prepared.group_count);
-            std::vector<float> beta_f32(prepared.group_count);
+            std::vector<float16> alpha_fp16(prepared.group_count);
+            std::vector<float16> beta_fp16(prepared.group_count);
             for (std::size_t i = 0;
                  i < static_cast<size_t>(prepared.group_count); ++i) {
-                alpha_f32[i] = static_cast<float>(prepared.alpha[i]);
-                beta_f32[i]  = static_cast<float>(prepared.beta[i]);
+                alpha_fp16[i] =
+                    f32_to_fp16(static_cast<float>(prepared.alpha[i]));
+                beta_fp16[i] =
+                    f32_to_fp16(static_cast<float>(prepared.beta[i]));
             }
 
             auto a_ptrs =
@@ -1155,10 +1158,42 @@ UalDlp::batch_gemm(std::vector<BatchGroup>& groups, MatrixType accType)
             aocl_batch_gemm_f16f16f16of16(
                 prepared.order.data(), prepared.transa.data(),
                 prepared.transb.data(), prepared.m.data(), prepared.n.data(),
-                prepared.k.data(), alpha_f32.data(),
+                prepared.k.data(), alpha_fp16.data(),
                 const_cast<const float16**>(a_ptrs), prepared.lda.data(),
                 const_cast<const float16**>(b_ptrs), prepared.ldb.data(),
-                beta_f32.data(), const_cast<float16**>(c_ptrs),
+                beta_fp16.data(), const_cast<float16**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata.data());
+            break;
+        }
+
+        case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::f32,
+                          MatrixType::fp16>(): {
+            std::vector<float16> alpha_fp16(prepared.group_count);
+            std::vector<float16> beta_fp16(prepared.group_count);
+            for (std::size_t i = 0;
+                 i < static_cast<size_t>(prepared.group_count); ++i) {
+                alpha_fp16[i] =
+                    f32_to_fp16(static_cast<float>(prepared.alpha[i]));
+                beta_fp16[i] =
+                    f32_to_fp16(static_cast<float>(prepared.beta[i]));
+            }
+
+            auto a_ptrs =
+                reinterpret_cast<const float16* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const float16* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_f16f16f16of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), alpha_fp16.data(),
+                const_cast<const float16**>(a_ptrs), prepared.lda.data(),
+                const_cast<const float16**>(b_ptrs), prepared.ldb.data(),
+                beta_fp16.data(), const_cast<float**>(c_ptrs),
                 prepared.ldc.data(), prepared.group_count,
                 prepared.group_size.data(), prepared.mem_format_a.data(),
                 prepared.mem_format_b.data(), metadata.data());
@@ -1338,8 +1373,7 @@ UalDlp::batch_prepare_metadata(PreparedBatchGemmArgs& args)
         (args.b_type == MatrixType::s8 && args.acc_type == MatrixType::s32);
     bool needs_f32 =
         !is_mixed_int_accum
-        && (args.a_type == MatrixType::f32 || args.a_type == MatrixType::bf16
-            || args.a_type == MatrixType::fp16);
+        && (args.a_type == MatrixType::f32 || args.a_type == MatrixType::bf16);
     bool needs_s32 = (args.a_type == MatrixType::u8
                       || args.a_type == MatrixType::s8 || is_mixed_int_accum);
 
@@ -1350,6 +1384,16 @@ UalDlp::batch_prepare_metadata(PreparedBatchGemmArgs& args)
              ++i) {
             args.alpha_f32[i] = static_cast<float>(args.alpha[i]);
             args.beta_f32[i]  = static_cast<float>(args.beta[i]);
+        }
+    }
+
+    if (args.a_type == MatrixType::fp16) {
+        args.alpha_fp16.resize(args.group_count);
+        args.beta_fp16.resize(args.group_count);
+        for (std::size_t i = 0; i < static_cast<size_t>(args.group_count);
+             ++i) {
+            args.alpha_fp16[i] = f32_to_fp16(static_cast<float>(args.alpha[i]));
+            args.beta_fp16[i]  = f32_to_fp16(static_cast<float>(args.beta[i]));
         }
     }
 
@@ -1940,7 +1984,6 @@ UalDlp::batch_gemm(const PreparedBatchGemmArgs& prepared)
 
         case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::fp16,
                           MatrixType::fp16>(): {
-            // Use precomputed alpha/beta - NO allocation!
             auto a_ptrs =
                 reinterpret_cast<const float16* const*>(prepared.a_ptrs.data());
             auto b_ptrs =
@@ -1951,10 +1994,32 @@ UalDlp::batch_gemm(const PreparedBatchGemmArgs& prepared)
             aocl_batch_gemm_f16f16f16of16(
                 prepared.order.data(), prepared.transa.data(),
                 prepared.transb.data(), prepared.m.data(), prepared.n.data(),
-                prepared.k.data(), prepared.alpha_f32.data(),
+                prepared.k.data(), prepared.alpha_fp16.data(),
                 const_cast<const float16**>(a_ptrs), prepared.lda.data(),
                 const_cast<const float16**>(b_ptrs), prepared.ldb.data(),
-                prepared.beta_f32.data(), const_cast<float16**>(c_ptrs),
+                prepared.beta_fp16.data(), const_cast<float16**>(c_ptrs),
+                prepared.ldc.data(), prepared.group_count,
+                prepared.group_size.data(), prepared.mem_format_a.data(),
+                prepared.mem_format_b.data(), metadata);
+            break;
+        }
+
+        case encode_types<MatrixType::fp16, MatrixType::fp16, MatrixType::f32,
+                          MatrixType::fp16>(): {
+            auto a_ptrs =
+                reinterpret_cast<const float16* const*>(prepared.a_ptrs.data());
+            auto b_ptrs =
+                reinterpret_cast<const float16* const*>(prepared.b_ptrs.data());
+            auto c_ptrs =
+                reinterpret_cast<float* const*>(prepared.c_ptrs.data());
+
+            aocl_batch_gemm_f16f16f16of32(
+                prepared.order.data(), prepared.transa.data(),
+                prepared.transb.data(), prepared.m.data(), prepared.n.data(),
+                prepared.k.data(), prepared.alpha_fp16.data(),
+                const_cast<const float16**>(a_ptrs), prepared.lda.data(),
+                const_cast<const float16**>(b_ptrs), prepared.ldb.data(),
+                prepared.beta_fp16.data(), const_cast<float**>(c_ptrs),
                 prepared.ldc.data(), prepared.group_count,
                 prepared.group_size.data(), prepared.mem_format_a.data(),
                 prepared.mem_format_b.data(), metadata);

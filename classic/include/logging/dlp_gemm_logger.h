@@ -31,6 +31,7 @@
 
 #include <float.h>
 
+#include "classic/aocl_fp16_convert.h"
 #include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_post_ops.h"
 #include "dlp_gemm_types.h"
@@ -123,6 +124,32 @@ batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
         }                                                                      \
     }
 
+#define BATCH_DLP_GEMM_WRITE_LOGGER_FP16(                                      \
+    op_type, order, transa, transb, group_count, group_size, m, n, k,          \
+    alpha_fp16, lda, mem_format_a, ldb, mem_format_b, beta_fp16, ldc,          \
+    metadata)                                                                  \
+    {                                                                          \
+        if ((dlp_gemm_is_logger_enabled()) && (fd != NULL)) {                  \
+            char pre_ops_str[1024] = { 0 };                                    \
+                                                                               \
+            char post_ops_str[2048] = { 0 };                                   \
+                                                                               \
+            fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);         \
+            for (iter_t i = 0; i < group_count; i++) {                         \
+                dlp_gemm_get_pre_ops_str(metadata[i], pre_ops_str);            \
+                dlp_gemm_get_post_ops_str(metadata[i], post_ops_str);          \
+                fprintf(fd,                                                    \
+                        "%ld %c %c %c %c %c %ld %ld %ld %ld %ld %ld "          \
+                        ":pre_ops=[%s]:metadata=[%s] %f %f\n",                 \
+                        group_size[i], order[i], transa[i], transb[i],         \
+                        mem_format_a[i], mem_format_b[i], m[i], n[i], k[i],    \
+                        lda[i], ldb[i], ldc[i], pre_ops_str, post_ops_str,     \
+                        fp16_to_f32(alpha_fp16[i]),                            \
+                        fp16_to_f32(beta_fp16[i]));                            \
+            }                                                                  \
+        }                                                                      \
+    }
+
 #else
 
 #define DLP_GEMM_START_LOGGER(...)
@@ -132,6 +159,8 @@ batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
 #define DLP_GEMM_WRITE_LOGGER(...)
 
 #define BATCH_DLP_GEMM_WRITE_LOGGER(...)
+
+#define BATCH_DLP_GEMM_WRITE_LOGGER_FP16(...)
 
 #endif
 
