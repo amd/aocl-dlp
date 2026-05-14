@@ -223,6 +223,20 @@ aocl_gemm_bf16u4f32_impl(const char        order,
         rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
         lcntx_l.blksz.NR, lcntx_l.blksz.KC, c_dtype, &lcntx_l.dlp_kernel_hndl);
 
+    // Defense-in-depth: if JIT init failed AND the post-op list contains an
+    // op_code unsupported by the classic kernel, the 5-loop's classic
+    // fallback would crash on goto *post_ops_labels[op_code]. Reject cleanly
+    // in that combination; classic-supported post-ops can still proceed via
+    // the existing fallback.
+    if ((lcntx_l.dlp_kernel_hndl.kernel_base == NULL)
+        && (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true)) {
+        dlp_print_msg(" Requested post-op is not supported in the "
+                      "classic kernel.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+
     dlp_gemm_ops_bundle_t ops =
         DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
 

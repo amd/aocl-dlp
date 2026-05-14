@@ -128,6 +128,22 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
                                          md_t                    n,
                                          md_t                    k);
 
+/* Highest op_code with an entry in classic kernels' post_ops_labels[]
+ * dispatch table. Codes above this must be routed through the JIT
+ * micro-kernel. BUMP when a new label is added to ALL classic
+ * post_ops_labels[] tables.
+ *
+ * This is a temporary workaround until the JIT kernels are completely
+ * supported and the classic kernel dependency is removed. */
+#define DLP_CLASSIC_MAX_POST_OP_CODE POST_OPS_SIGMOID
+
+/* Returns true if the list contains any post-op whose op_code exceeds
+ * DLP_CLASSIC_MAX_POST_OP_CODE (i.e. one that has no entry in the
+ * classic post_ops_labels[] dispatch table and must be served by the
+ * JIT micro-kernel). NULL list returns false. */
+bool
+dlp_gemm_post_op_list_has_jit_only_op(const dlp_gemm_post_op* post_op_list);
+
 #define POST_OP_LABEL_LASTK_SAFE_JUMP                                          \
     if ((post_ops_attr.is_last_k == TRUE) && (post_ops_list_temp != NULL)) {   \
         goto* post_ops_labels[post_ops_list_temp->op_code];                    \

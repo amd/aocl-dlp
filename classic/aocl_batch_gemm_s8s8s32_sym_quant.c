@@ -153,6 +153,18 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
             goto err_hndl;
         }
 
+        /* Capability gate (fail-fast): sym_quant has no JIT alternative;
+         * post-ops with op_code > DLP_CLASSIC_MAX_POST_OP_CODE have no
+         * entry in the classic post_ops_labels[] dispatch table. Reject
+         * the whole batch on the first offending element. */
+        if (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true) {
+            dlp_print_msg(" Requested post-op is not supported in the "
+                          "classic kernel.",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+            goto err_hndl;
+        }
+
         dlp_trans_t dlp_transa;
         dlp_trans_t dlp_transb;
 
@@ -438,6 +450,18 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
+        /* Capability gate (fail-fast): sym_quant has no JIT alternative;
+         * post-ops with op_code > DLP_CLASSIC_MAX_POST_OP_CODE have no
+         * entry in the classic post_ops_labels[] dispatch table. Reject
+         * the whole batch on the first offending element. */
+        if (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true) {
+            dlp_print_msg(" Requested post-op is not supported in the "
+                          "classic kernel.",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
             goto err_hndl;
         }
 

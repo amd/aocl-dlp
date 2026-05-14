@@ -30,6 +30,19 @@
 #include "dlp_gemm_types.h"
 #include "gemm_utils/dlp_gemm_utils.h"
 
+bool
+dlp_gemm_post_op_list_has_jit_only_op(const dlp_gemm_post_op* post_op_list)
+{
+    bool has_jit_only = false;
+    for (const dlp_gemm_post_op* node                    = post_op_list;
+         (node != NULL) && (has_jit_only == false); node = node->next) {
+        if (node->op_code > DLP_CLASSIC_MAX_POST_OP_CODE) {
+            has_jit_only = true;
+        }
+    }
+    return has_jit_only;
+}
+
 static inline DLP_TYPE
 dlp_gemm_get_stor_type(DLP_TYPE pstor_type)
 {

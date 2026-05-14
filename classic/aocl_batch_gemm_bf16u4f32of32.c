@@ -175,6 +175,19 @@ aocl_batch_gemm_bf16u4f32_impl(const char*      order,
             goto err_hndl;
         }
 
+        // Reject post-ops whose op_code exceeds DLP_CLASSIC_MAX_POST_OP_CODE.
+        // The 5-loop on this batch path always falls through to the classic
+        // bf16bf16 kern_fun_ptr, whose post_ops_labels[] dispatch table only
+        // covers op codes <= DLP_CLASSIC_MAX_POST_OP_CODE; codes above that
+        // (e.g. MISH = 15) read off the end of the table.
+        if (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true) {
+            dlp_print_msg(" Requested post-op is not supported in the "
+                          "classic kernel.",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+            goto err_hndl;
+        }
+
         const bfloat16** a_local;
         const uint8_t**  b_local;
         md_t             m_local, n_local, k_local;

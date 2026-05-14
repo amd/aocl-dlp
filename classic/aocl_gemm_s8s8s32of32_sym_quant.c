@@ -300,6 +300,17 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
         goto err_hndl;
     }
 
+    /* Capability gate: sym_quant has no JIT alternative; post-ops with
+     * op_code > DLP_CLASSIC_MAX_POST_OP_CODE have no entry in the
+     * classic post_ops_labels[] dispatch table. Reject cleanly. */
+    if (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true) {
+        dlp_print_msg(" Requested post-op is not supported in the "
+                      "classic kernel.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+
     // Initialize a local runtime with global settings if necessary. Note
     // that in the case that a runtime is passed in, we make a local copy.
     dlp_rntm_t rntm_g;
