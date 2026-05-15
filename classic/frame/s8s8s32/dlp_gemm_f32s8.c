@@ -47,6 +47,8 @@
  */
 DLP_GEMV3(float, int8_t, int32_t, f32s8s32os32)
 {
+    (void)rntm;   /* Threading handled via thread object, not rntm. */
+    (void)mtag_a; /* mtag_a not used in quantized GEMV path. */
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;

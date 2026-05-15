@@ -1036,7 +1036,9 @@ jitF32GEMVN1<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
 // and avx2 variants
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32GEMVN1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+jitF32GEMVN1<KType>::convertF32toBF16([[maybe_unused]] int scratch1,
+                                      [[maybe_unused]] int scratch2,
+                                      [[maybe_unused]] int destIdx)
 {
     return dlp::jit::jitGeneratorError::notSupported;
 }
@@ -2435,7 +2437,9 @@ jitF32GEMVM1<utils::kernelInstrType::avx2_ymm_16_reg>::convertF32toBF16(
 // and avx2 variants
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32GEMVM1<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+jitF32GEMVM1<KType>::convertF32toBF16([[maybe_unused]] int scratch1,
+                                      [[maybe_unused]] int scratch2,
+                                      [[maybe_unused]] int destIdx)
 {
     return dlp::jit::jitGeneratorError::notSupported;
 }

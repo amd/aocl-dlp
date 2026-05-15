@@ -281,6 +281,8 @@ dlp_gemm_adjust_ic_jc_ways(const md_t m,
                            md_t*      jc_ways,
                            md_t       m_boost)
 {
+    (void)NC; /* NC reserved for future block-size-aware heuristics. */
+
     md_t mu = (m + MR - 1) / MR;
     md_t nu = (n + NR - 1) / NR;
 
@@ -407,6 +409,8 @@ dlp_gemm_s32o32_get_threading(md_t*                   n_threads,
                               dlp_rntm_t*             rntm_g,
                               AOCL_DLP_OPERATION_TYPE op_type)
 {
+    (void)k; /* k unused: threading decision based on m/n geometry only. */
+
     *n_threads = rntm_g->num_threads;
     *jc_ways   = rntm_g->jc_ways;
     *ic_ways   = rntm_g->ic_ways;
@@ -472,6 +476,7 @@ batch_dlp_gemm_s32o32_get_threading(md_t                    group_size,
                                     dlp_rntm_t*             rntm_g,
                                     AOCL_DLP_OPERATION_TYPE op_type)
 {
+    (void)k; /* k unused: batch threading based on m/n geometry only. */
 
     dlp_calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
                                      n_threads_per_gemm, rntm_g);
@@ -588,6 +593,8 @@ dlp_gemm_bf16bf16f32of32_get_threading(md_t*       n_threads,
                                        md_t        k,
                                        dlp_rntm_t* rntm_g)
 {
+    (void)k; /* k unused: threading decision based on m/n geometry only. */
+
     *n_threads = rntm_g->num_threads;
     *jc_ways   = rntm_g->jc_ways;
     *ic_ways   = rntm_g->ic_ways;
@@ -661,6 +668,8 @@ dlp_gemm_f16f16f16of16_get_threading(md_t*       n_threads,
                                      md_t        k,
                                      dlp_rntm_t* rntm_g)
 {
+    (void)k; /* k unused: threading decision based on m/n geometry only. */
+
     *n_threads = rntm_g->num_threads;
     *jc_ways   = rntm_g->jc_ways;
     *ic_ways   = rntm_g->ic_ways;
@@ -734,6 +743,8 @@ dlp_gemm_f32f16f32of32_get_threading(md_t*       n_threads,
                                      md_t        k,
                                      dlp_rntm_t* rntm_g)
 {
+    (void)k; /* k unused: threading decision based on m/n geometry only. */
+
     *n_threads = rntm_g->num_threads;
     *jc_ways   = rntm_g->jc_ways;
     *ic_ways   = rntm_g->ic_ways;
@@ -805,6 +816,7 @@ batch_dlp_gemm_bf16bf16f32of32_get_threading(md_t        group_size,
                                              md_t        k,
                                              dlp_rntm_t* rntm_g)
 {
+    (void)k; /* k unused: batch threading based on m/n geometry only. */
 
     dlp_calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
                                      n_threads_per_gemm, rntm_g);
@@ -1037,6 +1049,10 @@ dlp_gemm_get_tid_distr_type(md_t             m,
                             md_t             jc_ways,
                             dlp_gemm_cntx_t* lcntx)
 {
+    (void)k;       /* k reserved for future depth-aware distribution. */
+    (void)ic_ways; /* ic_ways reserved for future ic-aware distribution. */
+    (void)jc_ways; /* jc_ways reserved for future jc-aware distribution. */
+
     AOCL_DLP_TID_DISTR_TYPE tid_distr = DEFAULT;
 
     md_t NR = lcntx->blksz.NR;

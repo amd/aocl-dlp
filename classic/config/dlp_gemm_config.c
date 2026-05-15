@@ -585,6 +585,8 @@ void
 dlp_gemm_mod_block_size_s16(
     md_t m, md_t n, md_t k, md_t* MC, md_t* NC, md_t* KC)
 {
+    (void)m;
+    (void)MC;
     const md_t range[4] = { 1024, 512, 256, 128 };
 
     if (n < *NC) {

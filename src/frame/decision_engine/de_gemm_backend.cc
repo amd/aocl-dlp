@@ -351,9 +351,10 @@ gemmS8DEBackend::getKernelInfoForInput(iDEInput* in)
 }
 
 void
-gemmDEBackendUtils::setKernelOps(kernel_frame::kernelOpsMetaData* metaData,
-                                 dlp_gemm_post_op*                post_op,
-                                 kernel_frame::kernelDatatype     k_dtype)
+gemmDEBackendUtils::setKernelOps(
+    kernel_frame::kernelOpsMetaData*              metaData,
+    dlp_gemm_post_op*                             post_op,
+    [[maybe_unused]] kernel_frame::kernelDatatype k_dtype)
 {
     kernel_frame::kernelOps kOpsType = kernel_frame::kernelOps::invalid;
     switch (post_op->op_code) {

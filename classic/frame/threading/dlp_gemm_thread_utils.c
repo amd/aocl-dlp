@@ -239,6 +239,7 @@ dlp_gemm_get_thread_attrs()
 void
 dlp_atomic_barrier(md_t t_id, dlp_task_comm_t* comm)
 {
+    (void)t_id;
     if (comm == NULL || comm->n_threads == 1)
         return;
 

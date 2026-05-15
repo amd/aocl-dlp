@@ -107,6 +107,7 @@ typedef void (*dlp_gemv_a_pack_ft)(float*,
 
 DLP_GEMV(float, float, float, f32f32f32of32)
 {
+    (void)rntm; /* Threading handled via thread object, not rntm. */
     // Ignoring mtag_a/b and should_pack_A/B for now .
     // Matrices are packed only when the storage format is not supported by the
     // kernel.

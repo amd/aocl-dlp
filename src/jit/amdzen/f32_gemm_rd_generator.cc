@@ -218,7 +218,7 @@ jitGEMMF32RD<KType>::initializeStackFrame(Xbyak::util::StackFrame& stackFrame)
 
 template<utils::kernelInstrType KType>
 void
-jitGEMMF32RD<KType>::initializeParameters(bool addIrLoop)
+jitGEMMF32RD<KType>::initializeParameters([[maybe_unused]] bool addIrLoop)
 {
     mov(regRsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, rsA)]);
     lea(regRsA, ptr[regRsA * sizeof(float)]);

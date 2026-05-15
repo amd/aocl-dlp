@@ -56,6 +56,7 @@ typedef void (*dlp_gemm_rowvar_bf16)(const md_t,
 #ifdef DLP_KERNELS_ZEN4
 DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
+    (void)mtag_a; /* mtag_a not used in tiny GEMV path. */
     // Strides are updated based on matrix packing/reordering.
     bfloat16* a_use    = (bfloat16*)a;
     md_t      rs_a_use = rs_a;

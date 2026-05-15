@@ -223,8 +223,12 @@ TransposeGenerator<KType>::unpackPd(int s1, int op_idx1, int op_idx2)
 
 template<utils::kernelInstrType KType>
 void
-TransposeGenerator<KType>::permutePdR1Pair(
-    int s1, int s2, int sel1, int sel2, int d1, int d2)
+TransposeGenerator<KType>::permutePdR1Pair(int                  s1,
+                                           int                  s2,
+                                           [[maybe_unused]] int sel1,
+                                           [[maybe_unused]] int sel2,
+                                           int                  d1,
+                                           int                  d2)
 {
     int scratch = getScratchReg();
     jit_->vperm2f128(RegType(scratch), RegType(s1), RegType(s2), 0x20);
@@ -241,7 +245,12 @@ TransposeGenerator<KType>::permutePdR1Pair(
 template<>
 void
 TransposeGenerator<utils::kernelInstrType::avx512_ymm_32_reg>::permutePdR1Pair(
-    int s1, int s2, int sel1, int sel2, int d1, int d2)
+    int                  s1,
+    int                  s2,
+    [[maybe_unused]] int sel1,
+    [[maybe_unused]] int sel2,
+    int                  d1,
+    int                  d2)
 {
     int scratch = getScratchReg();
     jit_->vshuff32x4(RegType(scratch), RegType(s1), RegType(s2), 0x00);
@@ -275,8 +284,11 @@ TransposeGenerator<utils::kernelInstrType::avx512_zmm_32_reg>::permutePdR1Pair(
 
 template<utils::kernelInstrType KType>
 void
-TransposeGenerator<KType>::permutePdR1(
-    int s1, int sel1, int sel2, int d1, int d2)
+TransposeGenerator<KType>::permutePdR1(int                  s1,
+                                       [[maybe_unused]] int sel1,
+                                       [[maybe_unused]] int sel2,
+                                       int                  d1,
+                                       int                  d2)
 {
     int scratch = getScratchReg();
     jit_->vperm2f128(RegType(scratch), RegType(s1), RegType(s1), 0x20);
@@ -292,7 +304,11 @@ TransposeGenerator<KType>::permutePdR1(
 template<>
 void
 TransposeGenerator<utils::kernelInstrType::avx512_ymm_32_reg>::permutePdR1(
-    int s1, int sel1, int sel2, int d1, int d2)
+    int                  s1,
+    [[maybe_unused]] int sel1,
+    [[maybe_unused]] int sel2,
+    int                  d1,
+    int                  d2)
 {
     int scratch = getScratchReg();
     jit_->vshuff32x4(RegType(scratch), RegType(s1), RegType(s1), 0x00);
@@ -581,9 +597,9 @@ TransposeGenerator<KType>::get_reg_from_stack(int num_regs,
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 TransposeGenerator<KType>::generateTranspose(
-    const Xbyak::Reg64&   postOpsArgWrapperPtrReg,
-    dlp::jit::jitAlgoType algoType,
-    bool                  fuseBetaWithStore)
+    const Xbyak::Reg64&                    postOpsArgWrapperPtrReg,
+    [[maybe_unused]] dlp::jit::jitAlgoType algoType,
+    bool                                   fuseBetaWithStore)
 {
     utils::registerGuard<Xbyak::Reg64> gprGuard{ jit_ };
     gprGuard.saveRegister(regCjr);
@@ -1079,7 +1095,8 @@ TransposeGenerator<KType>::store_4xNR(bool applyBetaScale)
     };
 
     if (applyBetaScale) {
-        auto betaScaleOp = [this](int col_idx, int reg_idx, int quarter_idx) {
+        auto betaScaleOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                  int quarter_idx) {
             int cRegIdx = getScratchReg();
             jit_->vmovups(Xmm(cRegIdx) | mrMask, jit_->ptr[regTmp1]);
 
@@ -1095,7 +1112,8 @@ TransposeGenerator<KType>::store_4xNR(bool applyBetaScale)
         storeColumns_variableCount(reg_idx, quarter_idx, numElemsPerReg,
                                    betaScaleOp);
     } else {
-        auto betaZeroOp = [this](int col_idx, int reg_idx, int quarter_idx) {
+        auto betaZeroOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                 int quarter_idx) {
             if (quarter_idx == 0) {
                 jit_->vmovups(jit_->ptr[regTmp1] | mrMask,
                               Zmm(curr_output[reg_idx]));
@@ -1122,7 +1140,8 @@ TransposeGenerator<utils::kernelInstrType::avx2_ymm_16_reg>::store_4xNR(
     const int half_idx[8] = { 0, 0, 0, 0, 1, 1, 1, 1 };
 
     if (applyBetaScale) {
-        auto betaScaleOp = [this](int col_idx, int reg_idx, int quarter_idx) {
+        auto betaScaleOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                  int quarter_idx) {
             int cRegIdx = getScratchReg();
             jit_->vmaskmovps(Xmm(cRegIdx), Xmm(maskRegIdx), jit_->ptr[regTmp1]);
 
@@ -1138,7 +1157,8 @@ TransposeGenerator<utils::kernelInstrType::avx2_ymm_16_reg>::store_4xNR(
         storeColumns_variableCount(reg_idx, half_idx, numElemsPerReg,
                                    betaScaleOp);
     } else {
-        auto betaZeroOp = [this](int col_idx, int reg_idx, int quarter_idx) {
+        auto betaZeroOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                 int quarter_idx) {
             if (quarter_idx == 0) {
                 jit_->vmaskmovps(jit_->ptr[regTmp1], Xmm(maskRegIdx),
                                  Xmm(curr_output[reg_idx]));
@@ -1171,7 +1191,8 @@ TransposeGenerator<KType>::store_8xNR(bool applyBetaScale)
     const int dummy_idx[8]   = { 0, 0, 0, 0, 0, 0, 0, 0 };
 
     if (applyBetaScale) {
-        auto betaScaleOp = [this](int col_idx, int reg_idx, int unused) {
+        auto betaScaleOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                  [[maybe_unused]] int unused) {
             int cRegIdx = getScratchReg();
             MASK_MOV(Ymm(cRegIdx), jit_->ptr[regTmp1])
             jit_->vfmadd231ps(Ymm(curr_output[reg_idx]), Ymm(betaRegIdx),
@@ -1182,7 +1203,8 @@ TransposeGenerator<KType>::store_8xNR(bool applyBetaScale)
         storeColumns_variableCount(reg_indices, dummy_idx, numElemsPerReg,
                                    betaScaleOp);
     } else {
-        auto betaZeroOp = [this](int col_idx, int reg_idx, int unused) {
+        auto betaZeroOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                 [[maybe_unused]] int unused) {
             MASK_MOV(jit_->ptr[regTmp1], Ymm(curr_output[reg_idx]))
         };
         storeColumns_variableCount(reg_indices, dummy_idx, numElemsPerReg,
@@ -1199,7 +1221,8 @@ TransposeGenerator<utils::kernelInstrType::avx512_zmm_32_reg>::store_8xNR(
     const int half_idx[16] = { 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 1, 1 };
 
     if (applyBetaScale) {
-        auto betaScaleOp = [this](int col_idx, int reg_idx, int half_idx) {
+        auto betaScaleOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                  int half_idx) {
             int cRegIdx = getScratchReg();
             jit_->vmovups(Ymm(cRegIdx) | mrMask, jit_->ptr[regTmp1]);
 
@@ -1215,7 +1238,8 @@ TransposeGenerator<utils::kernelInstrType::avx512_zmm_32_reg>::store_8xNR(
         storeColumns_variableCount(reg_idx, half_idx, numElemsPerReg,
                                    betaScaleOp);
     } else {
-        auto betaZeroOp = [this](int col_idx, int reg_idx, int half_idx) {
+        auto betaZeroOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                 int half_idx) {
             if (half_idx == 0) {
                 jit_->vmovups(jit_->ptr[regTmp1] | mrMask,
                               Ymm(curr_output[reg_idx]));
@@ -1243,7 +1267,8 @@ TransposeGenerator<KType>::store_16xNR(bool applyBetaScale)
     };
 
     if (applyBetaScale) {
-        auto betaScaleOp = [this](int col_idx, int reg_idx, int unused) {
+        auto betaScaleOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                  [[maybe_unused]] int unused) {
             int cRegIdx = getScratchReg();
             jit_->vmovups(Zmm(cRegIdx) | mrMask, jit_->ptr[regTmp1]);
             jit_->vfmadd231ps(Zmm(curr_output[reg_idx]), Zmm(betaRegIdx),
@@ -1255,7 +1280,8 @@ TransposeGenerator<KType>::store_16xNR(bool applyBetaScale)
         storeColumns_variableCount(reg_indices, dummy_idx, numElemsPerReg,
                                    betaScaleOp);
     } else {
-        auto betaZeroOp = [this](int col_idx, int reg_idx, int unused) {
+        auto betaZeroOp = [this]([[maybe_unused]] int col_idx, int reg_idx,
+                                 [[maybe_unused]] int unused) {
             jit_->vmovups(jit_->ptr[regTmp1] | mrMask,
                           Zmm(curr_output[reg_idx]));
         };

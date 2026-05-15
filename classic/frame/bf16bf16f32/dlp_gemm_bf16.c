@@ -56,6 +56,8 @@ typedef void (*dlp_gemm_rowvar_bf16)(const md_t,
 #ifdef DLP_KERNELS_ZEN4
 DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
+    (void)rntm; /* Threading handled via thread object, not rntm. */
+
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;
@@ -670,6 +672,8 @@ typedef void (*dlp_gemv_n_one_ker_ft)(const md_t,
 
 DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
+    (void)rntm; /* Threading handled via thread object, not rntm. */
+
     // DLP_BF16 Contexts
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;

@@ -110,7 +110,8 @@ jitF32FP16_GEMM<KType>::initializeParameters(bool mLoop)
 
 template<utils::kernelInstrType KType>
 void
-jitF32FP16_GEMM<KType>::initializeAccumulators(utils::generatorParams& params)
+jitF32FP16_GEMM<KType>::initializeAccumulators(
+    [[maybe_unused]] utils::generatorParams& params)
 {
     // Zero out F32 accumulator registers
     if constexpr (Traits::isAVX512) {
@@ -418,7 +419,7 @@ jitF32FP16_GEMM<KType>::generateMLoop(utils::generatorParams& params)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32FP16_GEMM<KType>::broadcastAFMAwithB(bool isKRemainder)
+jitF32FP16_GEMM<KType>::broadcastAFMAwithB([[maybe_unused]] bool isKRemainder)
 {
     for (iter_t i = 0; i < MR; i++) {
         // Broadcast F32 A element to all lanes using vbroadcastss

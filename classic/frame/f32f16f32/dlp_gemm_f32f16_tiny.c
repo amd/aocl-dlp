@@ -58,6 +58,7 @@
  */
 DLP_GEMV_TINY(float, float16, float, f32f16f32of32)
 {
+    (void)mtag_a; /* mtag_a not used in tiny GEMV path. */
     const float* a_use    = (const float*)a;
     md_t         rs_a_use = rs_a;
     md_t         cs_a_use = cs_a;

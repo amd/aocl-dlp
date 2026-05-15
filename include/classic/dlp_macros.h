@@ -49,6 +49,12 @@
 #define DLP_ALWAYS_INLINE inline
 #endif
 
+#if defined(__GNUC__) || defined(__clang__)
+#define DLP_ATTRIBUTE_USED [[gnu::used]]
+#else
+#define DLP_ATTRIBUTE_USED
+#endif
+
 #ifdef __cplusplus
 
 #define DLP_BEGIN_EXTERN_C                                                     \

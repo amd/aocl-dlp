@@ -891,7 +891,7 @@ dlp::jit::jitGeneratorError
 jitFP16GEMVM1<KType>::applyPostOps(utils::gemvM1GeneratorParams& params,
                                    gen::kernelOpsHandler<KType>& handler,
                                    int                           numAccumRegs,
-                                   bool                          nMask,
+                                   [[maybe_unused]] bool         nMask,
                                    int                           nActual)
 {
     static constexpr int F32_PER_ZMM = Traits::regBytes / sizeof(float);

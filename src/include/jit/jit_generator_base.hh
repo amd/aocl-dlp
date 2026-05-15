@@ -95,7 +95,8 @@ class jitGeneratorBase
 
     // TODO: Remove this once the JIT generator and execution code are
     // separated.
-    virtual kernels::kernelError executeKernel(kernels::kernelParams* _params)
+    virtual kernels::kernelError executeKernel(
+        [[maybe_unused]] kernels::kernelParams* _params)
     {
         return kernels::kernelError::error;
     }

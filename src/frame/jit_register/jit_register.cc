@@ -36,7 +36,7 @@ namespace dlp::jit {
 jitGeneratorFrameError
 jitGeneratorRegister::registerJitGenerator(
     std::unique_ptr<jitGeneratorBase> jitGen,
-    std::string&&                     kernelFamily,
+    [[maybe_unused]] std::string&&    kernelFamily,
     kernel_frame::kernelRoutineType   kType)
 {
     if (!jitGen) {
@@ -106,7 +106,7 @@ jitGeneratorRegister::registerJitGenerator(
 jitGeneratorBaseRef
 jitGeneratorRegister::registerAndGetJitGenerator(
     std::unique_ptr<jitGeneratorBase> jitGen,
-    std::string&&                     kernelFamily,
+    [[maybe_unused]] std::string&&    kernelFamily,
     kernel_frame::kernelRoutineType   kType,
     kernel_frame::kernelDatatype      kDtype)
 {

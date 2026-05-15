@@ -216,7 +216,7 @@ class emptyKernel : public kernels::kernelBase
     }
 
     virtual kernels::kernelError operator()(
-        kernels::kernelParams* kP) override final
+        [[maybe_unused]] kernels::kernelParams* kP) override final
     {
         return kernels::kernelError::error;
     }
@@ -319,7 +319,7 @@ class kernelRegister
              typename VALUE_WATCHER>
     [[nodiscard]] kernelFrameError registerKernel(
         std::unique_ptr<kernels::kernelBase> _kB,
-        std::string&&                        kernelFamily,
+        [[maybe_unused]] std::string&&       kernelFamily,
         kernelRoutineType                    kType)
     {
         if (!_kB) {
@@ -395,7 +395,7 @@ class kernelRegister
              typename VALUE_WATCHER>
     [[nodiscard]] kernelBaseRef registerAndGetKernel(
         std::unique_ptr<kernels::kernelBase> _kB,
-        std::string&&                        kernelFamily,
+        [[maybe_unused]] std::string&&       kernelFamily,
         kernelRoutineType                    kType,
         kernelDatatype                       kDtype)
     {
@@ -719,8 +719,8 @@ dlpKernelRegisterInstance()
                   "Requires trivially constructible classes for kernels.");    \
     static_assert(std::is_base_of_v<kernelBase, className>,                    \
                   "Requires classes derived from kernelBase.");                \
-    static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_kernel_reg_var_,           \
-                                     className, __LINE__) =                    \
+    DLP_ATTRIBUTE_USED static auto DLP_SUBS_CONCAT_3TOK(                       \
+        static_mgc_dlp_kernel_reg_var_, className, __LINE__) =                 \
         dlp::kernel_frame::dlpKernelRegisterInstance().registerGemmKernel(     \
             std::move(std::make_unique<className>()),                          \
             std::string{ kernelFamily });
@@ -730,8 +730,8 @@ dlpKernelRegisterInstance()
                   "Requires trivially constructible classes for kernels.");    \
     static_assert(std::is_base_of_v<kernelBase, className>,                    \
                   "Requires classes derived from kernelBase.");                \
-    static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_packb_reg_var_, className, \
-                                     __LINE__) =                               \
+    DLP_ATTRIBUTE_USED static auto DLP_SUBS_CONCAT_3TOK(                       \
+        static_mgc_dlp_packb_reg_var_, className, __LINE__) =                  \
         dlp::kernel_frame::dlpKernelRegisterInstance().registerPackBKernel(    \
             std::move(std::make_unique<className>()),                          \
             std::string{ kernelFamily });

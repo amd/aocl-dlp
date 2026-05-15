@@ -132,7 +132,8 @@ jitFP16_GEMM<KType>::initializeParameters(bool mLoop)
 
 template<utils::kernelInstrType KType>
 void
-jitFP16_GEMM<KType>::initializeAccumulators(utils::generatorParams& params)
+jitFP16_GEMM<KType>::initializeAccumulators(
+    [[maybe_unused]] utils::generatorParams& params)
 {
     // Zero out accumulator registers for FP16 results
     if constexpr (Traits::isAVX512) {
@@ -871,7 +872,7 @@ jitFP16_GEMM<KType>::generateMLoop(utils::generatorParams& params)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitFP16_GEMM<KType>::broadcastAFMAwithB(bool isKRemainder)
+jitFP16_GEMM<KType>::broadcastAFMAwithB([[maybe_unused]] bool isKRemainder)
 {
     for (iter_t i = 0; i < MR; i++) {
         // Broadcast 16-bit FP16 A element to all lanes using vpbroadcastw

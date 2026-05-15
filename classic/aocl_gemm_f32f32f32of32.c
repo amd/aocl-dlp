@@ -457,9 +457,9 @@ aocl_gemm_f32f32f32of32(const char      order,
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
     dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_F32F32F32OF32, order, mtag_a_use, mtag_b_use, m_use, n_use,
-        k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
-        (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
+        DLP_KERNEL_F32F32F32OF32, order_use, mtag_a_use, mtag_b_use, m_use,
+        n_use, k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use,
+        cs_c_use, (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
         lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32, &lcntx_l.dlp_kernel_hndl);
 
     // Invalid handle means that the jit kernel generation has failed. Do not

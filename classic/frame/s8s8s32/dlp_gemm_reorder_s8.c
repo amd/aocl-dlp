@@ -433,6 +433,7 @@ dlp_reordera_mr6_s8s8s32o32(dlp_gemm_obj_t*  a,
                             dlp_rntm_t*      rntm,
                             dlp_gemm_cntx_t* lcntx)
 {
+    (void)rntm;
     md_t MC = lcntx->blksz.MC;
     md_t KC = lcntx->blksz.KC;
 

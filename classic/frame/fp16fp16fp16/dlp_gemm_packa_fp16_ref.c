@@ -183,6 +183,7 @@ dlp_unpacka_mr32_f16f16f16of16_row_major_ref(float16*       a,
                                              const md_t     KC,
                                              const md_t     m_actual)
 {
+    (void)MR;
     // Copy M-rows from packed format back to row-major
     for (iter_t m = 0; m < m_actual; m++) {
         const float16* inp  = pack_a + m * KC;
@@ -201,6 +202,7 @@ dlp_unpacka_mr32_f16f16f16of16_col_major_ref(float16*       a,
                                              const md_t     KC,
                                              const md_t     m_actual)
 {
+    (void)MR;
     // Transpose: read row-wise from packed, write column-wise to output
     for (iter_t m = 0; m < m_actual; m++) {
         const float16* inp = pack_a + m * KC;

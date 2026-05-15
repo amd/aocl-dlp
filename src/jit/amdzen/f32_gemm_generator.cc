@@ -85,7 +85,7 @@ jitGEMMF32<KType>::allocateReg()
 
 template<utils::kernelInstrType KType>
 void
-jitGEMMF32<KType>::initializeParameters(bool addIrLoop)
+jitGEMMF32<KType>::initializeParameters([[maybe_unused]] bool addIrLoop)
 {
     mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
 
@@ -270,7 +270,8 @@ jitGEMMF32<KType>::storeResult(bool fuseBetaWithStore, bool mLoop)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::storeResultColumnMajor(bool fuseBetaWithStore)
+jitGEMMF32<KType>::storeResultColumnMajor(
+    [[maybe_unused]] bool fuseBetaWithStore)
 {
     return dlp::jit::jitGeneratorError::notSupported;
 }
@@ -278,7 +279,7 @@ jitGEMMF32<KType>::storeResultColumnMajor(bool fuseBetaWithStore)
 template<>
 dlp::jit::jitGeneratorError
 jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::storeResultColumnMajor(
-    bool fuseBetaWithStore)
+    [[maybe_unused]] bool fuseBetaWithStore)
 {
 
     std::queue<int> scratch_reg_queue;
@@ -441,7 +442,9 @@ jitGEMMF32<utils::kernelInstrType::avx512_zmm_32_reg>::convertF32toBF16(
 // and avx2 variants
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitGEMMF32<KType>::convertF32toBF16(int scratch1, int scratch2, int destIdx)
+jitGEMMF32<KType>::convertF32toBF16([[maybe_unused]] int scratch1,
+                                    [[maybe_unused]] int scratch2,
+                                    [[maybe_unused]] int destIdx)
 {
     return dlp::jit::jitGeneratorError::notSupported;
 }

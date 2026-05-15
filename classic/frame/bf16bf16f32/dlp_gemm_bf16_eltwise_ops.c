@@ -46,6 +46,7 @@ typedef void (*dlp_gemm_util_post_ops_kernel_f32)(const md_t,
 
 DLP_GEMM_ELTWISE_OPS_IFACE(bfloat16, float, bf16of32)
 {
+    (void)rntm; /* Threading handled via thread object, not rntm. */
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
 

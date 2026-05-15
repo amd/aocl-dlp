@@ -405,17 +405,17 @@ class MockKernelInfoGenerator
      * @return Initialized kernelInfo structure
      */
     static kernelInfo createKernelInfo(
-        kernelInstrType       kType,
-        int                   mr,
-        int                   nr,
-        int                   kc                        = 4096,
-        int                   k_unroll                  = 4,
-        int                   prefetch_c_dist           = 8,
-        bool                  genLtKrnlForAvailFullKrnl = false,
-        int                   term_fringe_nr            = 0,
-        scalingType           alphaType                 = scalingType::generic,
-        scalingType           betaType                  = scalingType::generic,
-        kernelInstrPreference kInstPref =
+        [[maybe_unused]] kernelInstrType kType,
+        int                              mr,
+        int                              nr,
+        int                              kc                        = 4096,
+        int                              k_unroll                  = 4,
+        int                              prefetch_c_dist           = 8,
+        bool                             genLtKrnlForAvailFullKrnl = false,
+        int                              term_fringe_nr            = 0,
+        scalingType                      alphaType = scalingType::generic,
+        scalingType                      betaType  = scalingType::generic,
+        kernelInstrPreference            kInstPref =
             kernelInstrPreference::avx512_zmm_favour)
     {
         kernelInfo ki;

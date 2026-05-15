@@ -128,6 +128,8 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
                                          md_t                    n,
                                          md_t                    k)
 {
+    (void)m;
+    (void)n;
     if ((metadata == NULL) || (metadata->seq_length <= 0)) {
         dlp_gemm_set_group_post_ops_node_params(post_op_list, 0, NULL, NULL, 0,
                                                 0, NULL, NULL, 0, 0,
@@ -242,6 +244,7 @@ dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
                                    md_t             k)
 {
     (void)(m); // Unused for now, potential to be used later.
+    (void)(n); // Unused for now, potential to be used later.
 
     if ((pre_op_unparsed == NULL) || (pre_op_unparsed->seq_length <= 0)) {
         dlp_gemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,

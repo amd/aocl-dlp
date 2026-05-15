@@ -38,19 +38,26 @@ class referenceCpuFeatureDetector : public cpuFeatureDetectorBase
     referenceCpuFeatureDetector()          = default;
     virtual ~referenceCpuFeatureDetector() = default;
 
-    bool hasFeatures(const std::vector<isaFeature>& featureList) const final
+    bool hasFeatures(
+        [[maybe_unused]] const std::vector<isaFeature>& featureList) const final
     {
         return false;
     }
 
-    bool hasFeature(const isaFeature feature) const final { return false; }
+    bool hasFeature([[maybe_unused]] const isaFeature feature) const final
+    {
+        return false;
+    }
 
     std::vector<isaFeature> getFeatures() const final
     {
         return std::vector<isaFeature>{};
     }
 
-    bool isCpuVendor(cpuVendor vendor) const final { return false; }
+    bool isCpuVendor([[maybe_unused]] cpuVendor vendor) const final
+    {
+        return false;
+    }
 
     cpuVendor getCpuVendor() const final { return cpuVendor::invalid; }
 

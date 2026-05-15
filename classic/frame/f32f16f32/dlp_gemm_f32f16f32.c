@@ -51,6 +51,9 @@
 
 DLP_GEMV(float, float16, float, f32f16f32of32)
 {
+    (void)rntm;        /* Threading handled via thread object, not rntm. */
+    (void)mtag_a;      /* mtag_a not used in F32xFP16 GEMV path. */
+    (void)c_downscale; /* F32xFP16 GEMV always outputs F32. */
     const md_t NC = lcntx->blksz.NC;
     const md_t KC = lcntx->blksz.KC;
     const md_t MC = lcntx->blksz.MC;

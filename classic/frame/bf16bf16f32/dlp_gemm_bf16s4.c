@@ -63,6 +63,7 @@ typedef void (*dlp_gemm_rowvar_bf16)(const md_t,
 // B should always be packed.
 DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, float, float, bf16s4f32of32, const)
 {
+    (void)rntm; /* Threading handled via thread object, not rntm. */
     // Extract operations from bundle into local variables
     DLP_GEMM_OPS_EXTRACT(ops);
 

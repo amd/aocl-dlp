@@ -113,7 +113,8 @@ jitU8S8VNNI_GEMM<KType>::initializeParameters(bool mLoop)
 
 template<utils::kernelInstrType KType>
 void
-jitU8S8VNNI_GEMM<KType>::initializeAccumulators(utils::generatorParams& params)
+jitU8S8VNNI_GEMM<KType>::initializeAccumulators(
+    [[maybe_unused]] utils::generatorParams& params)
 {
 
     // Zero out accumulator registers for int32 results

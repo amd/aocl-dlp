@@ -154,8 +154,8 @@ class gemmDEBackendUtils
         kernel_frame::kernelInstrPreference kInstPref,
         md_t                                c_downscale,
         dlp::kernel_frame::kernelDatatype   k_dtype,
-        md_t                                rs_c,
-        md_t                                cs_c,
+        [[maybe_unused]] md_t               rs_c,
+        [[maybe_unused]] md_t               cs_c,
         dlp_gemm_post_op*                   metadata)
     {
         // Iterate over the post_ops list to get the number of post-ops.
@@ -170,7 +170,7 @@ class gemmDEBackendUtils
         if (numPostOps == 0) {
             return kernel_frame::kernelInfo{ mr,
                                              nr,
-                                             0,
+                                             term_fringe_nr,
                                              k_unroll,
                                              kc,
                                              prefetch_c_dist,
@@ -188,7 +188,7 @@ class gemmDEBackendUtils
         } else {
             kernel_frame::kernelInfo kI{ mr,
                                          nr,
-                                         0,
+                                         term_fringe_nr,
                                          k_unroll,
                                          kc,
                                          prefetch_c_dist,

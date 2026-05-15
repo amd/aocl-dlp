@@ -67,6 +67,7 @@
  */
 DLP_GEMV(float16, float16, float16, f16f16f16of16)
 {
+    (void)rntm; /* Threading handled via thread object, not rntm. */
     const md_t NC = lcntx->blksz.NC;
     const md_t KC = lcntx->blksz.KC;
     const md_t MC = lcntx->blksz.MC;

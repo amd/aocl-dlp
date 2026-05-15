@@ -107,6 +107,7 @@ typedef void (*dlp_gemv_n_one_a_pack_ft)(float*,
 
 DLP_GEMV_TINY(float, float, float, f32f32f32of32)
 {
+    (void)mtag_a; /* mtag_a not used in tiny GEMV path. */
     const float* a_use    = (float*)a;
     md_t         rs_a_use = rs_a;
     md_t         cs_a_use = cs_a;

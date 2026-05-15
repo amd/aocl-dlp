@@ -90,7 +90,7 @@ jitF32FP16GEMVM1<KType>::initializeStackFrame(Xbyak::util::StackFrame& frame)
 template<utils::kernelInstrType KType>
 void
 jitF32FP16GEMVM1<KType>::initializeParameters(
-    utils::gemvM1GeneratorParams& params)
+    [[maybe_unused]] utils::gemvM1GeneratorParams& params)
 {
     nElemsPerReg = F32_PER_ZMM;
 
@@ -129,7 +129,7 @@ jitF32FP16GEMVM1<KType>::loadMasks()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32FP16GEMVM1<KType>::computeKxNR(bool nMask)
+jitF32FP16GEMVM1<KType>::computeKxNR([[maybe_unused]] bool nMask)
 {
     int regsPerPanel = NR / nElemsPerReg;
 
@@ -154,7 +154,7 @@ jitF32FP16GEMVM1<KType>::computeKxNR(bool nMask)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32FP16GEMVM1<KType>::compute1xNR(bool nMask)
+jitF32FP16GEMVM1<KType>::compute1xNR([[maybe_unused]] bool nMask)
 {
     int regsPerPanel = NR / nElemsPerReg;
 
@@ -391,7 +391,7 @@ jitF32FP16GEMVM1<KType>::scaleWithAlpha()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32FP16GEMVM1<KType>::scaleYWithBeta(bool nMask)
+jitF32FP16GEMVM1<KType>::scaleYWithBeta([[maybe_unused]] bool nMask)
 {
     int  regsPerPanel = NR / nElemsPerReg;
     bool isBetaOne = (betaScalingType == dlp::kernel_frame::scalingType::one);
@@ -486,7 +486,7 @@ jitF32FP16GEMVM1<KType>::scaleYWithBetaFringe()
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32FP16GEMVM1<KType>::storeYValues(bool nMask)
+jitF32FP16GEMVM1<KType>::storeYValues([[maybe_unused]] bool nMask)
 {
     int regsPerPanel = NR / nElemsPerReg;
 
@@ -1271,8 +1271,8 @@ jitF32FP16GEMVN1<KType>::storeYValues(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
-jitF32FP16GEMVN1<KType>::generateIrLoop(int                           mSize,
-                                        utils::gemvN1GeneratorParams& params)
+jitF32FP16GEMVN1<KType>::generateIrLoop(
+    int mSize, [[maybe_unused]] utils::gemvN1GeneratorParams& params)
 {
     inLocalLabel();
 

@@ -59,6 +59,7 @@ typedef void (*dlp_gemm_rowvar_s32_s8)(const md_t,
 
 DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
 {
+    (void)rntm; /* Threading handled via thread object, not rntm. */
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;

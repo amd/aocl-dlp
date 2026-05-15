@@ -73,6 +73,8 @@ aocl_gemm_bf16u4f32_impl(const char        order,
                          kernel_datatype_t krnl_dtype,
                          DLP_TYPE          c_dtype)
 {
+    (void)func_name; /* Only used by DLP_GEMM_WRITE_LOGGER when enabled. */
+
     DLP_GEMM_START_LOGGER();
     DLP_GEMM_WRITE_LOGGER(func_name, order, transa, transb, m, n, k,
                           ((float)alpha), lda, mem_format_a, ldb, mem_format_b,

@@ -325,8 +325,8 @@ dlpJitGeneratorRegisterInstance()
         "Requires trivially constructible classes for jit generators.");       \
     static_assert(std::is_base_of_v<dlp::jit::jitGeneratorBase, className>,    \
                   "Requires classes derived from jitGeneratorBase.");          \
-    static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_jit_reg_var_, className,   \
-                                     __LINE__) =                               \
+    DLP_ATTRIBUTE_USED static auto DLP_SUBS_CONCAT_3TOK(                       \
+        static_mgc_dlp_jit_reg_var_, className, __LINE__) =                    \
         dlp::jit::dlpJitGeneratorRegisterInstance().registerGemmJitGenerator(  \
             std::make_unique<className>(), std::string{ kernelFamily });
 

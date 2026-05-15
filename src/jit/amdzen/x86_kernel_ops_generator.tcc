@@ -1231,7 +1231,7 @@ template<utils::kernelInstrType KType>
 void
 GeluErf<KType>::erf(
     int y, int r, int c1, int c2,
-    int x, int r2, int z, int dn, int q)
+    int x, int r2, [[maybe_unused]] int z, [[maybe_unused]] int dn, [[maybe_unused]] int q)
 {
     auto* jit = this->jit;
 
@@ -1303,7 +1303,7 @@ template<>
 inline void
 GeluErf<utils::kernelInstrType::avx512_zmm_32_reg>::geluErfF32(
     int reg, int xtanh, int c1, int c2,
-    int x, int r, int r2, int z, int dn, int q)
+    int x, [[maybe_unused]] int r, int r2, int z, int dn, int q)
 {
     using ZmmReg = Xbyak::Zmm;
 
@@ -1352,7 +1352,7 @@ GeluErf<KType>::geluErfF32(
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-GeluErf<KType>::generateImpl(kernelOpsMetaData& op)
+GeluErf<KType>::generateImpl([[maybe_unused]] kernelOpsMetaData& op)
 {
     if constexpr (Traits::hasMaskSupport) {
         if (erfCmpMaskIdx < 0)
@@ -1555,7 +1555,7 @@ kernelOpsGeneratorX86<KType>::loadVectorInt32andConvertToF32(
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-Relu<KType>::generateImpl(kernelOpsMetaData& op)
+Relu<KType>::generateImpl([[maybe_unused]] kernelOpsMetaData& op)
 {
     utils::registerGuard<RegType> zeroGuard;
     RETURN_IF_ERROR(this->vecPool->acquireGuard(zeroGuard));
@@ -1660,7 +1660,7 @@ GeluTanh<KType>::geluTanhF32(
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-GeluTanh<KType>::generateImpl(kernelOpsMetaData& op)
+GeluTanh<KType>::generateImpl([[maybe_unused]] kernelOpsMetaData& op)
 {
     if constexpr (Traits::hasMaskSupport) {
         if (expCmpMaskIdx < 0)
@@ -1748,7 +1748,7 @@ Mish<KType>::mishF32(
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-Mish<KType>::generateImpl(kernelOpsMetaData& op)
+Mish<KType>::generateImpl([[maybe_unused]] kernelOpsMetaData& op)
 {
     if constexpr (Traits::hasMaskSupport) {
         if (expCmpMaskIdx < 0)
@@ -1790,7 +1790,7 @@ Tanh<KType>::tanhDef(
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-Tanh<KType>::generateImpl(kernelOpsMetaData& op)
+Tanh<KType>::generateImpl([[maybe_unused]] kernelOpsMetaData& op)
 {
     if constexpr (Traits::hasMaskSupport) {
         if (expCmpMaskIdx < 0)
@@ -1834,7 +1834,7 @@ Sigmoid<KType>::sigmoidDef(
 
 template<utils::kernelInstrType KType>
 jitGeneratorError
-Sigmoid<KType>::generateImpl(kernelOpsMetaData& op)
+Sigmoid<KType>::generateImpl([[maybe_unused]] kernelOpsMetaData& op)
 {
     if constexpr (Traits::hasMaskSupport) {
         if (expCmpMaskIdx < 0)
@@ -2655,7 +2655,7 @@ ADQuantize<KType>::aDQuantScaleFactorRowMajorImpl(DataType sfDt, const Xbyak::Re
 template<utils::kernelInstrType KType>
 jitGeneratorError
 ADQuantize<KType>::aDQuantScaleFactorRowMajorImplGEMVN1(DataType sfDt,
-                                                        const Xbyak::Reg64& sfBase)
+                                                        [[maybe_unused]] const Xbyak::Reg64& sfBase)
 {
     using VecGuard = utils::registerGuard<RegType>;
     auto* jit = this->jit;
@@ -2867,7 +2867,7 @@ ADQuantize<KType>::aDQuantZeroPointRowMajorImpl(DataType zpDt, const Xbyak::Reg6
 template<utils::kernelInstrType KType>
 jitGeneratorError
 ADQuantize<KType>::aDQuantZeroPointRowMajorImplGEMVN1(DataType zpDt,
-                                                      const Xbyak::Reg64& zpBase)
+                                                      [[maybe_unused]] const Xbyak::Reg64& zpBase)
 {
     using VecGuard = utils::registerGuard<RegType>;
     auto* jit = this->jit;
