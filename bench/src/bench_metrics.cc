@@ -32,13 +32,13 @@
 
 namespace dlp::benchmarking {
 
-size_t
+double
 BenchmarkMetrics::getMatrixTypeSize(MatrixType type)
 {
     switch (type) {
         case MatrixType::u4:
         case MatrixType::s4:
-            return 1; // 4-bit types packed, but count as 1 byte min
+            return 0.5;
         case MatrixType::u8:
         case MatrixType::s8:
             return 1;
@@ -73,9 +73,9 @@ BenchmarkMetrics::calculateAndReport(benchmark::State& state,
 
     // For bandwidth calculation, we need bytes and will let Google Benchmark
     // calculate the rate
-    size_t size_a = getMatrixTypeSize(a_type);
-    size_t size_b = getMatrixTypeSize(b_type);
-    size_t size_c = getMatrixTypeSize(c_type);
+    double size_a = getMatrixTypeSize(a_type);
+    double size_b = getMatrixTypeSize(b_type);
+    double size_c = getMatrixTypeSize(c_type);
 
     double bytes_A     = static_cast<double>(m) * k * size_a;
     double bytes_B     = static_cast<double>(k) * n * size_b;

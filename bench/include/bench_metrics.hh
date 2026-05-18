@@ -57,9 +57,9 @@ class BenchmarkMetrics
                                    MatrixType        c_type);
 
     /**
-     * @brief Get size in bytes for a matrix type
+     * @brief Get bytes-per-element for a matrix type.
      */
-    static size_t getMatrixTypeSize(MatrixType type);
+    static double getMatrixTypeSize(MatrixType type);
 };
 
 } // namespace dlp::benchmarking
