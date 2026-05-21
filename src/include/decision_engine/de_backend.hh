@@ -57,7 +57,8 @@ static const kernel_frame::kernelInfo INVALID_KERNEL_INFO{
     0,
     false,
     kernel_frame::kernelInstrPreference::none,
-    0
+    0,
+    false
 };
 
 class iDEBackend
@@ -387,11 +388,43 @@ class gemmF32DEBackend : public iDEBackend
             k_unroll = 4;
         }
 
+        // Increasing MR helps when n<=16 (mirrors the BF16 fix below).
+        //
+        // The default DE returns mr=6, nr=64. For shapes with n<=16 the
+        // dispatcher only ever reaches the NR=16 family of kernels (the
+        // lt16-mask kernel for n<16 and the NR=16 full kernel for n==16),
+        // so most of the 32 ZMMs sit idle as C accumulators. Bumping mr
+        // lets each cached B line be consumed by more rows of A.
+        //
+        // nr stays at nr_hint (=64) so the existing row-major NR=64
+        // packed-B layout and the framework's N-direction blocking are
+        // reused unchanged. The JIT generator below will see the bumped
+        // MR and skip the wider NR variants whose register budget would
+        // overflow at MR=16 (NR>=32 needs cReg>=32); those slots are
+        // never reached at runtime for n<=16 anyway.
+        //
+        // Override only when:
+        //  - n <= 16              (skinny-N: only NR=16 family reached)
+        //  - !invokeRD            (RD path has its own internal MR)
+        //  - kInstPref is ZMM     (32-ZMM budget is what the math relies on;
+        //                          AVX2 path has 16 regs, MR=16 won't fit)
+        //  - kc != 1              (the k=1 fused path is sized differently)
+        //
+        // For M < 16 we cap mr at m so the kernel uses an MR-partial
+        // kernel sized exactly to the input row count.
+        bool skinnyN = false;
+        if (!invokeRD && n <= 16 && m > 0 && kc != 1
+            && kInstPref
+                   == kernel_frame::kernelInstrPreference::avx512_zmm_favour) {
+            mr      = (m < 16) ? m : 16;
+            skinnyN = true;
+        }
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, allLtFringeKernels, invokeRD,
-            anyKOpsOrder, kInstPref, c_downscale, k_dtype, rs_c, cs_c,
-            metadata);
+            anyKOpsOrder, kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata,
+            skinnyN);
     }
 
     DLP_ALWAYS_INLINE
@@ -567,8 +600,40 @@ class gemmBF16DEBackend : public iDEBackend
         std::tie(alphaScalingType, betaScalingType) =
             gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
 
-        md_t mr              = mr_hint;
-        md_t nr              = nr_hint;
+        md_t mr = mr_hint;
+        md_t nr = nr_hint;
+
+        // Increasing MR helps when n<=16.
+        //
+        // The default DE returns mr=6, nr=64. For shapes with n<=16 the
+        // dispatcher only ever reaches the NR=16 family of kernels (the
+        // lt16-mask kernel for n<16 and the NR=16 full kernel for n==16),
+        // so only 6 of the 32 ZMM registers are used as C accumulators --
+        // the other ~25 ZMMs sit idle.
+        //
+        // We bump mr to min(16, M) so each cached B line is now consumed
+        // by up to 16 rows of A instead of 6, raising B reuse and cutting
+        // the M-iteration count from ceil(M/6) to ceil(M/16). With
+        // bReg=1 (the only NR variant the skinny-N dispatch reaches),
+        // cReg=16 and aReg=15: well inside the 32-ZMM budget.
+        //
+        // nr stays at nr_hint (=64) so the existing row-major NR=64
+        // packed-B layout and the framework's N-direction blocking are
+        // reused unchanged. The JIT generator below skips the wider NR
+        // variants whose register budget would overflow at MR=16
+        // (NR>=32 needs cReg>=32); those slots are never reached at
+        // runtime for n<=16 anyway.
+        //
+        // For M < 16 we cap mr at m so the kernel uses an MR-partial
+        // kernel sized exactly to the input row count (single full
+        // panel, no fringe). This avoids leaving C ZMMs idle for tiny-M
+        // shapes.
+        bool skinnyN = false;
+        if (n <= 16 && m > 0) {
+            mr      = (m < 16) ? m : 16;
+            skinnyN = true;
+        }
+
         md_t k_unroll        = 1;
         md_t kc              = kc_hint;
         md_t prefetch_c_dist = getPrefetchDistance();
@@ -582,7 +647,7 @@ class gemmBF16DEBackend : public iDEBackend
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
-            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, skinnyN);
     }
 };
 

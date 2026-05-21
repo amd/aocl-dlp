@@ -602,7 +602,22 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
 
-        // Generate all kernels for the given MR and NR
+        // Generate all kernels for the given MR and NR. Any per-variant
+        // generator failure (after passing the feasibility filter below)
+        // is fatal (goto cleanup): we want the existing fail-fast contract
+        // to hold, so we never call generateKernel() for an (mr, nr) pair
+        // we already know cannot fit.
+        //
+        // Feasibility filter: when the DE bumps MR (e.g. MR=16 for the
+        // skinny-N n<=16 override), the wider-NR variants (NR>=32) would
+        // exceed the register budget (cReg=MR*bReg, aReg = numRegs -
+        // cReg - bReg - maskVecReg, must have aReg >= 1 -- mirrors
+        // jitGEMMF32::allocateReg()). Skip those slots up front instead
+        // of relying on the per-variant generator to return badKernelInfo.
+        // The dispatcher only reaches the lt-mask kernel and the NR=16
+        // full kernel for n<=16, both of which always pass the filter.
+        const int kNumRegs =
+            (kType == utils::kernelInstrType::avx2_ymm_16_reg) ? 16 : 32;
         for (iter_t mr = 0; mr < numMRVariants; mr++) {
             for (iter_t nr = 0; nr < numNRVariants; nr++) {
                 params.MR    = mr == 0 ? MR : mr;
@@ -610,6 +625,42 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
                 int correspondingMainFringe = 0;
                 deriveGEMMNRAndMaskUse(nr, params, correspondingMainFringe);
+
+                // Skinny-N override: when the DE has bumped MR via the
+                // n<=16 override (jI.kI.skinnyN), only the lt-numElems
+                // (nr=0) and the full numElems (nr=1) variants are ever
+                // dispatched at runtime. The wider NR slots (nr>=2:
+                // lt2x/2x/lt3x/3x/lt4x/4x) are unreachable AND would
+                // exceed the register budget at bumped MR -- skip them
+                // entirely so we don't waste codegen on dead kernels
+                // (and don't trigger badKernelInfo on infeasible ones).
+                if (jI.kI.skinnyN && nr >= 2) {
+                    continue;
+                }
+
+                // Pre-filter register-infeasible (MR, NR) variants. This
+                // mirrors jitGEMMF32<KType>::allocateReg(): bFullReg =
+                // NR / numElemsPerReg, bMaskReg = useMask ? numMaskRegs
+                // : 0, bReg = bFullReg + bMaskReg, cReg = MR * bReg.
+                // For AVX2 ymm, the mask consumes vector registers
+                // (maskVecReg = numMaskRegs); for AVX-512 the mask is in
+                // Opmask regs and does not draw from the vector budget.
+                {
+                    int bFullReg = params.NR / numElemsPerReg;
+                    int bMaskReg = params.useMask ? params.numMaskRegs : 0;
+                    int bReg     = bFullReg + bMaskReg;
+                    int cReg     = params.MR * bReg;
+                    int maskVecReg =
+                        (kType == utils::kernelInstrType::avx2_ymm_16_reg)
+                            ? bMaskReg
+                            : 0;
+                    if (kNumRegs - cReg - bReg - maskVecReg < 1) {
+                        // Slot stays nullptr (zero-initialized by
+                        // resize). The dispatcher never reaches it for
+                        // any DE-blessed shape that bumped MR.
+                        continue;
+                    }
+                }
 
                 std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
@@ -1414,7 +1465,22 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
 
-        // Generate all kernels for the given MR and NR
+        // Generate all kernels for the given MR and NR. Any per-variant
+        // generator failure (after passing the feasibility filter below)
+        // is fatal (goto cleanup): we want the existing fail-fast contract
+        // to hold, so we never call generateKernel() for an (mr, nr) pair
+        // we already know cannot fit.
+        //
+        // Feasibility filter: when the DE bumps MR (e.g. MR=16 for the
+        // skinny-N n<=16 override), the wider-NR variants (NR>=32) would
+        // exceed the 32-ZMM budget (cReg=MR*bReg, must have aReg = 32 -
+        // cReg - bReg >= aRegMin -- mirrors jitGEMMBF16::allocateReg()).
+        // Skip those slots up front instead of relying on the per-variant
+        // generator to return badKernelInfo. The dispatcher only reaches
+        // the lt16-mask kernel and the NR=16 full kernel for n<=16, both
+        // of which always pass the filter.
+        constexpr int kZmmRegs = 32;
+        const int     aRegMin  = ((jI.kI).c_downscale < DLP_F32) ? 2 : 1;
         for (iter_t mr = 0; mr < numMRVariants; mr++) {
             for (iter_t nr = 0; nr < numNRVariants; nr++) {
                 params.MR          = (mr == 0) ? MR : mr;
@@ -1422,6 +1488,31 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 params.NR          = (nr * numElemsPerReg);
                 params.useMask     = (nr == 0);
                 params.numMaskRegs = (params.useMask) ? 1 : 0;
+
+                // Skinny-N override: when the DE has bumped MR via the
+                // n<=16 override (jI.kI.skinnyN), only the lt16 (nr=0)
+                // and full-16 (nr=1) variants are ever dispatched. The
+                // wider NR slots (nr>=2: lt32/32/lt48/48/lt64/64) are
+                // unreachable AND would exceed the 32-ZMM budget at
+                // bumped MR -- skip them entirely so we don't waste
+                // codegen on dead kernels (and don't trigger
+                // badKernelInfo on infeasible ones).
+                if (jI.kI.skinnyN && nr >= 2) {
+                    continue;
+                }
+
+                // For BF16 ZMM: bFullReg = (2*NR)/nBF16ElemsPerReg
+                // = NR/16 = nr (with numElemsPerReg=16). bMaskReg=1 for
+                // useMask, else 0. So bReg = max(1, nr).
+                int bReg = (nr == 0) ? 1 : static_cast<int>(nr);
+                int cReg = params.MR * bReg;
+                if (kZmmRegs - cReg - bReg < aRegMin) {
+                    // Slot stays nullptr (zero-initialized by resize).
+                    // The dispatcher never reaches it for any DE-blessed
+                    // shape that bumped MR.
+                    continue;
+                }
+
                 auto gen = std::make_unique<GEMMcodeGenerator::jitGEMMBF16<
                     utils::kernelInstrType::avx512_zmm_32_reg>>(
                     utils::JIT_KERNEL_SIZE);

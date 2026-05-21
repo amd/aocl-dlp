@@ -156,7 +156,8 @@ class gemmDEBackendUtils
         dlp::kernel_frame::kernelDatatype   k_dtype,
         [[maybe_unused]] md_t               rs_c,
         [[maybe_unused]] md_t               cs_c,
-        dlp_gemm_post_op*                   metadata)
+        dlp_gemm_post_op*                   metadata,
+        bool                                skinnyN = false)
     {
         // Iterate over the post_ops list to get the number of post-ops.
         md_t              numPostOps    = 0;
@@ -184,7 +185,8 @@ class gemmDEBackendUtils
                                              0,
                                              anyKOpsOrder,
                                              kInstPref,
-                                             c_downscale };
+                                             c_downscale,
+                                             skinnyN };
         } else {
             kernel_frame::kernelInfo kI{ mr,
                                          nr,
@@ -202,7 +204,8 @@ class gemmDEBackendUtils
                                          0,
                                          anyKOpsOrder,
                                          kInstPref,
-                                         c_downscale };
+                                         c_downscale,
+                                         skinnyN };
             kI.kOpsArrSize = numPostOps;
             kI.kOpsArr =
                 kernel_frame::kernelInfo::allocateKernelOpsArray(numPostOps);

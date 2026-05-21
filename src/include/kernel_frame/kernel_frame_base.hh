@@ -304,6 +304,12 @@ struct kernelInfo
     bool                  anyKOpsOrder;
     kernelInstrPreference kInstPref;
     md_t                  c_downscale;
+    // True when the DE has applied the skinny-N (n<=16) override that
+    // bumps MR above the default. Signals to the JIT generator that
+    // only the lt16 (nr=0) and full-16 (nr=1) N-direction variants will
+    // ever be invoked at runtime, so the wider lt32/32/lt48/48/lt64/64
+    // slots can be skipped during generation.
+    bool skinnyN;
 
     // Empty constructor to create dummy kernelInfo.
     kernelInfo()
@@ -323,6 +329,7 @@ struct kernelInfo
         , anyKOpsOrder(false)
         , kInstPref(kernel_frame::kernelInstrPreference::none)
         , c_downscale(0)
+        , skinnyN(false)
     {
     }
 
@@ -342,7 +349,8 @@ struct kernelInfo
                std::size_t                        kOpsArrSize,
                bool                               anyKOpsOrder,
                kernelInstrPreference              instPref,
-               md_t                               c_downscale)
+               md_t                               c_downscale,
+               bool                               _skinnyN = false)
         : mr(mr)
         , nr(nr)
         , term_fringe_nr(_term_fringe_nr)
@@ -363,6 +371,7 @@ struct kernelInfo
         , anyKOpsOrder(anyKOpsOrder)
         , kInstPref(instPref)
         , c_downscale(c_downscale)
+        , skinnyN(_skinnyN)
     {
     }
 
@@ -386,6 +395,7 @@ struct kernelInfo
         , anyKOpsOrder(other.anyKOpsOrder)
         , kInstPref(other.kInstPref)
         , c_downscale(other.c_downscale)
+        , skinnyN(other.skinnyN)
     {
         if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
             this->kOpsArr =
@@ -419,6 +429,7 @@ struct kernelInfo
         , anyKOpsOrder(other->anyKOpsOrder)
         , kInstPref(other->kInstPref)
         , c_downscale(other->c_downscale)
+        , skinnyN(other->skinnyN)
     {
         if ((other->kOpsArr != nullptr) && (other->kOpsArrSize > 0)) {
             other->kOpsArr     = nullptr;
@@ -448,6 +459,7 @@ struct kernelInfo
         , anyKOpsOrder(other.anyKOpsOrder)
         , kInstPref(other.kInstPref)
         , c_downscale(other.c_downscale)
+        , skinnyN(other.skinnyN)
     {
         if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
             other.kOpsArr     = nullptr;
@@ -485,6 +497,7 @@ struct kernelInfo
             this->anyKOpsOrder = other.anyKOpsOrder;
             this->kInstPref    = other.kInstPref;
             this->c_downscale  = other.c_downscale;
+            this->skinnyN      = other.skinnyN;
         }
         return *this;
     }
@@ -517,6 +530,7 @@ struct kernelInfo
             this->anyKOpsOrder = other.anyKOpsOrder;
             this->kInstPref    = other.kInstPref;
             this->c_downscale  = other.c_downscale;
+            this->skinnyN      = other.skinnyN;
         }
         return *this;
     }
@@ -552,7 +566,8 @@ struct kernelInfo
                 && (this->kOpsArrSize == rhs.kOpsArrSize) && isKOpsArrEqual
                 && (this->anyKOpsOrder == rhs.anyKOpsOrder)
                 && (this->kInstPref == rhs.kInstPref)
-                && (this->c_downscale == rhs.c_downscale));
+                && (this->c_downscale == rhs.c_downscale)
+                && (this->skinnyN == rhs.skinnyN));
     }
 
     // TODO: Need to implement a subset function for kernelInfo
