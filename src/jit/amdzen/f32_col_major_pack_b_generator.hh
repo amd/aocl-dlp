@@ -84,7 +84,6 @@ class jitPackBF32ColMajor : public Xbyak::CodeGenerator
     Xbyak::Reg64 regDstPanel;
     Xbyak::Reg64 regK;
     Xbyak::Reg64 regLdbBytes;
-    Xbyak::Reg64 regNrBytes;
     Xbyak::Reg64 regKFull;
     Xbyak::Reg64 regSrcSb;
     Xbyak::Reg64 regDstSb;

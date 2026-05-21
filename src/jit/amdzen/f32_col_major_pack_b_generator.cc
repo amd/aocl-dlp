@@ -337,29 +337,27 @@ jitPackBF32ColMajor<KType>::generateKernel(utils::packBGeneratorParams& params)
 
     RETURN_IF_ERROR(allocateReg());
 
-    Xbyak::util::StackFrame sf(this, 1, 13, 0);
+    Xbyak::util::StackFrame sf(this, 1, 12 | Xbyak::util::UseRBPAsFramePointer,
+                               0);
 
     pParams     = sf.p[0];
     regSrcPanel = sf.t[0];
     regDstPanel = sf.t[1];
     regK        = sf.t[2];
     regLdbBytes = sf.t[3];
-    regNrBytes  = sf.t[4];
-    regKFull    = sf.t[5];
-    regSrcSb    = sf.t[6];
-    regDstSb    = sf.t[7];
-    regKr       = sf.t[8];
-    regSbCount  = sf.t[9];
-    regColPtr   = sf.t[10];
-    regTmp      = sf.t[11];
-    regTmp2     = sf.t[12];
+    regKFull    = sf.t[4];
+    regSrcSb    = sf.t[5];
+    regDstSb    = sf.t[6];
+    regKr       = sf.t[7];
+    regSbCount  = sf.t[8];
+    regColPtr   = sf.t[9];
+    regTmp      = sf.t[10];
+    regTmp2     = sf.t[11];
 
     mov(regK, ptr[pParams + offsetof(dlp::kernels::packBParams, k)]);
     mov(regLdbBytes,
         ptr[pParams + offsetof(dlp::kernels::packBParams, cs_src)]);
     shl(regLdbBytes, 2);
-
-    mov(regNrBytes, static_cast<int>(NR_ * sizeof(float)));
 
     mov(regKFull, regK);
     and_(regKFull, ~(simdWidth - 1));

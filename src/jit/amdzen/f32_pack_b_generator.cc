@@ -50,7 +50,8 @@ jitPackBF32<KType>::generateKernel(utils::packBGeneratorParams& params)
 
     RETURN_IF_ERROR(allocateReg());
 
-    Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
     initializeParameters();
 
