@@ -103,9 +103,27 @@ aocl_batch_gemm_f16f16f16of16(const char*      order,
             goto err_hndl;
         }
 
-        // Post-ops are not supported for FP16 GEMM.
-        if ((metadata[gc_i] != NULL) && (metadata[gc_i]->seq_length > 0)) {
-            dlp_print_msg(" Post-ops are not supported for f16f16f16of16 gemm.",
+        if ((metadata[gc_i] != NULL)
+            && (metadata[gc_i]->a_post_quant != NULL)) {
+            dlp_print_msg(" A-dequantization post-op is not supported for "
+                          "f16f16f16of16 batch gemm.",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+            goto err_hndl;
+        }
+
+        if ((metadata[gc_i] != NULL) && (metadata[gc_i]->pre_ops != NULL)
+            && (metadata[gc_i]->pre_ops->seq_length > 0)) {
+            dlp_print_msg(" Pre-ops are not supported for f16f16f16of16 batch "
+                          "gemm.",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+            goto err_hndl;
+        }
+
+        if ((metadata[gc_i] != NULL) && (metadata[gc_i]->post_op_grp != NULL)) {
+            dlp_print_msg(" Group post-ops are not supported for f16f16f16of16 "
+                          "batch gemm.",
                           __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
             goto err_hndl;
@@ -379,10 +397,29 @@ aocl_batch_gemm_f16f16f16of32(const char*      order,
                 goto err_hndl_of32;
             }
 
-            if ((metadata[gc_i] != NULL) && (metadata[gc_i]->seq_length > 0)) {
-                dlp_print_msg(
-                    " Post-ops are not supported for f16f16f16of32 batch gemm.",
-                    __FILE__, __LINE__);
+            if ((metadata[gc_i] != NULL)
+                && (metadata[gc_i]->a_post_quant != NULL)) {
+                dlp_print_msg(" A-dequantization post-op is not supported for "
+                              "f16f16f16of32 batch gemm.",
+                              __FILE__, __LINE__);
+                DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+                goto err_hndl_of32;
+            }
+
+            if ((metadata[gc_i] != NULL) && (metadata[gc_i]->pre_ops != NULL)
+                && (metadata[gc_i]->pre_ops->seq_length > 0)) {
+                dlp_print_msg(" Pre-ops are not supported for f16f16f16of32 "
+                              "batch gemm.",
+                              __FILE__, __LINE__);
+                DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
+                goto err_hndl_of32;
+            }
+
+            if ((metadata[gc_i] != NULL)
+                && (metadata[gc_i]->post_op_grp != NULL)) {
+                dlp_print_msg(" Group post-ops are not supported for "
+                              "f16f16f16of32 batch gemm.",
+                              __FILE__, __LINE__);
                 DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
                 goto err_hndl_of32;
             }

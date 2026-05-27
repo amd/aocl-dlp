@@ -535,3 +535,1392 @@ batch_gemm_tests:
     mtagA: "none"
     mtagB: "none"
     group_size: 2
+
+
+  # ============================================================================
+  # FP16 output (f16f16f16of16)
+  # ============================================================================
+
+  # --------------------------------------------------------------------------
+  # RELU
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_RELU_basic"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: [false, true]
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_MultiGroup_RELU"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_SingleGroup_RELU_fringe"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 5, 11, 15, 17, 23, 31]
+    n: [5, 11, 15, 17, 23, 31]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_SingleGroup_RELU_large_k"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [512, 1024]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_SingleGroup_RELU_large_batch"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: 1.0
+    beta: [0.0, 1.0]
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 16
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  # --------------------------------------------------------------------------
+  # Bias (fp16 bias vector)
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_Bias_fp16"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: [0.0, 1.0]
+    transA: [false, true]
+    transB: [false, true]
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  - name: "FP16of16_MultiGroup_Bias_fp16"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  - name: "FP16of16_SingleGroup_Bias_fp16_fringe"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 5, 11, 15, 17, 23, 31]
+    n: [5, 11, 15, 17, 23, 31]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  # --------------------------------------------------------------------------
+  # GELU-ERF
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_GELU_ERF"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-ERF"
+
+  - name: "FP16of16_MultiGroup_GELU_ERF"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-ERF"
+
+  # --------------------------------------------------------------------------
+  # GELU-TANH
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_GELU_TANH"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-TANH"
+
+  - name: "FP16of16_MultiGroup_GELU_TANH"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-TANH"
+
+  # --------------------------------------------------------------------------
+  # SWISH
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_SWISH"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-SWISH"
+          params:
+            alpha_type: ["f32"]
+            alpha: [0.5, 1.0, 2.0]
+
+  # --------------------------------------------------------------------------
+  # Scale
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_Scale"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n"]
+            scale_factor_type: ["f32"]
+
+  - name: "FP16of16_MultiGroup_Scale"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n"]
+            scale_factor_type: ["f32"]
+
+  # --------------------------------------------------------------------------
+  # Post-op chains
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_Bias_RELU_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_MultiGroup_Bias_RELU_chain"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_SingleGroup_Bias_GELU_ERF_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+        - type: "Elementwise-GELU-ERF"
+
+  - name: "FP16of16_SingleGroup_Scale_RELU_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n"]
+            scale_factor_type: ["f32"]
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_SingleGroup_RELU_Bias_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  # --------------------------------------------------------------------------
+  # alpha/beta stress
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_RELU_alpha_beta_stress"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32]
+    n: [16, 32]
+    k: [16, 32]
+    alpha: [0.5, 1.0, 2.0]
+    beta: [0.0, 0.5, 1.0]
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  # ============================================================================
+  # F32 output (f16f16f16of32)
+  # ============================================================================
+
+  # --------------------------------------------------------------------------
+  # RELU
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of32_SingleGroup_RELU_basic"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: [false, true]
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_MultiGroup_RELU"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_SingleGroup_RELU_fringe"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 5, 11, 15, 17, 23, 31]
+    n: [5, 11, 15, 17, 23, 31]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_SingleGroup_RELU_large_k"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [512, 1024]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  # --------------------------------------------------------------------------
+  # Bias (fp16 bias, f32 output)
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of32_SingleGroup_Bias_fp16"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: [0.0, 1.0]
+    transA: [false, true]
+    transB: [false, true]
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  - name: "FP16of32_MultiGroup_Bias_fp16"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  - name: "FP16of32_SingleGroup_Bias_fp16_fringe"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [1, 5, 11, 15, 17, 23, 31]
+    n: [5, 11, 15, 17, 23, 31]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 2
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  # --------------------------------------------------------------------------
+  # GELU-ERF (f32 output)
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of32_SingleGroup_GELU_ERF"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-ERF"
+
+  - name: "FP16of32_MultiGroup_GELU_ERF"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-GELU-ERF"
+
+  # --------------------------------------------------------------------------
+  # Post-op chains (f32 output)
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of32_SingleGroup_Bias_RELU_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_MultiGroup_Bias_RELU_chain"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 32, 64, 128]
+    n: [16, 32, 64, 128]
+    k: [16, 64, 128, 256]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [1, 2, 4, 8]
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_SingleGroup_Bias_GELU_ERF_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+        - type: "Elementwise-GELU-ERF"
+
+  - name: "FP16of32_SingleGroup_Scale_RELU_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_len: ["n"]
+            scale_factor_type: ["f32"]
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_SingleGroup_RELU_Bias_chain"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  - name: "FP16of32_SingleGroup_alpha_beta_stress"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32]
+    n: [16, 32]
+    k: [16, 32]
+    alpha: [0.5, 1.0, 2.0]
+    beta: [0.0, 0.5, 1.0]
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_SingleGroup_RELU_large_batch"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [32, 64]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: 1.0
+    beta: [0.0, 1.0]
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 16
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  # ============================================================================
+  # Matrix-Add / Matrix-Mul post-ops
+  # ============================================================================
+
+  # --------------------------------------------------------------------------
+  # FP16 output (f16f16f16of16)
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of16_SingleGroup_MatrixAdd_basic"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["fp16"]
+
+  - name: "FP16of16_MultiGroup_MatrixAdd"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["fp16"]
+
+  - name: "FP16of16_SingleGroup_MatrixMul_basic"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            matrix_type: ["fp16"]
+
+  - name: "FP16of16_MultiGroup_MatrixMul"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 4, 8]
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            matrix_type: ["fp16"]
+
+  # --------------------------------------------------------------------------
+  # F32 output (f16f16f16of32)
+  # --------------------------------------------------------------------------
+
+  - name: "FP16of32_SingleGroup_MatrixAdd_basic"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["f32"]
+
+  - name: "FP16of32_MultiGroup_MatrixAdd"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 4, 8]
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Add"
+          params:
+            matrix_type: ["f32"]
+
+  - name: "FP16of32_SingleGroup_MatrixMul_basic"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            matrix_type: ["f32"]
+
+  - name: "FP16of32_MultiGroup_MatrixMul"
+    product_type: "simple"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "none"
+    group_size: [2, 4, 8]
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Matrix-Mul"
+          params:
+            matrix_type: ["f32"]
+
+  # ============================================================================
+  # Runtime pack-B (mtagB="pack") coverage
+  # Exercises the explicit caller-requested pack path (separate from the
+  # auto-promotion to PACK that occurs internally when transB=true).
+  # ============================================================================
+
+  - name: "FP16of16_SingleGroup_RELU_packB"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: [0.0, 1.0]
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "pack"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of16_SingleGroup_Bias_fp16_packB"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "fp16"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "pack"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-1
+      absolute: 1.0e-1
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
+
+  - name: "FP16of32_SingleGroup_RELU_packB"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [8, 16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 32, 64, 128]
+    alpha: 1.0
+    beta: [0.0, 1.0]
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "pack"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Elementwise-RELU"
+
+  - name: "FP16of32_SingleGroup_Bias_fp16_packB"
+    product_type: "cartesian"
+    a_type: "fp16"
+    b_type: "fp16"
+    c_type: "f32"
+    acc_type: "fp16"
+    storage_format: "row_major"
+    m: [16, 32, 64]
+    n: [16, 32, 64]
+    k: [16, 64]
+    alpha: 1.0
+    beta: 0.0
+    transA: false
+    transB: false
+    mtagA: "none"
+    mtagB: "pack"
+    group_size: 4
+    tolerances:
+      relative: 1.0e-2
+      absolute: 1.0e-2
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Bias"
+          params:
+            bias_type: ["fp16"]
+            bias_dim: ["n"]
