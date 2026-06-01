@@ -6,7 +6,7 @@ on:
 
 jobs:
   check_branch_name:
-    runs-on: amd_linux  # Using your self-hosted runner labeled 'amd_linux'
+    runs-on: branch_check_linux  # Using your self-hosted runner labeled 'branch_check_linux'
 
     steps:
     - name: Check out code
