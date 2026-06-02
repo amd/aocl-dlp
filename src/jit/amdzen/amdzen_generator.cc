@@ -724,18 +724,18 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
 
         // Additionally generate nloop kernel for tiny path.
         //
-        // Skip the nLoop kernel entirely when skinnyN bumped MR to a value
-        // larger than the default. The nLoop kernel uses NR=processBlockSize
+        // Skip the nloop kernel entirely when skinnyN bumped MR to a value
+        // larger than the default. The nloop kernel uses NR=processBlockSize
         // (e.g. 64 for ZMM F32), so its register budget is
         //   cReg = MR * (NR / numElemsPerReg)
         // which exceeds the 32-ZMM budget once MR > ~7 (with NR=64,
         // numElemsPerReg=16, cReg = MR*4). On the bumped-MR (MR=16) skinny-N
-        // path the nLoop allocateReg() therefore returns badKernelInfo, which
+        // path the nloop allocateReg() therefore returns badKernelInfo, which
         // would propagate via `goto cleanup` and wipe ALL kernel slots
         // (including the per-(mr,nr) variants that succeeded above),
         // leaving kernel_base=NULL and silently no-op'ing the GEMM. The
         // per-(mr,nr) dispatch path is what skinnyN was optimizing for, so
-        // dropping the nLoop tiny-path optimization here is safe.
+        // dropping the nloop tiny-path optimization here is safe.
         if (!jI.kI.skinnyN) {
             int processBlockSize = getProcessBlockSize();
             int nloopNumNRVariants = (processBlockSize / numElemsPerReg) + 1;
@@ -746,7 +746,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
                 false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType,
                 kType);
-            nloopParams.nLoop = true;
+            nloopParams.nloop = true;
 
             for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
                 nloopParams.kernelOps.push_back((jI.kI).kOpsArr[ii]);
@@ -807,7 +807,7 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                                             processBlockSize, false,
                                             processBlockSize);
         } else {
-            // skinnyN path: leave the nLoop kernel un-generated; the tiny-path
+            // skinnyN path: leave the nloop kernel un-generated; the tiny-path
             // framework code checks hasNLoop and falls back to the regular
             // per-(mr,nr) dispatch when hasNLoop is false.
             nloopKernelCodeBlock = nullptr;

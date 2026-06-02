@@ -96,7 +96,7 @@ struct generatorParams
     bool mLoop; // This will be set to true only for the main kernel
     bool is_k1; // this will be set to true only for the K=1 kernel where we
                 // need not generate k-unroll loop
-    bool nLoop; // this will be set to true for the nloop kernel where
+    bool nloop; // this will be set to true for the nloop kernel where
                 // both M and N loops are inside the JIT kernel
     dlp::kernel_frame::scalingType                    alphaScalingType;
     dlp::kernel_frame::scalingType                    betaScalingType;
@@ -126,7 +126,7 @@ struct generatorParams
         , useMask(_useMask)
         , mLoop(_mLoop)
         , is_k1(_is_k1)
-        , nLoop(false)
+        , nloop(false)
         , alphaScalingType(_alphaScalingType)
         , betaScalingType(_betaScalingType)
         , kType(_kType)
@@ -143,7 +143,7 @@ struct generatorParams
         , useMask(other.useMask)
         , mLoop(other.mLoop)
         , is_k1(other.is_k1)
-        , nLoop(other.nLoop)
+        , nloop(other.nloop)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
@@ -163,7 +163,7 @@ struct generatorParams
             useMask          = other.useMask;
             mLoop            = other.mLoop;
             is_k1            = other.is_k1;
-            nLoop            = other.nLoop;
+            nloop            = other.nloop;
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
@@ -182,7 +182,7 @@ struct generatorParams
         , useMask(other.useMask)
         , mLoop(other.mLoop)
         , is_k1(other.is_k1)
-        , nLoop(other.nLoop)
+        , nloop(other.nloop)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
@@ -202,7 +202,7 @@ struct generatorParams
             useMask          = other.useMask;
             mLoop            = other.mLoop;
             is_k1            = other.is_k1;
-            nLoop            = other.nLoop;
+            nloop            = other.nloop;
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;

@@ -1411,8 +1411,8 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
         return generateKernelK1(params);
     }
 
-    // Check if this is an nLoop kernel (M and N loops inside JIT)
-    if (params.nLoop) {
+    // Check if this is an nloop kernel (M and N loops inside JIT)
+    if (params.nloop) {
         return generateKernel_IR_JR_General(params);
     }
 
