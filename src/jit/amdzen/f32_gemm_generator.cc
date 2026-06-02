@@ -1411,6 +1411,11 @@ jitGEMMF32<KType>::generateKernel(utils::generatorParams& params)
         return generateKernelK1(params);
     }
 
+    // Check if this is an nLoop kernel (M and N loops inside JIT)
+    if (params.nLoop) {
+        return generateKernel_IR_JR_General(params);
+    }
+
     MR          = params.MR;
     currentMR   = MR;
     NR          = params.NR;
@@ -2078,6 +2083,386 @@ jitGEMMF32<KType>::generateKernel_IR_JR(utils::generatorParams& params)
     }
 
     L(done_k1);
+
+    vzeroupper();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+// Generate kernel with M-outer, N-middle, K-inner loops all inside the JIT
+// kernel. This avoids per-NR-strip function call overhead for the general
+// GEMM (K>1) case on the tiny path.
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMF32<KType>::generateKernel_IR_JR_General(utils::generatorParams& params)
+{
+    MR          = params.MR;
+    NR          = params.NR;
+    c_downscale = params.c_downscale;
+
+    // Setting params.mLoop to false since we handle M-loop ourselves
+    params.mLoop = false;
+
+    // Allocate 48 bytes of local stack space for BF16 conversion constants
+    Xbyak::util::StackFrame stackFrame(
+        this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 48);
+    initializeStackFrame(stackFrame);
+    regNiter = regTmp2;
+    regNLeft = regKIter;
+    initializeParameters(true);
+
+    // Create kernel ops handler once for the entire kernel
+    std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
+    if (!params.kernelOps.empty()) {
+        kernelOpsHandlerPtr =
+            std::make_unique<gen::kernelOpsHandler<KType>>(this);
+    }
+
+    numNRVariants = NR / numElemsPerReg + 1; // +1 for the mask variant
+    numMRVariants = MR;
+
+    // Initialize labels
+    std::vector<Xbyak::Label>              m_labels;
+    Xbyak::Label                           done_all;
+    std::vector<Xbyak::Label>              NIterLoop;
+    Xbyak::Label                           MIterLoop;
+    std::vector<Xbyak::Label>              done_nVariants;
+    Xbyak::Label                           considerMLeft;
+    std::vector<Xbyak::Label>              considerNLeft;
+    std::vector<std::vector<Xbyak::Label>> skip_NR;
+
+    m_labels.resize(numMRVariants);
+    label_store_result_k1.resize(numMRVariants);
+    skip_NR.resize(numMRVariants);
+    considerNLeft.resize(numMRVariants);
+    done_nVariants.resize(numMRVariants);
+    NIterLoop.resize(numMRVariants);
+
+    // M-outer loop, N-middle loop, K-inner loop
+    for (int mr = MR; mr > 0; mr--) {
+
+        label_store_result_k1[mr - 1].resize(numNRVariants);
+        skip_NR[mr - 1].resize(numNRVariants);
+
+        bool isMainMRVariant = mr == MR;
+
+        currentMR = mr;
+
+        L(m_labels[mr - 1]);
+
+        if (isMainMRVariant) {
+            mov(regMiter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mIter)]);
+            test(regMiter, regMiter);
+            je(considerMLeft, T_NEAR);
+            L(MIterLoop);
+        }
+
+        // Save N-loop state on stack
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+        push(regTmp1);
+        mov(regNiter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+        push(regNiter);
+        mov(regNLeft,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+        push(regNLeft);
+        mov(regBptr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
+        push(regBptr);
+
+        // N-middle loop: generate all NR variants
+        for (currentNRIdx = numNRVariants - 1; currentNRIdx >= 0;
+             currentNRIdx--) {
+
+            currentNR = currentNRIdx * numElemsPerReg;
+            bool isMainNRVariant = currentNRIdx == numNRVariants - 1;
+
+            if (isMainNRVariant) {
+                mov(regNiter,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+                test(regNiter, regNiter);
+                je(considerNLeft[mr - 1], T_NEAR);
+                L(NIterLoop[mr - 1]);
+            } else {
+                cmp(regNLeft, currentNR);
+                jl(skip_NR[mr - 1][currentNRIdx], T_NEAR);
+            }
+
+            // Reload A ptr for this row
+            mov(regAPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)]);
+
+            // Reload regCsA since regTmp3 (aliased to regCsA) may have been
+            // clobbered by C/B pointer advancement in a previous NR sub-block
+            // or M iteration.
+            mov(regCsA, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csA)]);
+            lea(regCsA, ptr[regCsA * sizeof(float)]);
+
+            // Store nLeft value to n for transpose generator
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, n)],
+                regNLeft);
+
+            useMask     = currentNRIdx == 0;
+            numMaskRegs = useMask ? 1 : 0;
+            RETURN_IF_ERROR(allocateMaskRegisters());
+            loadMasks();
+
+            RETURN_IF_ERROR(allocateReg());
+
+            // --- K-inner loop body (adapted from generateIrLoop) ---
+            inLocalLabel();
+
+            mov(regTmpAptr, regAPtr);
+            mov(regBptr,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
+
+            // Zero out accumulators
+            regInit();
+
+            // K main loop
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
+            test(regKIter, regKIter);
+            je(".BCONSIDKLEFT", T_NEAR);
+
+            L(".BLOOPKITER");
+            RETURN_IF_ERROR(kernelUnroll(params.K_UNROLL));
+            dec(regKIter);
+            jne(".BLOOPKITER", T_NEAR);
+
+            L(".BCONSIDKLEFT");
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
+            test(regKIter, regKIter);
+            je(".BPOSTACCUM", T_NEAR);
+
+            RETURN_IF_ERROR(kernelUnroll(1));
+
+            L(".BPOSTACCUM");
+
+            if (params.alphaScalingType == dlp::kernel_frame::scalingType::one) {
+                // skip alpha scaling if alpha is 1
+            } else {
+                RETURN_IF_ERROR(scaleAlpha());
+            }
+
+            // Check if is_last_k is set
+            mov(regTmp1,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_store_result_k1[currentMR - 1][currentNRIdx], T_NEAR);
+
+            // Post-ops path (when is_last_k is set)
+            if (!params.kernelOps.empty()) {
+                using VecPoolType =
+                    utils::registerPool<typename Traits::RegType,
+                                        Traits::numRegs>;
+                using MaskPoolType =
+                    utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
+
+                if (params.betaScalingType
+                    == dlp::kernel_frame::scalingType::zero) {
+                    // skip beta scaling if beta is 0
+                } else {
+                    RETURN_IF_ERROR(scaleBeta());
+                }
+
+                VecPoolType vecPool;
+                vecPool.addPreserve(bRegIdx, cRegIdx - bRegIdx);
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    if (useMask && maskVecReg > 0) {
+                        vecPool.addPreserve(maskRegIdx);
+                    }
+                }
+                vecPool.setAccumulators(cRegIdx, cReg);
+                RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
+
+                MaskPoolType maskPool;
+                maskPool.addPreserve(utils::MASK_START_IDX,
+                                     useMask ? numMaskRegs : 0);
+                RETURN_IF_ERROR(maskPool.init(this,
+                                              utils::maskSaveWidth<KType>(),
+                                              Traits::reservedMaskBits));
+
+                int maskOffset;
+                if constexpr (KType
+                              == utils::kernelInstrType::avx2_ymm_16_reg) {
+                    maskOffset =
+                        useMask
+                            ? offsetof(dlp::kernels::gemmParams, maskArray)
+                            : -1;
+                } else if constexpr (KType
+                                     == utils::kernelInstrType::
+                                         avx512_ymm_32_reg) {
+                    maskOffset =
+                        useMask
+                            ? offsetof(dlp::kernels::gemmParams, maskF32_8[0])
+                            : -1;
+                } else {
+                    maskOffset =
+                        useMask
+                            ? offsetof(dlp::kernels::gemmParams, maskF32[0])
+                            : -1;
+                }
+
+                RETURN_IF_ERROR((kernelOpsHandlerPtr->generateKernelOps(
+                    params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemm,
+                    currentMR, currentNR, useMask, numMaskRegs, cRegIdx,
+                    cReg, vecPool, maskPool, maskOffset)));
+
+                RETURN_IF_ERROR(storeResult(false, false));
+                jmp(".AfterStore", T_NEAR);
+            }
+
+            // Store result path (when is_last_k is NOT set, or no post-ops)
+            L(label_store_result_k1[currentMR - 1][currentNRIdx]);
+
+            {
+                bool decoupleBeta = (c_downscale < DLP_F32);
+                if constexpr (KType
+                              == utils::kernelInstrType::avx512_zmm_32_reg) {
+                    decoupleBeta = decoupleBeta || (bReg == 1);
+                }
+
+                if (decoupleBeta) {
+                    if (params.betaScalingType
+                        != dlp::kernel_frame::scalingType::zero) {
+                        RETURN_IF_ERROR(scaleBeta());
+                    }
+                    RETURN_IF_ERROR(storeResult(false, false));
+                } else if (params.betaScalingType
+                           == dlp::kernel_frame::scalingType::zero) {
+                    RETURN_IF_ERROR(storeResult(false, false));
+                } else {
+                    RETURN_IF_ERROR(storeResult(true, false));
+                }
+            }
+
+            L(".AfterStore");
+
+            outLocalLabel();
+            // --- End K-inner loop body ---
+
+            // Advance B pointer to next NR sub-block.
+            // For the main NR variant (panel-to-panel jump), advance by
+            // csB * currentNR * sizeof(float) where csB holds ps_b_use (=k
+            // for packed B). This gives NR*k*sizeof(float) = one full panel.
+            // For fringe NR variants (within-panel jump), advance by just
+            // currentNR * sizeof(float) since columns within a packed panel
+            // are contiguous.
+            mov(regTmp1, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)]);
+            if (isMainNRVariant) {
+                mov(regTmp3,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csB)]);
+                imul(regTmp3, regTmp3,
+                     static_cast<int>(currentNR * sizeof(float)));
+                add(regTmp1, regTmp3);
+            } else {
+                add(regTmp1, currentNR * sizeof(float));
+            }
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)], regTmp1);
+
+            // Advance C by currentNR * csC
+            mov(regTmp3,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, csC)]);
+            lea(regTmp3, ptr[regTmp3 * sizeof(float)]);
+            moveCPtr(regCPtr, regTmp3, currentNR);
+
+            // Advance post_op_c_j by currentNR
+            mov(regTmp1,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+            add(regTmp1, currentNR);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
+                regTmp1);
+
+            if (isMainNRVariant) {
+                mov(regNiter,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)]);
+                dec(regNiter);
+                mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)],
+                    regNiter);
+                jnz(NIterLoop[mr - 1], T_NEAR);
+
+                L(considerNLeft[mr - 1]);
+                mov(regNLeft,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+                test(regNLeft, regNLeft);
+                je(done_nVariants[mr - 1], T_NEAR);
+            } else {
+                mov(regNLeft,
+                    ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)]);
+                sub(regNLeft, currentNR);
+                mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)],
+                    regNLeft);
+                test(regNLeft, regNLeft);
+                jz(done_nVariants[mr - 1], T_NEAR);
+                L(skip_NR[mr - 1][currentNRIdx]);
+            }
+        }
+
+        // Restore N-loop state
+        L(done_nVariants[mr - 1]);
+        pop(regBptr);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, b)], regBptr);
+        pop(regNLeft);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nLeft)],
+            regNLeft);
+        pop(regNiter);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, nIter)],
+            regNiter);
+        pop(regTmp1);
+        mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, post_op_c_j)],
+            regTmp1);
+
+        if (isMainMRVariant) {
+            // Advance A by psA
+            mov(regTmp1,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, psA)]);
+            lea(regTmp1, ptr[regTmp1 * sizeof(float)]);
+            lea(regAPtr, ptr[regAPtr + regTmp1]);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, a)], regAPtr);
+
+            // Update post_op_c_i
+            mov(regTmp1,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
+            add(regTmp1, currentMR);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, post_op_c_i)],
+                regTmp1);
+
+            // Advance C ptr
+            mov(regCPtr, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)]);
+            moveCPtr(regCPtr, regRsC, currentMR);
+            mov(ptr[stackPtr + offsetof(dlp::kernels::gemmParams, c)], regCPtr);
+
+            // Decrement m_iter
+            dec(regMiter);
+            jne(MIterLoop, T_NEAR);
+
+            L(considerMLeft);
+            mov(regMiter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, mLeft)]);
+            test(regMiter, regMiter);
+            je(done_all, T_NEAR);
+
+            // Dispatch to fringe M labels
+            for (int mr_idx = MR - 1; mr_idx > 0; mr_idx--) {
+                cmp(regMiter, mr_idx);
+                je(m_labels[mr_idx - 1], T_NEAR);
+            }
+        } else {
+            jmp(done_all, T_NEAR);
+        }
+    }
+
+    L(done_all);
 
     vzeroupper();
 

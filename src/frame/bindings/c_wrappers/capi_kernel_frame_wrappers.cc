@@ -287,6 +287,16 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
     kernel_hndl->nr          = fastKI.nr;
     kernel_hndl->kDtype      = k_dtype;
     kernel_hndl->invokeRD    = fastKI.invokeRD;
+
+    // Check if the generated kernel has an internal N-loop
+    kernel_hndl->hasNLoop = false;
+    if (kernPtr.isValid()) {
+        auto* adapter =
+            dynamic_cast<jitKernelAdapter*>(kernPtr.getPtr());
+        if (adapter) {
+            kernel_hndl->hasNLoop = adapter->hasNLoop();
+        }
+    }
 }
 
 [[gnu::noinline]] static dlp::kernel_frame::kernelBaseRef
@@ -497,6 +507,61 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
         kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
         kB->operator()(std::addressof(gemmParamsIn));
     }
+
+    return;
+}
+
+[[gnu::aligned(64)]]
+#if defined(__clang__) && __clang_major__ >= 19
+__attribute__((always_inline))
+#endif
+void
+dlp_execute_kernel_nloop(dlp_kernel_hndl_t*    kernel_hndl,
+                         md_t                  m,
+                         md_t                  n,
+                         md_t                  k,
+                         void*                 A,
+                         md_t                  rs_a,
+                         md_t                  cs_a,
+                         md_t                  ps_a,
+                         void*                 B,
+                         md_t                  rs_b,
+                         md_t                  cs_b,
+                         md_t                  n_sub_updated,
+                         md_t                  jc_cur_loop_rem,
+                         void*                 C,
+                         md_t                  rs_c,
+                         md_t                  cs_c,
+                         void*                 alpha,
+                         void*                 beta,
+                         dlp_gemm_post_op*     post_ops_list,
+                         dlp_gemm_post_op_attr post_ops_attr)
+{
+    if (!kernel_hndl || !kernel_hndl->kernel_base) {
+        return;
+    }
+
+    gemmParams gemmParamsIn{ A,
+                             B,
+                             C,
+                             m,
+                             n,
+                             k,
+                             rs_a,
+                             cs_a,
+                             ps_a,
+                             rs_b,
+                             cs_b,
+                             rs_c,
+                             cs_c,
+                             alpha,
+                             beta,
+                             post_ops_list,
+                             post_ops_attr };
+    gemmParamsIn.useNLoop = true;
+
+    kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
+    kB->operator()(std::addressof(gemmParamsIn));
 
     return;
 }

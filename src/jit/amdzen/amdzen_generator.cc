@@ -55,6 +55,7 @@ jitAmdZenFP32::jitAmdZenFP32()
     , kType(utils::kernelInstrType::none)
     , numElemsPerReg(1)     // Initializing with 1 to avoid div by zero
     , usingRDKernels(false) // Initialize to false
+    , hasNLoop_(false)      // Initialize to false
     , kernelSize(0)         // Initialize to 0, set when allocating kernels
 {
 }
@@ -65,6 +66,8 @@ jitAmdZenFP32::~jitAmdZenFP32()
     for (auto& block : kernelCodeBlocks) {
         block = nullptr;
     }
+    nloopCodeGenerator.reset();
+    nloopKernelCodeBlock = nullptr;
 }
 
 int
@@ -593,123 +596,222 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         kernelSize = utils::JIT_KERNEL_SIZE; // Standard size for general GEMM
 
         // Initializing with default values.
-        utils::generatorParams params(
-            0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
-            false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType, kType);
+        {
+            utils::generatorParams params(
+                0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
+                false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType,
+                kType);
 
-        for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
-            // Copy the kernelOps from the kernelInfo to params
-            params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
-        }
+            for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+                // Copy the kernelOps from the kernelInfo to params
+                params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+            }
 
-        // Generate all kernels for the given MR and NR. Any per-variant
-        // generator failure (after passing the feasibility filter below)
-        // is fatal (goto cleanup): we want the existing fail-fast contract
-        // to hold, so we never call generateKernel() for an (mr, nr) pair
-        // we already know cannot fit.
-        //
-        // Feasibility filter: when the DE bumps MR (e.g. MR=16 for the
-        // skinny-N n<=16 override), the wider-NR variants (NR>=32) would
-        // exceed the register budget (cReg=MR*bReg, aReg = numRegs -
-        // cReg - bReg - maskVecReg, must have aReg >= 1 -- mirrors
-        // jitGEMMF32::allocateReg()). Skip those slots up front instead
-        // of relying on the per-variant generator to return badKernelInfo.
-        // The dispatcher only reaches the lt-mask kernel and the NR=16
-        // full kernel for n<=16, both of which always pass the filter.
-        const int kNumRegs =
-            (kType == utils::kernelInstrType::avx2_ymm_16_reg) ? 16 : 32;
-        for (iter_t mr = 0; mr < numMRVariants; mr++) {
-            for (iter_t nr = 0; nr < numNRVariants; nr++) {
-                params.MR    = mr == 0 ? MR : mr;
-                params.mLoop = mr == 0;
+            // Generate all kernels for the given MR and NR. Any per-variant
+            // generator failure (after passing the feasibility filter below)
+            // is fatal (goto cleanup): we want the existing fail-fast contract
+            // to hold, so we never call generateKernel() for an (mr, nr) pair
+            // we already know cannot fit.
+            //
+            // Feasibility filter: when the DE bumps MR (e.g. MR=16 for the
+            // skinny-N n<=16 override), the wider-NR variants (NR>=32) would
+            // exceed the register budget (cReg=MR*bReg, aReg = numRegs -
+            // cReg - bReg - maskVecReg, must have aReg >= 1 -- mirrors
+            // jitGEMMF32::allocateReg()). Skip those slots up front instead
+            // of relying on the per-variant generator to return badKernelInfo.
+            // The dispatcher only reaches the lt-mask kernel and the NR=16
+            // full kernel for n<=16, both of which always pass the filter.
+            const int kNumRegs =
+                (kType == utils::kernelInstrType::avx2_ymm_16_reg) ? 16 : 32;
+            for (iter_t mr = 0; mr < numMRVariants; mr++) {
+                for (iter_t nr = 0; nr < numNRVariants; nr++) {
+                    params.MR    = mr == 0 ? MR : mr;
+                    params.mLoop = mr == 0;
 
-                int correspondingMainFringe = 0;
-                deriveGEMMNRAndMaskUse(nr, params, correspondingMainFringe);
+                    int correspondingMainFringe = 0;
+                    deriveGEMMNRAndMaskUse(nr, params, correspondingMainFringe);
 
-                // Skinny-N override: when the DE has bumped MR via the
-                // n<=16 override (jI.kI.skinnyN), only the lt-numElems
-                // (nr=0) and the full numElems (nr=1) variants are ever
-                // dispatched at runtime. The wider NR slots (nr>=2:
-                // lt2x/2x/lt3x/3x/lt4x/4x) are unreachable AND would
-                // exceed the register budget at bumped MR -- skip them
-                // entirely so we don't waste codegen on dead kernels
-                // (and don't trigger badKernelInfo on infeasible ones).
-                if (jI.kI.skinnyN && nr >= 2) {
-                    continue;
-                }
-
-                // Pre-filter register-infeasible (MR, NR) variants. This
-                // mirrors jitGEMMF32<KType>::allocateReg(): bFullReg =
-                // NR / numElemsPerReg, bMaskReg = useMask ? numMaskRegs
-                // : 0, bReg = bFullReg + bMaskReg, cReg = MR * bReg.
-                // For AVX2 ymm, the mask consumes vector registers
-                // (maskVecReg = numMaskRegs); for AVX-512 the mask is in
-                // Opmask regs and does not draw from the vector budget.
-                {
-                    int bFullReg = params.NR / numElemsPerReg;
-                    int bMaskReg = params.useMask ? params.numMaskRegs : 0;
-                    int bReg     = bFullReg + bMaskReg;
-                    int cReg     = params.MR * bReg;
-                    int maskVecReg =
-                        (kType == utils::kernelInstrType::avx2_ymm_16_reg)
-                            ? bMaskReg
-                            : 0;
-                    if (kNumRegs - cReg - bReg - maskVecReg < 1) {
-                        // Slot stays nullptr (zero-initialized by
-                        // resize). The dispatcher never reaches it for
-                        // any DE-blessed shape that bumped MR.
+                    // Skinny-N override: when the DE has bumped MR via the
+                    // n<=16 override (jI.kI.skinnyN), only the lt-numElems
+                    // (nr=0) and the full numElems (nr=1) variants are ever
+                    // dispatched at runtime. The wider NR slots (nr>=2:
+                    // lt2x/2x/lt3x/3x/lt4x/4x) are unreachable AND would
+                    // exceed the register budget at bumped MR -- skip them
+                    // entirely so we don't waste codegen on dead kernels
+                    // (and don't trigger badKernelInfo on infeasible ones).
+                    if (jI.kI.skinnyN && nr >= 2) {
                         continue;
                     }
-                }
 
+                    // Pre-filter register-infeasible (MR, NR) variants. This
+                    // mirrors jitGEMMF32<KType>::allocateReg(): bFullReg =
+                    // NR / numElemsPerReg, bMaskReg = useMask ? numMaskRegs
+                    // : 0, bReg = bFullReg + bMaskReg, cReg = MR * bReg.
+                    // For AVX2 ymm, the mask consumes vector registers
+                    // (maskVecReg = numMaskRegs); for AVX-512 the mask is in
+                    // Opmask regs and does not draw from the vector budget.
+                    {
+                        int bFullReg = params.NR / numElemsPerReg;
+                        int bMaskReg = params.useMask ? params.numMaskRegs : 0;
+                        int bReg     = bFullReg + bMaskReg;
+                        int cReg     = params.MR * bReg;
+                        int maskVecReg =
+                            (kType == utils::kernelInstrType::avx2_ymm_16_reg)
+                                ? bMaskReg
+                                : 0;
+                        if (kNumRegs - cReg - bReg - maskVecReg < 1) {
+                            // Slot stays nullptr (zero-initialized by
+                            // resize). The dispatcher never reaches it for
+                            // any DE-blessed shape that bumped MR.
+                            continue;
+                        }
+                    }
+
+                    std::unique_ptr<Xbyak::CodeGenerator> gen;
+                    switch (kType) {
+                        case utils::kernelInstrType::avx512_zmm_32_reg: {
+                            auto g =
+                                std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                                    utils::kernelInstrType::avx512_zmm_32_reg>>(
+                                    kernelSize);
+                            err = g->generateKernel(params);
+                            gen = std::move(g);
+                            break;
+                        }
+                        case utils::kernelInstrType::avx512_ymm_32_reg: {
+                            auto g =
+                                std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                                    utils::kernelInstrType::avx512_ymm_32_reg>>(
+                                    kernelSize);
+                            err = g->generateKernel(params);
+                            gen = std::move(g);
+                            break;
+                        }
+                        case utils::kernelInstrType::avx2_ymm_16_reg: {
+                            auto g =
+                                std::make_unique<GEMMcodeGenerator::jitGEMMF32<
+                                    utils::kernelInstrType::avx2_ymm_16_reg>>(
+                                    kernelSize);
+                            err = g->generateKernel(params);
+                            gen = std::move(g);
+                            break;
+                        }
+                        default:
+                            err = dlp::jit::jitGeneratorError::error;
+                            break;
+                    }
+                    if (err != dlp::jit::jitGeneratorError::success) {
+                        goto cleanup;
+                    }
+                    // Must call ready() to readjust jump/branch targets with
+                    // respect to any new buffer created as part of AutoGrow
+                    // mode in Xbyak.
+                    gen->ready();
+                    kernelCodeBlocks[mr * numNRVariants + nr] =
+                        const_cast<void*>(
+                            static_cast<const void*>(gen->getCode()));
+                    codeGenerators.push_back(std::move(gen));
+
+                    // params.useMask=false implies a fringe or main kernel.
+                    // params.useMask=true implies a lt fringe or lt main kernel.
+                    DLP_ENABLE_JIT_DUMP_AND_MONITOR(
+                        kernelCodeBlocks[mr * numNRVariants + nr], kernelSize,
+                        "jit_kernel", params.MR, correspondingMainFringe,
+                        params.useMask, mr * numNRVariants + nr);
+                }
+            }
+        }
+
+        // Additionally generate nloop kernel for tiny path.
+        //
+        // Skip the nLoop kernel entirely when skinnyN bumped MR to a value
+        // larger than the default. The nLoop kernel uses NR=processBlockSize
+        // (e.g. 64 for ZMM F32), so its register budget is
+        //   cReg = MR * (NR / numElemsPerReg)
+        // which exceeds the 32-ZMM budget once MR > ~7 (with NR=64,
+        // numElemsPerReg=16, cReg = MR*4). On the bumped-MR (MR=16) skinny-N
+        // path the nLoop allocateReg() therefore returns badKernelInfo, which
+        // would propagate via `goto cleanup` and wipe ALL kernel slots
+        // (including the per-(mr,nr) variants that succeeded above),
+        // leaving kernel_base=NULL and silently no-op'ing the GEMM. The
+        // per-(mr,nr) dispatch path is what skinnyN was optimizing for, so
+        // dropping the nLoop tiny-path optimization here is safe.
+        if (!jI.kI.skinnyN) {
+            int processBlockSize = getProcessBlockSize();
+            int nloopNumNRVariants = (processBlockSize / numElemsPerReg) + 1;
+            size_t nloopKernelSize =
+                nloopNumNRVariants * MR * utils::JIT_KERNEL_SIZE;
+
+            utils::generatorParams nloopParams(
+                0, 0, K_UNROLL, PREFETCH_C_DIST, c_downscale, 0, false, false,
+                false, (jI.kI).alphaScalingType, (jI.kI).betaScalingType,
+                kType);
+            nloopParams.nLoop = true;
+
+            for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
+                nloopParams.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+            }
+
+            nloopParams.MR = MR;
+            nloopParams.NR = processBlockSize;
+
+            {
                 std::unique_ptr<Xbyak::CodeGenerator> gen;
                 switch (kType) {
                     case utils::kernelInstrType::avx512_zmm_32_reg: {
                         auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
                             utils::kernelInstrType::avx512_zmm_32_reg>>(
-                            kernelSize);
-                        err = g->generateKernel(params);
+                            nloopKernelSize);
+                        err = g->generateKernel(nloopParams);
                         gen = std::move(g);
                         break;
                     }
                     case utils::kernelInstrType::avx512_ymm_32_reg: {
                         auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
                             utils::kernelInstrType::avx512_ymm_32_reg>>(
-                            kernelSize);
-                        err = g->generateKernel(params);
+                            nloopKernelSize);
+                        err = g->generateKernel(nloopParams);
                         gen = std::move(g);
                         break;
                     }
                     case utils::kernelInstrType::avx2_ymm_16_reg: {
                         auto g = std::make_unique<GEMMcodeGenerator::jitGEMMF32<
                             utils::kernelInstrType::avx2_ymm_16_reg>>(
-                            kernelSize);
-                        err = g->generateKernel(params);
+                            nloopKernelSize);
+                        err = g->generateKernel(nloopParams);
                         gen = std::move(g);
                         break;
                     }
-                    default:
+                    default: {
                         err = dlp::jit::jitGeneratorError::error;
                         break;
+                    }
                 }
                 if (err != dlp::jit::jitGeneratorError::success) {
                     goto cleanup;
                 }
-                // Must call ready() to readjust jump/branch targets with
-                // respect to any new buffer created as part of AutoGrow mode
-                // in Xbyak.
                 gen->ready();
-                kernelCodeBlocks[mr * numNRVariants + nr] =
+                nloopKernelCodeBlock =
                     const_cast<void*>(static_cast<const void*>(gen->getCode()));
-                codeGenerators.push_back(std::move(gen));
-
-                // params.useMask=false implies a fringe or main kernel.
-                // params.useMask=true implies a lt fringe or lt main kernel.
-                DLP_ENABLE_JIT_DUMP_AND_MONITOR(
-                    kernelCodeBlocks[mr * numNRVariants + nr], kernelSize,
-                    "jit_kernel", params.MR, correspondingMainFringe,
-                    params.useMask, mr * numNRVariants + nr);
+                nloopCodeGenerator = std::move(gen);
             }
+
+            // Disable nloop when processBlockSize < NR (avx512_ymm) because
+            // the B advancement formula (csB * processBlockSize) produces
+            // incorrect strides for packed B in NR-wide panels.
+            hasNLoop_ = (processBlockSize == NR);
+
+            DLP_ENABLE_JIT_DUMP_AND_MONITOR(nloopKernelCodeBlock,
+                                            nloopKernelSize,
+                                            "jit_kernel_nloop", MR,
+                                            processBlockSize, false,
+                                            processBlockSize);
+        } else {
+            // skinnyN path: leave the nLoop kernel un-generated; the tiny-path
+            // framework code checks hasNLoop and falls back to the regular
+            // per-(mr,nr) dispatch when hasNLoop is false.
+            nloopKernelCodeBlock = nullptr;
+            hasNLoop_            = false;
         }
     }
 
@@ -720,6 +822,8 @@ cleanup:
     for (auto& block : kernelCodeBlocks) {
         block = nullptr;
     }
+    nloopCodeGenerator.reset();
+    nloopKernelCodeBlock = nullptr;
     return err;
 }
 
@@ -1028,120 +1132,141 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
             return executeKernelRD(_params);
         }
 
-        // Note: It is expected the generateAllKernels is called before
-        // calling this function.
         auto params = static_cast<dlp::kernels::gemmParams*>(_params);
 
         int processBlockSize = getProcessBlockSize();
-        // Since JR loop is in framework, the 'n' dimension passed to this
-        // function is always <= NR.
-        int mFullPieces    = params->m / MR;
-        int mPartialPieces = params->m % MR;
 
-        params->kIterBP = params->k / K_UNROLL;
-        params->kLeft   = params->k % K_UNROLL;
+        if (hasNLoop_ && params->useNLoop) {
+            // nloop path: single JIT kernel handles M, N, and K loops
+            params->mIter = params->m / MR;
+            params->mLeft = params->m % MR;
+            params->nIter = params->n / processBlockSize;
+            params->nLeft = params->n % processBlockSize;
+            params->kIterBP = params->k / K_UNROLL;
+            params->kLeft   = params->k % K_UNROLL;
 
-        float* aPtr = static_cast<float*>(params->a);
-        float* bPtr = static_cast<float*>(params->b);
-        float* cPtr = static_cast<float*>(params->c);
-        // Initialize pointers to A and B
-        float* c_jr = cPtr;
-        float* c_ir = cPtr;
+            md_t nRemainder = params->n % numElemsPerReg;
+            if (nRemainder > 0) {
+                setMaskForGEMMLtFringe(params, nRemainder);
+            }
 
-        md_t n = params->n;
-        md_t m = params->m;
-        md_t k = params->k;
+            auto kernel = reinterpret_cast<utils::jit_kernel>(
+                nloopKernelCodeBlock);
+            kernel(params);
+        } else {
+            // Note: It is expected the generateAllKernels is called before
+            // calling this function.
 
-        md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+            // Since JR loop is in framework, the 'n' dimension passed to this
+            // function is always <= NR.
+            int mFullPieces    = params->m / MR;
+            int mPartialPieces = params->m % MR;
 
-        // OVERVIEW:
-        // This unified approach works for all kernel types (ZMM, YMM, AVX2).
-        // The key insight is that all architectures follow the same pattern:
-        // process elements in blocks, decompose fringe blocks into complete
-        // registers + remainder, then execute appropriate kernels.
-        //
-        // EXECUTION LOGIC:
-        // 1. Process elements in chunks of 'processBlockSize':
-        //    - ZMM: processBlockSize = 64 (full NR), numElemsPerReg = 16
-        //    - YMM: processBlockSize = 32 (NR/2), numElemsPerReg = 8
-        //
-        // 2. For each chunk, decompose into complete SIMD registers +
-        // remainder:
-        //    - Complete registers: Use kernel_idx = nFullpieces (no masking)
-        //    - Remainder elements: Use kernel_idx = 0 (mask kernel with
-        //    masking)
-        //
-        // 3. Execute kernels in sequence: complete registers first, then
-        // remainder
-        //
-        // EXAMPLE WALKTHROUGH (n=15 with YMM):
-        // - processBlockSize=32, numElemsPerReg=8
-        // - Iteration 1: nBlockSize = min(15, 32) = 15
-        //   - nFullpieces = 15/8 = 1  -> Execute kernel_idx=1 for 8 elements
-        //   (no mask)
-        //   - nRemainder = 15%8 = 7   -> Execute kernel_idx=0 for 7 elements
-        //   (with mask)
-        //   - Total processed: 8 + 7 = 15, n becomes 0, loop exits
-        //
-        // EXAMPLE WALKTHROUGH (n=95 with YMM):
-        // - Iteration 1: nBlockSize = min(95, 32) = 32
-        //   - nFullpieces = 32/8 = 4  -> Execute kernel_idx=4 for 32 elements
-        //   (no mask)
-        //   - nRemainder = 32%8 = 0   -> No remainder processing
-        //   - Processed: 32, n becomes 63
-        // - Iteration 2: nBlockSize = min(63, 32) = 32 -> Process 32 more
-        // elements
-        //   - Processed: 32, n becomes 31
-        // - Iteration 3: nBlockSize = min(31, 32) = 31
-        //   - nFullpieces = 31/8 = 3  -> Execute kernel_idx=3 for 24 elements
-        //   (no mask)
-        //   - nRemainder = 31%8 = 7   -> Execute kernel_idx=0 for 7 elements
-        //   (with mask)
-        //   - Processed: 24 + 7 = 31, n becomes 0, loop exits
+            params->kIterBP = params->k / K_UNROLL;
+            params->kLeft   = params->k % K_UNROLL;
 
-        while (n > 0) {
-            // Its expected that every NR value is multiple of numElemsPerReg.
-            int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
-            int nFullpieces = nBlockSize / numElemsPerReg;
-            int nRemainder  = ((nFullpieces - termNRFringeRegCount) >= 0)
-                                  ? (nBlockSize - (nFullpieces * numElemsPerReg))
-                                  : nBlockSize;
+            float* aPtr = static_cast<float*>(params->a);
+            float* bPtr = static_cast<float*>(params->b);
+            float* cPtr = static_cast<float*>(params->c);
+            // Initialize pointers to A and B
+            float* c_jr = cPtr;
+            float* c_ir = cPtr;
 
-            if (isGenLtKrnlForAvailFullKrnl) {
-                // Case where we generate both "==" and "<" kernels for
-                // each multiple of numElemsPerReg including "0".
-                int idBase       = ((nFullpieces - termNRFringeRegCount) >= 0)
-                                       ? (nFullpieces - termNRFringeRegCount)
-                                       : -1;
-                int kernel_n_idx = (2 * (idBase + 1)) - 1;
-                if (nRemainder > 0) {
-                    setMaskForGEMMLtFringe(params, nRemainder);
-                    kernel_n_idx += 1;
-                }
+            md_t n = params->n;
+            md_t m = params->m;
+            md_t k = params->k;
 
-                int elementsToProcess = nBlockSize;
-                executeGEMMMLoop(params, mFullPieces, mPartialPieces,
-                                 kernel_n_idx, elementsToProcess, n, &c_jr,
-                                 og_post_op_c_i, aPtr);
-            } else {
-                // Case where we generate "==" kernels for each multiple
-                // of numElemsPerReg including and 1 "<" kernel for the
-                // smallest multiple of numElemsPerReg, "0".
-                if (nFullpieces >= termNRFringeRegCount) {
-                    int kernel_n_idx = nFullpieces - termNRFringeRegCount + 1;
-                    int elementsToProcess = nFullpieces * numElemsPerReg;
+            md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+
+            // OVERVIEW:
+            // This unified approach works for all kernel types (ZMM, YMM, AVX2).
+            // The key insight is that all architectures follow the same pattern:
+            // process elements in blocks, decompose fringe blocks into complete
+            // registers + remainder, then execute appropriate kernels.
+            //
+            // EXECUTION LOGIC:
+            // 1. Process elements in chunks of 'processBlockSize':
+            //    - ZMM: processBlockSize = 64 (full NR), numElemsPerReg = 16
+            //    - YMM: processBlockSize = 32 (NR/2), numElemsPerReg = 8
+            //
+            // 2. For each chunk, decompose into complete SIMD registers +
+            // remainder:
+            //    - Complete registers: Use kernel_idx = nFullpieces (no masking)
+            //    - Remainder elements: Use kernel_idx = 0 (mask kernel with
+            //    masking)
+            //
+            // 3. Execute kernels in sequence: complete registers first, then
+            // remainder
+            //
+            // EXAMPLE WALKTHROUGH (n=15 with YMM):
+            // - processBlockSize=32, numElemsPerReg=8
+            // - Iteration 1: nBlockSize = min(15, 32) = 15
+            //   - nFullpieces = 15/8 = 1  -> Execute kernel_idx=1 for 8 elements
+            //   (no mask)
+            //   - nRemainder = 15%8 = 7   -> Execute kernel_idx=0 for 7 elements
+            //   (with mask)
+            //   - Total processed: 8 + 7 = 15, n becomes 0, loop exits
+            //
+            // EXAMPLE WALKTHROUGH (n=95 with YMM):
+            // - Iteration 1: nBlockSize = min(95, 32) = 32
+            //   - nFullpieces = 32/8 = 4  -> Execute kernel_idx=4 for 32 elements
+            //   (no mask)
+            //   - nRemainder = 32%8 = 0   -> No remainder processing
+            //   - Processed: 32, n becomes 63
+            // - Iteration 2: nBlockSize = min(63, 32) = 32 -> Process 32 more
+            // elements
+            //   - Processed: 32, n becomes 31
+            // - Iteration 3: nBlockSize = min(31, 32) = 31
+            //   - nFullpieces = 31/8 = 3  -> Execute kernel_idx=3 for 24 elements
+            //   (no mask)
+            //   - nRemainder = 31%8 = 7   -> Execute kernel_idx=0 for 7 elements
+            //   (with mask)
+            //   - Processed: 24 + 7 = 31, n becomes 0, loop exits
+
+            while (n > 0) {
+                // Its expected that every NR value is multiple of numElemsPerReg.
+                int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+                int nFullpieces = nBlockSize / numElemsPerReg;
+                int nRemainder  = ((nFullpieces - termNRFringeRegCount) >= 0)
+                                      ? (nBlockSize - (nFullpieces * numElemsPerReg))
+                                      : nBlockSize;
+
+                if (isGenLtKrnlForAvailFullKrnl) {
+                    // Case where we generate both "==" and "<" kernels for
+                    // each multiple of numElemsPerReg including "0".
+                    int idBase       = ((nFullpieces - termNRFringeRegCount) >= 0)
+                                           ? (nFullpieces - termNRFringeRegCount)
+                                           : -1;
+                    int kernel_n_idx = (2 * (idBase + 1)) - 1;
+                    if (nRemainder > 0) {
+                        setMaskForGEMMLtFringe(params, nRemainder);
+                        kernel_n_idx += 1;
+                    }
+
+                    int elementsToProcess = nBlockSize;
                     executeGEMMMLoop(params, mFullPieces, mPartialPieces,
                                      kernel_n_idx, elementsToProcess, n, &c_jr,
                                      og_post_op_c_i, aPtr);
-                }
+                } else {
+                    // Case where we generate "==" kernels for each multiple
+                    // of numElemsPerReg including and 1 "<" kernel for the
+                    // smallest multiple of numElemsPerReg, "0".
+                    if (nFullpieces >= termNRFringeRegCount) {
+                        int kernel_n_idx = nFullpieces - termNRFringeRegCount + 1;
+                        int elementsToProcess = nFullpieces * numElemsPerReg;
+                        executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                         kernel_n_idx, elementsToProcess, n,
+                                         &c_jr, og_post_op_c_i, aPtr);
+                    }
 
-                // Process remainder with mask (if any)
-                if (nRemainder > 0) {
-                    setMaskForGEMMLtFringe(params, nRemainder);
-                    int kernel_n_idx = 0; // Use lt mask kernel for nRemainder.
-                    executeGEMMMLoop(params, mFullPieces, mPartialPieces,
-                                     kernel_n_idx, nRemainder, n, &c_jr,
-                                     og_post_op_c_i, aPtr);
+                    // Process remainder with mask (if any)
+                    if (nRemainder > 0) {
+                        setMaskForGEMMLtFringe(params, nRemainder);
+                        int kernel_n_idx = 0; // Use lt mask kernel for nRemainder.
+                        executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                         kernel_n_idx, nRemainder, n, &c_jr,
+                                         og_post_op_c_i, aPtr);
+                    }
                 }
             }
         }

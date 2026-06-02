@@ -168,6 +168,8 @@ class jitGEMMF32 : public Xbyak::CodeGenerator
         utils::generatorParams& params);
     dlp::jit::jitGeneratorError generateKernel_IR_JR(
         utils::generatorParams& params);
+    dlp::jit::jitGeneratorError generateKernel_IR_JR_General(
+        utils::generatorParams& params);
     dlp::jit::jitGeneratorError generateKernelBodyK1(
         utils::generatorParams&       params,
         gen::kernelOpsHandler<KType>* kernelOpsHandlerPtr);

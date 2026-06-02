@@ -57,6 +57,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     bool isGenLtKrnlForAvailFullKrnl;
 
     bool usingRDKernels; // Flag to track if RD kernels were generated
+    bool hasNLoop_;      // Flag to track if nloop kernel was generated
 
     md_t               numKernelVariants;
     md_t               K_UNROLL, PREFETCH_C_DIST;
@@ -64,6 +65,9 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     std::vector<void*> kernelCodeBlocks;
     size_t             kernelSize; // Size of each kernel variant in bytes
     std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
+
+    void* nloopKernelCodeBlock = nullptr;
+    std::unique_ptr<Xbyak::CodeGenerator> nloopCodeGenerator;
 
     void setGeneratorKernelMetaInfo(
         dlp::kernel_frame::kernelInstrPreference kInstPref);
@@ -174,6 +178,8 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
 
     dlp::kernels::kernelError executeKernelRD(
         dlp::kernels::kernelParams* _params);
+
+    bool hasNLoop() const override { return hasNLoop_; }
 
     std::unique_ptr<jitGeneratorBase> clone() override
     {

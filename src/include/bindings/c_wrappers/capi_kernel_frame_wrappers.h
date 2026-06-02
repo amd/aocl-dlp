@@ -132,6 +132,7 @@ typedef struct
     md_t              nr;
     kernel_datatype_t kDtype;
     bool              invokeRD;
+    bool              hasNLoop;
 } dlp_kernel_hndl_t;
 
 typedef struct
@@ -224,6 +225,28 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
                    void*                 beta,
                    dlp_gemm_post_op*     post_ops_list,
                    dlp_gemm_post_op_attr post_ops_attr);
+
+void
+dlp_execute_kernel_nloop(dlp_kernel_hndl_t*    kernel_hndl,
+                         md_t                  m,
+                         md_t                  n,
+                         md_t                  k,
+                         void*                 A,
+                         md_t                  rs_a,
+                         md_t                  cs_a,
+                         md_t                  ps_a,
+                         void*                 B,
+                         md_t                  rs_b,
+                         md_t                  cs_b,
+                         md_t                  n_sub_updated,
+                         md_t                  jc_cur_loop_rem,
+                         void*                 C,
+                         md_t                  rs_c,
+                         md_t                  cs_c,
+                         void*                 alpha,
+                         void*                 beta,
+                         dlp_gemm_post_op*     post_ops_list,
+                         dlp_gemm_post_op_attr post_ops_attr);
 
 DLP_END_EXTERN_C
 

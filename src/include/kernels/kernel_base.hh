@@ -98,6 +98,8 @@ struct gemmParams : public kernelParams
     dlp_gemm_post_op*     kernelOpsList;
     dlp_gemm_post_op_attr kernelOpsAttr;
 
+    bool useNLoop;
+
     gemmParams(void*                 A,
                void*                 B,
                void*                 C_acc,
@@ -146,6 +148,7 @@ struct gemmParams : public kernelParams
         , quantScale(nullptr)
         , kernelOpsList(kernelOpsList)
         , kernelOpsAttr(kernelOpsAttr)
+        , useNLoop(false)
     {
     }
 
@@ -178,6 +181,7 @@ struct gemmParams : public kernelParams
         , quantScale(other.quantScale)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , useNLoop(other.useNLoop)
     {
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
@@ -218,6 +222,7 @@ struct gemmParams : public kernelParams
         , quantScale(other.quantScale)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , useNLoop(other.useNLoop)
     {
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
@@ -262,6 +267,7 @@ struct gemmParams : public kernelParams
         quantScale    = other.quantScale;
         kernelOpsList = other.kernelOpsList;
         kernelOpsAttr = other.kernelOpsAttr;
+        useNLoop      = other.useNLoop;
         return *this;
     }
 
@@ -289,6 +295,7 @@ struct gemmParams : public kernelParams
         kLeftmask     = 0;
         quantScale    = nullptr;
         kernelOpsList = nullptr;
+        useNLoop      = false;
     }
 };
 

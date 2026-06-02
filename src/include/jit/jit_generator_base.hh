@@ -100,6 +100,10 @@ class jitGeneratorBase
     {
         return kernels::kernelError::error;
     }
+
+    // Returns true if the generated kernel contains an internal N-loop,
+    // meaning a single kernel call handles the full N dimension.
+    virtual bool hasNLoop() const { return false; }
 };
 
 } // namespace dlp::jit

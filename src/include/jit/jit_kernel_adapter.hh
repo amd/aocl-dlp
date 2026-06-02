@@ -123,6 +123,11 @@ class jitKernelAdapter : public kernels::kernelBase
 
     bool isJitGenerated() const { return mIsJitGenerated; }
 
+    bool hasNLoop() const
+    {
+        return mJitGen ? mJitGen->hasNLoop() : false;
+    }
+
     operator bool() const { return isJitGenerated(); }
 
     // kernelBase interface implementation

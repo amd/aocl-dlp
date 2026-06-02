@@ -427,26 +427,43 @@ DLP_GEMM_TINY(float, float, float, f32f32f32of32)
         ps_a_use = MR * rs_a;
     }
 
-    for (iter_t jr = 0; jr < n; jr += NR) {
-        md_t nr0 = dlp_min((n - jr), NR);
-
-        // Post ops meta attributes.
+    if (lcntx->dlp_kernel_hndl.kernel_base != NULL
+        && lcntx->dlp_kernel_hndl.hasNLoop) {
+        // nloop path: single JIT kernel call handles the full N dimension.
+        // Pass ps_b_use as cs_b so the JIT kernel can correctly advance B
+        // between NR panels. For packed B, ps_b_use = k (panel stride),
+        // while cs_b_use = 1 (element stride within a panel row).
         post_ops_attr.post_op_c_i    = 0;
-        post_ops_attr.post_op_c_j    = jr;
+        post_ops_attr.post_op_c_j    = 0;
         post_ops_attr.rs_c_downscale = rs_c_downscale;
+        dlp_execute_kernel_nloop(&(lcntx->dlp_kernel_hndl), m, n, k, (float*)a_use,
+                           rs_a_use, cs_a_use, ps_a_use, (float*)b_use,
+                           rs_b_use, ps_b_use, 0, 0, c, rs_c, cs_c_use,
+                           (void*)&alpha, (void*)&beta, post_op_list,
+                           post_ops_attr);
+    } else {
+        for (iter_t jr = 0; jr < n; jr += NR) {
+            md_t nr0 = dlp_min((n - jr), NR);
 
-        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(
-                &(lcntx->dlp_kernel_hndl), m, nr0, k, (float*)a_use, rs_a_use,
-                cs_a_use, ps_a_use, (float*)(b_use + (jr * ps_b_use)), rs_b_use,
-                cs_b_use, 0, 0, (c + jr * cs_c_use), rs_c, cs_c_use,
-                (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
-        } else {
-            ((dlp_gemm_rowvar_f32)lcntx->kern_fun_ptr)(
-                m, nr0, k, (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
-                (float*)(b_use + (jr * ps_b_use)), rs_b_use, cs_b_use,
-                (c + jr * cs_c_use), rs_c, cs_c_use, alpha, beta, post_op_list,
-                post_ops_attr);
+            // Post ops meta attributes.
+            post_ops_attr.post_op_c_i    = 0;
+            post_ops_attr.post_op_c_j    = jr;
+            post_ops_attr.rs_c_downscale = rs_c_downscale;
+
+            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_kernel(
+                    &(lcntx->dlp_kernel_hndl), m, nr0, k, (float*)a_use,
+                    rs_a_use, cs_a_use, ps_a_use,
+                    (float*)(b_use + (jr * ps_b_use)), rs_b_use, cs_b_use, 0, 0,
+                    (c + jr * cs_c_use), rs_c, cs_c_use, (void*)&alpha,
+                    (void*)&beta, post_op_list, post_ops_attr);
+            } else {
+                ((dlp_gemm_rowvar_f32)lcntx->kern_fun_ptr)(
+                    m, nr0, k, (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
+                    (float*)(b_use + (jr * ps_b_use)), rs_b_use, cs_b_use,
+                    (c + jr * cs_c_use), rs_c, cs_c_use, alpha, beta,
+                    post_op_list, post_ops_attr);
+            }
         }
     }
 
