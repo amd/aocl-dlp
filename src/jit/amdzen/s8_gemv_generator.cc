@@ -1555,6 +1555,17 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
         RETURN_IF_ERROR(scaleYByBeta(MR));
 
+        // Gate post-ops on is_last_k: chunked-K frames reuse this kernel
+        // and would otherwise re-apply post-ops on every K chunk. On
+        // non-last chunks (or when no post-ops are configured) we
+        // converge on the single s32 partial-sum store below. Mirrors
+        // the hoist idiom in s8_gemm_generator.cc.
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(".STOREC", T_NEAR);
+
         if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < ((MR + vnniWidth - 1) / vnniWidth); ++i) {
@@ -1593,6 +1604,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             jmp(".POST_STOREC", T_NEAR);
         }
 
+        L(".STOREC");
         RETURN_IF_ERROR(storeY(MR));
         L(".POST_STOREC");
 
@@ -1697,6 +1709,17 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
         RETURN_IF_ERROR(scaleYByBeta(M_LEFT));
 
+        // Gate post-ops on is_last_k: chunked-K frames reuse this kernel
+        // and would otherwise re-apply post-ops on every K chunk. On
+        // non-last chunks (or when no post-ops are configured) we
+        // converge on the single s32 partial-sum store below. Mirrors
+        // the hoist idiom in s8_gemm_generator.cc.
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(".STOREC_MFRINGE", T_NEAR);
+
         if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < ((M_LEFT + vnniWidth - 1) / vnniWidth);
@@ -1736,6 +1759,7 @@ jitGEMVS8N1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             jmp(".POST_STOREC_MFRINGE", T_NEAR);
         }
 
+        L(".STOREC_MFRINGE");
         RETURN_IF_ERROR(storeY(M_LEFT));
         L(".POST_STOREC_MFRINGE");
 
@@ -3009,6 +3033,19 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Scale result by beta
         scaleYWithBeta(false);
 
+        // Gate post-ops on is_last_k: chunked-K frames reuse this kernel
+        // and would otherwise re-apply post-ops on every K chunk. On
+        // non-last chunks (or when no post-ops are configured) we
+        // converge on the single s32 partial-sum store below. Mirrors
+        // the hoist idiom in s8_gemm_generator.cc.
+        Xbyak::Label label_storey;
+        Xbyak::Label label_post_storey;
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(label_storey, T_NEAR);
+
         if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < (NR / vnniWidth); ++i) {
@@ -3053,10 +3090,12 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                    RegType(vec128BaseIdx));
             mov(regTmp2, 128);
             vpbroadcastb(RegType(vec128BaseIdx), regTmp2.cvt8());
-        } else {
-            // Store Result
-            RETURN_IF_ERROR(storeY(false, false));
+            jmp(label_post_storey, T_NEAR);
         }
+
+        L(label_storey);
+        RETURN_IF_ERROR(storeY(false, false));
+        L(label_post_storey);
 
         // Update b_sum_offset and store to memory
         mov(regTmp2,
@@ -3203,6 +3242,19 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         // Scale result by beta
         scaleYWithBeta(true);
 
+        // Gate post-ops on is_last_k: chunked-K frames reuse this kernel
+        // and would otherwise re-apply post-ops on every K chunk. On
+        // non-last chunks (or when no post-ops are configured) we
+        // converge on the single s32 partial-sum store below. Mirrors
+        // the hoist idiom in s8_gemm_generator.cc.
+        Xbyak::Label label_storey;
+        Xbyak::Label label_post_storey;
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(label_storey, T_NEAR);
+
         if (kernelOpsHandlerPtr) {
             // Convert to F32 since post-ops expect accumulators in F32.
             for (iter_t i = 0; i < ((N_LEFT + vnniWidth - 1) / vnniWidth);
@@ -3248,10 +3300,12 @@ jitGEMVS8M1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                    RegType(vec128BaseIdx));
             mov(regTmp2, 128);
             vpbroadcastb(RegType(vec128BaseIdx), regTmp2.cvt8());
-        } else {
-            // Store Result
-            RETURN_IF_ERROR(storeY(true, false));
+            jmp(label_post_storey, T_NEAR);
         }
+
+        L(label_storey);
+        RETURN_IF_ERROR(storeY(true, false));
+        L(label_post_storey);
 
         // Update b_sum_offset and store to memory
         mov(regTmp2,

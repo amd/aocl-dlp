@@ -1075,6 +1075,16 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         scaleYWithBeta(MR);
 
         if (kernelOpsHandlerPtr) {
+            // Gate post-ops on is_last_k: WoQ (bf16s4/u4) frames reuse this
+            // kernel chunked over K and would otherwise re-apply per chunk.
+            Xbyak::Label label_skip_kernel_ops;
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_skip_kernel_ops, T_NEAR);
+
             using VecPoolType =
                 utils::registerPool<typename Traits::RegType, Traits::numRegs>;
             using MaskPoolType =
@@ -1095,6 +1105,8 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
                 params.MR, 1, false, 1, accumBaseIdx, yReg, vecPool, maskPool,
                 maskOffset)));
+
+            L(label_skip_kernel_ops);
         }
 
         storeYValues(MR);
@@ -1198,6 +1210,16 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         scaleYWithBeta(M_LEFT);
 
         if (kernelOpsHandlerPtr) {
+            // Gate post-ops on is_last_k: WoQ (bf16s4/u4) frames reuse this
+            // kernel chunked over K and would otherwise re-apply per chunk.
+            Xbyak::Label label_skip_kernel_ops;
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_skip_kernel_ops, T_NEAR);
+
             using VecPoolType =
                 utils::registerPool<typename Traits::RegType, Traits::numRegs>;
             using MaskPoolType =
@@ -1220,6 +1242,8 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_n1,
                 params.M_LEFT, 1, true, 1, accumBaseIdx, fringeRegs, vecPool,
                 maskPool, maskOffset)));
+
+            L(label_skip_kernel_ops);
         }
 
         storeYValues(M_LEFT);
@@ -2068,6 +2092,16 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         scaleYWithBeta(NR);
 
         if (kernelOpsHandlerPtr) {
+            // Gate post-ops on is_last_k: WoQ (bf16s4/u4) frames reuse this
+            // kernel chunked over K and would otherwise re-apply per chunk.
+            Xbyak::Label label_skip_kernel_ops;
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_skip_kernel_ops, T_NEAR);
+
             using VecPoolType =
                 utils::registerPool<typename Traits::RegType, Traits::numRegs>;
             using MaskPoolType =
@@ -2090,6 +2124,8 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
                 params.NR, false, 1, accumBaseIdx, numCRegs, vecPool, maskPool,
                 maskOffset)));
+
+            L(label_skip_kernel_ops);
         }
 
         storeYValues(NR);
@@ -2256,6 +2292,16 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         scaleYWithBeta(N_LEFT);
 
         if (kernelOpsHandlerPtr) {
+            // Gate post-ops on is_last_k: WoQ (bf16s4/u4) frames reuse this
+            // kernel chunked over K and would otherwise re-apply per chunk.
+            Xbyak::Label label_skip_kernel_ops;
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_skip_kernel_ops, T_NEAR);
+
             using VecPoolType =
                 utils::registerPool<typename Traits::RegType, Traits::numRegs>;
             using MaskPoolType =
@@ -2278,6 +2324,8 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
                 N_LEFT, true, 1, accumBaseIdx, fringeRegs, vecPool, maskPool,
                 maskOffset)));
+
+            L(label_skip_kernel_ops);
         }
 
         storeYValues(N_LEFT);
@@ -2444,6 +2492,16 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         scaleYWithBeta(N_LEFT);
 
         if (kernelOpsHandlerPtr) {
+            // Gate post-ops on is_last_k: WoQ (bf16s4/u4) frames reuse this
+            // kernel chunked over K and would otherwise re-apply per chunk.
+            Xbyak::Label label_skip_kernel_ops;
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_skip_kernel_ops, T_NEAR);
+
             using VecPoolType =
                 utils::registerPool<typename Traits::RegType, Traits::numRegs>;
             using MaskPoolType =
@@ -2466,6 +2524,8 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                 params.kernelOps, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
                 N_LEFT, true, 1, accumBaseIdx, fringeRegs, vecPool, maskPool,
                 maskOffset)));
+
+            L(label_skip_kernel_ops);
         }
 
         storeYValues(N_LEFT);

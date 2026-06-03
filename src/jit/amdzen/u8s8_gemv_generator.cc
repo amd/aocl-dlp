@@ -1417,7 +1417,22 @@ jitU8S8VNNI_GEMVN1<KType>::generateIrLoop(int mSize)
         RETURN_IF_ERROR(scaleBeta(mSize));
     }
 
-    // Post-ops integration for GEMV N=1
+    // Post-ops integration for GEMV N=1.
+    //
+    // Gate post-ops + downscale on is_last_k: chunked-K frames reuse this
+    // kernel and would otherwise re-apply post-ops on every K chunk. On
+    // non-last chunks (or when no post-ops are configured) we converge on
+    // the single s32 partial-sum storeResult below. Mirrors the hoist
+    // idiom in s8_gemm_generator.cc. accumulatorsAreF32 is a JIT-time
+    // flag toggled around the f32 storeResult emission inside the if.
+    Xbyak::Label label_storey;
+    Xbyak::Label label_post_storey;
+    mov(regTmp1,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+    test(regTmp1, regTmp1);
+    je(label_storey, T_NEAR);
+
     if (kernelOpsHandlerPtr) {
         // Convert S32 accumulators to F32 for post-ops compatibility
         for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
@@ -1447,9 +1462,16 @@ jitU8S8VNNI_GEMVN1<KType>::generateIrLoop(int mSize)
         RETURN_IF_ERROR(kernelOpsHandlerPtr->generateKernelOps(
             *kernelOpsPtr, stackPtr, dlp::jit::jitAlgoType::gemv_n1, mSize, 1,
             useMask, 1, accumBaseIdx, numCRegs, vecPool, maskPool, maskOffset));
+
+        // Last-K path: store with f32 accumulators (post-downscale).
+        RETURN_IF_ERROR(storeResult(mSize));
+        jmp(label_post_storey, T_NEAR);
     }
 
+    L(label_storey);
+    accumulatorsAreF32 = false;
     RETURN_IF_ERROR(storeResult(mSize));
+    L(label_post_storey);
 
     outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
@@ -3107,9 +3129,22 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             // Scale the result by beta, and store it accordingly
             scaleYWithBeta(false);
 
-            // Post-ops integration for GEMV M=1
+            // Post-ops integration for GEMV M=1.
+            // Gate post-ops on is_last_k; on non-last chunks (or when no
+            // post-ops are configured) we converge on the single s32
+            // storeYValues below. Mirrors the hoist idiom in
+            // s8_gemm_generator.cc.
+            Xbyak::Label label_storey;
+            Xbyak::Label label_post_storey;
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_storey, T_NEAR);
+
             if (kernelOpsHandlerPtr) {
-                // Convert S32 accumulators to F32 for post-ops compatibility
+                // Convert S32 accumulators to F32 for post-ops compat
                 for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
                     vcvtdq2ps(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i));
                 }
@@ -3140,9 +3175,16 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     *kernelOpsPtr, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
                     NR, false, 1, accumBaseIdx, numCRegs, vecPool, maskPool,
                     maskOffset));
+
+                // Last-K path: store with f32 accumulators (post-downscale).
+                RETURN_IF_ERROR(storeYValues(false));
+                jmp(label_post_storey, T_NEAR);
             }
 
-            storeYValues(false);
+            L(label_storey);
+            accumulatorsAreF32 = false;
+            RETURN_IF_ERROR(storeYValues(false));
+            L(label_post_storey);
 
             // Update the pointers for next n iteration
             mov(regTmp2, NR);
@@ -3295,8 +3337,21 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             scaleYWithBeta(true);
 
             // Post-ops integration for GEMV M=1 n-fringe
+            // Gate post-ops on is_last_k; on non-last chunks (or when no
+            // post-ops are configured) we converge on the single s32
+            // storeYValues below. Mirrors the hoist idiom in
+            // s8_gemm_generator.cc.
+            Xbyak::Label label_storey;
+            Xbyak::Label label_post_storey;
+            mov(regTmp1,
+                ptr[stackPtr
+                    + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                    + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+            test(regTmp1, regTmp1);
+            je(label_storey, T_NEAR);
+
             if (kernelOpsHandlerPtr) {
-                // Convert S32 accumulators to F32 for post-ops compatibility
+                // Convert S32 accumulators to F32 for post-ops compat
                 for (iter_t i = 0;
                      i < (N_LEFT + nElemsPerReg - 1) / nElemsPerReg; i++) {
                     vcvtdq2ps(Zmm(accumBaseIdx + i), Zmm(accumBaseIdx + i));
@@ -3328,9 +3383,16 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
                     *kernelOpsPtr, stackPtr, dlp::jit::jitAlgoType::gemv_m1, 1,
                     N_LEFT, true, 1, accumBaseIdx, numCRegs, vecPool, maskPool,
                     maskOffset));
+
+                // Last-K path: store with f32 accumulators.
+                RETURN_IF_ERROR(storeYValues(true));
+                jmp(label_post_storey, T_NEAR);
             }
 
-            storeYValues(true);
+            L(label_storey);
+            accumulatorsAreF32 = false;
+            RETURN_IF_ERROR(storeYValues(true));
+            L(label_post_storey);
         }
 
         L(label_n_fringe_end);
