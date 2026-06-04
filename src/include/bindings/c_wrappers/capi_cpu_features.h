@@ -102,6 +102,10 @@ dlp_cpuid_query_fp_datapath(void);
 bool
 dlp_cpuid_is_similar_zen5_arch();
 
+// API to check if cpu is zen6 arch.
+bool
+dlp_cpuid_is_similar_zen6_arch();
+
 // API to check if cpu is zen4 arch.
 bool
 dlp_cpuid_is_similar_zen4_arch();

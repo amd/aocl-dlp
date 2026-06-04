@@ -90,6 +90,12 @@ dlp_cpuid_is_similar_zen5_arch()
 }
 
 bool
+dlp_cpuid_is_similar_zen6_arch()
+{
+    return archConfigManager::getInstance().isZen6SimilarArch();
+}
+
+bool
 dlp_cpuid_is_similar_zen4_arch()
 {
     return archConfigManager::getInstance().isZen4SimilarArch();

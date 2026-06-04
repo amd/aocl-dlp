@@ -789,12 +789,20 @@ class gemmU8S8DEBackend : public iDEBackend
             gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
                                                          kc_hint);
 
-        md_t mr              = mr_hint;
-        md_t nr              = nr_hint;
-        md_t k_unroll        = 1;
-        md_t kc              = kc_hint;
-        md_t prefetch_c_dist = getPrefetchDistance();
-        bool anyKOpsOrder    = false;
+        md_t mr = mr_hint;
+        md_t nr = nr_hint;
+        // k_unroll=2 emits two VNNI groups per outer-loop iteration. The
+        // generalised K-tail in u8s8_gemm_generator.cc makes K_UNROLL=2
+        // safe on any K, so divisibility is no longer required. A
+        // short-K guard keeps K_UNROLL=1 below kUnroll2MinK, because
+        // body-doubling does not amortise on very short K and small
+        // shapes; K >= 256 is the measured clean region across both
+        // u8s8 and s8s8 paths.
+        constexpr md_t kUnroll2MinK    = 256;
+        md_t           k_unroll        = (k >= kUnroll2MinK) ? 2 : 1;
+        md_t           kc              = kc_hint;
+        md_t           prefetch_c_dist = getPrefetchDistance();
+        bool           anyKOpsOrder    = false;
 
         // Set the kernel instruction preference based on the CPU features.
         // The DE constructor sets it to a safe value, based on the hardware
@@ -963,12 +971,21 @@ class gemmS8DEBackend : public iDEBackend
             gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
                                                          kc_hint);
 
-        md_t mr              = mr_hint;
-        md_t nr              = nr_hint;
-        md_t k_unroll        = 1;
-        md_t kc              = kc_hint;
-        md_t prefetch_c_dist = getPrefetchDistance();
-        bool anyKOpsOrder    = false;
+        md_t mr = mr_hint;
+        md_t nr = nr_hint;
+        // k_unroll=2 emits two VNNI groups per outer-loop iteration. The
+        // generalised K-tail in s8_gemm_generator.cc makes K_UNROLL=2
+        // safe on any K, so divisibility is no longer required. The
+        // +128/vpaddb pre-step on s8s8 operates per A-broadcast (not per
+        // K-element) and is unaffected by the tail count. A short-K
+        // guard keeps K_UNROLL=1 below kUnroll2MinK, because body-
+        // doubling does not amortise on very short K and small shapes;
+        // K >= 256 is the measured clean region.
+        constexpr md_t kUnroll2MinK    = 256;
+        md_t           k_unroll        = (k >= kUnroll2MinK) ? 2 : 1;
+        md_t           kc              = kc_hint;
+        md_t           prefetch_c_dist = getPrefetchDistance();
+        bool           anyKOpsOrder    = false;
 
         // Set the kernel instruction preference based on the CPU features.
         // The DE constructor sets it to a safe value, based on the hardware

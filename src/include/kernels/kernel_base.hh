@@ -74,13 +74,21 @@ struct gemmParams : public kernelParams
     void* alpha;
     void* beta;
 
-    md_t     mIter;
-    md_t     mLeft;
-    md_t     nIter;
-    md_t     nLeft;
-    md_t     kIterBP;
-    md_t     kIterAP;
-    md_t     kLeft;
+    md_t mIter;
+    md_t mLeft;
+    md_t nIter;
+    md_t nLeft;
+    md_t kIterBP;
+    md_t kIterAP;
+    md_t kLeft;
+    // Generalised K-tail decomposition. kLeft holds the full residual K
+    // count; kLeftIter and kLeftRem are derived host-side
+    // (amdzen_generator.cc) and consumed by the .BCONSIDKLEFTITER /
+    // .BCONSIDKLEFTREM JIT path. Both are zero whenever
+    // K % (K_UNROLL * vnniGroupSize) == 0, so the two stages fall through
+    // and behaviour is bit-identical to the prior single-stage tail.
+    md_t     kLeftIter; // Full VNNI groups in K-tail (0..K_UNROLL-1)
+    md_t     kLeftRem;  // K-element residual in K-tail (0..vnniGroupSize-1)
     uint16_t maskF32[maxNumMasks];
     uint8_t  maskF32_8[maxNumMasks];
     alignas(64) std::array<int32_t, 8> maskArray;
@@ -137,6 +145,8 @@ struct gemmParams : public kernelParams
         , kIterBP(0)
         , kIterAP(0)
         , kLeft(0)
+        , kLeftIter(0)
+        , kLeftRem(0)
         , maskF32{ 0 }
         , maskF32_8{ 0 }
         , maskArray{ 0, 0, 0, 0, 0, 0, 0, 0 }
@@ -172,6 +182,8 @@ struct gemmParams : public kernelParams
         , kIterBP(other.kIterBP)
         , kIterAP(other.kIterAP)
         , kLeft(other.kLeft)
+        , kLeftIter(other.kLeftIter)
+        , kLeftRem(other.kLeftRem)
         , maskS32(other.maskS32)
         , kLeftmask(other.kLeftmask)
         , maskFP16(other.maskFP16)
@@ -210,6 +222,8 @@ struct gemmParams : public kernelParams
         , kIterBP(other.kIterBP)
         , kIterAP(other.kIterAP)
         , kLeft(other.kLeft)
+        , kLeftIter(other.kLeftIter)
+        , kLeftRem(other.kLeftRem)
         , maskF32{ 0 }
         , maskF32_8{ 0 }
         , maskS32(other.maskS32)
@@ -228,28 +242,30 @@ struct gemmParams : public kernelParams
 
     gemmParams& operator=(const gemmParams& other)
     {
-        a       = other.a;
-        b       = other.b;
-        c       = other.c;
-        m       = other.m;
-        n       = other.n;
-        k       = other.k;
-        rsA     = other.rsA;
-        csA     = other.csA;
-        psA     = other.psA;
-        rsB     = other.rsB;
-        csB     = other.csB;
-        rsC     = other.rsC;
-        csC     = other.csC;
-        alpha   = other.alpha;
-        beta    = other.beta;
-        mIter   = other.mIter;
-        mLeft   = other.mLeft;
-        nIter   = other.nIter;
-        nLeft   = other.nLeft;
-        kIterBP = other.kIterBP;
-        kIterAP = other.kIterAP;
-        kLeft   = other.kLeft;
+        a         = other.a;
+        b         = other.b;
+        c         = other.c;
+        m         = other.m;
+        n         = other.n;
+        k         = other.k;
+        rsA       = other.rsA;
+        csA       = other.csA;
+        psA       = other.psA;
+        rsB       = other.rsB;
+        csB       = other.csB;
+        rsC       = other.rsC;
+        csC       = other.csC;
+        alpha     = other.alpha;
+        beta      = other.beta;
+        mIter     = other.mIter;
+        mLeft     = other.mLeft;
+        nIter     = other.nIter;
+        nLeft     = other.nLeft;
+        kIterBP   = other.kIterBP;
+        kIterAP   = other.kIterAP;
+        kLeft     = other.kLeft;
+        kLeftIter = other.kLeftIter;
+        kLeftRem  = other.kLeftRem;
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
         std::copy(std::begin(other.maskF32_8), std::end(other.maskF32_8),
@@ -285,6 +301,8 @@ struct gemmParams : public kernelParams
         kIterBP       = 0;
         kIterAP       = 0;
         kLeft         = 0;
+        kLeftIter     = 0;
+        kLeftRem      = 0;
         maskS32       = 0;
         kLeftmask     = 0;
         quantScale    = nullptr;

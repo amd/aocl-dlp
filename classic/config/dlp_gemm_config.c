@@ -386,7 +386,21 @@ _dlp_gemm_cntx_init_blksz_map()
     // the blocksize for a particular version of zen id is generalized
     // for all machines that support the ISA supported by that particular
     // zen id.
-    if (dlp_cpuid_is_similar_zen5_arch() == TRUE) {
+    // The Zen6-similar arch detector returns true on Zen6 silicon. Both
+    // isZen6 and isZen5 return true on Zen6 (Zen6 is a superset), so the
+    // Zen6 branch must come first in this cascade; otherwise the Zen5
+    // branch shadows it and the new map never fires. The ZEN3-fallback
+    // inside the Zen6 branch mirrors the Zen5 branch verbatim so that
+    // users explicitly setting global_dlp_gemmenable_arch ==
+    // DLP_ARCH_ZEN3 on Zen6 silicon continue to get the ZEN3 map,
+    // preserving the existing override contract.
+    if (dlp_cpuid_is_similar_zen6_arch() == TRUE) {
+        DLP_GEMM_BLKSZ_MAP_ZEN6
+
+        if (global_dlp_gemmenable_arch == DLP_ARCH_ZEN3) {
+            DLP_GEMM_BLKSZ_UPD_MAP_ZEN4_TO_ZEN
+        }
+    } else if (dlp_cpuid_is_similar_zen5_arch() == TRUE) {
         DLP_GEMM_BLKSZ_MAP_ZEN5
 
         // Fallback to zen3 blocksizes has the same logic for both

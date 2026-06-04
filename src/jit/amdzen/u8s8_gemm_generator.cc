@@ -154,13 +154,40 @@ jitU8S8VNNI_GEMM<KType>::generateIrLoop(utils::generatorParams& params)
         jne(".BLOOPKITER", T_NEAR);
 
         L(".BCONSIDKLEFT");
-        // Handle remaining K iterations
-        mov(regKIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
-        test(regKIter, regKIter);
-        je(".BPOSTACCUM", T_NEAR);
+        if (params.K_UNROLL == 1) {
+            // Legacy single-stage tail: with K_UNROLL=1, kLeft is already
+            // the 0..3 K-element residual consumed by the masked VNNI
+            // load. Skipping the two-stage tail dispatch removes a
+            // per-call test and branch from every K_UNROLL=1 microkernel
+            // invocation.
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
+            test(regKIter, regKIter);
+            je(".BPOSTACCUM", T_NEAR);
 
-        RETURN_IF_ERROR(kUnroll(1, true));
+            RETURN_IF_ERROR(kUnroll(1, true));
+        } else {
+            // K_UNROLL>1 needs the two-stage tail: kLeftIter full VNNI
+            // groups followed by the 0..3 masked K-element residual.
+            L(".BCONSIDKLEFTITER");
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftIter)]);
+            test(regKIter, regKIter);
+            je(".BCONSIDKLEFTREM", T_NEAR);
+
+            L(".BLOOPKLEFTITER");
+            RETURN_IF_ERROR(kUnroll(1, false));
+            sub(regKIter, 1);
+            jne(".BLOOPKLEFTITER", T_NEAR);
+
+            L(".BCONSIDKLEFTREM");
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftRem)]);
+            test(regKIter, regKIter);
+            je(".BPOSTACCUM", T_NEAR);
+
+            RETURN_IF_ERROR(kUnroll(1, true));
+        }
 
         L(".BPOSTACCUM");
     }

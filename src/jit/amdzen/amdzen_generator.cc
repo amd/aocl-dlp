@@ -2132,11 +2132,29 @@ jitAmdZenU8S8::executeKernel(dlp::kernels::kernelParams* _params)
         md_t mFullPieces    = params->m / MR;
         md_t mPartialPieces = params->m % MR;
 
-        params->kIterBP = params->k / vnniGroupSize;
-        params->kLeft   = params->k % vnniGroupSize;
+        // The JIT body emits K_UNROLL VNNI groups per outer-loop iteration,
+        // so the trip count must divide out both factors. Mirrors the
+        // FP32-VNNI template earlier in this file; K_UNROLL=1 reduces to
+        // the original formula.
+        //
+        // Generalised K-tail decomposition: kLeft (residual K count) splits
+        // into kLeftIter (full VNNI groups in the tail, 0..K_UNROLL-1) and
+        // kLeftRem (K-element residual, 0..vnniGroupSize-1). The two-stage
+        // tail in u8s8_gemm_generator.cc consumes kLeftIter via full-group
+        // iterations and kLeftRem via the masked load. The kLeftmask
+        // formula moves to (1 << kLeftRem) - 1: identical value semantics
+        // on any kLeftIter == 0 shape (which includes every
+        // K%(K_UNROLL*vnniGroupSize)==0 shape) and strictly correct on the
+        // K_UNROLL=2 K%8 != 0 shapes that the generalised tail unblocks.
+        params->kIterBP   = params->k / (K_UNROLL * vnniGroupSize);
+        params->kLeft     = params->k % (K_UNROLL * vnniGroupSize);
+        params->kLeftIter = params->kLeft / vnniGroupSize;
+        params->kLeftRem  = params->kLeft % vnniGroupSize;
 
         // Handle VNNI remainder case using AVX-512 masked memory load
-        params->kLeftmask = (1 << params->kLeft) - 1;
+        // (mask is on the kLeftRem residual; identical to the previous
+        //  formula on any kLeftIter == 0 shape).
+        params->kLeftmask = (1 << params->kLeftRem) - 1;
 
         uint8_t* aPtr           = static_cast<uint8_t*>(params->a);
         int8_t*  bPtr           = static_cast<int8_t*>(params->b);
@@ -2680,12 +2698,29 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
         md_t mFullPieces    = params->m / MR;
         md_t mPartialPieces = params->m % MR;
 
-        // Divided by 4(=VNNI_CONST) for VNNI instruction handling.
-        params->kIterBP = params->k / VNNI_CONST;
-        params->kLeft   = params->k % VNNI_CONST;
+        // The JIT body emits K_UNROLL VNNI groups per outer-loop iteration,
+        // so the trip count must divide out both factors. Mirrors the
+        // FP32-VNNI template earlier in this file; K_UNROLL=1 reduces to
+        // the original formula. VNNI_CONST = 4 K-elements per VNNI group.
+        //
+        // Generalised K-tail decomposition: kLeft (residual K count) splits
+        // into kLeftIter (full VNNI groups in the tail, 0..K_UNROLL-1) and
+        // kLeftRem (K-element residual, 0..VNNI_CONST-1). The two-stage
+        // tail in s8_gemm_generator.cc consumes kLeftIter via full-group
+        // iterations and kLeftRem via the masked load. The kLeftmask
+        // formula moves to (1 << kLeftRem) - 1: identical value semantics
+        // on any kLeftIter == 0 shape (which includes every
+        // K%(K_UNROLL*VNNI_CONST)==0 shape) and strictly correct on the
+        // K_UNROLL=2 K%8 != 0 shapes that the generalised tail unblocks.
+        params->kIterBP   = params->k / (K_UNROLL * VNNI_CONST);
+        params->kLeft     = params->k % (K_UNROLL * VNNI_CONST);
+        params->kLeftIter = params->kLeft / VNNI_CONST;
+        params->kLeftRem  = params->kLeft % VNNI_CONST;
 
         // Handle VNNI remainder case using AVX-512 masked memory load
-        params->kLeftmask = (1 << params->kLeft) - 1;
+        // (mask is on the kLeftRem residual; identical to the previous
+        //  formula on any kLeftIter == 0 shape).
+        params->kLeftmask = (1 << params->kLeftRem) - 1;
 
         int8_t*  aPtr = static_cast<int8_t*>(params->a);
         int8_t*  bPtr = static_cast<int8_t*>(params->b);
@@ -2739,9 +2774,19 @@ jitAmdZenS8::executeKernel(dlp::kernels::kernelParams* _params)
                 kernel(params);
             }
 
-            md_t bOffset = params->kLeft > 0 ? (VNNI_CONST - params->kLeft) : 0;
-            params->b    = (int8_t*)(params->b)
-                        + elementsToProcess * (params->k + bOffset);
+            // Advance B between the nFullpieces kernel call and the
+            // nRemainder mask-kernel call by the same K-rounded-up amount
+            // the u8s8 path uses earlier in this file. With the generalised
+            // K-tail kLeft now covers up to K_UNROLL * VNNI_CONST - 1
+            // K-elements; the previous (VNNI_CONST - kLeft) form produced
+            // a negative offset when kLeftIter >= 1, advancing B by the
+            // wrong number of bytes. The k_updated form below is
+            // byte-equivalent to the old formula on every shape that
+            // pre-fix had kLeftIter == 0, and correct on the
+            // K_UNROLL=2 K%8 != 0 shapes the generalised tail unblocks.
+            md_t k_updated =
+                ((params->k + VNNI_CONST - 1) / VNNI_CONST) * VNNI_CONST;
+            params->b = (int8_t*)(params->b) + elementsToProcess * k_updated;
 
             c_jr = (int32_t*)(c_jr) + elementsToProcess;
             (params->kernelOpsAttr).post_op_c_j += elementsToProcess;
