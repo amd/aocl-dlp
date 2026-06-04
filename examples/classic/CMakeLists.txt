@@ -40,6 +40,7 @@ set(EXAMPLE_SOURCES
     simple_gemm_bf16s4.c
     simple_gemm_bf16u4.c
     simple_gemm_f32s8.c
+    simple_gemm_per_token_quant.c
     post_ops_combinations.c
     eltwise_ops.c
     version.c

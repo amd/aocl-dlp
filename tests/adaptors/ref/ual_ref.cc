@@ -1059,7 +1059,8 @@ void
 UalRef::applyPostOperation(Matrix&                                    matrix,
                            const dlp::testing::framework::ScaleParam& op)
 {
-    applyScale(matrix, op.getScaleFactor(), op.getZeroPoint());
+    applyScale(matrix, op.getScaleFactor(), op.getScaleFactorDim(),
+               op.getZeroPoint());
 }
 
 /**
@@ -1612,6 +1613,7 @@ UalRef::applyMish(Matrix& matrix)
 void
 UalRef::applyScale(Matrix&       matrix,
                    const Matrix* scaleFactor,
+                   ParamDim      sfDim,
                    const Matrix* zeroPoint)
 {
     bool has_sf         = (scaleFactor != nullptr);
@@ -1620,12 +1622,13 @@ UalRef::applyScale(Matrix&       matrix,
     if (!has_sf && !has_zero_point)
         return;
 
-    bool per_channel =
-        has_sf && (scaleFactor->getRows() * scaleFactor->getCols()) > 1;
+    // Use explicit dimension — no shape inference.
+    bool per_row     = has_sf && (sfDim == ParamDim::PerToken);
+    bool per_channel = has_sf && (sfDim == ParamDim::PerChannel);
     bool per_channel_zp =
         has_zero_point && ((zeroPoint->getRows() * zeroPoint->getCols()) > 1);
 
-    if (!per_channel && !per_channel_zp) {
+    if (!per_row && !per_channel && !per_channel_zp) {
         float scale = has_sf ? dlp::testing::utils::convertTo<float>(
                                    scaleFactor->getData(),
                                    scaleFactor->getMatrixType(), 0)
@@ -1674,7 +1677,10 @@ UalRef::applyScale(Matrix&       matrix,
 
         for (iter_t i = 0; i < rows; ++i) {
             for (iter_t j = 0; j < cols; ++j) {
-                float  scale = has_sf ? scale_data[j % scale_size] : 1.0f;
+                // per_row: index by row; per_channel: index by column
+                float  scale = has_sf ? (per_row ? scale_data[i % scale_size]
+                                                 : scale_data[j % scale_size])
+                                      : 1.0f;
                 float  zp    = has_zero_point ? zp_data[j % zp_size] : 0.0f;
                 size_t idx   = (matrix.getLayout() == MatrixLayout::ROW_MAJOR)
                                    ? (static_cast<size_t>(i) * ld + j)
@@ -1697,10 +1703,12 @@ UalRef::applyScale(Matrix&       matrix,
         return;
     }
 
-    // Apply per-channel scaling in float
+    // Apply scaling in float
     for (iter_t i = 0; i < rows; ++i) {
         for (iter_t j = 0; j < cols; ++j) {
-            float  scale   = has_sf ? scale_data[j % scale_size] : 1.0f;
+            float  scale   = has_sf ? (per_row ? scale_data[i % scale_size]
+                                               : scale_data[j % scale_size])
+                                    : 1.0f;
             float  zp      = has_zero_point ? zp_data[j % zp_size] : 0.0f;
             size_t idx     = static_cast<size_t>(i) * temp_ld + j;
             temp_data[idx] = temp_data[idx] * scale + zp;

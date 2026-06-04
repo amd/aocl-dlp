@@ -39,6 +39,7 @@ using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
 using dlp::testing::framework::MatrixLayout;
 using dlp::testing::framework::MatrixType;
+using dlp::testing::framework::ParamDim;
 using dlp::testing::framework::PreparedBatchGemmArgs;
 using dlp::testing::framework::UALError;
 using dlp::testing::framework::UALType;
@@ -250,6 +251,7 @@ class UalRef : public IUal
     void applyMish(Matrix& matrix);
     void applyScale(Matrix&       matrix,
                     const Matrix* scaleFactor,
+                    ParamDim      sfDim,
                     const Matrix* zeroPoint);
     void applyBias(Matrix&       matrix,
                    const Matrix& bias,

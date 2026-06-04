@@ -368,33 +368,27 @@ gemmDEBackendUtils::setKernelOps(
                                        ? kernel_frame::storageFormat::colMajor
                                        : kernel_frame::storageFormat::rowMajor;
             if (post_op->op_args3 != nullptr) {
-                md_t bias_len          = *static_cast<md_t*>(post_op->op_args3);
-                metaData->isScalarBias = (bias_len == 1);
+                md_t bias_len     = *static_cast<md_t*>(post_op->op_args3);
+                metaData->biasDim = (bias_len == 1)
+                                        ? kernel_frame::ParamDim::Scalar
+                                        : kernel_frame::ParamDim::PerN;
             }
             // Dequantization support for BIAS
             if (post_op->scale_factor != nullptr) {
-                // Set scale factor datatype from user-provided type
                 metaData->scaleFactorDt =
                     utils::getStorageDtFromAoclStorageType(
                         static_cast<DLP_TYPE>(post_op->sf_stor_type));
-
-                // Determine scalar vs vector scale factor based on length
-                metaData->scalarScaleFactorRequired =
-                    (post_op->scale_factor_len == 1) ? true : false;
-                metaData->vectorScaleFactorRequired =
-                    (post_op->scale_factor_len > 1) ? true : false;
+                metaData->sfDim = (post_op->scale_factor_len == 1)
+                                      ? kernel_frame::ParamDim::Scalar
+                                      : kernel_frame::ParamDim::PerN;
             }
 
             if (post_op->bias_zp != nullptr) {
-                // Set zero point datatype from user-provided type
                 metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
                     static_cast<DLP_TYPE>(post_op->zp_stor_type));
-
-                // Determine scalar vs vector zero point based on length
-                metaData->scalarZeroPointRequired =
-                    (post_op->bias_zp_len == 1) ? true : false;
-                metaData->vectorZeroPointRequired =
-                    (post_op->bias_zp_len > 1) ? true : false;
+                metaData->zpDim = (post_op->bias_zp_len == 1)
+                                      ? kernel_frame::ParamDim::Scalar
+                                      : kernel_frame::ParamDim::PerN;
             }
             break;
         }
@@ -443,20 +437,36 @@ gemmDEBackendUtils::setKernelOps(
                 metaData->scaleFactorDt =
                     utils::getStorageDtFromAoclStorageType(
                         static_cast<DLP_TYPE>(post_op->sf_stor_type));
-                metaData->scalarScaleFactorRequired =
-                    (post_op->scale_factor_len == 1) ? true : false;
-                metaData->vectorScaleFactorRequired =
-                    (post_op->scale_factor_len > 1) ? true : false;
+                // SCALE validator enforces (dim, len) coherence; Default
+                // arm leaves sfDim at Invalid so any post-validator leakage
+                // fails with badKernelInfo downstream.
+                switch (post_op->scale_factor_dim) {
+                    case DLP_PARAM_DIM_PER_TENSOR:
+                        metaData->sfDim = kernel_frame::ParamDim::Scalar;
+                        break;
+                    case DLP_PARAM_DIM_PER_TOKEN:
+                        metaData->sfDim = kernel_frame::ParamDim::PerM;
+                        break;
+                    case DLP_PARAM_DIM_PER_CHANNEL:
+                        metaData->sfDim = kernel_frame::ParamDim::PerN;
+                        break;
+                    case DLP_PARAM_DIM_INVALID:
+                    default:
+                        break;
+                }
             }
+            // op_args3 is &zero_zp_len (a static 0) when no ZP is present;
+            // only activate zpDim when zp_len > 0 to avoid emitting ZP code
+            // with DataType::invalid, which causes JIT generation to fail.
             if (post_op->op_args3 != nullptr) {
                 metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
                     static_cast<DLP_TYPE>(post_op->zp_stor_type));
-                metaData->scalarZeroPointRequired =
-                    (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true
-                                                                    : false;
-                metaData->vectorZeroPointRequired =
-                    (*(static_cast<md_t*>(post_op->op_args3)) > 1) ? true
-                                                                   : false;
+                md_t zp_len = *(static_cast<md_t*>(post_op->op_args3));
+                if (zp_len > 0) {
+                    metaData->zpDim = (zp_len == 1)
+                                          ? kernel_frame::ParamDim::Scalar
+                                          : kernel_frame::ParamDim::PerN;
+                }
             }
             break;
         }
@@ -469,15 +479,13 @@ gemmDEBackendUtils::setKernelOps(
             metaData->cMatFormat = (storFormatC == 'c')
                                        ? kernel_frame::storageFormat::colMajor
                                        : kernel_frame::storageFormat::rowMajor;
-            // Only set scale factor metadata if scale_factor is provided
             if (post_op->scale_factor != nullptr) {
                 metaData->scaleFactorDt =
                     utils::getStorageDtFromAoclStorageType(
                         static_cast<DLP_TYPE>(post_op->sf_stor_type));
-                metaData->scalarScaleFactorRequired =
-                    (post_op->scale_factor_len == 1) ? true : false;
-                metaData->vectorScaleFactorRequired =
-                    (post_op->scale_factor_len > 1) ? true : false;
+                metaData->sfDim = (post_op->scale_factor_len == 1)
+                                      ? kernel_frame::ParamDim::Scalar
+                                      : kernel_frame::ParamDim::PerN;
             }
             break;
         }
@@ -490,15 +498,13 @@ gemmDEBackendUtils::setKernelOps(
             metaData->cMatFormat = (storFormatC == 'c')
                                        ? kernel_frame::storageFormat::colMajor
                                        : kernel_frame::storageFormat::rowMajor;
-            // Only set scale factor metadata if scale_factor is provided
             if (post_op->scale_factor != nullptr) {
                 metaData->scaleFactorDt =
                     utils::getStorageDtFromAoclStorageType(
                         static_cast<DLP_TYPE>(post_op->sf_stor_type));
-                metaData->scalarScaleFactorRequired =
-                    (post_op->scale_factor_len == 1) ? true : false;
-                metaData->vectorScaleFactorRequired =
-                    (post_op->scale_factor_len > 1) ? true : false;
+                metaData->sfDim = (post_op->scale_factor_len == 1)
+                                      ? kernel_frame::ParamDim::Scalar
+                                      : kernel_frame::ParamDim::PerN;
             }
             break;
         }
@@ -514,21 +520,23 @@ gemmDEBackendUtils::setKernelOps(
             // Extract inverse scale factor data type
             metaData->scaleFactorDt = utils::getStorageDtFromAoclStorageType(
                 static_cast<DLP_TYPE>(post_op->sf_stor_type));
-            metaData->scalarScaleFactorRequired =
-                (post_op->scale_factor_len == 1) ? true : false;
-            metaData->vectorScaleFactorRequired =
-                (post_op->scale_factor_len > 1) ? true : false;
+            metaData->sfDim = (post_op->scale_factor_len == 1)
+                                  ? kernel_frame::ParamDim::Scalar
+                                  : kernel_frame::ParamDim::PerM;
 
-            // Extract zero-point data type
+            // Extract zero-point data type and dimension.
+            // op_args3 points to zero_point_len (never NULL — a static 0 is
+            // used when zp is absent), so guard on zp_len > 0 to distinguish
+            // "no ZP" (len == 0, stor_type == INVALID) from a real ZP vector.
             metaData->zeroPointDt = utils::getStorageDtFromAoclStorageType(
                 static_cast<DLP_TYPE>(post_op->zp_stor_type));
             if (post_op->op_args3 != nullptr) {
-                metaData->scalarZeroPointRequired =
-                    (*(static_cast<md_t*>(post_op->op_args3)) == 1) ? true
-                                                                    : false;
-                metaData->vectorZeroPointRequired =
-                    (*(static_cast<md_t*>(post_op->op_args3)) > 1) ? true
-                                                                   : false;
+                md_t zp_len = *(static_cast<md_t*>(post_op->op_args3));
+                if (zp_len > 0) {
+                    metaData->zpDim = (zp_len == 1)
+                                          ? kernel_frame::ParamDim::Scalar
+                                          : kernel_frame::ParamDim::PerM;
+                }
             }
             break;
         }

@@ -117,6 +117,22 @@ namespace testing {
         };
 
         /**
+         * @enum ParamDim
+         * @brief Granularity at which a quantization parameter (scale factor,
+         *        zero point) varies across the output matrix.
+         *
+         * This is the framework-internal counterpart of DLP_PARAM_DIM_TYPE.
+         * The conversion to the C API type is done exclusively at the DLP
+         * adaptor boundary.
+         */
+        enum class ParamDim : uint8_t
+        {
+            PerTensor  = 0, ///< Single value for the entire tensor
+            PerChannel = 1, ///< One value per output column (N dimension)
+            PerToken   = 2, ///< One value per output row (M dimension)
+        };
+
+        /**
          * @brief Stream output operator for MatrixLayout
          * @param os Output stream
          * @param layout MatrixLayout to output

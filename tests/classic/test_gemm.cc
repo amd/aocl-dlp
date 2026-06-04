@@ -1581,12 +1581,18 @@ TEST(GEMMTest, MultiplePostOpsOfSameType)
         Matrix::fromVector(std::vector<float>{ 0.5f, 1.0f, 1.5f, 2.0f });
     plan->addPostOp(createBias().setBias(bias2).build());
 
-    // Add multiple SCALE operations
+    // Add multiple SCALE operations (scalar SF -> per-tensor)
     auto scale1 = Matrix::fromVector(std::vector<float>{ 1.5f });
-    plan->addPostOp(createScale().setScaleFactor(scale1).build());
+    plan->addPostOp(createScale()
+                        .setScaleFactor(scale1)
+                        .setScaleFactorDim(ParamDim::PerTensor)
+                        .build());
 
     auto scale2 = Matrix::fromVector(std::vector<float>{ 2.0f });
-    plan->addPostOp(createScale().setScaleFactor(scale2).build());
+    plan->addPostOp(createScale()
+                        .setScaleFactor(scale2)
+                        .setScaleFactorDim(ParamDim::PerTensor)
+                        .build());
 
     // Prepare and execute
     plan->prepare();
@@ -1712,7 +1718,10 @@ TEST(GEMMTest, IsolateSegFault)
                       << std::endl;
             auto scale = Matrix::fromVector(std::vector<float>{ 1.5f });
             std::cout << "Adding scale operation..." << std::endl;
-            plan->addPostOp(createScale().setScaleFactor(scale).build());
+            plan->addPostOp(createScale()
+                                .setScaleFactor(scale)
+                                .setScaleFactorDim(ParamDim::PerTensor)
+                                .build());
 
             std::cout << "Preparing plan..." << std::endl;
             plan->prepare();

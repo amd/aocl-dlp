@@ -641,19 +641,25 @@ template<utils::kernelInstrType KType>
 jitGeneratorError
 MatOps<KType>::generateImpl(kernelOpsMetaData& op)
 {
-    bool hasSF = (op.scalarScaleFactorRequired || op.vectorScaleFactorRequired);
+    if (op.paramStorageDt == DataType::invalid
+        || op.paramStorageDt == DataType::max_datatypes)
+        return jitGeneratorError::badKernelInfo;
+
+    bool     hasSF   = (op.sfDim != ParamDim::Invalid);
     DataType sfDtype = hasSF ? op.scaleFactorDt : DataType::f32;
 
-    if (op.paramStorageDt == DataType::invalid ||
-        (hasSF && sfDtype == DataType::invalid))
-        return jitGeneratorError::notSupported;
+    // When SF is in play, sfDim and scaleFactorDt must be coherent.
+    if (hasSF
+        && (op.scaleFactorDt == DataType::invalid
+            || op.scaleFactorDt == DataType::max_datatypes))
+        return jitGeneratorError::badKernelInfo;
 
     matOpType opType = (op.type == kernelOps::matAdd)
                        ? matOpType::matOpAdd
                        : matOpType::matOpMul;
 
     matOpScaleType sclType = matOpScaleType::scalar;
-    if (hasSF && !op.scalarScaleFactorRequired) {
+    if (hasSF && op.sfDim != ParamDim::Scalar) {
         sclType = (op.cMatFormat == storageFormat::rowMajor)
                   ? matOpScaleType::rowVector
                   : matOpScaleType::columnVector;
@@ -1944,9 +1950,40 @@ ReluScale<KType>::generateImpl(kernelOpsMetaData& op)
 
 template<utils::kernelInstrType KType>
 typename Downscale<KType>::LoadMode
-Downscale<KType>::getLoadMode(bool isScalar, storageFormat fmt) const
+Downscale<KType>::getLoadMode(ParamDim      dim,
+                              storageFormat fmt) const
 {
-    if (isScalar) return LoadMode::Scalar;
+    // Precondition: callers guard with hasSF/hasZP, so Invalid never reaches here.
+    if (dim == ParamDim::Scalar)
+        return LoadMode::Scalar;
+
+    // PerM and PerN are duals: col-major swaps which load mode is used.
+    //
+    // PerN (N values, by output column):
+    //   row-major → PerCol (vector load of NR, offset c_j)
+    //   col-major → PerRow (scalar broadcast per row, offset c_i)
+    //
+    // PerM (M values, by output row) — symmetric transpose of PerN:
+    //   row-major → PerRow (scalar broadcast per row, offset c_i)
+    //   col-major → PerCol (vector load of NR, offset c_j)
+    //
+    // GEMV-N1 exception: the accumulator layout packs MR distinct M-rows
+    // into the lanes of each ZMM register (each accumulator holds up to
+    // numElemsPerReg different rows). Broadcasting a single SF scalar across
+    // all lanes would apply the same factor to every row, which is wrong for
+    // per-row scaling. We therefore always use a vector load (PerCol path)
+    // for PerM on GEMV-N1, with the SF base offset by post_op_c_i so each
+    // register pulls the correct stride of M-row scale factors. This mirrors
+    // ADQuantize's GEMV-N1-specific row-major implementation.
+
+    if (dim == ParamDim::PerM) {
+        if (this->isGEMVN1())
+            return LoadMode::PerCol;
+        if (fmt == storageFormat::rowMajor) return LoadMode::PerRow;
+        return LoadMode::PerCol;
+    }
+
+    // PerN: existing logic unchanged.
     if (this->isGEMVN1()) {
         if (fmt == storageFormat::rowMajor)
             return LoadMode::Scalar;
@@ -1956,159 +1993,180 @@ Downscale<KType>::getLoadMode(bool isScalar, storageFormat fmt) const
     return LoadMode::PerRow;
 }
 
+// Apply C *= SF for the given sfMode.
 template<utils::kernelInstrType KType>
 jitGeneratorError
-Downscale<KType>::applyDownscale(
-    int effectiveMR, bool hasSF, bool hasZP,
-    LoadMode sfMode, LoadMode zpMode,
-    DataType sfDt, DataType zpDt,
-    const Xbyak::Reg64& sfBase, const Xbyak::Reg64& zpBase)
+Downscale<KType>::applyScaleFactor(int                 effectiveMR,
+                                   LoadMode            sfMode,
+                                   DataType            sfDt,
+                                   const Xbyak::Reg64& sfBase)
 {
     using VecGuard = utils::registerGuard<RegType>;
-    auto* jit = this->jit;
+    auto* jit       = this->jit;
+    int sfElemSize  = opBase::getElementSize(sfDt);
+    int sfLoadBytes = opBase::getLoadBytes(sfDt);
 
-    int sfLoadBytes = hasSF ? opBase::getLoadBytes(sfDt) : 0;
-    int zpLoadBytes = hasZP ? opBase::getLoadBytes(zpDt) : 0;
-    int sfElemSize  = hasSF ? opBase::getElementSize(sfDt) : 0;
-    int zpElemSize  = hasZP ? opBase::getElementSize(zpDt) : 0;
-
-    // Phase 1: Pre-load scalar SF/ZP
-    VecGuard scalarSfG, scalarZpG;
-    if (hasSF && sfMode == LoadMode::Scalar) {
-        RETURN_IF_ERROR(this->vecPool->acquireGuard(scalarSfG));
+    // ── Scalar SF: broadcast once, multiply across all C accumulators ──
+    if (sfMode == LoadMode::Scalar) {
+        VecGuard sfG;
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(sfG));
         RETURN_IF_ERROR(this->broadcastScalar(sfDt, jit->ptr[sfBase],
-                              RegType(scalarSfG.idx())));
-    }
-    if (hasZP && zpMode == LoadMode::Scalar) {
-        RETURN_IF_ERROR(this->vecPool->acquireGuard(scalarZpG));
-        RETURN_IF_ERROR(this->broadcastScalar(zpDt, jit->ptr[zpBase],
-                              RegType(scalarZpG.idx())));
-    }
+                              RegType(sfG.idx())));
 
-    // Resolve SF/ZP register for a given mode; for Scalar mode, returns the
-    // pre-loaded register.  For PerCol/PerRow the caller loads into vecGuard
-    // first and passes it.
-    auto resolveSfReg = [&](VecGuard& vecG) -> RegType {
-        return (hasSF && sfMode != LoadMode::Scalar)
-                   ? RegType(vecG.idx())
-                   : RegType(scalarSfG.idx());
-    };
-    auto resolveZpReg = [&](VecGuard& vecG) -> RegType {
-        return (hasZP && zpMode != LoadMode::Scalar)
-                   ? RegType(vecG.idx())
-                   : RegType(scalarZpG.idx());
-    };
-
-    // Phase 2: Apply operation to accumulators
-    // The instruction depends on which parameters are present:
-    //   SF+ZP → vfmadd213ps(C, SF, ZP)
-    //   SF    → vmulps(C, C, SF)
-    //   ZP    → vaddps(C, C, ZP)
-    auto emitOp = [&](RegType cReg, RegType sfReg, RegType zpReg) {
-        if (hasSF && hasZP) jit->vfmadd213ps(cReg, sfReg, zpReg);
-        else if (hasSF)     jit->vmulps(cReg, cReg, sfReg);
-        else                jit->vaddps(cReg, cReg, zpReg);
-    };
-
-    bool hasPerCol = (hasSF && sfMode == LoadMode::PerCol)
-                  || (hasZP && zpMode == LoadMode::PerCol);
-    bool hasPerRow = (hasSF && sfMode == LoadMode::PerRow)
-                  || (hasZP && zpMode == LoadMode::PerRow);
-
-    // ── PerCol path: iterate columns, load vectors per column ──
-    if (hasPerCol) {
-        VecGuard fringeBlendG;
-        if constexpr (!Traits::hasMaskSupport) {
-            if (this->useMask)
-                RETURN_IF_ERROR(this->vecPool->acquireGuard(fringeBlendG));
+        for (int i = 0; i < effectiveMR * this->numRegsPerRow; i++) {
+            jit->vmulps(RegType(this->cRegStartIdx + i),
+                        RegType(this->cRegStartIdx + i),
+                        RegType(sfG.idx()));
         }
-
-        for (int j = 0; j < this->numRegsPerRow; j++) {
-            bool isFringe = this->useMask && (j >= this->numFullRegsPerRow);
-            Xbyak::Opmask fMask;
-            if (isFringe)
-                fMask = this->getFringeMask(j - this->numFullRegsPerRow);
-
-            VecGuard vecSfG, vecZpG;
-            if (hasSF && sfMode == LoadMode::PerCol) {
-                RETURN_IF_ERROR(this->vecPool->acquireGuard(vecSfG));
-                RETURN_IF_ERROR(this->loadVector(sfDt,
-                    jit->ptr[sfBase + j * sfLoadBytes],
-                    RegType(vecSfG.idx()), isFringe, fMask));
-            }
-            if (hasZP && zpMode == LoadMode::PerCol) {
-                RETURN_IF_ERROR(this->vecPool->acquireGuard(vecZpG));
-                RETURN_IF_ERROR(this->loadVector(zpDt,
-                    jit->ptr[zpBase + j * zpLoadBytes],
-                    RegType(vecZpG.idx()), isFringe, fMask));
-            }
-
-            RegType sfReg = hasSF ? resolveSfReg(vecSfG) : RegType(-1);
-            RegType zpReg = hasZP ? resolveZpReg(vecZpG) : RegType(-1);
-
-            for (int row = 0; row < effectiveMR; row++) {
-                RegType cReg(this->cRegStartIdx
-                             + row * this->numRegsPerRow + j);
-                if (isFringe) {
-                    if constexpr (Traits::hasMaskSupport) {
-                        emitOp(cReg | fMask, sfReg, zpReg);
-                    } else {
-                        RegType scratch(fringeBlendG.idx());
-                        if (hasSF && hasZP) {
-                            jit->vmovaps(scratch, cReg);
-                            jit->vfmadd213ps(scratch, sfReg, zpReg);
-                            jit->vblendvps(cReg, cReg, scratch,
-                                           this->ymmMask);
-                        } else if (hasSF) {
-                            jit->vmulps(scratch, cReg, sfReg);
-                            jit->vblendvps(cReg, cReg, scratch,
-                                           this->ymmMask);
-                        } else {
-                            jit->vandps(scratch, zpReg, this->ymmMask);
-                            jit->vaddps(cReg, cReg, scratch);
-                        }
-                    }
-                } else {
-                    emitOp(cReg, sfReg, zpReg);
-                }
-            }
-        }
+        return jitGeneratorError::success;
     }
-    // ── PerRow path: iterate rows, broadcast per row ──
-    else if (hasPerRow) {
+
+    // ── PerRow SF: broadcast scalar per row, multiply across that row ──
+    if (sfMode == LoadMode::PerRow) {
         for (int row = 0; row < effectiveMR; row++) {
-            VecGuard rowSfG, rowZpG;
-            if (hasSF && sfMode == LoadMode::PerRow) {
-                RETURN_IF_ERROR(this->vecPool->acquireGuard(rowSfG));
-                RETURN_IF_ERROR(this->broadcastScalar(sfDt,
-                    jit->ptr[sfBase + row * sfElemSize],
-                    RegType(rowSfG.idx())));
-            }
-            if (hasZP && zpMode == LoadMode::PerRow) {
-                RETURN_IF_ERROR(this->vecPool->acquireGuard(rowZpG));
-                RETURN_IF_ERROR(this->broadcastScalar(zpDt,
-                    jit->ptr[zpBase + row * zpElemSize],
-                    RegType(rowZpG.idx())));
-            }
+            VecGuard sfG;
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(sfG));
+            RETURN_IF_ERROR(this->broadcastScalar(sfDt,
+                jit->ptr[sfBase + row * sfElemSize],
+                RegType(sfG.idx())));
 
-            RegType sfReg = hasSF ? resolveSfReg(rowSfG) : RegType(-1);
-            RegType zpReg = hasZP ? resolveZpReg(rowZpG) : RegType(-1);
+            for (int col = 0; col < this->numRegsPerRow; col++) {
+                jit->vmulps(RegType(this->cRegStartIdx
+                                    + row * this->numRegsPerRow + col),
+                            RegType(this->cRegStartIdx
+                                    + row * this->numRegsPerRow + col),
+                            RegType(sfG.idx()));
+            }
+        }
+        return jitGeneratorError::success;
+    }
 
-            for (int col = 0; col < this->numRegsPerRow; col++)
-                emitOp(RegType(this->cRegStartIdx
-                               + row * this->numRegsPerRow + col),
-                       sfReg, zpReg);
+    // ── PerCol SF: vector-load per column tile, multiply across rows ──
+    VecGuard fringeBlendG;
+    if constexpr (!Traits::hasMaskSupport) {
+        if (this->useMask)
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(fringeBlendG));
+    }
+
+    for (int j = 0; j < this->numRegsPerRow; j++) {
+        bool isFringe = this->useMask && (j >= this->numFullRegsPerRow);
+        Xbyak::Opmask fMask;
+        if (isFringe)
+            fMask = this->getFringeMask(j - this->numFullRegsPerRow);
+
+        VecGuard sfG;
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(sfG));
+        RETURN_IF_ERROR(this->loadVector(sfDt,
+            jit->ptr[sfBase + j * sfLoadBytes],
+            RegType(sfG.idx()), isFringe, fMask));
+
+        for (int row = 0; row < effectiveMR; row++) {
+            RegType cReg(this->cRegStartIdx
+                         + row * this->numRegsPerRow + j);
+            if (isFringe) {
+                if constexpr (Traits::hasMaskSupport) {
+                    jit->vmulps(cReg | fMask, cReg, RegType(sfG.idx()));
+                } else {
+                    // AVX2: multiply into scratch then blend so fringe
+                    // lanes outside ymmMask remain unchanged.
+                    RegType scratch(fringeBlendG.idx());
+                    jit->vmulps(scratch, cReg, RegType(sfG.idx()));
+                    jit->vblendvps(cReg, cReg, scratch, this->ymmMask);
+                }
+            } else {
+                jit->vmulps(cReg, cReg, RegType(sfG.idx()));
+            }
         }
     }
-    // ── All-scalar path: flat loop ──
-    else {
-        RegType sfReg = hasSF ? RegType(scalarSfG.idx()) : RegType(-1);
-        RegType zpReg = hasZP ? RegType(scalarZpG.idx()) : RegType(-1);
+    return jitGeneratorError::success;
+}
 
-        for (int i = 0; i < effectiveMR * this->numRegsPerRow; i++)
-            emitOp(RegType(this->cRegStartIdx + i), sfReg, zpReg);
+// Apply C += ZP for the given zpMode. Independent of any scale-factor
+// handling — the caller emits this pass after applyScaleFactor.
+template<utils::kernelInstrType KType>
+jitGeneratorError
+Downscale<KType>::applyZeroPoint(int                 effectiveMR,
+                                 LoadMode            zpMode,
+                                 DataType            zpDt,
+                                 const Xbyak::Reg64& zpBase)
+{
+    using VecGuard = utils::registerGuard<RegType>;
+    auto* jit       = this->jit;
+    int zpElemSize  = opBase::getElementSize(zpDt);
+    int zpLoadBytes = opBase::getLoadBytes(zpDt);
+
+    // ── Scalar ZP: broadcast once, add to all C accumulators ──
+    if (zpMode == LoadMode::Scalar) {
+        VecGuard zpG;
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(zpG));
+        RETURN_IF_ERROR(this->broadcastScalar(zpDt, jit->ptr[zpBase],
+                              RegType(zpG.idx())));
+
+        for (int i = 0; i < effectiveMR * this->numRegsPerRow; i++) {
+            jit->vaddps(RegType(this->cRegStartIdx + i),
+                        RegType(this->cRegStartIdx + i),
+                        RegType(zpG.idx()));
+        }
+        return jitGeneratorError::success;
     }
 
+    // ── PerRow ZP: broadcast scalar per row, add across that row ──
+    if (zpMode == LoadMode::PerRow) {
+        for (int row = 0; row < effectiveMR; row++) {
+            VecGuard zpG;
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(zpG));
+            RETURN_IF_ERROR(this->broadcastScalar(zpDt,
+                jit->ptr[zpBase + row * zpElemSize],
+                RegType(zpG.idx())));
+
+            for (int col = 0; col < this->numRegsPerRow; col++) {
+                jit->vaddps(RegType(this->cRegStartIdx
+                                    + row * this->numRegsPerRow + col),
+                            RegType(this->cRegStartIdx
+                                    + row * this->numRegsPerRow + col),
+                            RegType(zpG.idx()));
+            }
+        }
+        return jitGeneratorError::success;
+    }
+
+    // ── PerCol ZP: vector-load per column tile, add across rows ──
+    VecGuard fringeBlendG;
+    if constexpr (!Traits::hasMaskSupport) {
+        if (this->useMask)
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(fringeBlendG));
+    }
+
+    for (int j = 0; j < this->numRegsPerRow; j++) {
+        bool isFringe = this->useMask && (j >= this->numFullRegsPerRow);
+        Xbyak::Opmask fMask;
+        if (isFringe)
+            fMask = this->getFringeMask(j - this->numFullRegsPerRow);
+
+        VecGuard zpG;
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(zpG));
+        RETURN_IF_ERROR(this->loadVector(zpDt,
+            jit->ptr[zpBase + j * zpLoadBytes],
+            RegType(zpG.idx()), isFringe, fMask));
+
+        for (int row = 0; row < effectiveMR; row++) {
+            RegType cReg(this->cRegStartIdx
+                         + row * this->numRegsPerRow + j);
+            if (isFringe) {
+                if constexpr (Traits::hasMaskSupport) {
+                    jit->vaddps(cReg | fMask, cReg, RegType(zpG.idx()));
+                } else {
+                    // AVX2: zero out ZP lanes outside ymmMask so the add
+                    // contributes nothing in the fringe portion.
+                    RegType scratch(fringeBlendG.idx());
+                    jit->vandps(scratch, RegType(zpG.idx()), this->ymmMask);
+                    jit->vaddps(cReg, cReg, scratch);
+                }
+            } else {
+                jit->vaddps(cReg, cReg, RegType(zpG.idx()));
+            }
+        }
+    }
     return jitGeneratorError::success;
 }
 
@@ -2118,31 +2176,30 @@ Downscale<KType>::generateImpl(kernelOpsMetaData& op)
 {
     auto* jit = this->jit;
 
-    bool hasSF = (op.scalarScaleFactorRequired || op.vectorScaleFactorRequired);
-    bool hasZP = (op.scalarZeroPointRequired   || op.vectorZeroPointRequired);
+    bool hasSF = (op.sfDim != ParamDim::Invalid);
+    bool hasZP = (op.zpDim != ParamDim::Invalid);
 
     if (!hasSF && !hasZP)
         return jitGeneratorError::badKernelInfo;
 
-    auto isSupported = [](DataType dt) {
-        return dt == DataType::f32  || dt == DataType::bf16 ||
-               dt == DataType::f16  ||
-               dt == DataType::s8   || dt == DataType::u8   ||
-               dt == DataType::s32;
-    };
-    if (hasSF && !isSupported(op.scaleFactorDt))
+    // Reject any enabled feature (SF or ZP) whose datatype is unset.
+    // The decision engine writes `dim` and `Dt` together, so reaching this
+    // check with an Invalid Dt means upstream metadata is inconsistent.
+    if (hasSF
+        && (op.scaleFactorDt == DataType::invalid
+            || op.scaleFactorDt == DataType::max_datatypes))
         return jitGeneratorError::badKernelInfo;
-    if (hasZP && !isSupported(op.zeroPointDt))
+    if (hasZP
+        && (op.zeroPointDt == DataType::invalid
+            || op.zeroPointDt == DataType::max_datatypes))
         return jitGeneratorError::badKernelInfo;
 
     DataType sfDt = hasSF ? op.scaleFactorDt : DataType::f32;
     DataType zpDt = hasZP ? op.zeroPointDt   : DataType::f32;
 
-    LoadMode sfMode = hasSF ? getLoadMode(op.scalarScaleFactorRequired,
-                                          op.cMatFormat)
+    LoadMode sfMode = hasSF ? getLoadMode(op.sfDim, op.cMatFormat)
                             : LoadMode::Scalar;
-    LoadMode zpMode = hasZP ? getLoadMode(op.scalarZeroPointRequired,
-                                          op.cMatFormat)
+    LoadMode zpMode = hasZP ? getLoadMode(op.zpDim, op.cMatFormat)
                             : LoadMode::Scalar;
 
     int effectiveMR = this->isGEMVN1() ? 1 : this->MR;
@@ -2207,9 +2264,16 @@ Downscale<KType>::generateImpl(kernelOpsMetaData& op)
         }
     }
 
-    return applyDownscale(effectiveMR, hasSF, hasZP,
-                          sfMode, zpMode, sfDt, zpDt,
-                          this->regTmp1, this->regTmp2);
+    // Two independent passes: SF first (C *= SF), ZP second (C += ZP).
+    // Each pass dispatches on its own LoadMode, so any combination
+    // including mixed PerRow/PerCol is supported.
+    if (hasSF)
+        RETURN_IF_ERROR(applyScaleFactor(effectiveMR, sfMode, sfDt,
+                                         this->regTmp1));
+    if (hasZP)
+        RETURN_IF_ERROR(applyZeroPoint(effectiveMR, zpMode, zpDt,
+                                       this->regTmp2));
+    return jitGeneratorError::success;
 }
 
 
@@ -2448,23 +2512,23 @@ Bias<KType>::generateImpl(kernelOpsMetaData& op)
     using namespace dlp::kernel_frame;
     auto* jit = this->jit;
 
-    bool hasSF = (op.scalarScaleFactorRequired || op.vectorScaleFactorRequired);
-    bool hasZP = (op.scalarZeroPointRequired   || op.vectorZeroPointRequired);
+    if (op.biasDim == ParamDim::Invalid
+        || op.paramStorageDt == DataType::invalid
+        || op.paramStorageDt == DataType::max_datatypes)
+        return jitGeneratorError::badKernelInfo;
+
+    bool hasSF = (op.sfDim != ParamDim::Invalid);
+    bool hasZP = (op.zpDim != ParamDim::Invalid);
     bool hasDequant = hasSF || hasZP;
 
-    auto isSupported = [](DataType dt) {
-        return dt == DataType::f32  || dt == DataType::bf16 ||
-               dt == DataType::f16  ||
-               dt == DataType::s8   || dt == DataType::u8   ||
-               dt == DataType::s32;
-    };
-
-    if (!isSupported(op.paramStorageDt))
+    // When a feature is in play, its dim and DT must be coherent.
+    if (hasSF
+        && (op.scaleFactorDt == DataType::invalid
+            || op.scaleFactorDt == DataType::max_datatypes))
         return jitGeneratorError::badKernelInfo;
-
-    if (hasSF && !isSupported(op.scaleFactorDt))
-        return jitGeneratorError::badKernelInfo;
-    if (hasZP && !isSupported(op.zeroPointDt))
+    if (hasZP
+        && (op.zeroPointDt == DataType::invalid
+            || op.zeroPointDt == DataType::max_datatypes))
         return jitGeneratorError::badKernelInfo;
 
     DataType biasDt = op.paramStorageDt;
@@ -2473,7 +2537,7 @@ Bias<KType>::generateImpl(kernelOpsMetaData& op)
     int  effectiveMR = isGEMVN1 ? 1 : this->MR;
     int  biasElemSize = opBase::getElementSize(biasDt);
 
-    bool isScalar = op.isScalarBias;
+    bool isScalar = (op.biasDim == ParamDim::Scalar);
 
     jit->mov(this->regTmp1,
              jit->ptr[this->regkernelOpsList
@@ -2508,8 +2572,8 @@ Bias<KType>::generateImpl(kernelOpsMetaData& op)
 
     DataType sfDt = hasSF ? op.scaleFactorDt : DataType::f32;
     DataType zpDt = hasZP ? op.zeroPointDt   : DataType::f32;
-    bool sfIsScalar = op.scalarScaleFactorRequired;
-    bool zpIsScalar = op.scalarZeroPointRequired;
+    bool sfIsScalar = (op.sfDim == ParamDim::Scalar);
+    bool zpIsScalar = (op.zpDim == ParamDim::Scalar);
 
     int sfElemSize = hasSF ? opBase::getElementSize(sfDt) : 0;
     int zpElemSize = hasZP ? opBase::getElementSize(zpDt) : 0;
@@ -2697,7 +2761,7 @@ ADQuantize<KType>::aDQuantScaleFactorImpl(kernelOpsMetaData& op)
                       + offsetof(dlp_gemm_post_op, scale_factor)]);
 
     if (this->isGEMVN1()) {
-        if (op.scalarScaleFactorRequired) {
+        if (op.sfDim == ParamDim::Scalar) {
             return aDQuantScaleFactorScalarImplGEMVN1(op.scaleFactorDt, this->regTmp1);
         } else if (op.cMatFormat == storageFormat::rowMajor) {
             jit->mov(this->regTmp2,
@@ -2708,7 +2772,7 @@ ADQuantize<KType>::aDQuantScaleFactorImpl(kernelOpsMetaData& op)
             return jitGeneratorError::notSupported;
         }
     } else {
-        if (op.scalarScaleFactorRequired) {
+        if (op.sfDim == ParamDim::Scalar) {
             return aDQuantScaleFactorScalarImpl(op.scaleFactorDt, this->regTmp1);
         } else if (op.cMatFormat == storageFormat::rowMajor) {
             return aDQuantScaleFactorRowMajorImpl(op.scaleFactorDt, this->regTmp1);
@@ -2918,7 +2982,7 @@ template<utils::kernelInstrType KType>
 jitGeneratorError
 ADQuantize<KType>::aDQuantZeroPointImpl(kernelOpsMetaData& op)
 {
-    if (!op.scalarZeroPointRequired && !op.vectorZeroPointRequired)
+    if (op.zpDim == ParamDim::Invalid)
         return jitGeneratorError::success;
 
     auto* jit = this->jit;
@@ -2928,7 +2992,7 @@ ADQuantize<KType>::aDQuantZeroPointImpl(kernelOpsMetaData& op)
                       + offsetof(dlp_gemm_post_op, op_args1)]);
 
     if (this->isGEMVN1()) {
-        if (op.scalarZeroPointRequired) {
+        if (op.zpDim == ParamDim::Scalar) {
             return aDQuantZeroPointScalarImplGEMVN1(op.zeroPointDt, this->regTmp1);
         } else if (op.cMatFormat == storageFormat::rowMajor) {
             jit->mov(this->regTmp2,
@@ -2939,7 +3003,7 @@ ADQuantize<KType>::aDQuantZeroPointImpl(kernelOpsMetaData& op)
             return jitGeneratorError::notSupported;
         }
     } else {
-        if (op.scalarZeroPointRequired) {
+        if (op.zpDim == ParamDim::Scalar) {
             return aDQuantZeroPointScalarImpl(op.zeroPointDt, this->regTmp1);
         } else if (op.cMatFormat == storageFormat::rowMajor) {
             return aDQuantZeroPointRowMajorImpl(op.zeroPointDt, this->regTmp1);

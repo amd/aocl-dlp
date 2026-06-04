@@ -146,6 +146,25 @@ enum class storageFormat : uint8_t
     colMajor = 1  // Column-major layout (Fortran style)
 };
 
+// Granularity of a quantization parameter (SF, ZP, or bias) relative to the
+// GEMM output matrix logical dimensions.
+// Invalid = parameter absent OR metadata not validly described. Default
+//           value of a freshly-constructed kernelOpsMetaData. Code-gen
+//           treats this as "no usable parameter here" and, if the
+//           accompanying data type / pointer says one was expected, must
+//           fail with jitGeneratorError::badKernelInfo rather than
+//           silently skipping the parameter path.
+// Scalar  = single value broadcast to all elements.
+// PerN    = N values — one per output column (M x N output matrix).
+// PerM    = M values — one per output row  (M x N output matrix).
+enum class ParamDim : uint8_t
+{
+    Invalid = 0,
+    Scalar  = 1,
+    PerN    = 2,
+    PerM    = 3
+};
+
 // Enum for alpha/beta scaling type
 enum class scalingType : uint8_t
 {
@@ -156,97 +175,82 @@ enum class scalingType : uint8_t
 
 struct kernelOpsMetaData
 {
-    kernelOps     type;
-    DataType      scaleFactorDt; // Data type of the scale factor
-    bool          scalarScaleFactorRequired;
-    bool          vectorScaleFactorRequired;
-    DataType      zeroPointDt; // Data type of the zero point
-    bool          scalarZeroPointRequired;
-    bool          vectorZeroPointRequired;
+    kernelOps type;
+    DataType  scaleFactorDt;      // Data type of the scale factor
+    ParamDim  sfDim;              // SF granularity (Invalid/Scalar/PerN/PerM)
+    DataType  zeroPointDt;        // Data type of the zero point
+    ParamDim  zpDim;              // ZP granularity (Invalid/Scalar/PerN/PerM
+                                  //  — PerM only used by ADQuantize)
     DataType      paramStorageDt; // Data type of the parameter storage
-    storageFormat cMatFormat; // Storage format of the C matrix (row-major or
-                              // column-major)
-    bool isScalarBias;        // Whether bias is a single scalar value
-                              // broadcast to all elements
+    storageFormat cMatFormat;     // Storage format of the C matrix
+    ParamDim      biasDim;        // Bias granularity (Invalid/Scalar/PerN)
 
     kernelOpsMetaData()
         : type(kernelOps::max_kernel_ops)
         , scaleFactorDt(DataType::max_datatypes)
-        , scalarScaleFactorRequired(false)
-        , vectorScaleFactorRequired(false)
+        , sfDim(ParamDim::Invalid)
         , zeroPointDt(DataType::max_datatypes)
-        , scalarZeroPointRequired(false)
-        , vectorZeroPointRequired(false)
+        , zpDim(ParamDim::Invalid)
         , paramStorageDt(DataType::max_datatypes)
         , cMatFormat(storageFormat::rowMajor)
-        , isScalarBias(false)
+        , biasDim(ParamDim::Invalid)
     {
     }
 
     kernelOpsMetaData(kernelOps     type,
                       DataType      _scaleFactorDt,
-                      bool          _scalarScaleFactorRequired,
-                      bool          _vectorScaleFactorRequired,
+                      ParamDim      _sfDim,
                       DataType      _zeroPointDt,
-                      bool          _scalarZeroPointRequired,
-                      bool          _vectorZeroPointRequired,
+                      ParamDim      _zpDim,
                       DataType      _paramStorageDt,
                       storageFormat _CFormat,
-                      bool          _isScalarBias = false)
+                      ParamDim      _biasDim = ParamDim::Invalid)
         : type(type)
         , scaleFactorDt(_scaleFactorDt)
-        , scalarScaleFactorRequired(_scalarScaleFactorRequired)
-        , vectorScaleFactorRequired(_vectorScaleFactorRequired)
+        , sfDim(_sfDim)
         , zeroPointDt(_zeroPointDt)
-        , scalarZeroPointRequired(_scalarZeroPointRequired)
-        , vectorZeroPointRequired(_vectorZeroPointRequired)
+        , zpDim(_zpDim)
         , paramStorageDt(_paramStorageDt)
         , cMatFormat(_CFormat)
-        , isScalarBias(_isScalarBias)
+        , biasDim(_biasDim)
     {
     }
 
     kernelOpsMetaData(const kernelOpsMetaData& other)
         : type(other.type)
         , scaleFactorDt(other.scaleFactorDt)
-        , scalarScaleFactorRequired(other.scalarScaleFactorRequired)
-        , vectorScaleFactorRequired(other.vectorScaleFactorRequired)
+        , sfDim(other.sfDim)
         , zeroPointDt(other.zeroPointDt)
-        , scalarZeroPointRequired(other.scalarZeroPointRequired)
-        , vectorZeroPointRequired(other.vectorZeroPointRequired)
+        , zpDim(other.zpDim)
         , paramStorageDt(other.paramStorageDt)
         , cMatFormat(other.cMatFormat)
-        , isScalarBias(other.isScalarBias)
+        , biasDim(other.biasDim)
     {
     }
 
     kernelOpsMetaData(kernelOpsMetaData&& other)
         : type(other.type)
         , scaleFactorDt(other.scaleFactorDt)
-        , scalarScaleFactorRequired(other.scalarScaleFactorRequired)
-        , vectorScaleFactorRequired(other.vectorScaleFactorRequired)
+        , sfDim(other.sfDim)
         , zeroPointDt(other.zeroPointDt)
-        , scalarZeroPointRequired(other.scalarZeroPointRequired)
-        , vectorZeroPointRequired(other.vectorZeroPointRequired)
+        , zpDim(other.zpDim)
         , paramStorageDt(other.paramStorageDt)
         , cMatFormat(other.cMatFormat)
-        , isScalarBias(other.isScalarBias)
+        , biasDim(other.biasDim)
     {
     }
 
     kernelOpsMetaData& operator=(const kernelOpsMetaData& other)
     {
         if (this != std::addressof(other)) {
-            this->type                      = other.type;
-            this->scaleFactorDt             = other.scaleFactorDt;
-            this->scalarScaleFactorRequired = other.scalarScaleFactorRequired;
-            this->vectorScaleFactorRequired = other.vectorScaleFactorRequired;
-            this->zeroPointDt               = other.zeroPointDt;
-            this->scalarZeroPointRequired   = other.scalarZeroPointRequired;
-            this->vectorZeroPointRequired   = other.vectorZeroPointRequired;
-            this->paramStorageDt            = other.paramStorageDt;
-            this->cMatFormat                = other.cMatFormat;
-            this->isScalarBias              = other.isScalarBias;
+            this->type           = other.type;
+            this->scaleFactorDt  = other.scaleFactorDt;
+            this->sfDim          = other.sfDim;
+            this->zeroPointDt    = other.zeroPointDt;
+            this->zpDim          = other.zpDim;
+            this->paramStorageDt = other.paramStorageDt;
+            this->cMatFormat     = other.cMatFormat;
+            this->biasDim        = other.biasDim;
         }
         return *this;
     }
@@ -261,19 +265,14 @@ struct kernelOpsMetaData
 
     bool operator==(const kernelOpsMetaData& rhs) const
     {
-        return (
-            (this->type == rhs.type)
-            && (this->scaleFactorDt == rhs.scaleFactorDt)
-            && (this->scalarScaleFactorRequired
-                == rhs.scalarScaleFactorRequired)
-            && (this->vectorScaleFactorRequired
-                == rhs.vectorScaleFactorRequired)
-            && (this->zeroPointDt == rhs.zeroPointDt)
-            && (this->scalarZeroPointRequired == rhs.scalarZeroPointRequired)
-            && (this->vectorZeroPointRequired == rhs.vectorZeroPointRequired)
-            && (this->paramStorageDt == rhs.paramStorageDt)
-            && (this->cMatFormat == rhs.cMatFormat)
-            && (this->isScalarBias == rhs.isScalarBias));
+        return ((this->type == rhs.type)
+                && (this->scaleFactorDt == rhs.scaleFactorDt)
+                && (this->sfDim == rhs.sfDim)
+                && (this->zeroPointDt == rhs.zeroPointDt)
+                && (this->zpDim == rhs.zpDim)
+                && (this->paramStorageDt == rhs.paramStorageDt)
+                && (this->cMatFormat == rhs.cMatFormat)
+                && (this->biasDim == rhs.biasDim));
     }
 
     bool operator!=(const kernelOpsMetaData& rhs) const

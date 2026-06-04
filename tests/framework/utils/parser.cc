@@ -642,11 +642,23 @@ MicroTest::createOperationParam(
             sf_len     = std::any_cast<std::string>(sf_len_it->second[idx]);
         }
 
+        ParamDim sf_dim = ParamDim::PerChannel;
         {
             bool has_explicit_sf =
                 (sf_it != config.params.end() && !sf_it->second.empty());
-            if (sf_len == "n") {
+            if (sf_len == "m") {
+                // Per-row (per-token): M×1 column vector
+                scale_matrix = Matrix(getM(), 1, scale_type);
+                sf_dim       = ParamDim::PerToken;
+                if (has_explicit_sf) {
+                    scale_matrix.fillValue(static_cast<double>(scale_value));
+                } else {
+                    scale_matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE,
+                                            "uniform");
+                }
+            } else if (sf_len == "n") {
                 scale_matrix = Matrix(1, getN(), scale_type);
+                sf_dim       = ParamDim::PerChannel;
                 if (has_explicit_sf) {
                     scale_matrix.fillValue(static_cast<double>(scale_value));
                 } else {
@@ -654,10 +666,10 @@ MicroTest::createOperationParam(
                                             "uniform");
                 }
             } else {
-                // Scalar (per-tensor) - default when sf_len not specified or
-                // "1"
+                // Scalar / per-tensor
                 scale_matrix = Matrix::fromValue(
                     static_cast<float>(scale_value), scale_type);
+                sf_dim = ParamDim::PerTensor;
             }
         }
 
@@ -696,6 +708,7 @@ MicroTest::createOperationParam(
 
         auto builder = createScale();
         builder.setScaleFactor(scale_matrix);
+        builder.setScaleFactorDim(sf_dim);
         if (has_zp) {
             builder.setZeroPoint(zero_point_matrix);
         }

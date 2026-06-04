@@ -844,13 +844,54 @@ DlpUalPlan::convertScaleOperations()
 
         // Set scale factor if provided
         if (param.hasScaleFactor()) {
-            m_metadata->scale[i].sf = new dlp_sf_t;
-            m_metadata->scale[i].sf->scale_factor =
-                convertMatrixToPtr(*param.getScaleFactor());
-            m_metadata->scale[i].sf->scale_factor_len =
-                param.getScaleFactor()->getCols();
+            // Single source of truth for (ParamDim, SF matrix shape)
+            // coherence on the test path. ScaleBuilder deliberately
+            // defers this to the adaptor — this is where the matrix is
+            // turned into a (dlp_sf_t::scale_factor, scale_factor_len)
+            // pair, so a mismatch here would either silently truncate
+            // (PerTensor + vector matrix -> len = 1, rest of the SF
+            // dropped) or alias past the SF buffer (PerChannel /
+            // PerToken + 1x1 matrix -> len > 1). Failing fast keeps
+            // inconsistent metadata from ever reaching the C validator
+            // or JIT codegen.
+            const Matrix* sfMat = param.getScaleFactor();
+            const md_t    rows  = static_cast<md_t>(sfMat->getRows());
+            const md_t    cols  = static_cast<md_t>(sfMat->getCols());
+            ParamDim      sfDim = param.getScaleFactorDim();
+
+            switch (sfDim) {
+                case ParamDim::PerTensor:
+                    if (rows * cols != 1) {
+                        throw std::runtime_error(
+                            "DlpUalPlan: SCALE PerTensor requires a 1x1 "
+                            "scale-factor matrix");
+                    }
+                    break;
+                case ParamDim::PerChannel:
+                    if (rows != 1 || cols < 1) {
+                        throw std::runtime_error(
+                            "DlpUalPlan: SCALE PerChannel requires a 1xN "
+                            "scale-factor matrix");
+                    }
+                    break;
+                case ParamDim::PerToken:
+                    if (cols != 1 || rows < 1) {
+                        throw std::runtime_error(
+                            "DlpUalPlan: SCALE PerToken requires an Mx1 "
+                            "scale-factor matrix");
+                    }
+                    break;
+            }
+
+            m_metadata->scale[i].sf               = new dlp_sf_t{};
+            m_metadata->scale[i].sf->scale_factor = convertMatrixToPtr(*sfMat);
             m_metadata->scale[i].sf->scale_factor_type =
-                getStorageType(param.getScaleFactor()->getMatrixType());
+                getStorageType(sfMat->getMatrixType());
+            m_metadata->scale[i].sf->scale_factor_dim = getParamDim(sfDim);
+            m_metadata->scale[i].sf->scale_factor_len =
+                (sfDim == ParamDim::PerToken)     ? rows
+                : (sfDim == ParamDim::PerChannel) ? cols
+                                                  : md_t{ 1 };
         }
 
         // Set zero point if provided
@@ -904,13 +945,16 @@ DlpUalPlan::convertBiasOperations()
 
         // Set scale factor if provided
         if (param.hasScaleFactor()) {
-            m_metadata->bias[i].sf = new dlp_sf_t;
+            md_t bias_sf_len       = param.getScaleFactor()->getCols();
+            m_metadata->bias[i].sf = new dlp_sf_t{};
             m_metadata->bias[i].sf->scale_factor =
                 convertMatrixToPtr(*param.getScaleFactor());
-            m_metadata->bias[i].sf->scale_factor_len =
-                param.getScaleFactor()->getCols();
+            m_metadata->bias[i].sf->scale_factor_len = bias_sf_len;
             m_metadata->bias[i].sf->scale_factor_type =
                 getStorageType(param.getScaleFactor()->getMatrixType());
+            m_metadata->bias[i].sf->scale_factor_dim =
+                (bias_sf_len == 1) ? DLP_PARAM_DIM_PER_TENSOR
+                                   : DLP_PARAM_DIM_PER_CHANNEL;
         }
 
         // Set zero point if provided
@@ -952,13 +996,16 @@ DlpUalPlan::convertMatrixAddOperations()
             getStorageType(param.getMatrix().getMatrixType());
 
         if (param.hasScaleFactor()) {
-            m_metadata->matrix_add[i].sf = new dlp_sf_t;
+            md_t madd_sf_len             = param.getScaleFactor()->getCols();
+            m_metadata->matrix_add[i].sf = new dlp_sf_t{};
             m_metadata->matrix_add[i].sf->scale_factor =
                 convertMatrixToPtr(*param.getScaleFactor());
-            m_metadata->matrix_add[i].sf->scale_factor_len =
-                param.getScaleFactor()->getCols();
+            m_metadata->matrix_add[i].sf->scale_factor_len = madd_sf_len;
             m_metadata->matrix_add[i].sf->scale_factor_type =
                 getStorageType(param.getScaleFactor()->getMatrixType());
+            m_metadata->matrix_add[i].sf->scale_factor_dim =
+                (madd_sf_len == 1) ? DLP_PARAM_DIM_PER_TENSOR
+                                   : DLP_PARAM_DIM_PER_CHANNEL;
         }
     }
 }
@@ -989,13 +1036,16 @@ DlpUalPlan::convertMatrixMulOperations()
             getStorageType(param.getMatrix().getMatrixType());
 
         if (param.hasScaleFactor()) {
-            m_metadata->matrix_mul[i].sf = new dlp_sf_t;
+            md_t mmul_sf_len             = param.getScaleFactor()->getCols();
+            m_metadata->matrix_mul[i].sf = new dlp_sf_t{};
             m_metadata->matrix_mul[i].sf->scale_factor =
                 convertMatrixToPtr(*param.getScaleFactor());
-            m_metadata->matrix_mul[i].sf->scale_factor_len =
-                param.getScaleFactor()->getCols();
+            m_metadata->matrix_mul[i].sf->scale_factor_len = mmul_sf_len;
             m_metadata->matrix_mul[i].sf->scale_factor_type =
                 getStorageType(param.getScaleFactor()->getMatrixType());
+            m_metadata->matrix_mul[i].sf->scale_factor_dim =
+                (mmul_sf_len == 1) ? DLP_PARAM_DIM_PER_TENSOR
+                                   : DLP_PARAM_DIM_PER_CHANNEL;
         }
     }
 }
@@ -1067,7 +1117,7 @@ DlpUalPlan::convertA_QuantOperations()
     // Scale factor assignment
     if (param.hasA_PreOpScaleFactor()) {
         if (!m_metadata->a_pre_quant->scl) {
-            m_metadata->a_pre_quant->scl = new dlp_sf_t;
+            m_metadata->a_pre_quant->scl = new dlp_sf_t{};
         }
         auto* scl         = m_metadata->a_pre_quant->scl;
         scl->scale_factor = convertMatrixToPtr(*param.getA_PreOpScaleFactor());
@@ -1092,7 +1142,7 @@ DlpUalPlan::convertA_QuantOperations()
     // Scale factor assignment
     if (param.hasA_PostOpScaleFactor()) {
         if (!m_metadata->a_post_quant->scl) {
-            m_metadata->a_post_quant->scl = new dlp_sf_t;
+            m_metadata->a_post_quant->scl = new dlp_sf_t{};
         }
         auto* scl         = m_metadata->a_post_quant->scl;
         scl->scale_factor = convertMatrixToPtr(*param.getA_PostOpScaleFactor());
@@ -1141,7 +1191,7 @@ DlpUalPlan::convertB_QuantOperations()
     // Scale factor assignment for B pre-quant
     if (param.hasB_PreOpScaleFactor()) {
         if (!m_metadata->b_pre_quant->scl) {
-            m_metadata->b_pre_quant->scl = new dlp_sf_t;
+            m_metadata->b_pre_quant->scl = new dlp_sf_t{};
         }
         auto* scl         = m_metadata->b_pre_quant->scl;
         scl->scale_factor = convertMatrixToPtr(*param.getB_PreOpScaleFactor());
@@ -1166,7 +1216,7 @@ DlpUalPlan::convertB_QuantOperations()
     // Scale factor assignment for B post-quant
     if (param.hasB_PostOpScaleFactor()) {
         if (!m_metadata->b_post_quant->scl) {
-            m_metadata->b_post_quant->scl = new dlp_sf_t;
+            m_metadata->b_post_quant->scl = new dlp_sf_t{};
         }
         auto* scl         = m_metadata->b_post_quant->scl;
         scl->scale_factor = convertMatrixToPtr(*param.getB_PostOpScaleFactor());
@@ -1206,7 +1256,7 @@ DlpUalPlan::convertWOQOperations()
     // Scale factor assignment for B matrix
     if (param.hasB_ScaleFactor()) {
         if (!m_metadata->pre_ops->b_scl) {
-            m_metadata->pre_ops->b_scl = new dlp_sf_t;
+            m_metadata->pre_ops->b_scl = new dlp_sf_t{};
         }
         auto* scl             = m_metadata->pre_ops->b_scl;
         scl->scale_factor     = convertMatrixToPtr(*param.getB_ScaleFactor());
@@ -1284,7 +1334,7 @@ DlpUalPlan::convertGroupScaleOperations()
 
     // Set A scale factor
     if (param.hasAScaleFactor()) {
-        m_metadata->post_op_grp->a_scl = new dlp_sf_t;
+        m_metadata->post_op_grp->a_scl = new dlp_sf_t{};
         auto* scl                      = m_metadata->post_op_grp->a_scl;
         md_t  a_sf_len                 = param.getAScaleFactor()->getCols();
         scl->scale_factor_type =
@@ -1313,7 +1363,7 @@ DlpUalPlan::convertGroupScaleOperations()
 
     // Set B scale factor
     if (param.hasBScaleFactor()) {
-        m_metadata->post_op_grp->b_scl = new dlp_sf_t;
+        m_metadata->post_op_grp->b_scl = new dlp_sf_t{};
         auto* scl                      = m_metadata->post_op_grp->b_scl;
         md_t  b_sf_len                 = param.getBScaleFactor()->getCols();
         scl->scale_factor_type =
@@ -1413,6 +1463,21 @@ DlpUalPlan::getPostOpType(OperationType type)
             return MATRIX_MUL;
         default:
             throw std::runtime_error("Unsupported operation type");
+    }
+}
+
+DLP_PARAM_DIM_TYPE
+DlpUalPlan::getParamDim(ParamDim dim)
+{
+    switch (dim) {
+        case ParamDim::PerTensor:
+            return DLP_PARAM_DIM_PER_TENSOR;
+        case ParamDim::PerChannel:
+            return DLP_PARAM_DIM_PER_CHANNEL;
+        case ParamDim::PerToken:
+            return DLP_PARAM_DIM_PER_TOKEN;
+        default:
+            throw std::runtime_error("Unsupported ParamDim value");
     }
 }
 

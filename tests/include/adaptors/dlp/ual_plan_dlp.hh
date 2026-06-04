@@ -116,10 +116,11 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
     void convertGroupScaleOperations();
 
     // Helpers
-    void*                    convertMatrixToPtr(const Matrix& matrix);
-    static DLP_TYPE          getStorageType(MatrixType type);
-    static DLP_ELT_ALGO_TYPE getElementWiseAlgoType(ElementWiseOperation op);
-    static DLP_POST_OP_TYPE  getPostOpType(OperationType type);
+    void*                     convertMatrixToPtr(const Matrix& matrix);
+    static DLP_TYPE           getStorageType(MatrixType type);
+    static DLP_ELT_ALGO_TYPE  getElementWiseAlgoType(ElementWiseOperation op);
+    static DLP_POST_OP_TYPE   getPostOpType(OperationType type);
+    static DLP_PARAM_DIM_TYPE getParamDim(ParamDim dim);
 
     // Type encoding (from UalDlp)
     template<MatrixType A, MatrixType B, MatrixType C, MatrixType Acc>

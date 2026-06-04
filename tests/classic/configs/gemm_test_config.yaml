@@ -212,6 +212,107 @@ gemm_tests:
     mtagA: ["none"]
     mtagB: ["none", "reorder"]
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Per-token (PerM) DOWNSCALE post-op tests
+# One float32 scale factor per output row (M values total).
+# ─────────────────────────────────────────────────────────────────────────────
+
+  # Row-major output, per-token scale: canonical transformer inference pattern.
+  - name: "s8s8_downscale_per_token_rowmajor"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m:
+      lb: 1
+      ub: 14
+      step: 3
+    n:
+      lb: 16
+      ub: 64
+      step: 16
+    k: [32]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      relative: 5.0
+      absolute: 2.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["m"]
+
+  # Column-major output, per-token scale: verifies the PerM↔PerCol flip.
+  - name: "s8s8_downscale_per_token_colmajor"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m:
+      lb: 1
+      ub: 14
+      step: 3
+    n:
+      lb: 16
+      ub: 64
+      step: 16
+    k: [32]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none", "reorder"]
+    tolerances:
+      relative: 5.0
+      absolute: 2.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["m"]
+
+  # Row-major output, per-token scale + per-column zero point:
+  # mixed SF/ZP dimension exercising both PerM and PerN paths together.
+  - name: "s8s8_downscale_per_token_sf_percol_zp_rowmajor"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [6, 13]
+    n: [16, 64]
+    k: [32]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      relative: 5.0
+      absolute: 2.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["m"]
+            zero_point_type: ["s8"]
+            zero_point_len: ["n"]
+
 # To test unpack B routine when bf16 fallbacks to f32 on avx2 machines
   - name: "bf16_reorderB_for_avx2"
     a_type: ["bf16"]

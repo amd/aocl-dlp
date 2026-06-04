@@ -137,6 +137,19 @@ typedef struct
 } dlp_eltwise_algo_t;
 
 /**
+ * @enum DLP_PARAM_DIM_TYPE
+ * @brief Granularity at which a parameter varies: per-tensor, per-channel,
+ *        or per-token.
+ */
+typedef enum
+{
+    DLP_PARAM_DIM_INVALID     = 0, /**< Sentinel — unspecified / no parameter */
+    DLP_PARAM_DIM_PER_TENSOR  = 1, /**< Scalar / per-tensor (single value) */
+    DLP_PARAM_DIM_PER_CHANNEL = 2, /**< N values — one per output column */
+    DLP_PARAM_DIM_PER_TOKEN   = 3, /**< M values — one per output row */
+} DLP_PARAM_DIM_TYPE;
+
+/**
  * @brief Structure defining zero-point parameters for quantization.
  *
  * This structure contains zero-point information used in quantized operations.
@@ -158,25 +171,36 @@ typedef struct
 } dlp_zp_t;
 
 /**
+ * @struct dlp_sf_t
  * @brief Structure defining scale factor parameters for quantization.
  *
  * This structure contains scale factor information used in quantized
  * operations. Scale factor represents the scaling applied during
  * quantization/dequantization.
- */
-/**
- * @struct dlp_sf_t
- * @brief Scale factor parameters for quantization.
  *
- * Contains scale factor values, their length, and type for quantized
- * operations.
+ * scale_factor_dim contract:
+ *   SCALE                            : caller must set explicitly;
+ *                                      (dim, len) is validated.
+ *                                      PER_TENSOR/1, PER_CHANNEL/n, or
+ *                                      PER_TOKEN/m.
+ *   BIAS / ELTWISE / MATADD / MATMUL : ignored; dim is inferred from len
+ *                                      (1 -> PER_TENSOR, n -> PER_CHANNEL).
+ *                                      PER_TOKEN is SCALE-only.
  */
 typedef struct
 {
-    void* scale_factor;     /**< Pointer to scale factor values */
-    md_t  scale_factor_len; /**< Length of scale factor array (1 for per-tensor,
-                               n for per-channel) */
-    DLP_TYPE scale_factor_type; /**< Data type of scale factor values */
+    void* scale_factor;         /**< Pointer to scale_factor_len contiguous
+                                   elements of scale_factor_type. */
+    md_t scale_factor_len;      /**< Number of scale-factor elements. For
+                                   SCALE, must match scale_factor_dim
+                                   (1/n/m). For other ops, must be 1 or n. */
+    DLP_TYPE scale_factor_type; /**< Data type of scale factor values. */
+    DLP_PARAM_DIM_TYPE scale_factor_dim; /**< Granularity. Required for the
+                                            SCALE post-op only; ignored for
+                                            BIAS / ELTWISE / MATADD / MATMUL
+                                            (their dim is inferred from
+                                            scale_factor_len). See
+                                            ::DLP_PARAM_DIM_TYPE. */
 } dlp_sf_t;
 
 /**

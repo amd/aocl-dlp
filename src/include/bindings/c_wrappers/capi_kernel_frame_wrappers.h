@@ -80,6 +80,11 @@ typedef struct dlp_gemm_post_op_t
     uint64_t stor_type;
     uint64_t zp_stor_type;
     uint64_t sf_stor_type; // Introduced for sf store type
+    /* Granularity of scale_factor: per-tensor (scalar), per-channel (length N,
+     * per-output-column) or per-token (length M, per-output-row). Mirrors
+     * dlp_sf_t::scale_factor_dim from the user-facing metadata so the consumer
+     * does not have to re-derive it from a flag. */
+    DLP_PARAM_DIM_TYPE         scale_factor_dim;
     struct dlp_gemm_post_op_t* next;
 } dlp_gemm_post_op;
 

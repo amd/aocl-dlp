@@ -579,16 +579,16 @@ class KernelOpsBuilder
         bias.paramStorageDt = biasDt;
         bias.cMatFormat     = format;
 
+        bias.biasDim = ParamDim::PerN;
+
         if (withScaleFactor) {
-            bias.scaleFactorDt             = sfDt;
-            bias.scalarScaleFactorRequired = scalarSF;
-            bias.vectorScaleFactorRequired = !scalarSF;
+            bias.scaleFactorDt = sfDt;
+            bias.sfDim         = scalarSF ? ParamDim::Scalar : ParamDim::PerN;
         }
 
         if (withZeroPoint) {
-            bias.zeroPointDt             = zpDt;
-            bias.scalarZeroPointRequired = scalarZP;
-            bias.vectorZeroPointRequired = !scalarZP;
+            bias.zeroPointDt = zpDt;
+            bias.zpDim       = scalarZP ? ParamDim::Scalar : ParamDim::PerN;
         }
 
         ops.push_back(bias);
@@ -663,7 +663,7 @@ class KernelOpsBuilder
         return *this;
     }
 
-    // Add DOWNSCALE
+    // Add DOWNSCALE (bool convenience: scalarSF/scalarZP → Scalar vs PerN)
     KernelOpsBuilder& addDownscale(
         DataType      sfDt     = DataType::f32,
         DataType      zpDt     = DataType::s8,
@@ -671,15 +671,25 @@ class KernelOpsBuilder
         bool          scalarSF = true,
         bool          scalarZP = true)
     {
+        return addDownscale(sfDt, zpDt, format,
+                            scalarSF ? ParamDim::Scalar : ParamDim::PerN,
+                            scalarZP ? ParamDim::Scalar : ParamDim::PerN);
+    }
+
+    // Add DOWNSCALE with explicit ParamDim (supports PerM for per-token scale)
+    KernelOpsBuilder& addDownscale(DataType      sfDt,
+                                   DataType      zpDt,
+                                   storageFormat format,
+                                   ParamDim      sfDim,
+                                   ParamDim      zpDim)
+    {
         kernelOpsMetaData op;
-        op.type                      = kernelOps::downscale;
-        op.scaleFactorDt             = sfDt;
-        op.zeroPointDt               = zpDt;
-        op.cMatFormat                = format;
-        op.scalarScaleFactorRequired = scalarSF;
-        op.vectorScaleFactorRequired = !scalarSF;
-        op.scalarZeroPointRequired   = scalarZP;
-        op.vectorZeroPointRequired   = !scalarZP;
+        op.type          = kernelOps::downscale;
+        op.scaleFactorDt = sfDt;
+        op.zeroPointDt   = zpDt;
+        op.cMatFormat    = format;
+        op.sfDim         = sfDim;
+        op.zpDim         = zpDim;
         ops.push_back(op);
         return *this;
     }
@@ -691,12 +701,11 @@ class KernelOpsBuilder
                                 bool          scalarSF = true)
     {
         kernelOpsMetaData op;
-        op.type                      = kernelOps::matAdd;
-        op.paramStorageDt            = matDt;
-        op.scaleFactorDt             = sfDt;
-        op.cMatFormat                = format;
-        op.scalarScaleFactorRequired = scalarSF;
-        op.vectorScaleFactorRequired = !scalarSF;
+        op.type           = kernelOps::matAdd;
+        op.paramStorageDt = matDt;
+        op.scaleFactorDt  = sfDt;
+        op.cMatFormat     = format;
+        op.sfDim          = scalarSF ? ParamDim::Scalar : ParamDim::PerN;
         ops.push_back(op);
         return *this;
     }
@@ -708,12 +717,11 @@ class KernelOpsBuilder
                                 bool          scalarSF = true)
     {
         kernelOpsMetaData op;
-        op.type                      = kernelOps::matMul;
-        op.paramStorageDt            = matDt;
-        op.scaleFactorDt             = sfDt;
-        op.cMatFormat                = format;
-        op.scalarScaleFactorRequired = scalarSF;
-        op.vectorScaleFactorRequired = !scalarSF;
+        op.type           = kernelOps::matMul;
+        op.paramStorageDt = matDt;
+        op.scaleFactorDt  = sfDt;
+        op.cMatFormat     = format;
+        op.sfDim          = scalarSF ? ParamDim::Scalar : ParamDim::PerN;
         ops.push_back(op);
         return *this;
     }
@@ -727,14 +735,12 @@ class KernelOpsBuilder
         bool          scalarZP = true)
     {
         kernelOpsMetaData op;
-        op.type                      = kernelOps::aDQuantize;
-        op.scaleFactorDt             = sfDt;
-        op.zeroPointDt               = zpDt;
-        op.cMatFormat                = format;
-        op.scalarScaleFactorRequired = scalarSF;
-        op.vectorScaleFactorRequired = !scalarSF;
-        op.scalarZeroPointRequired   = scalarZP;
-        op.vectorZeroPointRequired   = !scalarZP;
+        op.type          = kernelOps::aDQuantize;
+        op.scaleFactorDt = sfDt;
+        op.zeroPointDt   = zpDt;
+        op.cMatFormat    = format;
+        op.sfDim         = scalarSF ? ParamDim::Scalar : ParamDim::PerM;
+        op.zpDim         = scalarZP ? ParamDim::Scalar : ParamDim::PerM;
         ops.push_back(op);
         return *this;
     }

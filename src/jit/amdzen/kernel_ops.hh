@@ -469,17 +469,24 @@ class Downscale : public kernelopsBase<Downscale<KType>, KType>
         PerRow
     };
 
-    LoadMode getLoadMode(bool                             isScalar,
+    LoadMode getLoadMode(dlp::kernel_frame::ParamDim      dim,
                          dlp::kernel_frame::storageFormat fmt) const;
 
-    dlp::jit::jitGeneratorError applyDownscale(int      effectiveMR,
-                                               bool     hasSF,
-                                               bool     hasZP,
-                                               LoadMode sfMode,
+    // C *= SF, dispatched on sfMode (Scalar / PerRow / PerCol). Independent
+    // of any zero-point handling so each mode is selected from the SF side
+    // alone — mirrors the ADQuantize split.
+    dlp::jit::jitGeneratorError applyScaleFactor(
+        int                         effectiveMR,
+        LoadMode                    sfMode,
+        dlp::kernel_frame::DataType sfDt,
+        const Xbyak::Reg64&         sfBase);
+
+    // C += ZP, dispatched on zpMode (Scalar / PerRow / PerCol). Independent
+    // of any scale-factor handling so each mode is selected from the ZP side
+    // alone — mirrors the ADQuantize split.
+    dlp::jit::jitGeneratorError applyZeroPoint(int      effectiveMR,
                                                LoadMode zpMode,
-                                               dlp::kernel_frame::DataType sfDt,
                                                dlp::kernel_frame::DataType zpDt,
-                                               const Xbyak::Reg64& sfBase,
                                                const Xbyak::Reg64& zpBase);
 
   public:

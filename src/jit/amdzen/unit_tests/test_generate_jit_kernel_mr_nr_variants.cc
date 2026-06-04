@@ -187,6 +187,44 @@ TEST_F(JitMrNrVariantsTest, F32F16_GEMM_MR_NR_Variants)
         });
 }
 
+// ============================================================================
+// S8 GEMM MR/NR Variant Tests — Per-token (PerM) DOWNSCALE
+//
+// Exercises the PerM SF code path in getLoadMode/applyScaleFactor for both
+// row-major and column-major C storage, ensuring JIT generation succeeds
+// across all valid MR/NR pairs.
+// ============================================================================
+
+TEST_F(JitMrNrVariantsTest, S8_GEMM_Downscale_PerToken_RowMajor)
+{
+    using namespace dlp::kernel_frame;
+    testGemmWithPostOp(
+        "S8", "DownscalePerTokenRowMajor", allKTypes_s8, DLP_S32,
+        [](KernelOpsBuilder& b) -> KernelOpsBuilder& {
+            return b.addDownscale(DataType::f32, DataType::s8,
+                                  storageFormat::rowMajor, ParamDim::PerM,
+                                  ParamDim::Scalar);
+        },
+        [this](generatorParams& p) {
+            return generateS8GemmKernel(p.kType, p);
+        });
+}
+
+TEST_F(JitMrNrVariantsTest, S8_GEMM_Downscale_PerToken_ColMajor)
+{
+    using namespace dlp::kernel_frame;
+    testGemmWithPostOp(
+        "S8", "DownscalePerTokenColMajor", allKTypes_s8, DLP_S32,
+        [](KernelOpsBuilder& b) -> KernelOpsBuilder& {
+            return b.addDownscale(DataType::f32, DataType::s8,
+                                  storageFormat::colMajor, ParamDim::PerM,
+                                  ParamDim::Scalar);
+        },
+        [this](generatorParams& p) {
+            return generateS8GemmKernel(p.kType, p);
+        });
+}
+
 int
 main(int argc, char** argv)
 {

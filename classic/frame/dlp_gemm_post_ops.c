@@ -39,6 +39,15 @@ dlp_gemm_post_op_list_has_jit_only_op(const dlp_gemm_post_op* post_op_list)
         if (node->op_code > DLP_CLASSIC_MAX_POST_OP_CODE) {
             has_jit_only = true;
         }
+        /* Per-token (PER_TOKEN, len == m) DOWNSCALE is implemented only by
+         * the JIT generator. The classic kernels' DOWNSCALE labels branch
+         * on scale_factor_len in {1, n} and would index past the SF buffer
+         * for a per-row vector. Force JIT routing to keep the classic path
+         * safe from per-token inputs. */
+        else if (node->op_code == POST_OPS_DOWNSCALE
+                 && node->scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) {
+            has_jit_only = true;
+        }
     }
     return has_jit_only;
 }
@@ -335,7 +344,8 @@ dlp_gemm_set_node_params(dlp_gemm_post_op*     post_op_node,
                          md_t                  bias_zp_len,
                          DLP_TYPE              stor_type,
                          DLP_TYPE              zp_stor_type,
-                         DLP_TYPE              sf_stor_type)
+                         DLP_TYPE              sf_stor_type,
+                         DLP_PARAM_DIM_TYPE    scale_factor_dim)
 {
     post_op_node->op_code          = op_code;
     post_op_node->op_args1         = op1;
@@ -348,6 +358,7 @@ dlp_gemm_set_node_params(dlp_gemm_post_op*     post_op_node,
     post_op_node->stor_type        = stor_type;
     post_op_node->zp_stor_type     = zp_stor_type;
     post_op_node->sf_stor_type     = sf_stor_type;
+    post_op_node->scale_factor_dim = scale_factor_dim;
     post_op_node->next             = NULL;
 }
 
@@ -429,7 +440,9 @@ dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
         (metadata->a_post_quant)->scl
             ? (metadata->a_post_quant)->scl->scale_factor_len
             : 0,
-        NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type);
+        NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type,
+        (metadata->a_post_quant)->scl ? DLP_PARAM_DIM_PER_TOKEN
+                                      : DLP_PARAM_DIM_INVALID);
 
     // --- Step 7: Link to seq_vector post-ops (filled at post_op_list+1) ---
     if (metadata->seq_length > 0) {
@@ -454,17 +467,17 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
     }
 
     if (metadata == NULL || (metadata->seq_length <= 0)) {
-        dlp_gemm_set_node_params(post_op_list, POST_OPS_DISABLE, NULL, NULL,
-                                 NULL, NULL, 0, NULL, 0, DLP_INVALID,
-                                 DLP_INVALID, DLP_INVALID);
+        dlp_gemm_set_node_params(
+            post_op_list, POST_OPS_DISABLE, NULL, NULL, NULL, NULL, 0, NULL, 0,
+            DLP_INVALID, DLP_INVALID, DLP_INVALID, DLP_PARAM_DIM_INVALID);
 
         return DLP_CLSC_SUCCESS;
     }
 
     if ((metadata->seq_length > AOCL_DLP_MAX_POST_OPS)) {
-        dlp_gemm_set_node_params(post_op_list, POST_OPS_DISABLE, NULL, NULL,
-                                 NULL, NULL, 0, NULL, 0, DLP_INVALID,
-                                 DLP_INVALID, DLP_INVALID);
+        dlp_gemm_set_node_params(
+            post_op_list, POST_OPS_DISABLE, NULL, NULL, NULL, NULL, 0, NULL, 0,
+            DLP_INVALID, DLP_INVALID, DLP_INVALID, DLP_PARAM_DIM_INVALID);
 
         dlp_print_msg(" Max supported post-ops is 8, supplied input post-ops"
                       " are more. Exiting..",
@@ -555,6 +568,18 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     default:
                         break;
                 }
+
+                /* ELTWISE supports only per-tensor (len == 1) or
+                 * per-channel (len == n) scale factors. */
+                if ((metadata->eltwise + e_i)->sf
+                    && ((metadata->eltwise + e_i)->sf->scale_factor_len != 1)
+                    && ((metadata->eltwise + e_i)->sf->scale_factor_len != n)) {
+                    dlp_print_msg(" ELTWISE scale_factor_len is != 1 and"
+                                  " != n. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+                }
+
                 dlp_gemm_set_node_params(
                     (post_op_list + i), tmp_code, NULL,
                     (metadata->eltwise + e_i)->algo.alpha,
@@ -565,7 +590,15 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     (metadata->eltwise + e_i)->sf
                         ? (metadata->eltwise + e_i)->sf->scale_factor_len
                         : 0,
-                    NULL, 0, tmp_stor_type, DLP_INVALID, DLP_INVALID);
+                    NULL, 0, tmp_stor_type, DLP_INVALID, DLP_INVALID,
+                    /* ELTWISE supports per-tensor or per-channel SF only;
+                     * len fully determines the dim. */
+                    (metadata->eltwise + e_i)->sf
+                        ? (((metadata->eltwise + e_i)->sf->scale_factor_len
+                            == 1)
+                               ? DLP_PARAM_DIM_PER_TENSOR
+                               : DLP_PARAM_DIM_PER_CHANNEL)
+                        : DLP_PARAM_DIM_INVALID);
                 e_i += 1;
             } break;
             case BIAS: {
@@ -613,6 +646,18 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     return DLP_CLSC_NULL_POINTER;
                 }
 
+                /* BIAS supports only per-tensor (len == 1) or per-channel
+                 * (len == n) scale factors; reject anything else early so
+                 * the kernel never sees a mid-sized vector and reads OOB. */
+                if ((metadata->bias + b_i)->sf
+                    && ((metadata->bias + b_i)->sf->scale_factor_len != 1)
+                    && ((metadata->bias + b_i)->sf->scale_factor_len != n)) {
+                    dlp_print_msg(
+                        " BIAS scale_factor_len is != 1 and != n. Exiting..",
+                        __FILE__, __LINE__);
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+                }
+
                 if (((metadata->bias + b_i)->zp
                      && (metadata->bias + b_i)->zp->zero_point_len > 0)
                     && ((metadata->bias + b_i)->zp->zero_point == NULL)) {
@@ -620,6 +665,16 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         " BIAS zero_point is NULL but length > 0. Exiting..",
                         __FILE__, __LINE__);
                     return DLP_CLSC_NULL_POINTER;
+                }
+
+                /* Same length contract for the BIAS dequant zero point. */
+                if ((metadata->bias + b_i)->zp
+                    && ((metadata->bias + b_i)->zp->zero_point_len != 1)
+                    && ((metadata->bias + b_i)->zp->zero_point_len != n)) {
+                    dlp_print_msg(
+                        " BIAS zero_point_len is != 1 and != n. Exiting..",
+                        __FILE__, __LINE__);
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
                 }
 
                 dlp_gemm_set_node_params(
@@ -640,7 +695,14 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     (metadata->bias + b_i)->zp
                         ? (metadata->bias + b_i)->zp->zero_point_len
                         : 0,
-                    tmp_stor_type, tmp_zp_stor_type, tmp_sf_stor_type);
+                    tmp_stor_type, tmp_zp_stor_type, tmp_sf_stor_type,
+                    /* BIAS supports per-tensor or per-channel SF only;
+                     * len fully determines the dim. */
+                    (metadata->bias + b_i)->sf
+                        ? (((metadata->bias + b_i)->sf->scale_factor_len == 1)
+                               ? DLP_PARAM_DIM_PER_TENSOR
+                               : DLP_PARAM_DIM_PER_CHANNEL)
+                        : DLP_PARAM_DIM_INVALID);
 
                 b_i += 1;
             } break;
@@ -666,13 +728,47 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         __FILE__, __LINE__);
                     return DLP_CLSC_NULL_POINTER;
                 }
-                if ((metadata->scale + s_i)->sf
-                    && ((metadata->scale + s_i)->sf->scale_factor_len != 1)
-                    && ((metadata->scale + s_i)->sf->scale_factor_len < n)) {
-                    dlp_print_msg(" Post_op.scale scale factor length is < n."
-                                  " Exiting..",
-                                  __FILE__, __LINE__);
-                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+                {
+                    /* Strict (dim, len) coherence for SCALE SF.
+                     *
+                     *   PER_TENSOR  <=> len == 1
+                     *   PER_TOKEN   <=> len == m   (per output row)
+                     *   PER_CHANNEL <=> len == n   (per output column)
+                     *
+                     * Any other dim value (incl. INVALID) is rejected so
+                     * the decision engine can map dim -> sfDim verbatim
+                     * without having to second-guess the caller. */
+                    const dlp_sf_t* sf = (metadata->scale + s_i)->sf;
+                    if (sf) {
+                        char* err = NULL;
+                        switch (sf->scale_factor_dim) {
+                            case DLP_PARAM_DIM_PER_TENSOR:
+                                if (sf->scale_factor_len != 1)
+                                    err = " Post_op.scale PER_TENSOR requires"
+                                          " scale_factor_len == 1. Exiting..";
+                                break;
+                            case DLP_PARAM_DIM_PER_TOKEN:
+                                if (sf->scale_factor_len != m)
+                                    err = " Post_op.scale PER_TOKEN requires"
+                                          " scale_factor_len == m. Exiting..";
+                                break;
+                            case DLP_PARAM_DIM_PER_CHANNEL:
+                                if (sf->scale_factor_len != n)
+                                    err = " Post_op.scale PER_CHANNEL requires"
+                                          " scale_factor_len == n. Exiting..";
+                                break;
+                            default:
+                                err = " Post_op.scale scale_factor_dim must be"
+                                      " PER_TENSOR / PER_TOKEN / PER_CHANNEL."
+                                      " Set sf->scale_factor_dim explicitly."
+                                      " Exiting..";
+                                break;
+                        }
+                        if (err) {
+                            dlp_print_msg(err, __FILE__, __LINE__);
+                            return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+                        }
+                    }
                 }
                 if ((metadata->scale + s_i)->zp
                     && ((metadata->scale + s_i)->zp->zero_point_len != 1)
@@ -699,6 +795,12 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                         ? &((metadata->scale + s_i)->zp->zero_point_len)
                         : &zero_zp_len;
 
+                /* SCALE is the only post-op that supports per-token scale
+                 * factors (in addition to per-tensor / per-channel), so we
+                 * propagate sf->scale_factor_dim verbatim from the caller
+                 * rather than inferring it from len. PerToken vs PerChannel
+                 * cannot be distinguished from len alone (both are vectors)
+                 * and is the user's choice. */
                 dlp_gemm_set_node_params(
                     (post_op_list + i), POST_OPS_DOWNSCALE,
                     (metadata->scale + s_i)->zp
@@ -711,7 +813,10 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     (metadata->scale + s_i)->sf
                         ? (metadata->scale + s_i)->sf->scale_factor_len
                         : 0,
-                    NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type);
+                    NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type,
+                    (metadata->scale + s_i)->sf
+                        ? (metadata->scale + s_i)->sf->scale_factor_dim
+                        : DLP_PARAM_DIM_INVALID);
 
                 s_i += 1;
             } break;
@@ -748,6 +853,18 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     return DLP_CLSC_NULL_POINTER;
                 }
 
+                /* MATRIX_ADD supports only per-tensor (len == 1) or
+                 * per-channel (len == n) scale factors. */
+                if ((metadata->matrix_add + m_i)->sf
+                    && ((metadata->matrix_add + m_i)->sf->scale_factor_len != 1)
+                    && ((metadata->matrix_add + m_i)->sf->scale_factor_len
+                        != n)) {
+                    dlp_print_msg(" MATRIX_ADD scale_factor_len is != 1 and"
+                                  " != n. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+                }
+
                 dlp_gemm_set_node_params(
                     (post_op_list + i), POST_OPS_MATRIX_ADD,
                     (metadata->matrix_add + m_i)->matrix, meta_arg,
@@ -758,7 +875,15 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     (metadata->matrix_add + m_i)->sf
                         ? (metadata->matrix_add + m_i)->sf->scale_factor_len
                         : 0,
-                    NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type);
+                    NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type,
+                    /* MATRIX_ADD supports per-tensor or per-channel SF only;
+                     * len fully determines the dim. */
+                    (metadata->matrix_add + m_i)->sf
+                        ? (((metadata->matrix_add + m_i)->sf->scale_factor_len
+                            == 1)
+                               ? DLP_PARAM_DIM_PER_TENSOR
+                               : DLP_PARAM_DIM_PER_CHANNEL)
+                        : DLP_PARAM_DIM_INVALID);
 
                 m_i += 1;
             } break;
@@ -796,6 +921,19 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     return DLP_CLSC_NULL_POINTER;
                 }
 
+                /* MATRIX_MUL supports only per-tensor (len == 1) or
+                 * per-channel (len == n) scale factors. */
+                if ((metadata->matrix_mul + mul_i)->sf
+                    && ((metadata->matrix_mul + mul_i)->sf->scale_factor_len
+                        != 1)
+                    && ((metadata->matrix_mul + mul_i)->sf->scale_factor_len
+                        != n)) {
+                    dlp_print_msg(" MATRIX_MUL scale_factor_len is != 1 and"
+                                  " != n. Exiting..",
+                                  __FILE__, __LINE__);
+                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+                }
+
                 dlp_gemm_set_node_params(
                     (post_op_list + i), POST_OPS_MATRIX_MUL,
                     (metadata->matrix_mul + mul_i)->matrix, meta_arg,
@@ -806,7 +944,15 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     (metadata->matrix_mul + mul_i)->sf
                         ? (metadata->matrix_mul + mul_i)->sf->scale_factor_len
                         : 0,
-                    NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type);
+                    NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type,
+                    /* MATRIX_MUL supports per-tensor or per-channel SF only;
+                     * len fully determines the dim. */
+                    (metadata->matrix_mul + mul_i)->sf
+                        ? (((metadata->matrix_mul + mul_i)->sf->scale_factor_len
+                            == 1)
+                               ? DLP_PARAM_DIM_PER_TENSOR
+                               : DLP_PARAM_DIM_PER_CHANNEL)
+                        : DLP_PARAM_DIM_INVALID);
 
                 mul_i += 1;
             } break;

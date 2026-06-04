@@ -176,11 +176,17 @@ class ScaleParam : public IOperationParam
   private:
     std::unique_ptr<Matrix> m_scaleFactor;
     std::unique_ptr<Matrix> m_zeroPoint;
+    // PerTensor default — only safe for a 1x1 SF. Vector SFs must call
+    // ScaleBuilder::setScaleFactorDim() explicitly; (dim, SF shape)
+    // coherence is enforced once at the DLP adaptor boundary
+    // (DlpUalPlan::convertScaleOperations).
+    ParamDim m_sfDim{ ParamDim::PerTensor };
 
   public:
     ScaleParam() = default;
 
     ScaleParam(const ScaleParam& other)
+        : m_sfDim(other.m_sfDim)
     {
         if (other.m_scaleFactor) {
             m_scaleFactor = std::make_unique<Matrix>(*other.m_scaleFactor);
@@ -202,12 +208,15 @@ class ScaleParam : public IOperationParam
         m_scaleFactor = std::make_unique<Matrix>(scale);
     }
 
+    void setScaleFactorDim(ParamDim dim) { m_sfDim = dim; }
+
     void setZeroPoint(const Matrix& zp)
     {
         m_zeroPoint = std::make_unique<Matrix>(zp);
     }
 
     const Matrix* getScaleFactor() const { return m_scaleFactor.get(); }
+    ParamDim      getScaleFactorDim() const { return m_sfDim; }
     const Matrix* getZeroPoint() const { return m_zeroPoint.get(); }
     bool          hasScaleFactor() const { return m_scaleFactor != nullptr; }
     bool          hasZeroPoint() const { return m_zeroPoint != nullptr; }
@@ -853,11 +862,30 @@ class ScaleBuilder
   private:
     std::unique_ptr<Matrix> m_scaleFactor;
     std::unique_ptr<Matrix> m_zeroPoint;
+    // SF granularity. Always supplied by the caller via
+    // setScaleFactorDim() — never inferred from the matrix shape, since
+    // PerToken (Mx1) and PerChannel (1xN) collide when M == N. Required
+    // shapes per dim:
+    //   PerTensor -> 1x1, PerChannel -> 1xN, PerToken -> Mx1
+    //
+    // The default below is only meaningful for the scalar (1x1) case;
+    // a vector SF that omits setScaleFactorDim() would have len = 1 in
+    // the DLP metadata and silently drop all but the first element.
+    // That mismatch is caught at the adaptor boundary
+    // (DlpUalPlan::convertScaleOperations), which is the single point
+    // where (dim, SF shape) coherence is enforced for the test path.
+    ParamDim m_sfDim{ ParamDim::PerTensor };
 
   public:
     ScaleBuilder& setScaleFactor(const Matrix& scale)
     {
         m_scaleFactor = std::make_unique<Matrix>(scale);
+        return *this;
+    }
+
+    ScaleBuilder& setScaleFactorDim(ParamDim dim)
+    {
+        m_sfDim = dim;
         return *this;
     }
 
@@ -875,6 +903,7 @@ class ScaleBuilder
         }
         auto param = std::make_unique<ScaleParam>();
         param->setScaleFactor(*m_scaleFactor);
+        param->setScaleFactorDim(m_sfDim);
         if (m_zeroPoint) {
             param->setZeroPoint(*m_zeroPoint);
         }

@@ -341,6 +341,7 @@ main()
     *((float*)metadata->scale->sf->scale_factor) = 1.0f / c_scale;
     metadata->scale->sf->scale_factor_len        = 1;
     metadata->scale->sf->scale_factor_type       = DLP_F32;
+    metadata->scale->sf->scale_factor_dim        = DLP_PARAM_DIM_PER_TENSOR;
 
     // Allocate and set up zero point structure
     metadata->scale->zp = calloc(1, sizeof(dlp_zp_t));

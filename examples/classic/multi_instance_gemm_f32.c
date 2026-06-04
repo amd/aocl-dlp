@@ -238,7 +238,7 @@ initSingleBiasPostOp(dlp_metadata_t* mData, md_t m, md_t n, int index)
 
     // Bias scale factor.
     (mData->bias[index]).sf = NULL;
-    (mData->bias[index]).sf = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
+    (mData->bias[index]).sf = (dlp_sf_t*)calloc(1, sizeof(dlp_sf_t));
     if (!(mData->bias[index]).sf) {
         return false;
     }
@@ -288,7 +288,7 @@ initSingleGeluTanhPostOp(dlp_metadata_t* mData, md_t m, md_t n, int index)
 
     // Eltwise scale factor.
     (mData->eltwise[index]).sf = NULL;
-    (mData->eltwise[index]).sf = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
+    (mData->eltwise[index]).sf = (dlp_sf_t*)calloc(1, sizeof(dlp_sf_t));
     if (!(mData->eltwise[index]).sf) {
         return false;
     }
@@ -347,7 +347,7 @@ initSingleMatAddPostOp(dlp_metadata_t* mData, md_t m, md_t n, int index)
 
     // Matrix scale factor.
     (mData->matrix_add[index]).sf = NULL;
-    (mData->matrix_add[index]).sf = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
+    (mData->matrix_add[index]).sf = (dlp_sf_t*)calloc(1, sizeof(dlp_sf_t));
     if (!(mData->matrix_add[index]).sf) {
         return false;
     }

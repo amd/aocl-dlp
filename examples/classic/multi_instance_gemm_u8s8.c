@@ -141,7 +141,7 @@ init_bias_post_op(dlp_metadata_t* md, md_t n)
     md->bias[0].stor_type = DLP_S32; // raw bias type matches accumulator
     md->bias[0].bias_len  = n;
     md->bias[0].zp        = NULL;
-    md->bias[0].sf        = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
+    md->bias[0].sf        = (dlp_sf_t*)calloc(1, sizeof(dlp_sf_t));
     if (!md->bias[0].sf)
         return false;
     md->bias[0].sf->scale_factor = malloc(n * sizeof(float));
@@ -163,7 +163,7 @@ init_gelu_post_op(dlp_metadata_t* md, md_t n)
     md->eltwise[0].algo.algo_type = GELU_TANH;
     md->eltwise[0].algo.alpha     = NULL;
     md->eltwise[0].algo.beta      = NULL;
-    md->eltwise[0].sf             = (dlp_sf_t*)malloc(sizeof(dlp_sf_t));
+    md->eltwise[0].sf             = (dlp_sf_t*)calloc(1, sizeof(dlp_sf_t));
     if (!md->eltwise[0].sf)
         return false;
     md->eltwise[0].sf->scale_factor = malloc(n * sizeof(float));
