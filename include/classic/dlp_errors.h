@@ -52,9 +52,11 @@ typedef enum
                                          */
     DLP_CLSC_INVALID_MATRIX_TYPE,       /**< Invalid matrix type specified */
     DLP_CLSC_INVALID_GROUP_DIMENSION, /**< Invalid group dimension specified */
-    DLP_CLSC_TYPE_MISMATCH,           /**< Data type mismatch encountered */
-    DLP_CLSC_INVALID_JIT_KERNEL,      /**< JIT kernel generation failed or no
-                                         fallback kernel available */
+    DLP_CLSC_INVALID_SF_LEN,     /**< Invalid scale factor length specified */
+    DLP_CLSC_INVALID_ZP_LEN,     /**< Invalid zero point length specified */
+    DLP_CLSC_TYPE_MISMATCH,      /**< Data type mismatch encountered */
+    DLP_CLSC_INVALID_JIT_KERNEL, /**< JIT kernel generation failed or no
+                                    fallback kernel available */
     DLP_CLSC_INVALID_KERNEL, /**< Static kernel not found for given parameters
                               */
     DLP_CLSC_ERROR_MAX /**< Maximum error code value (for bounds checking) */

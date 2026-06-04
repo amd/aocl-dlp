@@ -243,7 +243,8 @@ UalRef::reorder(const Matrix& in,
                 MatrixType    A_type,
                 MatrixType    B_type,
                 MatrixType    C_type,
-                MatrixType    accType)
+                MatrixType    accType,
+                const GroupScaleParam* /*group_scale*/)
 {
     /*
         Reordering operation in reference is

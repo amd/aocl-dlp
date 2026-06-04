@@ -266,7 +266,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         } // jc loop
 
         // Release pack buffers.
-        if (mtag_b == PACK && (pack_a_buffer_s8s8s32os32 != NULL)) {
+        if ((mtag_a == PACK) && (pack_a_buffer_s8s8s32os32 != NULL)) {
             dlp_free_page_aligned(pack_a_buffer_s8s8s32os32);
         }
     }

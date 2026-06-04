@@ -261,8 +261,12 @@ RefUalPlan::execute()
          || (aType == MatrixType::s8 && bType == MatrixType::s8));
     bool isBf16Gemm = (aType == MatrixType::bf16 && bType == MatrixType::bf16);
     bool isF32Gemm  = (aType == MatrixType::f32 && bType == MatrixType::f32);
-    bool needsF32Intermediate =
-        (isIntegerGemm || isBf16Gemm || isF32Gemm) && hasPostOps;
+
+    bool isS8S8GroupScale =
+        (aType == MatrixType::s8 && bType == MatrixType::s8 && m_group_scale);
+
+    bool needsF32Intermediate = (isIntegerGemm || isBf16Gemm || isF32Gemm)
+                                && hasPostOps && !isS8S8GroupScale;
 
     if (needsF32Intermediate && !ualRef.checkValidGemmParams(A, B, C, true)) {
         needsF32Intermediate = false;
@@ -301,9 +305,6 @@ RefUalPlan::execute()
     // Uses specialized ref that handles per-group scale application during
     // K-panel accumulation, which is required for correct results when
     // group_size > 0.
-    bool isS8S8GroupScale =
-        (aType == MatrixType::s8 && bType == MatrixType::s8 && m_group_scale);
-
     if (isS8S8GroupScale) {
         md_t gs = m_group_scale->getGroupSize();
 

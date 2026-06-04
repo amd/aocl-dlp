@@ -34,6 +34,7 @@
 namespace dlp::testing::classic {
 
 using dlp::testing::framework::BatchGroup;
+using dlp::testing::framework::GroupScaleParam;
 using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
 using dlp::testing::framework::MatrixLayout;
@@ -112,14 +113,17 @@ class UalDlp : public IUal
      * @param B_type Type of matrix B in GEMM context
      * @param C_type Type of matrix C in GEMM context
      * @param accType Accumulation type
+     * @param group_scale Optional symmetric-quantization group-scale
+     * parameters; when non-null selects the sym_quant reorder path
      * @return UALError Error code indicating success or failure
      */
-    UALError reorder(const Matrix& in,
-                     Matrix&       out,
-                     MatrixType    A_type,
-                     MatrixType    B_type,
-                     MatrixType    C_type,
-                     MatrixType    accType) override;
+    UALError reorder(const Matrix&          in,
+                     Matrix&                out,
+                     MatrixType             A_type,
+                     MatrixType             B_type,
+                     MatrixType             C_type,
+                     MatrixType             accType,
+                     const GroupScaleParam* group_scale = nullptr) override;
 
     UALError batch_gemm(std::vector<BatchGroup>& groups,
                         MatrixType               accType) override;

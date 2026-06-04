@@ -150,8 +150,8 @@ class OptimizedGemmBenchmark : public ConcreteUAL
         // Apply memory tag for B (reorder and pack are mutually exclusive)
         if (config.reorderB) {
             Matrix B_reordered;
-            this->reorder(B_, B_reordered, a_type_, b_type_, c_type_,
-                          acc_type_);
+            this->reorder(B_, B_reordered, a_type_, b_type_, c_type_, acc_type_,
+                          config.group_scale_param.get());
             B_ = std::move(B_reordered);
             // Reorder handles transposition; reset trans flag for GEMM call
             transB_ = false;

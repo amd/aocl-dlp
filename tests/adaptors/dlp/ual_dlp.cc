@@ -116,12 +116,13 @@ UalDlp::toString(UALType type)
  * @return UALError Error code indicating success or failure
  */
 UALError
-UalDlp::reorder(const Matrix& in,
-                Matrix&       out,
-                MatrixType    A_type,
-                MatrixType    B_type,
-                MatrixType    C_type,
-                MatrixType    accType)
+UalDlp::reorder(const Matrix&          in,
+                Matrix&                out,
+                MatrixType             A_type,
+                MatrixType             B_type,
+                MatrixType             C_type,
+                MatrixType             accType,
+                const GroupScaleParam* group_scale)
 {
     dlp_metadata_t meta;
     meta.error_hndl.error_code = DLP_CLSC_SUCCESS;
@@ -129,6 +130,13 @@ UalDlp::reorder(const Matrix& in,
     // Use effective (logical) dimensions for reordering
     md_t effective_rows = in.getEffectiveRows();
     md_t effective_cols = in.getEffectiveCols();
+
+    // Detect symmetric-quantization reorder path:
+    // s8 input, s32 accumulation, f32 or bf16 output, and group_scale provided.
+    const bool sym_quant =
+        (group_scale != nullptr) && (in.getMatrixType() == MatrixType::s8)
+        && (accType == MatrixType::s32)
+        && (C_type == MatrixType::f32 || C_type == MatrixType::bf16);
 
     // Determine appropriate reorder function based on input type and GEMM
     // context The A, B, C types provide context for optimal reordering strategy
@@ -166,14 +174,20 @@ UalDlp::reorder(const Matrix& in,
                 effective_cols, &meta);
         }
     } else if (in.getMatrixType() == MatrixType::s8) {
-        // For s8, consider the accumulation type and output type
-        if (accType == MatrixType::s32) {
-            alloc_bytes = aocl_get_reorder_buf_size_s8s8s32os32(
+        // For s8, select sym_quant or standard reorder based on GEMM context
+        if (sym_quant) {
+            // group_size=0 means "full K dimension"; normalize before calling
+            // the AOCL sym_quant APIs which require a strictly positive value.
+            md_t gs = group_scale->getGroupSize();
+            if (gs == 0) {
+                gs = effective_rows; // effective_rows == K for B matrix
+            }
+            DLP_SYMM_STAT_QUANT symq = { gs };
+            alloc_bytes = aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, &meta);
+                effective_cols, &symq, &meta);
         } else {
-            // Handle other accumulation types - for now, fall back to standard
             alloc_bytes = aocl_get_reorder_buf_size_s8s8s32os32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
@@ -274,13 +288,31 @@ UalDlp::reorder(const Matrix& in,
                 &meta);
             break;
         case MatrixType::s8:
-            aocl_reorder_s8s8s32os32(
-                layout, in.isTransposed() ? 't' : 'n', 'B',
-                reinterpret_cast<const int8_t*>(
-                    in.getMatrixData().getMatrixPtr()),
-                reinterpret_cast<int8_t*>(out.getMatrixData().getMatrixPtr()),
-                effective_rows, effective_cols, in.getLeadingDimension(),
-                &meta);
+            if (sym_quant) {
+                // group_size=0 means "full K"; normalize to avoid div-by-zero.
+                md_t gs = group_scale->getGroupSize();
+                if (gs == 0) {
+                    gs = effective_rows;
+                }
+                DLP_SYMM_STAT_QUANT symq = { gs };
+                aocl_reorder_s8s8s32os32_sym_quant(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const int8_t*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<int8_t*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    &symq, &meta);
+            } else {
+                aocl_reorder_s8s8s32os32(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const int8_t*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<int8_t*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    &meta);
+            }
             break;
         case MatrixType::fp16:
             if (A_type == MatrixType::f32 && C_type == MatrixType::f32

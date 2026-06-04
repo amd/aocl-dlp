@@ -1092,7 +1092,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             dlp_reorder_status = ual_test_->reorder(
                 B, B_reordered, config_.a_type, config_.b_type, config_.c_type,
-                config_.acc_type);
+                config_.acc_type, config_.group_scale_param.get());
 
             // Skip test if DLP reorder is not supported
             if (dlp_reorder_status == UALError::UAL_NOT_SUPPORTED) {
@@ -1112,7 +1112,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             if (params_valid) {
                 ref_reorder_status = ual_ref_->reorder(
                     B_ref, B_ref_reordered, config_.a_type, config_.b_type,
-                    config_.c_type, config_.acc_type);
+                    config_.c_type, config_.acc_type,
+                    config_.group_scale_param.get());
 
                 if (ref_reorder_status == UALError::UAL_SUCCESS) {
                     // For bf16×s4 and bf16×u4, the reference uses row-major B

@@ -137,8 +137,6 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
                                          md_t                    n,
                                          md_t                    k)
 {
-    (void)m;
-    (void)n;
     if ((metadata == NULL) || (metadata->seq_length <= 0)) {
         dlp_gemm_set_group_post_ops_node_params(post_op_list, 0, NULL, NULL, 0,
                                                 0, NULL, NULL, 0, 0,
@@ -166,12 +164,20 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
             if (((metadata->a_zp)->zero_point_len > 0)
                 && ((metadata->a_zp)->zero_point == NULL))
                 return DLP_CLSC_NULL_POINTER;
+
+            if ((metadata->a_zp)->zero_point_len
+                < (m * ((k + group_size - 1) / group_size)))
+                return DLP_CLSC_INVALID_ZP_LEN;
         }
 
         if (metadata->a_scl != NULL) {
             if (((metadata->a_scl)->scale_factor_len > 0)
                 && ((metadata->a_scl)->scale_factor == NULL))
                 return DLP_CLSC_NULL_POINTER;
+
+            if ((metadata->a_scl)->scale_factor_len
+                < (m * ((k + group_size - 1) / group_size)))
+                return DLP_CLSC_INVALID_SF_LEN;
         }
 
         if (metadata->b_zp != NULL) {
@@ -179,12 +185,20 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
             if (((metadata->b_zp)->zero_point_len > 0)
                 && ((metadata->b_zp)->zero_point == NULL))
                 return DLP_CLSC_NULL_POINTER;
+
+            if ((metadata->b_zp)->zero_point_len
+                < (n * ((k + group_size - 1) / group_size)))
+                return DLP_CLSC_INVALID_ZP_LEN;
         }
 
         if (metadata->b_scl != NULL) {
             if (((metadata->b_scl)->scale_factor_len > 0)
                 && ((metadata->b_scl)->scale_factor == NULL))
                 return DLP_CLSC_NULL_POINTER;
+
+            if ((metadata->b_scl)->scale_factor_len
+                < (n * ((k + group_size - 1) / group_size)))
+                return DLP_CLSC_INVALID_SF_LEN;
         }
 
         if ((metadata->a_scl != NULL) && (metadata->b_scl != NULL)
