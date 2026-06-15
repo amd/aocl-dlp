@@ -428,11 +428,12 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
 
-        params.MR      = MR;
-        params.mloop   = true;
-        params.kloop   = true;
-        params.mfringe = false;
-        params.kfringe = true;
+        params.MR           = MR;
+        params.mloop        = true;
+        params.kloop        = true;
+        params.mfringe      = false;
+        params.kfringe      = true;
+        params.aliasMrSplit = (jI.kI).aliasMrSplit;
 
         for (iter_t m_left = 0; m_left < MR; m_left++) {
             params.M_LEFT  = m_left;
@@ -1392,11 +1393,12 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
         }
 
-        params.MR      = MR;
-        params.mloop   = true;
-        params.kloop   = true;
-        params.mfringe = false;
-        params.kfringe = true;
+        params.MR           = MR;
+        params.mloop        = true;
+        params.kloop        = true;
+        params.mfringe      = false;
+        params.kfringe      = true;
+        params.aliasMrSplit = (jI.kI).aliasMrSplit;
 
         for (iter_t m_left = 0; m_left < MR; m_left++) {
             params.M_LEFT  = m_left;

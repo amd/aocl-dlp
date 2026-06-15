@@ -28,9 +28,11 @@
 
 #pragma once
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
+#include "alias_detection_utils.hh"
 #include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "classic/dlp_macros.h"
 #include "de_backend_utils.hh"
@@ -149,7 +151,7 @@ class gemmF32DEBackend : public iDEBackend
         md_t                              m,
         md_t                              n,
         md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
+        md_t                              rs_a,
         [[maybe_unused]] md_t             cs_a,
         [[maybe_unused]] md_t             rs_b,
         [[maybe_unused]] md_t             cs_b,
@@ -260,10 +262,30 @@ class gemmF32DEBackend : public iDEBackend
             return INVALID_KERNEL_INFO;
         }
 
+        // L1-cache aliasing mitigation for GEMV N=1 (MR=16 on Zen4/5).
+        // When rsA (in bytes) is within +-ALIAS_GUARD_BYTES (16 B) of a
+        // multiple of the L1D way size (4096 B), the kernel's MR rows
+        // map to the same L1 set on each k-iteration and trigger
+        // conflict misses. The GEMV N=1 generator consumes this flag
+        // at codegen time and emits a two-pass MR/2 k-loop body (no
+        // runtime check).
+        //
+        // Only applies to unpacked A: a packed/reordered A is laid out
+        // in a packed panel format whose row stride no longer matches
+        // the user-visible `rs_a`, so the predicate would spuriously
+        // fire on `rs_a == 1` (1*sizeof(float) = 4 B < 16 B guard) and
+        // force the slow two-pass kernel even though packed-A is not
+        // alias-vulnerable.
+        const bool aliasMrSplit =
+            (n == 1 && mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED)
+                ? alias_detection::shouldUseMrSplit(rs_a, sizeof(float), mr)
+                : false;
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
-            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata,
+            /*skinnyN=*/false, aliasMrSplit);
     }
 
     DLP_ALWAYS_INLINE
@@ -272,7 +294,7 @@ class gemmF32DEBackend : public iDEBackend
         md_t                              m,
         md_t                              n,
         md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
+        md_t                              rs_a,
         [[maybe_unused]] md_t             cs_a,
         [[maybe_unused]] md_t             rs_b,
         md_t                              cs_b,
@@ -420,6 +442,20 @@ class gemmF32DEBackend : public iDEBackend
             skinnyN = true;
         }
 
+        // L1-cache aliasing mitigation for the skinny-N GEMM bump.
+        // When skinnyN raises MR to 16 (or to m, if m>=8) and the user
+        // calls with an unpacked A whose row stride in bytes lands
+        // within +-ALIAS_GUARD_BYTES (16 B) of a multiple of the L1D
+        // way size (4096 B), every k-iteration suffers L1 conflict
+        // misses, costing ~40% throughput. Cap MR at the alias-safe
+        // associativity bound (8) so each k-iter's MR rows fit within
+        // L1D associativity on every Zen variant. Skipped entirely
+        // when A is packed (rsA = 1, no aliasing).
+        if (skinnyN && mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED
+            && alias_detection::shouldUseMrSplit(rs_a, sizeof(float), mr)) {
+            mr = std::min<md_t>(mr, alias_detection::getAliasSafeMrCap());
+        }
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, allLtFringeKernels, invokeRD,
@@ -551,10 +587,21 @@ class gemmBF16DEBackend : public iDEBackend
             kc       = 4096;
         }
 
+        // L1-cache aliasing mitigation for BF16 GEMV N=1 (MR=16).
+        // Same condition as F32; rsA in BF16 elements -> bytes via
+        // sizeof(uint16_t). See alias_detection_utils.hh. Restricted
+        // to unpacked A so packed/reordered tags with rs_a==1 don't
+        // spuriously trigger the two-pass kernel.
+        const bool aliasMrSplit =
+            (n == 1 && mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED)
+                ? alias_detection::shouldUseMrSplit(rs_a, sizeof(uint16_t), mr)
+                : false;
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
-            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata,
+            /*skinnyN=*/false, aliasMrSplit);
     }
 
     DLP_ALWAYS_INLINE
@@ -632,6 +679,15 @@ class gemmBF16DEBackend : public iDEBackend
         if (n <= 16 && m > 0) {
             mr      = (m < 16) ? m : 16;
             skinnyN = true;
+        }
+
+        // L1-cache aliasing mitigation for the BF16 skinny-N GEMM bump.
+        // Same vulnerability as F32 skinnyN: MR=16 + unpacked A with
+        // rsA near a multiple of 4096B -> L1 conflict misses, ~40%
+        // slowdown. Cap MR to the alias-safe associativity bound.
+        if (skinnyN && mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED
+            && alias_detection::shouldUseMrSplit(rs_a, sizeof(uint16_t), mr)) {
+            mr = std::min<md_t>(mr, alias_detection::getAliasSafeMrCap());
         }
 
         md_t k_unroll        = 1;

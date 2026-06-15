@@ -310,6 +310,17 @@ struct kernelInfo
     // slots can be skipped during generation.
     bool skinnyN;
 
+    // True when the DE has detected an L1-cache aliasing case for this
+    // shape (row stride of A in bytes within +-ALIAS_GUARD_BYTES (16 B)
+    // of a multiple of the L1D way size 4096 B, with MR exceeding the
+    // L1D set associativity for the configured arch). See
+    // decision_engine/alias_detection_utils.hh for the predicate. For
+    // GEMV N=1 generators (F32, BF16), this signals the kernel to emit
+    // a two-pass MR/2 k-loop body instead of the single-pass MR body,
+    // eliminating L1 conflict misses without any runtime stride check
+    // in the emitted kernel.
+    bool aliasMrSplit;
+
     // Empty constructor to create dummy kernelInfo.
     kernelInfo()
         : mr(0)
@@ -329,6 +340,7 @@ struct kernelInfo
         , kInstPref(kernel_frame::kernelInstrPreference::none)
         , c_downscale(0)
         , skinnyN(false)
+        , aliasMrSplit(false)
     {
     }
 
@@ -349,7 +361,8 @@ struct kernelInfo
                bool                               anyKOpsOrder,
                kernelInstrPreference              instPref,
                md_t                               c_downscale,
-               bool                               _skinnyN = false)
+               bool                               _skinnyN      = false,
+               bool                               _aliasMrSplit = false)
         : mr(mr)
         , nr(nr)
         , term_fringe_nr(_term_fringe_nr)
@@ -371,6 +384,7 @@ struct kernelInfo
         , kInstPref(instPref)
         , c_downscale(c_downscale)
         , skinnyN(_skinnyN)
+        , aliasMrSplit(_aliasMrSplit)
     {
     }
 
@@ -395,6 +409,7 @@ struct kernelInfo
         , kInstPref(other.kInstPref)
         , c_downscale(other.c_downscale)
         , skinnyN(other.skinnyN)
+        , aliasMrSplit(other.aliasMrSplit)
     {
         if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
             this->kOpsArr =
@@ -429,6 +444,7 @@ struct kernelInfo
         , kInstPref(other->kInstPref)
         , c_downscale(other->c_downscale)
         , skinnyN(other->skinnyN)
+        , aliasMrSplit(other->aliasMrSplit)
     {
         if ((other->kOpsArr != nullptr) && (other->kOpsArrSize > 0)) {
             other->kOpsArr     = nullptr;
@@ -459,6 +475,7 @@ struct kernelInfo
         , kInstPref(other.kInstPref)
         , c_downscale(other.c_downscale)
         , skinnyN(other.skinnyN)
+        , aliasMrSplit(other.aliasMrSplit)
     {
         if ((other.kOpsArr != nullptr) && (other.kOpsArrSize > 0)) {
             other.kOpsArr     = nullptr;
@@ -497,6 +514,7 @@ struct kernelInfo
             this->kInstPref    = other.kInstPref;
             this->c_downscale  = other.c_downscale;
             this->skinnyN      = other.skinnyN;
+            this->aliasMrSplit = other.aliasMrSplit;
         }
         return *this;
     }
@@ -530,6 +548,7 @@ struct kernelInfo
             this->kInstPref    = other.kInstPref;
             this->c_downscale  = other.c_downscale;
             this->skinnyN      = other.skinnyN;
+            this->aliasMrSplit = other.aliasMrSplit;
         }
         return *this;
     }
@@ -566,7 +585,8 @@ struct kernelInfo
                 && (this->anyKOpsOrder == rhs.anyKOpsOrder)
                 && (this->kInstPref == rhs.kInstPref)
                 && (this->c_downscale == rhs.c_downscale)
-                && (this->skinnyN == rhs.skinnyN));
+                && (this->skinnyN == rhs.skinnyN)
+                && (this->aliasMrSplit == rhs.aliasMrSplit));
     }
 
     // TODO: Need to implement a subset function for kernelInfo

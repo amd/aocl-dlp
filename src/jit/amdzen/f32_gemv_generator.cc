@@ -29,6 +29,7 @@
 #include <functional>
 #include <memory>
 
+#include "alias_mitigation_utils.hh"
 #include "f32_gemv_generator.hh"
 #include "jit_register/jit_register.hh"
 
@@ -1409,29 +1410,113 @@ jitF32GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 
             // Set the for-loop sequence for k-dimension
             if (params.kloop) {
-                mov(regKIter,
-                    ptr[stackPtr
-                        + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
-                test(regKIter, regKIter);
-                jz(label_m_loop_k_loop_end, T_NEAR);
-                L(label_m_loop_k_loop_start);
+                // L1-cache aliasing mitigation: when the DE has flagged
+                // this shape as alias-prone (rsA near a multiple of the
+                // L1D way size and MR > L1D associativity), emit a
+                // two-pass MR/2 k-loop body so each pass stays within
+                // the L1D associativity budget. Otherwise emit the
+                // standard single-pass MR body. The decision is made
+                // at codegen time from `params.aliasMrSplit` -- no
+                // runtime stride check is emitted in the kernel.
+                if (!params.aliasMrSplit) {
+                    // --- Single-pass MR body (non-aliasing strides) ---
+                    mov(regKIter,
+                        ptr[stackPtr
+                            + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
+                    test(regKIter, regKIter);
+                    jz(label_m_loop_k_loop_end, T_NEAR);
+                    L(label_m_loop_k_loop_start);
 
-                // Load the X vector
-                RETURN_IF_ERROR((loadXValues()));
+                    RETURN_IF_ERROR((loadXValues()));
+                    RETURN_IF_ERROR((processMRBlock(MR)));
 
-                // Process all rows including fringe
-                RETURN_IF_ERROR((processMRBlock(MR)));
+                    mov(regTmp1, simdWidth);
+                    imul(regTmp1, regCsA);
+                    add(regTmpYptr, regTmp1);
+                    mov(regTmpAptr, regTmpYptr);
+                    add(regXptr, RegBytes);
 
-                // Save current A pointer and update pointers for next k
-                // iteration
-                mov(regTmp1, simdWidth);
-                imul(regTmp1, regCsA);
-                add(regTmpYptr, regTmp1);
-                mov(regTmpAptr, regTmpYptr);
-                add(regXptr, RegBytes); // Since B will be unit-strided
+                    sub(regKIter, 1);
+                    jnz(label_m_loop_k_loop_start, T_NEAR);
+                } else {
+                    // --- Two-pass MR/2 body (alias-prone strides) ---
+                    // Pass 1: rows 0..MR/2-1
+                    {
+                        Xbyak::Label lp1_start, lp1_end;
+                        mov(regKIter, ptr[stackPtr
+                                          + offsetof(dlp::kernels::gemvN1Params,
+                                                     k_iter)]);
+                        test(regKIter, regKIter);
+                        jz(lp1_end, T_NEAR);
+                        L(lp1_start);
 
-                sub(regKIter, 1);
-                jnz(label_m_loop_k_loop_start, T_NEAR);
+                        RETURN_IF_ERROR((loadXValues()));
+                        RETURN_IF_ERROR((processMRBlock(MR / 2)));
+
+                        mov(regTmp1, simdWidth);
+                        imul(regTmp1, regCsA);
+                        add(regTmpYptr, regTmp1);
+                        mov(regTmpAptr, regTmpYptr);
+                        add(regXptr, RegBytes);
+
+                        sub(regKIter, 1);
+                        jnz(lp1_start, T_NEAR);
+                        L(lp1_end);
+                    }
+
+                    // Save end-of-pass-1 column position for use as
+                    // the k-fringe starting column.
+                    mov(regTmp2, regTmpYptr);
+
+                    // Advance A base by MR/2 rows for pass 2.
+                    mov(regTmpYptr, regAptr);
+                    alias_mitigation::emitAdvanceRows(this, MR / 2, regTmpYptr,
+                                                      regRsA, regTmp1);
+                    mov(regTmpAptr, regTmpYptr);
+
+                    // Reset X pointer for pass 2.
+                    mov(regXptr,
+                        ptr[stackPtr
+                            + offsetof(dlp::kernels::gemvN1Params, x)]);
+
+                    // Pass 2: rows MR/2..MR-1 (accumulators shifted by
+                    // MR/2 so the upper-half ZMMs get populated).
+                    {
+                        const int savedAccumBase = accumBaseIdx;
+                        accumBaseIdx += MR / 2;
+
+                        Xbyak::Label lp2_start, lp2_end;
+                        mov(regKIter, ptr[stackPtr
+                                          + offsetof(dlp::kernels::gemvN1Params,
+                                                     k_iter)]);
+                        test(regKIter, regKIter);
+                        jz(lp2_end, T_NEAR);
+                        L(lp2_start);
+
+                        RETURN_IF_ERROR((loadXValues()));
+                        RETURN_IF_ERROR((processMRBlock(MR / 2)));
+
+                        mov(regTmp1, simdWidth);
+                        imul(regTmp1, regCsA);
+                        add(regTmpYptr, regTmp1);
+                        mov(regTmpAptr, regTmpYptr);
+                        add(regXptr, RegBytes);
+
+                        sub(regKIter, 1);
+                        jnz(lp2_start, T_NEAR);
+                        L(lp2_end);
+
+                        accumBaseIdx = savedAccumBase;
+                    }
+
+                    // Restore A column position for the shared k-fringe
+                    // (which still processes all MR rows from the
+                    // initial A base; the k-fringe iterates at most
+                    // k_unroll-1 columns and its alias contribution
+                    // is negligible).
+                    mov(regTmpYptr, regTmp2);
+                    mov(regTmpAptr, regTmpYptr);
+                }
             }
             L(label_m_loop_k_loop_end);
 

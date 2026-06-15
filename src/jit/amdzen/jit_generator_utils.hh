@@ -231,6 +231,11 @@ struct gemvN1GeneratorParams
     std::vector<dlp::kernel_frame::kernelOpsMetaData>
         kernelOps; // List of post-ops
 
+    // True when the DE has detected an L1-cache aliasing case for this
+    // shape. The generator emits a two-pass MR/2 k-loop body instead
+    // of the single-pass MR body. No runtime stride check is emitted.
+    bool aliasMrSplit = false;
+
     // Constructor
     gemvN1GeneratorParams(int                              _MR,
                           int                              _M_LEFT,
@@ -271,6 +276,7 @@ struct gemvN1GeneratorParams
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
         , kernelOps(other.kernelOps)
+        , aliasMrSplit(other.aliasMrSplit)
     {
     }
     // Copy assignment operator
@@ -289,7 +295,7 @@ struct gemvN1GeneratorParams
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
             kernelOps        = other.kernelOps;
-            c_downscale      = other.c_downscale;
+            aliasMrSplit     = other.aliasMrSplit;
         }
         return *this;
     }
@@ -308,6 +314,7 @@ struct gemvN1GeneratorParams
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
         , kernelOps(std::move(other.kernelOps))
+        , aliasMrSplit(other.aliasMrSplit)
     {
     }
 
@@ -327,7 +334,7 @@ struct gemvN1GeneratorParams
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
             kernelOps        = std::move(other.kernelOps);
-            c_downscale      = other.c_downscale;
+            aliasMrSplit     = other.aliasMrSplit;
         }
         return *this;
     }
@@ -424,6 +431,8 @@ struct gemvM1GeneratorParams
         , nloop(other.nloop)
         , kloop(other.kloop)
         , nfringe(other.nfringe)
+        , nfringe_main(other.nfringe_main)
+        , nfringe_left(other.nfringe_left)
         , kfringe(other.kfringe)
         , yFormat(other.yFormat)
         , alphaScalingType(other.alphaScalingType)
@@ -450,6 +459,8 @@ struct gemvM1GeneratorParams
             nloop            = other.nloop;
             kloop            = other.kloop;
             nfringe          = other.nfringe;
+            nfringe_main     = other.nfringe_main;
+            nfringe_left     = other.nfringe_left;
             kfringe          = other.kfringe;
             yFormat          = other.yFormat;
             alphaScalingType = other.alphaScalingType;
@@ -475,12 +486,14 @@ struct gemvM1GeneratorParams
         , nloop(other.nloop)
         , kloop(other.kloop)
         , nfringe(other.nfringe)
+        , nfringe_main(other.nfringe_main)
+        , nfringe_left(other.nfringe_left)
         , kfringe(other.kfringe)
         , yFormat(other.yFormat)
         , alphaScalingType(other.alphaScalingType)
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
-        , kernelOps(other.kernelOps)
+        , kernelOps(std::move(other.kernelOps))
     {
     }
 
@@ -501,12 +514,14 @@ struct gemvM1GeneratorParams
             nloop            = other.nloop;
             kloop            = other.kloop;
             nfringe          = other.nfringe;
+            nfringe_main     = other.nfringe_main;
+            nfringe_left     = other.nfringe_left;
             kfringe          = other.kfringe;
             yFormat          = other.yFormat;
             alphaScalingType = other.alphaScalingType;
             betaScalingType  = other.betaScalingType;
             kType            = other.kType;
-            kernelOps        = other.kernelOps;
+            kernelOps        = std::move(other.kernelOps);
         }
         return *this;
     }
