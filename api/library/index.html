@@ -16,30 +16,33 @@
     document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
     document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
   </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-
-  
-  <link href="../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=643846e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/rocm_header.css?v=9557e3d1" />
     <link rel="stylesheet" type="text/css" href="../../_static/rocm_footer.css?v=7095035a" />
     <link rel="stylesheet" type="text/css" href="../../_static/fonts.css?v=fcff5274" />
   
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
-<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
-  <script src="../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
     <script src="../../_static/documentation_options.js?v=58f7b4a7"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
@@ -49,13 +52,14 @@
     <script async="async" src="../../_static/rdcMisc.js?v=01f88d96"></script>
     <script async="async" src="../../_static/theme_mode_captions.js?v=15f4ec5d"></script>
     <script defer="defer" src="../../_static/search.js?v=90a4452c"></script>
-    <script src="../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script src="../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/library/index';</script>
     <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
     <link rel="canonical" href="http://localhost:8082/api/library/index.html" />
     <link rel="icon" href="https://www.amd.com/content/dam/code/images/favicon/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
+    <link rel="next" title="Data Types and Structures" href="../types/index.html" />
     <link rel="prev" title="Utility Functions" href="../utils/index.html" />
     <meta name="google-site-verification" content="vo35SZt_GASsTHAEmdww7AYKPCvZyzLvOXBl8guBME4" />
 
@@ -74,19 +78,8 @@
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
 
   
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-primary-sidebar-checkbox"/>
-  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
-  
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-secondary-sidebar-checkbox"/>
-  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
-  
-  <div class="search-button__wrapper">
-    <div class="search-button__overlay"></div>
-    <div class="search-button__search-container">
+  <dialog id="pst-search-dialog">
+    
 <form class="bd-search d-flex align-items-center"
       action="../../search.html"
       method="get">
@@ -94,7 +87,6 @@
   <input type="search"
          class="form-control"
          name="q"
-         id="search-input"
          placeholder="Search..."
          aria-label="Search..."
          autocomplete="off"
@@ -102,8 +94,8 @@
          autocapitalize="off"
          spellcheck="false"/>
   <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form></div>
-  </div>
+</form>
+  </dialog>
 
   <div class="pst-async-banner-revealer d-none">
   <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
@@ -136,7 +128,8 @@
       
       
       
-      <div class="bd-sidebar-primary bd-sidebar">
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
         
 
   
@@ -166,25 +159,22 @@
 </a></div>
         <div class="sidebar-primary-item">
 
- <script>
- document.write(`
-   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-    <span class="search-button__default-text">Search</span>
-    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-   </button>
- `);
- </script></div>
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Categories</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">API Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gemm/index.html">GEMM Operations</a></li>
-
+<li class="toctree-l1"><a class="reference internal" href="../gemm/post_ops.html">Post-Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../eltwise/index.html">Element-wise Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../utils/index.html">Utility Functions</a></li>
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">Library Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../types/index.html">Data Types and Structures</a></li>
 </ul>
 
     </div>
@@ -193,9 +183,14 @@
   
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
   </div>
-  
-  <div id="rtd-footer-container"></div>
 
 
       </div>
@@ -220,8 +215,6 @@
       
         <div class="header-article-item">
 
-
-
 <nav aria-label="Breadcrumb" class="d-print-none">
   <ul class="bd-breadcrumbs">
     
@@ -230,7 +223,7 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page">Library Management</li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Library Management</span></li>
   </ul>
 </nav>
 </div>
@@ -245,25 +238,17 @@
 <div class="article-header-buttons">
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
-    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
-    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
-  </button>
-`);
-</script>
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
-  </button>
-`);
-</script>
-<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <span class="fa-solid fa-list"></span>
 </button>
 </div></div>
@@ -287,12 +272,29 @@ document.write(`
             <nav aria-label="Page">
                 <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#threading-configuration">Threading Configuration</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv426dlp_thread_set_num_threads4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv419dlp_thread_set_ways4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#thread-count">Thread Count</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv426dlp_thread_set_num_threads4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv434dlp_thread_set_num_threads_library4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads_library()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv432dlp_thread_set_num_threads_local4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads_local()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv433dlp_thread_get_num_threads_activev"><code class="docutils literal notranslate"><span class="pre">dlp_thread_get_num_threads_active()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#thread-ways-2d-decomposition">Thread Ways (2D Decomposition)</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv419dlp_thread_set_ways4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv427dlp_thread_set_ways_library4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways_library()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv425dlp_thread_set_ways_local4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways_local()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv429dlp_thread_get_ic_ways_activev"><code class="docutils literal notranslate"><span class="pre">dlp_thread_get_ic_ways_active()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv429dlp_thread_get_jc_ways_activev"><code class="docutils literal notranslate"><span class="pre">dlp_thread_get_jc_ways_active()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-query">Hardware Query</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv433dlp_aocl_enable_instruction_queryv"><code class="docutils literal notranslate"><span class="pre">dlp_aocl_enable_instruction_query()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#version-query">Version Query</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv417dlp_version_queryPiPiPi"><code class="docutils literal notranslate"><span class="pre">dlp_version_query()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -307,32 +309,194 @@ document.write(`
                 <article class="bd-article">
                   
   <section id="library-management">
-<h1>Library Management<a class="headerlink" href="#library-management" title="Link to this heading">#</a></h1>
+<span id="id1"></span><h1>Library Management<a class="headerlink" href="#library-management" title="Link to this heading">#</a></h1>
 <p>Library configuration and management functions for AOCL-DLP.</p>
 <section id="threading-configuration">
-<h2>Threading Configuration<a class="headerlink" href="#threading-configuration" title="Link to this heading">#</a></h2>
+<span id="library-threading-config"></span><h2>Threading Configuration<a class="headerlink" href="#threading-configuration" title="Link to this heading">#</a></h2>
+<section id="thread-count">
+<h3>Thread Count<a class="headerlink" href="#thread-count" title="Link to this heading">#</a></h3>
 <dl class="cpp function" id="fn-dlp-thread-set-num-threads">
 <dt class="sig sig-object cpp" id="_CPPv426dlp_thread_set_num_threads4md_t">
 <span id="_CPPv326dlp_thread_set_num_threads4md_t"></span><span id="_CPPv226dlp_thread_set_num_threads4md_t"></span><span id="dlp_thread_set_num_threads__md_t"></span><span class="target" id="aocl__lib__interface__apis_8h_1a53b4087f6dd035d42ef0d1b50305c2a0"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_set_num_threads</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">n_threads</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv426dlp_thread_set_num_threads4md_t" title="Link to this definition">#</a><br /></dt>
-<dd></dd></dl>
+<dd><p>Alias for dlp_thread_set_num_threads_local. </p>
+</dd></dl>
 
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv434dlp_thread_set_num_threads_library4md_t">
+<span id="_CPPv334dlp_thread_set_num_threads_library4md_t"></span><span id="_CPPv234dlp_thread_set_num_threads_library4md_t"></span><span id="dlp_thread_set_num_threads_library__md_t"></span><span class="target" id="aocl__lib__interface__apis_8h_1a9a567241a8b2aa06a837c55b161ae628"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_set_num_threads_library</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">n_threads</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv434dlp_thread_set_num_threads_library4md_t" title="Link to this definition">#</a><br /></dt>
+<dd><p>Set library-global thread count. </p>
+<p>Sets thread count-based parallelism for all DLP operations in this process. Note: Ways-based configuration (ic_ways, jc_ways) has HIGHER precedence.</p>
+<p>Interaction with Ways:<ul class="simple">
+<li><p>Does NOT modify lib_packed_ways (ic/jc preserved)</p></li>
+<li><p>If ways are set (ic&gt;0 or jc&gt;0), they take precedence over num_threads</p></li>
+<li><p>Only effective when ways are unset (-1)</p></li>
+</ul>
+</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Value -1 means “unset” </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Setting num_threads disables external threading control (OpenMP) </p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_threads</strong> – Number of threads to use (&gt; 0), or -1 to unset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv432dlp_thread_set_num_threads_local4md_t">
+<span id="_CPPv332dlp_thread_set_num_threads_local4md_t"></span><span id="_CPPv232dlp_thread_set_num_threads_local4md_t"></span><span id="dlp_thread_set_num_threads_local__md_t"></span><span class="target" id="aocl__lib__interface__apis_8h_1a041a6ce1c619f9dbf75e43ebfbbaacfc"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_set_num_threads_local</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">n_threads</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv432dlp_thread_set_num_threads_local4md_t" title="Link to this definition">#</a><br /></dt>
+<dd><p>Set thread-local thread count. </p>
+<p>Sets thread count-based parallelism for DLP operations ONLY in the calling thread. Has HIGHEST precedence - overrides library-global and environment settings. Note: Ways-based configuration still has higher precedence than this.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Thread-local settings are NOT inherited by spawned threads </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Value -1 means “unset” </p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_threads</strong> – Number of threads to use (&gt; 0), or -1 to unset</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv433dlp_thread_get_num_threads_activev">
+<span id="_CPPv333dlp_thread_get_num_threads_activev"></span><span id="_CPPv233dlp_thread_get_num_threads_activev"></span><span id="dlp_thread_get_num_threads_active__void"></span><span class="target" id="aocl__lib__interface__apis_8h_1a4633da54e115e8fee478902f7ab6d7e7"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_get_num_threads_active</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv433dlp_thread_get_num_threads_activev" title="Link to this definition">#</a><br /></dt>
+<dd><p>Get currently active thread count. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Active num_threads value based on priority order, or -1 if unset </p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="thread-ways-2d-decomposition">
+<h3>Thread Ways (2D Decomposition)<a class="headerlink" href="#thread-ways-2d-decomposition" title="Link to this heading">#</a></h3>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv419dlp_thread_set_ways4md_t4md_t">
 <span id="_CPPv319dlp_thread_set_ways4md_t4md_t"></span><span id="_CPPv219dlp_thread_set_ways4md_t4md_t"></span><span id="dlp_thread_set_ways__md_t.md_t"></span><span class="target" id="aocl__lib__interface__apis_8h_1a4b1528ebf5b2a22e0f8572f8ee649aed"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_set_ways</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">jc</span></span>, <a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">ic</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv419dlp_thread_set_ways4md_t4md_t" title="Link to this definition">#</a><br /></dt>
-<dd></dd></dl>
+<dd><p>Alias for dlp_thread_set_ways_local. </p>
+</dd></dl>
 
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv427dlp_thread_set_ways_library4md_t4md_t">
+<span id="_CPPv327dlp_thread_set_ways_library4md_t4md_t"></span><span id="_CPPv227dlp_thread_set_ways_library4md_t4md_t"></span><span id="dlp_thread_set_ways_library__md_t.md_t"></span><span class="target" id="aocl__lib__interface__apis_8h_1a16f620e9ab2d300debc216a32150a9ad"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_set_ways_library</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">jc</span></span>, <a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">ic</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv427dlp_thread_set_ways_library4md_t4md_t" title="Link to this definition">#</a><br /></dt>
+<dd><p>Set library-global threading ways (ic_ways, jc_ways). </p>
+<p>Sets ways-based parallelism for all DLP operations in this process. This configuration has higher precedence than num_threads.</p>
+<p>Atomicity Guarantee: Three atomic stores (ways, nt, ext_mt) execute independently but form logical transaction because all callers ALWAYS set: nt=-1, ext_mt=FALSE.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Setting ways automatically unsets num_threads (mutually exclusive modes) </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Value -1 means “unset” </p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>jc</strong> – JC loop parallelism (outer loop), must be &gt; 0 or will be set to -1 </p></li>
+<li><p><strong>ic</strong> – IC loop parallelism (inner loop), must be &gt; 0 or will be set to -1</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv425dlp_thread_set_ways_local4md_t4md_t">
+<span id="_CPPv325dlp_thread_set_ways_local4md_t4md_t"></span><span id="_CPPv225dlp_thread_set_ways_local4md_t4md_t"></span><span id="dlp_thread_set_ways_local__md_t.md_t"></span><span class="target" id="aocl__lib__interface__apis_8h_1ae04ea87c1151eb2e7b98e029645efba9"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_set_ways_local</span></span></span><span class="sig-paren">(</span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">jc</span></span>, <a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="n sig-param"><span class="pre">ic</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv425dlp_thread_set_ways_local4md_t4md_t" title="Link to this definition">#</a><br /></dt>
+<dd><p>Set thread-local threading ways (ic_ways, jc_ways). </p>
+<p>Sets ways-based parallelism for DLP operations ONLY in the calling thread. Has HIGHEST precedence - overrides library-global and environment settings.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Thread-local settings are NOT inherited by spawned threads </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Setting ways automatically unsets num_threads (mutually exclusive) </p>
+</div>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Value -1 means “unset” </p>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>jc</strong> – JC loop parallelism (outer loop), must be &gt; 0 or will be set to -1 </p></li>
+<li><p><strong>ic</strong> – IC loop parallelism (inner loop), must be &gt; 0 or will be set to -1</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv429dlp_thread_get_ic_ways_activev">
+<span id="_CPPv329dlp_thread_get_ic_ways_activev"></span><span id="_CPPv229dlp_thread_get_ic_ways_activev"></span><span id="dlp_thread_get_ic_ways_active__void"></span><span class="target" id="aocl__lib__interface__apis_8h_1a1bbedb92a0a71a3709a667186bdf4ae0"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_get_ic_ways_active</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv429dlp_thread_get_ic_ways_activev" title="Link to this definition">#</a><br /></dt>
+<dd><p>Get currently active IC ways parallelism count. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Active ic_ways value based on priority order, or -1 if unset </p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv429dlp_thread_get_jc_ways_activev">
+<span id="_CPPv329dlp_thread_get_jc_ways_activev"></span><span id="_CPPv229dlp_thread_get_jc_ways_activev"></span><span id="dlp_thread_get_jc_ways_active__void"></span><span class="target" id="aocl__lib__interface__apis_8h_1ab8d11828a60762f3c9bd977aa8c6d571"></span><a class="reference internal" href="../types/index.html#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_thread_get_jc_ways_active</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv429dlp_thread_get_jc_ways_activev" title="Link to this definition">#</a><br /></dt>
+<dd><p>Get currently active JC ways parallelism count. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Active jc_ways value based on priority order, or -1 if unset </p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
 </section>
 <section id="hardware-query">
 <h2>Hardware Query<a class="headerlink" href="#hardware-query" title="Link to this heading">#</a></h2>
 <dl class="cpp function">
 <dt class="sig sig-object cpp" id="_CPPv433dlp_aocl_enable_instruction_queryv">
 <span id="_CPPv333dlp_aocl_enable_instruction_queryv"></span><span id="_CPPv233dlp_aocl_enable_instruction_queryv"></span><span id="dlp_aocl_enable_instruction_query__void"></span><span class="target" id="aocl__lib__interface__apis_8h_1ab376b7d9ed0ce8cd81c39ddb57d4f3b6"></span><span class="kt"><span class="pre">bool</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_aocl_enable_instruction_query</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">void</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv433dlp_aocl_enable_instruction_queryv" title="Link to this definition">#</a><br /></dt>
-<dd></dd></dl>
+<dd><p>Query whether AOCL_DLP_ENABLE_INSTRUCTIONS environment variable is set. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>true if the environment variable is set, false otherwise. </p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="version-query">
+<h2>Version Query<a class="headerlink" href="#version-query" title="Link to this heading">#</a></h2>
+<dl class="cpp function">
+<dt class="sig sig-object cpp" id="_CPPv417dlp_version_queryPiPiPi">
+<span id="_CPPv317dlp_version_queryPiPiPi"></span><span id="_CPPv217dlp_version_queryPiPiPi"></span><span id="dlp_version_query__iP.iP.iP"></span><span class="target" id="aocl__lib__interface__apis_8h_1a247f1006e3428eb848366d61c081c918"></span><span class="kt"><span class="pre">void</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_version_query</span></span></span><span class="sig-paren">(</span><span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">major</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">minor</span></span>, <span class="kt"><span class="pre">int</span></span><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="n sig-param"><span class="pre">patch</span></span><span class="sig-paren">)</span><a class="headerlink" href="#_CPPv417dlp_version_queryPiPiPi" title="Link to this definition">#</a><br /></dt>
+<dd><p>Query AOCL-DLP library version. </p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>major</strong> – <strong>[out]</strong> Major version number (optional, pass NULL to skip) </p></li>
+<li><p><strong>minor</strong> – <strong>[out]</strong> Minor version number (optional, pass NULL to skip) </p></li>
+<li><p><strong>patch</strong> – <strong>[out]</strong> Patch version number (optional, pass NULL to skip) </p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
 
 <p class="rubric">See Also</p>
 <ul class="simple">
 <li><p><a class="reference internal" href="../gemm/index.html"><span class="doc">GEMM Operations</span></a> - GEMM operations</p></li>
-<li><p><span class="xref std std-doc">../post_ops/index</span> - Post-operations framework</p></li>
+<li><p><a class="reference internal" href="../gemm/post_ops.html"><span class="doc">Post-Operations</span></a> - Post-operations framework</p></li>
 <li><p><a class="reference internal" href="../utils/index.html"><span class="doc">Utility Functions</span></a> - Utility functions</p></li>
 </ul>
 </section>
@@ -358,6 +522,15 @@ document.write(`
         <p class="prev-next-title">Utility Functions</p>
       </div>
     </a>
+    <a class="right-next"
+       href="../types/index.html"
+       title="next page">
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">next</p>
+        <p class="prev-next-title">Data Types and Structures</p>
+      </div>
+      <i class="fa-solid fa-angle-right"></i>
+    </a>
 </div>
                 </footer>
               
@@ -365,22 +538,41 @@ document.write(`
             
             
               
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
-  <div class="sidebar-secondary-item">
-  <div class="page-toc tocsection onthispage">
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
     <i class="fa-solid fa-list"></i> Contents
   </div>
-  <nav class="bd-toc-nav page-toc">
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#threading-configuration">Threading Configuration</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv426dlp_thread_set_num_threads4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads()</span></code></a></li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv419dlp_thread_set_ways4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways()</span></code></a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#thread-count">Thread Count</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv426dlp_thread_set_num_threads4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv434dlp_thread_set_num_threads_library4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads_library()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv432dlp_thread_set_num_threads_local4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_num_threads_local()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv433dlp_thread_get_num_threads_activev"><code class="docutils literal notranslate"><span class="pre">dlp_thread_get_num_threads_active()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#thread-ways-2d-decomposition">Thread Ways (2D Decomposition)</a><ul class="nav section-nav flex-column">
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv419dlp_thread_set_ways4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv427dlp_thread_set_ways_library4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways_library()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv425dlp_thread_set_ways_local4md_t4md_t"><code class="docutils literal notranslate"><span class="pre">dlp_thread_set_ways_local()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv429dlp_thread_get_ic_ways_activev"><code class="docutils literal notranslate"><span class="pre">dlp_thread_get_ic_ways_active()</span></code></a></li>
+<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv429dlp_thread_get_jc_ways_activev"><code class="docutils literal notranslate"><span class="pre">dlp_thread_get_jc_ways_active()</span></code></a></li>
+</ul>
+</li>
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-query">Hardware Query</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv433dlp_aocl_enable_instruction_queryv"><code class="docutils literal notranslate"><span class="pre">dlp_aocl_enable_instruction_query()</span></code></a></li>
+</ul>
+</li>
+<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#version-query">Version Query</a><ul class="nav section-nav flex-column">
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv417dlp_version_queryPiPiPi"><code class="docutils literal notranslate"><span class="pre">dlp_version_query()</span></code></a></li>
 </ul>
 </li>
 </ul>
@@ -401,8 +593,8 @@ document.write(`
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
-<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
 <footer class="rocm-footer">
     <div class="container-lg">

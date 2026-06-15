@@ -16,30 +16,33 @@
     document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
     document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
   </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-
-  
-  <link href="../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+  <link href="../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
     <link rel="stylesheet" type="text/css" href="../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../_static/custom.css?v=643846e8" />
     <link rel="stylesheet" type="text/css" href="../_static/rocm_header.css?v=9557e3d1" />
     <link rel="stylesheet" type="text/css" href="../_static/rocm_footer.css?v=7095035a" />
     <link rel="stylesheet" type="text/css" href="../_static/fonts.css?v=fcff5274" />
   
+  <!-- So that users can add custom icons -->
+  <script src="../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
-<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
-  <script src="../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <link rel="preload" as="script" href="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
     <script src="../_static/documentation_options.js?v=58f7b4a7"></script>
     <script src="../_static/doctools.js?v=9bcbadda"></script>
@@ -49,7 +52,7 @@
     <script async="async" src="../_static/rdcMisc.js?v=01f88d96"></script>
     <script async="async" src="../_static/theme_mode_captions.js?v=15f4ec5d"></script>
     <script defer="defer" src="../_static/search.js?v=90a4452c"></script>
-    <script src="../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script src="../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
     <script async="async" src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/overview';</script>
     <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
@@ -76,19 +79,8 @@
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
 
   
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-primary-sidebar-checkbox"/>
-  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
-  
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-secondary-sidebar-checkbox"/>
-  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
-  
-  <div class="search-button__wrapper">
-    <div class="search-button__overlay"></div>
-    <div class="search-button__search-container">
+  <dialog id="pst-search-dialog">
+    
 <form class="bd-search d-flex align-items-center"
       action="../search.html"
       method="get">
@@ -96,7 +88,6 @@
   <input type="search"
          class="form-control"
          name="q"
-         id="search-input"
          placeholder="Search..."
          aria-label="Search..."
          autocomplete="off"
@@ -104,8 +95,8 @@
          autocapitalize="off"
          spellcheck="false"/>
   <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form></div>
-  </div>
+</form>
+  </dialog>
 
   <div class="pst-async-banner-revealer d-none">
   <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
@@ -138,7 +129,8 @@
       
       
       
-      <div class="bd-sidebar-primary bd-sidebar">
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
         
 
   
@@ -168,25 +160,22 @@
 </a></div>
         <div class="sidebar-primary-item">
 
- <script>
- document.write(`
-   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-    <span class="search-button__default-text">Search</span>
-    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-   </button>
- `);
- </script></div>
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Categories</span></p>
 <ul class="current nav bd-sidenav">
 <li class="toctree-l1 current active"><a class="current reference internal" href="#">API Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="gemm/index.html">GEMM Operations</a></li>
-
+<li class="toctree-l1"><a class="reference internal" href="gemm/post_ops.html">Post-Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="eltwise/index.html">Element-wise Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="utils/index.html">Utility Functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="library/index.html">Library Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="types/index.html">Data Types and Structures</a></li>
 </ul>
 
     </div>
@@ -195,9 +184,14 @@
   
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
   </div>
-  
-  <div id="rtd-footer-container"></div>
 
 
       </div>
@@ -222,8 +216,6 @@
       
         <div class="header-article-item">
 
-
-
 <nav aria-label="Breadcrumb" class="d-print-none">
   <ul class="bd-breadcrumbs">
     
@@ -232,7 +224,7 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page">API Overview</li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">API Overview</span></li>
   </ul>
 </nav>
 </div>
@@ -247,25 +239,17 @@
 <div class="article-header-buttons">
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
-    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
-    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
-  </button>
-`);
-</script>
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
-  </button>
-`);
-</script>
-<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <span class="fa-solid fa-list"></span>
 </button>
 </div></div>
@@ -327,7 +311,7 @@ document.write(`
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#error-handling">Error Handling</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Parameter Validation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#api-overview-error-param-validation">Parameter Validation</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-compatibility">Hardware Compatibility</a></li>
 </ul>
 </li>
@@ -423,7 +407,7 @@ document.write(`
 <section id="api-categories">
 <h2>API Categories<a class="headerlink" href="#api-categories" title="Link to this heading">#</a></h2>
 <section id="core-gemm-operations">
-<h3>Core GEMM Operations<a class="headerlink" href="#core-gemm-operations" title="Link to this heading">#</a></h3>
+<span id="overview-core-gemm"></span><h3>Core GEMM Operations<a class="headerlink" href="#core-gemm-operations" title="Link to this heading">#</a></h3>
 <p>The fundamental matrix multiplication APIs:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Float32 precision</span>
 <span class="n">aocl_gemm_f32f32f32of32</span><span class="p">(...)</span>
@@ -438,7 +422,7 @@ document.write(`
 </div>
 </section>
 <section id="batch-operations">
-<h3>Batch Operations<a class="headerlink" href="#batch-operations" title="Link to this heading">#</a></h3>
+<span id="overview-batch-operations"></span><h3>Batch Operations<a class="headerlink" href="#batch-operations" title="Link to this heading">#</a></h3>
 <p>For processing multiple GEMM operations efficiently:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Batch processing</span>
 <span class="n">aocl_batch_gemm_f32f32f32of32</span><span class="p">(...)</span>
@@ -447,7 +431,7 @@ document.write(`
 </div>
 </section>
 <section id="element-wise-operations">
-<h3>Element-wise Operations<a class="headerlink" href="#element-wise-operations" title="Link to this heading">#</a></h3>
+<span id="api-overview-element-wise"></span><h3>Element-wise Operations<a class="headerlink" href="#element-wise-operations" title="Link to this heading">#</a></h3>
 <p>For applying operations without matrix multiplication:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Element-wise operations</span>
 <span class="n">aocl_gemm_eltwise_ops_f32of32</span><span class="p">(...)</span>
@@ -456,7 +440,7 @@ document.write(`
 </div>
 </section>
 <section id="utility-functions">
-<h3>Utility Functions<a class="headerlink" href="#utility-functions" title="Link to this heading">#</a></h3>
+<span id="overview-utility-functions"></span><h3>Utility Functions<a class="headerlink" href="#utility-functions" title="Link to this heading">#</a></h3>
 <p>Standalone mathematical operations:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Activation functions</span>
 <span class="n">aocl_gemm_gelu_tanh_f32</span><span class="p">(...)</span>
@@ -466,7 +450,7 @@ document.write(`
 </div>
 </section>
 <section id="matrix-reordering">
-<h3>Matrix Reordering<a class="headerlink" href="#matrix-reordering" title="Link to this heading">#</a></h3>
+<span id="api-overview-matrix-reordering"></span><h3>Matrix Reordering<a class="headerlink" href="#matrix-reordering" title="Link to this heading">#</a></h3>
 <p>For optimizing repeated operations:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Get buffer size for reordering</span>
 <span class="n">aocl_get_reorder_buf_size_f32f32f32of32</span><span class="p">(...)</span>
@@ -477,7 +461,7 @@ document.write(`
 </div>
 </section>
 <section id="library-management">
-<h3>Library Management<a class="headerlink" href="#library-management" title="Link to this heading">#</a></h3>
+<span id="api-overview-library-management"></span><h3>Library Management<a class="headerlink" href="#library-management" title="Link to this heading">#</a></h3>
 <p>For configuration and feature detection:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Thread configuration</span>
 <span class="n">dlp_thread_set_num_threads</span><span class="p">(...)</span>
@@ -536,7 +520,7 @@ document.write(`
 </div>
 </section>
 <section id="parameter-validation">
-<h3>Parameter Validation<a class="headerlink" href="#parameter-validation" title="Link to this heading">#</a></h3>
+<span id="api-design-parameter-validation"></span><h3>Parameter Validation<a class="headerlink" href="#parameter-validation" title="Link to this heading">#</a></h3>
 <p>AOCL-DLP APIs perform robust parameter validation:</p>
 <ul class="simple">
 <li><p><strong>Dimension checks</strong>: Ensure matrix dimensions are compatible</p></li>
@@ -596,20 +580,33 @@ document.write(`
 </section>
 <section id="usage-pattern">
 <h3>Usage Pattern<a class="headerlink" href="#usage-pattern" title="Link to this heading">#</a></h3>
-<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Initialize post-operations</span>
-<span class="n">aocl_post_op</span><span class="w"> </span><span class="n">post_ops</span><span class="p">;</span>
-<span class="n">aocl_post_op_init</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">);</span>
+<div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Configure post-operations via dlp_metadata_t</span>
+<span class="kt">float</span><span class="w"> </span><span class="n">bias_vector</span><span class="p">[</span><span class="n">N</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="cm">/* ... */</span><span class="w"> </span><span class="p">};</span>
 
-<span class="c1">// Add bias operation</span>
-<span class="n">aocl_post_op_bias</span><span class="w"> </span><span class="n">bias_op</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{.</span><span class="n">bias</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bias_vector</span><span class="p">};</span>
-<span class="n">aocl_post_op_append_bias</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">bias_op</span><span class="p">);</span>
+<span class="n">dlp_post_op_bias</span><span class="w"> </span><span class="n">bias_op</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">.</span><span class="n">bias</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">bias_vector</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">stor_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DLP_F32</span><span class="p">,</span>
+<span class="w">    </span><span class="p">.</span><span class="n">sf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">NULL</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">zp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">NULL</span>
+<span class="p">};</span>
 
-<span class="c1">// Add activation</span>
-<span class="n">aocl_post_op_eltwise</span><span class="w"> </span><span class="n">relu_op</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{.</span><span class="n">algo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">AOCL_ELTWISE_RELU</span><span class="p">};</span>
-<span class="n">aocl_post_op_append_eltwise</span><span class="p">(</span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">relu_op</span><span class="p">);</span>
+<span class="n">dlp_post_op_eltwise</span><span class="w"> </span><span class="n">relu_op</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="p">.</span><span class="n">sf</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">NULL</span><span class="p">,</span>
+<span class="w">    </span><span class="p">.</span><span class="n">algo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">.</span><span class="n">alpha</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">NULL</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">beta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">NULL</span><span class="p">,</span>
+<span class="w">              </span><span class="p">.</span><span class="n">algo_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">RELU</span><span class="p">,</span><span class="w"> </span><span class="p">.</span><span class="n">stor_type</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">DLP_F32</span><span class="w"> </span><span class="p">}</span>
+<span class="p">};</span>
+
+<span class="n">DLP_POST_OP_TYPE</span><span class="w"> </span><span class="n">seq</span><span class="p">[]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="n">BIAS</span><span class="p">,</span><span class="w"> </span><span class="n">ELTWISE</span><span class="w"> </span><span class="p">};</span>
+
+<span class="n">dlp_metadata_t</span><span class="w"> </span><span class="n">meta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="mi">0</span><span class="p">};</span>
+<span class="n">meta</span><span class="p">.</span><span class="n">seq_length</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span><span class="p">;</span>
+<span class="n">meta</span><span class="p">.</span><span class="n">seq_vector</span><span class="w">  </span><span class="o">=</span><span class="w"> </span><span class="n">seq</span><span class="p">;</span>
+<span class="n">meta</span><span class="p">.</span><span class="n">bias</span><span class="w">        </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">bias_op</span><span class="p">;</span>
+<span class="n">meta</span><span class="p">.</span><span class="n">eltwise</span><span class="w">     </span><span class="o">=</span><span class="w"> </span><span class="o">&amp;</span><span class="n">relu_op</span><span class="p">;</span>
+<span class="n">meta</span><span class="p">.</span><span class="n">num_eltwise</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
 
 <span class="c1">// Use in GEMM</span>
-<span class="n">aocl_gemm_f32f32f32of32</span><span class="p">(...,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">post_ops</span><span class="p">);</span>
+<span class="n">aocl_gemm_f32f32f32of32</span><span class="p">(</span><span class="sc">&#39;R&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">m</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">,</span>
+<span class="w">    </span><span class="mf">1.0f</span><span class="p">,</span><span class="w"> </span><span class="n">a</span><span class="p">,</span><span class="w"> </span><span class="n">lda</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span><span class="w"> </span><span class="n">b</span><span class="p">,</span><span class="w"> </span><span class="n">ldb</span><span class="p">,</span><span class="w"> </span><span class="sc">&#39;N&#39;</span><span class="p">,</span>
+<span class="w">    </span><span class="mf">0.0f</span><span class="p">,</span><span class="w"> </span><span class="n">c</span><span class="p">,</span><span class="w"> </span><span class="n">ldc</span><span class="p">,</span><span class="w"> </span><span class="o">&amp;</span><span class="n">meta</span><span class="p">);</span>
 </pre></div>
 </div>
 </section>
@@ -660,18 +657,18 @@ document.write(`
 <li><p><strong>Data Layout</strong>: Use row-major layout when possible</p></li>
 <li><p><strong>Alignment</strong>: Align matrices to cache line boundaries (64 bytes)</p></li>
 <li><p><strong>Reordering</strong>: Reorder frequently-used matrices</p></li>
-<li><p><strong>Batch Processing</strong>: Group similar operations</p></li>
-<li><p><strong>Memory Bandwidth</strong>: Consider bandwidth limitations for large matrices</p></li>
+<li><p><strong>Batch Processing</strong>: Group similar operations
+5. <strong>Memory Bandwidth</strong>: Consider bandwidth limitations for large matrices</p></li>
 </ol>
 </section>
 <section id="threading-configuration">
-<h3>Threading Configuration<a class="headerlink" href="#threading-configuration" title="Link to this heading">#</a></h3>
+<span id="api-overview-threading-config"></span><h3>Threading Configuration<a class="headerlink" href="#threading-configuration" title="Link to this heading">#</a></h3>
 <p>Optimize parallel execution:</p>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// Set thread count (typically number of CPU cores)</span>
 <span class="n">dlp_thread_set_num_threads</span><span class="p">(</span><span class="mi">8</span><span class="p">);</span>
 
 <span class="c1">// Configure workload distribution</span>
-<span class="n">dlp_thread_set_ways</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">2</span><span class="p">);</span><span class="w">  </span><span class="c1">// 3D parallelization</span>
+<span class="n">dlp_thread_set_ways</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="w"> </span><span class="mi">4</span><span class="p">);</span><span class="w">  </span><span class="c1">// JC=2, IC=4 loop parallelization</span>
 </pre></div>
 </div>
 </section>
@@ -758,8 +755,8 @@ document.write(`
 <section id="error-handling">
 <h2>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading">#</a></h2>
 <p>AOCL-DLP uses defensive programming practices:</p>
-<section id="id1">
-<h3>Parameter Validation<a class="headerlink" href="#id1" title="Link to this heading">#</a></h3>
+<section id="api-overview-error-param-validation">
+<span id="id1"></span><h3>Parameter Validation<a class="headerlink" href="#api-overview-error-param-validation" title="Link to this heading">#</a></h3>
 <div class="highlight-c notranslate"><div class="highlight"><pre><span></span><span class="c1">// APIs validate parameters and handle gracefully</span>
 <span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="n">m</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="n">k</span><span class="w"> </span><span class="o">&lt;=</span><span class="w"> </span><span class="mi">0</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <span class="w">    </span><span class="c1">// No operation performed, function returns safely</span>
@@ -806,7 +803,7 @@ document.write(`
 </ol>
 </section>
 <section id="migration-guide">
-<h2>Migration Guide<a class="headerlink" href="#migration-guide" title="Link to this heading">#</a></h2>
+<span id="overview-best-practices"></span><h2>Migration Guide<a class="headerlink" href="#migration-guide" title="Link to this heading">#</a></h2>
 <section id="from-other-blas-libraries">
 <h3>From Other BLAS Libraries<a class="headerlink" href="#from-other-blas-libraries" title="Link to this heading">#</a></h3>
 <p>AOCL-DLP APIs are designed to be familiar to BLAS users:</p>
@@ -852,11 +849,14 @@ document.write(`
 </section>
 </section>
 <section id="see-also">
-<h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<span id="api-overview-see-also"></span><h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="gemm/index.html"><span class="doc">GEMM Operations</span></a> - Detailed GEMM API documentation</p></li>
 <li><p><a class="reference internal" href="gemm/post_ops.html"><span class="doc">Post-Operations</span></a> - Post-operations reference</p></li>
-<li><p><a class="reference external" href="https://github.com/AMD-AOCL/aocl-dlp/wiki/Examples-and-Tutorials">AOCL-DLP Examples and Tutorials (GitHub Wiki)</a></p></li>
+<li><p><a class="reference internal" href="types/index.html"><span class="doc">Data Types and Structures</span></a> - Data types and structures reference</p></li>
+<li><p><a class="reference external" href="https://github.com/amd/aocl-dlp/wiki/Examples-and-Tutorials">AOCL-DLP Examples and Tutorials</a></p></li>
+<li><p><a class="reference external" href="https://github.com/amd/aocl-dlp/wiki/Quick-Start">Quick Start Guide</a></p></li>
+<li><p><a class="reference external" href="https://github.com/amd/aocl-dlp/wiki/Integration-Guide">Integration Guide</a></p></li>
 </ul>
 </section>
 </section>
@@ -897,14 +897,16 @@ document.write(`
             
             
               
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
-  <div class="sidebar-secondary-item">
-  <div class="page-toc tocsection onthispage">
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
     <i class="fa-solid fa-list"></i> Contents
   </div>
-  <nav class="bd-toc-nav page-toc">
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#core-concepts">Core Concepts</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#matrix-operations">Matrix Operations</a></li>
@@ -945,7 +947,7 @@ document.write(`
 </ul>
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#error-handling">Error Handling</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#id1">Parameter Validation</a></li>
+<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#api-overview-error-param-validation">Parameter Validation</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#hardware-compatibility">Hardware Compatibility</a></li>
 </ul>
 </li>
@@ -974,8 +976,8 @@ document.write(`
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
-<script src="../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <script defer src="../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
 <footer class="rocm-footer">
     <div class="container-lg">

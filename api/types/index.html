@@ -16,30 +16,33 @@
     document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
     document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
   </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="../../_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="../../_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-
-  
-  <link href="../../_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="../../_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+  <link href="../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="../../_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="../../_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
     <link rel="stylesheet" type="text/css" href="../../_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="../../_static/custom.css?v=643846e8" />
     <link rel="stylesheet" type="text/css" href="../../_static/rocm_header.css?v=9557e3d1" />
     <link rel="stylesheet" type="text/css" href="../../_static/rocm_footer.css?v=7095035a" />
     <link rel="stylesheet" type="text/css" href="../../_static/fonts.css?v=fcff5274" />
   
+  <!-- So that users can add custom icons -->
+  <script src="../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
-<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
-  <script src="../../_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <link rel="preload" as="script" href="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
     <script src="../../_static/documentation_options.js?v=58f7b4a7"></script>
     <script src="../../_static/doctools.js?v=9bcbadda"></script>
@@ -49,13 +52,14 @@
     <script async="async" src="../../_static/rdcMisc.js?v=01f88d96"></script>
     <script async="async" src="../../_static/theme_mode_captions.js?v=15f4ec5d"></script>
     <script defer="defer" src="../../_static/search.js?v=90a4452c"></script>
-    <script src="../../_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script src="../../_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'api/types/index';</script>
     <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
     <link rel="canonical" href="http://localhost:8082/api/types/index.html" />
     <link rel="icon" href="https://www.amd.com/content/dam/code/images/favicon/favicon.ico"/>
     <link rel="index" title="Index" href="../../genindex.html" />
     <link rel="search" title="Search" href="../../search.html" />
+    <link rel="prev" title="Library Management" href="../library/index.html" />
     <meta name="google-site-verification" content="vo35SZt_GASsTHAEmdww7AYKPCvZyzLvOXBl8guBME4" />
 
   </head>
@@ -73,19 +77,8 @@
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
 
   
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-primary-sidebar-checkbox"/>
-  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
-  
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-secondary-sidebar-checkbox"/>
-  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
-  
-  <div class="search-button__wrapper">
-    <div class="search-button__overlay"></div>
-    <div class="search-button__search-container">
+  <dialog id="pst-search-dialog">
+    
 <form class="bd-search d-flex align-items-center"
       action="../../search.html"
       method="get">
@@ -93,7 +86,6 @@
   <input type="search"
          class="form-control"
          name="q"
-         id="search-input"
          placeholder="Search..."
          aria-label="Search..."
          autocomplete="off"
@@ -101,8 +93,8 @@
          autocapitalize="off"
          spellcheck="false"/>
   <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form></div>
-  </div>
+</form>
+  </dialog>
 
   <div class="pst-async-banner-revealer d-none">
   <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
@@ -135,9 +127,8 @@
       
       
       
-        
-      
-      <div class="bd-sidebar-primary bd-sidebar">
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
         
 
   
@@ -167,25 +158,22 @@
 </a></div>
         <div class="sidebar-primary-item">
 
- <script>
- document.write(`
-   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-    <span class="search-button__default-text">Search</span>
-    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-   </button>
- `);
- </script></div>
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Categories</span></p>
-<ul class="nav bd-sidenav">
+<ul class="current nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="../overview.html">API Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../gemm/index.html">GEMM Operations</a></li>
-
+<li class="toctree-l1"><a class="reference internal" href="../gemm/post_ops.html">Post-Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../eltwise/index.html">Element-wise Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../utils/index.html">Utility Functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../library/index.html">Library Management</a></li>
+<li class="toctree-l1 current active"><a class="current reference internal" href="#">Data Types and Structures</a></li>
 </ul>
 
     </div>
@@ -194,9 +182,14 @@
   
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
   </div>
-  
-  <div id="rtd-footer-container"></div>
 
 
       </div>
@@ -221,8 +214,6 @@
       
         <div class="header-article-item">
 
-
-
 <nav aria-label="Breadcrumb" class="d-print-none">
   <ul class="bd-breadcrumbs">
     
@@ -231,7 +222,7 @@
         <i class="fa-solid fa-home"></i>
       </a>
     </li>
-    <li class="breadcrumb-item active" aria-current="page">Data Types...</li>
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">Data Types and Structures</span></li>
   </ul>
 </nav>
 </div>
@@ -246,25 +237,17 @@
 <div class="article-header-buttons">
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
-    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
-    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
-  </button>
-`);
-</script>
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
-  </button>
-`);
-</script>
-<button class="sidebar-toggle secondary-toggle btn btn-sm" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
+</button>
+<button class="sidebar-toggle secondary-toggle btn btn-sm pst-navbar-icon" title="Toggle secondary sidebar" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <span class="fa-solid fa-list"></span>
 </button>
 </div></div>
@@ -299,45 +282,6 @@ document.write(`
 </li>
 </ul>
 </li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#post-operations-structures">Post-Operations Structures</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv414dlp_metadata_t"><code class="docutils literal notranslate"><span class="pre">dlp_metadata_t</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t5scaleE"><code class="docutils literal notranslate"><span class="pre">scale</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t7eltwiseE"><code class="docutils literal notranslate"><span class="pre">eltwise</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t4biasE"><code class="docutils literal notranslate"><span class="pre">bias</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10matrix_addE"><code class="docutils literal notranslate"><span class="pre">matrix_add</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10matrix_mulE"><code class="docutils literal notranslate"><span class="pre">matrix_mul</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10seq_lengthE"><code class="docutils literal notranslate"><span class="pre">seq_length</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10seq_vectorE"><code class="docutils literal notranslate"><span class="pre">seq_vector</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t7pre_opsE"><code class="docutils literal notranslate"><span class="pre">pre_ops</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t11post_op_grpE"><code class="docutils literal notranslate"><span class="pre">post_op_grp</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t11num_eltwiseE"><code class="docutils literal notranslate"><span class="pre">num_eltwise</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10error_hndlE"><code class="docutils literal notranslate"><span class="pre">error_hndl</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#post-operation-types">Post-Operation Types</a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv416DLP_POST_OP_TYPE"><code class="docutils literal notranslate"><span class="pre">DLP_POST_OP_TYPE</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE"><code class="docutils literal notranslate"><span class="pre">ELTWISE</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE4BIASE"><code class="docutils literal notranslate"><span class="pre">BIAS</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE5SCALEE"><code class="docutils literal notranslate"><span class="pre">SCALE</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE"><code class="docutils literal notranslate"><span class="pre">MATRIX_ADD</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE"><code class="docutils literal notranslate"><span class="pre">MATRIX_MUL</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv417DLP_ELT_ALGO_TYPE"><code class="docutils literal notranslate"><span class="pre">DLP_ELT_ALGO_TYPE</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE"><code class="docutils literal notranslate"><span class="pre">RELU</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE"><code class="docutils literal notranslate"><span class="pre">PRELU</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE"><code class="docutils literal notranslate"><span class="pre">GELU_TANH</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE"><code class="docutils literal notranslate"><span class="pre">GELU_ERF</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE"><code class="docutils literal notranslate"><span class="pre">CLIP</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE"><code class="docutils literal notranslate"><span class="pre">SWISH</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE"><code class="docutils literal notranslate"><span class="pre">TANH</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE"><code class="docutils literal notranslate"><span class="pre">SIGMOID</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-</ul>
-</li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#constants-and-enumerations">Constants and Enumerations</a><ul class="nav section-nav flex-column">
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#memory-format-constants">Memory Format Constants</a></li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#transpose-options">Transpose Options</a></li>
@@ -364,7 +308,6 @@ document.write(`
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#best-practices">Best Practices</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See Also</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#full-header-reference">Full Header Reference</a></li>
 </ul>
             </nav>
         </div>
@@ -390,7 +333,8 @@ document.write(`
 <dl class="cpp type">
 <dt class="sig sig-object cpp" id="_CPPv44md_t">
 <span id="_CPPv34md_t"></span><span id="_CPPv24md_t"></span><span id="md_t"></span><span class="target" id="dlp__base__types_8h_1a302bf1c425eaf12c7fe01c277e370187"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="n"><span class="pre">int64_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">md_t</span></span></span><a class="headerlink" href="#_CPPv44md_t" title="Link to this definition">#</a><br /></dt>
-<dd></dd></dl>
+<dd><p>Matrix dimension type. Used for m, n, k, leading dimensions. </p>
+</dd></dl>
 
 </section>
 <section id="bfloat16-support">
@@ -398,188 +342,8 @@ document.write(`
 <dl class="cpp type">
 <dt class="sig sig-object cpp" id="_CPPv48bfloat16">
 <span id="_CPPv38bfloat16"></span><span id="_CPPv28bfloat16"></span><span id="bfloat16"></span><span class="target" id="aocl__bf16__type_8h_1a9b703e0aaac42bfac783853504f494ab"></span><span class="k"><span class="pre">typedef</span></span><span class="w"> </span><span class="n"><span class="pre">int16_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">bfloat16</span></span></span><a class="headerlink" href="#_CPPv48bfloat16" title="Link to this definition">#</a><br /></dt>
-<dd></dd></dl>
-
-</section>
-</section>
-<section id="post-operations-structures">
-<h2>Post-Operations Structures<a class="headerlink" href="#post-operations-structures" title="Link to this heading">#</a></h2>
-<dl class="cpp struct" id="struct-dlp-metadata-t-types">
-<dt class="sig sig-object cpp" id="_CPPv414dlp_metadata_t">
-<span id="_CPPv314dlp_metadata_t"></span><span id="_CPPv214dlp_metadata_t"></span><span id="dlp_metadata_t"></span><span class="target" id="structdlp__metadata__t"></span><span class="k"><span class="pre">struct</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">dlp_metadata_t</span></span></span><br /></dt>
-<dd><p>Main metadata structure containing all post-operation configurations. </p>
-<p>This structure serves as the main container for all post-operation metadata, defining the sequence and parameters of operations to be applied after GEMM. It supports multiple post-operations that can be chained together in a specific order.</p>
-<p>Main metadata structure for post-operation configurations.</p>
-<p>Contains all post-operation parameters, sequence, and group information for GEMM. </p>
-<div class="breathe-sectiondef docutils container">
-<p class="breathe-sectiondef-title rubric" id="breathe-section-title-public-members">Public Members</p>
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t5scaleE">
-<span id="_CPPv3N14dlp_metadata_t5scaleE"></span><span id="_CPPv2N14dlp_metadata_t5scaleE"></span><span id="dlp_metadata_t::scale__dlp_scale_tP"></span><span class="target" id="structdlp__metadata__t_1a0d94502c953f36ebbb3ae2d557429e46"></span><a class="reference internal" href="../gemm/index.html#_CPPv411dlp_scale_t" title="dlp_scale_t"><span class="n"><span class="pre">dlp_scale_t</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">scale</span></span></span><br /></dt>
-<dd><p>Scale post-operations (multiple allowed) </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t7eltwiseE">
-<span id="_CPPv3N14dlp_metadata_t7eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t7eltwiseE"></span><span id="dlp_metadata_t::eltwise__dlp_post_op_eltwiseP"></span><span class="target" id="structdlp__metadata__t_1aa2a182f0bcda2d3eb539f3cec7dcc344"></span><a class="reference internal" href="../gemm/index.html#_CPPv419dlp_post_op_eltwise" title="dlp_post_op_eltwise"><span class="n"><span class="pre">dlp_post_op_eltwise</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">eltwise</span></span></span><br /></dt>
-<dd><p>Element-wise post-operations (multiple allowed) </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t4biasE">
-<span id="_CPPv3N14dlp_metadata_t4biasE"></span><span id="_CPPv2N14dlp_metadata_t4biasE"></span><span id="dlp_metadata_t::bias__dlp_post_op_biasP"></span><span class="target" id="structdlp__metadata__t_1a01c330ff2ac492632871c1628eff59b9"></span><a class="reference internal" href="../gemm/index.html#_CPPv416dlp_post_op_bias" title="dlp_post_op_bias"><span class="n"><span class="pre">dlp_post_op_bias</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">bias</span></span></span><br /></dt>
-<dd><p>Bias addition post-operation </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10matrix_addE">
-<span id="_CPPv3N14dlp_metadata_t10matrix_addE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_addE"></span><span id="dlp_metadata_t::matrix_add__dlp_post_op_matrix_addP"></span><span class="target" id="structdlp__metadata__t_1a4d48c3610d759f4391eb4be3a7e4c25e"></span><a class="reference internal" href="../gemm/index.html#_CPPv422dlp_post_op_matrix_add" title="dlp_post_op_matrix_add"><span class="n"><span class="pre">dlp_post_op_matrix_add</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_add</span></span></span><br /></dt>
-<dd><p>Matrix addition post-operation </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10matrix_mulE">
-<span id="_CPPv3N14dlp_metadata_t10matrix_mulE"></span><span id="_CPPv2N14dlp_metadata_t10matrix_mulE"></span><span id="dlp_metadata_t::matrix_mul__dlp_post_op_matrix_mulP"></span><span class="target" id="structdlp__metadata__t_1a4eda120352cc25d282bc7fa375bbc246"></span><a class="reference internal" href="../gemm/index.html#_CPPv422dlp_post_op_matrix_mul" title="dlp_post_op_matrix_mul"><span class="n"><span class="pre">dlp_post_op_matrix_mul</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">matrix_mul</span></span></span><br /></dt>
-<dd><p>Matrix multiplication post-operation </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10seq_lengthE">
-<span id="_CPPv3N14dlp_metadata_t10seq_lengthE"></span><span id="_CPPv2N14dlp_metadata_t10seq_lengthE"></span><span id="dlp_metadata_t::seq_length__md_t"></span><span class="target" id="structdlp__metadata__t_1ab9ab0d1de055bce89cdf72983c8d2660"></span><a class="reference internal" href="#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">seq_length</span></span></span><br /></dt>
-<dd><p>Number of operations in the sequence (e.g., 2) </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10seq_vectorE">
-<span id="_CPPv3N14dlp_metadata_t10seq_vectorE"></span><span id="_CPPv2N14dlp_metadata_t10seq_vectorE"></span><span id="dlp_metadata_t::seq_vector__DLP_POST_OP_TYPEP"></span><span class="target" id="structdlp__metadata__t_1a4f4125a96644d2591d993714c88e30b2"></span><a class="reference internal" href="../gemm/index.html#_CPPv416DLP_POST_OP_TYPE" title="DLP_POST_OP_TYPE"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">seq_vector</span></span></span><br /></dt>
-<dd><p>Sequence of post-operations to apply in order (e.g., seq_vector[0]=BIAS, seq_vector[1]=ELTWISE means bias followed by element-wise operation) </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t7pre_opsE">
-<span id="_CPPv3N14dlp_metadata_t7pre_opsE"></span><span id="_CPPv2N14dlp_metadata_t7pre_opsE"></span><span id="dlp_metadata_t::pre_ops__dlp_pre_opP"></span><span class="target" id="structdlp__metadata__t_1a132361013ea9b399bc9872ab48879382"></span><a class="reference internal" href="../gemm/index.html#_CPPv410dlp_pre_op" title="dlp_pre_op"><span class="n"><span class="pre">dlp_pre_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">pre_ops</span></span></span><br /></dt>
-<dd><p>Pre-operations to be applied before GEMM </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t11post_op_grpE">
-<span id="_CPPv3N14dlp_metadata_t11post_op_grpE"></span><span id="_CPPv2N14dlp_metadata_t11post_op_grpE"></span><span id="dlp_metadata_t::post_op_grp__dlp_group_post_opP"></span><span class="target" id="structdlp__metadata__t_1a14858783a4796cab10675213cdc3134e"></span><a class="reference internal" href="../gemm/index.html#_CPPv417dlp_group_post_op" title="dlp_group_post_op"><span class="n"><span class="pre">dlp_group_post_op</span></span></a><span class="w"> </span><span class="p"><span class="pre">*</span></span><span class="sig-name descname"><span class="n"><span class="pre">post_op_grp</span></span></span><br /></dt>
-<dd><p>Grouped post-operations for different quantization groups </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t11num_eltwiseE">
-<span id="_CPPv3N14dlp_metadata_t11num_eltwiseE"></span><span id="_CPPv2N14dlp_metadata_t11num_eltwiseE"></span><span id="dlp_metadata_t::num_eltwise__md_t"></span><span class="target" id="structdlp__metadata__t_1a9a4798fbc25386bf0f226ed9321f82b5"></span><a class="reference internal" href="#_CPPv44md_t" title="md_t"><span class="n"><span class="pre">md_t</span></span></a><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">num_eltwise</span></span></span><br /></dt>
-<dd><p>Number of element-wise operations to track </p>
-</dd></dl>
-
-<dl class="cpp var">
-<dt class="sig sig-object cpp" id="_CPPv4N14dlp_metadata_t10error_hndlE">
-<span id="_CPPv3N14dlp_metadata_t10error_hndlE"></span><span id="_CPPv2N14dlp_metadata_t10error_hndlE"></span><span id="dlp_metadata_t::error_hndl__dlp_error_hndl_t"></span><span class="target" id="structdlp__metadata__t_1a05e379d63fd45f37452f3ee22f327b44"></span><span class="n"><span class="pre">dlp_error_hndl_t</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">error_hndl</span></span></span><br /></dt>
-<dd><p>Error handle for the routine, currently wrapped as part of the metadata. </p>
-</dd></dl>
-
-</div>
-</dd></dl>
-
-<section id="post-operation-types">
-<h3>Post-Operation Types<a class="headerlink" href="#post-operation-types" title="Link to this heading">#</a></h3>
-<dl class="cpp enum">
-<dt class="sig sig-object cpp" id="_CPPv416DLP_POST_OP_TYPE">
-<span id="_CPPv316DLP_POST_OP_TYPE"></span><span id="_CPPv216DLP_POST_OP_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_POST_OP_TYPE</span></span></span><br /></dt>
-<dd><p>Enumeration of post-operation types that can be applied to GEMM results. </p>
-<p>This enum defines the different types of operations that can be performed on the output matrix after GEMM computation.</p>
-<p>Post-operation types for GEMM results.</p>
-<p>Enumerates supported post-operations that can be applied to GEMM output. </p>
-<p><em>Values:</em></p>
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE7ELTWISEE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE7ELTWISEE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a44cd7058a54a981f3eabc2499a2d1aec"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">ELTWISE</span></span></span><br /></dt>
-<dd><p>Element-wise operations (activations) </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE4BIASE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE4BIASE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE4BIASE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a3912ef9909d39fcdcdbbb0b6f5ad6e96"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">BIAS</span></span></span><br /></dt>
-<dd><p>Bias addition operation </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE5SCALEE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE5SCALEE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE5SCALEE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a593be05a10070b4e7e0856e20590eaaf"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SCALE</span></span></span><br /></dt>
-<dd><p>Scaling operation </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE10MATRIX_ADDE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE10MATRIX_ADDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4a063213dec4a2ed8c95a49a58a6dcbc3d"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">MATRIX_ADD</span></span></span><br /></dt>
-<dd><p>Matrix addition operation </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE">
-<span id="_CPPv3N16DLP_POST_OP_TYPE10MATRIX_MULE"></span><span id="_CPPv2N16DLP_POST_OP_TYPE10MATRIX_MULE"></span><span class="target" id="aocl__gemm__post__ops_8h_1a4dfb32947acc1790c1300da7e83529f4aea4dbdaedf616c124529ea2c3c7ed5fa"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">MATRIX_MUL</span></span></span><br /></dt>
-<dd><p>Matrix multiplication operation </p>
-</dd></dl>
-
-</dd></dl>
-
-<dl class="cpp enum">
-<dt class="sig sig-object cpp" id="_CPPv417DLP_ELT_ALGO_TYPE">
-<span id="_CPPv317DLP_ELT_ALGO_TYPE"></span><span id="_CPPv217DLP_ELT_ALGO_TYPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839"></span><span class="k"><span class="pre">enum</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">DLP_ELT_ALGO_TYPE</span></span></span><br /></dt>
-<dd><p>Enumeration of element-wise algorithm types supported in post-operations. </p>
-<p>This enum defines the various activation functions and element-wise operations that can be applied as post-operations in GEMM computations.</p>
-<p>Element-wise algorithm types for post-operations.</p>
-<p>Enumerates supported activation and element-wise functions for GEMM post-ops. </p>
-<p><em>Values:</em></p>
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4RELUE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4RELUE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a9b69aa04edddb5cade1fea783ef633a3"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">RELU</span></span></span><br /></dt>
-<dd><p>Rectified Linear Unit activation: max(0, x) </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE5PRELUE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE5PRELUE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ae38a71c2a212332cb2bfe2ab1bc78de4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">PRELU</span></span></span><br /></dt>
-<dd><p>Parametric ReLU activation: max(alpha*x, x) </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE9GELU_TANHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE9GELU_TANHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a702fa4c565f7605bc5d3e86454331b48"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GELU_TANH</span></span></span><br /></dt>
-<dd><p>GELU activation using tanh approximation </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE8GELU_ERFE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE8GELU_ERFE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ac3fe0e80c6d25e36d718701cc4ab9dbc"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">GELU_ERF</span></span></span><br /></dt>
-<dd><p>GELU activation using error function </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4CLIPE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4CLIPE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839ad4624417d4872d4ff7b0a75ec2f8a4c7"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">CLIP</span></span></span><br /></dt>
-<dd><p>Clipping operation: min(max(x, min_val), max_val) </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE5SWISHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE5SWISHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a681708022d3dfd3ceb050218d63c6649"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SWISH</span></span></span><br /></dt>
-<dd><p>Swish activation: x * sigmoid(x) </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE4TANHE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE4TANHE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a5cf05eaf3e6d14026cfec37f90ca44e4"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">TANH</span></span></span><br /></dt>
-<dd><p>Hyperbolic tangent activation </p>
-</dd></dl>
-
-<dl class="cpp enumerator">
-<dt class="sig sig-object cpp" id="_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE">
-<span id="_CPPv3N17DLP_ELT_ALGO_TYPE7SIGMOIDE"></span><span id="_CPPv2N17DLP_ELT_ALGO_TYPE7SIGMOIDE"></span><span class="target" id="aocl__gemm__post__ops_8h_1aaa4d9a77151b9975044398ceabc45839a11c1096689b7d3504dbcc4f61d854883"></span><span class="k"><span class="pre">enumerator</span></span><span class="w"> </span><span class="sig-name descname"><span class="n"><span class="pre">SIGMOID</span></span></span><br /></dt>
-<dd><p>Sigmoid activation: 1 / (1 + exp(-x)) </p>
-</dd></dl>
-
+<dd><p>BFloat16 (Brain Floating Point) type definition. </p>
+<p>BFloat16 format: 1 sign bit + 8 exponent bits + 7 mantissa bits = 16 bits. Same exponent range as float32, reduced mantissa precision. Stored as int16_t for bit-level compatibility. </p>
 </dd></dl>
 
 </section>
@@ -644,7 +408,7 @@ document.write(`
 <section id="data-type-naming-convention">
 <h2>Data Type Naming Convention<a class="headerlink" href="#data-type-naming-convention" title="Link to this heading">#</a></h2>
 <p>Function names in AOCL-DLP follow a systematic naming convention that encodes the data types:</p>
-<p>Pattern: <code class="docutils literal notranslate"><span class="pre">[input_A][input_B][accumulation]o[output]</span></code></p>
+<p id="types-data-type-naming">Pattern: <code class="docutils literal notranslate"><span class="pre">[input_A][input_B][accumulation]o[output]</span></code></p>
 <div class="pst-scrollable-table-container"><table class="table" id="id3">
 <caption><span class="caption-text">Type Abbreviations</span><a class="headerlink" href="#id3" title="Link to this table">#</a></caption>
 <colgroup>
@@ -804,7 +568,7 @@ document.write(`
 </section>
 </section>
 <section id="best-practices">
-<h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading">#</a></h2>
+<span id="types-best-practices"></span><h2>Best Practices<a class="headerlink" href="#best-practices" title="Link to this heading">#</a></h2>
 <ol class="arabic simple">
 <li><p><strong>Choose appropriate precision</strong>: Balance accuracy and performance requirements</p></li>
 <li><p><strong>Understand memory layouts</strong>: Use consistent layouts throughout your application</p></li>
@@ -814,15 +578,12 @@ document.write(`
 </ol>
 </section>
 <section id="see-also">
-<h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
+<span id="types-see-also"></span><h2>See Also<a class="headerlink" href="#see-also" title="Link to this heading">#</a></h2>
 <ul class="simple">
 <li><p><a class="reference internal" href="../gemm/index.html"><span class="doc">GEMM Operations</span></a> - GEMM operations using these types</p></li>
-<li><p><span class="xref std std-doc">../post_ops/index</span> - Post-operations metadata structures</p></li>
+<li><p><a class="reference internal" href="../gemm/post_ops.html"><span class="doc">Post-Operations</span></a> - Post-operations metadata structures</p></li>
 <li><p><a class="reference internal" href="../eltwise/index.html"><span class="doc">Element-wise Operations</span></a> - Element-wise type conversions</p></li>
 </ul>
-</section>
-<section id="full-header-reference">
-<h2>Full Header Reference<a class="headerlink" href="#full-header-reference" title="Link to this heading">#</a></h2>
 </section>
 </section>
 
@@ -837,6 +598,15 @@ document.write(`
                 <footer class="prev-next-footer d-print-none">
                   
 <div class="prev-next-area">
+    <a class="left-prev"
+       href="../library/index.html"
+       title="previous page">
+      <i class="fa-solid fa-angle-left"></i>
+      <div class="prev-next-info">
+        <p class="prev-next-subtitle">previous</p>
+        <p class="prev-next-title">Library Management</p>
+      </div>
+    </a>
 </div>
                 </footer>
               
@@ -844,14 +614,16 @@ document.write(`
             
             
               
-                <div class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
+                <dialog id="pst-secondary-sidebar-modal"></dialog>
+                <div id="pst-secondary-sidebar" class="bd-sidebar-secondary bd-toc"><div class="sidebar-secondary-items sidebar-secondary__inner">
 
 
-  <div class="sidebar-secondary-item">
-  <div class="page-toc tocsection onthispage">
+  <div class="sidebar-secondary-item"><div
+    id="pst-page-navigation-heading-2"
+    class="page-toc tocsection onthispage">
     <i class="fa-solid fa-list"></i> Contents
   </div>
-  <nav class="bd-toc-nav page-toc">
+  <nav id="pst-page-toc-nav" class="page-toc" aria-labelledby="pst-page-navigation-heading-2">
     <ul class="visible nav section-nav flex-column">
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#overview">Overview</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#basic-data-types">Basic Data Types</a><ul class="nav section-nav flex-column">
@@ -861,45 +633,6 @@ document.write(`
 </li>
 <li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#bfloat16-support">BFloat16 Support</a><ul class="nav section-nav flex-column">
 <li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv48bfloat16"><code class="docutils literal notranslate"><span class="pre">bfloat16</span></code></a></li>
-</ul>
-</li>
-</ul>
-</li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#post-operations-structures">Post-Operations Structures</a><ul class="nav section-nav flex-column">
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv414dlp_metadata_t"><code class="docutils literal notranslate"><span class="pre">dlp_metadata_t</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t5scaleE"><code class="docutils literal notranslate"><span class="pre">scale</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t7eltwiseE"><code class="docutils literal notranslate"><span class="pre">eltwise</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t4biasE"><code class="docutils literal notranslate"><span class="pre">bias</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10matrix_addE"><code class="docutils literal notranslate"><span class="pre">matrix_add</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10matrix_mulE"><code class="docutils literal notranslate"><span class="pre">matrix_mul</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10seq_lengthE"><code class="docutils literal notranslate"><span class="pre">seq_length</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10seq_vectorE"><code class="docutils literal notranslate"><span class="pre">seq_vector</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t7pre_opsE"><code class="docutils literal notranslate"><span class="pre">pre_ops</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t11post_op_grpE"><code class="docutils literal notranslate"><span class="pre">post_op_grp</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t11num_eltwiseE"><code class="docutils literal notranslate"><span class="pre">num_eltwise</span></code></a></li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N14dlp_metadata_t10error_hndlE"><code class="docutils literal notranslate"><span class="pre">error_hndl</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h3 nav-item toc-entry"><a class="reference internal nav-link" href="#post-operation-types">Post-Operation Types</a><ul class="nav section-nav flex-column">
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv416DLP_POST_OP_TYPE"><code class="docutils literal notranslate"><span class="pre">DLP_POST_OP_TYPE</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE"><code class="docutils literal notranslate"><span class="pre">ELTWISE</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE4BIASE"><code class="docutils literal notranslate"><span class="pre">BIAS</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE5SCALEE"><code class="docutils literal notranslate"><span class="pre">SCALE</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE"><code class="docutils literal notranslate"><span class="pre">MATRIX_ADD</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE"><code class="docutils literal notranslate"><span class="pre">MATRIX_MUL</span></code></a></li>
-</ul>
-</li>
-<li class="toc-h4 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv417DLP_ELT_ALGO_TYPE"><code class="docutils literal notranslate"><span class="pre">DLP_ELT_ALGO_TYPE</span></code></a><ul class="nav section-nav flex-column">
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE"><code class="docutils literal notranslate"><span class="pre">RELU</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE"><code class="docutils literal notranslate"><span class="pre">PRELU</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE"><code class="docutils literal notranslate"><span class="pre">GELU_TANH</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE"><code class="docutils literal notranslate"><span class="pre">GELU_ERF</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE"><code class="docutils literal notranslate"><span class="pre">CLIP</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE"><code class="docutils literal notranslate"><span class="pre">SWISH</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE"><code class="docutils literal notranslate"><span class="pre">TANH</span></code></a></li>
-<li class="toc-h5 nav-item toc-entry"><a class="reference internal nav-link" href="#_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE"><code class="docutils literal notranslate"><span class="pre">SIGMOID</span></code></a></li>
-</ul>
-</li>
 </ul>
 </li>
 </ul>
@@ -930,7 +663,6 @@ document.write(`
 </li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#best-practices">Best Practices</a></li>
 <li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#see-also">See Also</a></li>
-<li class="toc-h2 nav-item toc-entry"><a class="reference internal nav-link" href="#full-header-reference">Full Header Reference</a></li>
 </ul>
   </nav></div>
 
@@ -949,8 +681,8 @@ document.write(`
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="../../_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
-<script src="../../_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <script defer src="../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
 <footer class="rocm-footer">
     <div class="container-lg">

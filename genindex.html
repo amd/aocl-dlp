@@ -15,30 +15,33 @@
     document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
     document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
   </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
   
   <!-- Loaded before other Sphinx assets -->
-  <link href="_static/styles/theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="_static/styles/bootstrap.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-<link href="_static/styles/pydata-sphinx-theme.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-
-  
-  <link href="_static/vendor/fontawesome/6.5.2/css/all.min.css?digest=dfe6caa3a7d634c4db9b" rel="stylesheet" />
-  <link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-solid-900.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-brands-400.woff2" />
-<link rel="preload" as="font" type="font/woff2" crossorigin href="_static/vendor/fontawesome/6.5.2/webfonts/fa-regular-400.woff2" />
+  <link href="_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
 
     <link rel="stylesheet" type="text/css" href="_static/pygments.css?v=8f2a1f02" />
-    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=eba8b062" />
+    <link rel="stylesheet" type="text/css" href="_static/styles/sphinx-book-theme.css?v=3c74b3bc" />
     <link rel="stylesheet" type="text/css" href="_static/graphviz.css?v=4ae1632d" />
     <link rel="stylesheet" type="text/css" href="_static/custom.css?v=643846e8" />
     <link rel="stylesheet" type="text/css" href="_static/rocm_header.css?v=9557e3d1" />
     <link rel="stylesheet" type="text/css" href="_static/rocm_footer.css?v=7095035a" />
     <link rel="stylesheet" type="text/css" href="_static/fonts.css?v=fcff5274" />
   
+  <!-- So that users can add custom icons -->
+  <script src="_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
   <!-- Pre-loaded scripts that we'll load fully later -->
-  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b" />
-<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b" />
-  <script src="_static/vendor/fontawesome/6.5.2/js/all.min.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <link rel="preload" as="script" href="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
 
     <script src="_static/documentation_options.js?v=58f7b4a7"></script>
     <script src="_static/doctools.js?v=9bcbadda"></script>
@@ -48,7 +51,7 @@
     <script async="async" src="_static/rdcMisc.js?v=01f88d96"></script>
     <script async="async" src="_static/theme_mode_captions.js?v=15f4ec5d"></script>
     <script defer="defer" src="_static/search.js?v=90a4452c"></script>
-    <script src="_static/scripts/sphinx-book-theme.js?v=887ef09a"></script>
+    <script src="_static/scripts/sphinx-book-theme.js?v=fab101a9"></script>
     <script>DOCUMENTATION_OPTIONS.pagename = 'genindex';</script>
     <script async="async" src="https://download.amd.com/js/analytics/analyticsinit.js"></script>
     <link rel="canonical" href="http://localhost:8082/genindex.html" />
@@ -72,19 +75,8 @@
     <i class="fa-solid fa-arrow-up"></i>Back to top</button>
 
   
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-primary-sidebar-checkbox"/>
-  <label class="overlay overlay-primary" for="pst-primary-sidebar-checkbox"></label>
-  
-  <input type="checkbox"
-          class="sidebar-toggle"
-          id="pst-secondary-sidebar-checkbox"/>
-  <label class="overlay overlay-secondary" for="pst-secondary-sidebar-checkbox"></label>
-  
-  <div class="search-button__wrapper">
-    <div class="search-button__overlay"></div>
-    <div class="search-button__search-container">
+  <dialog id="pst-search-dialog">
+    
 <form class="bd-search d-flex align-items-center"
       action="search.html"
       method="get">
@@ -92,7 +84,6 @@
   <input type="search"
          class="form-control"
          name="q"
-         id="search-input"
          placeholder="Search..."
          aria-label="Search..."
          autocomplete="off"
@@ -100,8 +91,8 @@
          autocapitalize="off"
          spellcheck="false"/>
   <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
-</form></div>
-  </div>
+</form>
+  </dialog>
 
   <div class="pst-async-banner-revealer d-none">
   <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
@@ -136,7 +127,8 @@
       
         
       
-      <div class="bd-sidebar-primary bd-sidebar">
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar">
         
 
   
@@ -166,25 +158,22 @@
 </a></div>
         <div class="sidebar-primary-item">
 
- <script>
- document.write(`
-   <button class="btn search-button-field search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="fa-solid fa-magnifying-glass"></i>
-    <span class="search-button__default-text">Search</span>
-    <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
-   </button>
- `);
- </script></div>
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button></div>
         <div class="sidebar-primary-item"><nav class="bd-links bd-docs-nav" aria-label="Main">
     <div class="bd-toc-item navbar-nav active">
         <p aria-level="2" class="caption" role="heading"><span class="caption-text">API Categories</span></p>
 <ul class="nav bd-sidenav">
 <li class="toctree-l1"><a class="reference internal" href="api/overview.html">API Overview</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/gemm/index.html">GEMM Operations</a></li>
-
+<li class="toctree-l1"><a class="reference internal" href="api/gemm/post_ops.html">Post-Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/eltwise/index.html">Element-wise Operations</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/utils/index.html">Utility Functions</a></li>
 <li class="toctree-l1"><a class="reference internal" href="api/library/index.html">Library Management</a></li>
+<li class="toctree-l1"><a class="reference internal" href="api/types/index.html">Data Types and Structures</a></li>
 </ul>
 
     </div>
@@ -193,9 +182,14 @@
   
   
   <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
   </div>
-  
-  <div id="rtd-footer-container"></div>
 
 
       </div>
@@ -228,24 +222,16 @@
 <div class="article-header-buttons">
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button" title="light/dark" aria-label="light/dark" data-bs-placement="bottom" data-bs-toggle="tooltip">
-    <i class="theme-switch fa-solid fa-sun fa-lg" data-mode="light"></i>
-    <i class="theme-switch fa-solid fa-moon fa-lg" data-mode="dark"></i>
-    <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"></i>
-  </button>
-`);
-</script>
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button>
 
 
-<script>
-document.write(`
-  <button class="btn btn-sm pst-navbar-icon search-button search-button__button" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+<button class="btn btn-sm pst-navbar-icon search-button search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
     <i class="fa-solid fa-magnifying-glass fa-lg"></i>
-  </button>
-`);
-</script>
+</button>
 
 </div></div>
       
@@ -322,6 +308,20 @@ document.write(`
 </li>
       <li><a href="api/gemm/index.html#_CPPv423aocl_gemm_bf16s4f32of32KcKcKcK4md_tK4md_tK4md_tKfPK8bfloat16K4md_tKcPK6int8_tK4md_tKcKfPfK4md_tP14dlp_metadata_t">aocl_gemm_bf16s4f32of32 (C++ function)</a>
 </li>
+      <li><a href="api/gemm/index.html#_CPPv424aocl_gemm_bf16s8s32obf16KcKcKcK4md_tK4md_tK4md_tK7int32_tPK8bfloat16K4md_tKcPK6int8_tK4md_tKcK7int32_tP8bfloat16K4md_tP14dlp_metadata_t">aocl_gemm_bf16s8s32obf16 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv423aocl_gemm_bf16s8s32of32KcKcKcK4md_tK4md_tK4md_tK7int32_tPK8bfloat16K4md_tKcPK6int8_tK4md_tKcK7int32_tPfK4md_tP14dlp_metadata_t">aocl_gemm_bf16s8s32of32 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv423aocl_gemm_bf16s8s32os32KcKcKcK4md_tK4md_tK4md_tK7int32_tPK8bfloat16K4md_tKcPK6int8_tK4md_tKcK7int32_tP7int32_tK4md_tP14dlp_metadata_t">aocl_gemm_bf16s8s32os32 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv422aocl_gemm_bf16s8s32os8KcKcKcK4md_tK4md_tK4md_tK7int32_tPK8bfloat16K4md_tKcPK6int8_tK4md_tKcK7int32_tP6int8_tK4md_tP14dlp_metadata_t">aocl_gemm_bf16s8s32os8 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv422aocl_gemm_bf16s8s32ou8KcKcKcK4md_tK4md_tK4md_tK7int32_tPK8bfloat16K4md_tKcPK6int8_tK4md_tKcK7int32_tP7uint8_tK4md_tP14dlp_metadata_t">aocl_gemm_bf16s8s32ou8 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv424aocl_gemm_bf16u4f32obf16KcKcKcK4md_tK4md_tK4md_tKfPK8bfloat16K4md_tKcPK7uint8_tK4md_tKcKfP8bfloat16K4md_tP14dlp_metadata_t">aocl_gemm_bf16u4f32obf16 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv423aocl_gemm_bf16u4f32of32KcKcKcK4md_tK4md_tK4md_tKfPK8bfloat16K4md_tKcPK7uint8_tK4md_tKcKfPfK4md_tP14dlp_metadata_t">aocl_gemm_bf16u4f32of32 (C++ function)</a>
+</li>
       <li><a href="api/eltwise/index.html#_CPPv431aocl_gemm_eltwise_ops_bf16obf16KcKcKcK4md_tK4md_tPK8bfloat16K4md_tP8bfloat16K4md_tP14dlp_metadata_t">aocl_gemm_eltwise_ops_bf16obf16 (C++ function)</a>
 </li>
       <li><a href="api/eltwise/index.html#_CPPv430aocl_gemm_eltwise_ops_bf16of32KcKcKcK4md_tK4md_tPK8bfloat16K4md_tPfK4md_tP14dlp_metadata_t">aocl_gemm_eltwise_ops_bf16of32 (C++ function)</a>
@@ -336,7 +336,21 @@ document.write(`
 </li>
       <li><a href="api/eltwise/index.html#_CPPv428aocl_gemm_eltwise_ops_f32ou8KcKcKcK4md_tK4md_tPKfK4md_tP7uint8_tK4md_tP14dlp_metadata_t">aocl_gemm_eltwise_ops_f32ou8 (C++ function)</a>
 </li>
+      <li><a href="api/gemm/index.html#_CPPv423aocl_gemm_f16f16f16of16KcKcKcK4md_tK4md_tK4md_tK7float16PK7float16K4md_tKcPK7float16K4md_tKcK7float16P7float16K4md_tP14dlp_metadata_t">aocl_gemm_f16f16f16of16 (C++ function)</a>
+</li>
       <li><a href="api/gemm/index.html#_CPPv423aocl_gemm_f32f32f32of32KcKcKcK4md_tK4md_tK4md_tKfPKfK4md_tKcPKfK4md_tKcKfPfK4md_tP14dlp_metadata_t">aocl_gemm_f32f32f32of32 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv423aocl_gemm_f32s8s32obf16KcKcKcK4md_tK4md_tK4md_tK7int32_tPKfK4md_tKcPK6int8_tK4md_tKcK7int32_tP8bfloat16K4md_tP14dlp_metadata_t">aocl_gemm_f32s8s32obf16 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv422aocl_gemm_f32s8s32of32KcKcKcK4md_tK4md_tK4md_tK7int32_tPKfK4md_tKcPK6int8_tK4md_tKcK7int32_tPfK4md_tP14dlp_metadata_t">aocl_gemm_f32s8s32of32 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv422aocl_gemm_f32s8s32os32KcKcKcK4md_tK4md_tK4md_tK7int32_tPKfK4md_tKcPK6int8_tK4md_tKcK7int32_tP7int32_tK4md_tP14dlp_metadata_t">aocl_gemm_f32s8s32os32 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv421aocl_gemm_f32s8s32os8KcKcKcK4md_tK4md_tK4md_tK7int32_tPKfK4md_tKcPK6int8_tK4md_tKcK7int32_tP6int8_tK4md_tP14dlp_metadata_t">aocl_gemm_f32s8s32os8 (C++ function)</a>
+</li>
+  </ul></td>
+  <td style="width: 33%; vertical-align: top;"><ul>
+      <li><a href="api/gemm/index.html#_CPPv421aocl_gemm_f32s8s32ou8KcKcKcK4md_tK4md_tK4md_tK7int32_tPKfK4md_tKcPK6int8_tK4md_tKcK7int32_tP7uint8_tK4md_tP14dlp_metadata_t">aocl_gemm_f32s8s32ou8 (C++ function)</a>
 </li>
       <li><a href="api/utils/index.html#_CPPv422aocl_gemm_gelu_erf_f32K4md_tPfK4md_t">aocl_gemm_gelu_erf_f32 (C++ function)</a>
 </li>
@@ -346,8 +360,6 @@ document.write(`
 </li>
       <li><a href="api/gemm/index.html#_CPPv432aocl_gemm_s8s8s32obf16_sym_quantKcKcKcK4md_tK4md_tK4md_tK7int32_tPK6int8_tK4md_tKcPK6int8_tK4md_tKcK7int32_tP8bfloat16K4md_tP14dlp_metadata_t">aocl_gemm_s8s8s32obf16_sym_quant (C++ function)</a>
 </li>
-  </ul></td>
-  <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/gemm/index.html#_CPPv421aocl_gemm_s8s8s32of32KcKcKcK4md_tK4md_tK4md_tK7int32_tPK6int8_tK4md_tKcPK6int8_tK4md_tKcK7int32_tPfK4md_tP14dlp_metadata_t">aocl_gemm_s8s8s32of32 (C++ function)</a>
 </li>
       <li><a href="api/gemm/index.html#_CPPv431aocl_gemm_s8s8s32of32_sym_quantKcKcKcK4md_tK4md_tK4md_tK7int32_tPK6int8_tK4md_tKcPK6int8_tK4md_tKcK7int32_tPfK4md_tP14dlp_metadata_t">aocl_gemm_s8s8s32of32_sym_quant (C++ function)</a>
@@ -374,6 +386,8 @@ document.write(`
 </li>
       <li><a href="api/gemm/index.html#_CPPv439aocl_get_reorder_buf_size_bf16s4f32of32KcKcKcK4md_tK4md_tP14dlp_metadata_t">aocl_get_reorder_buf_size_bf16s4f32of32 (C++ function)</a>
 </li>
+      <li><a href="api/gemm/index.html#_CPPv439aocl_get_reorder_buf_size_f16f16f16of16KcKcKcK4md_tK4md_tP14dlp_metadata_t">aocl_get_reorder_buf_size_f16f16f16of16 (C++ function)</a>
+</li>
       <li><a href="api/gemm/index.html#_CPPv439aocl_get_reorder_buf_size_f32f32f32of32KcKcKcK4md_tK4md_tP14dlp_metadata_t">aocl_get_reorder_buf_size_f32f32f32of32 (C++ function)</a>
 </li>
       <li><a href="api/gemm/index.html#_CPPv437aocl_get_reorder_buf_size_s8s8s32os32KcKcKcK4md_tK4md_tP14dlp_metadata_t">aocl_get_reorder_buf_size_s8s8s32os32 (C++ function)</a>
@@ -389,6 +403,8 @@ document.write(`
       <li><a href="api/gemm/index.html#_CPPv438aocl_reorder_bf16bf16f32of32_referenceKcKcKcPK8bfloat16P8bfloat16K4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_reorder_bf16bf16f32of32_reference (C++ function)</a>
 </li>
       <li><a href="api/gemm/index.html#_CPPv426aocl_reorder_bf16s4f32of32KcKcKcPK6int8_tP6int8_tK4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_reorder_bf16s4f32of32 (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv426aocl_reorder_f16f16f16of16KcKcKcPK7float16P7float16K4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_reorder_f16f16f16of16 (C++ function)</a>
 </li>
       <li><a href="api/gemm/index.html#_CPPv426aocl_reorder_f32f32f32of32KcKcKcPKfPfK4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_reorder_f32f32f32of32 (C++ function)</a>
 </li>
@@ -407,6 +423,8 @@ document.write(`
       <li><a href="api/gemm/index.html#_CPPv430aocl_unreorder_bf16bf16f32of32KcKcPK8bfloat16P8bfloat16K4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_unreorder_bf16bf16f32of32 (C++ function)</a>
 </li>
       <li><a href="api/gemm/index.html#_CPPv440aocl_unreorder_bf16bf16f32of32_referenceKcKcPK8bfloat16P8bfloat16K4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_unreorder_bf16bf16f32of32_reference (C++ function)</a>
+</li>
+      <li><a href="api/gemm/index.html#_CPPv428aocl_unreorder_f16f16f16of16KcKcPK7float16P7float16K4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_unreorder_f16f16f16of16 (C++ function)</a>
 </li>
       <li><a href="api/gemm/index.html#_CPPv438aocl_unreorder_f32f32f32of32_referenceKcKcPKfPfK4md_tK4md_tK4md_tP14dlp_metadata_t">aocl_unreorder_f32f32f32of32_reference (C++ function)</a>
 </li>
@@ -428,187 +446,285 @@ document.write(`
   <td style="width: 33%; vertical-align: top;"><ul>
       <li><a href="api/library/index.html#_CPPv433dlp_aocl_enable_instruction_queryv">dlp_aocl_enable_instruction_query (C++ function)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv417DLP_ELT_ALGO_TYPE">DLP_ELT_ALGO_TYPE (C++ enum)</a>, <a href="api/gemm/post_ops.html#_CPPv417DLP_ELT_ALGO_TYPE">[1]</a>, <a href="api/types/index.html#_CPPv417DLP_ELT_ALGO_TYPE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv414dlp_clsc_err_t">dlp_clsc_err_t (C++ enum)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE">DLP_ELT_ALGO_TYPE::CLIP (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t18DLP_CLSC_ERROR_MAXE">dlp_clsc_err_t::DLP_CLSC_ERROR_MAX (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE">DLP_ELT_ALGO_TYPE::GELU_ERF (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t16DLP_CLSC_FAILUREE">dlp_clsc_err_t::DLP_CLSC_FAILURE (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE">DLP_ELT_ALGO_TYPE::GELU_TANH (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t32DLP_CLSC_INVALID_GROUP_DIMENSIONE">dlp_clsc_err_t::DLP_CLSC_INVALID_GROUP_DIMENSION (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE">DLP_ELT_ALGO_TYPE::PRELU (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t27DLP_CLSC_INVALID_JIT_KERNELE">dlp_clsc_err_t::DLP_CLSC_INVALID_JIT_KERNEL (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE">DLP_ELT_ALGO_TYPE::RELU (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t23DLP_CLSC_INVALID_KERNELE">dlp_clsc_err_t::DLP_CLSC_INVALID_KERNEL (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE">DLP_ELT_ALGO_TYPE::SIGMOID (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t34DLP_CLSC_INVALID_LEADING_DIMENSIONE">dlp_clsc_err_t::DLP_CLSC_INVALID_LEADING_DIMENSION (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE">DLP_ELT_ALGO_TYPE::SWISH (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t33DLP_CLSC_INVALID_MATRIX_DIMENSIONE">dlp_clsc_err_t::DLP_CLSC_INVALID_MATRIX_DIMENSION (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE">DLP_ELT_ALGO_TYPE::TANH (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE">[1]</a>, <a href="api/types/index.html#_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t28DLP_CLSC_INVALID_MATRIX_TYPEE">dlp_clsc_err_t::DLP_CLSC_INVALID_MATRIX_TYPE (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv418dlp_eltwise_algo_t">dlp_eltwise_algo_t (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv418dlp_eltwise_algo_t">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t27DLP_CLSC_INVALID_MEMORY_TAGE">dlp_clsc_err_t::DLP_CLSC_INVALID_MEMORY_TAG (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N18dlp_eltwise_algo_t9algo_typeE">dlp_eltwise_algo_t::algo_type (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N18dlp_eltwise_algo_t9algo_typeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t22DLP_CLSC_INVALID_ORDERE">dlp_clsc_err_t::DLP_CLSC_INVALID_ORDER (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N18dlp_eltwise_algo_t5alphaE">dlp_eltwise_algo_t::alpha (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N18dlp_eltwise_algo_t5alphaE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t23DLP_CLSC_INVALID_SF_LENE">dlp_clsc_err_t::DLP_CLSC_INVALID_SF_LEN (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N18dlp_eltwise_algo_t4betaE">dlp_eltwise_algo_t::beta (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N18dlp_eltwise_algo_t4betaE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t26DLP_CLSC_INVALID_TRANSPOSEE">dlp_clsc_err_t::DLP_CLSC_INVALID_TRANSPOSE (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv417dlp_group_post_op">dlp_group_post_op (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv417dlp_group_post_op">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t23DLP_CLSC_INVALID_ZP_LENE">dlp_clsc_err_t::DLP_CLSC_INVALID_ZP_LEN (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17dlp_group_post_op5a_sclE">dlp_group_post_op::a_scl (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op5a_sclE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t22DLP_CLSC_NOT_SUPPORTEDE">dlp_clsc_err_t::DLP_CLSC_NOT_SUPPORTED (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17dlp_group_post_op4a_zpE">dlp_group_post_op::a_zp (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op4a_zpE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t21DLP_CLSC_NULL_POINTERE">dlp_clsc_err_t::DLP_CLSC_NULL_POINTER (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17dlp_group_post_op5b_sclE">dlp_group_post_op::b_scl (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op5b_sclE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t16DLP_CLSC_SUCCESSE">dlp_clsc_err_t::DLP_CLSC_SUCCESS (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17dlp_group_post_op4b_zpE">dlp_group_post_op::b_zp (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op4b_zpE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t22DLP_CLSC_TYPE_MISMATCHE">dlp_clsc_err_t::DLP_CLSC_TYPE_MISMATCH (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17dlp_group_post_op10group_sizeE">dlp_group_post_op::group_size (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op10group_sizeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_clsc_err_t30DLP_CLSC_UNEXPECTED_VECTOR_DIME">dlp_clsc_err_t::DLP_CLSC_UNEXPECTED_VECTOR_DIM (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N17dlp_group_post_op10seq_lengthE">dlp_group_post_op::seq_length (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op10seq_lengthE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv417DLP_ELT_ALGO_TYPE">DLP_ELT_ALGO_TYPE (C++ enum)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv414dlp_metadata_t">dlp_metadata_t (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv414dlp_metadata_t">[1]</a>, <a href="api/types/index.html#_CPPv414dlp_metadata_t">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE4CLIPE">DLP_ELT_ALGO_TYPE::CLIP (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t4biasE">dlp_metadata_t::bias (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t4biasE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t4biasE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE8GELU_ERFE">DLP_ELT_ALGO_TYPE::GELU_ERF (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t7eltwiseE">dlp_metadata_t::eltwise (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t7eltwiseE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t7eltwiseE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE9GELU_TANHE">DLP_ELT_ALGO_TYPE::GELU_TANH (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t10error_hndlE">dlp_metadata_t::error_hndl (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10error_hndlE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t10error_hndlE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE4MISHE">DLP_ELT_ALGO_TYPE::MISH (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t10matrix_addE">dlp_metadata_t::matrix_add (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10matrix_addE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t10matrix_addE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE5PRELUE">DLP_ELT_ALGO_TYPE::PRELU (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t10matrix_mulE">dlp_metadata_t::matrix_mul (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10matrix_mulE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t10matrix_mulE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE4RELUE">DLP_ELT_ALGO_TYPE::RELU (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t11num_eltwiseE">dlp_metadata_t::num_eltwise (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t11num_eltwiseE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t11num_eltwiseE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE7SIGMOIDE">DLP_ELT_ALGO_TYPE::SIGMOID (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t11post_op_grpE">dlp_metadata_t::post_op_grp (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t11post_op_grpE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t11post_op_grpE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE5SWISHE">DLP_ELT_ALGO_TYPE::SWISH (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t7pre_opsE">dlp_metadata_t::pre_ops (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t7pre_opsE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t7pre_opsE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17DLP_ELT_ALGO_TYPE4TANHE">DLP_ELT_ALGO_TYPE::TANH (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t5scaleE">dlp_metadata_t::scale (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t5scaleE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t5scaleE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv418dlp_eltwise_algo_t">dlp_eltwise_algo_t (C++ struct)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t10seq_lengthE">dlp_metadata_t::seq_length (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10seq_lengthE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t10seq_lengthE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N18dlp_eltwise_algo_t9algo_typeE">dlp_eltwise_algo_t::algo_type (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N14dlp_metadata_t10seq_vectorE">dlp_metadata_t::seq_vector (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10seq_vectorE">[1]</a>, <a href="api/types/index.html#_CPPv4N14dlp_metadata_t10seq_vectorE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N18dlp_eltwise_algo_t5alphaE">dlp_eltwise_algo_t::alpha (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv416dlp_post_op_bias">dlp_post_op_bias (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv416dlp_post_op_bias">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N18dlp_eltwise_algo_t4betaE">dlp_eltwise_algo_t::beta (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16dlp_post_op_bias4biasE">dlp_post_op_bias::bias (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias4biasE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N18dlp_eltwise_algo_t9stor_typeE">dlp_eltwise_algo_t::stor_type (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16dlp_post_op_bias2sfE">dlp_post_op_bias::sf (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias2sfE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv416dlp_error_hndl_t">dlp_error_hndl_t (C++ struct)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16dlp_post_op_bias9stor_typeE">dlp_post_op_bias::stor_type (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias9stor_typeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16dlp_error_hndl_t10error_codeE">dlp_error_hndl_t::error_code (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv419dlp_post_op_eltwise">dlp_post_op_eltwise (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv419dlp_post_op_eltwise">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv417dlp_group_post_op">dlp_group_post_op (C++ struct)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N19dlp_post_op_eltwise4algoE">dlp_post_op_eltwise::algo (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N19dlp_post_op_eltwise4algoE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op5a_sclE">dlp_group_post_op::a_scl (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N19dlp_post_op_eltwise2sfE">dlp_post_op_eltwise::sf (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N19dlp_post_op_eltwise2sfE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op4a_zpE">dlp_group_post_op::a_zp (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv422dlp_post_op_matrix_add">dlp_post_op_matrix_add (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv422dlp_post_op_matrix_add">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op5b_sclE">dlp_group_post_op::b_scl (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_add3ldmE">dlp_post_op_matrix_add::ldm (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add3ldmE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op4b_zpE">dlp_group_post_op::b_zp (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_add6matrixE">dlp_post_op_matrix_add::matrix (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add6matrixE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op10group_sizeE">dlp_group_post_op::group_size (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_add2sfE">dlp_post_op_matrix_add::sf (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add2sfE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N17dlp_group_post_op10seq_lengthE">dlp_group_post_op::seq_length (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_add9stor_typeE">dlp_post_op_matrix_add::stor_type (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add9stor_typeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv414dlp_metadata_t">dlp_metadata_t (C++ struct)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t20a_post_op_seq_lengthE">dlp_metadata_t::a_post_op_seq_length (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t12a_post_quantE">dlp_metadata_t::a_post_quant (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t19a_pre_op_seq_lengthE">dlp_metadata_t::a_pre_op_seq_length (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t11a_pre_quantE">dlp_metadata_t::a_pre_quant (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t20b_post_op_seq_lengthE">dlp_metadata_t::b_post_op_seq_length (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t12b_post_quantE">dlp_metadata_t::b_post_quant (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t19b_pre_op_seq_lengthE">dlp_metadata_t::b_pre_op_seq_length (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t11b_pre_quantE">dlp_metadata_t::b_pre_quant (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t4biasE">dlp_metadata_t::bias (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t7eltwiseE">dlp_metadata_t::eltwise (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10error_hndlE">dlp_metadata_t::error_hndl (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10matrix_addE">dlp_metadata_t::matrix_add (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10matrix_mulE">dlp_metadata_t::matrix_mul (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t11num_eltwiseE">dlp_metadata_t::num_eltwise (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t11post_op_grpE">dlp_metadata_t::post_op_grp (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t7pre_opsE">dlp_metadata_t::pre_ops (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t5scaleE">dlp_metadata_t::scale (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10seq_lengthE">dlp_metadata_t::seq_length (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N14dlp_metadata_t10seq_vectorE">dlp_metadata_t::seq_vector (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv416dlp_post_op_bias">dlp_post_op_bias (C++ struct)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias4biasE">dlp_post_op_bias::bias (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias8bias_lenE">dlp_post_op_bias::bias_len (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias2sfE">dlp_post_op_bias::sf (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias9stor_typeE">dlp_post_op_bias::stor_type (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16dlp_post_op_bias2zpE">dlp_post_op_bias::zp (C++ member)</a>
 </li>
   </ul></td>
   <td style="width: 33%; vertical-align: top;"><ul>
-      <li><a href="api/gemm/index.html#_CPPv422dlp_post_op_matrix_mul">dlp_post_op_matrix_mul (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv422dlp_post_op_matrix_mul">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv419dlp_post_op_eltwise">dlp_post_op_eltwise (C++ struct)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_mul3ldmE">dlp_post_op_matrix_mul::ldm (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul3ldmE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N19dlp_post_op_eltwise4algoE">dlp_post_op_eltwise::algo (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_mul6matrixE">dlp_post_op_matrix_mul::matrix (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul6matrixE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N19dlp_post_op_eltwise2sfE">dlp_post_op_eltwise::sf (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_mul2sfE">dlp_post_op_matrix_mul::sf (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul2sfE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv422dlp_post_op_matrix_add">dlp_post_op_matrix_add (C++ struct)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N22dlp_post_op_matrix_mul9stor_typeE">dlp_post_op_matrix_mul::stor_type (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul9stor_typeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add3ldmE">dlp_post_op_matrix_add::ldm (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv416DLP_POST_OP_TYPE">DLP_POST_OP_TYPE (C++ enum)</a>, <a href="api/gemm/post_ops.html#_CPPv416DLP_POST_OP_TYPE">[1]</a>, <a href="api/types/index.html#_CPPv416DLP_POST_OP_TYPE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add6matrixE">dlp_post_op_matrix_add::matrix (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16DLP_POST_OP_TYPE4BIASE">DLP_POST_OP_TYPE::BIAS (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE4BIASE">[1]</a>, <a href="api/types/index.html#_CPPv4N16DLP_POST_OP_TYPE4BIASE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add2sfE">dlp_post_op_matrix_add::sf (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE">DLP_POST_OP_TYPE::ELTWISE (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE">[1]</a>, <a href="api/types/index.html#_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_add9stor_typeE">dlp_post_op_matrix_add::stor_type (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE">DLP_POST_OP_TYPE::MATRIX_ADD (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE">[1]</a>, <a href="api/types/index.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv422dlp_post_op_matrix_mul">dlp_post_op_matrix_mul (C++ struct)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE">DLP_POST_OP_TYPE::MATRIX_MUL (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE">[1]</a>, <a href="api/types/index.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul3ldmE">dlp_post_op_matrix_mul::ldm (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N16DLP_POST_OP_TYPE5SCALEE">DLP_POST_OP_TYPE::SCALE (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE5SCALEE">[1]</a>, <a href="api/types/index.html#_CPPv4N16DLP_POST_OP_TYPE5SCALEE">[2]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul6matrixE">dlp_post_op_matrix_mul::matrix (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv410dlp_pre_op">dlp_pre_op (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv410dlp_pre_op">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul2sfE">dlp_post_op_matrix_mul::sf (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N10dlp_pre_op5b_sclE">dlp_pre_op::b_scl (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op5b_sclE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N22dlp_post_op_matrix_mul9stor_typeE">dlp_post_op_matrix_mul::stor_type (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N10dlp_pre_op4b_zpE">dlp_pre_op::b_zp (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op4b_zpE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv416DLP_POST_OP_TYPE">DLP_POST_OP_TYPE (C++ enum)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N10dlp_pre_op10group_sizeE">dlp_pre_op::group_size (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op10group_sizeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE4BIASE">DLP_POST_OP_TYPE::BIAS (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N10dlp_pre_op10seq_lengthE">dlp_pre_op::seq_length (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op10seq_lengthE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE7ELTWISEE">DLP_POST_OP_TYPE::ELTWISE (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv411dlp_scale_t">dlp_scale_t (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv411dlp_scale_t">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_ADDE">DLP_POST_OP_TYPE::MATRIX_ADD (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N11dlp_scale_t2sfE">dlp_scale_t::sf (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N11dlp_scale_t2sfE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE10MATRIX_MULE">DLP_POST_OP_TYPE::MATRIX_MUL (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N11dlp_scale_t2zpE">dlp_scale_t::zp (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N11dlp_scale_t2zpE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N16DLP_POST_OP_TYPE5SCALEE">DLP_POST_OP_TYPE::SCALE (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv48dlp_sf_t">dlp_sf_t (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv48dlp_sf_t">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv410dlp_pre_op">dlp_pre_op (C++ struct)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8dlp_sf_t12scale_factorE">dlp_sf_t::scale_factor (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8dlp_sf_t12scale_factorE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op5b_sclE">dlp_pre_op::b_scl (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8dlp_sf_t16scale_factor_lenE">dlp_sf_t::scale_factor_len (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8dlp_sf_t16scale_factor_lenE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op4b_zpE">dlp_pre_op::b_zp (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8dlp_sf_t17scale_factor_typeE">dlp_sf_t::scale_factor_type (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8dlp_sf_t17scale_factor_typeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op10group_sizeE">dlp_pre_op::group_size (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv419DLP_SYMM_STAT_QUANT">DLP_SYMM_STAT_QUANT (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv419DLP_SYMM_STAT_QUANT">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N10dlp_pre_op10seq_lengthE">dlp_pre_op::seq_length (C++ member)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N19DLP_SYMM_STAT_QUANT10group_sizeE">DLP_SYMM_STAT_QUANT::group_size (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N19DLP_SYMM_STAT_QUANT10group_sizeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv412dlp_quant_op">dlp_quant_op (C++ struct)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N12dlp_quant_op8dst_typeE">dlp_quant_op::dst_type (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N12dlp_quant_op10group_sizeE">dlp_quant_op::group_size (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N12dlp_quant_op3sclE">dlp_quant_op::scl (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N12dlp_quant_op8src_typeE">dlp_quant_op::src_type (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N12dlp_quant_op9symmetricE">dlp_quant_op::symmetric (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N12dlp_quant_op2zpE">dlp_quant_op::zp (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv411dlp_scale_t">dlp_scale_t (C++ struct)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N11dlp_scale_t2sfE">dlp_scale_t::sf (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N11dlp_scale_t2zpE">dlp_scale_t::zp (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv48dlp_sf_t">dlp_sf_t (C++ struct)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8dlp_sf_t12scale_factorE">dlp_sf_t::scale_factor (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8dlp_sf_t16scale_factor_dimE">dlp_sf_t::scale_factor_dim (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8dlp_sf_t16scale_factor_lenE">dlp_sf_t::scale_factor_len (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8dlp_sf_t17scale_factor_typeE">dlp_sf_t::scale_factor_type (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv419DLP_SYMM_STAT_QUANT">DLP_SYMM_STAT_QUANT (C++ struct)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N19DLP_SYMM_STAT_QUANT10group_sizeE">DLP_SYMM_STAT_QUANT::group_size (C++ member)</a>
+</li>
+      <li><a href="api/library/index.html#_CPPv429dlp_thread_get_ic_ways_activev">dlp_thread_get_ic_ways_active (C++ function)</a>
+</li>
+      <li><a href="api/library/index.html#_CPPv429dlp_thread_get_jc_ways_activev">dlp_thread_get_jc_ways_active (C++ function)</a>
+</li>
+      <li><a href="api/library/index.html#_CPPv433dlp_thread_get_num_threads_activev">dlp_thread_get_num_threads_active (C++ function)</a>
 </li>
       <li><a href="api/library/index.html#_CPPv426dlp_thread_set_num_threads4md_t">dlp_thread_set_num_threads (C++ function)</a>
 </li>
+      <li><a href="api/library/index.html#_CPPv434dlp_thread_set_num_threads_library4md_t">dlp_thread_set_num_threads_library (C++ function)</a>
+</li>
+      <li><a href="api/library/index.html#_CPPv432dlp_thread_set_num_threads_local4md_t">dlp_thread_set_num_threads_local (C++ function)</a>
+</li>
       <li><a href="api/library/index.html#_CPPv419dlp_thread_set_ways4md_t4md_t">dlp_thread_set_ways (C++ function)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv48DLP_TYPE">DLP_TYPE (C++ enum)</a>, <a href="api/gemm/post_ops.html#_CPPv48DLP_TYPE">[1]</a>
+      <li><a href="api/library/index.html#_CPPv427dlp_thread_set_ways_library4md_t4md_t">dlp_thread_set_ways_library (C++ function)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE8DLP_BF16E">DLP_TYPE::DLP_BF16 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE8DLP_BF16E">[1]</a>
+      <li><a href="api/library/index.html#_CPPv425dlp_thread_set_ways_local4md_t4md_t">dlp_thread_set_ways_local (C++ function)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE7DLP_F16E">DLP_TYPE::DLP_F16 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_F16E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv48DLP_TYPE">DLP_TYPE (C++ enum)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE7DLP_F32E">DLP_TYPE::DLP_F32 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_F32E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE8DLP_BF16E">DLP_TYPE::DLP_BF16 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE6DLP_F4E">DLP_TYPE::DLP_F4 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_F4E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_F16E">DLP_TYPE::DLP_F16 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE11DLP_INVALIDE">DLP_TYPE::DLP_INVALID (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE11DLP_INVALIDE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_F32E">DLP_TYPE::DLP_F32 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE7DLP_MAXE">DLP_TYPE::DLP_MAX (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_MAXE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_F4E">DLP_TYPE::DLP_F4 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE7DLP_S16E">DLP_TYPE::DLP_S16 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_S16E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE11DLP_INVALIDE">DLP_TYPE::DLP_INVALID (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE7DLP_S32E">DLP_TYPE::DLP_S32 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_S32E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_MAXE">DLP_TYPE::DLP_MAX (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE6DLP_S4E">DLP_TYPE::DLP_S4 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_S4E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_S16E">DLP_TYPE::DLP_S16 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE6DLP_S8E">DLP_TYPE::DLP_S8 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_S8E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_S32E">DLP_TYPE::DLP_S32 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE7DLP_U16E">DLP_TYPE::DLP_U16 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_U16E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_S4E">DLP_TYPE::DLP_S4 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE7DLP_U32E">DLP_TYPE::DLP_U32 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_U32E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_S8E">DLP_TYPE::DLP_S8 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE6DLP_U4E">DLP_TYPE::DLP_U4 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_U4E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_U16E">DLP_TYPE::DLP_U16 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8DLP_TYPE6DLP_U8E">DLP_TYPE::DLP_U8 (C++ enumerator)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_U8E">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE7DLP_U32E">DLP_TYPE::DLP_U32 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv48dlp_zp_t">dlp_zp_t (C++ struct)</a>, <a href="api/gemm/post_ops.html#_CPPv48dlp_zp_t">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_U4E">DLP_TYPE::DLP_U4 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8dlp_zp_t10zero_pointE">dlp_zp_t::zero_point (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8dlp_zp_t10zero_pointE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8DLP_TYPE6DLP_U8E">DLP_TYPE::DLP_U8 (C++ enumerator)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8dlp_zp_t14zero_point_lenE">dlp_zp_t::zero_point_len (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8dlp_zp_t14zero_point_lenE">[1]</a>
+      <li><a href="api/library/index.html#_CPPv417dlp_version_queryPiPiPi">dlp_version_query (C++ function)</a>
 </li>
-      <li><a href="api/gemm/index.html#_CPPv4N8dlp_zp_t15zero_point_typeE">dlp_zp_t::zero_point_type (C++ member)</a>, <a href="api/gemm/post_ops.html#_CPPv4N8dlp_zp_t15zero_point_typeE">[1]</a>
+      <li><a href="api/gemm/post_ops.html#_CPPv48dlp_zp_t">dlp_zp_t (C++ struct)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8dlp_zp_t10zero_pointE">dlp_zp_t::zero_point (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8dlp_zp_t14zero_point_lenE">dlp_zp_t::zero_point_len (C++ member)</a>
+</li>
+      <li><a href="api/gemm/post_ops.html#_CPPv4N8dlp_zp_t15zero_point_typeE">dlp_zp_t::zero_point_type (C++ member)</a>
 </li>
   </ul></td>
 </tr></table>
@@ -653,8 +769,8 @@ document.write(`
   </div>
   
   <!-- Scripts loaded after <body> so the DOM is not blocked -->
-  <script src="_static/scripts/bootstrap.js?digest=dfe6caa3a7d634c4db9b"></script>
-<script src="_static/scripts/pydata-sphinx-theme.js?digest=dfe6caa3a7d634c4db9b"></script>
+  <script defer src="_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
 
 <footer class="rocm-footer">
     <div class="container-lg">
