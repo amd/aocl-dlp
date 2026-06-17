@@ -476,6 +476,9 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
         kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
         kB->operator()(std::addressof(gemvN1ParamsIn));
     } else {
+        // NOTE: For F32 GEMM kernel this carries ps_b (B panel/column stride).
+        // To be revisited later with a more comprehensive fix.
+        md_t       ps_b = n_sub_updated;
         gemmParams gemmParamsIn{ A,
                                  B,
                                  C,
@@ -487,6 +490,7 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
                                  ps_a,
                                  rs_b,
                                  cs_b,
+                                 ps_b,
                                  rs_c,
                                  cs_c,
                                  alpha,

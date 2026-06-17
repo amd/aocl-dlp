@@ -68,6 +68,7 @@ struct gemmParams : public kernelParams
     md_t psA;
     md_t rsB;
     md_t csB;
+    md_t psB;
     md_t rsC;
     md_t csC;
 
@@ -117,6 +118,7 @@ struct gemmParams : public kernelParams
                md_t                  ps_a,
                md_t                  rs_b,
                md_t                  cs_b,
+               md_t                  ps_b,
                md_t                  rs_c,
                md_t                  cs_c,
                void*                 alpha_acc,
@@ -134,6 +136,7 @@ struct gemmParams : public kernelParams
         , psA(ps_a)
         , rsB(rs_b)
         , csB(cs_b)
+        , psB(ps_b)
         , rsC(rs_c)
         , csC(cs_c)
         , alpha(alpha_acc)
@@ -171,6 +174,7 @@ struct gemmParams : public kernelParams
         , psA(other.psA)
         , rsB(other.rsB)
         , csB(other.csB)
+        , psB(other.psB)
         , rsC(other.rsC)
         , csC(other.csC)
         , alpha(other.alpha)
@@ -211,6 +215,7 @@ struct gemmParams : public kernelParams
         , psA(other.psA)
         , rsB(other.rsB)
         , csB(other.csB)
+        , psB(other.psB)
         , rsC(other.rsC)
         , csC(other.csC)
         , alpha(other.alpha)
@@ -253,6 +258,7 @@ struct gemmParams : public kernelParams
         psA       = other.psA;
         rsB       = other.rsB;
         csB       = other.csB;
+        psB       = other.psB;
         rsC       = other.rsC;
         csC       = other.csC;
         alpha     = other.alpha;

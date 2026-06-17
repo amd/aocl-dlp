@@ -1031,118 +1031,131 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
 
         // Note: It is expected the generateAllKernels is called before
         // calling this function.
-        auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+        auto     params = static_cast<dlp::kernels::gemmParams*>(_params);
+        int      processBlockSize = getProcessBlockSize();
+        uint64_t og_post_op_c_i   = (params->kernelOpsAttr).post_op_c_i;
+        uint64_t og_post_op_c_j   = (params->kernelOpsAttr).post_op_c_j;
+        float*   aPtr             = static_cast<float*>(params->a);
+        float*   og_BPtr          = static_cast<float*>(params->b);
+        float*   og_CPtr          = static_cast<float*>(params->c);
+        md_t     og_n             = params->n;
+        md_t     og_m             = params->m;
+        md_t     og_k             = params->k;
 
-        int processBlockSize = getProcessBlockSize();
-        // Since JR loop is in framework, the 'n' dimension passed to this
-        // function is always <= NR.
-        int mFullPieces    = params->m / MR;
-        int mPartialPieces = params->m % MR;
+        for (iter_t jr = 0; jr < og_n; jr += NR) {
+            // Post ops meta attributes.
+            params->kernelOpsAttr.post_op_c_j = og_post_op_c_j + jr;
 
-        params->kIterBP = params->k / K_UNROLL;
-        params->kLeft   = params->k % K_UNROLL;
+            md_t n    = dlp_min((og_n - jr), NR);
+            params->n = n;
+            params->m = og_m;
+            params->k = og_k;
 
-        float* aPtr = static_cast<float*>(params->a);
-        float* bPtr = static_cast<float*>(params->b);
-        float* cPtr = static_cast<float*>(params->c);
-        // Initialize pointers to A and B
-        float* c_jr = cPtr;
-        float* c_ir = cPtr;
+            int mFullPieces    = og_m / MR;
+            int mPartialPieces = og_m % MR;
 
-        md_t n = params->n;
-        md_t m = params->m;
-        md_t k = params->k;
+            params->kIterBP = og_k / K_UNROLL;
+            params->kLeft   = og_k % K_UNROLL;
 
-        md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
+            // Initialize pointers.
+            float* bPtr = og_BPtr + (jr * params->psB);
+            params->b   = bPtr;
+            float* c_jr = og_CPtr + (jr * params->csC);
 
-        // OVERVIEW:
-        // This unified approach works for all kernel types (ZMM, YMM, AVX2).
-        // The key insight is that all architectures follow the same pattern:
-        // process elements in blocks, decompose fringe blocks into complete
-        // registers + remainder, then execute appropriate kernels.
-        //
-        // EXECUTION LOGIC:
-        // 1. Process elements in chunks of 'processBlockSize':
-        //    - ZMM: processBlockSize = 64 (full NR), numElemsPerReg = 16
-        //    - YMM: processBlockSize = 32 (NR/2), numElemsPerReg = 8
-        //
-        // 2. For each chunk, decompose into complete SIMD registers +
-        // remainder:
-        //    - Complete registers: Use kernel_idx = nFullpieces (no masking)
-        //    - Remainder elements: Use kernel_idx = 0 (mask kernel with
-        //    masking)
-        //
-        // 3. Execute kernels in sequence: complete registers first, then
-        // remainder
-        //
-        // EXAMPLE WALKTHROUGH (n=15 with YMM):
-        // - processBlockSize=32, numElemsPerReg=8
-        // - Iteration 1: nBlockSize = min(15, 32) = 15
-        //   - nFullpieces = 15/8 = 1  -> Execute kernel_idx=1 for 8 elements
-        //   (no mask)
-        //   - nRemainder = 15%8 = 7   -> Execute kernel_idx=0 for 7 elements
-        //   (with mask)
-        //   - Total processed: 8 + 7 = 15, n becomes 0, loop exits
-        //
-        // EXAMPLE WALKTHROUGH (n=95 with YMM):
-        // - Iteration 1: nBlockSize = min(95, 32) = 32
-        //   - nFullpieces = 32/8 = 4  -> Execute kernel_idx=4 for 32 elements
-        //   (no mask)
-        //   - nRemainder = 32%8 = 0   -> No remainder processing
-        //   - Processed: 32, n becomes 63
-        // - Iteration 2: nBlockSize = min(63, 32) = 32 -> Process 32 more
-        // elements
-        //   - Processed: 32, n becomes 31
-        // - Iteration 3: nBlockSize = min(31, 32) = 31
-        //   - nFullpieces = 31/8 = 3  -> Execute kernel_idx=3 for 24 elements
-        //   (no mask)
-        //   - nRemainder = 31%8 = 7   -> Execute kernel_idx=0 for 7 elements
-        //   (with mask)
-        //   - Processed: 24 + 7 = 31, n becomes 0, loop exits
+            // OVERVIEW:
+            // This unified approach works for all kernel types (ZMM, YMM,
+            // AVX2). The key insight is that all architectures follow the same
+            // pattern: process elements in blocks, decompose fringe blocks into
+            // complete registers + remainder, then execute appropriate kernels.
+            //
+            // EXECUTION LOGIC:
+            // 1. Process elements in chunks of 'processBlockSize':
+            //    - ZMM: processBlockSize = 64 (full NR), numElemsPerReg = 16
+            //    - YMM: processBlockSize = 32 (NR/2), numElemsPerReg = 8
+            //
+            // 2. For each chunk, decompose into complete SIMD registers +
+            // remainder:
+            //    - Complete registers: Use kernel_idx = nFullpieces (no
+            //    masking)
+            //    - Remainder elements: Use kernel_idx = 0 (mask kernel with
+            //    masking)
+            //
+            // 3. Execute kernels in sequence: complete registers first, then
+            // remainder
+            //
+            // EXAMPLE WALKTHROUGH (n=15 with YMM):
+            // - processBlockSize=32, numElemsPerReg=8
+            // - Iteration 1: nBlockSize = min(15, 32) = 15
+            //   - nFullpieces = 15/8 = 1  -> Execute kernel_idx=1 for 8
+            //   elements (no mask)
+            //   - nRemainder = 15%8 = 7   -> Execute kernel_idx=0 for 7
+            //   elements (with mask)
+            //   - Total processed: 8 + 7 = 15, n becomes 0, loop exits
+            //
+            // EXAMPLE WALKTHROUGH (n=95 with YMM):
+            // - Iteration 1: nBlockSize = min(95, 32) = 32
+            //   - nFullpieces = 32/8 = 4  -> Execute kernel_idx=4 for 32
+            //   elements (no mask)
+            //   - nRemainder = 32%8 = 0   -> No remainder processing
+            //   - Processed: 32, n becomes 63
+            // - Iteration 2: nBlockSize = min(63, 32) = 32 -> Process 32 more
+            // elements
+            //   - Processed: 32, n becomes 31
+            // - Iteration 3: nBlockSize = min(31, 32) = 31
+            //   - nFullpieces = 31/8 = 3  -> Execute kernel_idx=3 for 24
+            //   elements (no mask)
+            //   - nRemainder = 31%8 = 7   -> Execute kernel_idx=0 for 7
+            //   elements (with mask)
+            //   - Processed: 24 + 7 = 31, n becomes 0, loop exits
 
-        while (n > 0) {
-            // Its expected that every NR value is multiple of numElemsPerReg.
-            int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
-            int nFullpieces = nBlockSize / numElemsPerReg;
-            int nRemainder  = ((nFullpieces - termNRFringeRegCount) >= 0)
-                                  ? (nBlockSize - (nFullpieces * numElemsPerReg))
-                                  : nBlockSize;
+            while (n > 0) {
+                // Its expected that every NR value is multiple of
+                // numElemsPerReg.
+                int nBlockSize = (n >= processBlockSize) ? processBlockSize : n;
+                int nFullpieces = nBlockSize / numElemsPerReg;
+                int nRemainder =
+                    ((nFullpieces - termNRFringeRegCount) >= 0)
+                        ? (nBlockSize - (nFullpieces * numElemsPerReg))
+                        : nBlockSize;
 
-            if (isGenLtKrnlForAvailFullKrnl) {
-                // Case where we generate both "==" and "<" kernels for
-                // each multiple of numElemsPerReg including "0".
-                int idBase       = ((nFullpieces - termNRFringeRegCount) >= 0)
-                                       ? (nFullpieces - termNRFringeRegCount)
-                                       : -1;
-                int kernel_n_idx = (2 * (idBase + 1)) - 1;
-                if (nRemainder > 0) {
-                    setMaskForGEMMLtFringe(params, nRemainder);
-                    kernel_n_idx += 1;
-                }
+                if (isGenLtKrnlForAvailFullKrnl) {
+                    // Case where we generate both "==" and "<" kernels for
+                    // each multiple of numElemsPerReg including "0".
+                    int idBase = ((nFullpieces - termNRFringeRegCount) >= 0)
+                                     ? (nFullpieces - termNRFringeRegCount)
+                                     : -1;
+                    int kernel_n_idx = (2 * (idBase + 1)) - 1;
+                    if (nRemainder > 0) {
+                        setMaskForGEMMLtFringe(params, nRemainder);
+                        kernel_n_idx += 1;
+                    }
 
-                int elementsToProcess = nBlockSize;
-                executeGEMMMLoop(params, mFullPieces, mPartialPieces,
-                                 kernel_n_idx, elementsToProcess, n, &c_jr,
-                                 og_post_op_c_i, aPtr);
-            } else {
-                // Case where we generate "==" kernels for each multiple
-                // of numElemsPerReg including and 1 "<" kernel for the
-                // smallest multiple of numElemsPerReg, "0".
-                if (nFullpieces >= termNRFringeRegCount) {
-                    int kernel_n_idx = nFullpieces - termNRFringeRegCount + 1;
-                    int elementsToProcess = nFullpieces * numElemsPerReg;
+                    int elementsToProcess = nBlockSize;
                     executeGEMMMLoop(params, mFullPieces, mPartialPieces,
                                      kernel_n_idx, elementsToProcess, n, &c_jr,
                                      og_post_op_c_i, aPtr);
-                }
+                } else {
+                    // Case where we generate "==" kernels for each multiple
+                    // of numElemsPerReg including and 1 "<" kernel for the
+                    // smallest multiple of numElemsPerReg, "0".
+                    if (nFullpieces >= termNRFringeRegCount) {
+                        int kernel_n_idx =
+                            nFullpieces - termNRFringeRegCount + 1;
+                        int elementsToProcess = nFullpieces * numElemsPerReg;
+                        executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                         kernel_n_idx, elementsToProcess, n,
+                                         &c_jr, og_post_op_c_i, aPtr);
+                    }
 
-                // Process remainder with mask (if any)
-                if (nRemainder > 0) {
-                    setMaskForGEMMLtFringe(params, nRemainder);
-                    int kernel_n_idx = 0; // Use lt mask kernel for nRemainder.
-                    executeGEMMMLoop(params, mFullPieces, mPartialPieces,
-                                     kernel_n_idx, nRemainder, n, &c_jr,
-                                     og_post_op_c_i, aPtr);
+                    // Process remainder with mask (if any)
+                    if (nRemainder > 0) {
+                        setMaskForGEMMLtFringe(params, nRemainder);
+                        int kernel_n_idx =
+                            0; // Use lt mask kernel for nRemainder.
+                        executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                         kernel_n_idx, nRemainder, n, &c_jr,
+                                         og_post_op_c_i, aPtr);
+                    }
                 }
             }
         }
@@ -1154,69 +1167,65 @@ jitAmdZenFP32::executeKernel(dlp::kernels::kernelParams* _params)
 dlp::kernels::kernelError
 jitAmdZenFP32::executeKernelRD(dlp::kernels::kernelParams* _params)
 {
-    auto params = static_cast<dlp::kernels::gemmParams*>(_params);
+    auto     params           = static_cast<dlp::kernels::gemmParams*>(_params);
+    int      processBlockSize = getProcessBlockSize();
+    uint64_t og_post_op_c_i   = (params->kernelOpsAttr).post_op_c_i;
+    uint64_t og_post_op_c_j_nrloop = (params->kernelOpsAttr).post_op_c_j;
+    float*   aPtr                  = static_cast<float*>(params->a);
+    float*   og_BPtr               = static_cast<float*>(params->b);
+    float*   og_CPtr               = static_cast<float*>(params->c);
+    md_t     og_n                  = params->n;
+    md_t     og_m                  = params->m;
+    md_t     og_k                  = params->k;
 
-    int processBlockSize = getProcessBlockSize();
+    // Iterate over N in NR-sized panels (framework no longer runs the JR loop).
+    // The inner while(n) loop further decomposes each NR panel into
+    // processBlockSize / vector-sized chunks (main + fringe).
+    for (iter_t jr = 0; jr < og_n; jr += NR) {
+        // Post ops meta attributes.
+        params->kernelOpsAttr.post_op_c_j = og_post_op_c_j_nrloop + jr;
+        uint64_t og_post_op_c_j           = (params->kernelOpsAttr).post_op_c_j;
 
-    int mFullPieces    = params->m / MR;
-    int mPartialPieces = params->m % MR;
+        md_t n    = dlp_min((og_n - jr), NR);
+        params->n = n;
+        params->m = og_m;
+        params->k = og_k;
 
-    params->kIterBP = params->k / (K_UNROLL * numElemsPerReg);
-    params->kLeft   = params->k % (K_UNROLL * numElemsPerReg);
+        int mFullPieces    = og_m / MR;
+        int mPartialPieces = og_m % MR;
 
-    // In RD kernels, mask is set for k-dimension.
-    setMaskForGEMMLtFringe(params, (params->kLeft % numElemsPerReg));
+        params->kIterBP = og_k / (K_UNROLL * numElemsPerReg);
+        params->kLeft   = og_k % (K_UNROLL * numElemsPerReg);
 
-    float* aPtr = static_cast<float*>(params->a);
-    float* bPtr = static_cast<float*>(params->b);
-    float* cPtr = static_cast<float*>(params->c);
+        // Initialize pointers.
+        float* bPtr = og_BPtr + (jr * params->psB);
+        params->b   = bPtr;
+        float* c_jr = og_CPtr + (jr * params->csC);
 
-    float* c_jr = cPtr;
-    float* c_ir = cPtr;
+        // In RD kernels, mask is set for k-dimension.
+        setMaskForGEMMLtFringe(params, (params->kLeft % numElemsPerReg));
 
-    md_t n = params->n;
-    md_t m = params->m;
-    md_t k = params->k;
+        int kernel_n_idx = 0, kernel_m_idx = 0;
+        int elementsToProcess = 0;
 
-    md_t og_post_op_c_i = (params->kernelOpsAttr).post_op_c_i;
-    md_t og_post_op_c_j = (params->kernelOpsAttr).post_op_c_j;
+        // MR and psA are passed as 6 and 6*rs_a respectively from the
+        // framework. since we are using MR as 3 for Avx2 path, we recalculate
+        // and update psA here. Since mtag_a will always be unpacked, it is safe
+        // to overwrite psA to MR * rs_a here.
+        params->psA = MR * (params->rsA);
 
-    int kernel_n_idx = 0, kernel_m_idx = 0;
-    int elementsToProcess = 0;
+        int nElemsPerRegLog2 = amdzen::utils::int_log2(numElemsPerReg);
+        int power            = nElemsPerRegLog2;
 
-    // MR and psA are passed as 6 and 6*rs_a respectively from the framework.
-    // since we are using MR as 3 for Avx2 path, we recalculate and update psA
-    // here. Since mtag_a will always be unpacked, it is safe to overwrite psA
-    // to MR * rs_a here.
-    params->psA = MR * (params->rsA);
+        while (n > 0) {
+            int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
+            int nFullpieces = nBlockSize / numElemsPerReg;
+            int nRemainder  = nBlockSize % numElemsPerReg;
 
-    int nElemsPerRegLog2 = amdzen::utils::int_log2(numElemsPerReg);
-    int power            = nElemsPerRegLog2;
-
-    while (n > 0) {
-        int nBlockSize  = (n >= processBlockSize) ? processBlockSize : n;
-        int nFullpieces = nBlockSize / numElemsPerReg;
-        int nRemainder  = nBlockSize % numElemsPerReg;
-
-        // process multiples of numElemsPerReg
-        if (nFullpieces >= 1) {
-            kernel_n_idx      = nElemsPerRegLog2 + nFullpieces - 1;
-            elementsToProcess = nFullpieces * numElemsPerReg;
-            executeGEMMMLoop(params, mFullPieces, mPartialPieces, kernel_n_idx,
-                             elementsToProcess, n, &c_jr, og_post_op_c_i, aPtr);
-
-            // post_op_c_j attribute is updated inside assembly code. so reset
-            // it to the original value and increment properly.
-            og_post_op_c_j += elementsToProcess;
-            (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
-        }
-        // process remainder by dividing into powers of 2
-        // For example, if nRemainder is 15, then we will process 8, 4, 2, 1.
-        if (nRemainder > 0) {
-            int n_chunk = (1 << power); // 2^power
-            if (n >= n_chunk) {
-                kernel_n_idx      = power;
-                elementsToProcess = n_chunk;
+            // process multiples of numElemsPerReg
+            if (nFullpieces >= 1) {
+                kernel_n_idx      = nElemsPerRegLog2 + nFullpieces - 1;
+                elementsToProcess = nFullpieces * numElemsPerReg;
                 executeGEMMMLoop(params, mFullPieces, mPartialPieces,
                                  kernel_n_idx, elementsToProcess, n, &c_jr,
                                  og_post_op_c_i, aPtr);
@@ -1226,7 +1235,25 @@ jitAmdZenFP32::executeKernelRD(dlp::kernels::kernelParams* _params)
                 og_post_op_c_j += elementsToProcess;
                 (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
             }
-            power--;
+            // process remainder by dividing into powers of 2
+            // For example, if nRemainder is 15, then we will process 8, 4,
+            // 2, 1.
+            if (nRemainder > 0) {
+                int n_chunk = (1 << power); // 2^power
+                if (n >= n_chunk) {
+                    kernel_n_idx      = power;
+                    elementsToProcess = n_chunk;
+                    executeGEMMMLoop(params, mFullPieces, mPartialPieces,
+                                     kernel_n_idx, elementsToProcess, n, &c_jr,
+                                     og_post_op_c_i, aPtr);
+
+                    // post_op_c_j attribute is updated inside assembly code. so
+                    // reset it to the original value and increment properly.
+                    og_post_op_c_j += elementsToProcess;
+                    (params->kernelOpsAttr).post_op_c_j = og_post_op_c_j;
+                }
+                power--;
+            }
         }
     }
     return dlp::kernels::kernelError::success;

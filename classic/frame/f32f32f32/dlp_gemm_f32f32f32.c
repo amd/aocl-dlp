@@ -171,6 +171,8 @@ DLP_GEMV(float, float, float, f32f32f32of32)
         //        and generating the appropriate kernels.
         if (dlp_cpuid_is_avx512_supported() == TRUE) {
             if (dlp_gemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
+                // BUG: MR=8 in DE, 16 here. Also packa_mr8 called,
+                // seems to imply MR=8 is correct.
                 MR       = 16;
                 ker_fp   = dlp_gemv_n_one_f32f32f32of32_avx512_256;
                 packa_fp = dlp_packa_mr8_f32f32f32of32_col_major;
@@ -654,32 +656,17 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                     ps_a_use = MR * rs_a;
                 }
 
-                for (iter_t jr = 0; jr < nc0; jr += NR) {
-                    md_t nr0 = dlp_min((nc0 - jr), NR);
+                // Post ops meta attributes.
+                post_ops_attr.post_op_c_i    = ic;
+                post_ops_attr.rs_c_downscale = rs_c_downscale;
+                post_ops_attr.post_op_c_j    = jc;
 
-                    // Post ops meta attributes.
-                    post_ops_attr.post_op_c_i    = ic;
-                    post_ops_attr.post_op_c_j    = (jc + jr);
-                    post_ops_attr.rs_c_downscale = rs_c_downscale;
-
-                    // Call the micro-kernel
-                    if ((lcntx->dlp_kernel_hndl.kernel_base != NULL)) {
-                        dlp_execute_kernel(
-                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
-                            (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
-                            (float*)(b_use + (jr * ps_b_use)), rs_b_use,
-                            cs_b_use, 0, 0, (c_use_ic + jr * cs_c_use), rs_c,
-                            cs_c_use, (void*)&alpha, (void*)&beta0,
-                            post_op_list, post_ops_attr);
-                    } else {
-                        ker_ptr(mc0, nr0, kc0, (float*)a_use, rs_a_use,
-                                cs_a_use, ps_a_use,
-                                (float*)(b_use + (jr * ps_b_use)), rs_b_use,
-                                cs_b_use, (c_use_ic + jr * cs_c_use), rs_c,
-                                cs_c_use, alpha, beta0, post_op_list,
-                                post_ops_attr);
-                    }
-                }
+                // Call the micro-kernel
+                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, nc0, kc0,
+                                   (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
+                                   (float*)b_use, rs_b_use, cs_b_use, ps_b_use,
+                                   0, c_use_ic, rs_c, cs_c_use, (void*)&alpha,
+                                   (void*)&beta0, post_op_list, post_ops_attr);
             }
         }
         if (mtag_b == REORDERED) {
