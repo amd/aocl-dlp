@@ -30,8 +30,9 @@
 #define DLP_RNTM_H
 
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
 
-typedef struct __attribute__((aligned(64)))
+typedef struct DLP_ALIGNED_STRUCT(64)
 {
     md_t num_threads;
     md_t ic_ways;

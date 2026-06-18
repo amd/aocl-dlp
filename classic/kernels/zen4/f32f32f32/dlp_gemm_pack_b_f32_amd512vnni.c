@@ -28,6 +28,7 @@
 
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
+#include "classic/dlp_simd_casts.h"
 
 void
 dlp_packb_nr64_f32f32f32of32_row_major(float*       pack_b_buffer,
@@ -231,107 +232,107 @@ dlp_packb_nr64_f32f32f32of32_row_major(float*       pack_b_buffer,
 #define UNPACK_PD_16x16()                                                      \
     /* Even indices contains lo parts, odd indices contains hi parts. */       \
     a_reg[0] =                                                                 \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[0], (__m512d)b_reg[2]);      \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[0]), DLP_CAST_PS_PD512(b_reg[2])));      \
     a_reg[1] =                                                                 \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[0], (__m512d)b_reg[2]);      \
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[0]), DLP_CAST_PS_PD512(b_reg[2])));      \
     a_reg[2] =                                                                 \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[4], (__m512d)b_reg[6]);      \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[4]), DLP_CAST_PS_PD512(b_reg[6])));      \
     a_reg[3] =                                                                 \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[4], (__m512d)b_reg[6]);      \
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[4]), DLP_CAST_PS_PD512(b_reg[6])));      \
     a_reg[4] =                                                                 \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[8], (__m512d)b_reg[10]);     \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[8]), DLP_CAST_PS_PD512(b_reg[10])));     \
     a_reg[5] =                                                                 \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[8], (__m512d)b_reg[10]);     \
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[8]), DLP_CAST_PS_PD512(b_reg[10])));     \
     a_reg[6] =                                                                 \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[12], (__m512d)b_reg[14]);    \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[12]), DLP_CAST_PS_PD512(b_reg[14])));    \
     a_reg[7] =                                                                 \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[12], (__m512d)b_reg[14]);    \
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[12]), DLP_CAST_PS_PD512(b_reg[14])));    \
     a_reg[8] =                                                                 \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[1], (__m512d)b_reg[3]);      \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[1]), DLP_CAST_PS_PD512(b_reg[3])));      \
     a_reg[9] =                                                                 \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[1], (__m512d)b_reg[3]);      \
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[1]), DLP_CAST_PS_PD512(b_reg[3])));      \
     a_reg[10] =                                                                \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[5], (__m512d)b_reg[7]);      \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[5]), DLP_CAST_PS_PD512(b_reg[7])));      \
     a_reg[11] =                                                                \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[5], (__m512d)b_reg[7]);      \
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[5]), DLP_CAST_PS_PD512(b_reg[7])));      \
     a_reg[12] =                                                                \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[9], (__m512d)b_reg[11]);     \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[9]), DLP_CAST_PS_PD512(b_reg[11])));     \
     a_reg[13] =                                                                \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[9], (__m512d)b_reg[11]);     \
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[9]), DLP_CAST_PS_PD512(b_reg[11])));     \
     a_reg[14] =                                                                \
-        (__m512)_mm512_unpacklo_pd((__m512d)b_reg[13], (__m512d)b_reg[15]);    \
+        DLP_CAST_PD_PS512(_mm512_unpacklo_pd(DLP_CAST_PS_PD512(b_reg[13]), DLP_CAST_PS_PD512(b_reg[15])));    \
     a_reg[15] =                                                                \
-        (__m512)_mm512_unpackhi_pd((__m512d)b_reg[13], (__m512d)b_reg[15]);
+        DLP_CAST_PD_PS512(_mm512_unpackhi_pd(DLP_CAST_PS_PD512(b_reg[13]), DLP_CAST_PS_PD512(b_reg[15])));
 
 #define PERMUTE_R1_16x16(selector1, selector2)                                 \
     /* Even indices contains lo parts, odd indices contains hi parts. */       \
-    b_reg[0]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[0], selector1,   \
-                                               (__m512d)a_reg[2]);             \
-    b_reg[1]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[0], selector2,   \
-                                               (__m512d)a_reg[2]);             \
-    b_reg[2]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[4], selector1,   \
-                                               (__m512d)a_reg[6]);             \
-    b_reg[3]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[4], selector2,   \
-                                               (__m512d)a_reg[6]);             \
-    b_reg[4]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[8], selector1,   \
-                                               (__m512d)a_reg[10]);            \
-    b_reg[5]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[8], selector2,   \
-                                               (__m512d)a_reg[10]);            \
-    b_reg[6]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[12], selector1,  \
-                                               (__m512d)a_reg[14]);            \
-    b_reg[7]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[12], selector2,  \
-                                               (__m512d)a_reg[14]);            \
-    b_reg[8]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[1], selector1,   \
-                                               (__m512d)a_reg[3]);             \
-    b_reg[9]  = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[1], selector2,   \
-                                               (__m512d)a_reg[3]);             \
-    b_reg[10] = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[5], selector1,   \
-                                               (__m512d)a_reg[7]);             \
-    b_reg[11] = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[5], selector2,   \
-                                               (__m512d)a_reg[7]);             \
-    b_reg[12] = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[9], selector1,   \
-                                               (__m512d)a_reg[11]);            \
-    b_reg[13] = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[9], selector2,   \
-                                               (__m512d)a_reg[11]);            \
-    b_reg[14] = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[13], selector1,  \
-                                               (__m512d)a_reg[15]);            \
-    b_reg[15] = (__m512)_mm512_permutex2var_pd((__m512d)a_reg[13], selector2,  \
-                                               (__m512d)a_reg[15]);
+    b_reg[0]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[0]), selector1,   \
+                                               DLP_CAST_PS_PD512(a_reg[2])));             \
+    b_reg[1]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[0]), selector2,   \
+                                               DLP_CAST_PS_PD512(a_reg[2])));             \
+    b_reg[2]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[4]), selector1,   \
+                                               DLP_CAST_PS_PD512(a_reg[6])));             \
+    b_reg[3]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[4]), selector2,   \
+                                               DLP_CAST_PS_PD512(a_reg[6])));             \
+    b_reg[4]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[8]), selector1,   \
+                                               DLP_CAST_PS_PD512(a_reg[10])));            \
+    b_reg[5]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[8]), selector2,   \
+                                               DLP_CAST_PS_PD512(a_reg[10])));            \
+    b_reg[6]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[12]), selector1,  \
+                                               DLP_CAST_PS_PD512(a_reg[14])));            \
+    b_reg[7]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[12]), selector2,  \
+                                               DLP_CAST_PS_PD512(a_reg[14])));            \
+    b_reg[8]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[1]), selector1,   \
+                                               DLP_CAST_PS_PD512(a_reg[3])));             \
+    b_reg[9]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[1]), selector2,   \
+                                               DLP_CAST_PS_PD512(a_reg[3])));             \
+    b_reg[10] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[5]), selector1,   \
+                                               DLP_CAST_PS_PD512(a_reg[7])));             \
+    b_reg[11] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[5]), selector2,   \
+                                               DLP_CAST_PS_PD512(a_reg[7])));             \
+    b_reg[12] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[9]), selector1,   \
+                                               DLP_CAST_PS_PD512(a_reg[11])));            \
+    b_reg[13] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[9]), selector2,   \
+                                               DLP_CAST_PS_PD512(a_reg[11])));            \
+    b_reg[14] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[13]), selector1,  \
+                                               DLP_CAST_PS_PD512(a_reg[15])));            \
+    b_reg[15] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(a_reg[13]), selector2,  \
+                                               DLP_CAST_PS_PD512(a_reg[15])));
 
 #define PERMUTE_R2_16x16(selector1_1, selector2_1)                              \
     /* Even indices contains lo parts, odd indices contains hi parts. */        \
-    a_reg[0]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[0], selector1_1,  \
-                                               (__m512d)b_reg[2]); /* Row 0 */  \
-    a_reg[1]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[0], selector2_1,  \
-                                               (__m512d)b_reg[2]); /* Row 4 */  \
-    a_reg[2]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[4], selector1_1,  \
-                                               (__m512d)b_reg[6]); /* Row 2 */  \
-    a_reg[3]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[4], selector2_1,  \
-                                               (__m512d)b_reg[6]); /* Row 6 */  \
-    a_reg[4]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[8], selector1_1,  \
-                                               (__m512d)b_reg[10]); /* Row 1 */ \
-    a_reg[5]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[8], selector2_1,  \
-                                               (__m512d)b_reg[10]); /* Row 5 */ \
-    a_reg[6]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[12], selector1_1, \
-                                               (__m512d)b_reg[14]); /* Row 3 */ \
-    a_reg[7]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[12], selector2_1, \
-                                               (__m512d)b_reg[14]); /* Row 7 */ \
-    a_reg[8]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[1], selector1_1,  \
-                                               (__m512d)b_reg[3]); /* Row 8 */  \
-    a_reg[9]  = (__m512)_mm512_permutex2var_pd((__m512d)b_reg[1], selector2_1,  \
-                                               (__m512d)b_reg[3]); /* Row 12 */ \
-    a_reg[10] = (__m512)_mm512_permutex2var_pd(                                 \
-        (__m512d)b_reg[5], selector1_1, (__m512d)b_reg[7]); /* Row 10 */        \
-    a_reg[11] = (__m512)_mm512_permutex2var_pd(                                 \
-        (__m512d)b_reg[5], selector2_1, (__m512d)b_reg[7]); /* Row 14 */        \
-    a_reg[12] = (__m512)_mm512_permutex2var_pd(                                 \
-        (__m512d)b_reg[9], selector1_1, (__m512d)b_reg[11]); /* Row 9 */        \
-    a_reg[13] = (__m512)_mm512_permutex2var_pd(                                 \
-        (__m512d)b_reg[9], selector2_1, (__m512d)b_reg[11]); /* Row 13 */       \
-    a_reg[14] = (__m512)_mm512_permutex2var_pd(                                 \
-        (__m512d)b_reg[13], selector1_1, (__m512d)b_reg[15]); /* Row 11 */      \
-    a_reg[15] = (__m512)_mm512_permutex2var_pd(                                 \
-        (__m512d)b_reg[13], selector2_1, (__m512d)b_reg[15]); /* Row 15 */
+    a_reg[0]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[0]), selector1_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[2]))); /* Row 0 */  \
+    a_reg[1]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[0]), selector2_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[2]))); /* Row 4 */  \
+    a_reg[2]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[4]), selector1_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[6]))); /* Row 2 */  \
+    a_reg[3]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[4]), selector2_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[6]))); /* Row 6 */  \
+    a_reg[4]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[8]), selector1_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[10]))); /* Row 1 */ \
+    a_reg[5]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[8]), selector2_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[10]))); /* Row 5 */ \
+    a_reg[6]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[12]), selector1_1, \
+                                               DLP_CAST_PS_PD512(b_reg[14]))); /* Row 3 */ \
+    a_reg[7]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[12]), selector2_1, \
+                                               DLP_CAST_PS_PD512(b_reg[14]))); /* Row 7 */ \
+    a_reg[8]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[1]), selector1_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[3]))); /* Row 8 */  \
+    a_reg[9]  = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(DLP_CAST_PS_PD512(b_reg[1]), selector2_1,  \
+                                               DLP_CAST_PS_PD512(b_reg[3]))); /* Row 12 */ \
+    a_reg[10] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(                                 \
+        DLP_CAST_PS_PD512(b_reg[5]), selector1_1, DLP_CAST_PS_PD512(b_reg[7]))); /* Row 10 */        \
+    a_reg[11] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(                                 \
+        DLP_CAST_PS_PD512(b_reg[5]), selector2_1, DLP_CAST_PS_PD512(b_reg[7]))); /* Row 14 */        \
+    a_reg[12] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(                                 \
+        DLP_CAST_PS_PD512(b_reg[9]), selector1_1, DLP_CAST_PS_PD512(b_reg[11]))); /* Row 9 */        \
+    a_reg[13] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(                                 \
+        DLP_CAST_PS_PD512(b_reg[9]), selector2_1, DLP_CAST_PS_PD512(b_reg[11]))); /* Row 13 */       \
+    a_reg[14] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(                                 \
+        DLP_CAST_PS_PD512(b_reg[13]), selector1_1, DLP_CAST_PS_PD512(b_reg[15]))); /* Row 11 */      \
+    a_reg[15] = DLP_CAST_PD_PS512(_mm512_permutex2var_pd(                                 \
+        DLP_CAST_PS_PD512(b_reg[13]), selector2_1, DLP_CAST_PS_PD512(b_reg[15]))); /* Row 15 */
 
 #define STORE_PS_16x16()                                                       \
     _mm512_storeu_ps(pack_b_buffer + (jc * KC) + ((kr + 0) * NR) + jr_offset,  \

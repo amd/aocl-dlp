@@ -29,6 +29,7 @@
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 #include <string.h>
+#include "classic/dlp_simd_casts.h"
 
 #ifdef DLP_GEMM_BF16_JIT
 void
@@ -168,15 +169,15 @@ dlp_packb_mxp_nr64_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
             b01 = _mm512_loadu_ps(b + (ldb * (kr + 0)) + jc + 16);
             b02 = _mm512_loadu_ps(b + (ldb * (kr + 0)) + jc + 32);
             b03 = _mm512_loadu_ps(b + (ldb * (kr + 0)) + jc + 48);
-            a0  = (__m512i)_mm512_cvtne2ps_pbh(b01, b00);
-            b0  = (__m512i)_mm512_cvtne2ps_pbh(b03, b02);
+            a0  = _mm512_cvtne2ps_pbh(b01, b00);
+            b0  = _mm512_cvtne2ps_pbh(b03, b02);
 
             b00 = _mm512_loadu_ps(b + (ldb * (kr + 1)) + jc);
             b01 = _mm512_loadu_ps(b + (ldb * (kr + 1)) + jc + 16);
             b02 = _mm512_loadu_ps(b + (ldb * (kr + 1)) + jc + 32);
             b03 = _mm512_loadu_ps(b + (ldb * (kr + 1)) + jc + 48);
-            c0  = (__m512i)_mm512_cvtne2ps_pbh(b01, b00);
-            d0  = (__m512i)_mm512_cvtne2ps_pbh(b03, b02);
+            c0  = _mm512_cvtne2ps_pbh(b01, b00);
+            d0  = _mm512_cvtne2ps_pbh(b03, b02);
 
             a01 = _mm512_unpacklo_epi16(a0, c0);
             a0  = _mm512_unpackhi_epi16(a0, c0);
@@ -210,8 +211,8 @@ dlp_packb_mxp_nr64_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
             b02 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0)) + jc + 32);
             b03 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0)) + jc + 48);
 
-            a0 = (__m512i)_mm512_cvtne2ps_pbh(b01, b00);
-            b0 = (__m512i)_mm512_cvtne2ps_pbh(b03, b02);
+            a0 = _mm512_cvtne2ps_pbh(b01, b00);
+            b0 = _mm512_cvtne2ps_pbh(b03, b02);
 
             c0 = _mm512_setzero_si512();
             d0 = _mm512_setzero_si512();
@@ -330,8 +331,8 @@ dlp_packb_mxp_nr48_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
         b01 = _mm512_loadu_ps(b + (ldb * (kr + 0)) + 16);
         b02 = _mm512_loadu_ps(b + (ldb * (kr + 1)));
         b03 = _mm512_loadu_ps(b + (ldb * (kr + 1)) + 16);
-        a0x = (__m512i)_mm512_cvtne2ps_pbh(b01, b00);
-        c0x = (__m512i)_mm512_cvtne2ps_pbh(b03, b02);
+        a0x = _mm512_cvtne2ps_pbh(b01, b00);
+        c0x = _mm512_cvtne2ps_pbh(b03, b02);
 
         a01x = _mm512_unpacklo_epi16(a0x, c0x);
         a0x  = _mm512_unpackhi_epi16(a0x, c0x);
@@ -347,8 +348,8 @@ dlp_packb_mxp_nr48_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
         // row.
         b00 = _mm512_loadu_ps(b + (ldb * (kr + 0)) + 32);
         b01 = _mm512_loadu_ps(b + (ldb * (kr + 1)) + 32);
-        a0  = (__m256i)_mm512_cvtneps_pbh(b00);
-        c0  = (__m256i)_mm512_cvtneps_pbh(b01);
+        a0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b00));
+        c0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b01));
 
         a01 = _mm256_unpacklo_epi16(a0, c0);
         a0  = _mm256_unpackhi_epi16(a0, c0);
@@ -369,7 +370,7 @@ dlp_packb_mxp_nr48_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
     if (k_partial_pieces > 0) {
         b00 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0)));
         b01 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0) + 16));
-        a0x = (__m512i)_mm512_cvtne2ps_pbh(b01, b00);
+        a0x = _mm512_cvtne2ps_pbh(b01, b00);
         c0x = _mm512_setzero_si512();
 
         a01x = _mm512_unpacklo_epi16(a0x, c0x);
@@ -383,7 +384,7 @@ dlp_packb_mxp_nr48_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
         _mm512_storeu_si512(pack_b_buffer_f32obf16 + ((kr_new + 1) * NR1), a0x);
 
         b00 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0)) + 32);
-        a0  = (__m256i)_mm512_cvtneps_pbh(b00);
+        a0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b00));
         c0  = _mm256_setzero_si256();
 
         a01 = _mm256_unpacklo_epi16(a0, c0);
@@ -432,8 +433,8 @@ dlp_packb_mxp_nr32_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
         b01 = _mm512_loadu_ps(b + (ldb * (kr + 0)) + 16);
         b02 = _mm512_loadu_ps(b + (ldb * (kr + 1)));
         b03 = _mm512_loadu_ps(b + (ldb * (kr + 1)) + 16);
-        a0  = (__m512i)_mm512_cvtne2ps_pbh(b01, b00);
-        c0  = (__m512i)_mm512_cvtne2ps_pbh(b03, b02);
+        a0  = _mm512_cvtne2ps_pbh(b01, b00);
+        c0  = _mm512_cvtne2ps_pbh(b03, b02);
 
         a01 = _mm512_unpacklo_epi16(a0, c0);
         a0  = _mm512_unpackhi_epi16(a0, c0);
@@ -451,7 +452,7 @@ dlp_packb_mxp_nr32_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
     if (k_partial_pieces > 0) {
         b00 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0)));
         b01 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0) + 16));
-        a0  = (__m512i)_mm512_cvtne2ps_pbh(b01, b00);
+        a0  = _mm512_cvtne2ps_pbh(b01, b00);
         c0  = _mm512_setzero_si512();
 
         a01 = _mm512_unpacklo_epi16(a0, c0);
@@ -489,8 +490,8 @@ dlp_packb_mxp_nr16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
         // row.
         b00 = _mm512_loadu_ps(b + (ldb * (kr + 0)));
         b01 = _mm512_loadu_ps(b + (ldb * (kr + 1)));
-        a0  = (__m256i)_mm512_cvtneps_pbh(b00);
-        c0  = (__m256i)_mm512_cvtneps_pbh(b01);
+        a0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b00));
+        c0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b01));
 
         a01 = _mm256_unpacklo_epi16(a0, c0);
         a0  = _mm256_unpackhi_epi16(a0, c0);
@@ -509,7 +510,7 @@ dlp_packb_mxp_nr16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
     // Handle k remainder.
     if (k_partial_pieces > 0) {
         b00 = _mm512_loadu_ps(b + (ldb * (k_full_pieces + 0)));
-        a0  = (__m256i)_mm512_cvtneps_pbh(b00);
+        a0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b00));
 
         c0 = _mm256_setzero_si256();
 
@@ -552,8 +553,8 @@ dlp_packb_mxp_nrlt16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
         // row.
         b00 = _mm512_maskz_loadu_ps(mask, (b + (ldb * (kr + 0))));
         b01 = _mm512_maskz_loadu_ps(mask, (b + (ldb * (kr + 1))));
-        a0  = (__m256i)_mm512_cvtneps_pbh(b00);
-        c0  = (__m256i)_mm512_cvtneps_pbh(b01);
+        a0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b00));
+        c0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b01));
 
         a01 = _mm256_unpacklo_epi16(a0, c0);
         a0  = _mm256_unpackhi_epi16(a0, c0);
@@ -572,7 +573,7 @@ dlp_packb_mxp_nrlt16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
     // Handle k remainder.
     if (k_partial_pieces > 0) {
         b00 = _mm512_maskz_loadu_ps(mask, (b + (ldb * (k_partial_pieces + 0))));
-        a0  = (__m256i)_mm512_cvtneps_pbh(b00);
+        a0  = DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(b00));
         c0  = _mm256_setzero_si256();
 
         a01 = _mm256_unpacklo_epi16(a0, c0);
@@ -589,52 +590,52 @@ dlp_packb_mxp_nrlt16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
 }
 
 #define LOAD_16_COLS_AVX512                                                    \
-    a_reg[0] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[0] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 0)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 0)) + kr));                           \
-    a_reg[1] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[1] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 1)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 1)) + kr));                           \
-    a_reg[2] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[2] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 2)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 2)) + kr));                           \
-    a_reg[3] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[3] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 3)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 3)) + kr));                           \
-    a_reg[4] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[4] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 4)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 4)) + kr));                           \
-    a_reg[5] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[5] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 5)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 5)) + kr));                           \
-    a_reg[6] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[6] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 6)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 6)) + kr));                           \
-    a_reg[7] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[7] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 7)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 7)) + kr));                           \
-    a_reg[8] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[8] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 8)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 8)) + kr));                           \
-    a_reg[9] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[9] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_loadu_ps(b + (ldb * (jr + 9)) + kr + 16),                       \
         _mm512_loadu_ps(b + (ldb * (jr + 9)) + kr));                           \
-    a_reg[10] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[10] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_loadu_ps(b + (ldb * (jr + 10)) + kr + 16),                      \
         _mm512_loadu_ps(b + (ldb * (jr + 10)) + kr));                          \
-    a_reg[11] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[11] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_loadu_ps(b + (ldb * (jr + 11)) + kr + 16),                      \
         _mm512_loadu_ps(b + (ldb * (jr + 11)) + kr));                          \
-    a_reg[12] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[12] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_loadu_ps(b + (ldb * (jr + 12)) + kr + 16),                      \
         _mm512_loadu_ps(b + (ldb * (jr + 12)) + kr));                          \
-    a_reg[13] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[13] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_loadu_ps(b + (ldb * (jr + 13)) + kr + 16),                      \
         _mm512_loadu_ps(b + (ldb * (jr + 13)) + kr));                          \
-    a_reg[14] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[14] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_loadu_ps(b + (ldb * (jr + 14)) + kr + 16),                      \
         _mm512_loadu_ps(b + (ldb * (jr + 14)) + kr));                          \
-    a_reg[15] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[15] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_loadu_ps(b + (ldb * (jr + 15)) + kr + 16),                      \
         _mm512_loadu_ps(b + (ldb * (jr + 15)) + kr));
 
@@ -713,52 +714,52 @@ dlp_packb_mxp_nrlt16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
     a_reg[15] = _mm512_shuffle_i64x2(b_reg[14], b_reg[15], 0xEE);
 
 #define MASK_LOAD_16_COLS_AVX512(mask)                                         \
-    a_reg[0] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[0] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 0)) + kr));               \
-    a_reg[1] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[1] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 1)) + kr));               \
-    a_reg[2] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[2] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 2)) + kr));               \
-    a_reg[3] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[3] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 3)) + kr));               \
-    a_reg[4] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[4] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 4)) + kr));               \
-    a_reg[5] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[5] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 5)) + kr));               \
-    a_reg[6] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[6] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 6)) + kr));               \
-    a_reg[7] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[7] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 7)) + kr));               \
-    a_reg[8] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[8] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 8)) + kr));               \
-    a_reg[9] = (__m512i)_mm512_cvtne2ps_pbh(                                   \
+    a_reg[9] = _mm512_cvtne2ps_pbh(                                   \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 9)) + kr));               \
-    a_reg[10] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[10] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 10)) + kr));              \
-    a_reg[11] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[11] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 11)) + kr));              \
-    a_reg[12] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[12] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 12)) + kr));              \
-    a_reg[13] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[13] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 13)) + kr));              \
-    a_reg[14] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[14] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 14)) + kr));              \
-    a_reg[15] = (__m512i)_mm512_cvtne2ps_pbh(                                  \
+    a_reg[15] = _mm512_cvtne2ps_pbh(                                  \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 15)) + kr));
 
@@ -1021,7 +1022,7 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
         for (jr = 0; jr < n0_partial_rem; jr += 1) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
-            a_reg[jr] = (__m512i)_mm512_cvtne2ps_pbh(
+            a_reg[jr] = _mm512_cvtne2ps_pbh(
                 _mm512_loadu_ps(b + ((ldb * jr) + kr + 16)),
                 _mm512_loadu_ps(b + (ldb * jr) + kr));
         }
@@ -1058,7 +1059,7 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
         for (jr = 0; jr < n0_partial_rem; jr += 1) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
-            a_reg[jr] = (__m512i)_mm512_cvtne2ps_pbh(
+            a_reg[jr] = _mm512_cvtne2ps_pbh(
                 _mm512_set1_ps(0),
                 _mm512_maskz_loadu_ps(0xFFFF, b + (ldb * (jr + 0)) + kr));
         }
@@ -1087,7 +1088,7 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
         for (jr = 0; jr < n0_partial_rem; jr += 1) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
-            a_reg[jr] = (__m512i)_mm512_cvtne2ps_pbh(
+            a_reg[jr] = _mm512_cvtne2ps_pbh(
                 _mm512_set1_ps(0),
                 _mm512_maskz_loadu_ps(0xFF, b + (ldb * (jr + 0)) + kr));
         }
@@ -1112,7 +1113,7 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
         for (jr = 0; jr < n0_partial_rem; jr += 1) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
-            a_reg[jr] = (__m512i)_mm512_cvtne2ps_pbh(
+            a_reg[jr] = _mm512_cvtne2ps_pbh(
                 _mm512_set1_ps(0),
                 _mm512_maskz_loadu_ps(0xF, b + (ldb * (jr + 0)) + kr));
         }
@@ -1135,7 +1136,7 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
         for (jr = 0; jr < n0_partial_rem; jr += 1) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
-            a_reg[jr] = (__m512i)_mm512_cvtne2ps_pbh(
+            a_reg[jr] = _mm512_cvtne2ps_pbh(
                 _mm512_set1_ps(0),
                 _mm512_maskz_loadu_ps(0x3, b + (ldb * (jr + 0)) + kr));
         }
@@ -1156,7 +1157,7 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
         for (jr = 0; jr < n0_partial_rem; jr += 1) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
-            a_reg[jr] = (__m512i)_mm512_cvtne2ps_pbh(
+            a_reg[jr] = _mm512_cvtne2ps_pbh(
                 _mm512_set1_ps(0),
                 _mm512_maskz_loadu_ps(0x1, b + (ldb * (jr + 0)) + kr));
         }

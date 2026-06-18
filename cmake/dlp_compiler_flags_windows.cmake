@@ -95,6 +95,15 @@ target_compile_options(dlp_compiler_flags INTERFACE
     $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # Disable deprecation warnings
 )
 
+# Force-include the centralized portability header for all MSVC compilation units.
+# This ensures NOMINMAX, __builtin_clz, DLP_INF, DLP_ATOMIC_*, etc. are available
+# everywhere without requiring explicit #include in each source file.
+if(MSVC)
+    target_compile_options(dlp_compiler_flags INTERFACE
+        "/FI${CMAKE_SOURCE_DIR}/include/classic/dlp_compat.h"
+    )
+endif()
+
 # Function to apply global compiler flags to a target
 # Parameters:
 #   target - The target to apply flags to
@@ -273,9 +282,11 @@ function(dlp_set_jit_flags target)
         set(DLP_JIT_FLAGS_OTHER "")
 
         # MSVC: /bigobj allows more sections in object files (for large JIT-generated code)
+        # /FI force-includes MSVC shims (__builtin_clz, NOMINMAX, DLP_FLOAT_INF) for all JIT TUs
         if(MSVC)
             list(APPEND DLP_JIT_FLAGS_MSVC /bigobj)
-            message(STATUS "JIT flags (MSVC) initialized: /bigobj")
+            list(APPEND DLP_JIT_FLAGS_MSVC "/FI${CMAKE_SOURCE_DIR}/src/jit/amdzen/dlp_msvc_compat.h")
+            message(STATUS "JIT flags (MSVC) initialized: /bigobj, /FI dlp_msvc_compat.h")
         endif()
 
         # MinGW/Clang on Windows: Use same flags as Linux
@@ -339,8 +350,15 @@ function(dlp_setup_atomic_support)
 endfunction()
 
 function(dlp_set_platform_options)
-    # Ensure symbols are exported for all classic targets when building shared libs
-    if(BUILD_SHARED_LIBS)
+    # On MSVC, define DLP_IS_BUILDING_LIBRARY for all object libraries
+    # so that DLP_CLASSIC_EXPORT expands to __declspec(dllexport) in the DLL build.
+    if(MSVC)
+        foreach(classic_target IN LISTS CLASSIC_TARGETS DLP_PLUS_TARGETS)
+            target_compile_definitions(${classic_target} PRIVATE DLP_IS_BUILDING_LIBRARY)
+        endforeach()
+        target_compile_definitions(aocl_dlp_jit_amdzen PRIVATE DLP_IS_BUILDING_LIBRARY)
+        target_compile_definitions(${PROJECT_NAME} PRIVATE DLP_IS_BUILDING_LIBRARY)
+    elseif(BUILD_SHARED_LIBS)
         foreach(classic_target IN LISTS CLASSIC_TARGETS)
             target_compile_definitions(${classic_target} PUBLIC DLP_IS_BUILDING_LIBRARY)
         endforeach()

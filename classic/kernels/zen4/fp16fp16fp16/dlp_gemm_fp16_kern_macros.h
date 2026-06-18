@@ -30,6 +30,7 @@
 #define DLP_GEMM_FP16_KERN_MACROS_H
 
 #include <immintrin.h>
+#include "classic/dlp_simd_casts.h"
 
 /**
  * @file dlp_gemm_fp16_kern_macros.h
@@ -186,7 +187,7 @@
 
 /* Masked store */
 #define MASK_STORE_FP16(ptr, mask, val)                                        \
-    _mm512_mask_storeu_epi16((ptr), (mask), (__m512i)(val))
+    _mm512_mask_storeu_epi16((ptr), (mask), DLP_CAST_PS_SI512((val)))
 
 /* Masked FMA: c += a * b (only for masked elements) */
 #define MASK_FMA_FP16(mask, a_bcast, b_masked, c_masked)                       \

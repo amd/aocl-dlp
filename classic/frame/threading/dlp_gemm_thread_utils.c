@@ -29,6 +29,7 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include "classic/dlp_compat.h"
 #include "sys_utils/dlp_gemm_sys.h"
 #include "threading/dlp_gemm_thread_utils.h"
 
@@ -245,18 +246,16 @@ dlp_atomic_barrier(md_t t_id, dlp_task_comm_t* comm)
 
     // This orig_sense variable used as variable on which to spin for
     // waiting threads.
-    md_t orig_sense = __atomic_load_n(&comm->barrier_sense, __ATOMIC_RELAXED);
-
+    md_t orig_sense = (md_t)DLP_ATOMIC_LOAD_I64(&comm->barrier_sense);
     md_t my_threads_arrived =
-        __atomic_add_fetch(&comm->barrier_threads_arrived, 1, __ATOMIC_ACQ_REL);
+        (md_t)DLP_ATOMIC_INCREMENT_I64(&comm->barrier_threads_arrived);
 
     // Last thread to arrive.
     if (my_threads_arrived == comm->n_threads) {
         comm->barrier_threads_arrived = 0;
-        __atomic_fetch_xor(&comm->barrier_sense, 1, __ATOMIC_RELEASE);
+        DLP_ATOMIC_FETCH_XOR_I64(&comm->barrier_sense, 1);
     } else {
-        while (__atomic_load_n(&comm->barrier_sense, __ATOMIC_ACQUIRE)
-               == orig_sense) {
+        while ((md_t)DLP_ATOMIC_LOAD_I64(&comm->barrier_sense) == orig_sense) {
         }
     }
 }

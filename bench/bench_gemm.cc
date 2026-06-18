@@ -68,8 +68,10 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
 #include <numa.h>
 #include <numaif.h>
+#endif
 
 using namespace dlp::testing::framework;
 using namespace dlp::testing::classic;

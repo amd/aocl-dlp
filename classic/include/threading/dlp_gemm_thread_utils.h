@@ -32,8 +32,9 @@
 #include <stdio.h>
 
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_macros.h"
 
-typedef struct __attribute__((aligned(64)))
+typedef struct DLP_ALIGNED_STRUCT(64)
 {
     int* tid_core_grp_id_list;
     int  tid_cnt;
@@ -49,7 +50,7 @@ dlp_gemm_init_thread_attrs();
 dlp_gemm_thread_attrs_t*
 dlp_gemm_get_thread_attrs();
 
-typedef struct __attribute__((aligned(64)))
+typedef struct DLP_ALIGNED_STRUCT(64)
 {
     void* sent_object;
     md_t  n_threads;
@@ -57,7 +58,7 @@ typedef struct __attribute__((aligned(64)))
     md_t  barrier_threads_arrived;
 } dlp_task_comm_t;
 
-typedef struct __attribute__((aligned(64)))
+typedef struct DLP_ALIGNED_STRUCT(64)
 {
     md_t             n_threads;
     md_t             tid;
@@ -77,7 +78,7 @@ dlp_task_comm_init(md_t n_threads, dlp_task_comm_t* comm)
     comm->barrier_threads_arrived = 0;
 }
 
-typedef struct __attribute__((aligned(64)))
+typedef struct DLP_ALIGNED_STRUCT(64)
 {
     // Our thread id within the task communicator.
     md_t ocomm_id;

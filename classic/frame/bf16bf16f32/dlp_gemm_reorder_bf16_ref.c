@@ -225,8 +225,8 @@ dlp_packb_nrlt16_bf16bf16f32of32_row_major_ref(bfloat16*       pack_b,
     md_t k_partial_pieces   = KC % 2;
 
     md_t     kr_new = 0;
-    bfloat16 buf0[NR];
-    bfloat16 buf1[NR];
+    bfloat16 buf0[16];
+    bfloat16 buf1[16];
 
     for (iter_t kr = 0; kr < k_full_pieces; kr += 2) {
         memcpy(buf0, (b + (ldb * (kr + 0))),

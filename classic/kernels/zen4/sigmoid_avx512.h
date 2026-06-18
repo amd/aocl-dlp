@@ -28,6 +28,7 @@
 
 #ifndef AOCL_DLP_GEMM_SIGMOID_AVX512_H
 #define AOCL_DLP_GEMM_SIGMOID_AVX512_H
+#include "classic/dlp_simd_casts.h"
 
 // Sigmoid(in_reg) = 1 / (1 + exp(-1 * in_reg)).
 // in_reg is expected to contain float values.
@@ -35,6 +36,6 @@
     al_in = _mm512_mul_ps(in_reg, _mm512_set1_ps(-1));                         \
     EXPF_AVX512(al_in, r, r2, z, dn, ex_out);                                  \
     in_reg = _mm512_div_ps(_mm512_set1_ps(1),                                  \
-                           _mm512_add_ps((__m512)ex_out, _mm512_set1_ps(1)));
+                           _mm512_add_ps(DLP_CAST_SI512_PS(ex_out), _mm512_set1_ps(1)));
 
 #endif // AOCL_DLP_GEMM_SIGMOID_AVX512_H

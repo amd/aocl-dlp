@@ -46,22 +46,12 @@
  * of the grouped interface with multiple groups of different configurations.
  */
 
-#ifndef _WIN32
-/* Define _POSIX_C_SOURCE to access POSIX functions in strict C11 mode */
-#define _POSIX_C_SOURCE 200809L
-#endif
-
 #include "aocl_dlp.h"
+#include "classic/dlp_compat.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <time.h>
-#endif
 
 // Utility function to initialize a matrix with values
 void
@@ -72,25 +62,6 @@ init_matrix(float* matrix, int rows, int cols, float value)
             matrix[i * cols + j] = value * (i + j + 1) / (rows * cols);
         }
     }
-}
-
-// Simple timing function for performance comparison
-double
-get_time_sec()
-{
-#ifdef _WIN32
-    static LARGE_INTEGER freq = { 0 };
-    if (freq.QuadPart == 0) {
-        QueryPerformanceFrequency(&freq);
-    }
-    LARGE_INTEGER counter;
-    QueryPerformanceCounter(&counter);
-    return (double)counter.QuadPart / (double)freq.QuadPart;
-#else
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec + (double)ts.tv_nsec * 1.e-9;
-#endif
 }
 
 int
@@ -226,7 +197,7 @@ main()
     // Method 1: Execute GEMMs sequentially
     printf("Running %lld GEMM operations sequentially...\n",
            (long long)total_matrices);
-    double sequential_start_time = get_time_sec();
+    double sequential_start_time = dlp_get_time_sec();
 
     matrix_idx = 0;
     for (int group = 0; group < num_groups; group++) {
@@ -253,14 +224,14 @@ main()
         }
     }
 
-    double sequential_end_time = get_time_sec();
+    double sequential_end_time = dlp_get_time_sec();
     double sequential_time     = sequential_end_time - sequential_start_time;
     printf("Sequential GEMM time: %.6f seconds\n", sequential_time);
 
     // Method 2: Execute GEMMs in grouped batch
     printf("Running %lld GEMM operations in %lld groups using batch API...\n",
            (long long)total_matrices, (long long)num_groups);
-    double batch_start_time = get_time_sec();
+    double batch_start_time = dlp_get_time_sec();
 
     // For multiple groups, we pass:
     // - group_count: Number of groups (3 in this case)
@@ -277,7 +248,7 @@ main()
         group_sizes, // group_count=3, group_sizes=[4,3,2]
         mem_format_a_array, mem_format_b_array, post_ops_array);
 
-    double batch_end_time = get_time_sec();
+    double batch_end_time = dlp_get_time_sec();
     double batch_time     = batch_end_time - batch_start_time;
     printf("Batch GEMM time: %.6f seconds\n", batch_time);
 

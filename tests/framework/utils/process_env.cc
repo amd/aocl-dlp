@@ -28,6 +28,7 @@
 
 #include "framework/utils/process_env.hh"
 
+#include "classic/dlp_compat.h"
 #include <cstdlib>
 
 namespace dlp::testing::utils {
@@ -43,11 +44,7 @@ setEnvironmentVariable(const char* name, const char* value, bool overwrite)
         return true;
     }
 
-#ifdef _WIN32
-    return _putenv_s(name, value) == 0;
-#else
-    return setenv(name, value, overwrite ? 1 : 0) == 0;
-#endif
+    return dlp_setenv(name, value, overwrite ? 1 : 0) == 0;
 }
 
 } // namespace dlp::testing::utils

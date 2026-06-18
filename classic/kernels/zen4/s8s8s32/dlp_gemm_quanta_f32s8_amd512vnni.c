@@ -262,8 +262,8 @@ dlp_quant_a_sym_f32s8_row_major(int8_t*        quant_a_buffer,
     md_t      kleft    = KC % NUM_ELEM; // Tail elements
     __mmask16 mask = 0xFFFF >> (NUM_ELEM - kleft); // Mask for tail processing
 
-    __m512 a_reg[MR]; // Temporary registers for input data
-    __m512 sf[MR];    // Scale factors broadcasted into registers
+    __m512 a_reg[16]; // Temporary registers for input data
+    __m512 sf[16];  // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings
     for (iter_t i = 0; i < MR; i++) {
@@ -531,9 +531,9 @@ dlp_quant_a_asym_f32s8_row_major(int8_t*        quant_a_buffer,
     md_t      MR       = 16;
     md_t      NUM_ELEM = 16;
     md_t      kleft    = KC % NUM_ELEM;
-    __m512    a_reg[MR];
-    __m512    sf[MR]; // Scale factors
-    __m512    zp[MR]; // Zero-points
+    __m512    a_reg[16];
+    __m512    sf[16]; // Scale factors
+    __m512    zp[16]; // Zero-points
     __mmask16 mask = 0xFFFF >> (NUM_ELEM - kleft);
 
     md_t ic = 0, kr = 0;
@@ -912,7 +912,7 @@ dlp_quant_a_sym_f32s8_col_major(int8_t*        quant_a_buffer,
     __m512i mask4 =
         _mm512_set_epi32(0x1F, 0x1E, 0x1D, 0x1C, 0x1B, 0x1A, 0x19, 0x18, 0x0F,
                          0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x08);
-    __m512 sf[MR]; // Scale factors broadcasted into registers
+    __m512 sf[16]; // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings
     for (iter_t i = 0; i < MR; i++) {
@@ -1324,7 +1324,7 @@ dlp_quant_a_asym_f32s8_col_major(int8_t*        quant_a_buffer,
         _mm512_set_epi32(0x1F, 0x1E, 0x1D, 0x1C, 0x1B, 0x1A, 0x19, 0x18, 0x0F,
                          0x0E, 0x0D, 0x0C, 0x0B, 0x0A, 0x09, 0x08);
 
-    __m512 sf[MR], zp[MR]; // Scale factors broadcasted into registers
+    __m512 sf[16], zp[16]; // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings
     for (iter_t i = 0; i < MR; i++) {

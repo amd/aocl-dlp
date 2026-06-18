@@ -28,8 +28,8 @@
 
 #pragma once
 
+#include "classic/dlp_compat.h"
 #include <cstdint>
-#include <cstdlib>
 #include <memory>
 #include <ostream>
 
@@ -283,7 +283,7 @@ namespace testing {
 
                 // Allocate memory based on alignment requirements
                 if (alignment > 0) {
-                    // Validate alignment requirements for std::aligned_alloc
+                    // Validate alignment requirements for aligned allocation
                     if ((alignment & (alignment - 1)) != 0) {
                         throw std::invalid_argument(
                             "Alignment must be a power of 2");
@@ -294,12 +294,12 @@ namespace testing {
                     }
 
                     // Ensure size is a multiple of alignment for
-                    // std::aligned_alloc
+                    // dlp_aligned_alloc
                     size_t alignedSize =
                         (sizeBytes + alignment - 1) & ~(alignment - 1);
 
                     data = static_cast<uint8_t*>(
-                        std::aligned_alloc(alignment, alignedSize));
+                        dlp_aligned_alloc(alignment, alignedSize));
                     if (!data) {
                         throw std::bad_alloc();
                     }

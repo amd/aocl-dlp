@@ -27,6 +27,7 @@
  */
 #ifndef AOCL_DLP_GEMM_MATH_UTILS_AVX2_H
 #define AOCL_DLP_GEMM_MATH_UTILS_AVX2_H
+#include "classic/dlp_simd_casts.h"
 
 // constants for exp function
 #define dlp_gemm_exp_c0 0x1.0000014439a91p0
@@ -40,7 +41,8 @@
 #define EXPF_HUGE 0x1.8p+23
 #define EXPF_MIN  -88.0f
 #define EXPF_MAX  88.0f
-#define inf       1.0 / 0.0
+#include "classic/dlp_compat.h"
+#define inf DLP_INF
 #define sign      -2147483648
 
 /*
@@ -67,13 +69,13 @@
     POLY_EVAL_6_AVX2(r, r2, z);                                                \
                                                                                \
     q = _mm256_add_epi32(                                                      \
-        (__m256i)(r), _mm256_sllv_epi32((__m256i)dn, _mm256_set1_epi32(23)));  \
-    q = (__m256i)_mm256_blendv_ps(                                             \
-        (__m256)q, _mm256_set1_ps(inf),                                        \
-        _mm256_cmp_ps(_mm256_set1_ps(EXPF_MAX), x, _CMP_LT_OS));               \
-    q = (__m256i)_mm256_blendv_ps(                                             \
-        (__m256)q, _mm256_set1_ps(0.0),                                        \
-        _mm256_cmp_ps(x, _mm256_set1_ps(EXPF_MIN), _CMP_LT_OS));
+        DLP_CAST_PS_SI256((r)), _mm256_sllv_epi32(DLP_CAST_PS_SI256(dn), _mm256_set1_epi32(23)));  \
+    q = DLP_CAST_PS_SI256(_mm256_blendv_ps(                                             \
+        DLP_CAST_SI256_PS(q), _mm256_set1_ps(inf),                                        \
+        _mm256_cmp_ps(_mm256_set1_ps(EXPF_MAX), x, _CMP_LT_OS)));               \
+    q = DLP_CAST_PS_SI256(_mm256_blendv_ps(                                             \
+        DLP_CAST_SI256_PS(q), _mm256_set1_ps(0.0),                                        \
+        _mm256_cmp_ps(x, _mm256_set1_ps(EXPF_MIN), _CMP_LT_OS)));
 
 #define TANHF_AVX2(x_tanh, r, r2, x, z, dn, q)                                 \
     x = _mm256_mul_ps(_mm256_andnot_ps(_mm256_set1_ps(-0.0f), x_tanh),         \
@@ -81,11 +83,11 @@
                                                                                \
     EXPF_AVX2(x, r, r2, z, dn, q);                                             \
                                                                                \
-    z      = _mm256_add_ps((__m256)q, _mm256_set1_ps(-1));                     \
+    z      = _mm256_add_ps(DLP_CAST_SI256_PS(q), _mm256_set1_ps(-1));                     \
     z      = _mm256_div_ps(z, _mm256_add_ps(z, _mm256_set1_ps(2)));            \
     z      = _mm256_mul_ps(z, _mm256_set1_ps(-1));                             \
     x_tanh = (_mm256_xor_ps(                                                   \
-        _mm256_and_ps(x_tanh, (__m256)(_mm256_set1_epi32(sign))), z));
+        _mm256_and_ps(x_tanh, DLP_CAST_SI256_PS((_mm256_set1_epi32(sign)))), z));
 
 /*
     SSE implementation of EXPF and TANH function with single precision.
@@ -110,12 +112,12 @@
                                                                                \
     POLY_EVAL_6_SSE(r, r2, z);                                                 \
                                                                                \
-    q = _mm_add_epi32((__m128i)(r),                                            \
-                      _mm_sllv_epi32((__m128i)dn, _mm_set1_epi32(23)));        \
-    q = (__m128i)_mm_blendv_ps((__m128)q, _mm_set1_ps(inf),                    \
-                               _mm_cmp_ps(_mm_set1_ps(EXPF_MAX), x, 1));       \
-    q = (__m128i)_mm_blendv_ps((__m128)q, _mm_set1_ps(0.0),                    \
-                               _mm_cmp_ps(x, _mm_set1_ps(EXPF_MIN), 1));
+    q = _mm_add_epi32(DLP_CAST_PS_SI128((r)),                                            \
+                      _mm_sllv_epi32(DLP_CAST_PS_SI128(dn), _mm_set1_epi32(23)));        \
+    q = DLP_CAST_PS_SI128(_mm_blendv_ps(DLP_CAST_SI128_PS(q), _mm_set1_ps(inf),                    \
+                               _mm_cmp_ps(_mm_set1_ps(EXPF_MAX), x, 1)));       \
+    q = DLP_CAST_PS_SI128(_mm_blendv_ps(DLP_CAST_SI128_PS(q), _mm_set1_ps(0.0),                    \
+                               _mm_cmp_ps(x, _mm_set1_ps(EXPF_MIN), 1)));
 
 #define TANHF_SSE(x_tanh, r, r2, x, z, dn, q)                                  \
     x = _mm_mul_ps(_mm_andnot_ps(_mm_set1_ps(-0.0f), x_tanh),                  \
@@ -123,11 +125,11 @@
                                                                                \
     EXPF_SSE(x, r, r2, z, dn, q);                                              \
                                                                                \
-    z = _mm_add_ps((__m128)q, _mm_set1_ps(-1));                                \
+    z = _mm_add_ps(DLP_CAST_SI128_PS(q), _mm_set1_ps(-1));                                \
     z = _mm_div_ps(z, _mm_add_ps(z, _mm_set1_ps(2)));                          \
     z = _mm_mul_ps(z, _mm_set1_ps(-1));                                        \
     x_tanh =                                                                   \
-        (_mm_xor_ps(_mm_and_ps(x_tanh, (__m128)(_mm_set1_epi32(sign))), z));
+        (_mm_xor_ps(_mm_and_ps(x_tanh, DLP_CAST_SI128_PS((_mm_set1_epi32(sign)))), z));
 
 /*
     AVX2 implementation of ERF function with double precision.
@@ -155,9 +157,9 @@
 
 #define POLY_EVAL_HORNER_16_0_AVX2(x, c0, c1, c2, c3, c4, c5, c6, c7, c8, c9,        \
                                    c10, c11, c12, c13, c14, c15)                     \
-    ({                                                                               \
-        __typeof(x) q = _mm256_mul_pd(                                               \
-            x,                                                                       \
+    _mm256_mul_pd(                                                                   \
+        x,                                                                           \
+        _mm256_fmadd_pd(                                                             \
             _mm256_fmadd_pd(                                                         \
                 _mm256_fmadd_pd(                                                     \
                     _mm256_fmadd_pd(                                                 \
@@ -172,32 +174,29 @@
                                                         _mm256_fmadd_pd(             \
                                                             _mm256_fmadd_pd(         \
                                                                 _mm256_fmadd_pd(     \
-                                                                    _mm256_fmadd_pd( \
-                                                                        c15,         \
-                                                                        x,           \
-                                                                        c14),        \
-                                                                    x, c13),         \
-                                                                x, c12),             \
-                                                            x, c11),                 \
-                                                        x, c10),                     \
-                                                    x, c9),                          \
-                                                x, c8),                              \
-                                            x, c7),                                  \
-                                        x, c6),                                      \
-                                    x, c5),                                          \
-                                x, c4),                                              \
-                            x, c3),                                                  \
-                        x, c2),                                                      \
-                    x, c1),                                                          \
-                x, c0));                                                             \
-        q;                                                                           \
-    })
+                                                                    c15,             \
+                                                                    x,               \
+                                                                    c14),            \
+                                                                x, c13),             \
+                                                            x, c12),                 \
+                                                        x, c11),                     \
+                                                    x, c10),                         \
+                                                x, c9),                              \
+                                            x, c8),                                  \
+                                        x, c7),                                      \
+                                    x, c6),                                          \
+                                x, c5),                                              \
+                            x, c4),                                                  \
+                        x, c3),                                                      \
+                    x, c2),                                                          \
+                x, c1),                                                              \
+            x, c0))
 
 #define ERF_AVX2(y, r)                                                            \
     {                                                                             \
-        __m256 absr = _mm256_and_ps(r, (__m256)_mm256_set1_epi32(0x7FFFFFFF));    \
+        __m256 absr = _mm256_and_ps(r, DLP_CAST_SI256_PS(_mm256_set1_epi32(0x7FFFFFFF)));    \
         __m256 erf_sign =                                                         \
-            _mm256_and_ps(r, (__m256)_mm256_set1_epi32(~(0x7FFFFFFF)));           \
+            _mm256_and_ps(r, DLP_CAST_SI256_PS(_mm256_set1_epi32(~(0x7FFFFFFF))));           \
         __m256d _y1d = _mm256_cvtps_pd(_mm256_extractf128_ps(absr, 0));           \
         __m256d _y2d = _mm256_cvtps_pd(_mm256_extractf128_ps(absr, 1));           \
         _y1d         = POLY_EVAL_HORNER_16_0_AVX2(                                \
@@ -225,9 +224,9 @@
 
 #define ERF_AVX2_LOW(y, r)                                                        \
     {                                                                             \
-        __m256 absr = _mm256_and_ps(r, (__m256)_mm256_set1_epi32(0x7FFFFFFF));    \
+        __m256 absr = _mm256_and_ps(r, DLP_CAST_SI256_PS(_mm256_set1_epi32(0x7FFFFFFF)));    \
         __m256 erf_sign =                                                         \
-            _mm256_and_ps(r, (__m256)_mm256_set1_epi32(~(0x7FFFFFFF)));           \
+            _mm256_and_ps(r, DLP_CAST_SI256_PS(_mm256_set1_epi32(~(0x7FFFFFFF))));           \
         __m256d _y1d = _mm256_cvtps_pd(_mm256_extractf128_ps(absr, 0));           \
         _y1d         = POLY_EVAL_HORNER_16_0_AVX2(                                \
             _y1d, erf_c0, erf_c1, erf_c2, erf_c3, erf_c4, erf_c5, erf_c6, \

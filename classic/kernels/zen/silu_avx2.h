@@ -28,21 +28,22 @@
 
 #ifndef AOCL_DLP_GEMM_SWISH_AVX2_H
 #define AOCL_DLP_GEMM_SWISH_AVX2_H
+#include "classic/dlp_simd_casts.h"
 
 // SiLU(in_reg) = in_reg / (1 + exp(-1 * al * in_reg)).
 // in_reg and al are expected to contain float values.
 #define SWISH_F32_AVX2_DEF(in_reg, al, al_in, r, r2, z, dn, ex_out)            \
     al_in = _mm256_fnmadd_ps(in_reg, al, _mm256_setzero_ps());                 \
     EXPF_AVX2(al_in, r, r2, z, dn, ex_out);                                    \
-    ex_out = (__m256i)_mm256_add_ps((__m256)ex_out, _mm256_set1_ps(1));        \
-    in_reg = _mm256_div_ps(in_reg, (__m256)ex_out);
+    ex_out = DLP_CAST_PS_SI256(_mm256_add_ps(DLP_CAST_SI256_PS(ex_out), _mm256_set1_ps(1)));        \
+    in_reg = _mm256_div_ps(in_reg, DLP_CAST_SI256_PS(ex_out));
 
 // SiLU(in_reg) = in_reg / (1 + exp(-1 * al * in_reg)).
 // in_reg and al are expected to contain float values.
 #define SWISH_F32_SSE_DEF(in_reg, al, al_in, r, r2, z, dn, ex_out)             \
     al_in = _mm_fnmadd_ps(in_reg, al, _mm_setzero_ps());                       \
     EXPF_SSE(al_in, r, r2, z, dn, ex_out);                                     \
-    ex_out = (__m128i)_mm_add_ps((__m128)ex_out, _mm_set1_ps(1));              \
-    in_reg = _mm_div_ps(in_reg, (__m128)ex_out);
+    ex_out = DLP_CAST_PS_SI128(_mm_add_ps(DLP_CAST_SI128_PS(ex_out), _mm_set1_ps(1)));              \
+    in_reg = _mm_div_ps(in_reg, DLP_CAST_SI128_PS(ex_out));
 
 #endif // AOCL_DLP_GEMM_SWISH_AVX2_H

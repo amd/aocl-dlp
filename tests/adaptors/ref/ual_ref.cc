@@ -26,6 +26,8 @@
  *
  */
 
+#define _USE_MATH_DEFINES
+
 /**
  * @file ual_ref.cc
  * @brief Implementation of the Reference Unified Abstraction Layer

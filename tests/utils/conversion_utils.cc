@@ -26,6 +26,7 @@
  */
 
 #include "utils/conversion_utils.hh"
+#include "classic/dlp_compat.h"
 #include <cstdint>
 
 namespace dlp { namespace testing { namespace utils {

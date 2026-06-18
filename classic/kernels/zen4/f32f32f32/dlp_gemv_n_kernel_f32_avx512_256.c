@@ -31,6 +31,7 @@
 #include "kernels/dlp_kernels.h"
 
 #include "../../zen/f32f32f32/dlp_gemm_kernel_macros_f32_avx2.h"
+#include "classic/dlp_simd_casts.h"
 
 #define DLP_GEMV_N_KERNEL_4_LOADS(ymm0, ymm1, ymm2, ymm3, paddr, stride)       \
     ymm0 = _mm256_loadu_ps(paddr);                                             \
@@ -62,7 +63,7 @@
 
 DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x32F_DISABLE,    &&POST_OPS_BIAS_1x32F,
         &&POST_OPS_RELU_1x32F,       &&POST_OPS_RELU_SCALE_1x32F,
         &&POST_OPS_GELU_TANH_1x32F,  &&POST_OPS_GELU_ERF_1x32F,
@@ -70,7 +71,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         &&POST_OPS_MATRIX_ADD_1x32F, &&POST_OPS_SWISH_1x32F,
         &&POST_OPS_MATRIX_MUL_1x32F, &&POST_OPS_TANH_1x32F,
         &&POST_OPS_SIGMOID_1x32F
-    };
+    )
 
     // Strides are updated based on matrix packing/reordering.
     const float* a_use = NULL;
@@ -432,22 +433,22 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
             ymm3 = _mm256_set1_ps(beta);
             if (rs_c == 1) {
                 if (post_ops_attr.buf_downscale != NULL) {
-                    ymm0 = (__m256)(_mm256_sllv_epi32(
+                    ymm0 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                         _mm256_cvtepi16_epi32(_mm_loadu_si128(
                             (__m128i const*)(((bfloat16*)
                                                   post_ops_attr.buf_downscale)
                                              + (post_ops_attr.rs_c_downscale
                                                 * (post_ops_attr.post_op_c_i))
                                              + (0 * 8)))),
-                        _mm256_set1_epi32(16)));
-                    ymm1 = (__m256)(_mm256_sllv_epi32(
+                        _mm256_set1_epi32(16))));
+                    ymm1 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                         _mm256_cvtepi16_epi32(_mm_loadu_si128(
                             (__m128i const*)(((bfloat16*)
                                                   post_ops_attr.buf_downscale)
                                              + (post_ops_attr.rs_c_downscale
                                                 * (post_ops_attr.post_op_c_i))
                                              + (1 * 8)))),
-                        _mm256_set1_epi32(16)));
+                        _mm256_set1_epi32(16))));
                 } else {
                     ymm0 = _mm256_maskload_ps(_cbuf, store_mask1);
                     ymm1 = _mm256_maskload_ps(_cbuf + 8, store_mask2);
@@ -460,14 +461,14 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
                                      + (post_ops_attr.rs_c_downscale
                                         * (post_ops_attr.post_op_c_i + i)));
                     }
-                    ymm0 = (__m256)(_mm256_sllv_epi32(
+                    ymm0 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                         _mm256_cvtepi16_epi32(_mm_loadu_si128(
                             (__m128i const*)((bfloat16*)ctemp))),
-                        _mm256_set1_epi32(16)));
-                    ymm1 = (__m256)(_mm256_sllv_epi32(
+                        _mm256_set1_epi32(16))));
+                    ymm1 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                         _mm256_cvtepi16_epi32(_mm_loadu_si128(
                             (__m128i const*)((bfloat16*)(ctemp + 8)))),
-                        _mm256_set1_epi32(16)));
+                        _mm256_set1_epi32(16))));
                 } else {
                     float ctemp[16] = { 0 };
                     for (iter_t i = 0; i < mr0; i++) {
@@ -487,8 +488,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         post_ops_attr.is_last_k              = TRUE;
         dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_1x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x32F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -522,14 +522,14 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_1x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x32F)
         ymm0  = _mm256_setzero_ps();
         ymm30 = _mm256_max_ps(ymm30, ymm0);
         ymm31 = _mm256_max_ps(ymm31, ymm0);
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_1x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x32F)
         ymm0 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args2);
         ymm1 = _mm256_setzero_ps();
 
@@ -538,7 +538,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_1x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x32F)
         __m256  dn, x_tanh;
         __m256i q;
 
@@ -547,13 +547,13 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_1x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x32F)
         GELU_ERF_F32S_AVX2(ymm30, ymm0, ymm1, ymm2)
         GELU_ERF_F32S_AVX2(ymm31, ymm0, ymm1, ymm2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_1x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x32F)
         ymm0 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args2);
         ymm1 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -562,7 +562,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_1x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x32F)
         __m256 zero_point0 = _mm256_setzero_ps();
         __m256 zero_point1 = _mm256_setzero_ps();
         __m256 selector1   = _mm256_setzero_ps();
@@ -645,7 +645,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_1x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x32F)
 
         __m256 selector1 = _mm256_setzero_ps();
         __m256 selector2 = _mm256_setzero_ps();
@@ -683,17 +683,17 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
             bfloat16* matptr = (bfloat16*)post_ops_list_temp->op_args1;
 
             if (ldm == 1) {
-                selector1 = (__m256)(_mm256_sllv_epi32(
+                selector1 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i))),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
 
                 selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                selector2 = (__m256)(_mm256_sllv_epi32(
+                selector2 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i
                                          + 8))),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
                 selector2 = _mm256_mul_ps(selector2, scl_fctr2);
 
                 ymm30 = _mm256_add_ps(selector1, ymm30);
@@ -707,15 +707,15 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
-                selector1 = (__m256)(_mm256_sllv_epi32(
+                selector1 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_maskload_epi32(
                         (int const*)(ctemp), matstore_mask1)),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
                 selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                selector2 = (__m256)(_mm256_sllv_epi32(
+                selector2 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_maskload_epi32(
                         (int const*)(ctemp + 8), matstore_mask2)),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
                 selector2 = _mm256_mul_ps(selector2, scl_fctr2);
 
                 ymm30 = _mm256_add_ps(selector1, ymm30);
@@ -753,7 +753,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_1x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x32F)
         __m256 selector1 = _mm256_setzero_ps();
         __m256 selector2 = _mm256_setzero_ps();
 
@@ -791,17 +791,17 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
             bfloat16* matptr = (bfloat16*)post_ops_list_temp->op_args1;
 
             if (ldm == 1) {
-                selector1 = (__m256)(_mm256_sllv_epi32(
+                selector1 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i))),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
 
                 selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                selector2 = (__m256)(_mm256_sllv_epi32(
+                selector2 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_loadu_si128(
                         (__m128i const*)(matptr + post_ops_attr.post_op_c_i
                                          + 8))),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
                 selector2 = _mm256_mul_ps(selector2, scl_fctr2);
 
                 ymm30 = _mm256_mul_ps(selector1, ymm30);
@@ -815,15 +815,15 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
-                selector1 = (__m256)(_mm256_sllv_epi32(
+                selector1 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_maskload_epi32(
                         (int const*)(ctemp), matstore_mask1)),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
                 selector1 = _mm256_mul_ps(selector1, scl_fctr1);
-                selector2 = (__m256)(_mm256_sllv_epi32(
+                selector2 = DLP_CAST_SI256_PS((_mm256_sllv_epi32(
                     _mm256_cvtepi16_epi32(_mm_maskload_epi32(
                         (int const*)(ctemp + 8), matstore_mask2)),
-                    _mm256_set1_epi32(16)));
+                    _mm256_set1_epi32(16))));
                 selector2 = _mm256_mul_ps(selector2, scl_fctr2);
 
                 ymm30 = _mm256_mul_ps(selector1, ymm30);
@@ -861,7 +861,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_1x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x32F)
         ymm7 = _mm256_set1_ps(*((float*)post_ops_list_temp->op_args2));
         __m256i ex_out;
 
@@ -870,7 +870,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_1x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x32F)
         __m256i ymm6;
         // c[0, 0-15]
         TANH_F32S_AVX2(ymm30, ymm0, ymm1, ymm2, ymm3, ymm4, ymm6)
@@ -878,7 +878,7 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_1x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x32F)
         __m256i ex_out;
 
         // c[0, 0-15]
@@ -887,8 +887,10 @@ DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx512_256)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
+DLP_POST_OPS_DISABLE(POST_OPS_1x32F_DISABLE)
 
-    POST_OPS_1x32F_DISABLE: {
+
+    {
         // store the result if bf16, convert f32 to bf16 and store result
         if ((post_ops_attr.buf_downscale != NULL)
             && (post_ops_attr.is_last_k == TRUE)) {

@@ -31,6 +31,7 @@
 #include "../u8s8s32/dlp_gemm_s32_kern_macros.h"
 #include "../u8s8s32/dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
+#include "classic/dlp_simd_casts.h"
 
 #define DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)       \
     zmm0 = _mm512_loadu_si512(paddr);                                          \
@@ -60,27 +61,6 @@
     zmm10 = _mm512_dpbusd_epi32(zmm10, zmm2, zmm6);                            \
     zmm11 = _mm512_dpbusd_epi32(zmm11, zmm3, zmm6);
 
-#define DLP_GEMV_N_KERNEL_3_LOADS(zmm0, zmm1, zmm2, paddr, stride)             \
-    zmm0 = _mm512_loadu_si512(paddr);                                          \
-    zmm1 = _mm512_loadu_si512(paddr + stride);                                 \
-    zmm2 = _mm512_loadu_si512(paddr + 2 * stride);                             \
-    zmm0 = _mm512_add_epi8(zmm0, vec_uint8);                                   \
-    zmm1 = _mm512_add_epi8(zmm1, vec_uint8);                                   \
-    zmm2 = _mm512_add_epi8(zmm2, vec_uint8);
-
-#define DLP_GEMV_N_KERNEL_3_MASKLOADS(zmm0, zmm1, zmm2, k1, paddr, stride)     \
-    zmm0 = _mm512_maskz_loadu_epi8(k1, paddr);                                 \
-    zmm1 = _mm512_maskz_loadu_epi8(k1, paddr + stride);                        \
-    zmm2 = _mm512_maskz_loadu_epi8(k1, paddr + 2 * stride);                    \
-    zmm0 = _mm512_maskz_add_epi8(k1, zmm0, vec_uint8);                         \
-    zmm1 = _mm512_maskz_add_epi8(k1, zmm1, vec_uint8);                         \
-    zmm2 = _mm512_maskz_add_epi8(k1, zmm2, vec_uint8);
-
-#define DLP_GEMV_N_KERNEL_3_FMA(zmm8, zmm9, zmm10, zmm6, zmm0, zmm1, zmm2)     \
-    zmm8  = _mm512_dpbusd_epi32(zmm8, zmm0, zmm6);                             \
-    zmm9  = _mm512_dpbusd_epi32(zmm9, zmm1, zmm6);                             \
-    zmm10 = _mm512_dpbusd_epi32(zmm10, zmm2, zmm6);
-
 #define DLP_GEMV_ZMM2XMM(zmm0, zmm1, zmm2, zmm3, ymm0, ymm1, ymm2, ymm3, xmm0) \
     ymm0 = _mm256_add_epi32(_mm512_extracti32x8_epi32(zmm0, 0x0),              \
                             _mm512_extracti32x8_epi32(zmm0, 0x1));             \
@@ -99,7 +79,7 @@
 // DLP_GEMV N=1 kernel for handling GEMV with group symmetric quantization.
 DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
         &&POST_OPS_GELU_TANH_6x64,  &&POST_OPS_GELU_ERF_6x64,
@@ -107,7 +87,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         &&POST_OPS_MATRIX_ADD_6x64, &&POST_OPS_SWISH_6x64,
         &&POST_OPS_MATRIX_MUL_6x64, &&POST_OPS_TANH_6x64,
         &&POST_OPS_SIGMOID_6x64
-    };
+    )
 
     const int8_t* a_use   = NULL;
     const int8_t* a_group = NULL;
@@ -124,17 +104,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
     md_t mr0     = MR;
     md_t mr0_use = MR;
 
-    for (iter_t ir = 0; ir < m0; ir += MR) {
-        mr0 = dlp_min((m0 - ir), MR);
+    for (iter_t ir = 0; ir < m0; ir += mr0_use) {
+        mr0     = dlp_min((m0 - ir), MR);
+        mr0_use = dlp_min((m0 - ir), MR);
 
         // Create load mask for k fringe
         __mmask64 k1 = 0xFFFFFFFFFFFFFFFF;
 
         // Create store mask for C.
         __mmask16 k2 = 0xFFFF;
-        if (mr0 < MR) {
-            k2 = (0xFFFF >> (MR - mr0));
-        }
 
         __m512i zmm0, zmm1, zmm2, zmm3, zmm6;
         __m512i zmm8, zmm9, zmm10, zmm11, zmm12, zmm13, zmm14;
@@ -145,7 +123,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         __m256i ymm0, ymm1, ymm2, ymm3, ymm4, ymm5, ymm6;
         __m128i xmm0, xmm1, xmm2, xmm3;
 
-        __m512 f32_acc0, f32_acc1, inter0;
+        __m512 f32_acc0, inter0;
 
         // Update pointers.
         a_use = a + ir * rs_a;
@@ -153,8 +131,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         c_use = c + ir * rs_c;
 
         f32_acc0 = _mm512_setzero_ps();
-        f32_acc1 = _mm512_setzero_ps();
-        inter0   = _mm512_setzero_ps();
 
         if (mr0 == MR) // Primary kernel (mr0 = MR = 16)
         {
@@ -172,7 +148,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23)
                 ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
 
-                a_group = a_use + (group * group_size);
+                a_group = a_use + (group * group_size * cs_a);
 
                 md_t k_start = dlp_max(group * group_size,
                                        (md_t)grp_post_ops_attr.grp_post_op_k);
@@ -225,8 +201,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                                             zmm28, zmm29, zmm30, zmm31)
                     DLP_GEMV_N_KERNEL_4_FMA(zmm20, zmm21, zmm22, zmm23, zmm6,
                                             zmm0, zmm1, zmm2, zmm3)
-
-                    a_group += 64;
                 } // k loop
 
                 if (k_rem) {
@@ -326,13 +300,13 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         a_sf[i] = *(a_scale_ptr + i * num_groups);
                     }
 
-                    a_scale_factor = (__m512)_mm512_sllv_epi32(
+                    a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                         _mm512_cvtepi16_epi32(_mm256_set_epi16(
                             a_sf[15], a_sf[14], a_sf[13], a_sf[12], a_sf[11],
                             a_sf[10], a_sf[9], a_sf[8], a_sf[7], a_sf[6],
                             a_sf[5], a_sf[4], a_sf[3], a_sf[2], a_sf[1],
                             a_sf[0])),
-                        _mm512_set1_epi32(16));
+                        _mm512_set1_epi32(16)));
                 } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
                 {
                     // load scales for A matrix
@@ -362,18 +336,22 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
             } // group loop
             a_use += 64;
 
+            post_ops_attr.post_op_c_i += MR;
             grp_post_ops_attr.grp_post_op_i += MR;
 
-            k2 = (0xFFFF >> (MR - mr0_use));
+            mr0_use = 16;
+            k2      = (0xFFFF >> (MR - mr0_use));
         } // MR primary kernel
         else // Handle M fringe cases when mr0 < MR.
         {
             const int8_t* a_use_fringe = a_use;
-            md_t          selector     = 0;
-            mr0_use                    = mr0;
+            md_t          regidx       = 0;
 
             // Dot-product kernel for m_fringe >= 8; [8, 16).
             if (mr0_use >= 8) {
+                mr0_use = 8;
+                k2      = (0xFFFF >> (MR - mr0_use));
+
                 md_t group_start =
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
@@ -388,7 +366,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23)
                     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
 
-                    a_group = a_use_fringe + (group * group_size);
+                    a_group = a_use_fringe + (group * group_size * cs_a);
 
                     md_t k_start =
                         dlp_max(group * group_size,
@@ -430,7 +408,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         DLP_GEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15,
                                                 zmm6, zmm24, zmm25, zmm26,
                                                 zmm27)
-                        a_group += 64;
                     } // k loop
 
                     if (k_rem) {
@@ -465,6 +442,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // Compose outputs into one zmm to perform post-ops
                     zmm8 = _mm512_inserti32x4(zmm8, xmm0, 0);
                     zmm8 = _mm512_inserti32x4(zmm8, xmm1, 1);
+
+                    // regidx = 2;
 
                     int32_t* bsumptr = post_ops_attr.b_col_sum_vec + group;
 
@@ -510,12 +489,12 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
-                        a_scale_factor = (__m512)_mm512_sllv_epi32(
+                        a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                             _mm512_cvtepi16_epi32(_mm256_set_epi16(
                                 0, 0, 0, 0, 0, 0, 0, 0, a_sf[7], a_sf[6],
                                 a_sf[5], a_sf[4], a_sf[3], a_sf[2], a_sf[1],
                                 a_sf[0])),
-                            _mm512_set1_epi32(16));
+                            _mm512_set1_epi32(16)));
                     } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
                     {
                         // load scales for A matrix
@@ -544,23 +523,22 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 } // group loop
 
                 // update pointers
-                selector += 8;
-                mr0_use -= 8;
                 a_use        = a_use_fringe + 8 * rs_a;
                 a_use_fringe = a_use;
                 b_use        = b;
 
+                post_ops_attr.post_op_c_i += 8;
                 grp_post_ops_attr.grp_post_op_i += 8;
-            }
+            } else if (mr0_use >= 4) {
+                mr0_use = 4;
+                k2      = (0xFFFF >> (MR - mr0_use));
 
-            if (mr0_use >= 4) {
                 md_t group_start =
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
                                  / group_size;
                 md_t num_groups = group_end - group_start + 1;
 
-                f32_acc1 = _mm512_setzero_ps();
                 for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
                     ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
@@ -569,7 +547,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23)
                     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
 
-                    a_group = a_use_fringe + (group * group_size);
+                    a_group = a_use_fringe + (group * group_size * cs_a);
 
                     md_t k_start =
                         dlp_max(group * group_size,
@@ -599,8 +577,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // Perform FMA on two 4x64 block of A with 64x1
                         DLP_GEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19,
                                                 zmm6, zmm0, zmm1, zmm2, zmm3)
-
-                        a_group += 64;
                     } // k loop
 
                     if (k_rem) {
@@ -619,6 +595,9 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     DLP_GEMV_ZMM2XMM(zmm16, zmm17, zmm18, zmm19, ymm5, ymm1,
                                      ymm2, ymm3, xmm2)
 
+                    // Compose outputs into one zmm to perform post-ops
+                    // if( regidx == 0 ) zmm8 = _mm512_inserti32x4( zmm8, xmm2,
+                    // 0 ); else zmm8 = _mm512_inserti32x4( zmm8, xmm2, 2 );
                     zmm8 = _mm512_inserti32x4(zmm8, xmm2, 0);
 
                     int32_t* bsumptr = post_ops_attr.b_col_sum_vec + group;
@@ -665,11 +644,11 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
-                        a_scale_factor = (__m512)_mm512_sllv_epi32(
+                        a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                             _mm512_cvtepi16_epi32(_mm256_set_epi16(
                                 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, a_sf[3],
                                 a_sf[2], a_sf[1], a_sf[0])),
-                            _mm512_set1_epi32(16));
+                            _mm512_set1_epi32(16)));
                     } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
                     {
                         // load scales for A matrix
@@ -693,35 +672,27 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
                     inter0 = _mm512_mul_ps(
                         _mm512_mul_ps(inter0, b_scale_factor), a_scale_factor);
-                    f32_acc1 = _mm512_add_ps(f32_acc1, inter0);
+
+                    f32_acc0 = _mm512_maskz_add_ps(k2, f32_acc0, inter0);
                 } // group loop
 
-                // insert xmm outputs into final output zmm8 reg based on the
-                // selector value
-                __m128 temp = _mm512_extractf32x4_ps(f32_acc1, 0);
-                if (selector == 8) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 2);
-                } else {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 0);
-                }
-
-                selector += 4;
-                mr0_use -= 4;
+                regidx++;
                 a_use        = a_use_fringe + 4 * rs_a;
                 a_use_fringe = a_use;
                 b_use        = b;
 
+                post_ops_attr.post_op_c_i += 4;
                 grp_post_ops_attr.grp_post_op_i += 4;
-            }
+            } else if (mr0_use >= 2) {
+                mr0_use = 2;
+                k2      = (0xFFFF >> (MR - mr0_use));
 
-            if (mr0_use == 3) {
                 md_t group_start =
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
                                  / group_size;
                 md_t num_groups = group_end - group_start + 1;
 
-                f32_acc1 = _mm512_setzero_ps();
                 for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
                     ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
@@ -730,174 +701,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23)
                     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
 
-                    a_group = a_use_fringe + (group * group_size);
-
-                    md_t k_start =
-                        dlp_max(group * group_size,
-                                (md_t)grp_post_ops_attr.grp_post_op_k);
-                    md_t k_end =
-                        dlp_min(((group + 1) * group_size - 1),
-                                (md_t)grp_post_ops_attr.grp_post_op_k + k - 1);
-
-                    md_t   kg0    = k_end - k_start + 1;
-                    iter_t k_iter = kg0 / 64;
-                    iter_t k_rem  = kg0 % 64;
-
-                    // Update load mask for fringe case.
-                    if (k_rem) {
-                        k1 = (0xFFFFFFFFFFFFFFFF >> (64 - k_rem));
-                    }
-
-                    // Dot product kernel
-                    for (iter_t k_i = 0; k_i < k_iter; k_i++) {
-                        zmm6 = _mm512_loadu_si512(b_use);
-                        b_use += 64;
-
-                        // Load 4x64 elements from row0-row3 of A
-                        DLP_GEMV_N_KERNEL_3_LOADS(zmm0, zmm1, zmm2, a_group,
-                                                  rs_a)
-
-                        // Perform FMA on two 4x64 block of A with 64x1
-                        DLP_GEMV_N_KERNEL_3_FMA(zmm16, zmm17, zmm18, zmm6, zmm0,
-                                                zmm1, zmm2)
-
-                        a_group += 64;
-                    } // k loop
-
-                    if (k_rem) {
-                        zmm6 = _mm512_maskz_loadu_epi8(k1, b_use);
-                        b_use += k_rem * rs_b;
-
-                        // Load 4x64 elements from row0-row3 of A
-                        DLP_GEMV_N_KERNEL_3_MASKLOADS(zmm0, zmm1, zmm2, k1,
-                                                      a_group, rs_a)
-
-                        DLP_GEMV_N_KERNEL_3_FMA(zmm16, zmm17, zmm18, zmm6, zmm0,
-                                                zmm1, zmm2)
-                    }
-
-                    // Add the registers horizontally to get one
-                    DLP_GEMV_ZMM2XMM(zmm16, zmm17, zmm18, zmm19, ymm5, ymm1,
-                                     ymm2, ymm3, xmm2)
-
-                    // Compose outputs into one zmm to perform post-ops
-                    zmm8 = _mm512_inserti32x4(zmm8, xmm2, 0);
-
-                    int32_t* bsumptr = post_ops_attr.b_col_sum_vec + group;
-
-                    zmm0 = _mm512_set1_epi32(*bsumptr);
-                    zmm8 = _mm512_maskz_sub_epi32(k2, zmm8, zmm0);
-
-                    inter0 = _mm512_cvtepi32_ps(zmm8);
-
-                    // Broadcast B scale factors.
-                    __m512 b_scale_factor;
-                    if (grp_post_ops_attr.sf_stor_type == DLP_BF16) {
-                        // load scales for B matrix.
-                        bfloat16* b_scale_ptr =
-                            ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
-
-                        SYM_QUANT_BF16_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
-                                                    0)
-                    } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
-                    {
-                        // load scales for B matrix
-                        float* b_scale_ptr =
-                            ((float*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
-
-                        SYM_QUANT_F32_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
-                                                   0)
-                    }
-
-                    __m512 a_scale_factor;
-                    if (grp_post_ops_attr.sf_stor_type == DLP_BF16) {
-                        // load scales for A matrix.
-                        bfloat16* a_scale_ptr =
-                            ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
-                            + (grp_post_ops_attr.grp_post_op_i
-                               * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
-
-                        // TODO
-                        // Devise an optimal approach to load Scale Factor of A.
-                        bfloat16 a_sf[3];
-                        for (iter_t i = 0; i < 3; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
-                        }
-
-                        a_scale_factor = (__m512)_mm512_sllv_epi32(
-                            _mm512_cvtepi16_epi32(_mm256_set_epi16(
-                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, a_sf[2],
-                                a_sf[1], a_sf[0])),
-                            _mm512_set1_epi32(16));
-                    } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
-                    {
-                        // load scales for A matrix
-                        float* a_scale_ptr =
-                            ((float*)(grp_post_ops_attr.a_scale_factor))
-                            + (grp_post_ops_attr.grp_post_op_i
-                               * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
-
-                        // TODO
-                        // Devise an optimal approach to load Scale Factor of A.
-                        float a_sf[3];
-                        for (iter_t i = 0; i < 3; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
-                        }
-
-                        a_scale_factor =
-                            _mm512_set_ps(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                                          a_sf[2], a_sf[1], a_sf[0]);
-                    }
-
-                    inter0 = _mm512_mul_ps(
-                        _mm512_mul_ps(inter0, b_scale_factor), a_scale_factor);
-                    f32_acc1 = _mm512_add_ps(f32_acc1, inter0);
-                } // group loop
-
-                // insert xmm outputs into final output zmm8 reg based on the
-                // selector value
-                __m128 temp = _mm512_extractf32x4_ps(f32_acc1, 0);
-
-                if (selector == 12) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 3);
-                } else if (selector == 8) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 2);
-                } else if (selector == 4) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 1);
-                } else {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 0);
-                }
-
-                selector += 3;
-                mr0_use -= 3;
-                a_use        = a_use_fringe + 3 * rs_a;
-                a_use_fringe = a_use;
-                b_use        = b;
-
-                grp_post_ops_attr.grp_post_op_i += 3;
-            }
-
-            if (mr0_use == 2) {
-                md_t group_start =
-                    (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
-                md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
-                                 / group_size;
-                md_t num_groups = group_end - group_start + 1;
-
-                f32_acc1 = _mm512_setzero_ps();
-                for (iter_t group = group_start; group <= group_end; ++group) {
-                    /* zero the accumulator registers */
-                    ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
-                    ZERO_ACC_ZMM_4_REG(zmm12, zmm13, zmm14, zmm15)
-                    ZERO_ACC_ZMM_4_REG(zmm16, zmm17, zmm18, zmm19)
-                    ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23)
-                    ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
-
-                    a_group = a_use_fringe + (group * group_size);
+                    a_group = a_use_fringe + (group * group_size * cs_a);
 
                     md_t k_start =
                         dlp_max(group * group_size,
@@ -999,11 +803,11 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
-                        a_scale_factor = (__m512)_mm512_sllv_epi32(
+                        a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                             _mm512_cvtepi16_epi32(
                                 _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                                  0, 0, 0, 0, a_sf[1], a_sf[0])),
-                            _mm512_set1_epi32(16));
+                            _mm512_set1_epi32(16)));
                     } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
                     {
                         // load scales for A matrix
@@ -1027,40 +831,27 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
                     inter0 = _mm512_mul_ps(
                         _mm512_mul_ps(inter0, b_scale_factor), a_scale_factor);
-                    f32_acc1 = _mm512_add_ps(f32_acc1, inter0);
+
+                    f32_acc0 = _mm512_maskz_add_ps(k2, f32_acc0, inter0);
                 } // group loop
 
-                // insert xmm outputs into final output zmm8 reg based on the
-                // selector value
-                __m128 temp = _mm512_extractf32x4_ps(f32_acc1, 0);
-
-                if (selector == 12) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 3);
-                } else if (selector == 8) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 2);
-                } else if (selector == 4) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 1);
-                } else {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 0);
-                }
-
+                post_ops_attr.post_op_c_i += 2;
                 grp_post_ops_attr.grp_post_op_i += 2;
 
-                selector += 2;
-                mr0_use -= 2;
                 a_use        = a_use_fringe + 2 * rs_a;
                 a_use_fringe = a_use;
                 b_use        = b;
-            }
+                regidx++;
+            } else if (mr0_use == 1) {
+                mr0_use = 1;
+                k2      = (0xFFFF >> (MR - mr0_use));
 
-            if (mr0_use == 1) {
                 md_t group_start =
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
                                  / group_size;
                 md_t num_groups = group_end - group_start + 1;
 
-                f32_acc1 = _mm512_setzero_ps();
                 for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
                     ZERO_ACC_ZMM_4_REG(zmm8, zmm9, zmm10, zmm11)
@@ -1069,7 +860,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     ZERO_ACC_ZMM_4_REG(zmm20, zmm21, zmm22, zmm23)
                     ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)
 
-                    a_group = a_use_fringe + (group * group_size);
+                    a_group = a_use_fringe + (group * group_size * cs_a);
 
                     md_t k_start =
                         dlp_max(group * group_size,
@@ -1093,7 +884,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         zmm6  = _mm512_loadu_si512(b_use);
                         zmm0  = _mm512_loadu_si512(a_group);
                         zmm0  = _mm512_add_epi8(zmm0, vec_uint8);
-                        zmm20 = _mm512_dpbusd_epi32(zmm20, zmm0, zmm6);
+                        zmm22 = _mm512_dpbusd_epi32(zmm22, zmm0, zmm6);
                         b_use += 64; // move b pointer to next 64 elements
                         a_group += 64;
                     } // k loop
@@ -1103,8 +894,13 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         b_use += k_rem * rs_b;
                         zmm0  = _mm512_maskz_loadu_epi8(k1, a_group);
                         zmm0  = _mm512_maskz_add_epi8(k1, zmm0, vec_uint8);
-                        zmm20 = _mm512_dpbusd_epi32(zmm20, zmm0, zmm6);
+                        zmm22 = _mm512_dpbusd_epi32(zmm22, zmm0, zmm6);
                     }
+
+                    // When only fringe 1,
+                    // update the registers to store in order
+                    if (!(mr0 & 0x2))
+                        zmm20 = zmm22;
 
                     // Horizontal add 4 zmm reg and get the output into one xmm
                     DLP_GEMV_ZMM2XMM(zmm20, zmm21, zmm22, zmm23, ymm6, ymm1,
@@ -1155,11 +951,11 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             a_sf[i] = *(a_scale_ptr + i * num_groups);
                         }
 
-                        a_scale_factor = (__m512)_mm512_sllv_epi32(
+                        a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                             _mm512_cvtepi16_epi32(
                                 _mm256_set_epi16(0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                                                  0, 0, 0, 0, 0, a_sf[0])),
-                            _mm512_set1_epi32(16));
+                            _mm512_set1_epi32(16)));
                     } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
                     {
                         // load scales for A matrix
@@ -1184,30 +980,16 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     inter0 = _mm512_mul_ps(
                         _mm512_mul_ps(inter0, b_scale_factor), a_scale_factor);
 
-                    f32_acc1 = _mm512_add_ps(f32_acc1, inter0);
+                    f32_acc0 = _mm512_maskz_add_ps(k2, f32_acc0, inter0);
                 } // group loop
 
-                // insert xmm outputs into final output zmm8 reg based on the
-                // selector value
-                __m128 temp = _mm512_extractf32x4_ps(f32_acc1, 0);
-
-                if (selector == 12) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 3);
-                } else if (selector == 8) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 2);
-                } else if (selector == 4) {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 1);
-                } else {
-                    f32_acc0 = _mm512_insertf32x4(f32_acc0, temp, 0);
-                }
-
+                post_ops_attr.post_op_c_i += 1;
                 grp_post_ops_attr.grp_post_op_i += 1;
 
-                selector += 1;
-                mr0_use -= 1;
                 a_use        = a_use_fringe + 1 * rs_a;
                 a_use_fringe = a_use;
                 b_use        = b;
+                regidx++;
             }
         }
 
@@ -1234,13 +1016,14 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                                             * (post_ops_attr.post_op_c_i + i)));
                         }
 
-                        selector1 = (__m512)_mm512_sllv_epi32(
+                        selector1 = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                             _mm512_cvtepi16_epi32(
                                 _mm256_maskz_loadu_epi16(0xFFFF, ctemp)),
-                            _mm512_set1_epi32(16));
+                            _mm512_set1_epi32(16)));
                     }
-                    F32_BETA_FMA(f32_acc0, selector1, selector2);
                 }
+
+                F32_BETA_FMA(f32_acc0, selector1, selector2);
             } else {
                 if (rs_c == 1) {
                     F32_F32_BETA_OP_NLT16F_MASK(c_use, k2, f32_acc0, 0, 0, 0,
@@ -1263,42 +1046,42 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         post_ops_attr.is_last_k = TRUE;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_6x64: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6x64)
         __m512 b0 = _mm512_setzero_ps();
 
-        // broadcast bias value to b0.
         if (post_ops_list_temp->stor_type == DLP_BF16) {
-            b0 = (__m512)_mm512_sllv_epi32(
-                _mm512_set1_epi32(
-                    (int32_t)*((bfloat16*)post_ops_list_temp->op_args1)),
-                _mm512_set1_epi32(16));
+            b0 = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
+                _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(
+                    _cvtu32_mask16(0x0001),
+                    ((bfloat16*)post_ops_list_temp->op_args1))),
+                _mm512_set1_epi32(16)));
         } else if (post_ops_list_temp->stor_type == DLP_S8) {
-            b0 = _mm512_cvtepi32_ps(_mm512_set1_epi32(
-                (int32_t)*((int8_t*)post_ops_list_temp->op_args1)));
+            b0 = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(
+                _mm_maskz_loadu_epi8(_cvtu32_mask16(0x0001),
+                                     ((int8_t*)post_ops_list_temp->op_args1))));
         } else if (post_ops_list_temp->stor_type == DLP_U8) {
-            b0 = _mm512_cvtepi32_ps(_mm512_set1_epi32(
-                (int32_t)*((uint8_t*)post_ops_list_temp->op_args1)));
+            b0 = _mm512_cvtepi32_ps(_mm512_cvtepu8_epi32(
+                _mm_maskz_loadu_epi8(_cvtu32_mask16(0x0001),
+                                     ((int8_t*)post_ops_list_temp->op_args1))));
         } else if (post_ops_list_temp->stor_type == DLP_S32) {
             b0 = _mm512_cvtepi32_ps(
                 _mm512_set1_epi32(*((int32_t*)post_ops_list_temp->op_args1)));
         } else {
-            b0 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args1));
+            b0 = _mm512_maskz_loadu_ps(_cvtu32_mask16(0x0001),
+                                       ((float*)post_ops_list_temp->op_args1));
         }
         acc_8 = _mm512_add_ps(b0, acc_8);
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_6x64: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6x64)
         __m512 zero = _mm512_setzero_ps();
 
         acc_8 = _mm512_max_ps(zero, acc_8);
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_6x64: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6x64)
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -1317,8 +1100,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_6x64: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6x64)
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -1326,16 +1108,14 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_6x64: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6x64)
         __m512 y, r, r2;
 
         GELU_ERF_F32_AVX512_DEF(acc_8, y, r, r2);
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_6x64: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6x64)
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -1355,8 +1135,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_6x64: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x64)
         __m512 scale0 = _mm512_setzero_ps();
         if (post_ops_list_temp->sf_stor_type == DLP_U8) {
             U8_F32_SCALE_BCST(scale0, 0)
@@ -1389,8 +1168,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_6x64: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -1429,9 +1207,9 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
-                t0 = (__m512)_mm512_sllv_epi32(
+                t0 = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                     _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(k2, ctemp)),
-                    _mm512_set1_epi32(16));
+                    _mm512_set1_epi32(16)));
                 t0    = _mm512_mul_ps(t0, scl_fctr1);
                 acc_8 = _mm512_add_ps(t0, acc_8);
             }
@@ -1493,8 +1271,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_6x64: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -1534,9 +1311,9 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
-                t0 = (__m512)_mm512_sllv_epi32(
+                t0 = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                     _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(k2, ctemp)),
-                    _mm512_set1_epi32(16));
+                    _mm512_set1_epi32(16)));
                 t0    = _mm512_mul_ps(t0, scl_fctr1);
                 acc_8 = _mm512_mul_round_ps(
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
@@ -1607,8 +1384,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_6x64: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6x64)
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == DLP_S32)
@@ -1627,8 +1403,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_6x64: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6x64)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -1636,8 +1411,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_6x64: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6x64)
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -1645,8 +1419,10 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
+DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
 
-    POST_OPS_6x64_DISABLE: {
+
+    {
         // Case where the output C matrix is s8 (downscaled) and
         // this is the final write for a given block within C.
         if (post_ops_attr.buf_downscale != NULL) {
@@ -1708,7 +1484,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 }
             }
         }
-        post_ops_attr.post_op_c_i += MR;
     }
     }
 }

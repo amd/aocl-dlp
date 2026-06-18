@@ -42,13 +42,13 @@
 #include "classic/aocl_bf16_type.h"
 #include "classic/aocl_fp16_type.h"
 #include "classic/dlp_base_types.h"
+#include "classic/dlp_compat.h"
 #include "utils/conversion_utils.hh"
 #include <algorithm> // For std::max
 #include <any>
 #include <chrono> // For time-based seeding
 #include <cmath>  // For std::abs, std::isnan, std::isinf
 #include <cstdint>
-#include <cstdlib>  // For std::aligned_alloc, std::free
 #include <cstring>  // For std::memcpy, std::memcmp
 #include <iomanip>  // For std::setprecision, std::setw, std::setfill
 #include <iostream> // For std::cout
@@ -1452,7 +1452,7 @@ uint8_t*
 Matrix::allocateAlignedMemory(size_t sizeBytes, size_t alignment)
 {
     if (alignment > 0) {
-        // Validate alignment requirements for std::aligned_alloc
+        // Validate alignment requirements for aligned allocation
         if ((alignment & (alignment - 1)) != 0) {
             throw std::invalid_argument("Alignment must be a power of 2");
         }
@@ -1461,12 +1461,11 @@ Matrix::allocateAlignedMemory(size_t sizeBytes, size_t alignment)
                 "Alignment must be at least sizeof(void*)");
         }
 
-        // Ensure size is a multiple of alignment for std::aligned_alloc
+        // Ensure size is a multiple of alignment for aligned allocation
         size_t alignedSize = (sizeBytes + alignment - 1) & ~(alignment - 1);
 
-        // Use C++17 aligned allocation for aligned memory
         uint8_t* data =
-            static_cast<uint8_t*>(std::aligned_alloc(alignment, alignedSize));
+            static_cast<uint8_t*>(dlp_aligned_alloc(alignment, alignedSize));
         if (!data) {
             throw std::bad_alloc();
         }
@@ -1486,8 +1485,7 @@ Matrix::deallocateAlignedMemory(uint8_t* ptr, size_t alignment)
 {
     if (ptr) {
         if (alignment > 0) {
-            // Memory was allocated with std::aligned_alloc
-            std::free(ptr);
+            dlp_aligned_free(ptr);
         } else {
             // Memory was allocated with new[]
             delete[] ptr;

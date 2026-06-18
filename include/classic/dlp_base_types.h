@@ -32,6 +32,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "classic/dlp_compat.h"
 #include "classic/dlp_defines.h"
 #include "classic/dlp_errors.h"
 
@@ -43,17 +44,10 @@
 #define FALSE false
 #endif
 
-#if defined(_WIN32) || defined(__CYGWIN__)
-#ifdef DLP_IS_BUILDING_LIBRARY
-#define DLP_CLASSIC_EXPORT __declspec(dllexport)
-#else
-#define DLP_CLASSIC_EXPORT
-#endif
-#elif defined(__GNUC__) && __GNUC__ >= 4
-#define DLP_CLASSIC_EXPORT __attribute__((visibility("default")))
-#else
-#define DLP_CLASSIC_EXPORT
-#endif
+/*
+ * DLP_CLASSIC_EXPORT and DLP_CLASSIC_THREAD_LOCAL are now defined
+ * in dlp_compat.h — the single portability header.
+ */
 
 // Determine if we are on a 64-bit or 32-bit architecture.
 #if defined(_M_X64) || defined(__x86_64) || defined(__aarch64__)               \
@@ -61,16 +55,6 @@
 #define DLP_CLASSIC_ARCH_64
 #else
 #define DLP_CLASSIC_ARCH_32
-#endif
-
-#if defined(__GNUC__) || defined(__clang__) || defined(__ICC)                  \
-    || defined(__IBMC__)
-#define DLP_CLASSIC_THREAD_LOCAL __thread
-#elif defined(_MSC_VER)
-#define DLP_CLASSIC_THREAD_LOCAL __declspec(thread)
-#else
-#define DLP_CLASSIC_THREAD_LOCAL
-#error "Thread-local storage not supported on this compiler"
 #endif
 
 #ifdef DLP_CLASSIC_ARCH_64

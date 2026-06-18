@@ -31,6 +31,7 @@
 #include "dlp_gemm_s32_kern_macros.h"
 #include "dlp_gemm_s32_memcpy_macros.h"
 #include "kernels/dlp_kernels.h"
+#include "classic/dlp_simd_casts.h"
 
 #define DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)       \
     zmm0 = _mm512_loadu_si512(paddr);                                          \
@@ -69,7 +70,7 @@
 
 DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
         &&POST_OPS_GELU_TANH_6x64,  &&POST_OPS_GELU_ERF_6x64,
@@ -77,7 +78,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
         &&POST_OPS_MATRIX_ADD_6x64, &&POST_OPS_SWISH_6x64,
         &&POST_OPS_MATRIX_MUL_6x64, &&POST_OPS_TANH_6x64,
         &&POST_OPS_SIGMOID_6x64
-    };
+    )
 
     const uint8_t* a_use = NULL;
     const int8_t*  b_use = NULL;
@@ -445,10 +446,10 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                                             * (post_ops_attr.post_op_c_i + i)));
                         }
                         selector1 =
-                            _mm512_cvtps_epi32((__m512)_mm512_sllv_epi32(
+                            _mm512_cvtps_epi32(DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                                 _mm512_cvtepi16_epi32(
                                     _mm256_maskz_loadu_epi16(0xFFFF, ctemp)),
-                                _mm512_set1_epi32(16)));
+                                _mm512_set1_epi32(16))));
                     } else if (post_ops_attr.c_stor_type == DLP_F32) {
                         float ctemp[16];
                         for (iter_t i = 0; i < mr0; i++) {
@@ -484,16 +485,15 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         post_ops_attr.is_last_k = TRUE;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_6x64: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6x64)
         __m512 b0 = _mm512_setzero_ps();
 
         if (post_ops_list_temp->stor_type == DLP_BF16) {
-            b0 = (__m512)_mm512_sllv_epi32(
+            b0 = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                 _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(
                     _cvtu32_mask16(0x0001),
                     ((bfloat16*)post_ops_list_temp->op_args1))),
-                _mm512_set1_epi32(16));
+                _mm512_set1_epi32(16)));
         } else if (post_ops_list_temp->stor_type == DLP_S8) {
             b0 = _mm512_cvtepi32_ps(_mm512_cvtepi8_epi32(
                 _mm_maskz_loadu_epi8(_cvtu32_mask16(0x0001),
@@ -513,14 +513,14 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x64: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6x64)
         __m512 zero = _mm512_setzero_ps();
 
         acc_8 = _mm512_max_ps(zero, acc_8);
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x64: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6x64)
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -539,7 +539,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x64: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6x64)
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -547,14 +547,14 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x64: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6x64)
         __m512 y, r, r2;
 
         GELU_ERF_F32_AVX512_DEF(acc_8, y, r, r2);
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6x64: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6x64)
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -574,7 +574,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x64: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x64)
         __m512 scale0 = _mm512_setzero_ps();
         if (post_ops_list_temp->sf_stor_type == DLP_U8) {
             U8_F32_SCALE_BCST(scale0, 0)
@@ -607,7 +607,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x64: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -647,9 +647,9 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
-                t0 = (__m512)_mm512_sllv_epi32(
+                t0 = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                     _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(k2, ctemp)),
-                    _mm512_set1_epi32(16));
+                    _mm512_set1_epi32(16)));
                 t0    = _mm512_mul_ps(t0, scl_fctr1);
                 acc_8 = _mm512_add_ps(t0, acc_8);
             }
@@ -729,7 +729,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x64: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -770,9 +770,9 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
                     ctemp[i] =
                         *(matptr + ((post_ops_attr.post_op_c_i + i) * ldm));
                 }
-                t0 = (__m512)_mm512_sllv_epi32(
+                t0 = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
                     _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(k2, ctemp)),
-                    _mm512_set1_epi32(16));
+                    _mm512_set1_epi32(16)));
                 t0    = _mm512_mul_ps(t0, scl_fctr1);
                 acc_8 = _mm512_mul_round_ps(
                     t0, acc_8, (_MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC));
@@ -864,7 +864,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x64: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6x64)
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == DLP_S32)
@@ -883,7 +883,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x64: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6x64)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -891,7 +891,7 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x64: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6x64)
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -899,7 +899,9 @@ DLP_GEMV_N_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_6x64_DISABLE: {
+DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
+
+    {
         // Case where the output C matrix is s8 (downscaled) and
         // this is the final write for a given block within C.
         if (post_ops_attr.buf_downscale != NULL) {

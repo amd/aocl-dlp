@@ -33,7 +33,7 @@
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x64F_DISABLE,    &&POST_OPS_BIAS_5x64F,
         &&POST_OPS_RELU_5x64F,       &&POST_OPS_RELU_SCALE_5x64F,
         &&POST_OPS_GELU_TANH_5x64F,  &&POST_OPS_GELU_ERF_5x64F,
@@ -41,7 +41,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64)
         &&POST_OPS_MATRIX_ADD_5x64F, &&POST_OPS_SWISH_5x64F,
         &&POST_OPS_MATRIX_MUL_5x64F, &&POST_OPS_TANH_5x64F,
         &&POST_OPS_SIGMOID_5x64F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -227,8 +227,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_5x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5x64F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -395,7 +394,7 @@ POST_OPS_BIAS_5x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_5x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5x64F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -460,7 +459,7 @@ POST_OPS_RELU_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_5x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5x64F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -528,7 +527,7 @@ POST_OPS_RELU_SCALE_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_5x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5x64F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -592,7 +591,7 @@ POST_OPS_GELU_TANH_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_5x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5x64F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -655,7 +654,7 @@ POST_OPS_GELU_ERF_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_5x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5x64F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -721,7 +720,7 @@ POST_OPS_CLIP_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_5x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x64F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -979,7 +978,7 @@ POST_OPS_DOWNSCALE_5x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_5x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -1146,7 +1145,7 @@ POST_OPS_MATRIX_ADD_5x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_5x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -1316,7 +1315,7 @@ POST_OPS_MATRIX_MUL_5x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_5x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5x64F)
     zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -1382,7 +1381,7 @@ POST_OPS_SWISH_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_5x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5x64F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -1446,7 +1445,7 @@ POST_OPS_TANH_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_5x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5x64F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -1511,8 +1510,7 @@ POST_OPS_SIGMOID_5x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-
-POST_OPS_5x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5x64F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -1569,7 +1567,7 @@ POST_OPS_5x64F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x64F_DISABLE,    &&POST_OPS_BIAS_4x64F,
         &&POST_OPS_RELU_4x64F,       &&POST_OPS_RELU_SCALE_4x64F,
         &&POST_OPS_GELU_TANH_4x64F,  &&POST_OPS_GELU_ERF_4x64F,
@@ -1577,7 +1575,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64)
         &&POST_OPS_MATRIX_ADD_4x64F, &&POST_OPS_SWISH_4x64F,
         &&POST_OPS_MATRIX_MUL_4x64F, &&POST_OPS_TANH_4x64F,
         &&POST_OPS_SIGMOID_4x64F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -1737,8 +1735,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_4x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4x64F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -1878,7 +1875,7 @@ POST_OPS_BIAS_4x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_4x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4x64F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -1931,7 +1928,7 @@ POST_OPS_RELU_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_4x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4x64F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -1987,7 +1984,7 @@ POST_OPS_RELU_SCALE_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_4x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4x64F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -2039,7 +2036,7 @@ POST_OPS_GELU_TANH_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_4x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4x64F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -2090,7 +2087,7 @@ POST_OPS_GELU_ERF_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_4x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4x64F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -2144,7 +2141,7 @@ POST_OPS_CLIP_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_4x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x64F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -2363,7 +2360,7 @@ POST_OPS_DOWNSCALE_4x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_4x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -2506,7 +2503,7 @@ POST_OPS_MATRIX_ADD_4x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_4x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -2649,7 +2646,7 @@ POST_OPS_MATRIX_MUL_4x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_4x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4x64F)
     zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -2703,7 +2700,7 @@ POST_OPS_SWISH_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_4x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4x64F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -2755,7 +2752,7 @@ POST_OPS_TANH_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_4x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4x64F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -2808,7 +2805,7 @@ POST_OPS_SIGMOID_4x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_4x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4x64F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -2855,7 +2852,7 @@ POST_OPS_4x64F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x64F_DISABLE,    &&POST_OPS_BIAS_3x64F,
         &&POST_OPS_RELU_3x64F,       &&POST_OPS_RELU_SCALE_3x64F,
         &&POST_OPS_GELU_TANH_3x64F,  &&POST_OPS_GELU_ERF_3x64F,
@@ -2863,7 +2860,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64)
         &&POST_OPS_MATRIX_ADD_3x64F, &&POST_OPS_SWISH_3x64F,
         &&POST_OPS_MATRIX_MUL_3x64F, &&POST_OPS_TANH_3x64F,
         &&POST_OPS_SIGMOID_3x64F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -2997,8 +2994,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_3x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3x64F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -3111,7 +3107,7 @@ POST_OPS_BIAS_3x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_3x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3x64F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -3152,7 +3148,7 @@ POST_OPS_RELU_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_3x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3x64F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -3196,7 +3192,7 @@ POST_OPS_RELU_SCALE_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_3x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3x64F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -3236,7 +3232,7 @@ POST_OPS_GELU_TANH_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_3x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3x64F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -3275,7 +3271,7 @@ POST_OPS_GELU_ERF_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_3x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3x64F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -3317,7 +3313,7 @@ POST_OPS_CLIP_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_3x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x64F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -3505,7 +3501,7 @@ POST_OPS_DOWNSCALE_3x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_3x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -3627,7 +3623,7 @@ POST_OPS_MATRIX_ADD_3x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_3x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -3748,7 +3744,7 @@ POST_OPS_MATRIX_MUL_3x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_3x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3x64F)
     zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -3790,7 +3786,7 @@ POST_OPS_SWISH_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_3x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3x64F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -3830,7 +3826,7 @@ POST_OPS_TANH_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_3x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3x64F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -3871,7 +3867,7 @@ POST_OPS_SIGMOID_3x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_3x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3x64F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -3909,7 +3905,7 @@ POST_OPS_3x64F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x64F_DISABLE,    &&POST_OPS_BIAS_2x64F,
         &&POST_OPS_RELU_2x64F,       &&POST_OPS_RELU_SCALE_2x64F,
         &&POST_OPS_GELU_TANH_2x64F,  &&POST_OPS_GELU_ERF_2x64F,
@@ -3917,7 +3913,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64)
         &&POST_OPS_MATRIX_ADD_2x64F, &&POST_OPS_SWISH_2x64F,
         &&POST_OPS_MATRIX_MUL_2x64F, &&POST_OPS_TANH_2x64F,
         &&POST_OPS_SIGMOID_2x64F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -4023,8 +4019,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_2x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2x64F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -4110,7 +4105,7 @@ POST_OPS_BIAS_2x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_2x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2x64F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -4139,7 +4134,7 @@ POST_OPS_RELU_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_2x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2x64F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -4171,7 +4166,7 @@ POST_OPS_RELU_SCALE_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_2x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2x64F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -4199,7 +4194,7 @@ POST_OPS_GELU_TANH_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_2x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2x64F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -4226,7 +4221,7 @@ POST_OPS_GELU_ERF_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_2x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2x64F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -4256,7 +4251,7 @@ POST_OPS_CLIP_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_2x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x64F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -4413,7 +4408,7 @@ POST_OPS_DOWNSCALE_2x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_2x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -4510,7 +4505,7 @@ POST_OPS_MATRIX_ADD_2x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_2x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -4608,7 +4603,7 @@ POST_OPS_MATRIX_MUL_2x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_2x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2x64F)
     zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -4638,7 +4633,7 @@ POST_OPS_SWISH_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_2x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2x64F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -4666,7 +4661,7 @@ POST_OPS_TANH_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_2x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2x64F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -4695,7 +4690,7 @@ POST_OPS_SIGMOID_2x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_2x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2x64F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -4724,7 +4719,7 @@ POST_OPS_2x64F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64F_DISABLE,    &&POST_OPS_BIAS_1x64F,
         &&POST_OPS_RELU_1x64F,       &&POST_OPS_RELU_SCALE_1x64F,
         &&POST_OPS_GELU_TANH_1x64F,  &&POST_OPS_GELU_ERF_1x64F,
@@ -4732,7 +4727,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64)
         &&POST_OPS_MATRIX_ADD_1x64F, &&POST_OPS_SWISH_1x64F,
         &&POST_OPS_MATRIX_MUL_1x64F, &&POST_OPS_TANH_1x64F,
         &&POST_OPS_SIGMOID_1x64F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -4806,8 +4801,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_1x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x64F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -4866,7 +4860,7 @@ POST_OPS_BIAS_1x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_1x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x64F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -4883,7 +4877,7 @@ POST_OPS_RELU_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_1x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x64F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -4903,7 +4897,7 @@ POST_OPS_RELU_SCALE_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_1x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x64F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -4919,7 +4913,7 @@ POST_OPS_GELU_TANH_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_1x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x64F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -4934,7 +4928,7 @@ POST_OPS_GELU_ERF_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_1x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x64F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -4952,7 +4946,7 @@ POST_OPS_CLIP_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_1x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x64F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -5078,7 +5072,7 @@ POST_OPS_DOWNSCALE_1x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_1x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -5152,7 +5146,7 @@ POST_OPS_MATRIX_ADD_1x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_1x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x64F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -5226,7 +5220,7 @@ POST_OPS_MATRIX_MUL_1x64F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_1x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x64F)
     zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -5244,7 +5238,7 @@ POST_OPS_SWISH_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_1x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x64F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -5260,7 +5254,7 @@ POST_OPS_TANH_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_1x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x64F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -5277,7 +5271,7 @@ POST_OPS_SIGMOID_1x64F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_1x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x64F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -5297,7 +5291,7 @@ POST_OPS_1x64F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x48F_DISABLE,    &&POST_OPS_BIAS_5x48F,
         &&POST_OPS_RELU_5x48F,       &&POST_OPS_RELU_SCALE_5x48F,
         &&POST_OPS_GELU_TANH_5x48F,  &&POST_OPS_GELU_ERF_5x48F,
@@ -5305,7 +5299,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48)
         &&POST_OPS_MATRIX_ADD_5x48F, &&POST_OPS_SWISH_5x48F,
         &&POST_OPS_MATRIX_MUL_5x48F, &&POST_OPS_TANH_5x48F,
         &&POST_OPS_SIGMOID_5x48F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -5463,8 +5457,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_5x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5x48F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -5598,7 +5591,7 @@ POST_OPS_BIAS_5x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_5x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5x48F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -5648,7 +5641,7 @@ POST_OPS_RELU_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_5x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5x48F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -5701,7 +5694,7 @@ POST_OPS_RELU_SCALE_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_5x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5x48F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -5750,7 +5743,7 @@ POST_OPS_GELU_TANH_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_5x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5x48F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -5798,7 +5791,7 @@ POST_OPS_GELU_ERF_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_5x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5x48F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -5849,7 +5842,7 @@ POST_OPS_CLIP_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_5x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x48F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -6071,7 +6064,7 @@ POST_OPS_DOWNSCALE_5x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_5x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -6215,7 +6208,7 @@ POST_OPS_MATRIX_ADD_5x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_5x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -6362,7 +6355,7 @@ POST_OPS_MATRIX_MUL_5x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_5x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5x48F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -6413,7 +6406,7 @@ POST_OPS_SWISH_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_5x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5x48F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -6462,7 +6455,7 @@ POST_OPS_TANH_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_5x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5x48F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -6512,7 +6505,7 @@ POST_OPS_SIGMOID_5x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_5x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5x48F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -6563,7 +6556,7 @@ POST_OPS_5x48F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x48F_DISABLE,    &&POST_OPS_BIAS_4x48F,
         &&POST_OPS_RELU_4x48F,       &&POST_OPS_RELU_SCALE_4x48F,
         &&POST_OPS_GELU_TANH_4x48F,  &&POST_OPS_GELU_ERF_4x48F,
@@ -6571,7 +6564,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48)
         &&POST_OPS_MATRIX_ADD_4x48F, &&POST_OPS_SWISH_4x48F,
         &&POST_OPS_MATRIX_MUL_4x48F, &&POST_OPS_TANH_4x48F,
         &&POST_OPS_SIGMOID_4x48F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -6706,8 +6699,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_4x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4x48F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -6820,7 +6812,7 @@ POST_OPS_BIAS_4x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_4x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4x48F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -6861,7 +6853,7 @@ POST_OPS_RELU_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_4x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4x48F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -6905,7 +6897,7 @@ POST_OPS_RELU_SCALE_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_4x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4x48F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -6945,7 +6937,7 @@ POST_OPS_GELU_TANH_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_4x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4x48F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -6984,7 +6976,7 @@ POST_OPS_GELU_ERF_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_4x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4x48F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -7026,7 +7018,7 @@ POST_OPS_CLIP_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_4x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x48F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -7215,7 +7207,7 @@ POST_OPS_DOWNSCALE_4x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_4x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -7339,7 +7331,7 @@ POST_OPS_MATRIX_ADD_4x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_4x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -7465,7 +7457,7 @@ POST_OPS_MATRIX_MUL_4x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_4x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4x48F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -7507,7 +7499,7 @@ POST_OPS_SWISH_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_4x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4x48F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -7547,7 +7539,7 @@ POST_OPS_TANH_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_4x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4x48F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -7588,7 +7580,7 @@ POST_OPS_SIGMOID_4x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_4x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4x48F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -7631,7 +7623,7 @@ POST_OPS_4x48F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x48F_DISABLE,    &&POST_OPS_BIAS_3x48F,
         &&POST_OPS_RELU_3x48F,       &&POST_OPS_RELU_SCALE_3x48F,
         &&POST_OPS_GELU_TANH_3x48F,  &&POST_OPS_GELU_ERF_3x48F,
@@ -7639,7 +7631,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48)
         &&POST_OPS_MATRIX_ADD_3x48F, &&POST_OPS_SWISH_3x48F,
         &&POST_OPS_MATRIX_MUL_3x48F, &&POST_OPS_TANH_3x48F,
         &&POST_OPS_SIGMOID_3x48F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -7753,8 +7745,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_3x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3x48F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -7846,7 +7837,7 @@ POST_OPS_BIAS_3x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_3x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3x48F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -7878,7 +7869,7 @@ POST_OPS_RELU_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_3x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3x48F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -7913,7 +7904,7 @@ POST_OPS_RELU_SCALE_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_3x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3x48F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -7944,7 +7935,7 @@ POST_OPS_GELU_TANH_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_3x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3x48F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -7974,7 +7965,7 @@ POST_OPS_GELU_ERF_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_3x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3x48F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -8007,7 +7998,7 @@ POST_OPS_CLIP_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_3x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x48F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -8165,7 +8156,7 @@ POST_OPS_DOWNSCALE_3x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_3x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -8268,7 +8259,7 @@ POST_OPS_MATRIX_ADD_3x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_3x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -8371,7 +8362,7 @@ POST_OPS_MATRIX_MUL_3x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_3x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3x48F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -8404,7 +8395,7 @@ POST_OPS_SWISH_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_3x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3x48F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -8435,7 +8426,7 @@ POST_OPS_TANH_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_3x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3x48F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -8467,7 +8458,7 @@ POST_OPS_SIGMOID_3x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_3x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3x48F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -8502,7 +8493,7 @@ POST_OPS_3x48F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x48F_DISABLE,    &&POST_OPS_BIAS_2x48F,
         &&POST_OPS_RELU_2x48F,       &&POST_OPS_RELU_SCALE_2x48F,
         &&POST_OPS_GELU_TANH_2x48F,  &&POST_OPS_GELU_ERF_2x48F,
@@ -8510,7 +8501,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48)
         &&POST_OPS_MATRIX_ADD_2x48F, &&POST_OPS_SWISH_2x48F,
         &&POST_OPS_MATRIX_MUL_2x48F, &&POST_OPS_TANH_2x48F,
         &&POST_OPS_SIGMOID_2x48F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -8601,8 +8592,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_2x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2x48F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -8673,7 +8663,7 @@ POST_OPS_BIAS_2x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_2x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2x48F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -8696,7 +8686,7 @@ POST_OPS_RELU_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_2x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2x48F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -8722,7 +8712,7 @@ POST_OPS_RELU_SCALE_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_2x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2x48F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -8744,7 +8734,7 @@ POST_OPS_GELU_TANH_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_2x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2x48F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -8765,7 +8755,7 @@ POST_OPS_GELU_ERF_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_2x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2x48F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -8789,7 +8779,7 @@ POST_OPS_CLIP_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_2x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x48F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -8922,7 +8912,7 @@ POST_OPS_DOWNSCALE_2x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_2x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -9006,7 +8996,7 @@ POST_OPS_MATRIX_ADD_2x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_2x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -9090,7 +9080,7 @@ POST_OPS_MATRIX_MUL_2x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_2x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2x48F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -9114,7 +9104,7 @@ POST_OPS_SWISH_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_2x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2x48F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -9136,7 +9126,7 @@ POST_OPS_TANH_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_2x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2x48F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -9159,7 +9149,7 @@ POST_OPS_SIGMOID_2x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_2x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2x48F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -9186,7 +9176,7 @@ POST_OPS_2x48F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x48F_DISABLE,    &&POST_OPS_BIAS_1x48F,
         &&POST_OPS_RELU_1x48F,       &&POST_OPS_RELU_SCALE_1x48F,
         &&POST_OPS_GELU_TANH_1x48F,  &&POST_OPS_GELU_ERF_1x48F,
@@ -9194,7 +9184,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48)
         &&POST_OPS_MATRIX_ADD_1x48F, &&POST_OPS_SWISH_1x48F,
         &&POST_OPS_MATRIX_MUL_1x48F, &&POST_OPS_TANH_1x48F,
         &&POST_OPS_SIGMOID_1x48F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -9261,8 +9251,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_1x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x48F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -9312,7 +9301,7 @@ POST_OPS_BIAS_1x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_1x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x48F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -9326,7 +9315,7 @@ POST_OPS_RELU_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_1x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x48F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -9343,7 +9332,7 @@ POST_OPS_RELU_SCALE_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_1x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x48F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -9356,7 +9345,7 @@ POST_OPS_GELU_TANH_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_1x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x48F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -9368,7 +9357,7 @@ POST_OPS_GELU_ERF_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_1x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x48F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -9383,7 +9372,7 @@ POST_OPS_CLIP_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_1x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x48F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -9492,7 +9481,7 @@ POST_OPS_DOWNSCALE_1x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_1x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -9557,7 +9546,7 @@ POST_OPS_MATRIX_ADD_1x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_1x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x48F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -9622,7 +9611,7 @@ POST_OPS_MATRIX_MUL_1x48F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_1x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x48F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -9637,7 +9626,7 @@ POST_OPS_SWISH_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_1x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x48F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -9650,7 +9639,7 @@ POST_OPS_TANH_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_1x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x48F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -9664,7 +9653,7 @@ POST_OPS_SIGMOID_1x48F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_1x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x48F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -9683,7 +9672,7 @@ POST_OPS_1x48F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x32F_DISABLE,    &&POST_OPS_BIAS_5x32F,
         &&POST_OPS_RELU_5x32F,       &&POST_OPS_RELU_SCALE_5x32F,
         &&POST_OPS_GELU_TANH_5x32F,  &&POST_OPS_GELU_ERF_5x32F,
@@ -9691,7 +9680,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32)
         &&POST_OPS_MATRIX_ADD_5x32F, &&POST_OPS_SWISH_5x32F,
         &&POST_OPS_MATRIX_MUL_5x32F, &&POST_OPS_TANH_5x32F,
         &&POST_OPS_SIGMOID_5x32F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -9815,8 +9804,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_5x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5x32F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -9917,7 +9905,7 @@ POST_OPS_BIAS_5x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_5x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5x32F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -9952,7 +9940,7 @@ POST_OPS_RELU_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_5x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5x32F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -9990,7 +9978,7 @@ POST_OPS_RELU_SCALE_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_5x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5x32F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -10024,7 +10012,7 @@ POST_OPS_GELU_TANH_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_5x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5x32F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -10057,7 +10045,7 @@ POST_OPS_GELU_ERF_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_5x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5x32F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -10093,7 +10081,7 @@ POST_OPS_CLIP_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_5x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x32F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -10286,7 +10274,7 @@ POST_OPS_DOWNSCALE_5x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_5x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -10428,7 +10416,7 @@ POST_OPS_MATRIX_ADD_5x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_5x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -10570,7 +10558,7 @@ POST_OPS_MATRIX_MUL_5x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_5x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5x32F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -10606,7 +10594,7 @@ POST_OPS_SWISH_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_5x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5x32F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -10640,7 +10628,7 @@ POST_OPS_TANH_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_5x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5x32F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -10675,7 +10663,7 @@ POST_OPS_SIGMOID_5x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_5x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5x32F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -10716,7 +10704,7 @@ POST_OPS_5x32F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x32F_DISABLE,    &&POST_OPS_BIAS_4x32F,
         &&POST_OPS_RELU_4x32F,       &&POST_OPS_RELU_SCALE_4x32F,
         &&POST_OPS_GELU_TANH_4x32F,  &&POST_OPS_GELU_ERF_4x32F,
@@ -10724,7 +10712,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32)
         &&POST_OPS_MATRIX_ADD_4x32F, &&POST_OPS_SWISH_4x32F,
         &&POST_OPS_MATRIX_MUL_4x32F, &&POST_OPS_TANH_4x32F,
         &&POST_OPS_SIGMOID_4x32F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -10830,8 +10818,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_4x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4x32F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -10917,7 +10904,7 @@ POST_OPS_BIAS_4x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_4x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4x32F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -10946,7 +10933,7 @@ POST_OPS_RELU_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_4x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4x32F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -10978,7 +10965,7 @@ POST_OPS_RELU_SCALE_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_4x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4x32F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -11006,7 +10993,7 @@ POST_OPS_GELU_TANH_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_4x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4x32F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -11033,7 +11020,7 @@ POST_OPS_GELU_ERF_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_4x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4x32F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -11063,7 +11050,7 @@ POST_OPS_CLIP_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_4x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x32F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -11230,7 +11217,7 @@ POST_OPS_DOWNSCALE_4x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_4x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -11351,7 +11338,7 @@ POST_OPS_MATRIX_ADD_4x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_4x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -11472,7 +11459,7 @@ POST_OPS_MATRIX_MUL_4x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_4x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4x32F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -11502,7 +11489,7 @@ POST_OPS_SWISH_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_4x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4x32F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -11530,7 +11517,7 @@ POST_OPS_TANH_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_4x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4x32F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -11559,7 +11546,7 @@ POST_OPS_SIGMOID_4x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_4x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4x32F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -11594,7 +11581,7 @@ POST_OPS_4x32F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x32F_DISABLE,    &&POST_OPS_BIAS_3x32F,
         &&POST_OPS_RELU_3x32F,       &&POST_OPS_RELU_SCALE_3x32F,
         &&POST_OPS_GELU_TANH_3x32F,  &&POST_OPS_GELU_ERF_3x32F,
@@ -11602,7 +11589,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32)
         &&POST_OPS_MATRIX_ADD_3x32F, &&POST_OPS_SWISH_3x32F,
         &&POST_OPS_MATRIX_MUL_3x32F, &&POST_OPS_TANH_3x32F,
         &&POST_OPS_SIGMOID_3x32F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -11694,8 +11681,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_3x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3x32F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -11766,7 +11752,7 @@ POST_OPS_BIAS_3x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_3x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3x32F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -11789,7 +11775,7 @@ POST_OPS_RELU_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_3x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3x32F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -11815,7 +11801,7 @@ POST_OPS_RELU_SCALE_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_3x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3x32F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -11837,7 +11823,7 @@ POST_OPS_GELU_TANH_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_3x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3x32F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -11858,7 +11844,7 @@ POST_OPS_GELU_ERF_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_3x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3x32F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -11882,7 +11868,7 @@ POST_OPS_CLIP_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_3x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x32F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -12023,7 +12009,7 @@ POST_OPS_DOWNSCALE_3x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_3x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -12123,7 +12109,7 @@ POST_OPS_MATRIX_ADD_3x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_3x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -12223,7 +12209,7 @@ POST_OPS_MATRIX_MUL_3x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_3x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3x32F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -12247,7 +12233,7 @@ POST_OPS_SWISH_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_3x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3x32F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -12275,7 +12261,7 @@ POST_OPS_TANH_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_3x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3x32F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -12304,7 +12290,7 @@ POST_OPS_SIGMOID_3x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_3x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3x32F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -12333,7 +12319,7 @@ POST_OPS_3x32F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x32F_DISABLE,    &&POST_OPS_BIAS_2x32F,
         &&POST_OPS_RELU_2x32F,       &&POST_OPS_RELU_SCALE_2x32F,
         &&POST_OPS_GELU_TANH_2x32F,  &&POST_OPS_GELU_ERF_2x32F,
@@ -12341,7 +12327,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32)
         &&POST_OPS_MATRIX_ADD_2x32F, &&POST_OPS_SWISH_2x32F,
         &&POST_OPS_MATRIX_MUL_2x32F, &&POST_OPS_TANH_2x32F,
         &&POST_OPS_SIGMOID_2x32F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -12416,8 +12402,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_2x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2x32F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -12473,7 +12458,7 @@ POST_OPS_BIAS_2x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_2x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2x32F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -12490,7 +12475,7 @@ POST_OPS_RELU_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_2x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2x32F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -12510,7 +12495,7 @@ POST_OPS_RELU_SCALE_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_2x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2x32F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -12526,7 +12511,7 @@ POST_OPS_GELU_TANH_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_2x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2x32F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -12541,7 +12526,7 @@ POST_OPS_GELU_ERF_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_2x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2x32F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -12559,7 +12544,7 @@ POST_OPS_CLIP_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_2x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x32F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
 
@@ -12668,7 +12653,7 @@ POST_OPS_DOWNSCALE_2x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_2x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -12747,7 +12732,7 @@ POST_OPS_MATRIX_ADD_2x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_2x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -12826,7 +12811,7 @@ POST_OPS_MATRIX_MUL_2x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_2x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2x32F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -12844,7 +12829,7 @@ POST_OPS_SWISH_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_2x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2x32F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -12860,7 +12845,7 @@ POST_OPS_TANH_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_2x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2x32F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -12877,7 +12862,7 @@ POST_OPS_SIGMOID_2x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_2x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2x32F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -12900,7 +12885,7 @@ POST_OPS_2x32F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x32F_DISABLE,    &&POST_OPS_BIAS_1x32F,
         &&POST_OPS_RELU_1x32F,       &&POST_OPS_RELU_SCALE_1x32F,
         &&POST_OPS_GELU_TANH_1x32F,  &&POST_OPS_GELU_ERF_1x32F,
@@ -12908,7 +12893,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32)
         &&POST_OPS_MATRIX_ADD_1x32F, &&POST_OPS_SWISH_1x32F,
         &&POST_OPS_MATRIX_MUL_1x32F, &&POST_OPS_TANH_1x32F,
         &&POST_OPS_SIGMOID_1x32F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -12967,8 +12952,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_1x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x32F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -13009,7 +12993,7 @@ POST_OPS_BIAS_1x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_1x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x32F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -13020,7 +13004,7 @@ POST_OPS_RELU_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_1x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x32F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -13034,7 +13018,7 @@ POST_OPS_RELU_SCALE_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_1x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x32F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -13044,7 +13028,7 @@ POST_OPS_GELU_TANH_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_1x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x32F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -13053,7 +13037,7 @@ POST_OPS_GELU_ERF_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_1x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x32F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -13065,7 +13049,7 @@ POST_OPS_CLIP_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_1x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x32F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
 
@@ -13155,7 +13139,7 @@ POST_OPS_DOWNSCALE_1x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_1x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -13215,7 +13199,7 @@ POST_OPS_MATRIX_ADD_1x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_1x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x32F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -13275,7 +13259,7 @@ POST_OPS_MATRIX_MUL_1x32F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_1x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x32F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -13287,7 +13271,7 @@ POST_OPS_SWISH_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_1x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x32F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -13297,7 +13281,7 @@ POST_OPS_TANH_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_1x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x32F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -13308,7 +13292,7 @@ POST_OPS_SIGMOID_1x32F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_1x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x32F_DISABLE)
     uint32_t  tlsb, rounded, temp[16] = { 0 };
     int       i;
     bfloat16* dest;
@@ -13325,7 +13309,7 @@ POST_OPS_1x32F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x16F_DISABLE,    &&POST_OPS_BIAS_5x16F,
         &&POST_OPS_RELU_5x16F,       &&POST_OPS_RELU_SCALE_5x16F,
         &&POST_OPS_GELU_TANH_5x16F,  &&POST_OPS_GELU_ERF_5x16F,
@@ -13333,7 +13317,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x16)
         &&POST_OPS_MATRIX_ADD_5x16F, &&POST_OPS_SWISH_5x16F,
         &&POST_OPS_MATRIX_MUL_5x16F, &&POST_OPS_TANH_5x16F,
         &&POST_OPS_SIGMOID_5x16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -13429,8 +13413,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_5x16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5x16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -13499,7 +13482,7 @@ POST_OPS_BIAS_5x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_5x16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5x16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -13519,7 +13502,7 @@ POST_OPS_RELU_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_5x16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5x16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -13542,7 +13525,7 @@ POST_OPS_RELU_SCALE_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_5x16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5x16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -13561,7 +13544,7 @@ POST_OPS_GELU_TANH_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_5x16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5x16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -13579,7 +13562,7 @@ POST_OPS_GELU_ERF_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_5x16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5x16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -13600,7 +13583,7 @@ POST_OPS_CLIP_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_5x16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -13759,7 +13742,7 @@ POST_OPS_DOWNSCALE_5x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_5x16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -13878,7 +13861,7 @@ POST_OPS_MATRIX_ADD_5x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_5x16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -13997,7 +13980,7 @@ POST_OPS_MATRIX_MUL_5x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_5x16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5x16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -14018,7 +14001,7 @@ POST_OPS_SWISH_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_5x16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5x16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -14037,7 +14020,7 @@ POST_OPS_TANH_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_5x16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5x16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -14057,7 +14040,7 @@ POST_OPS_SIGMOID_5x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_5x16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5x16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -14089,7 +14072,7 @@ POST_OPS_5x16F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x16F_DISABLE,    &&POST_OPS_BIAS_4x16F,
         &&POST_OPS_RELU_4x16F,       &&POST_OPS_RELU_SCALE_4x16F,
         &&POST_OPS_GELU_TANH_4x16F,  &&POST_OPS_GELU_ERF_4x16F,
@@ -14097,7 +14080,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x16)
         &&POST_OPS_MATRIX_ADD_4x16F, &&POST_OPS_SWISH_4x16F,
         &&POST_OPS_MATRIX_MUL_4x16F, &&POST_OPS_TANH_4x16F,
         &&POST_OPS_SIGMOID_4x16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -14181,8 +14164,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_4x16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4x16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -14242,7 +14224,7 @@ POST_OPS_BIAS_4x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_4x16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4x16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -14259,7 +14241,7 @@ POST_OPS_RELU_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_4x16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4x16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -14279,7 +14261,7 @@ POST_OPS_RELU_SCALE_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_4x16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4x16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -14295,7 +14277,7 @@ POST_OPS_GELU_TANH_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_4x16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4x16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -14310,7 +14292,7 @@ POST_OPS_GELU_ERF_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_4x16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4x16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -14328,7 +14310,7 @@ POST_OPS_CLIP_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_4x16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -14467,7 +14449,7 @@ POST_OPS_DOWNSCALE_4x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_4x16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -14569,7 +14551,7 @@ POST_OPS_MATRIX_ADD_4x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_4x16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -14672,7 +14654,7 @@ POST_OPS_MATRIX_MUL_4x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_4x16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4x16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -14690,7 +14672,7 @@ POST_OPS_SWISH_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_4x16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4x16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -14706,7 +14688,7 @@ POST_OPS_TANH_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_4x16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4x16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -14723,7 +14705,7 @@ POST_OPS_SIGMOID_4x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_4x16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4x16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -14752,7 +14734,7 @@ POST_OPS_4x16F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x16F_DISABLE,    &&POST_OPS_BIAS_3x16F,
         &&POST_OPS_RELU_3x16F,       &&POST_OPS_RELU_SCALE_3x16F,
         &&POST_OPS_GELU_TANH_3x16F,  &&POST_OPS_GELU_ERF_3x16F,
@@ -14760,7 +14742,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x16)
         &&POST_OPS_MATRIX_ADD_3x16F, &&POST_OPS_SWISH_3x16F,
         &&POST_OPS_MATRIX_MUL_3x16F, &&POST_OPS_TANH_3x16F,
         &&POST_OPS_SIGMOID_3x16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -14837,8 +14819,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_3x16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3x16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -14889,7 +14870,7 @@ POST_OPS_BIAS_3x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_3x16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3x16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -14903,7 +14884,7 @@ POST_OPS_RELU_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_3x16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3x16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -14920,7 +14901,7 @@ POST_OPS_RELU_SCALE_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_3x16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3x16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -14933,7 +14914,7 @@ POST_OPS_GELU_TANH_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_3x16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3x16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -14945,7 +14926,7 @@ POST_OPS_GELU_ERF_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_3x16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3x16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -14960,7 +14941,7 @@ POST_OPS_CLIP_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_3x16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -15079,7 +15060,7 @@ POST_OPS_DOWNSCALE_3x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_3x16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -15165,7 +15146,7 @@ POST_OPS_MATRIX_ADD_3x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_3x16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -15251,7 +15232,7 @@ POST_OPS_MATRIX_MUL_3x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_3x16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3x16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -15266,7 +15247,7 @@ POST_OPS_SWISH_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_3x16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3x16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -15279,7 +15260,7 @@ POST_OPS_TANH_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_3x16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3x16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -15293,7 +15274,7 @@ POST_OPS_SIGMOID_3x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_3x16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3x16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -15318,7 +15299,7 @@ POST_OPS_3x16F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x16F_DISABLE,    &&POST_OPS_BIAS_2x16F,
         &&POST_OPS_RELU_2x16F,       &&POST_OPS_RELU_SCALE_2x16F,
         &&POST_OPS_GELU_TANH_2x16F,  &&POST_OPS_GELU_ERF_2x16F,
@@ -15326,7 +15307,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x16)
         &&POST_OPS_MATRIX_ADD_2x16F, &&POST_OPS_SWISH_2x16F,
         &&POST_OPS_MATRIX_MUL_2x16F, &&POST_OPS_TANH_2x16F,
         &&POST_OPS_SIGMOID_2x16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -15391,8 +15372,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_2x16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2x16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -15434,7 +15414,7 @@ POST_OPS_BIAS_2x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_2x16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2x16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -15445,7 +15425,7 @@ POST_OPS_RELU_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_2x16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2x16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -15459,7 +15439,7 @@ POST_OPS_RELU_SCALE_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_2x16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2x16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -15469,7 +15449,7 @@ POST_OPS_GELU_TANH_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_2x16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2x16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -15478,7 +15458,7 @@ POST_OPS_GELU_ERF_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_2x16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2x16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -15490,7 +15470,7 @@ POST_OPS_CLIP_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_2x16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
 
@@ -15589,7 +15569,7 @@ POST_OPS_DOWNSCALE_2x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_2x16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -15659,7 +15639,7 @@ POST_OPS_MATRIX_ADD_2x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_2x16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -15728,7 +15708,7 @@ POST_OPS_MATRIX_MUL_2x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_2x16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2x16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -15740,7 +15720,7 @@ POST_OPS_SWISH_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_2x16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2x16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -15750,7 +15730,7 @@ POST_OPS_TANH_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_2x16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2x16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -15761,7 +15741,7 @@ POST_OPS_SIGMOID_2x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_2x16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2x16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -15782,7 +15762,7 @@ POST_OPS_2x16F_DISABLE:;
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
         &&POST_OPS_RELU_1x16F,       &&POST_OPS_RELU_SCALE_1x16F,
         &&POST_OPS_GELU_TANH_1x16F,  &&POST_OPS_GELU_ERF_1x16F,
@@ -15790,7 +15770,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x16)
         &&POST_OPS_MATRIX_ADD_1x16F, &&POST_OPS_SWISH_1x16F,
         &&POST_OPS_MATRIX_MUL_1x16F, &&POST_OPS_TANH_1x16F,
         &&POST_OPS_SIGMOID_1x16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -15846,8 +15826,7 @@ DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_1x16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -15880,7 +15859,7 @@ POST_OPS_BIAS_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_1x16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -15888,7 +15867,7 @@ POST_OPS_RELU_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_1x16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -15899,20 +15878,20 @@ POST_OPS_RELU_SCALE_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_1x16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_1x16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_1x16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -15921,7 +15900,7 @@ POST_OPS_CLIP_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_1x16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x16F)
     __m512 selector1 = _mm512_setzero_ps();
 
     __m512 zero_point0 = _mm512_setzero_ps();
@@ -15995,7 +15974,7 @@ POST_OPS_DOWNSCALE_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_1x16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -16047,7 +16026,7 @@ POST_OPS_MATRIX_ADD_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_1x16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -16099,7 +16078,7 @@ POST_OPS_MATRIX_MUL_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_1x16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -16108,14 +16087,14 @@ POST_OPS_SWISH_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_1x16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_1x16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -16123,7 +16102,7 @@ POST_OPS_SIGMOID_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_1x16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -16140,7 +16119,7 @@ POST_OPS_1x16F_DISABLE:;
 
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5xlt16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5xlt16F_DISABLE,    &&POST_OPS_BIAS_5xlt16F,
         &&POST_OPS_RELU_5xlt16F,       &&POST_OPS_RELU_SCALE_5xlt16F,
         &&POST_OPS_GELU_TANH_5xlt16F,  &&POST_OPS_GELU_ERF_5xlt16F,
@@ -16148,7 +16127,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5xlt16)
         &&POST_OPS_MATRIX_ADD_5xlt16F, &&POST_OPS_SWISH_5xlt16F,
         &&POST_OPS_MATRIX_MUL_5xlt16F, &&POST_OPS_TANH_5xlt16F,
         &&POST_OPS_SIGMOID_5xlt16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -16247,8 +16226,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5xlt16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_5xlt16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5xlt16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -16317,7 +16295,7 @@ POST_OPS_BIAS_5xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_5xlt16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5xlt16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -16337,7 +16315,7 @@ POST_OPS_RELU_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_5xlt16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5xlt16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -16360,7 +16338,7 @@ POST_OPS_RELU_SCALE_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_5xlt16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -16379,7 +16357,7 @@ POST_OPS_GELU_TANH_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_5xlt16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5xlt16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -16397,7 +16375,7 @@ POST_OPS_GELU_ERF_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_5xlt16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5xlt16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -16418,7 +16396,7 @@ POST_OPS_CLIP_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_5xlt16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5xlt16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -16576,7 +16554,7 @@ POST_OPS_DOWNSCALE_5xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_5xlt16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -16706,7 +16684,7 @@ POST_OPS_MATRIX_ADD_5xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_5xlt16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -16836,7 +16814,7 @@ POST_OPS_MATRIX_MUL_5xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_5xlt16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5xlt16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -16857,7 +16835,7 @@ POST_OPS_SWISH_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_5xlt16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -16876,7 +16854,7 @@ POST_OPS_TANH_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_5xlt16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5xlt16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -16896,7 +16874,7 @@ POST_OPS_SIGMOID_5xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_5xlt16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5xlt16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -16928,7 +16906,7 @@ POST_OPS_5xlt16F_DISABLE:;
 
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4xlt16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4xlt16F_DISABLE,    &&POST_OPS_BIAS_4xlt16F,
         &&POST_OPS_RELU_4xlt16F,       &&POST_OPS_RELU_SCALE_4xlt16F,
         &&POST_OPS_GELU_TANH_4xlt16F,  &&POST_OPS_GELU_ERF_4xlt16F,
@@ -16936,7 +16914,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4xlt16)
         &&POST_OPS_MATRIX_ADD_4xlt16F, &&POST_OPS_SWISH_4xlt16F,
         &&POST_OPS_MATRIX_MUL_4xlt16F, &&POST_OPS_TANH_4xlt16F,
         &&POST_OPS_SIGMOID_4xlt16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -17022,8 +17000,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4xlt16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_4xlt16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4xlt16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -17083,7 +17060,7 @@ POST_OPS_BIAS_4xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_4xlt16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4xlt16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -17100,7 +17077,7 @@ POST_OPS_RELU_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_4xlt16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4xlt16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -17120,7 +17097,7 @@ POST_OPS_RELU_SCALE_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_4xlt16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -17136,7 +17113,7 @@ POST_OPS_GELU_TANH_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_4xlt16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4xlt16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -17151,7 +17128,7 @@ POST_OPS_GELU_ERF_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_4xlt16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4xlt16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -17169,7 +17146,7 @@ POST_OPS_CLIP_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_4xlt16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4xlt16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -17307,7 +17284,7 @@ POST_OPS_DOWNSCALE_4xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_4xlt16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -17419,7 +17396,7 @@ POST_OPS_MATRIX_ADD_4xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_4xlt16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -17531,7 +17508,7 @@ POST_OPS_MATRIX_MUL_4xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_4xlt16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4xlt16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -17549,7 +17526,7 @@ POST_OPS_SWISH_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_4xlt16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -17565,7 +17542,7 @@ POST_OPS_TANH_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_4xlt16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4xlt16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -17582,7 +17559,7 @@ POST_OPS_SIGMOID_4xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_4xlt16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4xlt16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -17611,7 +17588,7 @@ POST_OPS_4xlt16F_DISABLE:;
 
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3xlt16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3xlt16F_DISABLE,    &&POST_OPS_BIAS_3xlt16F,
         &&POST_OPS_RELU_3xlt16F,       &&POST_OPS_RELU_SCALE_3xlt16F,
         &&POST_OPS_GELU_TANH_3xlt16F,  &&POST_OPS_GELU_ERF_3xlt16F,
@@ -17619,7 +17596,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3xlt16)
         &&POST_OPS_MATRIX_ADD_3xlt16F, &&POST_OPS_SWISH_3xlt16F,
         &&POST_OPS_MATRIX_MUL_3xlt16F, &&POST_OPS_TANH_3xlt16F,
         &&POST_OPS_SIGMOID_3xlt16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -17698,8 +17675,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3xlt16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_3xlt16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3xlt16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -17750,7 +17726,7 @@ POST_OPS_BIAS_3xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_3xlt16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3xlt16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -17764,7 +17740,7 @@ POST_OPS_RELU_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_3xlt16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3xlt16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -17781,7 +17757,7 @@ POST_OPS_RELU_SCALE_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_3xlt16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -17794,7 +17770,7 @@ POST_OPS_GELU_TANH_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_3xlt16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3xlt16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -17806,7 +17782,7 @@ POST_OPS_GELU_ERF_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_3xlt16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3xlt16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -17821,7 +17797,7 @@ POST_OPS_CLIP_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_3xlt16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3xlt16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
     __m512 selector3 = _mm512_setzero_ps();
@@ -17939,7 +17915,7 @@ POST_OPS_DOWNSCALE_3xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_3xlt16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -18033,7 +18009,7 @@ POST_OPS_MATRIX_ADD_3xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_3xlt16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -18126,7 +18102,7 @@ POST_OPS_MATRIX_MUL_3xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_3xlt16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3xlt16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -18141,7 +18117,7 @@ POST_OPS_SWISH_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_3xlt16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -18154,7 +18130,7 @@ POST_OPS_TANH_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_3xlt16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3xlt16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -18168,7 +18144,7 @@ POST_OPS_SIGMOID_3xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_3xlt16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3xlt16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -18193,7 +18169,7 @@ POST_OPS_3xlt16F_DISABLE:;
 
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2xlt16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2xlt16F_DISABLE,    &&POST_OPS_BIAS_2xlt16F,
         &&POST_OPS_RELU_2xlt16F,       &&POST_OPS_RELU_SCALE_2xlt16F,
         &&POST_OPS_GELU_TANH_2xlt16F,  &&POST_OPS_GELU_ERF_2xlt16F,
@@ -18201,7 +18177,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2xlt16)
         &&POST_OPS_MATRIX_ADD_2xlt16F, &&POST_OPS_SWISH_2xlt16F,
         &&POST_OPS_MATRIX_MUL_2xlt16F, &&POST_OPS_TANH_2xlt16F,
         &&POST_OPS_SIGMOID_2xlt16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -18268,8 +18244,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2xlt16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_2xlt16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2xlt16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -18311,7 +18286,7 @@ POST_OPS_BIAS_2xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_2xlt16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2xlt16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -18322,7 +18297,7 @@ POST_OPS_RELU_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_2xlt16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2xlt16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -18336,7 +18311,7 @@ POST_OPS_RELU_SCALE_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_2xlt16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
@@ -18346,7 +18321,7 @@ POST_OPS_GELU_TANH_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_2xlt16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2xlt16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
@@ -18355,7 +18330,7 @@ POST_OPS_GELU_ERF_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_2xlt16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2xlt16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -18367,7 +18342,7 @@ POST_OPS_CLIP_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_2xlt16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2xlt16F)
     __m512 selector1 = _mm512_setzero_ps();
     __m512 selector2 = _mm512_setzero_ps();
 
@@ -18465,7 +18440,7 @@ POST_OPS_DOWNSCALE_2xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_2xlt16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -18539,7 +18514,7 @@ POST_OPS_MATRIX_ADD_2xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_2xlt16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -18613,7 +18588,7 @@ POST_OPS_MATRIX_MUL_2xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_2xlt16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2xlt16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -18625,7 +18600,7 @@ POST_OPS_SWISH_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_2xlt16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
@@ -18635,7 +18610,7 @@ POST_OPS_TANH_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_2xlt16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2xlt16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -18646,7 +18621,7 @@ POST_OPS_SIGMOID_2xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_2xlt16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2xlt16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {
@@ -18667,7 +18642,7 @@ POST_OPS_2xlt16F_DISABLE:;
 
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1xlt16)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1xlt16F_DISABLE,    &&POST_OPS_BIAS_1xlt16F,
         &&POST_OPS_RELU_1xlt16F,       &&POST_OPS_RELU_SCALE_1xlt16F,
         &&POST_OPS_GELU_TANH_1xlt16F,  &&POST_OPS_GELU_ERF_1xlt16F,
@@ -18675,7 +18650,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1xlt16)
         &&POST_OPS_MATRIX_ADD_1xlt16F, &&POST_OPS_SWISH_1xlt16F,
         &&POST_OPS_MATRIX_MUL_1xlt16F, &&POST_OPS_TANH_1xlt16F,
         &&POST_OPS_SIGMOID_1xlt16F
-    };
+    )
     // Typecast local copies of integers in case md_t and inc_t are a
     // different size than is expected by load instructions.
     iter_t k_iter = k0;
@@ -18733,8 +18708,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1xlt16)
     // Post Ops
     dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_1xlt16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1xlt16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -18767,7 +18741,7 @@ POST_OPS_BIAS_1xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_1xlt16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1xlt16F)
     zmm1 = _mm512_setzero_ps();
 
     // c[0,0-15]
@@ -18775,7 +18749,7 @@ POST_OPS_RELU_1xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_1xlt16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1xlt16F)
     zmm1 = _mm512_setzero_ps();
     zmm2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -18786,20 +18760,20 @@ POST_OPS_RELU_SCALE_1xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_1xlt16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     GELU_TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm5, zmm6)
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_1xlt16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1xlt16F)
     // c[0, 0-15]
     GELU_ERF_F32S_AVX512(zmm8, zmm0, zmm1, zmm2)
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_1xlt16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1xlt16F)
     zmm0 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
     zmm1 = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -18808,7 +18782,7 @@ POST_OPS_CLIP_1xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_1xlt16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1xlt16F)
     __m512 selector1 = _mm512_setzero_ps();
 
     __m512 zero_point0 = _mm512_setzero_ps();
@@ -18884,7 +18858,7 @@ POST_OPS_DOWNSCALE_1xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_1xlt16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -18939,7 +18913,7 @@ POST_OPS_MATRIX_ADD_1xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_1xlt16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1xlt16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     __m512 selector1 = _mm512_setzero_ps();
@@ -18994,7 +18968,7 @@ POST_OPS_MATRIX_MUL_1xlt16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_1xlt16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1xlt16F)
     __m512  zmm7 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
     __m512i ex_out;
 
@@ -19003,14 +18977,14 @@ POST_OPS_SWISH_1xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_1xlt16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1xlt16F)
     __m512i zmm6;
     // c[0, 0-15]
     TANH_F32S_AVX512(zmm8, zmm0, zmm1, zmm2, zmm3, zmm4, zmm6)
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_1xlt16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1xlt16F)
     __m512i ex_out;
 
     // c[0, 0-15]
@@ -19018,7 +18992,7 @@ POST_OPS_SIGMOID_1xlt16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_1xlt16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1xlt16F_DISABLE)
 
     if ((post_ops_attr.buf_downscale != NULL)
         && (post_ops_attr.is_last_k == TRUE)) {

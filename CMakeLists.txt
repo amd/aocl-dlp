@@ -92,7 +92,18 @@ add_subdirectory(src)
 set(DLP_SRCS "")
 
 # Create the library target
-add_library(${PROJECT_NAME} SHARED ${DLP_SRCS})
+if(MSVC)
+    add_library(${PROJECT_NAME} SHARED
+        ${DLP_SRCS}
+        $<TARGET_OBJECTS:aocl_dlp_classic>
+        $<TARGET_OBJECTS:aocl_dlp_plus>
+        $<TARGET_OBJECTS:aocl_dlp_jit_amdzen>
+        $<TARGET_OBJECTS:dlp_kernel_zen>
+        $<TARGET_OBJECTS:dlp_kernel_zen4>
+    )
+else()
+    add_library(${PROJECT_NAME} SHARED ${DLP_SRCS})
+endif()
 
 # Create the static library target including object libraries
 add_library(${PROJECT_NAME}_static STATIC
@@ -108,16 +119,25 @@ add_library(${PROJECT_NAME}_static STATIC
 dlp_set_platform_options()
 
 # Link with the classic object library and dependencies
-target_link_libraries(${PROJECT_NAME}
-    PRIVATE
-        ${CLASSIC_TARGETS}
-        ${DLP_PLUS_TARGETS}
-        $<$<PLATFORM_ID:Linux>:-Wl,--whole-archive>
-        aocl_dlp_jit_amdzen
-        $<$<PLATFORM_ID:Linux>:-Wl,--no-whole-archive>
-    PUBLIC
-        Threads::Threads
-)
+if(MSVC)
+    # On MSVC, objects are already included via $<TARGET_OBJECTS:...> above.
+    # Only link external dependencies, not the object libraries themselves.
+    target_link_libraries(${PROJECT_NAME}
+        PUBLIC
+            Threads::Threads
+    )
+else()
+    target_link_libraries(${PROJECT_NAME}
+        PRIVATE
+            ${CLASSIC_TARGETS}
+            ${DLP_PLUS_TARGETS}
+            $<$<PLATFORM_ID:Linux>:-Wl,--whole-archive>
+            aocl_dlp_jit_amdzen
+            $<$<PLATFORM_ID:Linux>:-Wl,--no-whole-archive>
+        PUBLIC
+            Threads::Threads
+    )
+endif()
 
 # Link with OpenMP if enabled
 if(DLP_ENABLE_OPENMP)

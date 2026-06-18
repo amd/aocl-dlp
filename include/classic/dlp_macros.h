@@ -12,7 +12,7 @@
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS”
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
  * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
  * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
  * ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE
@@ -29,25 +29,13 @@
 #ifndef DLP_MACROS_H
 #define DLP_MACROS_H
 
-/**
- * @brief Force inline macro - portable across compilers
- *
- * Use this macro to force the compiler to inline a function.
- * This is useful for performance-critical code paths where
- * inlining is essential.
- *
- * Usage:
- *   DLP_ALWAYS_INLINE void myFunction() { ... }
- *
- * Note: This macro includes 'inline' so don't add it separately.
+/*
+ * All compiler-specific macros (DLP_ALWAYS_INLINE, DLP_ALIGN_PREFIX,
+ * DLP_ALIGN_SUFFIX, DLP_ALIGNED_STRUCT) are defined in dlp_compat.h.
+ * This header re-exports them so existing #include "classic/dlp_macros.h"
+ * sites continue to work unchanged.
  */
-#if defined(_MSC_VER)
-#define DLP_ALWAYS_INLINE __forceinline
-#elif defined(__GNUC__) || defined(__clang__)
-#define DLP_ALWAYS_INLINE [[gnu::always_inline]] inline
-#else
-#define DLP_ALWAYS_INLINE inline
-#endif
+#include "classic/dlp_compat.h"
 
 #if defined(__GNUC__) || defined(__clang__)
 #define DLP_ATTRIBUTE_USED [[gnu::used]]

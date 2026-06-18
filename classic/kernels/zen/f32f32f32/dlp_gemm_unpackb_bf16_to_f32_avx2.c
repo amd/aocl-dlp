@@ -32,82 +32,83 @@
 
 // DLP_BF16 -> DLP_F32 convert helpers. reg: __m256 - CVT_BF16_F32_SHIFT_AVX2
 #include "dlp_gemm_kernel_macros_f32_avx2.h"
+#include "classic/dlp_simd_casts.h"
 
 #define LOAD_AND_CONVERT_FIRST32_NR64_BF16_NR32_AVX2(k)                        \
-    a_reg[0] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[0] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + (k + 0) * NR) + 0)));        \
-    a_reg[1] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + (k + 0) * NR) + 8)));        \
-    a_reg[2] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + (k + 0) * NR) + 16)));       \
-    a_reg[3] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + (k + 0) * NR) + 24)));       \
                                                                                \
-    a_reg[4] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[4] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + ((k + 1) * NR)) + 0)));      \
-    a_reg[5] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[5] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + ((k + 1) * NR)) + 8)));      \
-    a_reg[6] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[6] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + ((k + 1) * NR)) + 16)));     \
-    a_reg[7] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[7] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + ((jc * KC_updated) + ((k + 1) * NR)) + 24)));
 
 #define LOAD_AND_CONVERT_LAST32_NR64_BF16_AVX2(k)                              \
-    a_reg[0] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[0] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 0) * NR) + 32)));       \
-    a_reg[1] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 0) * NR) + 40)));       \
-    a_reg[2] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 0) * NR) + 48)));       \
-    a_reg[3] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 0) * NR) + 56)));       \
                                                                                \
-    a_reg[4] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[4] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 1) * NR) + 32)));       \
-    a_reg[5] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[5] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 1) * NR) + 40)));       \
-    a_reg[6] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[6] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 1) * NR) + 48)));       \
-    a_reg[7] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(               \
+    a_reg[7] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(               \
         (__m128i const*)(b + (jc * KC_updated) + ((k + 1) * NR) + 56)));
 
 #define LOAD_AND_CONVERT_NR32_BF16_NR32_AVX2(k)                                \
     a_reg[0] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 0)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 0)));   \
     a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 8)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 8)));   \
     a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 16)));  \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 16)));  \
     a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 24)));  \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 24)));  \
                                                                                \
     a_reg[4] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 0)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 0)));   \
     a_reg[5] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 8)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 8)));   \
     a_reg[6] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 16)));  \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 16)));  \
     a_reg[7] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 24)));
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 24)));
 
 #define LOAD_AND_CONVERT_FIRST32_BF16_NR32_AVX2(k)                             \
     a_reg[0] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 0)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 0)));   \
     a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 8)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 8)));   \
     a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 16)));  \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 16)));  \
     a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 24)));  \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 24)));  \
                                                                                \
     a_reg[4] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 0)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 0)));   \
     a_reg[5] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 8)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 8)));   \
     a_reg[6] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 16)));  \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 16)));  \
     a_reg[7] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 24)));
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 24)));
 
 #define SHUFFLE_F32_ELEMENTS_NR32_AVX2                                         \
     b_reg[0] = _mm256_shuffle_ps(a_reg[0], a_reg[1], 0x88);                    \
@@ -120,24 +121,24 @@
     b_reg[7] = _mm256_shuffle_ps(a_reg[6], a_reg[7], 0xDD);
 
 #define PERMUTE_NR32_ELEMENTS_AVX2                                             \
-    a_reg[0] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[0], 0xD8);      \
-    a_reg[1] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[1], 0xD8);      \
-    a_reg[2] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[2], 0xD8);      \
-    a_reg[3] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[3], 0xD8);      \
-    a_reg[4] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[4], 0xD8);      \
-    a_reg[5] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[5], 0xD8);      \
-    a_reg[6] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[6], 0xD8);      \
-    a_reg[7] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[7], 0xD8);
+    a_reg[0] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[0]), 0xD8));      \
+    a_reg[1] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[1]), 0xD8));      \
+    a_reg[2] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[2]), 0xD8));      \
+    a_reg[3] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[3]), 0xD8));      \
+    a_reg[4] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[4]), 0xD8));      \
+    a_reg[5] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[5]), 0xD8));      \
+    a_reg[6] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[6]), 0xD8));      \
+    a_reg[7] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[7]), 0xD8));
 
 #define LOAD_AND_CONVERT_BF16_NR16_AVX2(k)                                     \
     a_reg[0] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 0)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 0)));   \
     a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 8)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 0) * NR) + 8)));   \
     a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 0)));   \
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 0)));   \
     a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(                                        \
-        (__m128i)_mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 8)));
+        _mm_loadu_si128((__m128i const*)(b + ((k + 1) * NR) + 8)));
 
 #define SHUFFLE_F32_ELEMENTS_NR16_AVX2                                         \
     b_reg[0] = _mm256_shuffle_ps(a_reg[0], a_reg[1], 0x88);                    \
@@ -146,10 +147,10 @@
     b_reg[3] = _mm256_shuffle_ps(a_reg[2], a_reg[3], 0xDD);
 
 #define PERMUTE_NR16_ELEMENTS_AVX2                                             \
-    a_reg[0] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[0], 0xD8);      \
-    a_reg[1] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[1], 0xD8);      \
-    a_reg[2] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[2], 0xD8);      \
-    a_reg[3] = (__m256)_mm256_permute4x64_epi64((__m256i)b_reg[3], 0xD8);
+    a_reg[0] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[0]), 0xD8));      \
+    a_reg[1] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[1]), 0xD8));      \
+    a_reg[2] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[2]), 0xD8));      \
+    a_reg[3] = DLP_CAST_SI256_PS(_mm256_permute4x64_epi64(DLP_CAST_PS_SI256(b_reg[3]), 0xD8));
 
 void
 dlp_unpackb_nr48_bf16_f32_row_major(const bfloat16* b,
@@ -191,13 +192,13 @@ dlp_unpackb_nr48_bf16_f32_row_major(const bfloat16* b,
                          a_reg[7]);
 
         /* Read the remaining 16 elements from the first two rows*/
-        a_reg[0] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[0] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 0)));
-        a_reg[1] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 8)));
-        a_reg[2] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 16)));
-        a_reg[3] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 24)));
 
         SHUFFLE_F32_ELEMENTS_NR16_AVX2
@@ -231,13 +232,13 @@ dlp_unpackb_nr48_bf16_f32_row_major(const bfloat16* b,
                          a_reg[5]);
 
         /* Read the remaining 16 elements from the first two rows*/
-        a_reg[0] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[0] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 0)));
-        a_reg[1] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 8)));
-        a_reg[2] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 16)));
-        a_reg[3] = CVT_BF16_F32_SHIFT_AVX2((__m128i)_mm_loadu_si128(
+        a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(
             (__m128i const*)(b + ((kr_new + 2) * NR) + 24)));
 
         SHUFFLE_F32_ELEMENTS_NR16_AVX2
@@ -591,7 +592,7 @@ dlp_unpackb_nr64_bf16_f32_gemv(const bfloat16* b,
     // Process 8 elements at a time
     for (; (k0 + 8) < KC; k0 += 8) {
         a_reg = CVT_BF16_F32_SHIFT_AVX2(
-            (__m128i)_mm_loadu_si128((const __m128i*)((b + k0))));
+            _mm_loadu_si128((const __m128i*)((b + k0))));
         _mm256_storeu_ps((unpack_b_buffer + k0), a_reg);
     }
 
@@ -603,7 +604,7 @@ dlp_unpackb_nr64_bf16_f32_gemv(const bfloat16* b,
             buff[i] = (*(b + (k0 + i)));
 
         a_reg = CVT_BF16_F32_SHIFT_AVX2(
-            (__m128i)_mm_loadu_si128((const __m128i*)(buff)));
+            _mm_loadu_si128((const __m128i*)(buff)));
         GET_STORE_MASK(k_left, store_mask);
         _mm256_maskstore_ps((unpack_b_buffer + k0), store_mask, a_reg);
     }

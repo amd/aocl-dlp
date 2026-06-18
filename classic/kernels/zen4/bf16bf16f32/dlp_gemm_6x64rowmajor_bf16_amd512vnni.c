@@ -30,6 +30,7 @@
 #include <immintrin.h>
 
 #include "dlp_gemm_f32_kern_macros.h"
+#include "classic/dlp_simd_casts.h"
 
 #ifdef DLP_GEMM_BF16_JIT
 
@@ -193,7 +194,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 // 6x64 bf16 kernel
 DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
         &&POST_OPS_GELU_TANH_6x64,  &&POST_OPS_GELU_ERF_6x64,
@@ -201,7 +202,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
         &&POST_OPS_MATRIX_ADD_6x64, &&POST_OPS_SWISH_6x64,
         &&POST_OPS_MATRIX_MUL_6x64, &&POST_OPS_TANH_6x64,
         &&POST_OPS_SIGMOID_6x64
-    };
+    )
     md_t MR = 6;
     md_t NR = 64;
 
@@ -324,23 +325,23 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             // The instructions are arranged in a mixed way to reduce data
             // chain dependencies.
 
-            b0 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0));
+            b0 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0)));
 
             // Broadcast a[0,kr:kr+2]
-            a_bf16_0 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 0) + (cs_a * kr)));
+            a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 0) + (cs_a * kr))));
 
-            b1 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 1));
-            b2 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 2));
-            b3 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 3));
+            b1 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 1)));
+            b2 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 2)));
+            b3 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 3)));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
             c_float_0p0 = _mm512_dpbf16_ps(c_float_0p0, a_bf16_0, b0);
 
             // Broadcast a[1,kr:kr+2].
-            a_bf16_1 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 1) + (cs_a * kr)));
+            a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 1) + (cs_a * kr))));
 
             c_float_0p1 = _mm512_dpbf16_ps(c_float_0p1, a_bf16_0, b1);
             c_float_0p2 = _mm512_dpbf16_ps(c_float_0p2, a_bf16_0, b2);
@@ -351,8 +352,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_1p0 = _mm512_dpbf16_ps(c_float_1p0, a_bf16_1, b0);
 
             // Broadcast a[2,kr:kr+2].
-            a_bf16_0 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 2) + (cs_a * kr)));
+            a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 2) + (cs_a * kr))));
 
             c_float_1p1 = _mm512_dpbf16_ps(c_float_1p1, a_bf16_1, b1);
             c_float_1p2 = _mm512_dpbf16_ps(c_float_1p2, a_bf16_1, b2);
@@ -363,8 +364,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_2p0 = _mm512_dpbf16_ps(c_float_2p0, a_bf16_0, b0);
 
             // Broadcast a[3,kr:kr+2].
-            a_bf16_1 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 3) + (cs_a * kr)));
+            a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 3) + (cs_a * kr))));
 
             c_float_2p1 = _mm512_dpbf16_ps(c_float_2p1, a_bf16_0, b1);
             c_float_2p2 = _mm512_dpbf16_ps(c_float_2p2, a_bf16_0, b2);
@@ -375,8 +376,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_3p0 = _mm512_dpbf16_ps(c_float_3p0, a_bf16_1, b0);
 
             // Broadcast a[4,kr:kr+2].
-            a_bf16_0 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 4) + (cs_a * kr)));
+            a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 4) + (cs_a * kr))));
 
             c_float_3p1 = _mm512_dpbf16_ps(c_float_3p1, a_bf16_1, b1);
             c_float_3p2 = _mm512_dpbf16_ps(c_float_3p2, a_bf16_1, b2);
@@ -387,8 +388,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_4p0 = _mm512_dpbf16_ps(c_float_4p0, a_bf16_0, b0);
 
             // Broadcast a[5,kr:kr+2].
-            a_bf16_1 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 5) + (cs_a * kr)));
+            a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 5) + (cs_a * kr))));
 
             c_float_4p1 = _mm512_dpbf16_ps(c_float_4p1, a_bf16_0, b1);
             c_float_4p2 = _mm512_dpbf16_ps(c_float_4p2, a_bf16_0, b2);
@@ -436,23 +437,23 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             // The instructions are arranged in a mixed way to reduce data
             // chain dependencies.
 
-            b0 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0));
+            b0 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 0)));
 
             // Broadcast a[0,kr:kr+2]
-            a_bf16_0 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 0) + (cs_a * kr)));
+            a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 0) + (cs_a * kr))));
 
-            b1 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 1));
-            b2 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 2));
-            b3 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 3));
+            b1 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 1)));
+            b2 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 2)));
+            b3 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * kr) + (cs_b * 3)));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
             c_float_0p0 = _mm512_dpbf16_ps(c_float_0p0, a_bf16_0, b0);
 
             // Broadcast a[1,kr:kr+2].
-            a_bf16_1 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 1) + (cs_a * kr)));
+            a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 1) + (cs_a * kr))));
 
             c_float_0p1 = _mm512_dpbf16_ps(c_float_0p1, a_bf16_0, b1);
             c_float_0p2 = _mm512_dpbf16_ps(c_float_0p2, a_bf16_0, b2);
@@ -463,8 +464,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_1p0 = _mm512_dpbf16_ps(c_float_1p0, a_bf16_1, b0);
 
             // Broadcast a[2,kr:kr+2].
-            a_bf16_0 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 2) + (cs_a * kr)));
+            a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 2) + (cs_a * kr))));
 
             c_float_1p1 = _mm512_dpbf16_ps(c_float_1p1, a_bf16_1, b1);
             c_float_1p2 = _mm512_dpbf16_ps(c_float_1p2, a_bf16_1, b2);
@@ -475,8 +476,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_2p0 = _mm512_dpbf16_ps(c_float_2p0, a_bf16_0, b0);
 
             // Broadcast a[3,kr:kr+2].
-            a_bf16_1 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 3) + (cs_a * kr)));
+            a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 3) + (cs_a * kr))));
 
             c_float_2p1 = _mm512_dpbf16_ps(c_float_2p1, a_bf16_0, b1);
             c_float_2p2 = _mm512_dpbf16_ps(c_float_2p2, a_bf16_0, b2);
@@ -487,8 +488,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_3p0 = _mm512_dpbf16_ps(c_float_3p0, a_bf16_1, b0);
 
             // Broadcast a[4,kr:kr+2].
-            a_bf16_0 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 4) + (cs_a * kr)));
+            a_bf16_0 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 4) + (cs_a * kr))));
 
             c_float_3p1 = _mm512_dpbf16_ps(c_float_3p1, a_bf16_1, b1);
             c_float_3p2 = _mm512_dpbf16_ps(c_float_3p2, a_bf16_1, b2);
@@ -499,8 +500,8 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
             c_float_4p0 = _mm512_dpbf16_ps(c_float_4p0, a_bf16_0, b0);
 
             // Broadcast a[5,kr:kr+2].
-            a_bf16_1 = (__m512bh)_mm512_set1_epi32(
-                *(int32_t*)(a + (rs_a * 5) + (cs_a * kr)));
+            a_bf16_1 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
+                *(int32_t*)(a + (rs_a * 5) + (cs_a * kr))));
 
             c_float_4p1 = _mm512_dpbf16_ps(c_float_4p1, a_bf16_0, b1);
             c_float_4p2 = _mm512_dpbf16_ps(c_float_4p2, a_bf16_0, b2);
@@ -516,19 +517,19 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         // Handle k remainder.
         if (k_partial_pieces > 0) {
-            b0 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
-                                              + (cs_b * 0));
+            b0 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
+                                              + (cs_b * 0)));
 
             // Broadcast a[0,kr:kr+2].
             a_kfringe_buf = *(a + (rs_a * 0) + (cs_a * (k_full_pieces)));
-            a_bf16_0      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
+            a_bf16_0      = DLP_CAST_SI512_BH(_mm512_set1_epi16(a_kfringe_buf));
 
-            b1 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
-                                              + (cs_b * 1));
-            b2 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
-                                              + (cs_b * 2));
-            b3 = (__m512bh)_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
-                                              + (cs_b * 3));
+            b1 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
+                                              + (cs_b * 1)));
+            b2 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
+                                              + (cs_b * 2)));
+            b3 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(b + (rs_b * k_full_pieces)
+                                              + (cs_b * 3)));
 
             // Perform column direction mat-mul with k = 2.
             // c[0,0-63] = a[0,kr:kr+2]*b[kr:kr+2,0-63]
@@ -536,7 +537,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[1,kr:kr+2].
             a_kfringe_buf = *(a + (rs_a * 1) + (cs_a * (k_full_pieces)));
-            a_bf16_1      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
+            a_bf16_1      = DLP_CAST_SI512_BH(_mm512_set1_epi16(a_kfringe_buf));
 
             c_float_0p1 = _mm512_dpbf16_ps(c_float_0p1, a_bf16_0, b1);
             c_float_0p2 = _mm512_dpbf16_ps(c_float_0p2, a_bf16_0, b2);
@@ -548,7 +549,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[2,kr:kr+2].
             a_kfringe_buf = *(a + (rs_a * 2) + (cs_a * (k_full_pieces)));
-            a_bf16_0      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
+            a_bf16_0      = DLP_CAST_SI512_BH(_mm512_set1_epi16(a_kfringe_buf));
 
             c_float_1p1 = _mm512_dpbf16_ps(c_float_1p1, a_bf16_1, b1);
             c_float_1p2 = _mm512_dpbf16_ps(c_float_1p2, a_bf16_1, b2);
@@ -560,7 +561,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[3,kr:kr+2].
             a_kfringe_buf = *(a + (rs_a * 3) + (cs_a * (k_full_pieces)));
-            a_bf16_1      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
+            a_bf16_1      = DLP_CAST_SI512_BH(_mm512_set1_epi16(a_kfringe_buf));
 
             c_float_2p1 = _mm512_dpbf16_ps(c_float_2p1, a_bf16_0, b1);
             c_float_2p2 = _mm512_dpbf16_ps(c_float_2p2, a_bf16_0, b2);
@@ -572,7 +573,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[4,kr:kr+2].
             a_kfringe_buf = *(a + (rs_a * 4) + (cs_a * (k_full_pieces)));
-            a_bf16_0      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
+            a_bf16_0      = DLP_CAST_SI512_BH(_mm512_set1_epi16(a_kfringe_buf));
 
             c_float_3p1 = _mm512_dpbf16_ps(c_float_3p1, a_bf16_1, b1);
             c_float_3p2 = _mm512_dpbf16_ps(c_float_3p2, a_bf16_1, b2);
@@ -584,7 +585,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
             // Broadcast a[5,kr:kr+2].
             a_kfringe_buf = *(a + (rs_a * 5) + (cs_a * (k_full_pieces)));
-            a_bf16_1      = (__m512bh)_mm512_set1_epi16(a_kfringe_buf);
+            a_bf16_1      = DLP_CAST_SI512_BH(_mm512_set1_epi16(a_kfringe_buf));
 
             c_float_4p1 = _mm512_dpbf16_ps(c_float_4p1, a_bf16_0, b1);
             c_float_4p2 = _mm512_dpbf16_ps(c_float_4p2, a_bf16_0, b2);
@@ -789,8 +790,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
         // Post Ops
         dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_6x64: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6x64)
         __m512 selector3;
         __m512 selector4;
 
@@ -1001,7 +1001,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x64: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6x64)
         selector1 = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -1078,7 +1078,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x64: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6x64)
         selector1 = _mm512_setzero_ps();
         selector2 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
@@ -1158,7 +1158,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x64: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6x64)
         __m512  dn, z, x, r2, r, x_tanh;
         __m512i q;
 
@@ -1236,7 +1236,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x64: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6x64)
         __m512 x, r, x_erf;
 
         // c[0, 0-15]
@@ -1313,8 +1313,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_6x64: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6x64)
         __m512 min = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args2);
         __m512 max = _mm512_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -1392,7 +1391,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x64: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x64)
         __m512 selector3 = _mm512_setzero_ps();
         __m512 selector4 = _mm512_setzero_ps();
 
@@ -1663,7 +1662,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x64: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -1868,7 +1867,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x64: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -2073,7 +2072,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x64: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6x64)
         selector1 = _mm512_set1_ps(*((float*)post_ops_list_temp->op_args2));
 
         __m512  al_in, r, r2, z, dn;
@@ -2177,7 +2176,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x64: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6x64)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -2255,7 +2254,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x64: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6x64)
 
         __m512  al_in, r, r2, z, dn;
         __m512i ex_out;
@@ -2334,7 +2333,7 @@ DLP_GEMM_MAIN_KERN(bfloat16, bfloat16, float, bf16bf16f32of32_6x64)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_6x64_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
 
         // Case where the output C matrix is bf16 (downscaled) and this is the
         // final write for a given block within C.

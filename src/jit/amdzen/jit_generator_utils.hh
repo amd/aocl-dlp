@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include "aocl_dlp_config.h"  // for DLP_OS_WINDOWS
+
 #include <cassert>
 #include <cmath>
 #include <cstdint>
@@ -926,10 +928,10 @@ class registerPool
     template<typename R>
     friend struct registerHighPressureHandling;
 
-    int freeList[MAX_REGS];
-    int preserveList[MAX_REGS];
-    int accumList[MAX_REGS];
-    int regInUseList[MAX_REGS];
+    int freeList[MAX_REGS > 0 ? MAX_REGS : 1];
+    int preserveList[MAX_REGS > 0 ? MAX_REGS : 1];
+    int accumList[MAX_REGS > 0 ? MAX_REGS : 1];
+    int regInUseList[MAX_REGS > 0 ? MAX_REGS : 1];
 
     int freeCount     = 0;
     int preserveCount = 0;
@@ -1012,8 +1014,8 @@ class registerPool
             int     idx;
             uint8_t source;
         };
-        Reg acquiredRegs[MAX_REGS];
-        int scratchIndices[MAX_REGS];
+        Reg acquiredRegs[MAX_REGS > 0 ? MAX_REGS : 1];
+        int scratchIndices[MAX_REGS > 0 ? MAX_REGS : 1];
         int numAcquired = 0;
 
         for (int i = 0; i < scratchRegNeeded; ++i) {
@@ -1100,7 +1102,7 @@ class registerPool
         if (reservedBits.has_value())
             reservedReg = reservedBits.value();
 
-        bool claimed[MAX_REGS] = {};
+        bool claimed[MAX_REGS > 0 ? MAX_REGS : 1] = {};
 
         auto err = filterAndValidate(preserveList, preserveCount, claimed);
         if (err != dlp::jit::jitGeneratorError::success)
@@ -1266,7 +1268,7 @@ struct registerHighPressureHandling
         if (accumsRemaining <= 0)
             return dlp::jit::jitGeneratorError::notSupported;
 
-        int borrowedRegs[MAX_REGS];
+        int borrowedRegs[MAX_REGS > 0 ? MAX_REGS : 1];
         for (int i = 0; i < numToBorrow; ++i)
             borrowedRegs[i] = pool.accumList[i];
 
@@ -1332,7 +1334,7 @@ struct registerHighPressureHandling<Xbyak::Opmask>
         if (numToBorrow > pool.regInUseCount)
             return dlp::jit::jitGeneratorError::notSupported;
 
-        int borrowedRegs[MAX_REGS];
+        int borrowedRegs[MAX_REGS > 0 ? MAX_REGS : 1];
         for (int i = 0; i < numToBorrow; ++i)
             borrowedRegs[i] = pool.regInUseList[--pool.regInUseCount];
 

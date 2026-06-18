@@ -35,18 +35,16 @@
  * 3. Clean up resources
  */
 
-#define _POSIX_C_SOURCE 199309L
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
 #include <omp.h>
 #endif
 
 #include "aocl_dlp.h"
+#include "classic/dlp_compat.h"
 
 // Utility function to initialize a matrix with values
 void
@@ -548,20 +546,17 @@ main(int argc, char* argv[])
     int       threads_per_instance[4]  = { 1, 3, 8, 29 };
 
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
-    // Expecting the api itself to be multi-threaded based on openmp.
-    omp_set_max_active_levels(2);
+    dlp_omp_set_nesting(2);
 #endif
-    // Add timing variables
-    double          start_time, end_time;
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    start_time = ts.tv_sec + ts.tv_nsec / 1e9;
+    double start_time = dlp_get_time_sec();
+    double end_time;
 
     for (int repeat = 0; repeat < n_repeats; repeat++) {
+        int i;
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
 #pragma omp parallel for
 #endif
-        for (int i = 0; i < num_instances; i++) {
+        for (i = 0; i < num_instances; i++) {
             // Setting library internal thread count to a predetermined value.
             // Setting it outside the omp parallel does not work, since DLP
             // currently only updates a thread local rntm->num_threads value,
@@ -587,8 +582,7 @@ main(int argc, char* argv[])
         }
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    end_time            = ts.tv_sec + ts.tv_nsec / 1e9;
+    end_time            = dlp_get_time_sec();
     double elapsed_time = end_time - start_time;
 
     printf("Total time for %d repeats: %f seconds, average time per repeat: %f "

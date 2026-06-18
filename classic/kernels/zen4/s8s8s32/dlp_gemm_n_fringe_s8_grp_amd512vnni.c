@@ -39,7 +39,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
                                int32_t,
                                s8s8s32os32_6xlt16_sym_quant)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6xLT16_DISABLE,    &&POST_OPS_BIAS_6xLT16,
         &&POST_OPS_RELU_6xLT16,       &&POST_OPS_RELU_SCALE_6xLT16,
         &&POST_OPS_GELU_TANH_6xLT16,  &&POST_OPS_GELU_ERF_6xLT16,
@@ -47,7 +47,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
         &&POST_OPS_MATRIX_ADD_6xLT16, &&POST_OPS_SWISH_6xLT16,
         &&POST_OPS_MATRIX_MUL_6xLT16, &&POST_OPS_TANH_6xLT16,
         &&POST_OPS_SIGMOID_6xLT16
-    };
+    )
     md_t MR                       = 6;
     md_t m_full_pieces            = m0 / MR;
     md_t m_full_pieces_loop_limit = m_full_pieces * MR;
@@ -456,7 +456,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
         // Post Ops
         dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6xLT16: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6xLT16)
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
         __m512    b0        = _mm512_setzero_ps();
 
@@ -494,7 +494,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6xLT16: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6xLT16)
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -517,7 +517,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6xLT16: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6xLT16)
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -552,7 +552,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6xLT16: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6xLT16)
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -576,7 +576,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6xLT16: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6xLT16)
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -599,7 +599,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6xLT16: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6xLT16)
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -635,7 +635,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6xLT16: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6xLT16)
         __m512 scale0 = _mm512_setzero_ps();
         // Typecast without data modification, safe operation.
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
@@ -707,7 +707,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6xLT16: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6xLT16)
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
         md_t      ldm       = *(md_t*)post_ops_list_temp->op_args3;
 
@@ -978,7 +978,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6xLT16: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6xLT16)
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF >> (16 - n0_rem));
         md_t      ldm       = *(md_t*)post_ops_list_temp->op_args3;
 
@@ -1249,7 +1249,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6xLT16: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6xLT16)
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == DLP_S32)
@@ -1284,7 +1284,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6xLT16: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6xLT16)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -1308,7 +1308,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6xLT16: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6xLT16)
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -1332,7 +1332,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_6xLT16_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_6xLT16_DISABLE)
 
         // Store the results.
         if ((post_ops_attr.buf_downscale != NULL)
@@ -1463,7 +1463,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
 // 6x16 int8o32 fringe kernel
 DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x16_DISABLE,    &&POST_OPS_BIAS_6x16,
         &&POST_OPS_RELU_6x16,       &&POST_OPS_RELU_SCALE_6x16,
         &&POST_OPS_GELU_TANH_6x16,  &&POST_OPS_GELU_ERF_6x16,
@@ -1471,7 +1471,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
         &&POST_OPS_MATRIX_ADD_6x16, &&POST_OPS_SWISH_6x16,
         &&POST_OPS_MATRIX_MUL_6x16, &&POST_OPS_TANH_6x16,
         &&POST_OPS_SIGMOID_6x16
-    };
+    )
     md_t MR                       = 6;
     md_t m_full_pieces            = m0 / MR;
     md_t m_full_pieces_loop_limit = m_full_pieces * MR;
@@ -1865,7 +1865,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
         // Post Ops
         dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6x16: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6x16)
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF);
         __m512    b0        = _mm512_setzero_ps();
 
@@ -1903,7 +1903,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x16: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6x16)
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -1926,7 +1926,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x16: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6x16)
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -1961,7 +1961,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x16: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6x16)
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -1985,7 +1985,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x16: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6x16)
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -2008,7 +2008,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6x16: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6x16)
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -2044,7 +2044,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x16: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x16)
         __m512    scale0    = _mm512_setzero_ps();
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
         if (post_ops_list_temp->scale_factor_len > 1) {
@@ -2115,7 +2115,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x16: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6x16)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -2385,7 +2385,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x16: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6x16)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -2655,7 +2655,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x16: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6x16)
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == DLP_S32)
@@ -2690,7 +2690,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x16: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6x16)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -2714,7 +2714,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x16: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6x16)
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -2738,7 +2738,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_6x16_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_6x16_DISABLE)
 
         if ((post_ops_attr.buf_downscale != NULL)
             && (post_ops_attr.is_last_k == TRUE)) {
@@ -2867,7 +2867,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
 // 6x32 int8o32 fringe kernel
 DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x32_DISABLE,    &&POST_OPS_BIAS_6x32,
         &&POST_OPS_RELU_6x32,       &&POST_OPS_RELU_SCALE_6x32,
         &&POST_OPS_GELU_TANH_6x32,  &&POST_OPS_GELU_ERF_6x32,
@@ -2875,7 +2875,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
         &&POST_OPS_MATRIX_ADD_6x32, &&POST_OPS_SWISH_6x32,
         &&POST_OPS_MATRIX_MUL_6x32, &&POST_OPS_TANH_6x32,
         &&POST_OPS_SIGMOID_6x32
-    };
+    )
     md_t MR                       = 6;
     md_t m_full_pieces            = m0 / MR;
     md_t m_full_pieces_loop_limit = m_full_pieces * MR;
@@ -3313,7 +3313,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
         // Post Ops
         dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6x32: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6x32)
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF);
         __m512    b0        = _mm512_setzero_ps();
         __m512    b1        = _mm512_setzero_ps();
@@ -3377,7 +3377,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x32: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6x32)
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -3418,7 +3418,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x32: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6x32)
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -3471,7 +3471,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x32: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6x32)
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -3513,7 +3513,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x32: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6x32)
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -3554,7 +3554,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6x32: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6x32)
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -3608,7 +3608,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x32: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x32)
         __m512    scale0    = _mm512_setzero_ps();
         __m512    scale1    = _mm512_setzero_ps();
         __mmask16 load_mask = _cvtu32_mask16(0xFFFF);
@@ -3719,7 +3719,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x32: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6x32)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -3993,7 +3993,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x32: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6x32)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -4267,7 +4267,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x32: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6x32)
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == DLP_S32)
@@ -4320,7 +4320,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x32: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6x32)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -4362,7 +4362,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x32: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6x32)
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -4404,7 +4404,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_6x32_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_6x32_DISABLE)
 
         if ((post_ops_attr.buf_downscale != NULL)
             && (post_ops_attr.is_last_k == TRUE)) {
@@ -4605,7 +4605,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
 // 6x48 int8o32 fringe kernel
 DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x48_DISABLE,    &&POST_OPS_BIAS_6x48,
         &&POST_OPS_RELU_6x48,       &&POST_OPS_RELU_SCALE_6x48,
         &&POST_OPS_GELU_TANH_6x48,  &&POST_OPS_GELU_ERF_6x48,
@@ -4613,7 +4613,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
         &&POST_OPS_MATRIX_ADD_6x48, &&POST_OPS_SWISH_6x48,
         &&POST_OPS_MATRIX_MUL_6x48, &&POST_OPS_TANH_6x48,
         &&POST_OPS_SIGMOID_6x48
-    };
+    )
     md_t MR                       = 6;
     md_t m_full_pieces            = m0 / MR;
     md_t m_full_pieces_loop_limit = m_full_pieces * MR;
@@ -5095,7 +5095,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
         // Post Ops
         dlp_gemm_post_op* post_ops_list_temp = post_ops_list;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-    POST_OPS_BIAS_6x48: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6x48)
         __mmask16 bias_mask = _cvtu32_mask16(0xFFFF);
         __m512    b0        = _mm512_setzero_ps();
         __m512    b1        = _mm512_setzero_ps();
@@ -5185,7 +5185,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_6x48: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6x48)
         __m512 zero = _mm512_setzero_ps();
 
         // c[0,0-15]
@@ -5244,7 +5244,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_6x48: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6x48)
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -5315,7 +5315,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_6x48: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6x48)
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -5375,7 +5375,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_6x48: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6x48)
         __m512 y, r, r2;
 
         // c[0, 0-15]
@@ -5434,7 +5434,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_6x48: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6x48)
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -5506,7 +5506,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_6x48: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x48)
         __m512    scale0    = _mm512_setzero_ps();
         __m512    scale1    = _mm512_setzero_ps();
         __m512    scale2    = _mm512_setzero_ps();
@@ -5657,7 +5657,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_6x48: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6x48)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -5995,7 +5995,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_6x48: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6x48)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -6333,7 +6333,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_6x48: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6x48)
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == DLP_S32)
@@ -6404,7 +6404,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_6x48: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6x48)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -6464,7 +6464,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_6x48: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6x48)
 
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
@@ -6525,7 +6525,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_6x48_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_6x48_DISABLE)
 
         if ((post_ops_attr.buf_downscale != NULL)
             && (post_ops_attr.is_last_k == TRUE)) {

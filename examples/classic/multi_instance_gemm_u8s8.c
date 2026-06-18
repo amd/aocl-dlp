@@ -41,19 +41,18 @@
  * can see uniform behavior across the output types.
  */
 
-#define _POSIX_C_SOURCE 199309L
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
 #include <omp.h>
 #endif
 
 #include "aocl_dlp.h"
+#include "classic/dlp_compat.h"
 
 // Forward declaration for cleanup helper (defined at end of file)
 static void
@@ -315,23 +314,22 @@ main(int argc, char** argv)
     }
 
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
-    omp_set_max_active_levels(2);
+    dlp_omp_set_nesting(2);
 #endif
 
-    double          start_time, end_time;
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    start_time = ts.tv_sec + ts.tv_nsec / 1e9;
+    double start_time = dlp_get_time_sec();
+    double end_time;
 
     const char order  = 'R';
     const char transa = 'N';
     const char transb = 'N';
 
     for (int rep = 0; rep < n_repeats; ++rep) {
+        int i;
 #ifdef DLP_EXAMPLE_ENABLE_OPENMP
 #pragma omp parallel for
 #endif
-        for (int i = 0; i < num_instances; ++i) {
+        for (i = 0; i < num_instances; ++i) {
             dlp_thread_set_num_threads(1);
             md_t m = 64
                      + (i * (256 - 64))
@@ -368,8 +366,7 @@ main(int argc, char** argv)
         }
     }
 
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    end_time = ts.tv_sec + ts.tv_nsec / 1e9;
+    end_time = dlp_get_time_sec();
     printf("Completed %d repeats of %d u8s8s32 multi-output instances in %f s "
            "(avg %f s/repeat)\n",
            n_repeats, num_instances, end_time - start_time,

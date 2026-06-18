@@ -26,7 +26,12 @@
  *
  */
 
-#define _POSIX_C_SOURCE 199309L /* For clock_gettime and CLOCK_MONOTONIC */
+#include "classic/dlp_compat.h"
+
+#if !DLP_CLOCK_USE_QPC
+#define _POSIX_C_SOURCE 199309L
+#include <time.h>
+#endif
 
 #include <stdlib.h>
 
@@ -42,8 +47,6 @@
 #include <unistd.h>
 #endif
 
-#include <time.h>
-
 uint64_t
 dlp_gemm_gettid(void)
 {
@@ -51,7 +54,7 @@ dlp_gemm_gettid(void)
     return (uint64_t)omp_get_thread_num();
 #else
 #ifdef DLP_ENABLE_PTHREADS
-#ifndef _WIN32
+#if !DLP_CLOCK_USE_QPC
     return (uint64_t)pthread_self();
 #else
     return 0;
@@ -154,7 +157,7 @@ static double gtod_ref_time_sec = 0.0;
 double
 dlp_clock(void)
 {
-#if defined(_WIN32) || defined(__CYGWIN__)
+#if DLP_CLOCK_USE_QPC
 
     LARGE_INTEGER clock_freq = { 0 };
     LARGE_INTEGER clock_val;

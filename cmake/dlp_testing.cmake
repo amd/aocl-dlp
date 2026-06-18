@@ -206,7 +206,9 @@ function(dlp_add_test)
     endif()
 
     # Choose library target based on static linking preference
-    if(DLP_TESTING_LINK_STATIC)
+    # On MSVC, always use static library for tests to avoid needing
+    # to export every internal template and implementation symbol from the DLL.
+    if(DLP_TESTING_LINK_STATIC OR MSVC)
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME}_static)
     else()
         set(DLP_LIBRARY_TARGET ${PROJECT_NAME})

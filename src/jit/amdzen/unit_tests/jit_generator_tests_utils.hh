@@ -51,8 +51,12 @@
 #include <gtest/gtest.h>
 #include <iomanip>
 #include <string>
+#ifndef _WIN32
 #include <sys/wait.h>
 #include <unistd.h>
+#else
+#include <windows.h>
+#endif
 #include <vector>
 
 using namespace dlp::kernel_frame;
@@ -77,12 +81,69 @@ namespace test_jit_utils {
  */
 class CrashIsolation
 {
+  public:
+    struct Result
+    {
+        bool        completed  = false;
+        int         returnCode = 0;
+        bool        threw      = false;
+        std::string exceptionMessage;
+        bool crashed     = false;
+        int  crashSignal = 0;
+    };
+
+#ifdef _WIN32
   private:
-    // POD struct serialized over a pipe from child to parent.
-    // Carries either the function's return code (on normal completion)
-    // or an exception message (if the function threw).
-    // If the child crashes (signal), no message is written and the
-    // parent detects the crash via waitpid().
+    static int sehWrapper(std::function<int()>* func, Result* result)
+    {
+        __try {
+            return (*func)();
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            result->crashed     = true;
+            result->crashSignal = static_cast<int>(GetExceptionCode());
+            return -1;
+        }
+    }
+
+  public:
+    static Result runIsolated(std::function<int()> func)
+    {
+        Result result;
+        try {
+            int rc           = sehWrapper(&func, &result);
+            if (!result.crashed) {
+                result.returnCode = rc;
+                result.completed  = true;
+            }
+        } catch (const std::exception& e) {
+            result.threw            = true;
+            result.exceptionMessage = e.what();
+        } catch (...) {
+            result.threw            = true;
+            result.exceptionMessage = "Unknown exception";
+        }
+        return result;
+    }
+
+    static const char* signalName(int sig)
+    {
+        switch (static_cast<unsigned>(sig)) {
+            case EXCEPTION_ACCESS_VIOLATION:
+                return "ACCESS_VIOLATION (Segmentation fault)";
+            case EXCEPTION_ILLEGAL_INSTRUCTION:
+                return "ILLEGAL_INSTRUCTION";
+            case EXCEPTION_FLT_DIVIDE_BY_ZERO:
+                return "FLT_DIVIDE_BY_ZERO";
+            case EXCEPTION_INT_DIVIDE_BY_ZERO:
+                return "INT_DIVIDE_BY_ZERO";
+            case EXCEPTION_STACK_OVERFLOW:
+                return "STACK_OVERFLOW";
+            default:
+                return "Unknown exception";
+        }
+    }
+#else
+  private:
     struct ChildMessage
     {
         enum Status : uint8_t
@@ -95,11 +156,6 @@ class CrashIsolation
         char   message[256]{};
     };
 
-    // Runs in the forked child process. Executes the test function,
-    // writes the outcome to the pipe, and terminates with _exit()
-    // (not exit()) to avoid running GTest atexit handlers or flushing
-    // the parent's stdio buffers. If the function crashes (e.g., SIGSEGV),
-    // the write never happens and the parent detects it via waitpid().
     [[noreturn]] static void runInChild(int writeFd, std::function<int()>& func)
     {
         ChildMessage msg{};
@@ -120,7 +176,6 @@ class CrashIsolation
         ssize_t n = write(writeFd, &msg, sizeof(msg));
         (void)n;
         if (n != static_cast<ssize_t>(sizeof(msg))) {
-            // Treat partial or failed writes as a fatal error in the child.
             close(writeFd);
             _exit(1);
         }
@@ -128,38 +183,8 @@ class CrashIsolation
     }
 
   public:
-    // Outcome of running an isolated function. Exactly one of
-    // {completed, threw, crashed} will be true.
-    struct Result
-    {
-        bool        completed  = false; // Function returned normally
-        int         returnCode = 0; // Return value (e.g., jitGeneratorError)
-        bool        threw      = false; // Function threw a C++ exception
-        std::string exceptionMessage;   // The exception's what() string
-        bool crashed = false; // Child killed by signal (or pipe/fork failed)
-        int  crashSignal = 0; // Signal number (SIGSEGV, SIGABRT, etc.)
-    };
-
-    /**
-     * @brief Run a function in an isolated child process
-     * @param func Function returning an int (e.g., cast of jitGeneratorError)
-     * @return Result describing whether func completed, threw, or crashed
-     *
-     * How it works:
-     *   1. Create a pipe for child-to-parent communication.
-     *   2. fork() a child process (gets a COW copy of the parent's memory,
-     *      including the mmap'd JIT code buffer and all captured state).
-     *   3. Child: execute the function, write a ChildMessage to the pipe,
-     *      then _exit(0). If the function crashes, the write never happens.
-     *   4. Parent: waitpid() for the child.
-     *      - WIFSIGNALED: child was killed by a signal -> report crash.
-     *      - Normal exit:  read the ChildMessage from the pipe to get the
-     *        return code or exception message.
-     */
     static Result runIsolated(std::function<int()> func)
     {
-        // Step 1: Create a unidirectional pipe (pipefd[0]=read,
-        // pipefd[1]=write)
         int pipefd[2];
         if (pipe(pipefd) != 0) {
             Result r;
@@ -167,7 +192,6 @@ class CrashIsolation
             return r;
         }
 
-        // Step 2: Fork a child process to run the test function in isolation
         pid_t pid = fork();
         if (pid < 0) {
             close(pipefd[0]);
@@ -177,14 +201,11 @@ class CrashIsolation
             return r;
         }
 
-        // Step 3: Child process -- close read end and execute
         if (pid == 0) {
             close(pipefd[0]);
             runInChild(pipefd[1], func);
         }
 
-        // Step 4: Parent process -- close write end, wait for child, read
-        // result
         close(pipefd[1]);
 
         constexpr int kChildTimeoutSec = 30;
@@ -208,7 +229,6 @@ class CrashIsolation
 
         Result result;
 
-        // Child was killed by a signal (SIGSEGV, SIGABRT, etc.)
         if (WIFSIGNALED(status)) {
             result.crashed     = true;
             result.crashSignal = WTERMSIG(status);
@@ -216,8 +236,6 @@ class CrashIsolation
             return result;
         }
 
-        // Child exited normally -- read the serialized ChildMessage from the
-        // pipe
         ChildMessage msg{};
         ssize_t      bytesRead = read(pipefd[0], &msg, sizeof(msg));
         close(pipefd[0]);
@@ -231,14 +249,12 @@ class CrashIsolation
                 result.exceptionMessage = msg.message;
             }
         } else {
-            // Incomplete/missing message -- treat as crash
             result.crashed = true;
         }
 
         return result;
     }
 
-    // Convert a signal number to a human-readable description for test output
     static const char* signalName(int sig)
     {
         switch (sig) {
@@ -256,6 +272,7 @@ class CrashIsolation
                 return "Unknown signal";
         }
     }
+#endif
 };
 
 // ============================================================================

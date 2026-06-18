@@ -54,7 +54,7 @@ dlp_gemv_m_one_f32f32f32of32_avx2_LT16(const md_t                n0,
                                        dlp_gemm_post_op*      post_op,
                                        dlp_gemm_post_op_attr* post_op_attr)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
         &&POST_OPS_RELU_1x16F,       &&POST_OPS_RELU_SCALE_1x16F,
         &&POST_OPS_GELU_TANH_1x16F,  &&POST_OPS_GELU_ERF_1x16F,
@@ -62,7 +62,7 @@ dlp_gemv_m_one_f32f32f32of32_avx2_LT16(const md_t                n0,
         &&POST_OPS_MATRIX_ADD_1x16F, &&POST_OPS_SWISH_1x16F,
         &&POST_OPS_MATRIX_MUL_1x16F, &&POST_OPS_TANH_1x16F,
         &&POST_OPS_SIGMOID_1x16F
-    };
+    )
 
     const float* a_use = NULL;
     const float* b_use = NULL;
@@ -231,8 +231,7 @@ dlp_gemv_m_one_f32f32f32of32_avx2_LT16(const md_t                n0,
     post_ops_attr.is_last_k              = TRUE;
     dlp_gemm_post_op* post_ops_list_temp = post_op;
     POST_OP_LABEL_LASTK_SAFE_JUMP
-
-POST_OPS_BIAS_1x16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x16F)
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -274,7 +273,7 @@ POST_OPS_BIAS_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_1x16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x16F)
     ymm0 = _mm256_setzero_ps();
 
     // c[0,0-7]
@@ -285,7 +284,7 @@ POST_OPS_RELU_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_RELU_SCALE_1x16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x16F)
     ymm0 = _mm256_broadcast_ss((float*)post_ops_list_temp->op_args2);
     ymm1 = _mm256_setzero_ps();
 
@@ -297,7 +296,7 @@ POST_OPS_RELU_SCALE_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_TANH_1x16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x16F)
     __m256  dn, x_tanh;
     __m256i q;
 
@@ -309,7 +308,7 @@ POST_OPS_GELU_TANH_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_GELU_ERF_1x16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x16F)
     // c[0,0-7]
     GELU_ERF_F32S_AVX2(ymm8, ymm0, ymm1, ymm2)
 
@@ -318,7 +317,7 @@ POST_OPS_GELU_ERF_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_CLIP_1x16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x16F)
     ymm0 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args2);
     ymm1 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -330,7 +329,7 @@ POST_OPS_CLIP_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_DOWNSCALE_1x16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x16F)
     __m256 selector1 = _mm256_setzero_ps();
     __m256 selector2 = _mm256_setzero_ps();
 
@@ -418,7 +417,7 @@ POST_OPS_DOWNSCALE_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_ADD_1x16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -480,7 +479,7 @@ POST_OPS_MATRIX_ADD_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_MATRIX_MUL_1x16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x16F)
     md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
     bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -542,7 +541,7 @@ POST_OPS_MATRIX_MUL_1x16F: {
     }
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SWISH_1x16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x16F)
     ymm0 = _mm256_broadcast_ss((float*)post_ops_list_temp->op_args2);
     __m256  z, dn;
     __m256i ex_out;
@@ -554,7 +553,7 @@ POST_OPS_SWISH_1x16F: {
     SWISH_F32_AVX2_DEF(ymm12, ymm0, ymm1, ymm2, ymm3, z, dn, ex_out)
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_TANH_1x16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x16F)
     __m256  dn;
     __m256i q;
 
@@ -566,7 +565,7 @@ POST_OPS_TANH_1x16F: {
 
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_SIGMOID_1x16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x16F)
     __m256  z, dn;
     __m256i ex_out;
 
@@ -577,7 +576,7 @@ POST_OPS_SIGMOID_1x16F: {
     SIGMOID_F32_AVX2_DEF(ymm12, ymm1, ymm2, ymm3, z, dn, ex_out)
     POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
 }
-POST_OPS_1x16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x16F_DISABLE)
 
     uint32_t  tlsb, rounded, temp[8] = { 0 };
     int       i;
@@ -595,7 +594,7 @@ POST_OPS_1x16F_DISABLE:;
 
 DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
         &&POST_OPS_RELU_1x16F,       &&POST_OPS_RELU_SCALE_1x16F,
         &&POST_OPS_GELU_TANH_1x16F,  &&POST_OPS_GELU_ERF_1x16F,
@@ -603,7 +602,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         &&POST_OPS_MATRIX_ADD_1x16F, &&POST_OPS_SWISH_1x16F,
         &&POST_OPS_MATRIX_MUL_1x16F, &&POST_OPS_TANH_1x16F,
         &&POST_OPS_SIGMOID_1x16F
-    };
+    )
     const float* a_use = NULL;
     const float* b_use = NULL;
     float*       c_use = NULL;
@@ -752,8 +751,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         post_ops_attr.is_last_k              = TRUE;
         dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_1x16F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x16F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
             if (post_ops_list_temp->stor_type == DLP_BF16) {
@@ -793,7 +791,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_1x16F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x16F)
         ymm0 = _mm256_setzero_ps();
 
         // c[0,0-7]
@@ -804,7 +802,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_RELU_SCALE_1x16F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x16F)
         ymm0 = _mm256_broadcast_ss((float*)post_ops_list_temp->op_args2);
         ymm1 = _mm256_setzero_ps();
 
@@ -816,7 +814,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_TANH_1x16F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x16F)
         __m256  dn, x_tanh;
         __m256i q;
 
@@ -828,7 +826,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_GELU_ERF_1x16F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x16F)
         // c[0,0-7]
         GELU_ERF_F32S_AVX2(ymm8, ymm0, ymm1, ymm2)
 
@@ -837,7 +835,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_CLIP_1x16F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x16F)
         ymm0 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args2);
         ymm1 = _mm256_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -849,7 +847,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_DOWNSCALE_1x16F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x16F)
         __m256 selector1 = _mm256_setzero_ps();
         __m256 selector2 = _mm256_setzero_ps();
 
@@ -935,7 +933,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_ADD_1x16F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x16F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -997,7 +995,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_MATRIX_MUL_1x16F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x16F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -1059,7 +1057,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SWISH_1x16F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x16F)
         ymm0 = _mm256_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m256  z, dn;
         __m256i ex_out;
@@ -1072,7 +1070,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_TANH_1x16F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x16F)
         __m256  dn;
         __m256i q;
 
@@ -1084,7 +1082,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_SIGMOID_1x16F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x16F)
         __m256i ex_out;
         __m256  z, dn;
 
@@ -1096,7 +1094,7 @@ DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-    POST_OPS_1x16F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x16F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[8] = { 0 };
         int       i;

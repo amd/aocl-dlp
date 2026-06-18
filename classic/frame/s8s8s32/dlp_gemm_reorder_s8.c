@@ -139,7 +139,7 @@ dlp_reorderb_nr64_s8s8s32o32(dlp_gemm_obj_t*  b,
     n_threads      = (n_threads > 0) ? n_threads : 1;
 
     int32_t* pack_b_column_sum =
-        (int32_t*)(b_reorder->storage.aligned_buffer
+        (int32_t*)((int8_t*)b_reorder->storage.aligned_buffer
                    + (sizeof(int8_t) * n_updated * k_updated));
 
     for (iter_t idx = 0; idx < n_updated; idx++) {
@@ -278,7 +278,7 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
     n_threads      = (n_threads > 0) ? n_threads : 1;
 
     int32_t* pack_b_column_sum =
-        (int32_t*)(b_reorder->storage.aligned_buffer
+        (int32_t*)((int8_t*)b_reorder->storage.aligned_buffer
                    + (sizeof(int8_t) * n_updated * k_updated));
 
     for (iter_t idx = 0; idx < num_groups * n_updated; idx++) {

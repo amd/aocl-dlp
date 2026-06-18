@@ -35,7 +35,7 @@
 // DLP_GEMV M=1 kernel for handling GEMV with group symmetric quantization.
 DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
         &&POST_OPS_GELU_TANH_6x64,  &&POST_OPS_GELU_ERF_6x64,
@@ -43,7 +43,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         &&POST_OPS_MATRIX_ADD_6x64, &&POST_OPS_SWISH_6x64,
         &&POST_OPS_MATRIX_MUL_6x64, &&POST_OPS_TANH_6x64,
         &&POST_OPS_SIGMOID_6x64
-    };
+    )
 
     const int8_t* a_use = NULL;
     const int8_t* b_use = NULL;
@@ -393,8 +393,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
         post_ops_attr.is_last_k              = TRUE;
         dlp_gemm_post_op* post_ops_list_temp = post_op;
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_6x64: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_6x64)
         __m512 b0 = _mm512_setzero_ps();
         __m512 b1 = _mm512_setzero_ps();
         __m512 b2 = _mm512_setzero_ps();
@@ -442,8 +441,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_6x64: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_6x64)
         __m512 zero = _mm512_setzero_ps();
 
         acc_8  = _mm512_max_ps(zero, acc_8);
@@ -453,8 +451,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_6x64: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_6x64)
         __m512 zero = _mm512_setzero_ps();
         __m512 scale;
 
@@ -476,8 +473,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_6x64: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_6x64)
         __m512  dn, z, x, r2, r, y;
         __m512i tmpout;
 
@@ -488,8 +484,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_6x64: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_6x64)
         __m512 y, r, r2;
 
         GELU_ERF_F32_AVX512_DEF(acc_8, y, r, r2);
@@ -499,8 +494,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_6x64: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_6x64)
         __m512 min = _mm512_setzero_ps();
         __m512 max = _mm512_setzero_ps();
 
@@ -523,8 +517,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_6x64: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x64)
         __m512 scale0 = _mm512_setzero_ps();
         __m512 scale1 = _mm512_setzero_ps();
         __m512 scale2 = _mm512_setzero_ps();
@@ -668,8 +661,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_6x64: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -822,8 +814,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_6x64: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_6x64)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_s8 = (post_ops_list_temp->stor_type == DLP_S8)
@@ -996,8 +987,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_6x64: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_6x64)
         __m512 scale;
 
         if ((post_ops_attr.c_stor_type == DLP_S32)
@@ -1019,8 +1009,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_6x64: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_6x64)
         __m512  dn, z, x, r2, r;
         __m512i q;
 
@@ -1031,8 +1020,7 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_6x64: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_6x64)
         __m512  al_in, r, r2, z, dn;
         __m512i tmpout;
 
@@ -1043,8 +1031,10 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
+DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
 
-    POST_OPS_6x64_DISABLE: {
+
+    {
 
         if (post_ops_attr.buf_downscale != NULL) {
             if (post_ops_attr.c_stor_type == DLP_S8) {

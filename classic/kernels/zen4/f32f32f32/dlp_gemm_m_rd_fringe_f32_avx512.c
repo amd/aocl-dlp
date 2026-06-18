@@ -35,7 +35,7 @@
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x64F_DISABLE,    &&POST_OPS_BIAS_5x64F,
         &&POST_OPS_RELU_5x64F,       &&POST_OPS_RELU_SCALE_5x64F,
         &&POST_OPS_GELU_TANH_5x64F,  &&POST_OPS_GELU_ERF_5x64F,
@@ -43,7 +43,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
         &&POST_OPS_MATRIX_ADD_5x64F, &&POST_OPS_SWISH_5x64F,
         &&POST_OPS_MATRIX_MUL_5x64F, &&POST_OPS_TANH_5x64F,
         &&POST_OPS_SIGMOID_5x64F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -485,8 +485,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_5x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5x64F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -558,8 +557,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_5x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5x64F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -579,8 +577,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_5x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -601,8 +598,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_5x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5x64F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -623,8 +619,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_5x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5x64F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -642,8 +637,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_5x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5x64F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -664,8 +658,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_5x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x64F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -812,8 +805,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_5x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -936,8 +928,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_5x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -1060,8 +1051,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_5x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -1083,8 +1073,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_5x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5x64F)
         __m128  dn;
         __m128i q;
 
@@ -1105,8 +1094,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_5x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5x64F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -1127,8 +1115,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_5x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5x64F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -1162,7 +1149,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x64F_DISABLE,    &&POST_OPS_BIAS_4x64F,
         &&POST_OPS_RELU_4x64F,       &&POST_OPS_RELU_SCALE_4x64F,
         &&POST_OPS_GELU_TANH_4x64F,  &&POST_OPS_GELU_ERF_4x64F,
@@ -1170,7 +1157,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
         &&POST_OPS_MATRIX_ADD_4x64F, &&POST_OPS_SWISH_4x64F,
         &&POST_OPS_MATRIX_MUL_4x64F, &&POST_OPS_TANH_4x64F,
         &&POST_OPS_SIGMOID_4x64F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -1541,8 +1528,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_4x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4x64F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -1601,8 +1587,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_4x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4x64F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -1619,8 +1604,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_4x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -1638,8 +1622,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_4x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4x64F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -1657,8 +1640,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_4x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4x64F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -1673,8 +1655,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_4x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4x64F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -1692,8 +1673,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_4x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x64F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -1819,8 +1799,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_4x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -1925,8 +1904,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_4x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -2031,8 +2009,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_4x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -2051,8 +2028,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_4x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4x64F)
         __m128  dn;
         __m128i q;
 
@@ -2070,8 +2046,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_4x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4x64F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -2089,8 +2064,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_4x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4x64F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -2121,7 +2095,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x64F_DISABLE,    &&POST_OPS_BIAS_3x64F,
         &&POST_OPS_RELU_3x64F,       &&POST_OPS_RELU_SCALE_3x64F,
         &&POST_OPS_GELU_TANH_3x64F,  &&POST_OPS_GELU_ERF_3x64F,
@@ -2129,7 +2103,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
         &&POST_OPS_MATRIX_ADD_3x64F, &&POST_OPS_SWISH_3x64F,
         &&POST_OPS_MATRIX_MUL_3x64F, &&POST_OPS_TANH_3x64F,
         &&POST_OPS_SIGMOID_3x64F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -2431,8 +2405,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_3x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3x64F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -2482,8 +2455,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_3x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3x64F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -2497,8 +2469,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_3x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -2513,8 +2484,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_3x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3x64F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -2529,8 +2499,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_3x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3x64F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -2542,8 +2511,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_3x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3x64F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -2558,8 +2526,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_3x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x64F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -2665,8 +2632,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_3x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -2753,8 +2719,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_3x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -2841,8 +2806,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_3x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -2858,8 +2822,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_3x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3x64F)
         __m128  dn;
         __m128i q;
 
@@ -2874,8 +2837,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_3x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3x64F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -2890,8 +2852,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_3x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3x64F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -2919,7 +2880,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x64F_DISABLE,    &&POST_OPS_BIAS_2x64F,
         &&POST_OPS_RELU_2x64F,       &&POST_OPS_RELU_SCALE_2x64F,
         &&POST_OPS_GELU_TANH_2x64F,  &&POST_OPS_GELU_ERF_2x64F,
@@ -2927,7 +2888,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
         &&POST_OPS_MATRIX_ADD_2x64F, &&POST_OPS_SWISH_2x64F,
         &&POST_OPS_MATRIX_MUL_2x64F, &&POST_OPS_TANH_2x64F,
         &&POST_OPS_SIGMOID_2x64F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -3172,8 +3133,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_2x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2x64F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -3214,8 +3174,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_2x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2x64F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -3226,8 +3185,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_2x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -3239,8 +3197,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_2x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2x64F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -3252,8 +3209,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_2x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2x64F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -3262,8 +3218,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_2x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2x64F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -3275,8 +3230,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_2x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x64F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
 
@@ -3362,8 +3316,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_2x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -3432,8 +3385,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_2x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -3502,8 +3454,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_2x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -3516,8 +3467,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_2x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2x64F)
         __m128  dn;
         __m128i q;
 
@@ -3529,8 +3479,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_2x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2x64F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -3542,8 +3491,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_2x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2x64F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -3568,7 +3516,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64F_DISABLE,    &&POST_OPS_BIAS_1x64F,
         &&POST_OPS_RELU_1x64F,       &&POST_OPS_RELU_SCALE_1x64F,
         &&POST_OPS_GELU_TANH_1x64F,  &&POST_OPS_GELU_ERF_1x64F,
@@ -3576,7 +3524,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
         &&POST_OPS_MATRIX_ADD_1x64F, &&POST_OPS_SWISH_1x64F,
         &&POST_OPS_MATRIX_MUL_1x64F, &&POST_OPS_TANH_1x64F,
         &&POST_OPS_SIGMOID_1x64F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -3759,8 +3707,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_1x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x64F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -3792,8 +3739,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_1x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x64F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -3801,8 +3747,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_1x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -3811,8 +3756,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_1x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x64F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -3821,15 +3765,13 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_1x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x64F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_1x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x64F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -3838,8 +3780,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_1x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x64F)
         __m128 selector0 = _mm_setzero_ps();
 
         __m128 zero_point0 = _mm_setzero_ps();
@@ -3905,8 +3846,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_1x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -3957,8 +3897,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_1x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -4009,8 +3948,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_1x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -4020,8 +3958,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_1x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x64F)
         __m128  dn;
         __m128i q;
 
@@ -4030,8 +3967,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_1x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x64F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -4040,8 +3976,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_1x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x64F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -4064,7 +3999,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x48F_DISABLE,    &&POST_OPS_BIAS_5x48F,
         &&POST_OPS_RELU_5x48F,       &&POST_OPS_RELU_SCALE_5x48F,
         &&POST_OPS_GELU_TANH_5x48F,  &&POST_OPS_GELU_ERF_5x48F,
@@ -4072,7 +4007,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
         &&POST_OPS_MATRIX_ADD_5x48F, &&POST_OPS_SWISH_5x48F,
         &&POST_OPS_MATRIX_MUL_5x48F, &&POST_OPS_TANH_5x48F,
         &&POST_OPS_SIGMOID_5x48F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -4514,8 +4449,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_5x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5x48F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -4587,8 +4521,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_5x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5x48F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -4608,8 +4541,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_5x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -4630,8 +4562,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_5x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5x48F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -4652,8 +4583,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_5x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5x48F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -4671,8 +4601,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_5x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5x48F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -4693,8 +4622,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_5x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x48F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -4841,8 +4769,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_5x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -4965,8 +4892,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_5x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -5089,8 +5015,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_5x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -5112,8 +5037,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_5x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5x48F)
         __m128  dn;
         __m128i q;
 
@@ -5134,8 +5058,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_5x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5x48F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -5156,8 +5079,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_5x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5x48F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -5191,7 +5113,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x48F_DISABLE,    &&POST_OPS_BIAS_4x48F,
         &&POST_OPS_RELU_4x48F,       &&POST_OPS_RELU_SCALE_4x48F,
         &&POST_OPS_GELU_TANH_4x48F,  &&POST_OPS_GELU_ERF_4x48F,
@@ -5199,7 +5121,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
         &&POST_OPS_MATRIX_ADD_4x48F, &&POST_OPS_SWISH_4x48F,
         &&POST_OPS_MATRIX_MUL_4x48F, &&POST_OPS_TANH_4x48F,
         &&POST_OPS_SIGMOID_4x48F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -5570,8 +5492,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_4x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4x48F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -5630,8 +5551,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_4x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4x48F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -5648,8 +5568,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_4x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -5667,8 +5586,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_4x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4x48F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -5686,8 +5604,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_4x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4x48F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -5702,8 +5619,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_4x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4x48F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -5721,8 +5637,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_4x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x48F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -5848,8 +5763,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_4x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -5954,8 +5868,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_4x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -6060,8 +5973,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_4x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -6080,8 +5992,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_4x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4x48F)
         __m128  dn;
         __m128i q;
 
@@ -6099,8 +6010,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_4x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4x48F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -6118,8 +6028,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_4x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4x48F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -6150,7 +6059,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x48F_DISABLE,    &&POST_OPS_BIAS_3x48F,
         &&POST_OPS_RELU_3x48F,       &&POST_OPS_RELU_SCALE_3x48F,
         &&POST_OPS_GELU_TANH_3x48F,  &&POST_OPS_GELU_ERF_3x48F,
@@ -6158,7 +6067,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
         &&POST_OPS_MATRIX_ADD_3x48F, &&POST_OPS_SWISH_3x48F,
         &&POST_OPS_MATRIX_MUL_3x48F, &&POST_OPS_TANH_3x48F,
         &&POST_OPS_SIGMOID_3x48F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -6460,8 +6369,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_3x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3x48F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -6511,8 +6419,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_3x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3x48F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -6526,8 +6433,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_3x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -6542,8 +6448,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_3x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3x48F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -6558,8 +6463,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_3x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3x48F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -6571,8 +6475,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_3x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3x48F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -6587,8 +6490,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_3x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x48F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -6694,8 +6596,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_3x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -6782,8 +6683,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_3x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -6870,8 +6770,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_3x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -6887,8 +6786,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_3x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3x48F)
         __m128  dn;
         __m128i q;
 
@@ -6903,8 +6801,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_3x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3x48F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -6919,8 +6816,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_3x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3x48F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -6948,7 +6844,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x48F_DISABLE,    &&POST_OPS_BIAS_2x48F,
         &&POST_OPS_RELU_2x48F,       &&POST_OPS_RELU_SCALE_2x48F,
         &&POST_OPS_GELU_TANH_2x48F,  &&POST_OPS_GELU_ERF_2x48F,
@@ -6956,7 +6852,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
         &&POST_OPS_MATRIX_ADD_2x48F, &&POST_OPS_SWISH_2x48F,
         &&POST_OPS_MATRIX_MUL_2x48F, &&POST_OPS_TANH_2x48F,
         &&POST_OPS_SIGMOID_2x48F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -7201,8 +7097,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_2x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2x48F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -7243,8 +7138,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_2x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2x48F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -7255,8 +7149,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_2x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -7268,8 +7161,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_2x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2x48F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -7281,8 +7173,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_2x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2x48F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -7291,8 +7182,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_2x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2x48F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -7304,8 +7194,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_2x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x48F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
 
@@ -7391,8 +7280,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_2x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -7461,8 +7349,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_2x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -7531,8 +7418,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_2x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -7545,8 +7431,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_2x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2x48F)
         __m128  dn;
         __m128i q;
 
@@ -7558,8 +7443,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_2x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2x48F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -7571,8 +7455,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_2x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2x48F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -7597,7 +7480,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x48F_DISABLE,    &&POST_OPS_BIAS_1x48F,
         &&POST_OPS_RELU_1x48F,       &&POST_OPS_RELU_SCALE_1x48F,
         &&POST_OPS_GELU_TANH_1x48F,  &&POST_OPS_GELU_ERF_1x48F,
@@ -7605,7 +7488,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
         &&POST_OPS_MATRIX_ADD_1x48F, &&POST_OPS_SWISH_1x48F,
         &&POST_OPS_MATRIX_MUL_1x48F, &&POST_OPS_TANH_1x48F,
         &&POST_OPS_SIGMOID_1x48F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -7788,8 +7671,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_1x48F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x48F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -7821,8 +7703,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_1x48F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x48F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -7830,8 +7711,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_1x48F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -7840,8 +7720,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_1x48F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x48F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -7850,15 +7729,13 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_1x48F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x48F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_1x48F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x48F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -7867,8 +7744,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_1x48F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x48F)
         __m128 selector0 = _mm_setzero_ps();
 
         __m128 zero_point0 = _mm_setzero_ps();
@@ -7934,8 +7810,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_1x48F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -7986,8 +7861,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_1x48F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x48F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -8038,8 +7912,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_1x48F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x48F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -8049,8 +7922,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_1x48F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x48F)
         __m128  dn;
         __m128i q;
 
@@ -8059,8 +7931,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_1x48F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x48F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -8069,8 +7940,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_1x48F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x48F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -8093,7 +7963,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x32F_DISABLE,    &&POST_OPS_BIAS_5x32F,
         &&POST_OPS_RELU_5x32F,       &&POST_OPS_RELU_SCALE_5x32F,
         &&POST_OPS_GELU_TANH_5x32F,  &&POST_OPS_GELU_ERF_5x32F,
@@ -8101,7 +7971,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
         &&POST_OPS_MATRIX_ADD_5x32F, &&POST_OPS_SWISH_5x32F,
         &&POST_OPS_MATRIX_MUL_5x32F, &&POST_OPS_TANH_5x32F,
         &&POST_OPS_SIGMOID_5x32F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -8543,8 +8413,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_5x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_5x32F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -8616,8 +8485,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_5x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_5x32F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -8637,8 +8505,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_5x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_5x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -8659,8 +8526,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_5x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_5x32F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -8681,8 +8547,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_5x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_5x32F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -8700,8 +8565,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_5x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_5x32F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -8722,8 +8586,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_5x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x32F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -8870,8 +8733,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_5x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_5x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -8994,8 +8856,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_5x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_5x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -9118,8 +8979,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_5x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_5x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -9141,8 +9001,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_5x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_5x32F)
         __m128  dn;
         __m128i q;
 
@@ -9163,8 +9022,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_5x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_5x32F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -9185,8 +9043,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_5x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_5x32F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -9220,7 +9077,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x32F_DISABLE,    &&POST_OPS_BIAS_4x32F,
         &&POST_OPS_RELU_4x32F,       &&POST_OPS_RELU_SCALE_4x32F,
         &&POST_OPS_GELU_TANH_4x32F,  &&POST_OPS_GELU_ERF_4x32F,
@@ -9228,7 +9085,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
         &&POST_OPS_MATRIX_ADD_4x32F, &&POST_OPS_SWISH_4x32F,
         &&POST_OPS_MATRIX_MUL_4x32F, &&POST_OPS_TANH_4x32F,
         &&POST_OPS_SIGMOID_4x32F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -9599,8 +9456,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_4x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_4x32F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -9659,8 +9515,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_4x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_4x32F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -9677,8 +9532,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_4x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_4x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -9696,8 +9550,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_4x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_4x32F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -9715,8 +9568,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_4x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_4x32F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -9731,8 +9583,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_4x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_4x32F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -9750,8 +9601,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_4x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x32F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -9877,8 +9727,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_4x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_4x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -9983,8 +9832,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_4x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_4x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -10089,8 +9937,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_4x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_4x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -10109,8 +9956,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_4x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_4x32F)
         __m128  dn;
         __m128i q;
 
@@ -10128,8 +9974,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_4x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_4x32F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -10147,8 +9992,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_4x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_4x32F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -10179,7 +10023,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x32F_DISABLE,    &&POST_OPS_BIAS_3x32F,
         &&POST_OPS_RELU_3x32F,       &&POST_OPS_RELU_SCALE_3x32F,
         &&POST_OPS_GELU_TANH_3x32F,  &&POST_OPS_GELU_ERF_3x32F,
@@ -10187,7 +10031,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
         &&POST_OPS_MATRIX_ADD_3x32F, &&POST_OPS_SWISH_3x32F,
         &&POST_OPS_MATRIX_MUL_3x32F, &&POST_OPS_TANH_3x32F,
         &&POST_OPS_SIGMOID_3x32F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -10489,8 +10333,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_3x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_3x32F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -10540,8 +10383,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_3x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_3x32F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -10555,8 +10397,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_3x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_3x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -10571,8 +10412,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_3x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_3x32F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -10587,8 +10427,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_3x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_3x32F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -10600,8 +10439,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_3x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_3x32F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -10616,8 +10454,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_3x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x32F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
         __m128 selector2 = _mm_setzero_ps();
@@ -10723,8 +10560,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_3x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_3x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -10811,8 +10647,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_3x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_3x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -10899,8 +10734,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_3x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_3x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -10916,8 +10750,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_3x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_3x32F)
         __m128  dn;
         __m128i q;
 
@@ -10932,8 +10765,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_3x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_3x32F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -10948,8 +10780,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_3x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_3x32F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -10977,7 +10808,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x32F_DISABLE,    &&POST_OPS_BIAS_2x32F,
         &&POST_OPS_RELU_2x32F,       &&POST_OPS_RELU_SCALE_2x32F,
         &&POST_OPS_GELU_TANH_2x32F,  &&POST_OPS_GELU_ERF_2x32F,
@@ -10985,7 +10816,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
         &&POST_OPS_MATRIX_ADD_2x32F, &&POST_OPS_SWISH_2x32F,
         &&POST_OPS_MATRIX_MUL_2x32F, &&POST_OPS_TANH_2x32F,
         &&POST_OPS_SIGMOID_2x32F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -11230,8 +11061,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_2x32F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_2x32F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -11272,8 +11102,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_2x32F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_2x32F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -11284,8 +11113,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_2x32F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_2x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -11297,8 +11125,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_2x32F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_2x32F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -11310,8 +11137,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_2x32F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_2x32F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
@@ -11320,8 +11146,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_2x32F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_2x32F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -11333,8 +11158,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_2x32F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x32F)
         __m128 selector0 = _mm_setzero_ps();
         __m128 selector1 = _mm_setzero_ps();
 
@@ -11420,8 +11244,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_2x32F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_2x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -11490,8 +11313,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_2x32F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_2x32F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -11560,8 +11382,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_2x32F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_2x32F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -11574,8 +11395,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_2x32F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_2x32F)
         __m128  dn;
         __m128i q;
 
@@ -11587,8 +11407,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_2x32F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_2x32F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -11600,8 +11419,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_2x32F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_2x32F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;
@@ -11626,7 +11444,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 {
-    static void* post_ops_labels[] = {
+    DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64F_DISABLE,    &&POST_OPS_BIAS_1x64F,
         &&POST_OPS_RELU_1x64F,       &&POST_OPS_RELU_SCALE_1x64F,
         &&POST_OPS_GELU_TANH_1x64F,  &&POST_OPS_GELU_ERF_1x64F,
@@ -11634,7 +11452,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
         &&POST_OPS_MATRIX_ADD_1x64F, &&POST_OPS_SWISH_1x64F,
         &&POST_OPS_MATRIX_MUL_1x64F, &&POST_OPS_TANH_1x64F,
         &&POST_OPS_SIGMOID_1x64F
-    };
+    )
 
     iter_t k_iter64 = k0 / 64;
     md_t   k_left64 = k0 % 64;
@@ -11817,8 +11635,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         // Post Ops
         POST_OP_LABEL_LASTK_SAFE_JUMP
-
-    POST_OPS_BIAS_1x64F: {
+DLP_POST_OP_CASE(1, POST_OPS_BIAS_1x64F)
         if ((*(char*)post_ops_list_temp->op_args2 == 'r')
             || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
 
@@ -11850,8 +11667,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_1x64F: {
+DLP_POST_OP_CASE(2, POST_OPS_RELU_1x64F)
         xmm0 = _mm_setzero_ps();
 
         // c[0,0-3]
@@ -11859,8 +11675,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_RELU_SCALE_1x64F: {
+DLP_POST_OP_CASE(3, POST_OPS_RELU_SCALE_1x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_setzero_ps();
 
@@ -11869,8 +11684,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_TANH_1x64F: {
+DLP_POST_OP_CASE(4, POST_OPS_GELU_TANH_1x64F)
         __m128  dn, x_tanh;
         __m128i q;
 
@@ -11879,15 +11693,13 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_GELU_ERF_1x64F: {
+DLP_POST_OP_CASE(5, POST_OPS_GELU_ERF_1x64F)
         // c[0,0-3]
         GELU_ERF_F32S_SSE(xmm4, xmm0, xmm1, xmm2)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_CLIP_1x64F: {
+DLP_POST_OP_CASE(6, POST_OPS_CLIP_1x64F)
         xmm0 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args2);
         xmm1 = _mm_set1_ps(*(float*)post_ops_list_temp->op_args3);
 
@@ -11896,8 +11708,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_DOWNSCALE_1x64F: {
+DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x64F)
         __m128 selector0 = _mm_setzero_ps();
 
         __m128 zero_point0 = _mm_setzero_ps();
@@ -11963,8 +11774,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_ADD_1x64F: {
+DLP_POST_OP_CASE(8, POST_OPS_MATRIX_ADD_1x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -12015,8 +11825,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_MATRIX_MUL_1x64F: {
+DLP_POST_OP_CASE(10, POST_OPS_MATRIX_MUL_1x64F)
         md_t ldm = *(md_t*)post_ops_list_temp->op_args3;
 
         bool is_bf16 = (post_ops_list_temp->stor_type == DLP_BF16)
@@ -12067,8 +11876,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
         }
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SWISH_1x64F: {
+DLP_POST_OP_CASE(9, POST_OPS_SWISH_1x64F)
         xmm0 = _mm_broadcast_ss((float*)post_ops_list_temp->op_args2);
         __m128  z, dn;
         __m128i ex_out;
@@ -12078,8 +11886,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_TANH_1x64F: {
+DLP_POST_OP_CASE(11, POST_OPS_TANH_1x64F)
         __m128  dn;
         __m128i q;
 
@@ -12088,8 +11895,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_SIGMOID_1x64F: {
+DLP_POST_OP_CASE(12, POST_OPS_SIGMOID_1x64F)
         __m128  z, dn;
         __m128i ex_out;
 
@@ -12098,8 +11904,7 @@ DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 
         POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR
     }
-
-    POST_OPS_1x64F_DISABLE:;
+DLP_POST_OPS_DISABLE(POST_OPS_1x64F_DISABLE)
 
         uint32_t  tlsb, rounded, temp[4] = { 0 };
         int       i;

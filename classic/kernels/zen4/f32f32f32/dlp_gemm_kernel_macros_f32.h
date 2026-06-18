@@ -34,6 +34,7 @@
 #include "../sigmoid_avx512.h"
 #include "../silu_avx512.h"
 #include <string.h>
+#include "classic/dlp_simd_casts.h"
 
 /* Zero-out all ZMM registers */
 #define ZERO_ZMM_ALL                                                           \
@@ -192,25 +193,25 @@
     reg      = _mm512_add_ps(scratch1, reg);
 
 #define BF16_F32_BETA_OP(reg, m_ir, m_ind, n_ind, scratch1, scratch2)          \
-    scratch1 = (__m512)(_mm512_sllv_epi32(                                     \
-        _mm512_cvtepi16_epi32((__m256i)_mm256_loadu_epi16(                     \
+    scratch1 = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                     \
+        _mm512_cvtepi16_epi32(_mm256_loadu_epi16(                     \
             ((bfloat16*)post_ops_attr.buf_downscale                            \
              + (post_ops_attr.rs_c_downscale                                   \
                 * (post_ops_attr.post_op_c_i + m_ind))                         \
              + post_ops_attr.post_op_c_j + (n_ind * 16)))),                    \
-        _mm512_set1_epi32(16)));                                               \
+        _mm512_set1_epi32(16))));                                               \
     F32_BETA_FMA(reg, scratch1, scratch2)
 
 // Downscale n < 16 mask load beta macro
 #define BF16_F32_BETA_OP_NLT16F_MASK(lmask, reg, m_ind, n_ind, scratch1,       \
                                      scratch2)                                 \
-    scratch1 = (__m512)(_mm512_sllv_epi32(                                     \
-        _mm512_cvtepi16_epi32((__m256i)_mm256_maskz_loadu_epi16(               \
+    scratch1 = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                     \
+        _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(               \
             lmask, (bfloat16*)post_ops_attr.buf_downscale                      \
                        + (post_ops_attr.rs_c_downscale                         \
                           * (post_ops_attr.post_op_c_i + m_ind))               \
                        + post_ops_attr.post_op_c_j + (n_ind * 16))),           \
-        _mm512_set1_epi32(16)));                                               \
+        _mm512_set1_epi32(16))));                                               \
     F32_BETA_FMA(reg, scratch1, scratch2)
 
 // DLP_BF16->DLP_F32 store helper
@@ -219,7 +220,7 @@
                                  + (post_ops_attr.rs_c_downscale               \
                                     * (post_ops_attr.post_op_c_i + m_ind))     \
                                  + post_ops_attr.post_op_c_j + (n_ind * 16),   \
-                             mask_all1, (__m256i)_mm512_cvtneps_pbh(reg))
+                             mask_all1, DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(reg)))
 
 // This conversion will be used when AVX512BF16 is not supported.
 #define CVT_STORE_F32_BF16_MASK_AVX512(n_elem, reg, m_ind, n_ind)              \
@@ -238,11 +239,11 @@
 
 // DLP_BF16 bias helper macros.
 #define BF16_F32_BIAS_LOAD(scr, mask, n_ind)                                   \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(                        \
             (mask), ((bfloat16*)post_ops_list_temp->op_args1)                  \
                         + post_ops_attr.post_op_c_j + (n_ind * 16))),          \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 // DLP_F32 bias helper macros.
 #define S32_F32_BIAS_LOAD(scr, mask, n_ind)                                    \
@@ -258,11 +259,11 @@
 
 // DLP_BF16 bias helper macros.
 #define BF16_F32_BIAS_BCAST(scr, mask, m_ind)                                  \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_set1_epi16(                         \
             (mask), *(((bfloat16*)post_ops_list_temp->op_args1)                \
                       + post_ops_attr.post_op_c_i + m_ind))),                  \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 // DLP_F32 bias helper macros.
 #define S32_F32_BIAS_BCAST(scr, mask, m_ind)                                   \
@@ -278,27 +279,27 @@
 
 // zero point bf16->f32
 #define BF16_F32_ZP_BCST(scr, n_ind, zp_mask)                                  \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_set1_epi16(                         \
             zp_mask, *((bfloat16*)post_ops_list_temp->op_args1))),             \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 #define BF16_F32_ZP_COL_BCST(scr, n_ind, zp_mask)                              \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_set1_epi16(                         \
             zp_mask, *((bfloat16*)post_ops_list_temp->op_args1                 \
                        + post_ops_attr.post_op_c_i + n_ind))),                 \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 #define BF16_F32_BIAS_GEMV(scr, n_ind, bias_mask)                              \
     BF16_F32_ZP_BCST(scr, n_ind, bias_mask);
 
 #define BF16_F32_BIAS_LOAD_GEMV(scr, mask, n_ind)                              \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(                        \
             (mask), ((bfloat16*)post_ops_list_temp->op_args1)                  \
                         + post_ops_attr.post_op_c_i + (n_ind * 16))),          \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 // Matrix Add post-ops helper macros
 
@@ -323,11 +324,11 @@
 
 // DLP_BF16 matrix_add helper macros.
 #define BF16_F32_MATRIX_ADD_LOAD(mask, scr, scl_fct, m_ind, n_ind)             \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(                        \
             mask, matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm)         \
                       + post_ops_attr.post_op_c_j + (n_ind * 16))),            \
-        _mm512_set1_epi32(16)));                                               \
+        _mm512_set1_epi32(16))));                                               \
     scr = _mm512_mul_ps(scr, scl_fct);
 
 #define BF16_F32_MATRIX_ADD_1COL_MASK(mask, scr0, scl_fct0, m_ind, r_ind0)     \
@@ -386,10 +387,10 @@
                         r_ind3);
 
 #define BF16_F32_MATRIX_ADD_LOAD_GEMV(mask, scr, scl_fct, postop_ptr, n_ind)   \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(                        \
             mask, (bfloat16*)(matptr + postop_ptr + (n_ind * 16)))),           \
-        _mm512_set1_epi32(16)));                                               \
+        _mm512_set1_epi32(16))));                                               \
     scr = _mm512_mul_ps(scr, scl_fct);
 
 // DLP_S8 matrix_add helper macros.
@@ -738,11 +739,11 @@
 
 // bf16 zero point helper macros
 #define BF16_F32_ZP_LOAD(scr, mask, n_ind)                                     \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(                        \
             (mask), ((bfloat16*)post_ops_list_temp->op_args1)                  \
                         + post_ops_attr.post_op_c_j + (n_ind * 16))),          \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 // s32 zero point helper macros
 #define S32_F32_ZP_LOAD(scr, mask, n_ind)                                      \
@@ -764,11 +765,11 @@
 
 // bf16 zero point helper macros
 #define BF16_F32_ZP_BCAST(scr, mask, m_ind)                                    \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_set1_epi16(                         \
             (mask), *(((bfloat16*)post_ops_list_temp->op_args1)                \
                       + post_ops_attr.post_op_c_i + m_ind))),                  \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 // s32 zero point helper macros
 #define S32_F32_ZP_BCAST(scr, mask, m_ind)                                     \
@@ -788,10 +789,10 @@
 
 // bf16 zero point helper macros
 #define BF16_F32_SCALAR_ZP_BCAST(scr, mask)                                    \
-    scr = (__m512)(_mm512_sllv_epi32(                                          \
+    scr = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
         _mm512_cvtepi16_epi32(_mm256_maskz_set1_epi16(                         \
             (mask), *((bfloat16*)post_ops_list_temp->op_args1))),              \
-        _mm512_set1_epi32(16)));
+        _mm512_set1_epi32(16))));
 
 // s32 zero point helper macros
 #define S32_F32_SCALAR_ZP_BCAST(scr, mask)                                     \
@@ -805,7 +806,7 @@
 #define CVT_STORE_F32_BF16_POST_OPS_MASK(ir, jr, reg, mask, m_ind, n_ind)      \
     _mm256_mask_storeu_epi16(((bfloat16*)b) + (rs_b * (ir + m_ind))            \
                                  + (cs_b * (jr + n_ind)),                      \
-                             mask, (__m256i)_mm512_cvtneps_pbh(reg))
+                             mask, DLP_CAST_BH_SI256(_mm512_cvtneps_pbh(reg)))
 #endif
 
 // Downscale store s8 macro

@@ -26,8 +26,25 @@
  *
  */
 
-#include <stdatomic.h>
+#include <assert.h>
+#include <stdbool.h>
 #include <stdlib.h>
+
+#include "classic/dlp_macros.h"
+#include "classic/dlp_compat.h"
+
+/*
+ * The DLP_LIB_ATOMIC_* macros below accept a memory-order parameter for
+ * source-level documentation, but the underlying DLP_ATOMIC_* primitives
+ * in dlp_compat.h use a fixed acquire/release policy on all platforms.
+ */
+#ifndef memory_order_relaxed
+#define memory_order_relaxed  0
+#define memory_order_acquire  2
+#define memory_order_release  3
+#define memory_order_acq_rel  4
+#define memory_order_seq_cst  5
+#endif
 
 #include "aocl_dlp_config.h"
 #include "bindings/c_wrappers/capi_env_config.h"
@@ -64,11 +81,16 @@ static dlp_pthread_once_t once_init = DLP_PTHREAD_ONCE_INIT;
  * 2,000,000x safety margin. If ever larger values needed, this packing scheme
  * must be redesigned.
  */
-static __attribute__((aligned(64))) _Atomic int64_t lib_packed_ways    = -1;
-static __attribute__((aligned(64))) _Atomic int64_t lib_num_threads    = -1;
-static __attribute__((aligned(64))) _Atomic bool    lib_ext_mt_ctr_var = FALSE;
+static DLP_ALIGN_PREFIX(64) volatile int64_t lib_packed_ways DLP_ALIGN_SUFFIX(64)    = -1;
+static DLP_ALIGN_PREFIX(64) volatile int64_t lib_num_threads DLP_ALIGN_SUFFIX(64)    = -1;
+static DLP_ALIGN_PREFIX(64) volatile int32_t lib_ext_mt_ctr_var DLP_ALIGN_SUFFIX(64) = 0;
 
-_Static_assert(sizeof(int32_t) == 4, "Pack optimization requires 32-bit ints");
+#define DLP_LIB_ATOMIC_LOAD_I64(p, mo)       DLP_ATOMIC_LOAD_I64(p)
+#define DLP_LIB_ATOMIC_STORE_I64(p, v, mo)   DLP_ATOMIC_STORE_I64(p, v)
+#define DLP_LIB_ATOMIC_LOAD_BOOL(p, mo)      DLP_ATOMIC_LOAD_BOOL(p)
+#define DLP_LIB_ATOMIC_STORE_BOOL(p, v, mo)  DLP_ATOMIC_STORE_BOOL(p, v)
+
+static_assert(sizeof(int32_t) == 4, "Pack optimization requires 32-bit ints");
 
 /**
  * @brief Pack two int32_t values (ic_ways, jc_ways) into single int64_t
@@ -214,9 +236,11 @@ dlp_init_threading(void)
     // will be used to determine threading. In case the library rntm is
     // zeroed out, then the env vars will be used. All this assuming the
     // ext_mt_ctr_var is FALSE. Else OpenMP will control threading.
-    lib_num_threads    = nt;
-    lib_packed_ways    = dlp_pack_ways((int32_t)ic, (int32_t)jc);
-    lib_ext_mt_ctr_var = lcl_ext_mt_ctr_var;
+    DLP_LIB_ATOMIC_STORE_I64(&lib_num_threads, (int64_t)nt, memory_order_release);
+    DLP_LIB_ATOMIC_STORE_I64(
+        &lib_packed_ways, dlp_pack_ways((int32_t)ic, (int32_t)jc), memory_order_release);
+    DLP_LIB_ATOMIC_STORE_BOOL(
+        &lib_ext_mt_ctr_var, lcl_ext_mt_ctr_var, memory_order_release);
 }
 
 /**
@@ -278,7 +302,7 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
     // Library level rntm gets second priority.
     if ((act_nt == -1) && (act_ic == -1) && (act_jc == -1)) {
         bool lcl_ext_mt_ctr_var =
-            atomic_load_explicit(&lib_ext_mt_ctr_var, memory_order_acquire);
+            DLP_LIB_ATOMIC_LOAD_BOOL(&lib_ext_mt_ctr_var, memory_order_acquire);
         // Even though it seems there is chance for TOCTOU issue here, it is
         // guaranteed not to happen. Typically race conditions can arise from
         // calling the dlp_thread_set_ways_library and dlp_thread_set_num_
@@ -290,10 +314,10 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
         if (lcl_ext_mt_ctr_var == FALSE) {
             // Extract threading data from rntm.
             md_t lib_nt =
-                atomic_load_explicit(&lib_num_threads, memory_order_acquire);
+                (md_t)DLP_LIB_ATOMIC_LOAD_I64(&lib_num_threads, memory_order_acquire);
 
             md_t packed_ways =
-                atomic_load_explicit(&lib_packed_ways, memory_order_acquire);
+                (md_t)DLP_LIB_ATOMIC_LOAD_I64(&lib_packed_ways, memory_order_acquire);
             int32_t tmp_lib_ic = -1;
             int32_t tmp_lib_jc = -1;
             dlp_unpack_ways(packed_ways, &tmp_lib_ic, &tmp_lib_jc);
@@ -322,7 +346,7 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
     // specific env vars is valid.
     if ((act_nt == -1) && (act_ic == -1) && (act_jc == -1)) {
         bool lcl_ext_mt_ctr_var =
-            atomic_load_explicit(&lib_ext_mt_ctr_var, memory_order_acquire);
+            DLP_LIB_ATOMIC_LOAD_BOOL(&lib_ext_mt_ctr_var, memory_order_acquire);
         if (lcl_ext_mt_ctr_var == FALSE) {
             md_t env_ic = dlp_env_get_int("DLP_IC_NT", -1);
             md_t env_jc = dlp_env_get_int("DLP_JC_NT", -1);
@@ -358,8 +382,8 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
             act_ic                     = -1;
             act_jc                     = -1;
             dlp_tl_rntm.ext_mt_ctr_var = TRUE;
-            atomic_store_explicit(&lib_ext_mt_ctr_var, TRUE,
-                                  memory_order_release);
+            DLP_LIB_ATOMIC_STORE_BOOL(
+                &lib_ext_mt_ctr_var, TRUE, memory_order_release);
         }
     }
 #endif
@@ -424,7 +448,7 @@ dlp_init_threading_once()
         // only be set when the dlp_thread_set_ways_local or dlp_thread_set
         // _num_threads_local APIs are called.
         dlp_tl_rntm.ext_mt_ctr_var =
-            atomic_load_explicit(&lib_ext_mt_ctr_var, memory_order_acquire);
+            DLP_LIB_ATOMIC_LOAD_BOOL(&lib_ext_mt_ctr_var, memory_order_acquire);
         dlp_init_tl_rntm = FALSE;
     }
 }
@@ -469,7 +493,7 @@ dlp_thread_set_ways_library(md_t jc, md_t ic)
     }
 
     int64_t packed_ways = dlp_pack_ways((int32_t)ic, (int32_t)jc);
-    atomic_store_explicit(&lib_packed_ways, packed_ways, memory_order_release);
+    DLP_LIB_ATOMIC_STORE_I64(&lib_packed_ways, packed_ways, memory_order_release);
 
     // Also set the num_threads to -1 along with disabling the external control
     // flag. An interesting property here is that even though the ways and nt
@@ -477,11 +501,11 @@ dlp_thread_set_ways_library(md_t jc, md_t ic)
     // act like an atomic transaction. Reason being any thread/instance calling
     // this function always implies nt is -1 and ext_mt_ctr_var is FALSE.
     // Unset num_threads when ways are set.
-    atomic_store_explicit(&lib_num_threads, -1, memory_order_release);
+    DLP_LIB_ATOMIC_STORE_I64(&lib_num_threads, -1, memory_order_release);
 
     // DLP artifacts are used to set threading. Need to ensure OMP API or
     // env variables will not be of effect going forward.
-    atomic_store_explicit(&lib_ext_mt_ctr_var, FALSE, memory_order_release);
+    DLP_LIB_ATOMIC_STORE_BOOL(&lib_ext_mt_ctr_var, FALSE, memory_order_release);
 }
 
 void
@@ -540,11 +564,11 @@ dlp_thread_set_num_threads_library(md_t n_threads)
     // ways have higher priority, and in the event both the dlp_thread_set_
     // ways_library and dlp_thread_set_num_threads_library APIs are called,
     // the library will prioritise using the ic,jc ways for threading.
-    atomic_store_explicit(&lib_num_threads, n_threads, memory_order_release);
+    DLP_LIB_ATOMIC_STORE_I64(&lib_num_threads, (int64_t)n_threads, memory_order_release);
 
     // DLP artifacts are used to set threading. Need to ensure OMP API or
     // env variables will not be of effect going forward.
-    atomic_store_explicit(&lib_ext_mt_ctr_var, FALSE, memory_order_release);
+    DLP_LIB_ATOMIC_STORE_BOOL(&lib_ext_mt_ctr_var, FALSE, memory_order_release);
 }
 
 void

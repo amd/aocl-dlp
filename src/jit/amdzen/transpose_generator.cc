@@ -25,6 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
+
 #include "transpose_generator.hh"
 
 namespace amdzen::x86gen {

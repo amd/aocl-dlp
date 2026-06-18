@@ -30,6 +30,7 @@
 #include <string.h>
 
 #include "kernels/dlp_kernels.h"
+#include "classic/dlp_simd_casts.h"
 
 #define UNPACKLO_PS8                                                           \
     b_reg[0] = _mm256_unpacklo_ps(a_reg[0], a_reg[1]);                         \
@@ -45,21 +46,21 @@
 
 #define UNPACKLO_PD8                                                           \
     a_reg[0] =                                                                 \
-        (__m256)_mm256_unpacklo_pd((__m256d)b_reg[0], (__m256d)b_reg[1]);      \
+        DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[0]), DLP_CAST_PS_PD256(b_reg[1])));      \
     a_reg[1] =                                                                 \
-        (__m256)_mm256_unpacklo_pd((__m256d)b_reg[2], (__m256d)b_reg[3]);      \
+        DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[2]), DLP_CAST_PS_PD256(b_reg[3])));      \
     a_reg[2] =                                                                 \
-        (__m256)_mm256_unpacklo_pd((__m256d)b_reg[4], (__m256d)b_reg[5]);      \
-    a_reg[3] = (__m256)_mm256_unpacklo_pd((__m256d)b_reg[6], (__m256d)b_reg[7]);
+        DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[4]), DLP_CAST_PS_PD256(b_reg[5])));      \
+    a_reg[3] = DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[6]), DLP_CAST_PS_PD256(b_reg[7])));
 
 #define UNPACKHI_PD8                                                           \
     a_reg[4] =                                                                 \
-        (__m256)_mm256_unpackhi_pd((__m256d)b_reg[0], (__m256d)b_reg[1]);      \
+        DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[0]), DLP_CAST_PS_PD256(b_reg[1])));      \
     a_reg[5] =                                                                 \
-        (__m256)_mm256_unpackhi_pd((__m256d)b_reg[2], (__m256d)b_reg[3]);      \
+        DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[2]), DLP_CAST_PS_PD256(b_reg[3])));      \
     a_reg[6] =                                                                 \
-        (__m256)_mm256_unpackhi_pd((__m256d)b_reg[4], (__m256d)b_reg[5]);      \
-    a_reg[7] = (__m256)_mm256_unpackhi_pd((__m256d)b_reg[6], (__m256d)b_reg[7]);
+        DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[4]), DLP_CAST_PS_PD256(b_reg[5])));      \
+    a_reg[7] = DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[6]), DLP_CAST_PS_PD256(b_reg[7])));
 
 #define PERMUTE2F128_PS8                                                       \
     b_reg[0] = _mm256_permute2f128_ps(a_reg[0], a_reg[1], 0x20);               \

@@ -144,19 +144,9 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
 bool
 dlp_gemm_post_op_list_has_jit_only_op(const dlp_gemm_post_op* post_op_list);
 
-#define POST_OP_LABEL_LASTK_SAFE_JUMP                                          \
-    if ((post_ops_attr.is_last_k == TRUE) && (post_ops_list_temp != NULL)) {   \
-        goto* post_ops_labels[post_ops_list_temp->op_code];                    \
-    } else {                                                                   \
-        goto* post_ops_labels[0];                                              \
-    }
-
-#define POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR                            \
-    post_ops_list_temp = post_ops_list_temp->next;                             \
-    if (post_ops_list_temp != NULL) {                                          \
-        goto* post_ops_labels[post_ops_list_temp->op_code];                    \
-    } else {                                                                   \
-        goto* post_ops_labels[0];                                              \
-    }
+/*
+ * POST_OP_LABEL_LASTK_SAFE_JUMP, POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR,
+ * and POST_OPS_DISABLE_LABEL are defined in dlp_compat.h (Section 15).
+ */
 
 #endif // DLP_GEMM_POST_OPS_H

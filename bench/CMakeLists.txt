@@ -86,8 +86,8 @@ foreach(benchmark_source ${BENCHMARK_SOURCES})
     )
     dlp_set_global_compile_flags(${benchmark_name} VISIBILITY PUBLIC)
 
-    # Link NUMA library for bench_gemm (optimized implementation)
-    if(${benchmark_name} STREQUAL "bench_gemm")
+    # Link NUMA library for bench_gemm (Linux only)
+    if(${benchmark_name} STREQUAL "bench_gemm" AND NOT WIN32)
         target_link_libraries(${benchmark_name} PRIVATE numa)
     endif()
 

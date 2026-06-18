@@ -29,6 +29,8 @@
 #ifndef DLP_GEMM_INT4_CVT_UTILS_H
 #define DLP_GEMM_INT4_CVT_UTILS_H
 
+#include "classic/dlp_macros.h"
+
 /* shift_idx:__m512i*/
 #define MULTISHIFT_32BIT_8_INT4_IDX_64ELEM(shift_idx)                          \
     /* Multi shift uses indices that corresponds to the bit starting positions \
@@ -319,7 +321,7 @@
     } while (0);
 
 #define CREATE_CVT_INT8_INT4_PERM_IDX_64ELEM_2_ZMM_REG(var_name)               \
-    int8_t var_name[64] __attribute__((aligned(64))) = {                       \
+    DLP_ALIGN_PREFIX(64) int8_t var_name[64] DLP_ALIGN_SUFFIX(64) = {          \
         0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12, 0x14,      \
         0x16, 0x18, 0x1A, 0x1C, 0x1E, 0x20, 0x22, 0x24, 0x26, 0x28, 0x2A,      \
         0x2C, 0x2E, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3A, 0x3C, 0x3E, 0x40,      \
@@ -359,7 +361,7 @@
     } while (0);
 
 #define CREATE_CVT_INT8_INT4_PERM_IDX_32ELEM_2_YMM_REG(var_name)               \
-    int8_t var_name[32] __attribute__((aligned(64))) = {                       \
+    DLP_ALIGN_PREFIX(64) int8_t var_name[32] DLP_ALIGN_SUFFIX(64) = {        \
         0x00, 0x02, 0x04, 0x06, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12, 0x14,      \
         0x16, 0x18, 0x1A, 0x1C, 0x1E, 0x20, 0x22, 0x24, 0x26, 0x28, 0x2A,      \
         0x2C, 0x2E, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3A, 0x3C, 0x3E             \
@@ -385,8 +387,8 @@
     } while (0);
 
 #define CREATE_CVT_INT8_INT4_PERM_IDX_16ELEM_2_XMM_REG(var_name)               \
-    int8_t var_name[16]                                                        \
-        __attribute__((aligned(64))) = { 0x00, 0x02, 0x04, 0x06, 0x08, 0x0A,   \
+    DLP_ALIGN_PREFIX(64) int8_t var_name[16] DLP_ALIGN_SUFFIX(64) = {        \
+                                         0x00, 0x02, 0x04, 0x06, 0x08, 0x0A,   \
                                          0x0C, 0x0E, 0x10, 0x12, 0x14, 0x16,   \
                                          0x18, 0x1A, 0x1C, 0x1E };
 

@@ -28,6 +28,7 @@
 
 #include <stdlib.h>
 
+#include "classic/dlp_macros.h"
 #include "classic/aocl_gemm_metadata.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "config/dlp_gemm_config.h"
@@ -51,14 +52,14 @@
 #include "sys_utils/dlp_gemm_sys.h"
 #include "threading/dlp_gemm_thread_utils.h"
 
-static dlp_gemm_cntx_t global_cntx_t_list[AOCL_DLP_OPERATION_TYPE_LEN]
-    __attribute__((aligned(64))); // Only one op type supported now.
-static dlp_gemm_util_cntx_t
+DLP_ALIGN_PREFIX(64) static dlp_gemm_cntx_t global_cntx_t_list[AOCL_DLP_OPERATION_TYPE_LEN]
+    DLP_ALIGN_SUFFIX(64); // Only one op type supported now.
+DLP_ALIGN_PREFIX(64) static dlp_gemm_util_cntx_t
     global_util_cntx_t_list[AOCL_DLP_UTIL_OPERATION_TYPE_LEN]
-    __attribute__((aligned(64))); // Only post-ops like utils.
-static dlp_gemm_eltwise_ops_cntx_t
+    DLP_ALIGN_SUFFIX(64); // Only post-ops like utils.
+DLP_ALIGN_PREFIX(64) static dlp_gemm_eltwise_ops_cntx_t
     global_eltwise_ops_cntx_t_list[AOCL_DLP_ELTWISE_OPS_OPERATION_TYPE_LEN]
-    __attribute__((aligned(64))); // Post-ops only utils without gemm.
+    DLP_ALIGN_SUFFIX(64); // Post-ops only utils without gemm.
 
 static dlp_arch_t       global_dlp_gemmenable_arch       = DLP_ARCH_ERROR;
 static dlp_instr_pref_t global_dlp_gemmenable_instr_pref = DLP_INSTR_PREF_NONE;
@@ -74,9 +75,9 @@ dlp_gemm_get_jit_kernels_generated()
 #endif
 
 // This array is to store function pointers to jit generated kernels.
-static void* global_jit_kernels[DLP_GEMM_BF16_MR]
+DLP_ALIGN_PREFIX(64) static void* global_jit_kernels[DLP_GEMM_BF16_MR]
                                [(DLP_GEMM_BF16_NR / NUM_F32_ELEMS_PER_ZMM) + 1]
-    __attribute__((aligned(64)));
+    DLP_ALIGN_SUFFIX(64);
 
 // Buffer size is chosen in order to accommodate the
 // worst-case scenario for MR=6 and NR=64.

@@ -27,6 +27,7 @@
  */
 #ifndef AOCL_DLP_GEMM_MATH_UTILS_AVX512_H
 #define AOCL_DLP_GEMM_MATH_UTILS_AVX512_H
+#include "classic/dlp_simd_casts.h"
 
 // constants for exp function
 #define dlp_gemm_exp_c0 0x1.0000014439a91p0
@@ -40,7 +41,8 @@
 #define EXPF_HUGE     0x1.8p+23
 #define EXPF_MIN      -88.0f
 #define EXPF_MAX      88.0f
-#define inf           1.0 / 0.0
+#include "classic/dlp_compat.h"
+#define inf DLP_INF
 #define sign_bit_mask (-2147483648)
 
 /*
@@ -69,13 +71,13 @@
     POLY_EVAL_6_AVX512(r, r2, z);                                              \
                                                                                \
     q = _mm512_add_epi32(                                                      \
-        (__m512i)(r), _mm512_sllv_epi32((__m512i)dn, _mm512_set1_epi32(23)));  \
+        DLP_CAST_PS_SI512((r)), _mm512_sllv_epi32(DLP_CAST_PS_SI512(dn), _mm512_set1_epi32(23)));  \
     q = _mm512_mask_and_epi32(                                                 \
-        (__m512i)q, _mm512_cmpnle_ps_mask(_mm512_set1_ps(EXPF_MIN), x),        \
-        (__m512i)q, _mm512_set1_epi32(0));                                     \
+        q, _mm512_cmpnle_ps_mask(_mm512_set1_ps(EXPF_MIN), x),                \
+        q, _mm512_set1_epi32(0));                                              \
     q = _mm512_mask_xor_epi32(                                                 \
-        (__m512i)_mm512_set1_ps(inf),                                          \
-        _mm512_cmpnle_ps_mask(_mm512_set1_ps(EXPF_MAX), x), (__m512i)q,        \
+        DLP_CAST_PS_SI512(_mm512_set1_ps(inf)),                                \
+        _mm512_cmpnle_ps_mask(_mm512_set1_ps(EXPF_MAX), x), q,                  \
         _mm512_set1_epi32(0));
 
 /*
@@ -87,12 +89,12 @@
                                                                                \
     EXPF_AVX512(x, r, r2, z, dn, q);                                           \
                                                                                \
-    z      = _mm512_add_ps((__m512)q, _mm512_set1_ps(-1));                     \
+    z      = _mm512_add_ps(DLP_CAST_SI512_PS(q), _mm512_set1_ps(-1));                     \
     z      = _mm512_div_ps(z, _mm512_add_ps(z, _mm512_set1_ps(2)));            \
     z      = _mm512_mul_ps(z, _mm512_set1_ps(-1));                             \
-    x_tanh = (__m512)(_mm512_xor_epi32(                                        \
-        _mm512_and_epi32((__m512i)x_tanh, (_mm512_set1_epi32(sign_bit_mask))), \
-        (__m512i)z));
+    x_tanh = DLP_CAST_SI512_PS((_mm512_xor_epi32(                                        \
+        _mm512_and_epi32(DLP_CAST_PS_SI512(x_tanh), (_mm512_set1_epi32(sign_bit_mask))), \
+        DLP_CAST_PS_SI512(z))));
 
 /*
     AVX512 implementation of ERF function with double precision.
@@ -139,9 +141,9 @@ dlp_asuint32(float f)
 
 #define POLY_EVAL_HORNER_16_0_AVX512(x, c0, c1, c2, c3, c4, c5, c6, c7, c8,          \
                                      c9, c10, c11, c12, c13, c14, c15)               \
-    ({                                                                               \
-        __typeof(x) q = _mm512_mul_pd(                                               \
-            x,                                                                       \
+    _mm512_mul_pd(                                                                   \
+        x,                                                                           \
+        _mm512_fmadd_pd(                                                             \
             _mm512_fmadd_pd(                                                         \
                 _mm512_fmadd_pd(                                                     \
                     _mm512_fmadd_pd(                                                 \
@@ -156,26 +158,23 @@ dlp_asuint32(float f)
                                                         _mm512_fmadd_pd(             \
                                                             _mm512_fmadd_pd(         \
                                                                 _mm512_fmadd_pd(     \
-                                                                    _mm512_fmadd_pd( \
-                                                                        c15,         \
-                                                                        x,           \
-                                                                        c14),        \
-                                                                    x, c13),         \
-                                                                x, c12),             \
-                                                            x, c11),                 \
-                                                        x, c10),                     \
-                                                    x, c9),                          \
-                                                x, c8),                              \
-                                            x, c7),                                  \
-                                        x, c6),                                      \
-                                    x, c5),                                          \
-                                x, c4),                                              \
-                            x, c3),                                                  \
-                        x, c2),                                                      \
-                    x, c1),                                                          \
-                x, c0));                                                             \
-        q;                                                                           \
-    })
+                                                                    c15,             \
+                                                                    x,               \
+                                                                    c14),            \
+                                                                x, c13),             \
+                                                            x, c12),                 \
+                                                        x, c11),                     \
+                                                    x, c10),                         \
+                                                x, c9),                              \
+                                            x, c8),                                  \
+                                        x, c7),                                      \
+                                    x, c6),                                          \
+                                x, c5),                                              \
+                            x, c4),                                                  \
+                        x, c3),                                                      \
+                    x, c2),                                                          \
+                x, c1),                                                              \
+            x, c0))
 
 // ERF_AOCL Macro
 #define ERF_AOCL_DLP_AVX512(y, r)                                              \
@@ -201,13 +200,13 @@ dlp_asuint32(float f)
             _mm512_and_epi32(_mm512_castps_si512(r),                           \
                              _mm512_set1_epi32((unsigned int)0x80000000));     \
                                                                                \
-        y = as_v16_f32_u32(sign | as_v16_u32_f32(y));                          \
+        y = as_v16_f32_u32(_mm512_or_si512(sign, as_v16_u32_f32(y)));        \
         if (uxmax > ERF512_UBOUND) {                                           \
             __mmask16 mask =                                                   \
                 _mm512_cmp_ps_mask((ERF512_BOUND), absr, _CMP_LT_OQ);          \
             __m512 fONE = _mm512_set1_ps(1.0f);                                \
             y           = _mm512_mask_blend_ps(mask, y, fONE);                 \
-            y           = as_v16_f32_u32(sign | as_v16_u32_f32(y));            \
+            y           = as_v16_f32_u32(_mm512_or_si512(sign, as_v16_u32_f32(y))); \
         }                                                                      \
     }
 
