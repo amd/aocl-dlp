@@ -1088,6 +1088,11 @@ jitGEMMS8<KType>::generateKernel(utils::generatorParams& params)
     // the ret instr. StackFrame inserts a ret instr in its destructor.
     Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
     initializeStackFrame(stackFrame);
+
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+    // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+    utils::winAbiVectorGuard winAbiGuard(this);
+
     initializeParameters(params.mLoop);
     RETURN_IF_ERROR(generateIrLoop(params));
 

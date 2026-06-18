@@ -972,6 +972,11 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
     Xbyak::util::StackFrame frame(this, 1,
                                   12 | Xbyak::util::UseRBPAsFramePointer, 16);
     initializeStackFrame(frame);
+
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+    // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+    utils::winAbiVectorGuard winAbiGuard(this);
+
     // Initializes generator params
     initializeParameters(params);
     // initialize register allocation params based on ISA
@@ -1986,6 +1991,10 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     Xbyak::util::StackFrame frame(this, 1,
                                   12 | Xbyak::util::UseRBPAsFramePointer, 8);
     initializeStackFrame(frame);
+
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+    // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+    utils::winAbiVectorGuard winAbiGuard(this);
 
     // Initializing the parameters
     initializeParameters(params);

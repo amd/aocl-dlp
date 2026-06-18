@@ -740,6 +740,80 @@ struct registerStackOperations<Xbyak::Reg64>
 static constexpr uint8_t INVALID_REG_SOURCE = 255;
 
 // ─────────────────────────────────────────────────────────────────────────
+// winAbiVectorGuard: RAII save/restore of callee-saved XMM registers.
+//
+// On Windows x64, xmm6-xmm15 (lower 128 bits) are callee-saved (nonvolatile);
+// the SysV ABI (Linux) treats them as caller-saved (volatile). Xbyak's
+// StackFrame preserves callee-saved *general-purpose* registers but never
+// touches XMM/YMM/ZMM. A JIT kernel that uses vector registers 6-15 as
+// scratch therefore clobbers the caller's xmm6-15 on Windows, corrupting
+// MSVC-compiled code that relied on them across the call.
+//
+// Construct this guard at function scope immediately after the StackFrame so
+// the save is the outermost stack bracket: the prologue save nests strictly
+// outside any mid-kernel register spills (which also move rsp), and RAII
+// destruction restores before StackFrame emits its ret -- including on early
+// returns. zmm16-zmm31 are fully volatile on Windows and never saved; only
+// the xmm (128-bit) halves of regs 6..15 are callee-saved, so we save those.
+//
+// On non-Windows targets this is a no-op (empty ctor/dtor, zero emitted code).
+// ─────────────────────────────────────────────────────────────────────────
+class winAbiVectorGuard
+{
+#if defined(_WIN32)
+    Xbyak::CodeGenerator* jit_      = nullptr;
+    int                   loReg_    = 0;
+    int                   numSaved_ = 0;
+
+  public:
+    // Saves xmm[loReg .. hiReg] (clamped to the callee-saved range 6..15).
+    // Defaults preserve the full callee-saved set. Pass a tighter [loReg,hiReg]
+    // when the kernel's max used register index is known, to emit fewer stores.
+    explicit winAbiVectorGuard(Xbyak::CodeGenerator* jit,
+                               int                   loReg = 6,
+                               int                   hiReg = 15)
+        : jit_(jit)
+    {
+        if (loReg < 6)
+            loReg = 6;
+        if (hiReg > 15)
+            hiReg = 15;
+        if (jit_ == nullptr || hiReg < loReg)
+            return;
+
+        loReg_    = loReg;
+        numSaved_ = hiReg - loReg + 1;
+
+        // One aligned scratch block (16 B per xmm), then store each register.
+        jit_->sub(jit_->rsp, numSaved_ * 16);
+        for (int i = 0; i < numSaved_; ++i)
+            jit_->vmovups(jit_->ptr[jit_->rsp + i * 16],
+                          Xbyak::Xmm(loReg_ + i));
+    }
+
+    ~winAbiVectorGuard()
+    {
+        if (jit_ == nullptr || numSaved_ == 0)
+            return;
+        for (int i = 0; i < numSaved_; ++i)
+            jit_->vmovups(Xbyak::Xmm(loReg_ + i),
+                          jit_->ptr[jit_->rsp + i * 16]);
+        jit_->add(jit_->rsp, numSaved_ * 16);
+    }
+#else
+  public:
+    explicit winAbiVectorGuard(Xbyak::CodeGenerator* /*jit*/,
+                               int /*loReg*/ = 6,
+                               int /*hiReg*/ = 15)
+    {
+    }
+#endif
+
+    winAbiVectorGuard(const winAbiVectorGuard&)            = delete;
+    winAbiVectorGuard& operator=(const winAbiVectorGuard&) = delete;
+};
+
+// ─────────────────────────────────────────────────────────────────────────
 // registerGuard<REG_TYPE>: standalone RAII register guard (dual-mode)
 //
 // Pool mode (vector/mask): created by registerPool::acquireGuard(), releases

@@ -978,6 +978,11 @@ jitFP16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
     {
         Xbyak::util::StackFrame frame(this, 1, 13, 0);
         initializeStackFrame(frame);
+
+        // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+        // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+        utils::winAbiVectorGuard winAbiGuard(this);
+
         initializeParameters(params);
         RETURN_IF_ERROR(allocateRegisters());
 
@@ -2187,6 +2192,11 @@ jitFP16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
     {
         Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
         initializeStackFrame(stackFrame);
+
+        // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+        // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+        utils::winAbiVectorGuard winAbiGuard(this);
+
         initializeParameters();
 
         loadMasks();

@@ -947,6 +947,11 @@ jitU8S8VNNI_GEMM<KType>::generateKernel(utils::generatorParams& params)
     {
         Xbyak::util::StackFrame stackFrame(this, 1, 13, 0);
         initializeStackFrame(stackFrame);
+
+        // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+        // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+        utils::winAbiVectorGuard winAbiGuard(this);
+
         initializeParameters(params.mLoop);
 
         // Generate M-loop if needed, otherwise just IR loop

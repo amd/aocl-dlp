@@ -624,6 +624,11 @@ jitGEMMBF16<KType>::generateKernel(utils::generatorParams& params)
     Xbyak::util::StackFrame stackFrame(
         this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 16);
     initializeStackFrame(stackFrame);
+
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+    // (no-op on Linux/SysV). See utils::winAbiVectorGuard.
+    utils::winAbiVectorGuard winAbiGuard(this);
+
     initializeParameters(params.mLoop);
 
     RETURN_IF_ERROR(generateIrLoop(params));

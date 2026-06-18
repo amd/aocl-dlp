@@ -308,6 +308,11 @@ jitPackBF32ColMajor<KType>::generateKernel(utils::packBGeneratorParams& params)
     regTmp      = sf.t[10];
     regTmp2     = sf.t[11];
 
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64
+    // (no-op on Linux/SysV). The 8x8 / 16x16 transpose uses vector regs 6-15
+    // as scratch on every shape. See utils::winAbiVectorGuard.
+    utils::winAbiVectorGuard winAbiGuard(this);
+
     mov(regK, ptr[pParams + offsetof(dlp::kernels::packBParams, k)]);
     mov(regLdbBytes,
         ptr[pParams + offsetof(dlp::kernels::packBParams, cs_src)]);

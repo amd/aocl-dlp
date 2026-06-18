@@ -53,6 +53,12 @@ jitPackBF32<KType>::generateKernel(utils::packBGeneratorParams& params)
     Xbyak::util::StackFrame stackFrame(
         this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
+
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64.
+    // No-op on SysV (Linux). Must outlive the kernel body, hence function
+    // scope right after the StackFrame. See utils::winAbiVectorGuard.
+    utils::winAbiVectorGuard winAbiGuard(this);
+
     initializeParameters();
 
     if (useMask_) {
