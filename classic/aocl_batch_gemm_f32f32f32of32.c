@@ -299,7 +299,7 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
             g_sz, &m_local, &n_local, &k_local, (const float**)a_local, &rs_a,
             &cs_a, &mtag_a, (const float**)b_local, &rs_b, &cs_b, &mtag_b,
             &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
-            lcntx_g, &ops, DLP_F32);
+            &lcntx_l, &ops, DLP_F32);
 #endif
         // Increment the matrix index to get the next matrix in the group.
         mat_idx += g_sz;
