@@ -251,6 +251,11 @@ add_library(dlp_compiler_flags_coverage INTERFACE)
 # Set default compiler flags
 target_compile_options(dlp_compiler_flags INTERFACE ${DLP_GENERIC_FLAGS})
 
+# Request POSIX.1-2008 APIs (clock_gettime/CLOCK_MONOTONIC, used by the
+# centralized timer in include/classic/dlp_compat.h) under strict -std=c11.
+# Defined on the command line so it precedes any system header include.
+target_compile_definitions(dlp_compiler_flags INTERFACE _POSIX_C_SOURCE=200809L)
+
 # Set release-specific compiler flags
 target_compile_options(dlp_compiler_flags_release INTERFACE ${DLP_RELEASE_FLAGS})
 

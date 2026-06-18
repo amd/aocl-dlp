@@ -99,8 +99,11 @@ target_compile_options(dlp_compiler_flags INTERFACE
 # This ensures NOMINMAX, __builtin_clz, DLP_INF, DLP_ATOMIC_*, etc. are available
 # everywhere without requiring explicit #include in each source file.
 if(MSVC)
+    # Use DLP_SOURCE_DIR (the DLP project root), not CMAKE_SOURCE_DIR, which
+    # points at a parent project when DLP is built via add_subdirectory/
+    # FetchContent.
     target_compile_options(dlp_compiler_flags INTERFACE
-        "/FI${CMAKE_SOURCE_DIR}/include/classic/dlp_compat.h"
+        "/FI${DLP_SOURCE_DIR}/include/classic/dlp_compat.h"
     )
 endif()
 
@@ -285,7 +288,7 @@ function(dlp_set_jit_flags target)
         # /FI force-includes MSVC shims (__builtin_clz, NOMINMAX, DLP_FLOAT_INF) for all JIT TUs
         if(MSVC)
             list(APPEND DLP_JIT_FLAGS_MSVC /bigobj)
-            list(APPEND DLP_JIT_FLAGS_MSVC "/FI${CMAKE_SOURCE_DIR}/src/jit/amdzen/dlp_msvc_compat.h")
+            list(APPEND DLP_JIT_FLAGS_MSVC "/FI${DLP_SOURCE_DIR}/src/jit/amdzen/dlp_msvc_compat.h")
             message(STATUS "JIT flags (MSVC) initialized: /bigobj, /FI dlp_msvc_compat.h")
         endif()
 

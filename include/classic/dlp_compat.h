@@ -294,7 +294,16 @@ dlp_get_time_sec(void)
  * omp_set_max_active_levels() requires OpenMP 5.0; MSVC only has 2.0.
  * ====================================================================== */
 #ifdef _OPENMP
+/* <omp.h> declares C++ templates; if this header is pulled in from within an
+ * extern "C" block (common in C++ TUs that include the C API), those templates
+ * would inherit C linkage and fail to compile. Force C++ linkage explicitly. */
+#ifdef __cplusplus
+extern "C++" {
+#endif
 #include <omp.h>
+#ifdef __cplusplus
+}
+#endif
 #endif
 
 #if defined(_MSC_VER)

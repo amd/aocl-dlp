@@ -29,7 +29,8 @@
 #include "classic/dlp_compat.h"
 
 #if !DLP_CLOCK_USE_QPC
-#define _POSIX_C_SOURCE 199309L
+/* _POSIX_C_SOURCE is set globally by the build (see dlp_compiler_flags) so it
+ * precedes all system headers; no local define needed here. */
 #include <time.h>
 #endif
 

@@ -208,7 +208,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_12xlt16)
             // c[11,0-15] = a[11,kr:kr+4]*b[kr:kr+4,0-15]
             c_int32_11p0 = _mm512_dpbusd_epi32(c_int32_11p0, a_int32_11, b0);
         }
-        DLP_ASM_ALIGN(6)
+        DLP_ASM_ALIGN(6);
         // Handle k remainder.
         if (k_partial_pieces > 0) {
             __m128i   a_kfringe_buf;
@@ -2511,7 +2511,7 @@ DLP_GEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_12x16)
             // c[11,0-15] = a[11,kr:kr+4]*b[kr:kr+4,0-15]
             c_int32_11p0 = _mm512_dpbusd_epi32(c_int32_11p0, a_int32_11, b0);
         }
-        DLP_ASM_ALIGN(6)
+        DLP_ASM_ALIGN(6);
         // Handle k remainder.
         if (k_partial_pieces > 0) {
             __m128i   a_kfringe_buf;
@@ -4763,7 +4763,7 @@ DLP_GEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_9x32)
             c_int32_8p0 = _mm512_dpbusd_epi32(c_int32_8p0, a_int32_2, b0);
             c_int32_8p1 = _mm512_dpbusd_epi32(c_int32_8p1, a_int32_2, b1);
         }
-        DLP_ASM_ALIGN(6)
+        DLP_ASM_ALIGN(6);
         // Handle k remainder.
         if (k_partial_pieces > 0) {
             __m128i   a_kfringe_buf;

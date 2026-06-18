@@ -2852,7 +2852,7 @@ DLP_GEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
             c_int32_5p1 = _mm512_dpbusd_epi32(c_int32_5p1, a_int32_5, b1);
         }
         // Handle k remainder.
-        DLP_ASM_ALIGN(6)
+        DLP_ASM_ALIGN(6);
         if (k_partial_pieces > 0) {
             __m128i   a_kfringe_buf;
             __mmask16 load_mask =
