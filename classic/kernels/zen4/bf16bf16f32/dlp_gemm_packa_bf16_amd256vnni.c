@@ -526,7 +526,9 @@ dlp_packa_mr16_bf16bf16f32of32_row_major(bfloat16*       pack_a_buffer,
 
     md_t k_left = KC % 32;
 
-    __mmask32 mask = 0xFFFFFFFF >> (32 - k_left);
+    // Avoid shifting by the full width (UB) when KC is a multiple of 32; the
+    // mask is only used below when k_left > 0.
+    __mmask32 mask = (k_left > 0) ? (0xFFFFFFFF >> (32 - k_left)) : 0;
     __m512i   a_reg[32];
 
     md_t ic = 0, kr = 0;
