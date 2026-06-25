@@ -181,11 +181,16 @@ jitGEMMF32RD<KType>::allocateMaskRegisters()
     }
 
     // setting fringe mask for n-dimension.
-    // since this is happening before any values are loaded,
-    // it is safe to use ecx as a scratch register.
+    // This runs before the StackFrame prologue, so the only live register is
+    // the incoming params pointer (arg0). On Windows x64 arg0 is rcx, so ecx
+    // must NOT be used here as scratch -- doing so clobbers the params pointer
+    // before initializeParameters() reads it, faulting on the first param
+    // access. eax is volatile and never an argument register on either SysV or
+    // Win64, and it is consumed immediately by the kmovb below, so it is safe
+    // on both ABIs.
     int numMaskElems = NR > nElemsPerXmm ? nElemsPerXmm : NR;
-    mov(ecx, 0x0F >> (nElemsPerXmm - numMaskElems));
-    kmovb(fringeMask[0], ecx);
+    mov(eax, 0x0F >> (nElemsPerXmm - numMaskElems));
+    kmovb(fringeMask[0], eax);
 
     kLeftMask = Opmask(numMaskRegs + 1); // mask for k_left
 
