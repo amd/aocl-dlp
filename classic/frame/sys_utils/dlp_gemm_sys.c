@@ -26,6 +26,7 @@
  *
  */
 
+#include "aocl_dlp_config.h"
 #include "classic/dlp_compat.h"
 
 #if !DLP_CLOCK_USE_QPC
@@ -43,7 +44,7 @@
 #include <omp.h>
 #endif
 
-#if defined(__linux__)
+#if DLP_OS_LINUX
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -69,7 +70,7 @@ dlp_gemm_gettid(void)
 uint64_t
 dlp_gemm_getpid(void)
 {
-#if defined(__linux__)
+#if DLP_OS_LINUX
     return (uint64_t)getpid();
 #else
     return 0;

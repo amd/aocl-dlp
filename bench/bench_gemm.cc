@@ -45,6 +45,7 @@
  * - No explicit thread pinning (user has full control)
  */
 
+#include "aocl_dlp_config.h"
 #include "bench_metrics.hh"
 #include "bench_types.hh"
 
@@ -68,7 +69,7 @@
 #include <string>
 #include <vector>
 
-#ifndef _WIN32
+#if !DLP_OS_WINDOWS
 #include <numa.h>
 #include <numaif.h>
 #endif

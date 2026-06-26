@@ -760,7 +760,7 @@ static constexpr uint8_t INVALID_REG_SOURCE = 255;
 // ─────────────────────────────────────────────────────────────────────────
 class winAbiVectorGuard
 {
-#if defined(_WIN32)
+#if DLP_OS_WINDOWS
     Xbyak::CodeGenerator* jit_      = nullptr;
     int                   loReg_    = 0;
     int                   numSaved_ = 0;

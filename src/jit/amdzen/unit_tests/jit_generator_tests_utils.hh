@@ -51,7 +51,7 @@
 #include <gtest/gtest.h>
 #include <iomanip>
 #include <string>
-#ifndef _WIN32
+#if !DLP_OS_WINDOWS
 #include <sys/wait.h>
 #include <unistd.h>
 #else
@@ -92,7 +92,7 @@ class CrashIsolation
         int         crashSignal = 0;
     };
 
-#ifdef _WIN32
+#if DLP_OS_WINDOWS
   private:
     static int sehWrapper(std::function<int()>* func, Result* result)
     {

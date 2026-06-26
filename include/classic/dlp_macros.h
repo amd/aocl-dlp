@@ -35,9 +35,10 @@
  * This header re-exports them so existing #include "classic/dlp_macros.h"
  * sites continue to work unchanged.
  */
+#include "aocl_dlp_config.h"
 #include "classic/dlp_compat.h"
 
-#if defined(__GNUC__) || defined(__clang__)
+#if DLP_COMPILER_GCC || DLP_COMPILER_CLANG
 #define DLP_ATTRIBUTE_USED [[gnu::used]]
 #else
 #define DLP_ATTRIBUTE_USED
