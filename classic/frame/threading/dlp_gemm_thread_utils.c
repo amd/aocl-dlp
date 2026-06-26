@@ -29,6 +29,7 @@
 #include <math.h>
 #include <stdlib.h>
 
+#include "aocl_dlp_config.h"
 #include "classic/dlp_compat.h"
 #include "sys_utils/dlp_gemm_sys.h"
 #include "threading/dlp_gemm_thread_utils.h"
@@ -71,6 +72,11 @@ dlp_gemm_detect_thread_topo()
 
 // Launch max threads to determine the core bininding for all threads
 // within the omp team.
+// omp_get_place_num / omp_get_place_num_procs / omp_get_place_proc_ids are
+// OpenMP 4.0 APIs.  MSVC's /openmp:llvm runtime (OpenMP 3.1) does not
+// provide them, so we skip affinity detection entirely on MSVC and leave
+// tid_distr_nearly_seq / tid_core_grp_load_high at their safe FALSE defaults.
+#if !DLP_COMPILER_MSVC
 #pragma omp parallel num_threads(nt_max)
     {
         int thread_num      = omp_get_thread_num();
@@ -189,6 +195,7 @@ dlp_gemm_detect_thread_topo()
             dlp_gemm_thread_attrs.tid_core_grp_load_high = TRUE;
         }
     }
+#endif // !DLP_COMPILER_MSVC
 
 err_handle:
     free(tid_cnt_for_core_grps);

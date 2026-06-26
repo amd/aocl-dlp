@@ -62,6 +62,14 @@ function(dlp_setup_openmp)
         list(APPEND CMAKE_PREFIX_PATH "${DLP_OPENMP_ROOT}")
     endif()
 
+    # On MSVC, request the LLVM OpenMP runtime (/openmp:llvm) which provides
+    # OpenMP 3.1 (covering all OMP 3.0-level APIs the library uses).
+    # This must be set BEFORE find_package(OpenMP) so FindOpenMP picks it up.
+    if(MSVC)
+        set(OpenMP_RUNTIME_MSVC "llvm")
+        message(STATUS "MSVC detected: requesting /openmp:llvm (OpenMP 3.1) runtime")
+    endif()
+
     # Use CMake's built-in FindOpenMP module
     find_package(OpenMP REQUIRED COMPONENTS C CXX)
 
