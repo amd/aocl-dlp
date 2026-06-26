@@ -425,6 +425,22 @@ typedef struct
     md_t group_size; /**< Group size for grouped quantization */
 } DLP_SYMM_STAT_QUANT;
 
+typedef struct
+{
+    md_t MR; // Micro-kernel M dimension
+    md_t NR; // Micro-kernel N dimension
+    md_t MC; // Cache blocking M dimension (multiple of MR)
+    md_t NC; // Cache blocking N dimension (multiple of NR)
+    md_t KC; // Cache blocking K dimension
+} dlp_gemm_blocking_t;
+
+typedef struct
+{
+    md_t MT; /**< M dim threshold to decide whether to enable packing or not */
+    md_t NT; /**< N dim threshold to decide whether to enable packing or not */
+    md_t KT; /**< K dim threshold to decide whether to enable packing or not */
+} dlp_gemm_sup_threshold_t;
+
 /**
  * @brief Main metadata structure containing all post-operation configurations.
  *
@@ -493,6 +509,13 @@ typedef struct
 
     dlp_error_hndl_t error_hndl; /**< Error handle for the routine, currently
                                       wrapped as part of the metadata. */
+
+    dlp_gemm_blocking_t*
+        block_params; /**< Blocking parameters for GEMM kernels */
+    dlp_gemm_sup_threshold_t*
+        sup_thresholds; /**< Threshold parameters to decide whether to enable
+                            packing or not. Currently only applicable for f32
+                            and fp16 APIs only. */
 } dlp_metadata_t;
 
 #define DLP_METADATA_SET_ERROR(metadata, err_no)                               \

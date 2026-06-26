@@ -29,6 +29,7 @@
 #ifndef DLP_GEMM_CONFIG_H
 #define DLP_GEMM_CONFIG_H
 
+#include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 
 #define DLP_GEMM_BF16_MR 6
@@ -41,6 +42,11 @@ dlp_init_global_cntx();
 
 dlp_gemm_cntx_t*
 dlp_gemm_get_global_cntx_obj(AOCL_DLP_OPERATION_TYPE op);
+
+dlp_clsc_err_t
+dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
+                                dlp_gemm_cntx_t*        lcntx,
+                                dlp_metadata_t*         metadata);
 
 dlp_gemm_util_cntx_t*
 dlp_gemm_util_get_global_cntx_obj(AOCL_DLP_UTIL_OPERATION_TYPE op);

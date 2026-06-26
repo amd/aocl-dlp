@@ -207,17 +207,22 @@ aocl_gemm_bf16s4f32of32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16S4F32OF32);
-    dlp_gemm_cntx_t  lcntx_l = *lcntx_g;
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
+    err = dlp_gemm_upd_cntx_with_metadata(BF16S4F32OF32, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
     // Use BF16BF16F32OF32 kernel : S4->BF16 dequantization is done
     // in the framework (dlp_gemm_bf16s4.c) via pre-ops before the micro-kernel.
-    dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_BF16BF16F32OF32, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
-        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
-        &lcntx_l.dlp_kernel_hndl);
+    dlp_init_and_get_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, order, mtag_a,
+                                 mtag_b, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c,
+                                 cs_c, (void*)&alpha, (void*)&beta,
+                                 post_op_list, &lcntx_l, DLP_F32);
 
     // Defense-in-depth: if JIT init failed AND the post-op list contains an
     // op_code unsupported by the classic kernel, the 5-loop's classic
@@ -411,18 +416,23 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16S4F32OF32);
-    dlp_gemm_cntx_t  lcntx_l = *lcntx_g;
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
+    err = dlp_gemm_upd_cntx_with_metadata(BF16S4F32OF32, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
     // Use BF16BF16F32OBF16 kernel : S4->BF16 dequantization is done
     // in the framework (dlp_gemm_bf16s4.c) via pre-ops before
     // the micro-kernel.
-    dlp_init_and_get_kernel_hndl(
-        DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
-        rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
-        lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_BF16,
-        &lcntx_l.dlp_kernel_hndl);
+    dlp_init_and_get_kernel_hndl(DLP_KERNEL_BF16BF16F32OBF16, order, mtag_a,
+                                 mtag_b, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c,
+                                 cs_c, (void*)&alpha, (void*)&beta,
+                                 post_op_list, &lcntx_l, DLP_BF16);
 
     // Defense-in-depth: if JIT init failed AND the post-op list contains an
     // op_code unsupported by the classic kernel, the 5-loop's classic

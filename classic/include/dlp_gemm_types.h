@@ -55,15 +55,13 @@ typedef enum
     U8S4S32OS32     = 6, // Only used for reordering int4_t B matrix.
     BF16S4F32OF32   = 7, // Only used for reordering int4_t B matrix.
     F32OBF16 = 8, // Only used for reordering input float matrix to bf16 reorder
-    FP16FP16F32OF32 =
-        9, // float16 - A, float16 - B, float - C (FP32 accumulator)
     F16F16F16OF16 =
-        10, // float16 - A, float16 - B, float16 - C (FP16 accumulator)
-    BF16U4F32OF32 = 11, // Only used for reordering uint4_t B matrix.
+        9, // float16 - A, float16 - B, float16 - C (FP16 accumulator)
+    BF16U4F32OF32 = 10, // Only used for reordering uint4_t B matrix.
     F32F16F32OF32 =
-        12 // float - A, float16 - B, float - C (F32×FP16 mixed-precision)
+        11 // float - A, float16 - B, float - C (F32×FP16 mixed-precision)
 } AOCL_DLP_OPERATION_TYPE;
-#define AOCL_DLP_OPERATION_TYPE_LEN 13
+#define AOCL_DLP_OPERATION_TYPE_LEN 12
 
 typedef enum
 {
@@ -120,45 +118,6 @@ typedef struct
 
     dlp_gemm_mem_t storage;
 } dlp_gemm_obj_t;
-
-typedef struct
-{
-    md_t MC;
-    md_t NC;
-    md_t KC;
-    md_t NR;
-    md_t MR;
-} dlp_gemm_block_size_t;
-
-typedef struct
-{
-    md_t packa_rs;
-    md_t packa_cs;
-    md_t packb_rs;
-    md_t packb_cs;
-} dlp_gemm_pack_strides_t;
-
-typedef struct
-{
-    md_t MT;
-    md_t NT;
-    md_t KT;
-} dlp_gemm_sup_thres_t;
-
-typedef struct
-{
-    dlp_gemm_block_size_t   blksz;
-    opaq_fp_t               kern_fun_ptr;
-    opaq_fp_t               packa_fun_ptr;
-    opaq_fp_t               packb_mxp_fun_ptr;
-    opaq_fp_t               packb_fun_ptr;
-    opaq_fp_t               unpackb_fun_ptr;
-    opaq_fp_t               packsclb_fun_ptr;
-    dlp_gemm_pack_strides_t pack_s;
-    dlp_gemm_sup_thres_t    sup_thres;
-    dlp_kernel_hndl_t       dlp_kernel_hndl;
-    dlp_pack_kernel_hndl_t  dlp_pack_kernel_hndl;
-} dlp_gemm_cntx_t;
 
 typedef struct
 {

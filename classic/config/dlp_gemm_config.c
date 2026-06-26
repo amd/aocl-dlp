@@ -28,7 +28,7 @@
 
 #include <stdlib.h>
 
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_blksz_map.h"
@@ -519,6 +519,196 @@ dlp_gemm_cntx_t*
 dlp_gemm_get_global_cntx_obj(AOCL_DLP_OPERATION_TYPE op)
 {
     return &global_cntx_t_list[op];
+}
+
+/**
+ * @brief Calculate pack strides for INT8 data types (U8S8, S8S8, etc.)
+ *
+ * @param packa_rs Output: Pack A row stride
+ * @param packa_cs Output: Pack A column stride
+ * @param packb_rs Output: Pack B row stride
+ * @param packb_cs Output: Pack B column stride
+ * @param MR Micro-kernel M dimension (register blocking)
+ * @param NR Micro-kernel N dimension (register blocking)
+ * @param cache_line_size Architecture cache line size (typically 64 bytes)
+ */
+#define DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,   \
+                                 NR, cache_line_size)                          \
+    do {                                                                       \
+        *(packa_rs) = 4;        /* VNNI packing: 4×int8 → int32 */             \
+        *(packa_cs) = 4 * (MR); /* MR rows × 4-element packing */              \
+        *(packb_rs) = 4 * (NR); /* NR cols × 4-element packing */              \
+        *(packb_cs) =                                                          \
+            (cache_line_size) / sizeof(int8_t); /* Cache line align */         \
+    } while (0)
+
+/**
+ * @brief Calculate pack strides for BF16 (Brain Float16) data types
+ *
+ * @param packa_rs Output: Pack A row stride
+ * @param packa_cs Output: Pack A column stride
+ * @param packb_rs Output: Pack B row stride
+ * @param packb_cs Output: Pack B column stride
+ * @param MR Micro-kernel M dimension (register blocking)
+ * @param NR Micro-kernel N dimension (register blocking)
+ * @param cache_line_size Architecture cache line size (typically 64 bytes)
+ */
+#define DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,  \
+                                  NR, cache_line_size)                         \
+    do {                                                                       \
+        *(packa_rs) = 2;        /* BF16 packing: 2×bf16 pairs */               \
+        *(packa_cs) = 2 * (MR); /* MR rows × 2-element packing */              \
+        *(packb_rs) = 2 * (NR); /* NR cols × 2-element packing */              \
+        *(packb_cs) =                                                          \
+            (cache_line_size) / sizeof(int16_t); /* Cache line align */        \
+    } while (0)
+
+/**
+ * @brief Calculate pack strides for F32/F16 floating point data types
+ *
+ * Note: F16 (float16) uses same strides as F32 despite different sizes.
+ *       The kernel handles element size; packing layout remains consistent.
+ *
+ * @param packa_rs Output: Pack A row stride
+ * @param packa_cs Output: Pack A column stride
+ * @param packb_rs Output: Pack B row stride
+ * @param packb_cs Output: Pack B column stride
+ * @param MR Micro-kernel M dimension (register blocking)
+ * @param NR Micro-kernel N dimension (register blocking)
+ * @param cache_line_size Architecture cache line size (unused for F32/F16)
+ */
+#define DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR, \
+                                   NR, cache_line_size)                        \
+    do {                                                                       \
+        *(packa_rs) = 1;    /* Unit stride, no packing */                      \
+        *(packa_cs) = (MR); /* Natural column-major stride */                  \
+        *(packb_rs) = (NR); /* Natural row-major stride */                     \
+        *(packb_cs) = 1;    /* Unit stride, contiguous */                      \
+    } while (0)
+
+// **NOTE** This function makes certain assumptions about pack strides for
+// datatypes which requires mandatory B packing (like bf16, u8s8). This
+// function needs to be revisited in case any assumption gets broken. For
+// instance one assumption is that kernels are row major favoring and has
+// A broadcasts, B loads. Subsequently A and B strides will calculated on
+// the basis of kr loop, in a way that each kr iteration gets the correct
+// A and B ptrs offsets.
+static dlp_clsc_err_t
+dlp_gemm_upd_pack_strides(AOCL_DLP_OPERATION_TYPE op,
+                          md_t                    MR,
+                          md_t                    NR,
+                          md_t*                   packa_rs,
+                          md_t*                   packa_cs,
+                          md_t*                   packb_rs,
+                          md_t*                   packb_cs)
+{
+    const md_t cache_line_size = 64;
+
+    // As it stands, pack strides needs to be derived from the supplied
+    // metadata context, the data types and the underlying machine ISA.
+    if ((dlp_cpuid_is_avx2fma3_supported() == TRUE)
+        || (dlp_cpuid_is_avx512_supported() == TRUE)
+        || (dlp_cpuid_is_avx512vnni_supported() == TRUE)
+        || (dlp_cpuid_is_avx512bf16_supported() == TRUE)
+        || (dlp_cpuid_is_avx512fp16_supported() == TRUE)) {
+        if (op == U8S8S32OS32) {
+            DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,
+                                     NR, cache_line_size);
+        } else if (op == F32F32F32OF32) {
+            DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
+                                       MR, NR, cache_line_size);
+        } else if (op == BF16BF16F32OF32) {
+            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
+                                      MR, NR, cache_line_size);
+        } else if (op == S8S8S32OS32) {
+            DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,
+                                     NR, cache_line_size);
+        } else if (op == U8S4S32OS32) {
+            DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,
+                                     NR, cache_line_size);
+        } else if (op == BF16S4F32OF32) {
+            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
+                                      MR, NR, cache_line_size);
+        } else if (op == F32OBF16) {
+            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
+                                      MR, NR, cache_line_size);
+        } else if (op == F16F16F16OF16) {
+            DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
+                                       MR, NR, cache_line_size);
+        } else if (op == BF16U4F32OF32) {
+            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
+                                      MR, NR, cache_line_size);
+        } else if (op == F32F16F32OF32) {
+            DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
+                                       MR, NR, cache_line_size);
+        } else {
+            return DLP_CLSC_INVALID_BLOCK_PARAMS;
+        }
+    } else {
+        return DLP_CLSC_INVALID_BLOCK_PARAMS;
+    }
+
+    return DLP_CLSC_SUCCESS;
+}
+
+dlp_clsc_err_t
+dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
+                                dlp_gemm_cntx_t*        lcntx,
+                                dlp_metadata_t*         metadata)
+{
+    // NOTE: Making this a no-op for now, will enable this function later.
+    return DLP_CLSC_SUCCESS;
+
+    if (!lcntx) {
+        // Invalid context pointer, return error.
+        return DLP_CLSC_NULL_POINTER;
+    }
+    if (!metadata) {
+        // No updates to global context in this case.
+        return DLP_CLSC_SUCCESS;
+    }
+
+    // Set blocking parameters if applicable.
+    if (metadata->block_params != NULL) {
+        dlp_gemm_blocking_t* block_params = metadata->block_params;
+        if ((block_params->MR <= 0) || (block_params->NR <= 0)
+            || (block_params->MC <= 0) || (block_params->NC <= 0)
+            || (block_params->KC <= 0)
+            || ((block_params->MC % block_params->MR) != 0)
+            || ((block_params->NC % block_params->NR) != 0)) {
+            // Invalid blocking parameters in metadata, return error.
+            return DLP_CLSC_INVALID_BLOCK_PARAMS;
+        }
+
+        lcntx->blksz.MC = block_params->MC;
+        lcntx->blksz.NC = block_params->NC;
+        lcntx->blksz.KC = block_params->KC;
+        lcntx->blksz.MR = block_params->MR;
+        lcntx->blksz.NR = block_params->NR;
+
+        dlp_clsc_err_t err = dlp_gemm_upd_pack_strides(
+            op, block_params->MR, block_params->NR, &lcntx->pack_s.packa_rs,
+            &lcntx->pack_s.packa_cs, &lcntx->pack_s.packb_rs,
+            &lcntx->pack_s.packb_cs);
+        if (err != DLP_CLSC_SUCCESS) {
+            return err;
+        }
+    }
+
+    // Set SUP thresholds if applicable.
+    if (metadata->sup_thresholds != NULL) {
+        dlp_gemm_sup_threshold_t* sup_thres = metadata->sup_thresholds;
+        if ((sup_thres->MT < 0) || (sup_thres->NT < 0) || (sup_thres->KT < 0)) {
+            // Invalid SUP threshold parameters in metadata, return error.
+            return DLP_CLSC_INVALID_SUP_THRESHOLDS;
+        }
+
+        lcntx->sup_thres.MT = sup_thres->MT;
+        lcntx->sup_thres.NT = sup_thres->NT;
+        lcntx->sup_thres.KT = sup_thres->KT;
+    }
+
+    return DLP_CLSC_SUCCESS;
 }
 
 dlp_gemm_util_cntx_t*

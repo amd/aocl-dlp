@@ -278,19 +278,23 @@ aocl_gemm_f32s8s32_impl(const char        order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
-    dlp_gemm_cntx_t  lcntx_l;
-
     // Create thread-local copy since context may be modified during execution
-    lcntx_l = *lcntx_g;
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
 
-    dlp_init_and_get_kernel_hndl(
-        krnl_dtype, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a, rs_b, cs_b,
-        rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
-        lcntx_l.blksz.NR, lcntx_l.blksz.KC, c_dtype, &lcntx_l.dlp_kernel_hndl);
+    dlp_init_and_get_kernel_hndl(krnl_dtype, order, mtag_a, mtag_b, m, n, k,
+                                 rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                                 (void*)&alpha, (void*)&beta, post_op_list,
+                                 &lcntx_l, c_dtype);
 
     if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
         dlp_print_msg(" Kernel handle is not initialized. Only supported for "

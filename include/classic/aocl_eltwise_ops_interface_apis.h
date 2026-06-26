@@ -30,7 +30,7 @@
 #define AOCL_DLP_ELTWISE_OPS_INTERFACE_H
 
 #include "classic/aocl_bf16_type.h"
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "classic/dlp_base_types.h"
 
 /**

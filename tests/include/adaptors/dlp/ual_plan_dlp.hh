@@ -36,7 +36,7 @@
 
 extern "C"
 {
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 }
 
 namespace dlp::testing::classic {

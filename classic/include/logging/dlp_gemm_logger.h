@@ -33,7 +33,7 @@
 
 #include "classic/aocl_fp16_convert.h"
 #include "classic/aocl_fp16_type.h"
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 #include "sys_utils/dlp_gemm_sys.h"
 

@@ -267,7 +267,16 @@ aocl_batch_gemm_bf16u4f32_impl(const char*      order,
         dlp_rntm_t rntm_g;
         dlp_rntm_init_from_global(&rntm_g);
 
-        dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16U4F32OF32);
+        dlp_gemm_cntx_t lcntx_g =
+            *(dlp_gemm_get_global_cntx_obj(BF16U4F32OF32));
+        err = dlp_gemm_upd_cntx_with_metadata(BF16U4F32OF32, &lcntx_g,
+                                              metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                          __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
 
         dlp_gemm_ops_bundle_t ops =
             DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);
@@ -277,14 +286,14 @@ aocl_batch_gemm_bf16u4f32_impl(const char*      order,
             g_sz, &m_local, &n_local, &k_local, (const bfloat16**)a_local,
             &rs_a, &cs_a, &mtag_a, (const uint8_t**)b_local, &rs_b, &cs_b,
             &mtag_b, (float**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i],
-            beta[gc_i], &rntm_g, lcntx_g, &ops, c_dtype);
+            beta[gc_i], &rntm_g, &lcntx_g, &ops, c_dtype);
 
 #else
         batch_dlp_gemm_bf16u4f32of32_thread_decorator(
             g_sz, &m_local, &n_local, &k_local, (const bfloat16**)a_local,
             &rs_a, &cs_a, &mtag_a, (const uint8_t**)b_local, &rs_b, &cs_b,
             &mtag_b, (float**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i],
-            beta[gc_i], &rntm_g, lcntx_g, &ops, c_dtype);
+            beta[gc_i], &rntm_g, &lcntx_g, &ops, c_dtype);
 #endif
         mat_idx += g_sz;
     }

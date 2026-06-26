@@ -249,28 +249,26 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
                              void*                 alpha,
                              void*                 beta,
                              dlp_gemm_post_op*     metadata,
-                             md_t                  mr_hint,
-                             md_t                  nr_hint,
-                             md_t                  kc_hint,
-                             md_t                  c_downscale,
-                             dlp_kernel_hndl_t*    kernel_hndl)
+                             dlp_gemm_cntx_t*      cntx,
+                             md_t                  c_downscale)
 {
-    if (!kernel_hndl) {
+    if (!cntx) {
         return;
     }
 
     kernelDatatype kDType = getKernelDatatype(k_dtype);
     if (kDType == kernelDatatype::invalid) {
-        kernel_hndl->kernel_base = nullptr;
+        cntx->dlp_kernel_hndl.kernel_base = nullptr;
         return;
     }
 
     dlp::kernel_frame::kernelInfo fastKI = dlp_get_gemm_kernelInfo_by_dtype(
         kDType, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
-        mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint, c_downscale);
+        mtag_a, mtag_b, metadata, cntx->blksz.MR, cntx->blksz.NR,
+        cntx->blksz.KC, c_downscale);
 
     if ((fastKI.mr <= 0) || (fastKI.nr <= 0)) {
-        kernel_hndl->kernel_base = nullptr;
+        cntx->dlp_kernel_hndl.kernel_base = nullptr;
         return;
     }
 
@@ -280,13 +278,23 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
         kernPtr = dlp_generate_jit_kernel(fastKI, kDType);
     }
 
-    kernel_hndl->kernel_base = (kernPtr.isValid() && kernPtr.getPtr()->isValid)
-                                   ? static_cast<void*>(kernPtr.getPtr())
-                                   : nullptr;
-    kernel_hndl->mr          = fastKI.mr;
-    kernel_hndl->nr          = fastKI.nr;
-    kernel_hndl->kDtype      = k_dtype;
-    kernel_hndl->invokeRD    = fastKI.invokeRD;
+    cntx->dlp_kernel_hndl.kernel_base =
+        (kernPtr.isValid() && kernPtr.getPtr()->isValid)
+            ? static_cast<void*>(kernPtr.getPtr())
+            : nullptr;
+    cntx->dlp_kernel_hndl.mr = fastKI.mr;
+    cntx->dlp_kernel_hndl.nr = fastKI.nr;
+    cntx->blksz.KC           = fastKI.kc;
+    cntx->blksz.MC =
+        ((cntx->blksz.MC % fastKI.mr) == 0)
+            ? cntx->blksz.MC
+            : (((cntx->blksz.MC + fastKI.mr - 1) / fastKI.mr) * fastKI.mr);
+    cntx->blksz.NC =
+        ((cntx->blksz.NC % fastKI.nr) == 0)
+            ? cntx->blksz.NC
+            : (((cntx->blksz.NC + fastKI.nr - 1) / fastKI.nr) * fastKI.nr);
+    cntx->dlp_kernel_hndl.kDtype   = k_dtype;
+    cntx->dlp_kernel_hndl.invokeRD = fastKI.invokeRD;
 }
 
 [[gnu::noinline]] static dlp::kernel_frame::kernelBaseRef

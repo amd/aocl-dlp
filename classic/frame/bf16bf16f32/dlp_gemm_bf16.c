@@ -682,6 +682,9 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
     md_t MR = lcntx->blksz.MR;
 
     // DLP_F32 contexts for the GEMM
+    // The cntx queried here is not the one corresponding to the API but
+    // rather that of the underlying kernel used. Hence any updates to the
+    // API cntx via metadata will be nullified here.
     dlp_gemm_cntx_t*    lcntx_f32 = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
     md_t                f32_MR; // This will be modified
     md_t                f32_NR = lcntx_f32->blksz.NR;
@@ -991,6 +994,9 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
     md_t MR = lcntx->blksz.MR;
 
     // DLP_F32 contexts for the GEMM
+    // The cntx queried here is not the one corresponding to the API but
+    // rather that of the underlying kernel used. Hence any updates to the
+    // API cntx via metadata will be nullified here.
     dlp_gemm_cntx_t* lcntx_f32 = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
     md_t             f32_MR    = lcntx_f32->blksz.MR;
     md_t             f32_NR    = lcntx_f32->blksz.NR;

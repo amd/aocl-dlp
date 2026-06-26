@@ -60,6 +60,8 @@ dlp_mtag_b_pick(md_t                    m,
                 AOCL_DLP_OPERATION_TYPE mc_op_type,
                 const dlp_gemm_post_op* post_op_list)
 {
+    // NOTE: mc_op_type in this case is not the one corresponding to the API.
+    // Need to add a mechanism to ensure this wont result in undefined states.
     md_t MC = dlp_gemm_get_block_size_MC_global_cntx(mc_op_type);
 
     md_t m_ic = m / ic_ways;
@@ -400,14 +402,14 @@ dlp_gemm_adjust_ic_jc_ways(const md_t m,
 }
 
 DLP_INLINE void
-dlp_gemm_s32o32_get_threading(md_t*                   n_threads,
-                              md_t*                   ic_ways,
-                              md_t*                   jc_ways,
-                              md_t                    m,
-                              md_t                    n,
-                              md_t                    k,
-                              dlp_rntm_t*             rntm_g,
-                              AOCL_DLP_OPERATION_TYPE op_type)
+dlp_gemm_s32o32_get_threading(md_t*            n_threads,
+                              md_t*            ic_ways,
+                              md_t*            jc_ways,
+                              md_t             m,
+                              md_t             n,
+                              md_t             k,
+                              dlp_rntm_t*      rntm_g,
+                              dlp_gemm_cntx_t* lcntx)
 {
     (void)k; /* k unused: threading decision based on m/n geometry only. */
 
@@ -423,12 +425,11 @@ dlp_gemm_s32o32_get_threading(md_t*                   n_threads,
 
         *n_threads = (*jc_ways) * (*ic_ways);
     } else if ((*n_threads) > 1) {
-
-        md_t       NR         = dlp_gemm_get_block_size_NR_global_cntx(op_type);
-        md_t       MR         = dlp_gemm_get_block_size_MR_global_cntx(op_type);
-        md_t       mr_blks    = (m + MR - 1) / MR;
-        md_t       nr_blks    = (n + NR - 1) / NR;
-        md_t       mrxnr_blks = mr_blks * nr_blks;
+        md_t       NR                    = lcntx->blksz.NR;
+        md_t       MR                    = lcntx->blksz.MR;
+        md_t       mr_blks               = (m + MR - 1) / MR;
+        md_t       nr_blks               = (n + NR - 1) / NR;
+        md_t       mrxnr_blks            = mr_blks * nr_blks;
         md_t       mr_blks_adj_n_threads = ((*n_threads) / mr_blks) * mr_blks;
         md_t       delta_mr_blks_adj     = (*n_threads) - mr_blks_adj_n_threads;
         const md_t low_freq_thres        = 6;
@@ -464,17 +465,17 @@ dlp_gemm_s32o32_get_threading(md_t*                   n_threads,
 }
 
 DLP_INLINE void
-batch_dlp_gemm_s32o32_get_threading(md_t                    group_size,
-                                    md_t*                   n_threads,
-                                    md_t*                   n_gemms_in_parallel,
-                                    md_t*                   n_threads_per_gemm,
-                                    md_t*                   ic_ways,
-                                    md_t*                   jc_ways,
-                                    md_t                    m,
-                                    md_t                    n,
-                                    md_t                    k,
-                                    dlp_rntm_t*             rntm_g,
-                                    AOCL_DLP_OPERATION_TYPE op_type)
+batch_dlp_gemm_s32o32_get_threading(md_t             group_size,
+                                    md_t*            n_threads,
+                                    md_t*            n_gemms_in_parallel,
+                                    md_t*            n_threads_per_gemm,
+                                    md_t*            ic_ways,
+                                    md_t*            jc_ways,
+                                    md_t             m,
+                                    md_t             n,
+                                    md_t             k,
+                                    dlp_rntm_t*      rntm_g,
+                                    dlp_gemm_cntx_t* lcntx)
 {
     (void)k; /* k unused: batch threading based on m/n geometry only. */
 
@@ -482,9 +483,8 @@ batch_dlp_gemm_s32o32_get_threading(md_t                    group_size,
                                      n_threads_per_gemm, rntm_g);
 
     if ((*n_threads_per_gemm) > 1) {
-
-        md_t NR      = dlp_gemm_get_block_size_NR_global_cntx(op_type);
-        md_t MR      = dlp_gemm_get_block_size_MR_global_cntx(op_type);
+        md_t NR      = lcntx->blksz.NR;
+        md_t MR      = lcntx->blksz.MR;
         md_t mr_blks = (m + MR - 1) / MR;
         md_t nr_blks = (n + NR - 1) / NR;
 
@@ -525,73 +525,78 @@ batch_dlp_gemm_s32o32_get_threading(md_t                    group_size,
 }
 
 DLP_INLINE void
-batch_dlp_gemm_u8s8s32o32_get_threading(md_t        group_size,
-                                        md_t*       n_threads,
-                                        md_t*       n_gemms_in_parallel,
-                                        md_t*       n_threads_per_gemm,
-                                        md_t*       ic_ways,
-                                        md_t*       jc_ways,
-                                        md_t        m,
-                                        md_t        n,
-                                        md_t        k,
-                                        dlp_rntm_t* rntm_g)
+batch_dlp_gemm_u8s8s32o32_get_threading(md_t             group_size,
+                                        md_t*            n_threads,
+                                        md_t*            n_gemms_in_parallel,
+                                        md_t*            n_threads_per_gemm,
+                                        md_t*            ic_ways,
+                                        md_t*            jc_ways,
+                                        md_t             m,
+                                        md_t             n,
+                                        md_t             k,
+                                        dlp_rntm_t*      rntm_g,
+                                        dlp_gemm_cntx_t* lcntx)
 {
     batch_dlp_gemm_s32o32_get_threading(
         group_size, n_threads, n_gemms_in_parallel, n_threads_per_gemm, ic_ways,
-        jc_ways, m, n, k, rntm_g, U8S8S32OS32);
+        jc_ways, m, n, k, rntm_g, lcntx);
 }
 
 DLP_INLINE void
-batch_dlp_gemm_s8s8s32o32_get_threading(md_t        group_size,
-                                        md_t*       n_threads,
-                                        md_t*       n_gemms_in_parallel,
-                                        md_t*       n_threads_per_gemm,
-                                        md_t*       ic_ways,
-                                        md_t*       jc_ways,
-                                        md_t        m,
-                                        md_t        n,
-                                        md_t        k,
-                                        dlp_rntm_t* rntm_g)
+batch_dlp_gemm_s8s8s32o32_get_threading(md_t             group_size,
+                                        md_t*            n_threads,
+                                        md_t*            n_gemms_in_parallel,
+                                        md_t*            n_threads_per_gemm,
+                                        md_t*            ic_ways,
+                                        md_t*            jc_ways,
+                                        md_t             m,
+                                        md_t             n,
+                                        md_t             k,
+                                        dlp_rntm_t*      rntm_g,
+                                        dlp_gemm_cntx_t* lcntx)
 {
     batch_dlp_gemm_s32o32_get_threading(
         group_size, n_threads, n_gemms_in_parallel, n_threads_per_gemm, ic_ways,
-        jc_ways, m, n, k, rntm_g, S8S8S32OS32);
+        jc_ways, m, n, k, rntm_g, lcntx);
 }
 
 DLP_INLINE void
-dlp_gemm_u8s8s32o32_get_threading(md_t*       n_threads,
-                                  md_t*       ic_ways,
-                                  md_t*       jc_ways,
-                                  md_t        m,
-                                  md_t        n,
-                                  md_t        k,
-                                  dlp_rntm_t* rntm_g)
+dlp_gemm_u8s8s32o32_get_threading(md_t*            n_threads,
+                                  md_t*            ic_ways,
+                                  md_t*            jc_ways,
+                                  md_t             m,
+                                  md_t             n,
+                                  md_t             k,
+                                  dlp_rntm_t*      rntm_g,
+                                  dlp_gemm_cntx_t* lcntx)
 {
     dlp_gemm_s32o32_get_threading(n_threads, ic_ways, jc_ways, m, n, k, rntm_g,
-                                  U8S8S32OS32);
+                                  lcntx);
 }
 
 DLP_INLINE void
-dlp_gemm_s8s8s32o32_get_threading(md_t*       n_threads,
-                                  md_t*       ic_ways,
-                                  md_t*       jc_ways,
-                                  md_t        m,
-                                  md_t        n,
-                                  md_t        k,
-                                  dlp_rntm_t* rntm_g)
+dlp_gemm_s8s8s32o32_get_threading(md_t*            n_threads,
+                                  md_t*            ic_ways,
+                                  md_t*            jc_ways,
+                                  md_t             m,
+                                  md_t             n,
+                                  md_t             k,
+                                  dlp_rntm_t*      rntm_g,
+                                  dlp_gemm_cntx_t* lcntx)
 {
     dlp_gemm_s32o32_get_threading(n_threads, ic_ways, jc_ways, m, n, k, rntm_g,
-                                  S8S8S32OS32);
+                                  lcntx);
 }
 
 DLP_INLINE void
-dlp_gemm_bf16bf16f32of32_get_threading(md_t*       n_threads,
-                                       md_t*       ic_ways,
-                                       md_t*       jc_ways,
-                                       md_t        m,
-                                       md_t        n,
-                                       md_t        k,
-                                       dlp_rntm_t* rntm_g)
+dlp_gemm_bf16bf16f32of32_get_threading(md_t*            n_threads,
+                                       md_t*            ic_ways,
+                                       md_t*            jc_ways,
+                                       md_t             m,
+                                       md_t             n,
+                                       md_t             k,
+                                       dlp_rntm_t*      rntm_g,
+                                       dlp_gemm_cntx_t* lcntx)
 {
     (void)k; /* k unused: threading decision based on m/n geometry only. */
 
@@ -607,8 +612,8 @@ dlp_gemm_bf16bf16f32of32_get_threading(md_t*       n_threads,
 
         *n_threads = (*jc_ways) * (*ic_ways);
     } else if ((*n_threads) > 1) {
-        md_t       NR = dlp_gemm_get_block_size_NR_global_cntx(BF16BF16F32OF32);
-        md_t       MR = dlp_gemm_get_block_size_MR_global_cntx(BF16BF16F32OF32);
+        md_t       NR                    = lcntx->blksz.NR;
+        md_t       MR                    = lcntx->blksz.MR;
         md_t       mr_blks               = (m + MR - 1) / MR;
         md_t       nr_blks               = (n + NR - 1) / NR;
         md_t       mrxnr_blks            = mr_blks * nr_blks;
@@ -660,13 +665,14 @@ dlp_gemm_bf16bf16f32of32_get_threading(md_t*       n_threads,
 }
 
 DLP_INLINE void
-dlp_gemm_f16f16f16of16_get_threading(md_t*       n_threads,
-                                     md_t*       ic_ways,
-                                     md_t*       jc_ways,
-                                     md_t        m,
-                                     md_t        n,
-                                     md_t        k,
-                                     dlp_rntm_t* rntm_g)
+dlp_gemm_f16f16f16of16_get_threading(md_t*            n_threads,
+                                     md_t*            ic_ways,
+                                     md_t*            jc_ways,
+                                     md_t             m,
+                                     md_t             n,
+                                     md_t             k,
+                                     dlp_rntm_t*      rntm_g,
+                                     dlp_gemm_cntx_t* lcntx)
 {
     (void)k; /* k unused: threading decision based on m/n geometry only. */
 
@@ -682,8 +688,8 @@ dlp_gemm_f16f16f16of16_get_threading(md_t*       n_threads,
 
         *n_threads = (*jc_ways) * (*ic_ways);
     } else if ((*n_threads) > 1) {
-        md_t       NR = dlp_gemm_get_block_size_NR_global_cntx(F16F16F16OF16);
-        md_t       MR = dlp_gemm_get_block_size_MR_global_cntx(F16F16F16OF16);
+        md_t       NR                    = lcntx->blksz.NR;
+        md_t       MR                    = lcntx->blksz.MR;
         md_t       mr_blks               = (m + MR - 1) / MR;
         md_t       nr_blks               = (n + NR - 1) / NR;
         md_t       mrxnr_blks            = mr_blks * nr_blks;
@@ -735,13 +741,14 @@ dlp_gemm_f16f16f16of16_get_threading(md_t*       n_threads,
  * Based on bf16bf16f32of32 threading with F32F16F32OF32 block sizes.
  */
 DLP_INLINE void
-dlp_gemm_f32f16f32of32_get_threading(md_t*       n_threads,
-                                     md_t*       ic_ways,
-                                     md_t*       jc_ways,
-                                     md_t        m,
-                                     md_t        n,
-                                     md_t        k,
-                                     dlp_rntm_t* rntm_g)
+dlp_gemm_f32f16f32of32_get_threading(md_t*            n_threads,
+                                     md_t*            ic_ways,
+                                     md_t*            jc_ways,
+                                     md_t             m,
+                                     md_t             n,
+                                     md_t             k,
+                                     dlp_rntm_t*      rntm_g,
+                                     dlp_gemm_cntx_t* lcntx)
 {
     (void)k; /* k unused: threading decision based on m/n geometry only. */
 
@@ -757,8 +764,8 @@ dlp_gemm_f32f16f32of32_get_threading(md_t*       n_threads,
 
         *n_threads = (*jc_ways) * (*ic_ways);
     } else if ((*n_threads) > 1) {
-        md_t       NR = dlp_gemm_get_block_size_NR_global_cntx(F32F16F32OF32);
-        md_t       MR = dlp_gemm_get_block_size_MR_global_cntx(F32F16F32OF32);
+        md_t       NR                    = lcntx->blksz.NR;
+        md_t       MR                    = lcntx->blksz.MR;
         md_t       mr_blks               = (m + MR - 1) / MR;
         md_t       nr_blks               = (n + NR - 1) / NR;
         md_t       mrxnr_blks            = mr_blks * nr_blks;
@@ -814,7 +821,8 @@ batch_dlp_gemm_bf16bf16f32of32_get_threading(md_t        group_size,
                                              md_t        m,
                                              md_t        n,
                                              md_t        k,
-                                             dlp_rntm_t* rntm_g)
+                                             dlp_rntm_t* rntm_g,
+                                             dlp_gemm_cntx_t* lcntx)
 {
     (void)k; /* k unused: batch threading based on m/n geometry only. */
 
@@ -823,8 +831,8 @@ batch_dlp_gemm_bf16bf16f32of32_get_threading(md_t        group_size,
 
     /* The user is not allowed to set ic_ways or jc_ways */
     if ((*n_threads_per_gemm) > 1) {
-        md_t NR      = dlp_gemm_get_block_size_NR_global_cntx(BF16BF16F32OF32);
-        md_t MR      = dlp_gemm_get_block_size_MR_global_cntx(BF16BF16F32OF32);
+        md_t NR      = lcntx->blksz.NR;
+        md_t MR      = lcntx->blksz.MR;
         md_t mr_blks = (m + MR - 1) / MR;
         md_t nr_blks = (n + NR - 1) / NR;
 
@@ -867,25 +875,26 @@ batch_dlp_gemm_bf16bf16f32of32_get_threading(md_t        group_size,
 // Some aspects of sgemm smart threading incorporated here. Eventually this
 // will be redirected to the sgemm smart threading API.
 DLP_INLINE void
-dlp_gemm_f32f32f32of32_get_threading(md_t*       n_threads,
-                                     md_t*       ic_ways,
-                                     md_t*       jc_ways,
-                                     md_t        m,
-                                     md_t        n,
-                                     md_t        k,
-                                     dlp_rntm_t* rntm_g)
+dlp_gemm_f32f32f32of32_get_threading(md_t*            n_threads,
+                                     md_t*            ic_ways,
+                                     md_t*            jc_ways,
+                                     md_t             m,
+                                     md_t             n,
+                                     md_t             k,
+                                     dlp_rntm_t*      rntm_g,
+                                     dlp_gemm_cntx_t* lcntx)
 {
     // Query the context for SUP limits.
-    const md_t MT = dlp_gemm_get_sup_thres_MT_global_cntx(F32F32F32OF32);
-    const md_t NT = dlp_gemm_get_sup_thres_NT_global_cntx(F32F32F32OF32);
-    const md_t KT = dlp_gemm_get_sup_thres_KT_global_cntx(F32F32F32OF32);
+    const md_t MT = lcntx->sup_thres.MT;
+    const md_t NT = lcntx->sup_thres.NT;
+    const md_t KT = lcntx->sup_thres.KT;
 
     // Query the context for various blocksizes.
-    md_t NR = dlp_gemm_get_block_size_NR_global_cntx(F32F32F32OF32);
-    md_t MR = dlp_gemm_get_block_size_MR_global_cntx(F32F32F32OF32);
-    md_t MC = dlp_gemm_get_block_size_MC_global_cntx(F32F32F32OF32);
-    md_t NC = dlp_gemm_get_block_size_NC_global_cntx(F32F32F32OF32);
-    md_t KC = dlp_gemm_get_block_size_KC_global_cntx(F32F32F32OF32);
+    md_t NR = lcntx->blksz.NR;
+    md_t MR = lcntx->blksz.MR;
+    md_t MC = lcntx->blksz.MC;
+    md_t NC = lcntx->blksz.NC;
+    md_t KC = lcntx->blksz.KC;
 
     const md_t MT_2 = MT / 2;
 
@@ -954,32 +963,33 @@ dlp_gemm_f32f32f32of32_get_threading(md_t*       n_threads,
 }
 
 DLP_INLINE void
-batch_dlp_gemm_f32f32f32of32_get_threading(md_t        group_size,
-                                           md_t*       n_threads,
-                                           md_t*       n_gemms_in_parallel,
-                                           md_t*       n_threads_per_gemm,
-                                           md_t*       ic_ways,
-                                           md_t*       jc_ways,
-                                           md_t        m,
-                                           md_t        n,
-                                           md_t        k,
-                                           dlp_rntm_t* rntm_g)
+batch_dlp_gemm_f32f32f32of32_get_threading(md_t             group_size,
+                                           md_t*            n_threads,
+                                           md_t*            n_gemms_in_parallel,
+                                           md_t*            n_threads_per_gemm,
+                                           md_t*            ic_ways,
+                                           md_t*            jc_ways,
+                                           md_t             m,
+                                           md_t             n,
+                                           md_t             k,
+                                           dlp_rntm_t*      rntm_g,
+                                           dlp_gemm_cntx_t* lcntx)
 {
 
     dlp_calculate_n_threads_per_gemm(group_size, n_threads, n_gemms_in_parallel,
                                      n_threads_per_gemm, rntm_g);
 
     // Query the context for SUP limits.
-    const md_t MT = dlp_gemm_get_sup_thres_MT_global_cntx(F32F32F32OF32);
-    const md_t NT = dlp_gemm_get_sup_thres_NT_global_cntx(F32F32F32OF32);
-    const md_t KT = dlp_gemm_get_sup_thres_KT_global_cntx(F32F32F32OF32);
+    const md_t MT = lcntx->sup_thres.MT;
+    const md_t NT = lcntx->sup_thres.NT;
+    const md_t KT = lcntx->sup_thres.KT;
 
     // Query the context for various blocksizes.
-    md_t NR = dlp_gemm_get_block_size_NR_global_cntx(F32F32F32OF32);
-    md_t MR = dlp_gemm_get_block_size_MR_global_cntx(F32F32F32OF32);
-    md_t MC = dlp_gemm_get_block_size_MC_global_cntx(F32F32F32OF32);
-    md_t NC = dlp_gemm_get_block_size_NC_global_cntx(F32F32F32OF32);
-    md_t KC = dlp_gemm_get_block_size_KC_global_cntx(F32F32F32OF32);
+    md_t NR = lcntx->blksz.NR;
+    md_t MR = lcntx->blksz.MR;
+    md_t MC = lcntx->blksz.MC;
+    md_t NC = lcntx->blksz.NC;
+    md_t KC = lcntx->blksz.KC;
 
     const md_t MT_2 = MT / 2;
 
@@ -1156,8 +1166,8 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
         md_t jc_ways   = 1;                                                    \
                                                                                \
         /* Call appropriate threading function */                              \
-        dlp_gemm_##THREADING_SFX##_get_threading(&n_threads, &ic_ways,         \
-                                                 &jc_ways, m, n, k, rntm_g);   \
+        dlp_gemm_##THREADING_SFX##_get_threading(                              \
+            &n_threads, &ic_ways, &jc_ways, m, n, k, rntm_g, lcntx);           \
                                                                                \
         /* Get thread distribution type */                                     \
         AOCL_DLP_TID_DISTR_TYPE tid_distr = dlp_gemm_get_tid_distr_type(       \
@@ -1165,6 +1175,9 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
         if (HAS_MC_LOGIC) {                                                    \
+            /* The cntx queried here is not the one corresponding to the API   \
+             but rather that of the underlying kernel used. Hence any updates  \
+             to the API cntx via metadata will be nullified here. */           \
             mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE,    \
                                      ops ? ops->post_op_list : NULL);          \
         }                                                                      \
@@ -1299,7 +1312,7 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
                                                                                \
         batch_dlp_gemm_##THREADING_SFX##_get_threading(                        \
             group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
-            &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g);                     \
+            &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g, lcntx);              \
                                                                                \
         dlp_task_comm_t  static_dlp_gemm_comms[DLP_NUM_STATIC_COMMS];          \
         dlp_task_comm_t* cur_dlp_gemm_comms = static_dlp_gemm_comms;           \
@@ -1316,6 +1329,9 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
          * compute mtag_b once before the parallel region. */                  \
         AOCL_DLP_MEMORY_TAG mtag_b_mp = UNPACKED;                              \
         if (HAS_MC_LOGIC) {                                                    \
+            /* The cntx queried here is not the one corresponding to the API   \
+             but rather that of the underlying kernel used. Hence any updates  \
+             to the API cntx via metadata will be nullified here. */           \
             mtag_b_mp =                                                        \
                 dlp_mtag_b_pick(*m, *n, *k, ic_ways, jc_ways, MC_OP_TYPE,      \
                                 ops ? ops->post_op_list : NULL);               \
@@ -1427,7 +1443,7 @@ GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
                                                                                \
         batch_dlp_gemm_##THREADING_SFX##_get_threading(                        \
             group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
-            &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g);                     \
+            &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g, lcntx);              \
                                                                                \
         dlp_task_comm_t  static_dlp_gemm_comms[DLP_NUM_STATIC_COMMS];          \
         dlp_task_comm_t* cur_dlp_gemm_comms = static_dlp_gemm_comms;           \
@@ -1636,14 +1652,16 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
 #define GEN_DLP_GEMM_DECORATOR_UNIFIED(A_type, B_type, C_type, C_type_actual,  \
                                        DLP_GEMM_SFX, HAS_MC_LOGIC, MC_OP_TYPE) \
                                                                                \
-    void dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                           \
-        const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
-        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
-        AOCL_DLP_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,         \
-        const md_t cs_c, const C_type alpha, const C_type beta,                \
-        dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,                            \
-        const dlp_gemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                \
+    __attribute__((aligned(64))) void                                          \
+        dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                            \
+            const md_t m, const md_t n, const md_t k, const A_type* a,         \
+            const md_t rs_a, const md_t cs_a,                                  \
+            const AOCL_DLP_MEMORY_TAG mtag_a, const B_type* b,                 \
+            const md_t rs_b, const md_t cs_b, AOCL_DLP_MEMORY_TAG mtag_b,      \
+            C_type_actual* c, const md_t rs_c, const md_t cs_c,                \
+            const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,         \
+            dlp_gemm_cntx_t* lcntx, const dlp_gemm_ops_bundle_t* ops,          \
+            DLP_TYPE c_downscale)                                              \
     {                                                                          \
         /* Single-threaded execution */                                        \
         md_t n_threads = 1;                                                    \
@@ -1652,6 +1670,9 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
         if (HAS_MC_LOGIC) {                                                    \
+            /* The cntx queried here is not the one corresponding to the API   \
+             but rather that of the underlying kernel used. Hence any updates  \
+             to the API cntx via metadata will be nullified here. */           \
             mtag_b = dlp_mtag_b_pick(m, n, k, ic_ways, jc_ways, MC_OP_TYPE,    \
                                      ops ? ops->post_op_list : NULL);          \
         }                                                                      \

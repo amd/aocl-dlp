@@ -290,18 +290,32 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
-    dlp_gemm_cntx_t  lcntx_l;
     // Create local copy, since each thread in a multi-instance setup
     // modified the context object.
-    lcntx_l = *lcntx_g;
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32));
+    // The BF16 5 loop framework internally queries F32 cntx in case BF16
+    // API is called on a non BF16 ISA machine. Any update to BF16 cntx
+    // and block params here via metadata therefore wont be reflected in
+    // the 5 loop and hence disabling it on non BF16 machines.
+    if (dlp_cpuid_is_avx512bf16_supported() == TRUE) {
+        err = dlp_gemm_upd_cntx_with_metadata(BF16BF16F32OF32, &lcntx_l,
+                                              metadata);
+        if (err != DLP_CLSC_SUCCESS) {
+            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                          __LINE__);
+            DLP_METADATA_SET_ERROR(metadata, err);
+            goto err_hndl;
+        }
+    }
 
     // For machines without AVX512BF16, BF16 operations use F32 JIT kernels.
     // Use F32 block sizes (MR=6, NR=16 for AVX2) instead of BF16 block sizes
     // (MR=6, NR=64 for AVX512BF16) to ensure correct kernel generation.
-    md_t mr_hint = lcntx_l.blksz.MR;
-    md_t nr_hint = lcntx_l.blksz.NR;
-    md_t kc_hint = lcntx_l.blksz.KC;
+    // However the bf16 cntx blksz are updated with the f32 cntx blksz, and
+    // needs to be reverted post the JIT kernel init.
+    md_t og_mr_hint = lcntx_l.blksz.MR;
+    md_t og_nr_hint = lcntx_l.blksz.NR;
+    md_t og_kc_hint = lcntx_l.blksz.KC;
 
     // Create copy of mtag variables to handle jit kernel generation for bf16 on
     // architectures without bf16 support.
@@ -320,9 +334,9 @@ aocl_gemm_bf16bf16f32of32(const char      order,
         // Get F32 context for proper block sizes
         dlp_gemm_cntx_t* lcntx_f32 =
             dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
-        mr_hint = lcntx_f32->blksz.MR;
-        nr_hint = lcntx_f32->blksz.NR;
-        kc_hint = lcntx_f32->blksz.KC;
+        lcntx_l.blksz.MR = lcntx_f32->blksz.MR;
+        lcntx_l.blksz.NR = lcntx_f32->blksz.NR;
+        lcntx_l.blksz.KC = lcntx_f32->blksz.KC;
 
         // For m=1 case B matrix is unpacked inside the framework before
         // calling f32 kernel, same should be provided for generating JIT
@@ -338,8 +352,13 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_BF16BF16F32OF32, order, jit_mtag_a, jit_mtag_b, m_use, n_use,
         k, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
-        (void*)&alpha, (void*)&beta, post_op_list, mr_hint, nr_hint, kc_hint,
-        DLP_F32, &lcntx_l.dlp_kernel_hndl);
+        (void*)&alpha, (void*)&beta, post_op_list, &lcntx_l, DLP_F32);
+
+    // Revert back to original block sizes in the BF16 context after JIT
+    // kernel generation.
+    lcntx_l.blksz.MR = og_mr_hint;
+    lcntx_l.blksz.NR = og_nr_hint;
+    lcntx_l.blksz.KC = og_kc_hint;
 
     // Invalid handle means that the jit kernel generation has failed. Do not
     // attempt to execute the kernel, and return an error instead.

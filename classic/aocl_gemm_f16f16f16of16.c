@@ -243,16 +243,16 @@ aocl_gemm_f16f16f16of16(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F16F16F16OF16);
-    dlp_gemm_cntx_t  lcntx_l;
     // Create local copy, since each thread in a multi-instance setup
     // modifies the context object.
-    lcntx_l = *lcntx_g;
-
-    // Get block size hints for JIT kernel generation
-    md_t mr_hint = lcntx_l.blksz.MR;
-    md_t nr_hint = lcntx_l.blksz.NR;
-    md_t kc_hint = lcntx_l.blksz.KC;
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
+    err = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
     // Create copy of mtag variables for JIT kernel generation
     AOCL_DLP_MEMORY_TAG jit_mtag_a = mtag_a_use;
@@ -270,8 +270,7 @@ aocl_gemm_f16f16f16of16(const char      order,
     dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_F16F16F16OF16, order, jit_mtag_a, jit_mtag_b, m_use, n_use,
         k, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c, cs_c, (void*)&alpha,
-        (void*)&beta, post_op_list, mr_hint, nr_hint, kc_hint, DLP_F16,
-        &lcntx_l.dlp_kernel_hndl);
+        (void*)&beta, post_op_list, &lcntx_l, DLP_F16);
 
     // FP16 is JIT-only (no intrinsic fallback), so check if JIT succeeded
     if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {

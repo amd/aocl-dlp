@@ -226,11 +226,16 @@ aocl_gemm_s8s8s32os8(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
-    dlp_gemm_cntx_t  lcntx_l;
     // Create local copy, since each thread in a multi-instance setup
     // modifies the context object.
-    lcntx_l = *lcntx_g;
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
@@ -238,8 +243,7 @@ aocl_gemm_s8s8s32os8(const char      order,
     dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_S8S8S32OS8, order, mtag_a_use, mtag_b_use, m_use, n_use,
         k_use, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c_use, cs_c_use,
-        (void*)&alpha, (void*)&beta, post_op_list, lcntx_l.blksz.MR,
-        lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_S8, &lcntx_l.dlp_kernel_hndl);
+        (void*)&alpha, (void*)&beta, post_op_list, &lcntx_l, DLP_S8);
 
     // Invalid handle means that the jit kernel generation has failed. Do not
     // attempt to execute the kernel, and return an error instead.

@@ -59,6 +59,9 @@ typedef enum
                                     fallback kernel available */
     DLP_CLSC_INVALID_KERNEL, /**< Static kernel not found for given parameters
                               */
+    DLP_CLSC_INVALID_BLOCK_PARAMS, /**< Invalid blocking parameters provided */
+    DLP_CLSC_INVALID_SUP_THRESHOLDS, /**< Invalid SUP threshold parameters
+                                        provided */
     DLP_CLSC_ERROR_MAX /**< Maximum error code value (for bounds checking) */
 } dlp_clsc_err_t;
 

@@ -316,7 +316,14 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
     dlp_gemm_ops_bundle_t ops =
         DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
@@ -326,22 +333,22 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
     if (is_column_major == TRUE) {
         dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
     } else {
         dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
     }
 #else
     // Swapping inputs to induce row major computation for column major inputs.
     if (is_column_major == TRUE) {
         dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
             n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
     } else {
         dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
             m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, lcntx_g, &ops, DLP_F32);
+            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_F32);
     }
 #endif
 

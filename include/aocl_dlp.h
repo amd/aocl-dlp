@@ -37,7 +37,7 @@ DLP_BEGIN_EXTERN_C
 #include "classic/aocl_eltwise_ops_interface_apis.h"
 #include "classic/aocl_fp16_type.h"
 #include "classic/aocl_gemm_interface_apis.h"
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "classic/aocl_lib_interface_apis.h"
 #include "classic/aocl_util_interface_apis.h"
 #include "classic/dlp_base_types.h"

@@ -47,7 +47,7 @@
 #include "aocl_dlp.h" // IWYU pragma: keep
 #include "classic/aocl_fp16_convert.h"
 #include "classic/aocl_fp16_type.h"
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "classic/dlp_errors.h"
 
 using namespace dlp::testing::framework;
@@ -125,6 +125,7 @@ UalDlp::reorder(const Matrix&          in,
                 const GroupScaleParam* group_scale)
 {
     dlp_metadata_t meta;
+    std::memset(std::addressof(meta), 0, sizeof(dlp_metadata_t));
     meta.error_hndl.error_code = DLP_CLSC_SUCCESS;
 
     // Use effective (logical) dimensions for reordering

@@ -31,7 +31,7 @@
 
 #include <stdint.h>
 
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "classic/dlp_base_types.h"
 #include "classic/dlp_macros.h"
 
@@ -162,6 +162,45 @@ typedef struct
     dlp_pack_info_hndl_t pack_b_hndl;
 } dlp_pack_kernel_hndl_t;
 
+typedef struct
+{
+    md_t MC;
+    md_t NC;
+    md_t KC;
+    md_t NR;
+    md_t MR;
+} dlp_gemm_block_size_t;
+
+typedef struct
+{
+    md_t packa_rs;
+    md_t packa_cs;
+    md_t packb_rs;
+    md_t packb_cs;
+} dlp_gemm_pack_strides_t;
+
+typedef struct
+{
+    md_t MT;
+    md_t NT;
+    md_t KT;
+} dlp_gemm_sup_thres_t;
+
+typedef struct
+{
+    dlp_gemm_block_size_t   blksz;
+    opaq_fp_t               kern_fun_ptr;
+    opaq_fp_t               packa_fun_ptr;
+    opaq_fp_t               packb_mxp_fun_ptr;
+    opaq_fp_t               packb_fun_ptr;
+    opaq_fp_t               unpackb_fun_ptr;
+    opaq_fp_t               packsclb_fun_ptr;
+    dlp_gemm_pack_strides_t pack_s;
+    dlp_gemm_sup_thres_t    sup_thres;
+    dlp_kernel_hndl_t       dlp_kernel_hndl;
+    dlp_pack_kernel_hndl_t  dlp_pack_kernel_hndl;
+} dlp_gemm_cntx_t;
+
 // C linkage for function declarations only
 DLP_BEGIN_EXTERN_C
 
@@ -182,11 +221,8 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t   k_dtype,
                              void*               alpha,
                              void*               beta,
                              dlp_gemm_post_op*   metadata,
-                             md_t                mr_hint,
-                             md_t                nr_hint,
-                             md_t                kc_hint,
-                             md_t                c_downscale,
-                             dlp_kernel_hndl_t*  kernel_hndl);
+                             dlp_gemm_cntx_t*    cntx,
+                             md_t                c_downscale);
 
 void
 dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t     k_dtype,

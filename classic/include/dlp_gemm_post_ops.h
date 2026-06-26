@@ -29,7 +29,7 @@
 #ifndef DLP_GEMM_POST_OPS_H
 #define DLP_GEMM_POST_OPS_H
 
-#include "classic/aocl_gemm_post_ops.h"
+#include "classic/aocl_gemm_metadata.h"
 #include "dlp_gemm_types.h"
 
 // Used as an internal structure.

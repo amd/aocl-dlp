@@ -148,9 +148,16 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
         return 0; // A reorder not supported.
     }
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return 0; // Error.
+    }
 
-    md_t KC = lcntx_g->blksz.KC;
+    md_t KC = lcntx_g.blksz.KC;
 
     // Extra space since packing does width in multiples of 16. The vnni
     // instruction can be used as long as atleast one zmm register can be fully
@@ -277,7 +284,14 @@ aocl_reorder_s8s8s32os32(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
@@ -291,7 +305,7 @@ aocl_reorder_s8s8s32os32(const char      order,
     b.width                  = n;
     b.length                 = k;
 
-    dlp_reorderb_nr64_s8s8s32o32(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_reorderb_nr64_s8s8s32o32(&b, &b_reorder, &rntm_g, &lcntx_g);
 }
 
 void
@@ -366,9 +380,16 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
 
-    md_t KC = lcntx_g->blksz.KC;
+    md_t KC = lcntx_g.blksz.KC;
 
 #ifdef DLP_KERNELS_ZEN4
     // Follow alternate reordering for n==1 iff k is divisible by group_size.
@@ -408,7 +429,7 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
     b.width                  = n;
     b.length                 = k;
 
-    dlp_reorderb_nr64_s8s8s32o32_sym_quant(&b, &b_reorder, &rntm_g, lcntx_g,
+    dlp_reorderb_nr64_s8s8s32o32_sym_quant(&b, &b_reorder, &rntm_g, &lcntx_g,
                                            group_size);
 }
 
@@ -472,7 +493,14 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(S8S8S32OS32);
+    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
@@ -486,5 +514,6 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
     b.width                  = n;
     b.length                 = k;
 
-    dlp_unreorderb_nr64_s8s8s32os32_reference(&b, &b_reorder, &rntm_g, lcntx_g);
+    dlp_unreorderb_nr64_s8s8s32os32_reference(&b, &b_reorder, &rntm_g,
+                                              &lcntx_g);
 }

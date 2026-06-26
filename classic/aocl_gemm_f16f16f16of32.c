@@ -236,13 +236,14 @@ aocl_gemm_f16f16f16of32(const char      order,
     // underlying FP16 accumulator, JIT generator, and block sizes are the
     // same. Only c_downscale differs, keyed in dlp_init_and_get_kernel_hndl
     // and forwarded to the JIT post-ops rail.
-    dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F16F16F16OF16);
-    dlp_gemm_cntx_t  lcntx_l;
-    lcntx_l = *lcntx_g;
-
-    md_t mr_hint = lcntx_l.blksz.MR;
-    md_t nr_hint = lcntx_l.blksz.NR;
-    md_t kc_hint = lcntx_l.blksz.KC;
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
+    err = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
     AOCL_DLP_MEMORY_TAG jit_mtag_a = mtag_a_use;
     AOCL_DLP_MEMORY_TAG jit_mtag_b = mtag_b_use;
@@ -257,8 +258,7 @@ aocl_gemm_f16f16f16of32(const char      order,
     dlp_init_and_get_kernel_hndl(
         DLP_KERNEL_F16F16F16OF32, order, jit_mtag_a, jit_mtag_b, m_use, n_use,
         k, rs_a_use, cs_a_use, rs_b_use, cs_b_use, rs_c, cs_c, (void*)&alpha,
-        (void*)&beta, post_op_list, mr_hint, nr_hint, kc_hint, DLP_F32,
-        &lcntx_l.dlp_kernel_hndl);
+        (void*)&beta, post_op_list, &lcntx_l, DLP_F32);
 
     if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
         dlp_print_msg(" FP16 JIT kernel generation failed.", __FILE__,

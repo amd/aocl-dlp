@@ -273,11 +273,18 @@ aocl_batch_gemm_f16f16f16of16(const char*      order,
         dlp_rntm_t rntm_g;
         dlp_rntm_init_from_global(&rntm_g);
 
-        dlp_gemm_cntx_t* lcntx_g = dlp_gemm_get_global_cntx_obj(F16F16F16OF16);
-        dlp_gemm_cntx_t  lcntx_l;
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
-        lcntx_l = *lcntx_g;
+        dlp_gemm_cntx_t lcntx_l =
+            *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
+        err = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l,
+                                              metadata[gc_i]);
+        if (err != DLP_CLSC_SUCCESS) {
+            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                          __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
 
         float16 alpha_fp16 = alpha[gc_i];
         float16 beta_fp16  = beta[gc_i];
@@ -287,12 +294,11 @@ aocl_batch_gemm_f16f16f16of16(const char*      order,
         // All the g_sz inputs in a given group will have the same matrix
         // dimensions/attributes. Therefore the DE and Jit generation in
         // DLP Plus can proceed with any 1 input from this group.
-        dlp_init_and_get_kernel_hndl(
-            DLP_KERNEL_F16F16F16OF16, order[gc_i], mtag_a, mtag_b, m_local,
-            n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
-            (void*)&alpha_fp16, (void*)&beta_fp16, post_op_list,
-            lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F16,
-            &lcntx_l.dlp_kernel_hndl);
+        dlp_init_and_get_kernel_hndl(DLP_KERNEL_F16F16F16OF16, order[gc_i],
+                                     mtag_a, mtag_b, m_local, n_local, k_local,
+                                     rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
+                                     (void*)&alpha_fp16, (void*)&beta_fp16,
+                                     post_op_list, &lcntx_l, DLP_F16);
 
         // FP16 is JIT-only (no intrinsic fallback), so check if JIT succeeded
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
@@ -552,10 +558,16 @@ aocl_batch_gemm_f16f16f16of32(const char*      order,
             dlp_rntm_t rntm_g;
             dlp_rntm_init_from_global(&rntm_g);
 
-            dlp_gemm_cntx_t* lcntx_g =
-                dlp_gemm_get_global_cntx_obj(F16F16F16OF16);
-            dlp_gemm_cntx_t lcntx_l;
-            lcntx_l = *lcntx_g;
+            dlp_gemm_cntx_t lcntx_l =
+                *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
+            err = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l,
+                                                  metadata[gc_i]);
+            if (err != DLP_CLSC_SUCCESS) {
+                dlp_print_msg(" Failed to update context with metadata.",
+                              __FILE__, __LINE__);
+                DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+                goto err_hndl_of32;
+            }
 
             float16 alpha_fp16 = alpha[gc_i];
             float16 beta_fp16  = beta[gc_i];
@@ -565,9 +577,8 @@ aocl_batch_gemm_f16f16f16of32(const char*      order,
             dlp_init_and_get_kernel_hndl(
                 DLP_KERNEL_F16F16F16OF32, order[gc_i], mtag_a, mtag_b, m_local,
                 n_local, k_local, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c,
-                (void*)&alpha_fp16, (void*)&beta_fp16, post_op_list,
-                lcntx_l.blksz.MR, lcntx_l.blksz.NR, lcntx_l.blksz.KC, DLP_F32,
-                &lcntx_l.dlp_kernel_hndl);
+                (void*)&alpha_fp16, (void*)&beta_fp16, post_op_list, &lcntx_l,
+                DLP_F32);
 
             if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
                 dlp_print_msg(" FP16 JIT kernel generation failed for "
