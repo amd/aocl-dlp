@@ -34,6 +34,7 @@
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_5x32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x32F_DISABLE,    &&POST_OPS_BIAS_5x32F,
         &&POST_OPS_RELU_5x32F,       &&POST_OPS_RELU_SCALE_5x32F,
@@ -1027,9 +1028,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x32F_DISABLE)
         _mm256_storeu_ps(cbuf + 24, ymm27);
     }
 }
+// clang-format on
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_4x32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x32F_DISABLE,    &&POST_OPS_BIAS_4x32F,
         &&POST_OPS_RELU_4x32F,       &&POST_OPS_RELU_SCALE_4x32F,
@@ -1872,9 +1875,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x32F_DISABLE)
         _mm256_storeu_ps(cbuf + 24, ymm23);
     }
 }
+// clang-format on
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_3x32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x32F_DISABLE,    &&POST_OPS_BIAS_3x32F,
         &&POST_OPS_RELU_3x32F,       &&POST_OPS_RELU_SCALE_3x32F,
@@ -2583,9 +2588,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x32F_DISABLE)
         _mm256_storeu_ps(cbuf + 24, ymm19);
     }
 }
+// clang-format on
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_2x32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x32F_DISABLE,    &&POST_OPS_BIAS_2x32F,
         &&POST_OPS_RELU_2x32F,       &&POST_OPS_RELU_SCALE_2x32F,
@@ -3165,9 +3172,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x32F_DISABLE)
         _mm256_storeu_ps(cbuf + 24, ymm15);
     }
 }
+// clang-format on
 
 DLP_GEMM_M_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_256_1x32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x32F_DISABLE,    &&POST_OPS_BIAS_1x32F,
         &&POST_OPS_RELU_1x32F,       &&POST_OPS_RELU_SCALE_1x32F,
@@ -3614,3 +3623,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x32F_DISABLE)
         _mm256_storeu_ps(cbuf + 24, ymm11);
     }
 }
+// clang-format on

@@ -39,6 +39,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
                                 int32_t,
                                 s8s8s32os32_5xlt16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5xLT16_DISABLE,    &&POST_OPS_BIAS_5xLT16,
         &&POST_OPS_RELU_5xLT16,       &&POST_OPS_RELU_SCALE_5xLT16,
@@ -1239,6 +1240,7 @@ DLP_POST_OPS_DISABLE(POST_OPS_5xLT16_DISABLE)
         _mm512_mask_storeu_ps(c + (rs_c * 4), load_mask, acc_40);
     }
 }
+// clang-format on
 
 // 4xlt16 int8o32 fringe kernel
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
@@ -1246,6 +1248,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
                                 int32_t,
                                 s8s8s32os32_4xlt16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4xLT16_DISABLE,    &&POST_OPS_BIAS_4xLT16,
         &&POST_OPS_RELU_4xLT16,       &&POST_OPS_RELU_SCALE_4xLT16,
@@ -2281,6 +2284,7 @@ DLP_POST_OPS_DISABLE(POST_OPS_4xLT16_DISABLE)
         _mm512_mask_storeu_ps(c + (rs_c * 3), load_mask, acc_30);
     }
 }
+// clang-format on
 
 // 3xlt16 int8o32 fringe kernel
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
@@ -2288,6 +2292,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
                                 int32_t,
                                 s8s8s32os32_3xlt16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3xLT16_DISABLE,    &&POST_OPS_BIAS_3xLT16,
         &&POST_OPS_RELU_3xLT16,       &&POST_OPS_RELU_SCALE_3xLT16,
@@ -3168,6 +3173,7 @@ DLP_POST_OPS_DISABLE(POST_OPS_3xLT16_DISABLE)
         _mm512_mask_storeu_ps(c + (rs_c * 2), load_mask, acc_20);
     }
 }
+// clang-format on
 
 // 2xlt16 int8o32 fringe kernel
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
@@ -3175,6 +3181,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
                                 int32_t,
                                 s8s8s32os32_2xlt16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2xLT16_DISABLE,    &&POST_OPS_BIAS_2xLT16,
         &&POST_OPS_RELU_2xLT16,       &&POST_OPS_RELU_SCALE_2xLT16,
@@ -3898,6 +3905,7 @@ DLP_POST_OPS_DISABLE(POST_OPS_2xLT16_DISABLE)
         _mm512_mask_storeu_ps(c + (rs_c * 1), load_mask, acc_10);
     }
 }
+// clang-format on
 
 // 1xlt16 int8o32 fringe kernel
 DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
@@ -3905,6 +3913,7 @@ DLP_GEMM_MN_LT_NR0_FRINGE_KERN2(int8_t,
                                 int32_t,
                                 s8s8s32os32_1xlt16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1xLT16_DISABLE,    &&POST_OPS_BIAS_1xLT16,
         &&POST_OPS_RELU_1xLT16,       &&POST_OPS_RELU_SCALE_1xLT16,
@@ -4468,10 +4477,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_1xLT16_DISABLE)
         _mm512_mask_storeu_ps(c + (rs_c * 0), load_mask, acc_00);
     }
 }
+// clang-format on
 
 // 5x16 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x16_DISABLE,    &&POST_OPS_BIAS_5x16,
         &&POST_OPS_RELU_5x16,       &&POST_OPS_RELU_SCALE_5x16,
@@ -5633,10 +5644,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x16_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (4)) + (0 * 16), acc_40);
     }
 }
+// clang-format on
 
 // 4x16 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x16_DISABLE,    &&POST_OPS_BIAS_4x16,
         &&POST_OPS_RELU_4x16,       &&POST_OPS_RELU_SCALE_4x16,
@@ -6641,10 +6654,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x16_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (3)) + (0 * 16), acc_30);
     }
 }
+// clang-format on
 
 // 3x16 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x16_DISABLE,    &&POST_OPS_BIAS_3x16,
         &&POST_OPS_RELU_3x16,       &&POST_OPS_RELU_SCALE_3x16,
@@ -7500,10 +7515,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x16_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (2)) + (0 * 16), acc_20);
     }
 }
+// clang-format on
 
 // 2x16 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x16_DISABLE,    &&POST_OPS_BIAS_2x16,
         &&POST_OPS_RELU_2x16,       &&POST_OPS_RELU_SCALE_2x16,
@@ -8202,10 +8219,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x16_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (1)) + (0 * 16), acc_10);
     }
 }
+// clang-format on
 
 // 1x16 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x16_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16_DISABLE,    &&POST_OPS_BIAS_1x16,
         &&POST_OPS_RELU_1x16,       &&POST_OPS_RELU_SCALE_1x16,
@@ -8755,10 +8774,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x16_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (0)) + (0 * 16), acc_00);
     }
 }
+// clang-format on
 
 // 5x32 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x32_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x32_DISABLE,    &&POST_OPS_BIAS_5x32,
         &&POST_OPS_RELU_5x32,       &&POST_OPS_RELU_SCALE_5x32,
@@ -10188,10 +10209,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x32_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (4)) + (1 * 16), acc_41);
     }
 }
+// clang-format on
 
 // 4x32 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x32_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x32_DISABLE,    &&POST_OPS_BIAS_4x32,
         &&POST_OPS_RELU_4x32,       &&POST_OPS_RELU_SCALE_4x32,
@@ -11420,10 +11443,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x32_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (3)) + (1 * 16), acc_31);
     }
 }
+// clang-format on
 
 // 3x32 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x32_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x32_DISABLE,    &&POST_OPS_BIAS_3x32,
         &&POST_OPS_RELU_3x32,       &&POST_OPS_RELU_SCALE_3x32,
@@ -12460,10 +12485,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x32_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (2)) + (1 * 16), acc_21);
     }
 }
+// clang-format on
 
 // 2x32 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x32_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x32_DISABLE,    &&POST_OPS_BIAS_2x32,
         &&POST_OPS_RELU_2x32,       &&POST_OPS_RELU_SCALE_2x32,
@@ -13298,10 +13325,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x32_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (1)) + (1 * 16), acc_11);
     }
 }
+// clang-format on
 
 // 1x32 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x32_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x32_DISABLE,    &&POST_OPS_BIAS_1x32,
         &&POST_OPS_RELU_1x32,       &&POST_OPS_RELU_SCALE_1x32,
@@ -13948,10 +13977,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x32_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (0)) + (1 * 16), acc_01);
     }
 }
+// clang-format on
 
 // 5x48 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_5x48_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x48_DISABLE,    &&POST_OPS_BIAS_5x48,
         &&POST_OPS_RELU_5x48,       &&POST_OPS_RELU_SCALE_5x48,
@@ -15741,10 +15772,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x48_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (4)) + (2 * 16), acc_42);
     }
 }
+// clang-format on
 
 // 4x48 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_4x48_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x48_DISABLE,    &&POST_OPS_BIAS_4x48,
         &&POST_OPS_RELU_4x48,       &&POST_OPS_RELU_SCALE_4x48,
@@ -17267,10 +17300,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x48_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (3)) + (2 * 16), acc_32);
     }
 }
+// clang-format on
 
 // 3x48 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_3x48_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x48_DISABLE,    &&POST_OPS_BIAS_3x48,
         &&POST_OPS_RELU_3x48,       &&POST_OPS_RELU_SCALE_3x48,
@@ -18536,10 +18571,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x48_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (2)) + (2 * 16), acc_22);
     }
 }
+// clang-format on
 
 // 2x48 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_2x48_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x48_DISABLE,    &&POST_OPS_BIAS_2x48,
         &&POST_OPS_RELU_2x48,       &&POST_OPS_RELU_SCALE_2x48,
@@ -19544,10 +19581,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x48_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (1)) + (2 * 16), acc_12);
     }
 }
+// clang-format on
 
 // 1x48 int8o32 kernel
 DLP_GEMM_MN_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_1x48_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x48_DISABLE,    &&POST_OPS_BIAS_1x48,
         &&POST_OPS_RELU_1x48,       &&POST_OPS_RELU_SCALE_1x48,
@@ -20300,3 +20339,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x48_DISABLE)
         _mm512_storeu_ps(c + (rs_c * (0)) + (2 * 16), acc_02);
     }
 }
+// clang-format on

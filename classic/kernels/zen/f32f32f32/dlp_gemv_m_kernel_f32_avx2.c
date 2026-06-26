@@ -54,6 +54,7 @@ dlp_gemv_m_one_f32f32f32of32_avx2_LT16(const md_t                n0,
                                        dlp_gemm_post_op*      post_op,
                                        dlp_gemm_post_op_attr* post_op_attr)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
         &&POST_OPS_RELU_1x16F,       &&POST_OPS_RELU_SCALE_1x16F,
@@ -591,9 +592,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x16F_DISABLE)
         _mm256_maskstore_ps(c_use + 8, k2, ymm12);
     }
 }
+// clang-format on
 
 DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
         &&POST_OPS_RELU_1x16F,       &&POST_OPS_RELU_SCALE_1x16F,
@@ -1111,3 +1114,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x16F_DISABLE)
         post_ops_attr.post_op_c_j += NR;
     }
 }
+// clang-format on

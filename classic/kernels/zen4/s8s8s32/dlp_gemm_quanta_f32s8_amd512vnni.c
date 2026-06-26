@@ -263,7 +263,7 @@ dlp_quant_a_sym_f32s8_row_major(int8_t*        quant_a_buffer,
     __mmask16 mask = 0xFFFF >> (NUM_ELEM - kleft); // Mask for tail processing
 
     __m512 a_reg[16]; // Temporary registers for input data
-    __m512 sf[16];  // Scale factors broadcasted into registers
+    __m512 sf[16];    // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings
     for (iter_t i = 0; i < MR; i++) {

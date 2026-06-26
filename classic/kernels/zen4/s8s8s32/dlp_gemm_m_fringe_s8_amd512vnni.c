@@ -35,6 +35,7 @@
 // 5x64 int8o32 kernel
 DLP_GEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_5x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x64_DISABLE,    &&POST_OPS_BIAS_5x64,
         &&POST_OPS_RELU_5x64,       &&POST_OPS_RELU_SCALE_5x64,
@@ -2176,10 +2177,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x64_DISABLE)
                             _mm512_cvtps_epi32(acc_43));
     }
 }
+// clang-format on
 
 // 4x64 int8o32 kernel
 DLP_GEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_4x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x64_DISABLE,    &&POST_OPS_BIAS_4x64,
         &&POST_OPS_RELU_4x64,       &&POST_OPS_RELU_SCALE_4x64,
@@ -3999,10 +4002,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x64_DISABLE)
                             _mm512_cvtps_epi32(acc_33));
     }
 }
+// clang-format on
 
 // 3x64 int8o32 kernel
 DLP_GEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_3x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x64_DISABLE,    &&POST_OPS_BIAS_3x64,
         &&POST_OPS_RELU_3x64,       &&POST_OPS_RELU_SCALE_3x64,
@@ -5495,10 +5500,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x64_DISABLE)
                             _mm512_cvtps_epi32(acc_23));
     }
 }
+// clang-format on
 
 // 2x64 int8o32 kernel
 DLP_GEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_2x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x64_DISABLE,    &&POST_OPS_BIAS_2x64,
         &&POST_OPS_RELU_2x64,       &&POST_OPS_RELU_SCALE_2x64,
@@ -6658,10 +6665,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x64_DISABLE)
                             _mm512_cvtps_epi32(acc_13));
     }
 }
+// clang-format on
 
 // 1x64 int8o32 kernel
 DLP_GEMM_M_FRINGE_KERN(int8_t, int8_t, int32_t, s8s8s32os32_1x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64_DISABLE,    &&POST_OPS_BIAS_1x64,
         &&POST_OPS_RELU_1x64,       &&POST_OPS_RELU_SCALE_1x64,
@@ -7478,3 +7487,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x64_DISABLE)
         _mm512_storeu_si512(c + (3 * 16), _mm512_cvtps_epi32(acc_03));
     }
 }
+// clang-format on

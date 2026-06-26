@@ -31,14 +31,15 @@
 #include <string.h>
 
 #include "../int4_utils_avx512.h"
-#include "dlp_gemm_f32_kern_macros.h"
 #include "classic/dlp_simd_casts.h"
+#include "dlp_gemm_f32_kern_macros.h"
 
 #ifndef DLP_GEMM_BF16_JIT
 // 5x64 bf16 kernel
 DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_5x64)
 {
 
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x64_DISABLE,    &&POST_OPS_BIAS_5x64,
         &&POST_OPS_RELU_5x64,       &&POST_OPS_RELU_SCALE_5x64,
@@ -1939,11 +1940,13 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x64_DISABLE)
         _mm512_storeu_ps(c + (rs_c * 4) + (3 * 16), c_float_4p3);
     }
 }
+// clang-format on
 
 // 4x64 bf16 kernel
 DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_4x64)
 {
 
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x64_DISABLE,    &&POST_OPS_BIAS_4x64,
         &&POST_OPS_RELU_4x64,       &&POST_OPS_RELU_SCALE_4x64,
@@ -3555,11 +3558,13 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x64_DISABLE)
         _mm512_storeu_ps(c + (rs_c * 3) + (3 * 16), c_float_3p3);
     }
 }
+// clang-format on
 
 // 3x64 bf16 kernel
 DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_3x64)
 {
 
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x64_DISABLE,    &&POST_OPS_BIAS_3x64,
         &&POST_OPS_RELU_3x64,       &&POST_OPS_RELU_SCALE_3x64,
@@ -4887,10 +4892,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x64_DISABLE)
         _mm512_storeu_ps(c + (rs_c * 2) + (3 * 16), c_float_2p3);
     }
 }
+// clang-format on
 
 // 2x64 bf16 kernel
 DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_2x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x64_DISABLE,    &&POST_OPS_BIAS_2x64,
         &&POST_OPS_RELU_2x64,       &&POST_OPS_RELU_SCALE_2x64,
@@ -5939,10 +5946,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x64_DISABLE)
         _mm512_storeu_ps(c + (rs_c * 1) + (3 * 16), c_float_1p3);
     }
 }
+// clang-format on
 
 // 1x64 bf16 kernel
 DLP_GEMM_M_FRINGE_KERN1(bfloat16, int8_t, float, bf16s4f32of32_1x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64_DISABLE,    &&POST_OPS_BIAS_1x64,
         &&POST_OPS_RELU_1x64,       &&POST_OPS_RELU_SCALE_1x64,
@@ -6706,4 +6715,5 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x64_DISABLE)
         _mm512_storeu_ps(c + (rs_c * 0) + (3 * 16), c_float_0p3);
     }
 }
+// clang-format on
 #endif

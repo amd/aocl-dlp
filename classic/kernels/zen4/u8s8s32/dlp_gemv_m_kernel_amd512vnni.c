@@ -34,6 +34,7 @@
 
 DLP_GEMV_M_EQ1_KERN(uint8_t, int8_t, int32_t, u8s8s32os32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
@@ -979,3 +980,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
 
     } // jr loop
 }
+// clang-format on

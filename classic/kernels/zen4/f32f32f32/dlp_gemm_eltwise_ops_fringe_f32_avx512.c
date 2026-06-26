@@ -33,6 +33,7 @@
 
 DLP_GEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_5x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x64_OPS_DISABLE,    &&POST_OPS_BIAS_5x64_OPS,
         &&POST_OPS_RELU_5x64_OPS,       &&POST_OPS_RELU_SCALE_5x64_OPS,
@@ -2070,9 +2071,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x64_OPS_DISABLE)
         post_ops_attr.post_op_c_j += NR_L;
     }
 }
+// clang-format on
 
 DLP_GEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_4x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x64_OPS_DISABLE,    &&POST_OPS_BIAS_4x64_OPS,
         &&POST_OPS_RELU_4x64_OPS,       &&POST_OPS_RELU_SCALE_4x64_OPS,
@@ -3781,9 +3784,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x64_OPS_DISABLE)
         post_ops_attr.post_op_c_j += NR_L;
     }
 }
+// clang-format on
 
 DLP_GEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_3x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x64_OPS_DISABLE,    &&POST_OPS_BIAS_3x64_OPS,
         &&POST_OPS_RELU_3x64_OPS,       &&POST_OPS_RELU_SCALE_3x64_OPS,
@@ -5184,9 +5189,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x64_OPS_DISABLE)
         post_ops_attr.post_op_c_j += NR_L;
     }
 }
+// clang-format on
 
 DLP_GEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_2x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x64_OPS_DISABLE,    &&POST_OPS_BIAS_2x64_OPS,
         &&POST_OPS_RELU_2x64_OPS,       &&POST_OPS_RELU_SCALE_2x64_OPS,
@@ -6279,9 +6286,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x64_OPS_DISABLE)
         post_ops_attr.post_op_c_j += NR_L;
     }
 }
+// clang-format on
 
 DLP_GEMM_ELTWISE_OPS_M_FRINGE_KERNEL(float, float, f32of32_1x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64_OPS_DISABLE,    &&POST_OPS_BIAS_1x64_OPS,
         &&POST_OPS_RELU_1x64_OPS,       &&POST_OPS_RELU_SCALE_1x64_OPS,
@@ -7066,3 +7075,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x64_OPS_DISABLE)
         post_ops_attr.post_op_c_j += NR_L;
     }
 }
+// clang-format on

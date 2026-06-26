@@ -35,7 +35,8 @@
 #define SWISH_F32_AVX512_DEF(in_reg, al, al_in, r, r2, z, dn, ex_out)          \
     al_in = _mm512_fnmadd_ps(in_reg, al, _mm512_setzero_ps());                 \
     EXPF_AVX512(al_in, r, r2, z, dn, ex_out);                                  \
-    ex_out = DLP_CAST_PS_SI512(_mm512_add_ps(DLP_CAST_SI512_PS(ex_out), _mm512_set1_ps(1)));        \
+    ex_out = DLP_CAST_PS_SI512(                                                \
+        _mm512_add_ps(DLP_CAST_SI512_PS(ex_out), _mm512_set1_ps(1)));          \
     in_reg = _mm512_div_ps(in_reg, DLP_CAST_SI512_PS(ex_out));
 
 #endif // AOCL_DLP_GEMM_SWISH_AVX512_H

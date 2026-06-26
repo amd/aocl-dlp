@@ -81,9 +81,9 @@
 #endif
 
 #if defined(_MSC_VER)
+#include <errno.h>
 #include <intrin.h>
 #include <malloc.h>
-#include <errno.h>
 #endif
 
 #include <stdint.h>
@@ -107,16 +107,16 @@
  * ====================================================================== */
 #if defined(__clang__) || defined(__GNUC__)
 #define DLP_ALIGN_PREFIX(N)
-#define DLP_ALIGN_SUFFIX(N)    __attribute__((aligned(N)))
-#define DLP_ALIGNED_STRUCT(N)  __attribute__((aligned(N)))
+#define DLP_ALIGN_SUFFIX(N)   __attribute__((aligned(N)))
+#define DLP_ALIGNED_STRUCT(N) __attribute__((aligned(N)))
 #elif defined(_MSC_VER)
-#define DLP_ALIGN_PREFIX(N)    __declspec(align(N))
+#define DLP_ALIGN_PREFIX(N) __declspec(align(N))
 #define DLP_ALIGN_SUFFIX(N)
-#define DLP_ALIGNED_STRUCT(N)  __declspec(align(N))
+#define DLP_ALIGNED_STRUCT(N) __declspec(align(N))
 #else
 #define DLP_ALIGN_PREFIX(N)
-#define DLP_ALIGN_SUFFIX(N)    __attribute__((aligned(N)))
-#define DLP_ALIGNED_STRUCT(N)  __attribute__((aligned(N)))
+#define DLP_ALIGN_SUFFIX(N)   __attribute__((aligned(N)))
+#define DLP_ALIGNED_STRUCT(N) __attribute__((aligned(N)))
 #endif
 
 /* ======================================================================
@@ -137,7 +137,7 @@
 /* ======================================================================
  * 6. Thread-local storage
  * ====================================================================== */
-#if defined(__GNUC__) || defined(__clang__) || defined(__ICC) \
+#if defined(__GNUC__) || defined(__clang__) || defined(__ICC)                  \
     || defined(__IBMC__)
 #define DLP_CLASSIC_THREAD_LOCAL __thread
 #elif defined(_MSC_VER)
@@ -200,43 +200,46 @@ __builtin_clz(unsigned int x)
  * ====================================================================== */
 #if defined(_MSC_VER)
 
-#define DLP_ATOMIC_LOAD_I64(ptr) \
+#define DLP_ATOMIC_LOAD_I64(ptr)                                               \
     ((int64_t)_InterlockedOr64((volatile __int64*)(ptr), 0))
-#define DLP_ATOMIC_STORE_I64(ptr, val) \
+#define DLP_ATOMIC_STORE_I64(ptr, val)                                         \
     ((void)_InterlockedExchange64((volatile __int64*)(ptr), (__int64)(val)))
-#define DLP_ATOMIC_ADD_FETCH_I64(ptr, val) \
-    ((int64_t)_InterlockedExchangeAdd64((volatile __int64*)(ptr), (__int64)(val)) + (val))
-#define DLP_ATOMIC_FETCH_XOR_I64(ptr, val) \
+#define DLP_ATOMIC_ADD_FETCH_I64(ptr, val)                                     \
+    ((int64_t)_InterlockedExchangeAdd64((volatile __int64*)(ptr),              \
+                                        (__int64)(val))                        \
+     + (val))
+#define DLP_ATOMIC_FETCH_XOR_I64(ptr, val)                                     \
     ((int64_t)_InterlockedXor64((volatile __int64*)(ptr), (__int64)(val)))
-#define DLP_ATOMIC_INCREMENT_I64(ptr) \
+#define DLP_ATOMIC_INCREMENT_I64(ptr)                                          \
     ((int64_t)_InterlockedIncrement64((volatile __int64*)(ptr)))
 
-#define DLP_ATOMIC_LOAD_I32(ptr) \
+#define DLP_ATOMIC_LOAD_I32(ptr)                                               \
     ((int32_t)_InterlockedOr((volatile long*)(ptr), 0))
-#define DLP_ATOMIC_STORE_I32(ptr, val) \
+#define DLP_ATOMIC_STORE_I32(ptr, val)                                         \
     ((void)_InterlockedExchange((volatile long*)(ptr), (long)(val)))
-#define DLP_ATOMIC_LOAD_BOOL(ptr) \
+#define DLP_ATOMIC_LOAD_BOOL(ptr)                                              \
     (_InterlockedOr((volatile long*)(ptr), 0) != 0)
-#define DLP_ATOMIC_STORE_BOOL(ptr, val) \
+#define DLP_ATOMIC_STORE_BOOL(ptr, val)                                        \
     ((void)_InterlockedExchange((volatile long*)(ptr), (long)((val) ? 1 : 0)))
 
 #else /* GCC/Clang */
 
-#define DLP_ATOMIC_LOAD_I64(ptr) \
-    __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
-#define DLP_ATOMIC_STORE_I64(ptr, val) \
+#define DLP_ATOMIC_LOAD_I64(ptr) __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
+#define DLP_ATOMIC_STORE_I64(ptr, val)                                         \
     __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
-#define DLP_ATOMIC_ADD_FETCH_I64(ptr, val) \
+#define DLP_ATOMIC_ADD_FETCH_I64(ptr, val)                                     \
     __atomic_add_fetch(ptr, val, __ATOMIC_ACQ_REL)
-#define DLP_ATOMIC_FETCH_XOR_I64(ptr, val) \
+#define DLP_ATOMIC_FETCH_XOR_I64(ptr, val)                                     \
     __atomic_fetch_xor(ptr, val, __ATOMIC_RELEASE)
-#define DLP_ATOMIC_INCREMENT_I64(ptr) \
+#define DLP_ATOMIC_INCREMENT_I64(ptr)                                          \
     __atomic_add_fetch(ptr, 1, __ATOMIC_ACQ_REL)
 
-#define DLP_ATOMIC_LOAD_I32(ptr)       __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
-#define DLP_ATOMIC_STORE_I32(ptr, val) __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
-#define DLP_ATOMIC_LOAD_BOOL(ptr)      __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
-#define DLP_ATOMIC_STORE_BOOL(ptr, val) __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
+#define DLP_ATOMIC_LOAD_I32(ptr) __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
+#define DLP_ATOMIC_STORE_I32(ptr, val)                                         \
+    __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
+#define DLP_ATOMIC_LOAD_BOOL(ptr) __atomic_load_n(ptr, __ATOMIC_ACQUIRE)
+#define DLP_ATOMIC_STORE_BOOL(ptr, val)                                        \
+    __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
 
 #endif
 
@@ -298,7 +301,8 @@ dlp_get_time_sec(void)
  * extern "C" block (common in C++ TUs that include the C API), those templates
  * would inherit C linkage and fail to compile. Force C++ linkage explicitly. */
 #ifdef __cplusplus
-extern "C++" {
+extern "C++"
+{
 #endif
 #include <omp.h>
 #ifdef __cplusplus
@@ -321,7 +325,7 @@ extern "C++" {
 #if defined(_MSC_VER)
 #define DLP_ASM_ALIGN(N)
 #else
-#define DLP_ASM_ALIGN(N)  __asm__(".p2align " #N "\n")
+#define DLP_ASM_ALIGN(N) __asm__(".p2align " #N "\n")
 #endif
 
 /* ======================================================================
@@ -356,14 +360,15 @@ extern "C++" {
 #define POST_OP_LABEL_LASTK_SAFE_JUMP                                          \
     {                                                                          \
         uint64_t _po_target;                                                   \
-        if ((post_ops_attr.is_last_k == TRUE) &&                               \
-            (post_ops_list_temp != NULL)) {                                    \
+        if ((post_ops_attr.is_last_k == TRUE)                                  \
+            && (post_ops_list_temp != NULL)) {                                 \
             _po_target = post_ops_list_temp->op_code;                          \
         } else {                                                               \
             _po_target = 0;                                                    \
         }                                                                      \
         int _po_done = 0;                                                      \
-        while (!_po_done) { switch (_po_target) {
+        while (!_po_done) {                                                    \
+            switch (_po_target) {
 
 #define POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR                            \
     post_ops_list_temp = post_ops_list_temp->next;                             \
@@ -374,16 +379,24 @@ extern "C++" {
     }                                                                          \
     break;
 
-#define POST_OPS_DISABLE_LABEL  case 0: default: _po_done = 1; break; }} }
+#define POST_OPS_DISABLE_LABEL                                                 \
+    case 0:                                                                    \
+    default:                                                                   \
+        _po_done = 1;                                                          \
+        break;                                                                 \
+        }                                                                      \
+        }                                                                      \
+        }
 
 /*
  * Per-case dispatch helpers — replace #ifdef _MSC_VER blocks in kernel files.
  *
  * DLP_POST_OP_CASE(N, LABEL): emits `case N: {` on MSVC, `LABEL: {` on GCC.
  * DLP_POST_OPS_DISABLE(LABEL): emits the disable case on MSVC, `LABEL:` on GCC.
- * DLP_POST_OPS_LABELS_DECL(...): nothing on MSVC (switch doesn't need label array).
+ * DLP_POST_OPS_LABELS_DECL(...): nothing on MSVC (switch doesn't need label
+ * array).
  */
-#define DLP_POST_OP_CASE(N, LABEL) case N: {
+#define DLP_POST_OP_CASE(N, LABEL)  case N: {
 #define DLP_POST_OPS_DISABLE(LABEL) POST_OPS_DISABLE_LABEL
 #define DLP_POST_OPS_LABELS_DECL(...)
 
@@ -406,9 +419,12 @@ extern "C++" {
 
 #define POST_OPS_DISABLE_LABEL
 
-#define DLP_POST_OP_CASE(N, LABEL) LABEL: {
-#define DLP_POST_OPS_DISABLE(LABEL) LABEL:
-#define DLP_POST_OPS_LABELS_DECL(...) static void* post_ops_labels[] = { __VA_ARGS__ };
+#define DLP_POST_OP_CASE(N, LABEL)                                             \
+    LABEL: {
+#define DLP_POST_OPS_DISABLE(LABEL)                                            \
+    LABEL:
+#define DLP_POST_OPS_LABELS_DECL(...)                                          \
+    static void* post_ops_labels[] = { __VA_ARGS__ };
 
 #endif /* _MSC_VER (post-ops) */
 
@@ -443,7 +459,7 @@ dlp_pthread_once(dlp_pthread_once_t* once, void (*init)(void))
 {
     void* ctx = NULL;
 #pragma warning(push)
-#pragma warning(disable: 4152)
+#pragma warning(disable : 4152)
     InitOnceExecuteOnce(once, dlp_init_once_wrapper, (void*)init, &ctx);
 #pragma warning(pop)
 }
@@ -533,83 +549,123 @@ dlp_pthread_mutex_unlock(dlp_pthread_mutex_t* mutex)
 #if defined(_MSC_VER)
 
 /* 512-bit */
-#define DLP_CAST_SI512_PS(v)  _mm512_castsi512_ps(v)
-#define DLP_CAST_PS_SI512(v)  _mm512_castps_si512(v)
-#define DLP_CAST_SI512_PD(v)  _mm512_castsi512_pd(v)
-#define DLP_CAST_PD_SI512(v)  _mm512_castpd_si512(v)
-#define DLP_CAST_PS_PD512(v)  _mm512_castps_pd(v)
-#define DLP_CAST_PD_PS512(v)  _mm512_castpd_ps(v)
+#define DLP_CAST_SI512_PS(v) _mm512_castsi512_ps(v)
+#define DLP_CAST_PS_SI512(v) _mm512_castps_si512(v)
+#define DLP_CAST_SI512_PD(v) _mm512_castsi512_pd(v)
+#define DLP_CAST_PD_SI512(v) _mm512_castpd_si512(v)
+#define DLP_CAST_PS_PD512(v) _mm512_castps_pd(v)
+#define DLP_CAST_PD_PS512(v) _mm512_castpd_ps(v)
 
 /* 256-bit */
-#define DLP_CAST_SI256_PS(v)  _mm256_castsi256_ps(v)
-#define DLP_CAST_PS_SI256(v)  _mm256_castps_si256(v)
-#define DLP_CAST_SI256_PD(v)  _mm256_castsi256_pd(v)
-#define DLP_CAST_PD_SI256(v)  _mm256_castpd_si256(v)
-#define DLP_CAST_PS_PD256(v)  _mm256_castps_pd(v)
-#define DLP_CAST_PD_PS256(v)  _mm256_castpd_ps(v)
+#define DLP_CAST_SI256_PS(v) _mm256_castsi256_ps(v)
+#define DLP_CAST_PS_SI256(v) _mm256_castps_si256(v)
+#define DLP_CAST_SI256_PD(v) _mm256_castsi256_pd(v)
+#define DLP_CAST_PD_SI256(v) _mm256_castpd_si256(v)
+#define DLP_CAST_PS_PD256(v) _mm256_castps_pd(v)
+#define DLP_CAST_PD_PS256(v) _mm256_castpd_ps(v)
 
 /* 128-bit */
-#define DLP_CAST_SI128_PS(v)  _mm_castsi128_ps(v)
-#define DLP_CAST_PS_SI128(v)  _mm_castps_si128(v)
-#define DLP_CAST_SI128_PD(v)  _mm_castsi128_pd(v)
-#define DLP_CAST_PD_SI128(v)  _mm_castpd_si128(v)
-#define DLP_CAST_PS_PD128(v)  _mm_castps_pd(v)
-#define DLP_CAST_PD_PS128(v)  _mm_castpd_ps(v)
+#define DLP_CAST_SI128_PS(v) _mm_castsi128_ps(v)
+#define DLP_CAST_PS_SI128(v) _mm_castps_si128(v)
+#define DLP_CAST_SI128_PD(v) _mm_castsi128_pd(v)
+#define DLP_CAST_PD_SI128(v) _mm_castpd_si128(v)
+#define DLP_CAST_PS_PD128(v) _mm_castps_pd(v)
+#define DLP_CAST_PD_PS128(v) _mm_castpd_ps(v)
 
 /* BF16 reinterprets via union (no standard intrinsic exists) */
-static __forceinline __m512bh dlp_cast_si512_bh(__m512i v)  { union { __m512i i; __m512bh b; } u; u.i = v; return u.b; }
-static __forceinline __m512i  dlp_cast_bh_si512(__m512bh v) { union { __m512bh b; __m512i i; } u; u.b = v; return u.i; }
-static __forceinline __m256bh dlp_cast_si256_bh(__m256i v)  { union { __m256i i; __m256bh b; } u; u.i = v; return u.b; }
-static __forceinline __m256i  dlp_cast_bh_si256(__m256bh v) { union { __m256bh b; __m256i i; } u; u.b = v; return u.i; }
+static __forceinline __m512bh
+dlp_cast_si512_bh(__m512i v)
+{
+    union
+    {
+        __m512i  i;
+        __m512bh b;
+    } u;
+    u.i = v;
+    return u.b;
+}
+static __forceinline __m512i
+dlp_cast_bh_si512(__m512bh v)
+{
+    union
+    {
+        __m512bh b;
+        __m512i  i;
+    } u;
+    u.b = v;
+    return u.i;
+}
+static __forceinline __m256bh
+dlp_cast_si256_bh(__m256i v)
+{
+    union
+    {
+        __m256i  i;
+        __m256bh b;
+    } u;
+    u.i = v;
+    return u.b;
+}
+static __forceinline __m256i
+dlp_cast_bh_si256(__m256bh v)
+{
+    union
+    {
+        __m256bh b;
+        __m256i  i;
+    } u;
+    u.b = v;
+    return u.i;
+}
 
-#define DLP_CAST_SI512_BH(v)  dlp_cast_si512_bh(v)
-#define DLP_CAST_BH_SI512(v)  dlp_cast_bh_si512(v)
-#define DLP_CAST_SI256_BH(v)  dlp_cast_si256_bh(v)
-#define DLP_CAST_BH_SI256(v)  dlp_cast_bh_si256(v)
+#define DLP_CAST_SI512_BH(v) dlp_cast_si512_bh(v)
+#define DLP_CAST_BH_SI512(v) dlp_cast_bh_si512(v)
+#define DLP_CAST_SI256_BH(v) dlp_cast_si256_bh(v)
+#define DLP_CAST_BH_SI256(v) dlp_cast_bh_si256(v)
 
 /* Cross-width casts (extract lower half) */
-#define DLP_CAST_SI512_SI256(v)  _mm512_castsi512_si256(v)
-#define DLP_CAST_SI256_SI128(v)  _mm256_castsi256_si128(v)
-#define DLP_CAST_PS512_PS256(v)  _mm512_castps512_ps256(v)
-#define DLP_CAST_PS256_PS128(v)  _mm256_castps256_ps128(v)
-#define DLP_CAST_PD512_PD256(v)  _mm512_castpd512_pd256(v)
-#define DLP_CAST_PD256_PD128(v)  _mm256_castpd256_pd128(v)
+#define DLP_CAST_SI512_SI256(v) _mm512_castsi512_si256(v)
+#define DLP_CAST_SI256_SI128(v) _mm256_castsi256_si128(v)
+#define DLP_CAST_PS512_PS256(v) _mm512_castps512_ps256(v)
+#define DLP_CAST_PS256_PS128(v) _mm256_castps256_ps128(v)
+#define DLP_CAST_PD512_PD256(v) _mm512_castpd512_pd256(v)
+#define DLP_CAST_PD256_PD128(v) _mm256_castpd256_pd128(v)
 
 #else /* GCC/Clang: C-style casts work fine */
 
-#define DLP_CAST_SI512_PS(v)  ((__m512)(v))
-#define DLP_CAST_PS_SI512(v)  ((__m512i)(v))
-#define DLP_CAST_SI512_PD(v)  ((__m512d)(v))
-#define DLP_CAST_PD_SI512(v)  ((__m512i)(v))
-#define DLP_CAST_PS_PD512(v)  ((__m512d)(v))
-#define DLP_CAST_PD_PS512(v)  ((__m512)(v))
+#define DLP_CAST_SI512_PS(v) ((__m512)(v))
+#define DLP_CAST_PS_SI512(v) ((__m512i)(v))
+#define DLP_CAST_SI512_PD(v) ((__m512d)(v))
+#define DLP_CAST_PD_SI512(v) ((__m512i)(v))
+#define DLP_CAST_PS_PD512(v) ((__m512d)(v))
+#define DLP_CAST_PD_PS512(v) ((__m512)(v))
 
-#define DLP_CAST_SI256_PS(v)  ((__m256)(v))
-#define DLP_CAST_PS_SI256(v)  ((__m256i)(v))
-#define DLP_CAST_SI256_PD(v)  ((__m256d)(v))
-#define DLP_CAST_PD_SI256(v)  ((__m256i)(v))
-#define DLP_CAST_PS_PD256(v)  ((__m256d)(v))
-#define DLP_CAST_PD_PS256(v)  ((__m256)(v))
+#define DLP_CAST_SI256_PS(v) ((__m256)(v))
+#define DLP_CAST_PS_SI256(v) ((__m256i)(v))
+#define DLP_CAST_SI256_PD(v) ((__m256d)(v))
+#define DLP_CAST_PD_SI256(v) ((__m256i)(v))
+#define DLP_CAST_PS_PD256(v) ((__m256d)(v))
+#define DLP_CAST_PD_PS256(v) ((__m256)(v))
 
-#define DLP_CAST_SI128_PS(v)  ((__m128)(v))
-#define DLP_CAST_PS_SI128(v)  ((__m128i)(v))
-#define DLP_CAST_SI128_PD(v)  ((__m128d)(v))
-#define DLP_CAST_PD_SI128(v)  ((__m128i)(v))
-#define DLP_CAST_PS_PD128(v)  ((__m128d)(v))
-#define DLP_CAST_PD_PS128(v)  ((__m128)(v))
+#define DLP_CAST_SI128_PS(v) ((__m128)(v))
+#define DLP_CAST_PS_SI128(v) ((__m128i)(v))
+#define DLP_CAST_SI128_PD(v) ((__m128d)(v))
+#define DLP_CAST_PD_SI128(v) ((__m128i)(v))
+#define DLP_CAST_PS_PD128(v) ((__m128d)(v))
+#define DLP_CAST_PD_PS128(v) ((__m128)(v))
 
-#define DLP_CAST_SI512_BH(v)  ((__m512bh)(v))
-#define DLP_CAST_BH_SI512(v)  ((__m512i)(v))
-#define DLP_CAST_SI256_BH(v)  ((__m256bh)(v))
-#define DLP_CAST_BH_SI256(v)  ((__m256i)(v))
+#define DLP_CAST_SI512_BH(v)    ((__m512bh)(v))
+#define DLP_CAST_BH_SI512(v)    ((__m512i)(v))
+#define DLP_CAST_SI256_BH(v)    ((__m256bh)(v))
+#define DLP_CAST_BH_SI256(v)    ((__m256i)(v))
 
 /* Cross-width casts (extract lower half) */
-#define DLP_CAST_SI512_SI256(v)  ((__m256i)(v))
-#define DLP_CAST_SI256_SI128(v)  ((__m128i)(v))
-#define DLP_CAST_PS512_PS256(v)  ((__m256)(v))
-#define DLP_CAST_PS256_PS128(v)  ((__m128)(v))
-#define DLP_CAST_PD512_PD256(v)  ((__m256d)(v))
-#define DLP_CAST_PD256_PD128(v)  ((__m128d)(v))
+#define DLP_CAST_SI512_SI256(v) ((__m256i)(v))
+#define DLP_CAST_SI256_SI128(v) ((__m128i)(v))
+#define DLP_CAST_PS512_PS256(v) ((__m256)(v))
+#define DLP_CAST_PS256_PS128(v) ((__m128)(v))
+#define DLP_CAST_PD512_PD256(v) ((__m256d)(v))
+#define DLP_CAST_PD256_PD128(v) ((__m128d)(v))
 
 #endif /* _MSC_VER (SIMD) */
 #endif /* DLP_COMPAT_INCLUDE_SIMD && !DLP_COMPAT_SIMD_DEFINED */

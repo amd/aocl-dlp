@@ -35,6 +35,7 @@
 // 6xlt16 int8o32 fringe kernel
 DLP_GEMM_N_LT_NR0_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6xlt16)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6xLT16_DISABLE,    &&POST_OPS_BIAS_6xLT16,
         &&POST_OPS_RELU_6xLT16,       &&POST_OPS_RELU_SCALE_6xLT16,
@@ -1393,10 +1394,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_6xLT16_DISABLE)
         }
     }
 }
+// clang-format on
 
 // 6x16 int8o32 fringe kernel
 DLP_GEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x16)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x16_DISABLE,    &&POST_OPS_BIAS_6x16,
         &&POST_OPS_RELU_6x16,       &&POST_OPS_RELU_SCALE_6x16,
@@ -2732,10 +2735,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x16_DISABLE)
         }
     }
 }
+// clang-format on
 
 // 6x32 int8o32 fringe kernel
 DLP_GEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x32_DISABLE,    &&POST_OPS_BIAS_6x32,
         &&POST_OPS_RELU_6x32,       &&POST_OPS_RELU_SCALE_6x32,
@@ -4412,10 +4417,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x32_DISABLE)
         }
     }
 }
+// clang-format on
 
 // 6x48 int8o32 fringe kernel
 DLP_GEMM_N_FRINGE_KERN(uint8_t, int8_t, int32_t, u8s8s32o32_6x48)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x48_DISABLE,    &&POST_OPS_BIAS_6x48,
         &&POST_OPS_RELU_6x48,       &&POST_OPS_RELU_SCALE_6x48,
@@ -6554,3 +6561,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x48_DISABLE)
         }
     }
 }
+// clang-format on

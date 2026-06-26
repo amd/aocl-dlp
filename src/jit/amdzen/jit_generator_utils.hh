@@ -28,7 +28,7 @@
 
 #pragma once
 
-#include "aocl_dlp_config.h"  // for DLP_OS_WINDOWS
+#include "aocl_dlp_config.h" // for DLP_OS_WINDOWS
 
 #include <cassert>
 #include <cmath>

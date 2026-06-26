@@ -386,22 +386,22 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                              a_reg[7]);
         }
         for (; (kr + 7) < KC; kr += 8) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
-            a_reg[1] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 1) * cs_a));
-            a_reg[2] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 2) * cs_a));
-            a_reg[3] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 3) * cs_a));
-            a_reg[4] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 4) * cs_a));
-            a_reg[5] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 5) * cs_a));
-            a_reg[6] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 6) * cs_a));
-            a_reg[7] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 7) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
+            a_reg[1] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 1) * cs_a));
+            a_reg[2] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 2) * cs_a));
+            a_reg[3] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 3) * cs_a));
+            a_reg[4] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 4) * cs_a));
+            a_reg[5] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 5) * cs_a));
+            a_reg[6] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 6) * cs_a));
+            a_reg[7] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 7) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16
@@ -426,14 +426,14 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                   0xFF, a_reg[7]);
         }
         for (; (kr + 3) < KC; kr += 4) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
-            a_reg[1] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 1) * cs_a));
-            a_reg[2] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 2) * cs_a));
-            a_reg[3] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 3) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
+            a_reg[1] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 1) * cs_a));
+            a_reg[2] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 2) * cs_a));
+            a_reg[3] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 3) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16
@@ -457,10 +457,10 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                   0x0F, a_reg[7]);
         }
         for (; (kr + 1) < KC; kr += 2) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
-            a_reg[1] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 1) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
+            a_reg[1] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 1) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16
@@ -485,8 +485,8 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                   0x03, a_reg[7]);
         }
         for (; (kr) < KC; kr += 1) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16
@@ -560,22 +560,22 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                              a_reg[3]);
         }
         for (; (kr + 7) < KC; kr += 8) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
-            a_reg[1] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 1) * cs_a));
-            a_reg[2] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 2) * cs_a));
-            a_reg[3] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 3) * cs_a));
-            a_reg[4] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 4) * cs_a));
-            a_reg[5] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 5) * cs_a));
-            a_reg[6] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 6) * cs_a));
-            a_reg[7] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 7) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
+            a_reg[1] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 1) * cs_a));
+            a_reg[2] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 2) * cs_a));
+            a_reg[3] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 3) * cs_a));
+            a_reg[4] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 4) * cs_a));
+            a_reg[5] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 5) * cs_a));
+            a_reg[6] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 6) * cs_a));
+            a_reg[7] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 7) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16
@@ -592,14 +592,14 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                   0xFF, a_reg[3]);
         }
         for (; (kr + 3) < KC; kr += 4) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
-            a_reg[1] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 1) * cs_a));
-            a_reg[2] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 2) * cs_a));
-            a_reg[3] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 3) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
+            a_reg[1] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 1) * cs_a));
+            a_reg[2] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 2) * cs_a));
+            a_reg[3] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 3) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16
@@ -616,10 +616,10 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                   0x0F, a_reg[3]);
         }
         for (; (kr + 1) < KC; kr += 2) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
-            a_reg[1] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 1) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
+            a_reg[1] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 1) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16
@@ -636,8 +636,8 @@ dlp_packa_mr16_f32f32f32of32_col_major(float*       pack_a_buffer,
                                   0x03, a_reg[3]);
         }
         for (; (kr) < KC; kr += 1) {
-            a_reg[0] = _mm512_maskz_loadu_ps(
-                0xFF, a + (ic * rs_a) + ((kr + 0) * cs_a));
+            a_reg[0] = _mm512_maskz_loadu_ps(0xFF, a + (ic * rs_a)
+                                                       + ((kr + 0) * cs_a));
 
             UNPACKLO_PS16
             UNPACKHI_PS16

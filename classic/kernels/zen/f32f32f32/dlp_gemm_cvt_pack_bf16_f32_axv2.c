@@ -39,12 +39,12 @@
             data_feeder[i] = *(a + (ic * rs_a) + (kr * cs_a) + i);             \
         }                                                                      \
         reg = CVT_BF16_F32_SHIFT_AVX2(                                         \
-            _mm_loadu_si128((const __m128i*)data_feeder));            \
+            _mm_loadu_si128((const __m128i*)data_feeder));                     \
     }
 
 #define LOAD_AND_CONVERT_BF16_F32(reg, ic)                                     \
-    reg = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(                    \
-        (const __m128i*)(a + (ic * rs_a) + (kr * cs_a))));
+    reg = CVT_BF16_F32_SHIFT_AVX2(                                             \
+        _mm_loadu_si128((const __m128i*)(a + (ic * rs_a) + (kr * cs_a))));
 
 // GEMV conversion for true K=1 matrices(for B matrix) with contiguous output
 // This is a fast path for matrix-vector operations where the output is stored
@@ -68,8 +68,8 @@ dlp_cvt_bf16_f32_gemv_row_major(float*          cvt_buffer,
         bfloat16 buff[8] = { 0 };
         for (iter_t i = 0; i < 8; i++)
             buff[i] = (*(a + (m0 + i) * rs_a));
-        a_reg = CVT_BF16_F32_SHIFT_AVX2(
-            _mm_loadu_si128((const __m128i*)(buff)));
+        a_reg =
+            CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128((const __m128i*)(buff)));
         _mm256_storeu_ps((cvt_buffer + m0), a_reg);
     }
 
@@ -78,8 +78,8 @@ dlp_cvt_bf16_f32_gemv_row_major(float*          cvt_buffer,
         bfloat16 buff[8] = { 0 };
         for (iter_t i = 0; i < (MC - m0); i++)
             buff[i] = (*(a + (m0 + i) * rs_a));
-        a_reg = CVT_BF16_F32_SHIFT_AVX2(
-            _mm_loadu_si128((const __m128i*)(buff)));
+        a_reg =
+            CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128((const __m128i*)(buff)));
         GET_STORE_MASK((MC - m0), store_mask);
         _mm256_maskstore_ps((cvt_buffer + m0), store_mask, a_reg);
     }
@@ -341,49 +341,48 @@ dlp_cvt_bf16_f32_row_major(float*          cvt_buffer,
         bfloat16 buff[8] = { 0 };                                              \
         for (iter_t i = 0; i < 1; i++)                                         \
             buff[i] = *(a_ptr + (kr * cs_a) + i);                              \
-        reg = CVT_BF16_F32_SHIFT_AVX2(                                         \
-            _mm_loadu_si128((const __m128i*)buff));                   \
+        reg = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128((const __m128i*)buff));  \
     }
 
-#define LOAD_AND_CONVERT_8COLS_BF16_F32(kr)                                    \
-    {                                                                          \
-        bfloat16* a_ptr = (bfloat16*)(a + (ic * rs_a));                        \
-        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 0) * cs_a))));              \
-        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 1) * cs_a))));              \
-        a_reg[2]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 2) * cs_a))));              \
-        a_reg[3]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 3) * cs_a))));              \
-        a_reg[4]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 4) * cs_a))));              \
-        a_reg[5]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 5) * cs_a))));              \
-        a_reg[6]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 6) * cs_a))));              \
-        a_reg[7]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 7) * cs_a))));              \
+#define LOAD_AND_CONVERT_8COLS_BF16_F32(kr)                                       \
+    {                                                                             \
+        bfloat16* a_ptr = (bfloat16*)(a + (ic * rs_a));                           \
+        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(                                \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 0) * cs_a)))); \
+        a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 1) * cs_a))));        \
+        a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 2) * cs_a))));        \
+        a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 3) * cs_a))));        \
+        a_reg[4] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 4) * cs_a))));        \
+        a_reg[5] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 5) * cs_a))));        \
+        a_reg[6] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 6) * cs_a))));        \
+        a_reg[7] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 7) * cs_a))));        \
     }
 
 #define MASKED_LOAD_AND_CONVERT_8COLS_BF16_F32(kr, mask)                       \
     {                                                                          \
         bfloat16* a_ptr = (bfloat16*)(a + (ic * rs_a));                        \
-        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 0) * cs_a)), mask));            \
-        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 1) * cs_a)), mask));            \
-        a_reg[2]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[2]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 2) * cs_a)), mask));            \
-        a_reg[3]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[3]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 3) * cs_a)), mask));            \
-        a_reg[4]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[4]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 4) * cs_a)), mask));            \
-        a_reg[5]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[5]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 5) * cs_a)), mask));            \
-        a_reg[6]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[6]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 6) * cs_a)), mask));            \
-        a_reg[7]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[7]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 7) * cs_a)), mask));            \
     }
 
@@ -400,29 +399,29 @@ dlp_cvt_bf16_f32_row_major(float*          cvt_buffer,
         LOAD_1BF16_ELEMENT(a_ptr, (kr + 7), a_reg[7]);                         \
     }
 
-#define LOAD_AND_CONVERT_4COLS_BF16_F32(kr)                                    \
-    {                                                                          \
-        bfloat16* a_ptr = (bfloat16*)(a + (ic * rs_a));                        \
-        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 0) * cs_a))));              \
-        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 1) * cs_a))));              \
-        a_reg[2]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 2) * cs_a))));              \
-        a_reg[3]        = CVT_BF16_F32_SHIFT_AVX2(_mm_loadu_si128(    \
-            (const __m128i*)(a_ptr + ((kr + 3) * cs_a))));              \
+#define LOAD_AND_CONVERT_4COLS_BF16_F32(kr)                                       \
+    {                                                                             \
+        bfloat16* a_ptr = (bfloat16*)(a + (ic * rs_a));                           \
+        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(                                \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 0) * cs_a)))); \
+        a_reg[1] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 1) * cs_a))));        \
+        a_reg[2] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 2) * cs_a))));        \
+        a_reg[3] = CVT_BF16_F32_SHIFT_AVX2(                                       \
+            _mm_loadu_si128((const __m128i*)(a_ptr + ((kr + 3) * cs_a))));        \
     }
 
 #define MASKED_LOAD_AND_CONVERT_4COLS_BF16_F32(kr, mask)                       \
     {                                                                          \
         bfloat16* a_ptr = (bfloat16*)(a + (ic * rs_a));                        \
-        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 0) * cs_a)), mask));            \
-        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 1) * cs_a)), mask));            \
-        a_reg[2]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[2]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 2) * cs_a)), mask));            \
-        a_reg[3]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[3]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 3) * cs_a)), mask));            \
     }
 
@@ -438,9 +437,9 @@ dlp_cvt_bf16_f32_row_major(float*          cvt_buffer,
 #define MASKED_LOAD_AND_CONVERT_2COLS_BF16_F32(kr, mask)                       \
     {                                                                          \
         bfloat16* a_ptr = (bfloat16*)(a + (ic * rs_a));                        \
-        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[0]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 0) * cs_a)), mask));            \
-        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32( \
+        a_reg[1]        = CVT_BF16_F32_SHIFT_AVX2(_mm_maskload_epi32(          \
             (int const*)(a_ptr + ((kr + 1) * cs_a)), mask));            \
     }
 

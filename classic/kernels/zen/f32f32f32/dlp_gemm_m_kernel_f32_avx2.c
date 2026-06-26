@@ -28,9 +28,9 @@
 
 #include <immintrin.h>
 
+#include "classic/dlp_simd_casts.h"
 #include "dlp_gemm_kernel_macros_f32_avx2.h"
 #include "kernels/dlp_kernels.h"
-#include "classic/dlp_simd_casts.h"
 
 #define MR 6
 #define NR 16
@@ -45,6 +45,7 @@ DLP_GEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x16m)
         return;
     }
 
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x16F_DISABLE,    &&POST_OPS_BIAS_6x16F,
         &&POST_OPS_RELU_6x16F,       &&POST_OPS_RELU_SCALE_6x16F,
@@ -1302,9 +1303,11 @@ consider_edge_cases:
         return;
     }
 }
+// clang-format on
 
 DLP_GEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x8m)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x8F_DISABLE,    &&POST_OPS_BIAS_6x8F,
         &&POST_OPS_RELU_6x8F,       &&POST_OPS_RELU_SCALE_6x8F,
@@ -2192,9 +2195,11 @@ consider_edge_cases:
         return;
     }
 }
+// clang-format on
 
 DLP_GEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x4m)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x4F_DISABLE,    &&POST_OPS_BIAS_6x4F,
         &&POST_OPS_RELU_6x4F,       &&POST_OPS_RELU_SCALE_6x4F,
@@ -3067,9 +3072,11 @@ consider_edge_cases:
         return;
     }
 }
+// clang-format on
 
 DLP_GEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x2m)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x2F_DISABLE,    &&POST_OPS_BIAS_6x2F,
         &&POST_OPS_RELU_6x2F,       &&POST_OPS_RELU_SCALE_6x2F,
@@ -3942,9 +3949,11 @@ consider_edge_cases:
         return;
     }
 }
+// clang-format on
 
 DLP_GEMM_N_FRINGE_KERN(float, float, float, f32f32f32of32_6x1m)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x1F_DISABLE,    &&POST_OPS_BIAS_6x1F,
         &&POST_OPS_RELU_6x1F,       &&POST_OPS_RELU_SCALE_6x1F,
@@ -4818,6 +4827,7 @@ consider_edge_cases:
         return;
     }
 }
+// clang-format on
 
 /* Mask elements to specify how many elements to be loaded from C buffer */
 static const int32_t mask[8][8] = {
@@ -4831,6 +4841,7 @@ static const int32_t mask[8][8] = {
 
 DLP_GEMM_N_LT_NR0_FRINGE_KERN(float, float, float, f32f32f32of32_6xlt8m)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6xlt8F_DISABLE,    &&POST_OPS_BIAS_6xlt8F,
         &&POST_OPS_RELU_6xlt8F,       &&POST_OPS_RELU_SCALE_6xlt8F,
@@ -5737,3 +5748,4 @@ consider_edge_cases:
         return;
     }
 }
+// clang-format on

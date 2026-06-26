@@ -26,10 +26,10 @@
  *
  */
 
+#include "classic/dlp_simd_casts.h"
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 #include <string.h>
-#include "classic/dlp_simd_casts.h"
 
 void
 dlp_packb_nr16_f32f32f32of32_row_major(float*       pack_b_buffer,
@@ -183,21 +183,22 @@ dlp_packb_nr16_f32f32f32of32_row_major(float*       pack_b_buffer,
 
 #define UNPACK_PD_8x8()                                                        \
     /* Even indices contains lo parts, odd indices contains hi parts. */       \
-    a_reg[0] =                                                                 \
-        DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[0]), DLP_CAST_PS_PD256(b_reg[2])));      \
-    a_reg[1] =                                                                 \
-        DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[0]), DLP_CAST_PS_PD256(b_reg[2])));      \
-    a_reg[2] =                                                                 \
-        DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[4]), DLP_CAST_PS_PD256(b_reg[6])));      \
-    a_reg[3] =                                                                 \
-        DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[4]), DLP_CAST_PS_PD256(b_reg[6])));      \
-    a_reg[4] =                                                                 \
-        DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[1]), DLP_CAST_PS_PD256(b_reg[3])));      \
-    a_reg[5] =                                                                 \
-        DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[1]), DLP_CAST_PS_PD256(b_reg[3])));      \
-    a_reg[6] =                                                                 \
-        DLP_CAST_PD_PS256(_mm256_unpacklo_pd(DLP_CAST_PS_PD256(b_reg[5]), DLP_CAST_PS_PD256(b_reg[7])));      \
-    a_reg[7] = DLP_CAST_PD_PS256(_mm256_unpackhi_pd(DLP_CAST_PS_PD256(b_reg[5]), DLP_CAST_PS_PD256(b_reg[7])));
+    a_reg[0] = DLP_CAST_PD_PS256(_mm256_unpacklo_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[0]), DLP_CAST_PS_PD256(b_reg[2])));            \
+    a_reg[1] = DLP_CAST_PD_PS256(_mm256_unpackhi_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[0]), DLP_CAST_PS_PD256(b_reg[2])));            \
+    a_reg[2] = DLP_CAST_PD_PS256(_mm256_unpacklo_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[4]), DLP_CAST_PS_PD256(b_reg[6])));            \
+    a_reg[3] = DLP_CAST_PD_PS256(_mm256_unpackhi_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[4]), DLP_CAST_PS_PD256(b_reg[6])));            \
+    a_reg[4] = DLP_CAST_PD_PS256(_mm256_unpacklo_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[1]), DLP_CAST_PS_PD256(b_reg[3])));            \
+    a_reg[5] = DLP_CAST_PD_PS256(_mm256_unpackhi_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[1]), DLP_CAST_PS_PD256(b_reg[3])));            \
+    a_reg[6] = DLP_CAST_PD_PS256(_mm256_unpacklo_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[5]), DLP_CAST_PS_PD256(b_reg[7])));            \
+    a_reg[7] = DLP_CAST_PD_PS256(_mm256_unpackhi_pd(                           \
+        DLP_CAST_PS_PD256(b_reg[5]), DLP_CAST_PS_PD256(b_reg[7])));
 
 #define PERMUTE_R1_8x8()                                                       \
     /* Even indices contains lo parts, odd indices contains hi parts. */       \

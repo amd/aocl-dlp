@@ -33,6 +33,7 @@
 
 DLP_GEMV_M_EQ1_KERN(float, float, float, f32f32f32of32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64F_DISABLE,    &&POST_OPS_BIAS_6x64F,
         &&POST_OPS_RELU_6x64F,       &&POST_OPS_RELU_SCALE_6x64F,
@@ -774,3 +775,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64F_DISABLE)
     }
     } // jr loop
 }
+// clang-format on

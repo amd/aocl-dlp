@@ -41,14 +41,15 @@
 #include <immintrin.h>
 
 #include "../int4_utils_avx512.h"
-#include "dlp_gemm_f32_kern_macros.h"
 #include "classic/dlp_simd_casts.h"
+#include "dlp_gemm_f32_kern_macros.h"
 
 #ifndef DLP_GEMM_BF16_JIT
 
 // 6x64 bf16 kernel
 DLP_GEMM_MAIN_KERN1(bfloat16, uint8_t, float, bf16u4f32of32_6x64m)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
@@ -2572,5 +2573,6 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
         }
     }
 }
+// clang-format on
 
 #endif // DLP_GEMM_BF16_JIT

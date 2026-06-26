@@ -35,7 +35,8 @@
 #define SIGMOID_F32_AVX512_DEF(in_reg, al_in, r, r2, z, dn, ex_out)            \
     al_in = _mm512_mul_ps(in_reg, _mm512_set1_ps(-1));                         \
     EXPF_AVX512(al_in, r, r2, z, dn, ex_out);                                  \
-    in_reg = _mm512_div_ps(_mm512_set1_ps(1),                                  \
-                           _mm512_add_ps(DLP_CAST_SI512_PS(ex_out), _mm512_set1_ps(1)));
+    in_reg = _mm512_div_ps(                                                    \
+        _mm512_set1_ps(1),                                                     \
+        _mm512_add_ps(DLP_CAST_SI512_PS(ex_out), _mm512_set1_ps(1)));
 
 #endif // AOCL_DLP_GEMM_SIGMOID_AVX512_H

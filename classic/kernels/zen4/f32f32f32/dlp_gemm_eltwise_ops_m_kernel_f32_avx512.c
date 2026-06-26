@@ -33,6 +33,7 @@
 
 DLP_GEMM_ELTWISE_OPS_KERNEL(float, float, f32of32_6x64)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_OPS_DISABLE,    &&POST_OPS_BIAS_6x64_OPS,
         &&POST_OPS_RELU_6x64_OPS,       &&POST_OPS_RELU_SCALE_6x64_OPS,
@@ -2440,3 +2441,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_OPS_DISABLE)
         }
     }
 }
+// clang-format on

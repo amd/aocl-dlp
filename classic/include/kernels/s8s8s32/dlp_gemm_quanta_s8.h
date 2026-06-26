@@ -52,8 +52,8 @@
 #ifndef DLP_GEMM_QUANTA_S8_H
 #define DLP_GEMM_QUANTA_S8_H
 
-#include <immintrin.h>
 #include "classic/dlp_simd_casts.h"
+#include <immintrin.h>
 
 // ============================================================================
 // BASIC AVX-512 INTRINSIC WRAPPERS - COMMON TO ALL INPUT TYPES
@@ -83,9 +83,9 @@
 #define SET_S32_F32(reg, ptr) reg = _mm512_cvtepi32_ps(_mm512_set1_epi32(ptr));
 
 #define SET_BF16_F32(reg, ptr)                                                 \
-    reg = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
-        _mm512_cvtepi16_epi32(_mm256_set1_epi16(ptr)),                         \
-        _mm512_set1_epi32(16))));
+    reg = DLP_CAST_SI512_PS(                                                   \
+        (_mm512_sllv_epi32(_mm512_cvtepi16_epi32(_mm256_set1_epi16(ptr)),      \
+                           _mm512_set1_epi32(16))));
 
 #define SET_F32(reg, ptr) reg = _mm512_set1_ps(ptr);
 

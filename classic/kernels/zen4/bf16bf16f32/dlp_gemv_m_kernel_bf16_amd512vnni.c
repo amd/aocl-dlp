@@ -29,8 +29,8 @@
 #include "kernels/dlp_kernels.h"
 #include "xmmintrin.h"
 
-#include "dlp_gemm_f32_kern_macros.h"
 #include "classic/dlp_simd_casts.h"
+#include "dlp_gemm_f32_kern_macros.h"
 
 #ifdef DLP_GEMM_BF16_JIT
 DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
@@ -38,6 +38,7 @@ DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
 
 DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
@@ -736,5 +737,6 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
 
     } // jr loop
 }
+// clang-format on
 
 #endif //  DLP_GEMM_BF16_JIT

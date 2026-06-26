@@ -38,6 +38,7 @@ DLP_GEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x16m_rd)
 {
     md_t n_left = n0 % 16;
 
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x16F_DISABLE,    &&POST_OPS_BIAS_6x16F,
         &&POST_OPS_RELU_6x16F,       &&POST_OPS_RELU_SCALE_6x16F,
@@ -814,9 +815,11 @@ consider_edge_cases:
         }
     }
 }
+// clang-format on
 
 DLP_GEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x8m_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x8F_DISABLE,    &&POST_OPS_BIAS_6x8F,
         &&POST_OPS_RELU_6x8F,       &&POST_OPS_RELU_SCALE_6x8F,
@@ -1537,9 +1540,11 @@ consider_edge_cases:
         }
     }
 }
+// clang-format on
 
 DLP_GEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x4m_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x4F_DISABLE,    &&POST_OPS_BIAS_6x4F,
         &&POST_OPS_RELU_6x4F,       &&POST_OPS_RELU_SCALE_6x4F,
@@ -2260,9 +2265,11 @@ consider_edge_cases:
         }
     }
 }
+// clang-format on
 
 DLP_GEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x2m_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x2F_DISABLE,    &&POST_OPS_BIAS_6x2F,
         &&POST_OPS_RELU_6x2F,       &&POST_OPS_RELU_SCALE_6x2F,
@@ -2947,9 +2954,11 @@ consider_edge_cases:
         }
     }
 }
+// clang-format on
 
 DLP_GEMM_MAIN_KERN(float, float, float, f32f32f32of32_6x1m_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x1F_DISABLE,    &&POST_OPS_BIAS_6x1F,
         &&POST_OPS_RELU_6x1F,       &&POST_OPS_RELU_SCALE_6x1F,
@@ -3615,3 +3624,4 @@ consider_edge_cases:
         }
     }
 }
+// clang-format on

@@ -40,8 +40,8 @@
 #include <string.h>
 
 #include "../int4_utils_avx512.h"
-#include "dlp_gemm_f32_kern_macros.h"
 #include "classic/dlp_simd_casts.h"
+#include "dlp_gemm_f32_kern_macros.h"
 
 #ifdef DLP_GEMM_BF16_JIT
 
@@ -168,7 +168,8 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
                 zp_4 = _mm512_permutex2var_ps(zp_4, mask_scale1, zp_4);
             } else {
                 zero_point = _mm512_maskz_loadu_epi8(
-                    0xFFFFFFFFFFFF, (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
+                    0xFFFFFFFFFFFF,
+                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
                 /* interleave zero-point values */
                 zero_point1 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp2, zero_point);
@@ -267,7 +268,8 @@ dlp_packsclb_nr48_bf16u4f32of32(bfloat16*            packb_bf16,
                                         CVT_INT8_F32_SCAL_16(zmm15, 0, zmm8));
             }
             // store to pack_b buffer
-            _mm512_storeu_si512(packb_group + ((kr + 0) * NR), DLP_CAST_BH_SI512(zmm0));
+            _mm512_storeu_si512(packb_group + ((kr + 0) * NR),
+                                DLP_CAST_BH_SI512(zmm0));
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR) + 32,
                                 DLP_CAST_BH_SI512(zmm1));
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR) + 64,
@@ -433,7 +435,8 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
                 zp_2 = _mm512_permutex2var_ps(zp_2, mask_scale1, zp_2);
             } else {
                 zero_point = _mm512_maskz_loadu_epi8(
-                    0xFFFFFFFF, (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
+                    0xFFFFFFFF,
+                    (((int8_t*)pre_ops_attr.zero_point) + pre_op_off));
                 /* interleave zero-point values */
                 zero_point0 =
                     _mm512_permutex2var_epi8(zero_point, mask_zp1, zero_point);
@@ -508,7 +511,8 @@ dlp_packsclb_nr32_bf16u4f32of32(bfloat16*            packb_bf16,
                                         CVT_INT8_F32_SCAL_16(zmm14, 2, zmm6));
             }
             // store to pack_b buffer
-            _mm512_storeu_si512(packb_group + ((kr + 0) * NR), DLP_CAST_BH_SI512(zmm0));
+            _mm512_storeu_si512(packb_group + ((kr + 0) * NR),
+                                DLP_CAST_BH_SI512(zmm0));
             _mm512_storeu_si512(packb_group + ((kr + 0) * NR) + 32,
                                 DLP_CAST_BH_SI512(zmm1));
         }
@@ -704,7 +708,8 @@ dlp_packsclb_nr16_bf16u4f32of32(bfloat16*            packb_bf16,
             }
 
             // store to pack_b buffer
-            _mm512_storeu_si512(packb_group + ((kr + 0) * NR), DLP_CAST_BH_SI512(zmm0));
+            _mm512_storeu_si512(packb_group + ((kr + 0) * NR),
+                                DLP_CAST_BH_SI512(zmm0));
         }
         b_group += (k_full_pieces_per_group * NR) / 2;
         packb_group += k_full_pieces_per_group * NR;
@@ -933,7 +938,8 @@ dlp_packsclb_nrlt16_bf16u4f32of32(bfloat16*            packb_bf16,
             }
 
             // store to pack_b buffer
-            _mm512_mask_storeu_epi32(packb_group, lmask, DLP_CAST_BH_SI512(zmm0));
+            _mm512_mask_storeu_epi32(packb_group, lmask,
+                                     DLP_CAST_BH_SI512(zmm0));
         }
     }
 }

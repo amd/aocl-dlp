@@ -35,7 +35,8 @@
 #define SIGMOID_F32_AVX2_DEF(in_reg, al_in, r, r2, z, dn, ex_out)              \
     al_in = _mm256_mul_ps(in_reg, _mm256_set1_ps(-1));                         \
     EXPF_AVX2(al_in, r, r2, z, dn, ex_out);                                    \
-    ex_out = DLP_CAST_PS_SI256(_mm256_add_ps(DLP_CAST_SI256_PS(ex_out), _mm256_set1_ps(1)));        \
+    ex_out = DLP_CAST_PS_SI256(                                                \
+        _mm256_add_ps(DLP_CAST_SI256_PS(ex_out), _mm256_set1_ps(1)));          \
     in_reg = _mm256_div_ps(_mm256_set1_ps(1), DLP_CAST_SI256_PS(ex_out));
 
 // Sigmoid(in_reg) = 1 / (1 + exp(-1 * in_reg)).
@@ -43,7 +44,8 @@
 #define SIGMOID_F32_SSE_DEF(in_reg, al_in, r, r2, z, dn, ex_out)               \
     al_in = _mm_mul_ps(in_reg, _mm_set1_ps(-1));                               \
     EXPF_SSE(al_in, r, r2, z, dn, ex_out);                                     \
-    ex_out = DLP_CAST_PS_SI128(_mm_add_ps(DLP_CAST_SI128_PS(ex_out), _mm_set1_ps(1)));              \
+    ex_out = DLP_CAST_PS_SI128(                                                \
+        _mm_add_ps(DLP_CAST_SI128_PS(ex_out), _mm_set1_ps(1)));                \
     in_reg = _mm_div_ps(_mm_set1_ps(1), DLP_CAST_SI128_PS(ex_out));
 
 #endif // AOCL_DLP_GEMM_SIGMOID_AVX2_H

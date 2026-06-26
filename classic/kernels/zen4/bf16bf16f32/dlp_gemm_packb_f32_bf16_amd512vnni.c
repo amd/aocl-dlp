@@ -26,10 +26,10 @@
  *
  */
 
+#include "classic/dlp_simd_casts.h"
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 #include <string.h>
-#include "classic/dlp_simd_casts.h"
 
 #ifdef DLP_GEMM_BF16_JIT
 void
@@ -590,54 +590,54 @@ dlp_packb_mxp_nrlt16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
 }
 
 #define LOAD_16_COLS_AVX512                                                    \
-    a_reg[0] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 0)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 0)) + kr)));                           \
-    a_reg[1] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 1)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 1)) + kr)));                           \
-    a_reg[2] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 2)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 2)) + kr)));                           \
-    a_reg[3] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 3)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 3)) + kr)));                           \
-    a_reg[4] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 4)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 4)) + kr)));                           \
-    a_reg[5] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 5)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 5)) + kr)));                           \
-    a_reg[6] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 6)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 6)) + kr)));                           \
-    a_reg[7] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 7)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 7)) + kr)));                           \
-    a_reg[8] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 8)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 8)) + kr)));                           \
-    a_reg[9] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_loadu_ps(b + (ldb * (jr + 9)) + kr + 16),                       \
-        _mm512_loadu_ps(b + (ldb * (jr + 9)) + kr)));                           \
-    a_reg[10] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_loadu_ps(b + (ldb * (jr + 10)) + kr + 16),                      \
-        _mm512_loadu_ps(b + (ldb * (jr + 10)) + kr)));                          \
-    a_reg[11] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_loadu_ps(b + (ldb * (jr + 11)) + kr + 16),                      \
-        _mm512_loadu_ps(b + (ldb * (jr + 11)) + kr)));                          \
-    a_reg[12] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_loadu_ps(b + (ldb * (jr + 12)) + kr + 16),                      \
-        _mm512_loadu_ps(b + (ldb * (jr + 12)) + kr)));                          \
-    a_reg[13] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_loadu_ps(b + (ldb * (jr + 13)) + kr + 16),                      \
-        _mm512_loadu_ps(b + (ldb * (jr + 13)) + kr)));                          \
-    a_reg[14] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_loadu_ps(b + (ldb * (jr + 14)) + kr + 16),                      \
-        _mm512_loadu_ps(b + (ldb * (jr + 14)) + kr)));                          \
-    a_reg[15] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_loadu_ps(b + (ldb * (jr + 15)) + kr + 16),                      \
-        _mm512_loadu_ps(b + (ldb * (jr + 15)) + kr)));
+    a_reg[0] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 0)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 0)) + kr)));      \
+    a_reg[1] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 1)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 1)) + kr)));      \
+    a_reg[2] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 2)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 2)) + kr)));      \
+    a_reg[3] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 3)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 3)) + kr)));      \
+    a_reg[4] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 4)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 4)) + kr)));      \
+    a_reg[5] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 5)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 5)) + kr)));      \
+    a_reg[6] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 6)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 6)) + kr)));      \
+    a_reg[7] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 7)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 7)) + kr)));      \
+    a_reg[8] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 8)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 8)) + kr)));      \
+    a_reg[9] = DLP_CAST_BH_SI512(                                              \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 9)) + kr + 16),   \
+                            _mm512_loadu_ps(b + (ldb * (jr + 9)) + kr)));      \
+    a_reg[10] = DLP_CAST_BH_SI512(                                             \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 10)) + kr + 16),  \
+                            _mm512_loadu_ps(b + (ldb * (jr + 10)) + kr)));     \
+    a_reg[11] = DLP_CAST_BH_SI512(                                             \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 11)) + kr + 16),  \
+                            _mm512_loadu_ps(b + (ldb * (jr + 11)) + kr)));     \
+    a_reg[12] = DLP_CAST_BH_SI512(                                             \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 12)) + kr + 16),  \
+                            _mm512_loadu_ps(b + (ldb * (jr + 12)) + kr)));     \
+    a_reg[13] = DLP_CAST_BH_SI512(                                             \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 13)) + kr + 16),  \
+                            _mm512_loadu_ps(b + (ldb * (jr + 13)) + kr)));     \
+    a_reg[14] = DLP_CAST_BH_SI512(                                             \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 14)) + kr + 16),  \
+                            _mm512_loadu_ps(b + (ldb * (jr + 14)) + kr)));     \
+    a_reg[15] = DLP_CAST_BH_SI512(                                             \
+        _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + (ldb * (jr + 15)) + kr + 16),  \
+                            _mm512_loadu_ps(b + (ldb * (jr + 15)) + kr)));
 
 #define UNPACKHILO32_AVX512                                                    \
     b_reg[0]  = _mm512_unpacklo_epi32(a_reg[0], a_reg[1]);                     \
@@ -714,52 +714,52 @@ dlp_packb_mxp_nrlt16_f32obf16_row_major(bfloat16*    pack_b_buffer_f32obf16,
     a_reg[15] = _mm512_shuffle_i64x2(b_reg[14], b_reg[15], 0xEE);
 
 #define MASK_LOAD_16_COLS_AVX512(mask)                                         \
-    a_reg[0] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
+    a_reg[0]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 0)) + kr)));             \
+    a_reg[1]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 1)) + kr)));             \
+    a_reg[2]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 2)) + kr)));             \
+    a_reg[3]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 3)) + kr)));             \
+    a_reg[4]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 4)) + kr)));             \
+    a_reg[5]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 5)) + kr)));             \
+    a_reg[6]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 6)) + kr)));             \
+    a_reg[7]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 7)) + kr)));             \
+    a_reg[8]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 8)) + kr)));             \
+    a_reg[9]  = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
+        _mm512_set1_ps(0),                                                    \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 9)) + kr)));             \
+    a_reg[10] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
         _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 0)) + kr)));               \
-    a_reg[1] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 10)) + kr)));             \
+    a_reg[11] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
         _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 1)) + kr)));               \
-    a_reg[2] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 11)) + kr)));             \
+    a_reg[12] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
         _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 2)) + kr)));               \
-    a_reg[3] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 12)) + kr)));             \
+    a_reg[13] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
         _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 3)) + kr)));               \
-    a_reg[4] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 13)) + kr)));             \
+    a_reg[14] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
         _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 4)) + kr)));               \
-    a_reg[5] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 5)) + kr)));               \
-    a_reg[6] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 6)) + kr)));               \
-    a_reg[7] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 7)) + kr)));               \
-    a_reg[8] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 8)) + kr)));               \
-    a_reg[9] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                   \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 9)) + kr)));               \
-    a_reg[10] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 10)) + kr)));              \
-    a_reg[11] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 11)) + kr)));              \
-    a_reg[12] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 12)) + kr)));              \
-    a_reg[13] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 13)) + kr)));              \
-    a_reg[14] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
-        _mm512_set1_ps(0),                                                     \
-        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 14)) + kr)));              \
-    a_reg[15] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                                  \
+        _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 14)) + kr)));             \
+    a_reg[15] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(                         \
         _mm512_set1_ps(0),                                                     \
         _mm512_maskz_loadu_ps(mask, b + (ldb * (jr + 15)) + kr)));
 
@@ -1022,9 +1022,9 @@ dlp_packb_mxp_nrlt16_f32obf16_col_major(bfloat16*    pack_b_buffer,
         for (jr = 0; jr < n0_partial_rem; jr += 1) {
             // Rearrange for dpbf16_ps, read 2 rows from B with 64 elements in
             // each row.
-            a_reg[jr] = DLP_CAST_BH_SI512(_mm512_cvtne2ps_pbh(
-                _mm512_loadu_ps(b + ((ldb * jr) + kr + 16)),
-                _mm512_loadu_ps(b + (ldb * jr) + kr)));
+            a_reg[jr] = DLP_CAST_BH_SI512(
+                _mm512_cvtne2ps_pbh(_mm512_loadu_ps(b + ((ldb * jr) + kr + 16)),
+                                    _mm512_loadu_ps(b + (ldb * jr) + kr)));
         }
 
         for (; jr < NR; jr++) {

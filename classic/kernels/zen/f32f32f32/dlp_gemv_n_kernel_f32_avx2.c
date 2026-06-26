@@ -28,9 +28,9 @@
 
 #include <immintrin.h>
 
+#include "classic/dlp_simd_casts.h"
 #include "dlp_gemm_kernel_macros_f32_avx2.h"
 #include "kernels/dlp_kernels.h"
-#include "classic/dlp_simd_casts.h"
 
 // When n=1 is load 16x1 from B and load MRx16 from A and perform dot product
 //  to produce C output of MRX1. The vectorization is done in k loop and
@@ -67,6 +67,7 @@
 
 DLP_GEMV_N_EQ1_KERN(float, float, float, f32f32f32of32_avx2)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
         &&POST_OPS_RELU_1x16F,       &&POST_OPS_RELU_SCALE_1x16F,
@@ -640,3 +641,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x16F_DISABLE)
         post_ops_attr.post_op_c_i += MR;
     } // mr loop
 }
+// clang-format on

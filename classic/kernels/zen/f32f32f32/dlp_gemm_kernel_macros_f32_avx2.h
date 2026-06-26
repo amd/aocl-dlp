@@ -189,7 +189,7 @@
 
 /*Load C, Multiply with beta and add with A*B and store*/
 #define F32_C_BNZ_2(cbuf, rs_c, xmm0, beta, xmm2)                              \
-    xmm0 = DLP_CAST_PD_PS128(_mm_load_sd((const double*)cbuf));                           \
+    xmm0 = DLP_CAST_PD_PS128(_mm_load_sd((const double*)cbuf));                \
     xmm2 = _mm_fmadd_ps(xmm0, beta, xmm2);
 
 /*Load C, Multiply with beta and add with A*B and store*/
@@ -200,13 +200,13 @@
 /*Load C from buf_downscale and convert to DLP_F32,
 multiply with Beta, and add to alpha*A*B*/
 #define BF16_F32_C_BNZ_8(m_ind, n_ind, ymm0, beta, ymm2)                       \
-    ymm0 = DLP_CAST_SI256_PS(_mm256_sllv_epi32(                                          \
+    ymm0 = DLP_CAST_SI256_PS(_mm256_sllv_epi32(                                \
         _mm256_cvtepi16_epi32(_mm_loadu_si128(                                 \
             (__m128i const*)((bfloat16*)post_ops_attr.buf_downscale            \
                              + (post_ops_attr.rs_c_downscale                   \
                                 * (post_ops_attr.post_op_c_i + m_ind))         \
                              + post_ops_attr.post_op_c_j + (n_ind * 8)))),     \
-        _mm256_set1_epi32(16)));                                                \
+        _mm256_set1_epi32(16)));                                               \
     ymm2 = _mm256_fmadd_ps(ymm0, beta, ymm2);
 
 #define BF16_F32_C_BNZ_8_MASK(m_ind, n_ind, ymm0, beta, ymm2, mask)            \
@@ -223,10 +223,10 @@ multiply with Beta, and add to alpha*A*B*/
                 data_feeder[i] = *(post_op_ptr + i);                           \
             }                                                                  \
         }                                                                      \
-        ymm0 =                                                                 \
-            DLP_CAST_SI256_PS(_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(   \
-                                          (__m128i const*)(data_feeder))),     \
-                                      _mm256_set1_epi32(16)));                  \
+        ymm0 = DLP_CAST_SI256_PS(                                              \
+            _mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(           \
+                                  (__m128i const*)(data_feeder))),             \
+                              _mm256_set1_epi32(16)));                         \
         ymm2 = _mm256_fmadd_ps(ymm0, beta, ymm2);                              \
     }
 
@@ -237,47 +237,47 @@ multiply with Beta, and add to alpha*A*B*/
                                 + (post_ops_attr.post_op_c_j + (n_ind * 8));   \
         for (iter_t i = 0; i < n_elems; i++)                                   \
             data_feeder[i] = *(post_op_ptr + i);                               \
-        ymm0 =                                                                 \
-            DLP_CAST_SI256_PS(_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(   \
-                                          (__m128i const*)(data_feeder))),     \
-                                      _mm256_set1_epi32(16)));                  \
+        ymm0 = DLP_CAST_SI256_PS(                                              \
+            _mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(           \
+                                  (__m128i const*)(data_feeder))),             \
+                              _mm256_set1_epi32(16)));                         \
         ymm2 = _mm256_fmadd_ps(ymm0, beta, ymm2);                              \
     }
 
 /*Load C from buf_downscale and convert to DLP_F32, \ multiply with Beta, and
 add to alpha*A*B*/
 #define BF16_F32_C_BNZ_4(m_ind, n_ind, xmm0, beta, xmm2)                       \
-    xmm0 = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                             \
+    xmm0 = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                   \
         _mm_cvtepi16_epi32(_mm_loadu_si128(                                    \
             (__m128i const*)((bfloat16*)post_ops_attr.buf_downscale            \
                              + (post_ops_attr.rs_c_downscale                   \
                                 * (post_ops_attr.post_op_c_i + m_ind))         \
-                             + post_ops_attr.post_op_c_j + (n_ind * 8)))),      \
-        _mm_set1_epi32(16)));                                                   \
+                             + post_ops_attr.post_op_c_j + (n_ind * 8)))),     \
+        _mm_set1_epi32(16)));                                                  \
     xmm2 = _mm_fmadd_ps(xmm0, beta, xmm2);
 
 /*Load C from buf_downscale and convert to DLP_F32,
 multiply with Beta, and add to alpha*A*B and strore*/
 #define BF16_F32_C_BNZ_2(m_ind, n_ind, xmm0, beta, xmm2)                       \
-    xmm0 = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                             \
-        _mm_cvtepi16_epi32(DLP_CAST_PD_SI128(_mm_load_sd(                               \
+    xmm0 = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                   \
+        _mm_cvtepi16_epi32(DLP_CAST_PD_SI128(_mm_load_sd(                      \
             (double const*)((bfloat16*)post_ops_attr.buf_downscale             \
                             + (post_ops_attr.rs_c_downscale                    \
                                * (post_ops_attr.post_op_c_i + m_ind))          \
-                            + post_ops_attr.post_op_c_j + (n_ind * 8))))),      \
-        _mm_set1_epi32(16)));                                                   \
+                            + post_ops_attr.post_op_c_j + (n_ind * 8))))),     \
+        _mm_set1_epi32(16)));                                                  \
     xmm2 = _mm_fmadd_ps(xmm0, beta, xmm2);
 
 /*Load C from buf_downscale and convert to DLP_F32,
 multiply with Beta, and add to alpha*A*B*/
 #define BF16_F32_C_BNZ_1(m_ind, n_ind, xmm0, beta, xmm2)                       \
-    xmm0 = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                             \
-        _mm_cvtepi16_epi32(DLP_CAST_PS_SI128(_mm_load_ss(                               \
+    xmm0 = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                   \
+        _mm_cvtepi16_epi32(DLP_CAST_PS_SI128(_mm_load_ss(                      \
             (float const*)((bfloat16*)post_ops_attr.buf_downscale              \
                            + (post_ops_attr.rs_c_downscale                     \
                               * (post_ops_attr.post_op_c_i + m_ind))           \
-                           + post_ops_attr.post_op_c_j + (n_ind * 8))))),       \
-        _mm_set1_epi32(16)));                                                   \
+                           + post_ops_attr.post_op_c_j + (n_ind * 8))))),      \
+        _mm_set1_epi32(16)));                                                  \
     xmm2 = _mm_fmadd_ps(xmm0, beta, xmm2);
 
 // Matrix Add post-ops helper macros
@@ -299,8 +299,7 @@ multiply with Beta, and add to alpha*A*B*/
     ymm##r_ind3 = _mm256_add_ps(scr3, ymm##r_ind3);
 
 #define F32_F32_MATRIX_ADD_LOAD_XMM_1ELE(scr, scl_fct, m_ind, n_ind)           \
-    scr = _mm_load_ss(matptr                                                   \
-                      + ((post_ops_attr.post_op_c_i + m_ind) * ldm)            \
+    scr = _mm_load_ss(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm)     \
                       + post_ops_attr.post_op_c_j + (n_ind * 2));              \
     scr = _mm_mul_ps(scr, scl_fct);
 
@@ -309,9 +308,9 @@ multiply with Beta, and add to alpha*A*B*/
     F32_MATRIX_ADD_1COL_XMM(scr0, m_ind, r_ind0);
 
 #define F32_F32_MATRIX_ADD_LOAD_XMM_2ELE(scr, scl_fct, m_ind, n_ind)           \
-    scr = DLP_CAST_PD_PS128(_mm_load_sd(                                                 \
+    scr = DLP_CAST_PD_PS128(_mm_load_sd(                                       \
         (double*)(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm)         \
-                  + post_ops_attr.post_op_c_j + (n_ind * 2))));                 \
+                  + post_ops_attr.post_op_c_j + (n_ind * 2))));                \
     scr = _mm_mul_ps(scr, scl_fct);
 
 #define F32_F32_MATRIX_ADD_1COL_XMM_2ELE(scr0, scl_fct0, m_ind, r_ind0)        \
@@ -374,12 +373,12 @@ multiply with Beta, and add to alpha*A*B*/
 
 // Matrix-Add helpers for DLP_BF16 input.
 #define BF16_F32_MATRIX_ADD_LOAD_YMM(scr, scl_fct, m_ind, n_ind)               \
-    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                          \
+    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                \
         _mm256_cvtepi16_epi32(_mm_loadu_si128(                                 \
             (__m128i const*)(matptr                                            \
                              + ((post_ops_attr.post_op_c_i + m_ind) * ldm)     \
                              + post_ops_attr.post_op_c_j + (n_ind * 8)))),     \
-        _mm256_set1_epi32(16))));                                               \
+        _mm256_set1_epi32(16))));                                              \
     scr = _mm256_mul_ps(scr, scl_fct);
 
 #define BF16_F32_MATRIX_ADD_4COL_YMM(scr0, scr1, scr2, scr3, scl_fct0,         \
@@ -400,9 +399,10 @@ multiply with Beta, and add to alpha*A*B*/
                         + post_ops_attr.post_op_c_j + (n_ind * 8));            \
         for (iter_t i = 0; i < n_elems; i++)                                   \
             data_feeder[i] = *(post_op_ptr + i);                               \
-        scr = DLP_CAST_SI256_PS(_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128( \
-                                            (__m128i const*)(data_feeder))),   \
-                                        _mm256_set1_epi32(16)));                \
+        scr = DLP_CAST_SI256_PS(                                               \
+            _mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(           \
+                                  (__m128i const*)(data_feeder))),             \
+                              _mm256_set1_epi32(16)));                         \
         scr = _mm256_mul_ps(scr, scl_fct);                                     \
     }
 
@@ -442,20 +442,20 @@ multiply with Beta, and add to alpha*A*B*/
                 data_feeder[i] = *(post_op_ptr + i);                           \
             }                                                                  \
         }                                                                      \
-        scr0 =                                                                 \
-            DLP_CAST_SI256_PS((_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(  \
-                                           (__m128i const*)(data_feeder))),    \
-                                       _mm256_set1_epi32(16))));                \
+        scr0 = DLP_CAST_SI256_PS(                                              \
+            (_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(          \
+                                   (__m128i const*)(data_feeder))),            \
+                               _mm256_set1_epi32(16))));                       \
         scr0 = _mm256_mul_ps(scr0, scl_fct0);                                  \
     }
 
 #define BF16_F32_MATRIX_ADD_LOAD_XMM(scr, scl_fct, m_ind, n_ind)               \
-    scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                              \
-        _mm_cvtepi16_epi32(DLP_CAST_PD_SI128(_mm_load_sd(                               \
+    scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                    \
+        _mm_cvtepi16_epi32(DLP_CAST_PD_SI128(_mm_load_sd(                      \
             (double const*)(matptr                                             \
                             + ((post_ops_attr.post_op_c_i + m_ind) * ldm)      \
-                            + post_ops_attr.post_op_c_j + (n_ind * 4))))),      \
-        _mm_set1_epi32(16)));                                                   \
+                            + post_ops_attr.post_op_c_j + (n_ind * 4))))),     \
+        _mm_set1_epi32(16)));                                                  \
     scr = _mm_mul_ps(scr, scl_fct);
 
 #define BF16_F32_MATRIX_ADD_1COL_XMM(scr0, scl_fct0, m_ind, r_ind0)            \
@@ -463,11 +463,11 @@ multiply with Beta, and add to alpha*A*B*/
     F32_MATRIX_ADD_1COL_XMM(scr0, m_ind, r_ind0);
 
 #define BF16_F32_MATRIX_ADD_LOAD_XMM_2ELE(scr, scl_fct, m_ind, n_ind)          \
-    scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                              \
-        _mm_cvtepi16_epi32(DLP_CAST_PS_SI128(_mm_load_ss(                               \
-            (float const*)(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm) \
-                          + post_ops_attr.post_op_c_j + (n_ind * 2))))),        \
-        _mm_set1_epi32(16)));                                                   \
+    scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                    \
+        _mm_cvtepi16_epi32(DLP_CAST_PS_SI128(_mm_load_ss((                     \
+            float const*)(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm) \
+                          + post_ops_attr.post_op_c_j + (n_ind * 2))))),       \
+        _mm_set1_epi32(16)));                                                  \
     scr = _mm_mul_ps(scr, scl_fct);
 
 #define BF16_F32_MATRIX_ADD_1COL_XMM_2ELE(scr0, scl_fct0, m_ind, r_ind0)       \
@@ -483,10 +483,10 @@ multiply with Beta, and add to alpha*A*B*/
                                                                                \
         for (iter_t i = 0; i < 1; i++)                                         \
             data_feeder[i] = *(post_op_ptr + i);                               \
-        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                          \
-            _mm_cvtepi16_epi32(                                                \
-                _mm_loadu_si128((__m128i const*)(data_feeder))),      \
-            _mm_set1_epi32(16)));                                               \
+        scr = DLP_CAST_SI128_PS(                                               \
+            _mm_sllv_epi32(_mm_cvtepi16_epi32(_mm_loadu_si128(                 \
+                               (__m128i const*)(data_feeder))),                \
+                           _mm_set1_epi32(16)));                               \
         scr = _mm_mul_ps(scr, scl_fct);                                        \
     }
 
@@ -513,8 +513,7 @@ multiply with Beta, and add to alpha*A*B*/
     ymm##r_ind3 = _mm256_mul_ps(scr3, ymm##r_ind3);
 
 #define F32_F32_MATRIX_MUL_LOAD_XMM_1ELE(scr, scl_fct, m_ind, n_ind)           \
-    scr = _mm_load_ss(matptr                                                   \
-                      + ((post_ops_attr.post_op_c_i + m_ind) * ldm)            \
+    scr = _mm_load_ss(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm)     \
                       + post_ops_attr.post_op_c_j + (n_ind * 2));              \
     scr = _mm_mul_ps(scr, scl_fct);
 
@@ -523,9 +522,9 @@ multiply with Beta, and add to alpha*A*B*/
     F32_MATRIX_MUL_1COL_XMM(scr0, m_ind, r_ind0);
 
 #define F32_F32_MATRIX_MUL_LOAD_XMM_2ELE(scr, scl_fct, m_ind, n_ind)           \
-    scr = DLP_CAST_PD_PS128(_mm_load_sd(                                                 \
+    scr = DLP_CAST_PD_PS128(_mm_load_sd(                                       \
         (double*)(matptr + ((post_ops_attr.post_op_c_i + m_ind) * ldm)         \
-                  + post_ops_attr.post_op_c_j + (n_ind * 2))));                 \
+                  + post_ops_attr.post_op_c_j + (n_ind * 2))));                \
     scr = _mm_mul_ps(scr, scl_fct);
 
 #define F32_F32_MATRIX_MUL_1COL_XMM_2ELE(scr0, scl_fct0, m_ind, r_ind0)        \
@@ -675,12 +674,12 @@ multiply with Beta, and add to alpha*A*B*/
 
 // DLP_BF16 -> DLP_F32 helper
 #define CVT_BF16_F32_SHIFT_AVX2(in)                                            \
-    DLP_CAST_SI256_PS((_mm256_sllv_epi32(_mm256_cvtepi16_epi32(in),             \
-                                        _mm256_set1_epi32(16))));
+    DLP_CAST_SI256_PS((                                                        \
+        _mm256_sllv_epi32(_mm256_cvtepi16_epi32(in), _mm256_set1_epi32(16))));
 
 // DLP_BF16->DLP_F32 BIAS helpers
 #define BF16_F32_BIAS_LOAD_AVX2(scr, n_ind)                                    \
-    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                          \
+    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                \
         _mm256_cvtepi16_epi32(_mm_loadu_si128(                                 \
             (__m128i const*)(((bfloat16*)post_ops_list_temp->op_args1)         \
                              + post_ops_attr.post_op_c_j + (n_ind * 8)))),     \
@@ -698,35 +697,35 @@ multiply with Beta, and add to alpha*A*B*/
                 data_feeder[i] = *(post_op_ptr + i);                           \
             }                                                                  \
         }                                                                      \
-        scr =                                                                  \
-            DLP_CAST_SI256_PS((_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(  \
-                                           (__m128i const*)(data_feeder))),    \
-                                       _mm256_set1_epi32(16))));                \
+        scr = DLP_CAST_SI256_PS(                                               \
+            (_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(          \
+                                   (__m128i const*)(data_feeder))),            \
+                               _mm256_set1_epi32(16))));                       \
     }
 
 #define BF16_F32_BIAS_BCAST_AVX2(scr, m_ind)                                   \
-    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                          \
-        _mm256_cvtepi16_epi32(                                                 \
-            _mm_set1_epi16(*(((bfloat16*)post_ops_list_temp->op_args1)         \
-                             + post_ops_attr.post_op_c_i + m_ind))),           \
-        _mm256_set1_epi32(16))));
+    scr = DLP_CAST_SI256_PS(                                                   \
+        (_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_set1_epi16(               \
+                               *(((bfloat16*)post_ops_list_temp->op_args1)     \
+                                 + post_ops_attr.post_op_c_i + m_ind))),       \
+                           _mm256_set1_epi32(16))));
 
 #define BF16_F32_BIAS_LOAD_4BF16_AVX2(scr, idx)                                \
     {                                                                          \
-        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                          \
-            _mm_cvtepi16_epi32(DLP_CAST_PD_SI128(_mm_load_sd(                           \
+        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                \
+            _mm_cvtepi16_epi32(DLP_CAST_PD_SI128(_mm_load_sd(                  \
                 (double const*)((bfloat16*)post_ops_list_temp->op_args1        \
-                                + post_ops_attr.post_op_c_j + (idx * 4))))),    \
-            _mm_set1_epi32(16)));                                               \
+                                + post_ops_attr.post_op_c_j + (idx * 4))))),   \
+            _mm_set1_epi32(16)));                                              \
     }
 
 #define BF16_F32_BIAS_LOAD_2BF16_AVX2(scr, idx)                                \
     {                                                                          \
-        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                          \
-            _mm_cvtepi16_epi32(DLP_CAST_PS_SI128(_mm_load_ss(                           \
+        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                \
+            _mm_cvtepi16_epi32(DLP_CAST_PS_SI128(_mm_load_ss(                  \
                 (float const*)((bfloat16*)post_ops_list_temp->op_args1         \
-                               + post_ops_attr.post_op_c_j + (idx * 2))))),      \
-            _mm_set1_epi32(16)));                                               \
+                               + post_ops_attr.post_op_c_j + (idx * 2))))),    \
+            _mm_set1_epi32(16)));                                              \
     }
 
 #define BF16_F32_BIAS_LOAD_1BF16_AVX2(scr, idx)                                \
@@ -736,14 +735,13 @@ multiply with Beta, and add to alpha*A*B*/
                (bfloat16*)post_ops_list_temp->op_args1                         \
                    + post_ops_attr.post_op_c_j + (idx * 1),                    \
                sizeof(bfloat16));                                              \
-        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                          \
-            _mm_cvtepi16_epi32(                                                \
-                _mm_loadu_si128((__m128i const*)data_feeder)),        \
-            _mm_set1_epi32(16)));                                               \
+        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                \
+            _mm_cvtepi16_epi32(_mm_loadu_si128((__m128i const*)data_feeder)),  \
+            _mm_set1_epi32(16)));                                              \
     }
 
 #define BF16_F32_BIAS_LOAD_AVX2_GEMV(scr, n_ind)                               \
-    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                          \
+    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                \
         _mm256_cvtepi16_epi32(_mm_loadu_si128(                                 \
             (__m128i const*)(((bfloat16*)post_ops_list_temp->op_args1)         \
                              + post_ops_attr.post_op_c_i + (n_ind * 8)))),     \
@@ -751,11 +749,11 @@ multiply with Beta, and add to alpha*A*B*/
 
 #define BF16_F32_BIAS_BCAST_LT4BF16_AVX2(scr, m_ind)                           \
     {                                                                          \
-        scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                          \
-            _mm_cvtepi16_epi32(                                                \
-                _mm_set1_epi16(*(((bfloat16*)post_ops_list_temp->op_args1)     \
+        scr = DLP_CAST_SI128_PS(                                               \
+            _mm_sllv_epi32(_mm_cvtepi16_epi32(_mm_set1_epi16(                  \
+                               *(((bfloat16*)post_ops_list_temp->op_args1)     \
                                  + post_ops_attr.post_op_c_i + m_ind))),       \
-            _mm_set1_epi32(16)));                                               \
+                           _mm_set1_epi32(16)));                               \
     }
 
 #define BF16_F32_BIAS_AVX2_GEMV_MASK(n_ind, scr, n_elems)                      \
@@ -766,16 +764,17 @@ multiply with Beta, and add to alpha*A*B*/
                                 + (post_ops_attr.post_op_c_j + (n_ind * 8));   \
         for (iter_t i = 0; i < n_elems; i++)                                   \
             data_feeder[i] = *(post_op_ptr + i);                               \
-        scr = DLP_CAST_SI256_PS(_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128( \
-                                            (__m128i const*)(data_feeder))),   \
-                                        _mm256_set1_epi32(16)));                \
+        scr = DLP_CAST_SI256_PS(                                               \
+            _mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_loadu_si128(           \
+                                  (__m128i const*)(data_feeder))),             \
+                              _mm256_set1_epi32(16)));                         \
     }
 
 #define BF16_F32_BIAS_BCAST_AVX2_GEMV(scr)                                     \
-    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                          \
-        _mm256_cvtepi16_epi32(                                                 \
-            _mm_set1_epi16(*((bfloat16*)post_ops_list_temp->op_args1))),       \
-        _mm256_set1_epi32(16))));
+    scr = DLP_CAST_SI256_PS(                                                   \
+        (_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_set1_epi16(               \
+                               *((bfloat16*)post_ops_list_temp->op_args1))),   \
+                           _mm256_set1_epi32(16))));
 
 #define STORE_F32_BF16_YMM(reg, m_ind, n_ind, n_elems)                         \
     {                                                                          \
@@ -842,7 +841,7 @@ multiply with Beta, and add to alpha*A*B*/
 
 #define STORE_F32_BF16_2XMM(reg, m_ind, n_ind)                                 \
     {                                                                          \
-        _mm_store_sd((double*)temp, DLP_CAST_PS_PD128(reg));                             \
+        _mm_store_sd((double*)temp, DLP_CAST_PS_PD128(reg));                   \
         dest = (bfloat16*)post_ops_attr.buf_downscale                          \
                + (post_ops_attr.rs_c_downscale                                 \
                   * (post_ops_attr.post_op_c_i + m_ind))                       \
@@ -870,10 +869,10 @@ multiply with Beta, and add to alpha*A*B*/
 
 /*Downscale Zeropoint DLP_BF16->DLP_F32 Helpers*/
 #define BF16_F32_ZP_SCALAR_BCAST_AVX2(scr)                                     \
-    scr = DLP_CAST_SI256_PS((_mm256_sllv_epi32(                                          \
-        _mm256_cvtepi16_epi32(                                                 \
-            _mm_set1_epi16(*((bfloat16*)post_ops_list_temp->op_args1))),       \
-        _mm256_set1_epi32(16))));
+    scr = DLP_CAST_SI256_PS(                                                   \
+        (_mm256_sllv_epi32(_mm256_cvtepi16_epi32(_mm_set1_epi16(               \
+                               *((bfloat16*)post_ops_list_temp->op_args1))),   \
+                           _mm256_set1_epi32(16))));
 
 #define BF16_F32_ZP_VECTOR_BCAST_AVX2(scr, m_ind)                              \
     BF16_F32_BIAS_BCAST_AVX2(scr, m_ind);
@@ -891,10 +890,10 @@ multiply with Beta, and add to alpha*A*B*/
     BF16_F32_BIAS_AVX2_GEMV_MASK(n_ind, scr, n_elems)
 
 #define BF16_F32_ZP_SCALAR_BCAST_SSE(scr)                                      \
-    scr = DLP_CAST_SI128_PS(_mm_sllv_epi32(                                              \
-        _mm_cvtepi16_epi32(                                                    \
-            _mm_set1_epi16(*(((bfloat16*)post_ops_list_temp->op_args1)))),       \
-        _mm_set1_epi32(16)));
+    scr = DLP_CAST_SI128_PS(                                                   \
+        _mm_sllv_epi32(_mm_cvtepi16_epi32(_mm_set1_epi16(                      \
+                           *(((bfloat16*)post_ops_list_temp->op_args1)))),     \
+                       _mm_set1_epi32(16)));
 
 #define BF16_F32_ZP_VECTOR_BCAST_SSE(scr, m_ind)                               \
     BF16_F32_BIAS_BCAST_LT4BF16_AVX2(scr, m_ind);

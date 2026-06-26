@@ -35,6 +35,7 @@
 // DLP_GEMV M=1 kernel for handling GEMV with group symmetric quantization.
 DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
@@ -1066,3 +1067,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
         grp_post_ops_attr.grp_post_op_j += nr0;
     } // jr loop
 }
+// clang-format on

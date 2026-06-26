@@ -30,8 +30,8 @@
 
 #include "../u8s8s32/dlp_gemm_s32_kern_macros.h"
 #include "../u8s8s32/dlp_gemm_s32_memcpy_macros.h"
-#include "kernels/dlp_kernels.h"
 #include "classic/dlp_simd_casts.h"
+#include "kernels/dlp_kernels.h"
 
 #define DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)       \
     zmm0 = _mm512_loadu_si512(paddr);                                          \
@@ -78,6 +78,7 @@
 
 DLP_GEMV_N_EQ1_KERN(int8_t, int8_t, int32_t, s8s8s32os32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
@@ -1011,3 +1012,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
     }
     }
 }
+// clang-format on

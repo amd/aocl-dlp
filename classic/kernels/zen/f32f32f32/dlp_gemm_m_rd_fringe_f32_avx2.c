@@ -33,6 +33,7 @@
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x16_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x16F_DISABLE,    &&POST_OPS_BIAS_2x16F,
         &&POST_OPS_RELU_2x16F,       &&POST_OPS_RELU_SCALE_2x16F,
@@ -585,9 +586,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x16F_DISABLE)
         abuf = abuf + 3 * rs_a0;
     } // END LOOP_2x16J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x16_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x16F_DISABLE,    &&POST_OPS_BIAS_1x16F,
         &&POST_OPS_RELU_1x16F,       &&POST_OPS_RELU_SCALE_1x16F,
@@ -1048,9 +1051,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x16F_DISABLE)
         abuf = abuf + 3 * rs_a0;
     } // END LOOP_1x16J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x8_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x8F_DISABLE,    &&POST_OPS_BIAS_2x8F,
         &&POST_OPS_RELU_2x8F,       &&POST_OPS_RELU_SCALE_2x8F,
@@ -1603,9 +1608,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x8F_DISABLE)
         abuf = abuf + 3 * rs_a0;
     } // END LOOP_2x8J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x8_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x8F_DISABLE,    &&POST_OPS_BIAS_1x8F,
         &&POST_OPS_RELU_1x8F,       &&POST_OPS_RELU_SCALE_1x8F,
@@ -2066,9 +2073,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x8F_DISABLE)
         abuf = abuf + 3 * rs_a0;
     } // END LOOP_1x8J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x4_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x4F_DISABLE,    &&POST_OPS_BIAS_2x4F,
         &&POST_OPS_RELU_2x4F,       &&POST_OPS_RELU_SCALE_2x4F,
@@ -2621,9 +2630,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x4F_DISABLE)
         abuf = abuf + 3 * rs_a0;
     } // END LOOP_2x8J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x4_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x4F_DISABLE,    &&POST_OPS_BIAS_1x4F,
         &&POST_OPS_RELU_1x4F,       &&POST_OPS_RELU_SCALE_1x4F,
@@ -3084,9 +3095,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x4F_DISABLE)
         abuf = abuf + 3 * rs_a0;
     } // END LOOP_1x4J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x2_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x2F_DISABLE,    &&POST_OPS_BIAS_2x2F,
         &&POST_OPS_RELU_2x2F,       &&POST_OPS_RELU_SCALE_2x2F,
@@ -3579,9 +3592,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x2F_DISABLE)
         _mm_maskstore_ps(c_temp, m_mask, xmm5);
     }
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x2_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x2F_DISABLE,    &&POST_OPS_BIAS_1x2F,
         &&POST_OPS_RELU_1x2F,       &&POST_OPS_RELU_SCALE_1x2F,
@@ -3969,9 +3984,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x2F_DISABLE)
         _mm_maskstore_ps(c_temp, m_mask, xmm4);
     }
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_2x1_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x1F_DISABLE,    &&POST_OPS_BIAS_2x1F,
         &&POST_OPS_RELU_2x1F,       &&POST_OPS_RELU_SCALE_2x1F,
@@ -4450,9 +4467,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x1F_DISABLE)
         _mm_maskstore_ps(c_temp, m_mask, xmm5);
     }
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_1x1_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x1F_DISABLE,    &&POST_OPS_BIAS_1x1F,
         &&POST_OPS_RELU_1x1F,       &&POST_OPS_RELU_SCALE_1x1F,
@@ -4831,3 +4850,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x1F_DISABLE)
         _mm_maskstore_ps(c_temp, m_mask, xmm4);
     }
 }
+// clang-format on

@@ -35,6 +35,7 @@
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x64_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x64F_DISABLE,    &&POST_OPS_BIAS_5x64F,
         &&POST_OPS_RELU_5x64F,       &&POST_OPS_RELU_SCALE_5x64F,
@@ -1146,9 +1147,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x64F_DISABLE)
         a_temp = a_temp + 6 * rs_a0;
     } // END LOOP_5x64J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x64_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x64F_DISABLE,    &&POST_OPS_BIAS_4x64F,
         &&POST_OPS_RELU_4x64F,       &&POST_OPS_RELU_SCALE_4x64F,
@@ -2092,9 +2095,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x64F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_4x64J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x64_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x64F_DISABLE,    &&POST_OPS_BIAS_3x64F,
         &&POST_OPS_RELU_3x64F,       &&POST_OPS_RELU_SCALE_3x64F,
@@ -2877,9 +2882,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x64F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_3x64J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x64_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x64F_DISABLE,    &&POST_OPS_BIAS_2x64F,
         &&POST_OPS_RELU_2x64F,       &&POST_OPS_RELU_SCALE_2x64F,
@@ -3513,9 +3520,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x64F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_2x64J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x64_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64F_DISABLE,    &&POST_OPS_BIAS_1x64F,
         &&POST_OPS_RELU_1x64F,       &&POST_OPS_RELU_SCALE_1x64F,
@@ -3996,9 +4005,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x64F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_1x64J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x48_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x48F_DISABLE,    &&POST_OPS_BIAS_5x48F,
         &&POST_OPS_RELU_5x48F,       &&POST_OPS_RELU_SCALE_5x48F,
@@ -5110,9 +5121,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x48F_DISABLE)
         a_temp = a_temp + 6 * rs_a0;
     } // END LOOP_5x48J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x48_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x48F_DISABLE,    &&POST_OPS_BIAS_4x48F,
         &&POST_OPS_RELU_4x48F,       &&POST_OPS_RELU_SCALE_4x48F,
@@ -6056,9 +6069,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x48F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_4x48J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x48_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x48F_DISABLE,    &&POST_OPS_BIAS_3x48F,
         &&POST_OPS_RELU_3x48F,       &&POST_OPS_RELU_SCALE_3x48F,
@@ -6841,9 +6856,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x48F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_3x48J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x48_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x48F_DISABLE,    &&POST_OPS_BIAS_2x48F,
         &&POST_OPS_RELU_2x48F,       &&POST_OPS_RELU_SCALE_2x48F,
@@ -7477,9 +7494,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x48F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_2x48J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x48_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x48F_DISABLE,    &&POST_OPS_BIAS_1x48F,
         &&POST_OPS_RELU_1x48F,       &&POST_OPS_RELU_SCALE_1x48F,
@@ -7960,9 +7979,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x48F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_1x48J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_5x32_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_5x32F_DISABLE,    &&POST_OPS_BIAS_5x32F,
         &&POST_OPS_RELU_5x32F,       &&POST_OPS_RELU_SCALE_5x32F,
@@ -9074,9 +9095,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_5x32F_DISABLE)
         a_temp = a_temp + 6 * rs_a0;
     } // END LOOP_5x32J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_4x32_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_4x32F_DISABLE,    &&POST_OPS_BIAS_4x32F,
         &&POST_OPS_RELU_4x32F,       &&POST_OPS_RELU_SCALE_4x32F,
@@ -10020,9 +10043,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_4x32F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_4x32J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_3x32_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_3x32F_DISABLE,    &&POST_OPS_BIAS_3x32F,
         &&POST_OPS_RELU_3x32F,       &&POST_OPS_RELU_SCALE_3x32F,
@@ -10805,9 +10830,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_3x32F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_3x32J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_2x32_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_2x32F_DISABLE,    &&POST_OPS_BIAS_2x32F,
         &&POST_OPS_RELU_2x32F,       &&POST_OPS_RELU_SCALE_2x32F,
@@ -11441,9 +11468,11 @@ DLP_POST_OPS_DISABLE(POST_OPS_2x32F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_2x32J
 }
+// clang-format on
 
 DLP_GEMM_M_RD_FRINGE_KERN(float, float, float, f32f32f32of32_avx512_1x32_rd)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_1x64F_DISABLE,    &&POST_OPS_BIAS_1x64F,
         &&POST_OPS_RELU_1x64F,       &&POST_OPS_RELU_SCALE_1x64F,
@@ -11924,3 +11953,4 @@ DLP_POST_OPS_DISABLE(POST_OPS_1x64F_DISABLE)
         a_temp += 6 * rs_a0;
     } // END LOOP_1x32J
 }
+// clang-format on

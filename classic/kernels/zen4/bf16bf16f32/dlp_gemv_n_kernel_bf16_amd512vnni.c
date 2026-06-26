@@ -30,8 +30,8 @@
 #include "kernels/dlp_kernels.h"
 #include "xmmintrin.h"
 
-#include "dlp_gemm_f32_kern_macros.h"
 #include "classic/dlp_simd_casts.h"
+#include "dlp_gemm_f32_kern_macros.h"
 
 // Zero-out the given ZMM accumulator registers
 #define ZERO_ACC_XMM_4_REG(xmm0, xmm1, xmm2, xmm3)                             \
@@ -42,15 +42,16 @@
 
 #define DLP_GEMV_N_KERNEL_4_MASKLOADS(zmm0, zmm1, zmm2, zmm3, k1, paddr,       \
                                       stride)                                  \
-    zmm0 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k1, paddr));                      \
-    zmm1 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k1, paddr + stride));             \
-    zmm2 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k1, paddr + 2 * stride));         \
+    zmm0 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k1, paddr));             \
+    zmm1 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k1, paddr + stride));    \
+    zmm2 =                                                                     \
+        DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k1, paddr + 2 * stride));   \
     zmm3 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k1, paddr + 3 * stride));
 
 #define DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, paddr, stride)       \
-    zmm0 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(paddr));                                \
-    zmm1 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(paddr + stride));                       \
-    zmm2 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(paddr + 2 * stride));                   \
+    zmm0 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(paddr));                       \
+    zmm1 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(paddr + stride));              \
+    zmm2 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(paddr + 2 * stride));          \
     zmm3 = DLP_CAST_SI512_BH(_mm512_loadu_epi16(paddr + 3 * stride));
 
 #define DLP_GEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6, zmm0, zmm1,    \
@@ -80,6 +81,7 @@ DLP_GEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32) {}
 #else
 DLP_GEMV_N_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
+    // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
         &&POST_OPS_RELU_6x64,       &&POST_OPS_RELU_SCALE_6x64,
@@ -771,4 +773,5 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
     }
     }
 }
+// clang-format on
 #endif //  DLP_GEMM_BF16_JIT

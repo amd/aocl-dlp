@@ -88,8 +88,8 @@ class CrashIsolation
         int         returnCode = 0;
         bool        threw      = false;
         std::string exceptionMessage;
-        bool crashed     = false;
-        int  crashSignal = 0;
+        bool        crashed     = false;
+        int         crashSignal = 0;
     };
 
 #ifdef _WIN32
@@ -110,7 +110,7 @@ class CrashIsolation
     {
         Result result;
         try {
-            int rc           = sehWrapper(&func, &result);
+            int rc = sehWrapper(&func, &result);
             if (!result.crashed) {
                 result.returnCode = rc;
                 result.completed  = true;

@@ -29,8 +29,8 @@
 #ifndef DLP_GEMM_FP16_KERN_MACROS_H
 #define DLP_GEMM_FP16_KERN_MACROS_H
 
-#include <immintrin.h>
 #include "classic/dlp_simd_casts.h"
+#include <immintrin.h>
 
 /**
  * @file dlp_gemm_fp16_kern_macros.h

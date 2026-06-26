@@ -26,22 +26,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  */
+#include "classic/dlp_simd_casts.h"
 #include "kernels/dlp_kernels.h"
 #include "kernels/s8s8s32/dlp_gemm_quanta_s8.h"
-#include "classic/dlp_simd_casts.h"
 
 // Load BF16 value and convert to FP32 (shift left by 16 bits)
 #define LOAD_BF16_TO_F32(reg, in)                                              \
-    reg = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
+    reg = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                \
         _mm512_cvtepi16_epi32(_mm256_loadu_si256((const __m256i*)(in))),       \
         _mm512_set1_epi32(16))));
 
 // Load BF16 with mask and convert to FP32 (for tail handling)
 #define LOAD_MASKED_BF16_TO_F32(reg, mask, in)                                 \
-    reg = DLP_CAST_SI512_PS((_mm512_sllv_epi32(                                          \
-        _mm512_cvtepi16_epi32(                                                 \
-            _mm256_maskz_loadu_epi16(mask, (const __m256i*)(in))),             \
-        _mm512_set1_epi32(16))));
+    reg = DLP_CAST_SI512_PS(                                                   \
+        (_mm512_sllv_epi32(_mm512_cvtepi16_epi32(_mm256_maskz_loadu_epi16(     \
+                               mask, (const __m256i*)(in))),                   \
+                           _mm512_set1_epi32(16))));
 
 #define LOAD_BF16_ROW_OP(i, dest, src, ic, kr, rs, cs)                         \
     LOAD_BF16_TO_F32(dest[i], src + ((ic + i) * rs + kr * cs))
@@ -281,7 +281,7 @@ dlp_quant_a_sym_bf16s8_row_major(int8_t*         quant_a_buffer,
     __mmask16 mask = 0xFFFF >> (NUM_ELEM - kleft); // Mask for tail processing
 
     __m512 a_reg[16]; // Temporary registers for input data
-    __m512 sf[16];  // Scale factors broadcasted into registers
+    __m512 sf[16];    // Scale factors broadcasted into registers
 
     // Initialize to avoid uninitialized register warnings.
     for (iter_t i = 0; i < MR; i++) {
