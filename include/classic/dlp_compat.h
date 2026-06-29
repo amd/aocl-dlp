@@ -422,7 +422,7 @@ extern "C++"
 #define DLP_POST_OP_CASE(N, LABEL)                                             \
     LABEL: {
 #define DLP_POST_OPS_DISABLE(LABEL)                                            \
-    LABEL:
+    LABEL:;
 #define DLP_POST_OPS_LABELS_DECL(...)                                          \
     static void* post_ops_labels[] = { __VA_ARGS__ };
 
