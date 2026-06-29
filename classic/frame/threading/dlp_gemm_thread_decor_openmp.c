@@ -1652,16 +1652,15 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
 #define GEN_DLP_GEMM_DECORATOR_UNIFIED(A_type, B_type, C_type, C_type_actual,  \
                                        DLP_GEMM_SFX, HAS_MC_LOGIC, MC_OP_TYPE) \
                                                                                \
-    __attribute__((aligned(64))) void                                          \
-        dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                            \
-            const md_t m, const md_t n, const md_t k, const A_type* a,         \
-            const md_t rs_a, const md_t cs_a,                                  \
-            const AOCL_DLP_MEMORY_TAG mtag_a, const B_type* b,                 \
-            const md_t rs_b, const md_t cs_b, AOCL_DLP_MEMORY_TAG mtag_b,      \
-            C_type_actual* c, const md_t rs_c, const md_t cs_c,                \
-            const C_type alpha, const C_type beta, dlp_rntm_t* rntm_g,         \
-            dlp_gemm_cntx_t* lcntx, const dlp_gemm_ops_bundle_t* ops,          \
-            DLP_TYPE c_downscale)                                              \
+    DLP_ALIGN_FUNC(64)                                                         \
+    void dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                           \
+        const md_t m, const md_t n, const md_t k, const A_type* a,             \
+        const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
+        const B_type* b, const md_t rs_b, const md_t cs_b,                     \
+        AOCL_DLP_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,         \
+        const md_t cs_c, const C_type alpha, const C_type beta,                \
+        dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,                            \
+        const dlp_gemm_ops_bundle_t* ops, DLP_TYPE c_downscale)                \
     {                                                                          \
         /* Single-threaded execution */                                        \
         md_t n_threads = 1;                                                    \

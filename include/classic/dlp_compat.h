@@ -104,19 +104,23 @@
  *
  * Variables: DLP_ALIGN_PREFIX(N) type name DLP_ALIGN_SUFFIX(N);
  * Structs:   typedef struct DLP_ALIGNED_STRUCT(N) { ... } t;
+ * Functions: DLP_ALIGN_FUNC(N) ret_type fn(...) { ... }
  * ====================================================================== */
 #if defined(__clang__) || defined(__GNUC__)
 #define DLP_ALIGN_PREFIX(N)
 #define DLP_ALIGN_SUFFIX(N)   __attribute__((aligned(N)))
 #define DLP_ALIGNED_STRUCT(N) __attribute__((aligned(N)))
+#define DLP_ALIGN_FUNC(N)     __attribute__((aligned(N)))
 #elif defined(_MSC_VER)
 #define DLP_ALIGN_PREFIX(N) __declspec(align(N))
 #define DLP_ALIGN_SUFFIX(N)
 #define DLP_ALIGNED_STRUCT(N) __declspec(align(N))
+#define DLP_ALIGN_FUNC(N)     __declspec(align(N))
 #else
 #define DLP_ALIGN_PREFIX(N)
 #define DLP_ALIGN_SUFFIX(N)   __attribute__((aligned(N)))
 #define DLP_ALIGNED_STRUCT(N) __attribute__((aligned(N)))
+#define DLP_ALIGN_FUNC(N)     __attribute__((aligned(N)))
 #endif
 
 /* ======================================================================
