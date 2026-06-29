@@ -247,10 +247,24 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
                     md_t kc0_updated = kc0;
                     kc0_updated += (kc0_updated & 0x1);
 
-                    ((pack_bf16)lcntx->packb_fun_ptr)(
-                        ((bfloat16*)pack_b_buffer_bf16) + (n_sub_updated * pc),
-                        (((bfloat16*)b) + (rs_b * pc) + (jc * cs_b)), rs_b,
-                        cs_b, nc0, kc0, &rs_b_use, &cs_b_use);
+                    // Use the JIT pack-B kernel when a handle exists (row- or
+                    // column-major B); a NULL handle (e.g. unsupported ISA /
+                    // disabled JIT) falls back to the intrinsic packer.
+                    if (lcntx->dlp_pack_kernel_hndl.pack_b_hndl.kernel_base
+                        != NULL) {
+                        dlp_execute_packb_kernel(
+                            lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                            (void*)(((bfloat16*)b) + (rs_b * pc) + (jc * cs_b)),
+                            (void*)(((bfloat16*)pack_b_buffer_bf16)
+                                    + (n_sub_updated * pc)),
+                            nc0, kc0, rs_b, cs_b, &rs_b_use, &cs_b_use);
+                    } else {
+                        ((pack_bf16)lcntx->packb_fun_ptr)(
+                            ((bfloat16*)pack_b_buffer_bf16)
+                                + (n_sub_updated * pc),
+                            (((bfloat16*)b) + (rs_b * pc) + (jc * cs_b)), rs_b,
+                            cs_b, nc0, kc0, &rs_b_use, &cs_b_use);
+                    }
                 }
 
                 b_use = pack_b_buffer_bf16;
@@ -487,12 +501,27 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                 // no: of B panel NR chunks.
                 if ((jc_packb_end > jc_packb_start)
                     && (jc_packb_start < (jc + nc0))) {
-                    ((pack_bf16)lcntx->packb_fun_ptr)(
-                        pack_b_buffer_bf16 + (jc_packb_start * kc0_updated),
-                        (b + (rs_b * pc) + (cs_b * jc)
-                         + (cs_b * jc_packb_start)),
-                        rs_b, cs_b, (jc_packb_end - jc_packb_start), kc0,
-                        &rs_b_use, &cs_b_use);
+                    // Use the JIT pack-B kernel when a handle exists (row- or
+                    // column-major B); a NULL handle (e.g. unsupported ISA /
+                    // disabled JIT) falls back to the intrinsic packer.
+                    if (lcntx->dlp_pack_kernel_hndl.pack_b_hndl.kernel_base
+                        != NULL) {
+                        dlp_execute_packb_kernel(
+                            lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                            (void*)(b + (rs_b * pc) + (cs_b * jc)
+                                    + (cs_b * jc_packb_start)),
+                            (void*)(pack_b_buffer_bf16
+                                    + (jc_packb_start * kc0_updated)),
+                            (jc_packb_end - jc_packb_start), kc0, rs_b, cs_b,
+                            &rs_b_use, &cs_b_use);
+                    } else {
+                        ((pack_bf16)lcntx->packb_fun_ptr)(
+                            pack_b_buffer_bf16 + (jc_packb_start * kc0_updated),
+                            (b + (rs_b * pc) + (cs_b * jc)
+                             + (cs_b * jc_packb_start)),
+                            rs_b, cs_b, (jc_packb_end - jc_packb_start), kc0,
+                            &rs_b_use, &cs_b_use);
+                    }
                 } else {
                     dlp_gemm_get_packb_strides(lcntx, &rs_b_use, &cs_b_use);
                 }

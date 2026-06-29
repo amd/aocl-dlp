@@ -84,4 +84,65 @@ class jitAmdZenPackBFP32 : public dlp::jit::jitGeneratorBase
     std::unique_ptr<jitGeneratorBase> clone() override;
 };
 
+// Orchestrator for JIT-generated BF16 pack-B kernels. Mirrors
+// jitAmdZenPackBFP32: it owns ISA selection, generates the row-major fringe
+// ladder, runs the per-panel cascade dispatch in executeKernel, and reports the
+// packed-buffer strides.
+//
+// The ladder has numFull+1 kernels (numFull = NR / kernelWidth, kernelWidth =
+// simdWidth / K_FACTOR = 16 bf16 lanes):
+//   index 0            -> lt-block kernel (kernelWidth wide, runtime masked)
+//   index i in [1..nf] -> looped kernel of width i*kernelWidth (nf == full NR)
+// executeKernel issues the full-NR panels in one main call, then one base-width
+// fringe panel, then one runtime-masked lt-block, matching the intrinsic
+// packer's layout byte-for-byte. Both row-major and column-major sources are
+// supported (column-major uses the shared 16x16 transpose path).
+class jitAmdZenPackBBF16 : public dlp::jit::jitGeneratorBase
+{
+    std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
+    std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
+    utils::kernelInstrType                         kType;
+    int                                            numElemsPerReg;
+
+    // BF16 fuses two consecutive K elements per lane (vdpbf16ps), so the packed
+    // panel is laid out in K-pairs. K_FACTOR is fixed at 2 for BF16.
+    static constexpr md_t K_FACTOR = 2;
+
+    md_t NR;
+
+    bool isColMajor_;
+
+    // Fringe ladder: index 0 = lt-block (masked), index i = width
+    // i*kernelWidth.
+    std::vector<void*>                                 kernelCodeBlocks;
+    std::vector<std::unique_ptr<Xbyak::CodeGenerator>> codeGenerators;
+
+    void setGeneratorKernelMetaInfo(
+        dlp::kernel_frame::kernelInstrPreference kInstPref);
+
+    dlp::jit::jitGeneratorError generateAllKernels(
+        const dlp::jit::jitGeneratorContext& jI);
+
+  public:
+    jitAmdZenPackBBF16();
+    ~jitAmdZenPackBBF16();
+    jitAmdZenPackBBF16(const jitAmdZenPackBBF16&)            = delete;
+    jitAmdZenPackBBF16& operator=(const jitAmdZenPackBBF16&) = delete;
+    jitAmdZenPackBBF16(jitAmdZenPackBBF16&&)                 = delete;
+    jitAmdZenPackBBF16& operator=(jitAmdZenPackBBF16&&)      = delete;
+
+    dlp::jit::jitGeneratorError operator()(
+        const dlp::jit::jitGeneratorContext& jI) override
+    {
+        return generateAllKernels(jI);
+    }
+
+    std::vector<dlp::kernel_frame::kernelDatatype>& getKernelDatatypes()
+        override;
+    std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override;
+    dlp::kernels::kernelError                executeKernel(
+                       dlp::kernels::kernelParams* _params) override;
+    std::unique_ptr<jitGeneratorBase> clone() override;
+};
+
 } // namespace amdzen::gen

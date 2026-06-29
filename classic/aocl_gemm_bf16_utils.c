@@ -372,6 +372,18 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         return; // Error.
     }
 
+    // JIT pack B (BF16): optional optimization for the reorder path, mirroring
+    // the F32 reorder scaffolding. cs_b == 1 selects the row-major packer;
+    // cs_b != 1 (with rs_b == 1, i.e. transB) selects the column-major 16x16
+    // transpose packer. A NULL handle (e.g. no BF16 support) falls back to the
+    // classic intrinsic packer, so it is not an error. lcntx_g is already a
+    // local copy (with metadata-tuned block sizes applied above), so installing
+    // the handle here does not mutate the shared global context object.
+    lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+    dlp_init_and_get_packb_kernel_hndl(
+        DLP_KERNEL_BF16BF16F32OF32, n, lcntx_g.blksz.KC, rs_b, cs_b,
+        lcntx_g.blksz.NR, &lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl);
+
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;

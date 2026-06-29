@@ -31,6 +31,7 @@
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
 #include "kernels/kernel_base.hh"
+#include "pack_b_transpose_utils.hh"
 #include "traits.hh"
 #include "xbyak/xbyak.h"
 #include "xbyak/xbyak_util.h"
@@ -72,8 +73,9 @@ class jitPackBF32ColMajor : public Xbyak::CodeGenerator
     static constexpr int simdShift = (simdWidth == 16) ? 4 : 3;
 
     // AVX-512 16x16: post-transpose output row r is in Zmm(storeMap16[r]).
-    static constexpr int storeMap16[16] = { 0, 2, 8,  10, 1, 3, 9,  11,
-                                            4, 6, 12, 14, 5, 7, 13, 15 };
+    // The transpose itself is shared with the BF16 column-major packer; see
+    // pack_b_transpose_utils.hh.
+    static constexpr const int* storeMap16 = transpose::storeMap16;
 
     md_t NR_;
     int  numSubBlocks_;
@@ -123,8 +125,9 @@ class jitPackBF32ColMajor : public Xbyak::CodeGenerator
     void emitLoadCols(bool kMasked, bool partialNCols);
     void emitStoreRows(bool kMasked, bool nMaskedStore);
 
-    // Specialized transpose routines
-    void emitTranspose16x16();
+    // Specialized transpose routines. The AVX-512 16x16 transpose is shared
+    // with the BF16 column-major packer (pack_b_transpose_utils.hh); only the
+    // AVX2 8x8 path remains local here.
     void emitTranspose8x8();
     void emitTranspose();
 

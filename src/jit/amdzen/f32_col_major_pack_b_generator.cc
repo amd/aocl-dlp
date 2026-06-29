@@ -187,57 +187,11 @@ jitPackBF32ColMajor<utils::kernelInstrType::avx2_ymm_16_reg>::emitStoreOne(
 
 // ──────────────────────────────────────────────────────────────────────
 // ISA-specific: in-register transpose
+//
+// The AVX-512 16x16 transpose is shared with the BF16 column-major packer and
+// lives in pack_b_transpose_utils.hh (see emitTranspose() below). Only the AVX2
+// 8x8 transpose remains specific to this F32 generator.
 // ──────────────────────────────────────────────────────────────────────
-
-template<>
-void
-jitPackBF32ColMajor<
-    utils::kernelInstrType::avx512_zmm_32_reg>::emitTranspose16x16()
-{
-    // Stage 1: vunpcklps / vunpckhps (pairs -> Zmm16..31)
-    for (int i = 0; i < 16; i += 2) {
-        vunpcklps(Xbyak::Zmm(16 + i), Xbyak::Zmm(i), Xbyak::Zmm(i + 1));
-        vunpckhps(Xbyak::Zmm(16 + i + 1), Xbyak::Zmm(i), Xbyak::Zmm(i + 1));
-    }
-
-    // Stage 2: vunpcklpd / vunpckhpd (quads -> Zmm0..15)
-    vunpcklpd(Xbyak::Zmm(0), Xbyak::Zmm(16), Xbyak::Zmm(18));
-    vunpckhpd(Xbyak::Zmm(1), Xbyak::Zmm(16), Xbyak::Zmm(18));
-    vunpcklpd(Xbyak::Zmm(2), Xbyak::Zmm(20), Xbyak::Zmm(22));
-    vunpckhpd(Xbyak::Zmm(3), Xbyak::Zmm(20), Xbyak::Zmm(22));
-    vunpcklpd(Xbyak::Zmm(4), Xbyak::Zmm(24), Xbyak::Zmm(26));
-    vunpckhpd(Xbyak::Zmm(5), Xbyak::Zmm(24), Xbyak::Zmm(26));
-    vunpcklpd(Xbyak::Zmm(6), Xbyak::Zmm(28), Xbyak::Zmm(30));
-    vunpckhpd(Xbyak::Zmm(7), Xbyak::Zmm(28), Xbyak::Zmm(30));
-    vunpcklpd(Xbyak::Zmm(8), Xbyak::Zmm(17), Xbyak::Zmm(19));
-    vunpckhpd(Xbyak::Zmm(9), Xbyak::Zmm(17), Xbyak::Zmm(19));
-    vunpcklpd(Xbyak::Zmm(10), Xbyak::Zmm(21), Xbyak::Zmm(23));
-    vunpckhpd(Xbyak::Zmm(11), Xbyak::Zmm(21), Xbyak::Zmm(23));
-    vunpcklpd(Xbyak::Zmm(12), Xbyak::Zmm(25), Xbyak::Zmm(27));
-    vunpckhpd(Xbyak::Zmm(13), Xbyak::Zmm(25), Xbyak::Zmm(27));
-    vunpcklpd(Xbyak::Zmm(14), Xbyak::Zmm(29), Xbyak::Zmm(31));
-    vunpckhpd(Xbyak::Zmm(15), Xbyak::Zmm(29), Xbyak::Zmm(31));
-
-    // Stage 3: vshuff32x4 0x44 / 0xEE (128-bit lane pairs -> Zmm16..31)
-    static constexpr int s3a[8] = { 0, 4, 1, 5, 8, 12, 9, 13 };
-    static constexpr int s3b[8] = { 2, 6, 3, 7, 10, 14, 11, 15 };
-    for (int p = 0; p < 8; ++p) {
-        vshuff32x4(Xbyak::Zmm(16 + 2 * p), Xbyak::Zmm(s3a[p]),
-                   Xbyak::Zmm(s3b[p]), 0x44);
-        vshuff32x4(Xbyak::Zmm(16 + 2 * p + 1), Xbyak::Zmm(s3a[p]),
-                   Xbyak::Zmm(s3b[p]), 0xEE);
-    }
-
-    // Stage 4: vshuff32x4 0x88 / 0xDD (final placement -> Zmm0..15)
-    static constexpr int s4a[8] = { 16, 20, 17, 21, 24, 28, 25, 29 };
-    static constexpr int s4b[8] = { 18, 22, 19, 23, 26, 30, 27, 31 };
-    for (int p = 0; p < 8; ++p) {
-        vshuff32x4(Xbyak::Zmm(2 * p), Xbyak::Zmm(s4a[p]), Xbyak::Zmm(s4b[p]),
-                   0x88);
-        vshuff32x4(Xbyak::Zmm(2 * p + 1), Xbyak::Zmm(s4a[p]),
-                   Xbyak::Zmm(s4b[p]), 0xDD);
-    }
-}
 
 template<>
 void
@@ -553,7 +507,7 @@ template<>
 void
 jitPackBF32ColMajor<utils::kernelInstrType::avx512_zmm_32_reg>::emitTranspose()
 {
-    emitTranspose16x16();
+    transpose::emitTranspose16x16(*this);
 }
 
 template<>

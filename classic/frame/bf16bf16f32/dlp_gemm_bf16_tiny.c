@@ -223,8 +223,17 @@ DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         pack_b_buffer_bf16 =
             (bfloat16*)dlp_malloc_page_aligned(mem_b_size_req, &err);
 
-        ((pack_bf16)lcntx->packb_fun_ptr)(pack_b_buffer_bf16, b, rs_b, cs_b, n,
-                                          k, &rs_b_use, &cs_b_use);
+        // Use the JIT pack-B kernel when a handle exists (row- or column-major
+        // B); a NULL handle (e.g. unsupported ISA / disabled JIT) falls back to
+        // the intrinsic packer.
+        if (lcntx->dlp_pack_kernel_hndl.pack_b_hndl.kernel_base != NULL) {
+            dlp_execute_packb_kernel(lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                                     (void*)b, (void*)pack_b_buffer_bf16, n, k,
+                                     rs_b, cs_b, &rs_b_use, &cs_b_use);
+        } else {
+            ((pack_bf16)lcntx->packb_fun_ptr)(pack_b_buffer_bf16, b, rs_b, cs_b,
+                                              n, k, &rs_b_use, &cs_b_use);
+        }
 
         b_use = pack_b_buffer_bf16;
     } else if (mtag_b == REORDERED) {

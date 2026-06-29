@@ -537,17 +537,23 @@ struct packBGeneratorParams
     kernelInstrType kType;
     bool            useMask;
     int             numMaskRegs;
+    // Emit the N-panel (jc) loop over n_full_pieces_limit. True for the main
+    // full-NR kernel (packs every NR panel in one call); false for fringe
+    // kernels, which pack a single panel and skip the loop scaffolding.
+    bool nLoop;
 
     packBGeneratorParams(md_t            _NR,
                          md_t            _K_FACTOR,
                          kernelInstrType _kType,
                          bool            _useMask     = false,
-                         int             _numMaskRegs = 0)
+                         int             _numMaskRegs = 0,
+                         bool            _nLoop       = true)
         : NR(_NR)
         , K_FACTOR(_K_FACTOR)
         , kType(_kType)
         , useMask(_useMask)
         , numMaskRegs(_numMaskRegs)
+        , nLoop(_nLoop)
     {
     }
 

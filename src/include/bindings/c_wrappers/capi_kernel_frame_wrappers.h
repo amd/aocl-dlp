@@ -233,6 +233,9 @@ dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t     k_dtype,
                                    md_t                  nr_hint,
                                    dlp_pack_info_hndl_t* kernel_hndl);
 
+// Packs B with the JIT pack-B kernel. The caller must only invoke this with a
+// valid (non-NULL) handle; the kernel ladder covers the full NR panel plus the
+// fringe / lt16 cascade for every n, so there is no in-band failure to report.
 void
 dlp_execute_packb_kernel(dlp_pack_info_hndl_t kernel_hndl,
                          void*                src,

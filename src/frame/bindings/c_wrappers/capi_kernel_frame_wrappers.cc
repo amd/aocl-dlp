@@ -336,6 +336,13 @@ dlp_get_packb_kernelInfo_by_dtype(
                 nc, kc, cs_src, nr_hint, kDType);
     }
 
+    else if (kDType == kernelDatatype::bf16bf16f32of32
+             || kDType == kernelDatatype::bf16bf16f32obf16) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmPackBInfoForInputFastPath<dlp::de::gemmBF16DEBackend>(
+                nc, kc, cs_src, nr_hint, kDType);
+    }
+
     return dlp::kernel_frame::packKernelInfo();
 }
 

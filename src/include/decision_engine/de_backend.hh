@@ -705,6 +705,36 @@ class gemmBF16DEBackend : public iDEBackend
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, skinnyN);
     }
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
+        [[maybe_unused]] md_t nc,
+        [[maybe_unused]] md_t kc,
+        md_t                  cs_src,
+        md_t                  nr_hint) override final
+    {
+        // BF16 pack-B JIT is only valid on AVX-512-BF16. On a non-AVX-512-BF16
+        // machine no JIT-based pack-B is taken at all: when the backend has
+        // rerouted to F32 (no native BF16 path, or an AVX2/arch downgrade), the
+        // dedicated BF16->F32 fallback 5-loop converts/unreorders B to F32 and
+        // computes with the F32 micro-kernels. Report invalid here so the frame
+        // skips JIT pack-B on that path.
+        if (!isAvx512Bf16 || f32Backend != nullptr) {
+            return kernel_frame::INVALID_PACK_KERNEL_INFO;
+        }
+
+        bool colMajor = (cs_src != 1);
+
+        // BF16 fuses two consecutive K elements per lane (vdpbf16ps); the
+        // packed panel is laid out in K-pairs, hence k_factor = 2. Both src and
+        // dst of the packer are bf16 (the GEMM output type does not affect B
+        // packing).
+        constexpr md_t k_factor = 2;
+
+        return dlp::kernel_frame::packKernelInfo(
+            nr_hint, k_factor, eKernelInstPref, kernel_frame::DataType::bf16,
+            kernel_frame::DataType::bf16, colMajor);
+    }
 };
 
 class gemmU8S8DEBackend : public iDEBackend

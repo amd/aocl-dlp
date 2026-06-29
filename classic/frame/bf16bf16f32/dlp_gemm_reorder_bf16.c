@@ -338,13 +338,29 @@ dlp_reorderb_nr64_bf16bf16f32of32(dlp_gemm_obj_t*  b,
                 //    + ( n_sub_updated * pc ) <traverse block 5>
                 //    + ( NC' * kc0_updated)   <traverse block 6>
 
-                ((pack_bf16)lcntx->packb_fun_ptr)(
-                    ((bfloat16*)b_reorder->storage.aligned_buffer)
-                        + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
-                        + (jc_cur_loop_rem * kc0_updated),
-                    (((bfloat16*)b->storage.aligned_buffer) + (rs_b * pc)
-                     + (jc * cs_b)),
-                    rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
+                // Use the JIT pack-B kernel when a handle exists (row- or
+                // column-major B); a NULL handle (e.g. unsupported ISA /
+                // disabled JIT) falls back to the intrinsic packer.
+                if (lcntx->dlp_pack_kernel_hndl.pack_b_hndl.kernel_base
+                    != NULL) {
+                    dlp_execute_packb_kernel(
+                        lcntx->dlp_pack_kernel_hndl.pack_b_hndl,
+                        (void*)(((bfloat16*)b->storage.aligned_buffer)
+                                + (rs_b * pc) + (jc * cs_b)),
+                        (void*)(((bfloat16*)b_reorder->storage.aligned_buffer)
+                                + (jc_cur_loop * k_updated)
+                                + (n_sub_updated * pc)
+                                + (jc_cur_loop_rem * kc0_updated)),
+                        nc0, kc0, rs_b, cs_b, &rs_b_reorder, &cs_b_reorder);
+                } else {
+                    ((pack_bf16)lcntx->packb_fun_ptr)(
+                        ((bfloat16*)b_reorder->storage.aligned_buffer)
+                            + (jc_cur_loop * k_updated) + (n_sub_updated * pc)
+                            + (jc_cur_loop_rem * kc0_updated),
+                        (((bfloat16*)b->storage.aligned_buffer) + (rs_b * pc)
+                         + (jc * cs_b)),
+                        rs_b, cs_b, nc0, kc0, &rs_b_reorder, &cs_b_reorder);
+                }
             }
 
             dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
