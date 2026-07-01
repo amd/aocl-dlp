@@ -60,6 +60,18 @@ jitPackBBF16<KType>::generateKernel(utils::packBGeneratorParams& params)
     Xbyak::util::StackFrame stackFrame(
         this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
+
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64.
+    // No-op on SysV (Linux). This kernel uses vector regs ZMM_HI(6),
+    // ZMM_O0(7) and ZMM_O1(8) as scratch; their xmm halves (xmm6-xmm8) are
+    // nonvolatile under the Windows x64 ABI, which Xbyak's StackFrame does not
+    // preserve. Without this the kernel clobbers the MSVC caller's xmm6-8 and
+    // corrupts spilled host variables across executeKernel() (observed as a
+    // smashed loop index that blows the test's allocations into an OOM). Must
+    // outlive the kernel body, hence function scope right after the StackFrame.
+    // See utils::winAbiVectorGuard and the matching guard in the F32 packer.
+    utils::winAbiVectorGuard winAbiGuard(this, ZMM_HI, ZMM_O1);
+
     initializeParameters();
 
     // Load the vpermt2q index vectors and prepare the zero / tail-mask state.

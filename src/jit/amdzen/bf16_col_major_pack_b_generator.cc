@@ -139,6 +139,16 @@ jitPackBBF16ColMajor<KType>::generateKernel(utils::packBGeneratorParams& params)
     Xbyak::util::StackFrame stackFrame(
         this, 1, 12 | Xbyak::util::UseRBPAsFramePointer, 0);
     initializeStackFrame(stackFrame);
+
+    // Preserve callee-saved xmm6-15 across the kernel call on Windows x64.
+    // No-op on SysV (Linux). This 16x16 transpose packer uses Zmm(0..15) as
+    // scratch, so the xmm halves of regs 6..15 (nonvolatile under the Windows
+    // x64 ABI, untouched by Xbyak's StackFrame) must be saved/restored or the
+    // kernel corrupts the MSVC caller's xmm6-15 across executeKernel(). Must
+    // outlive the kernel body, hence function scope right after the StackFrame.
+    // See utils::winAbiVectorGuard and the matching guard in the F32 packer.
+    utils::winAbiVectorGuard winAbiGuard(this);
+
     initializeParameters();
 
     if (useMask_)
