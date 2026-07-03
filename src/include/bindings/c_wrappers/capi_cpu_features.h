@@ -95,7 +95,11 @@ bool
 dlp_cpuid_is_avx512fp16_supported(void);
 
 // API to get FP/SIMD execution datapath width.
-uint32_t
+// Returns a dlp_datapath_width enumerator: DATAPATH_FP128 (128-bit),
+// DATAPATH_FP256 (256-bit) or DATAPATH_FP512 (512-bit) on supported AMD
+// parts, or DATAPATH_INVALID when the width cannot be determined. The
+// return value is an enum, not a literal bit-width integer.
+dlp_datapath_width
 dlp_cpuid_query_fp_datapath(void);
 
 // API to check if cpu is zen5 arch.

@@ -77,7 +77,7 @@ dlp_cpuid_is_avx512fp16_supported(void)
     return archConfigManager::getInstance().isAvx512Fp16SupportedByArch();
 }
 
-uint32_t
+dlp_datapath_width
 dlp_cpuid_query_fp_datapath(void)
 {
     return archConfigManager::getInstance().getFpDatapathWidthOfArch();

@@ -90,9 +90,18 @@ target_compile_options(dlp_compiler_flags INTERFACE
     $<$<CXX_COMPILER_ID:MSVC>:/MP>  # Enable multi-processor compilation
 )
 
-# Disable specific warnings for MSVC that might be too noisy
+# Disable specific warnings for MSVC that might be too noisy.
+# These are MSVC-only /W4 pedantry that GCC and Clang accept silently; none of
+# them flags a real defect in the vectorized kernels. Suppressing them here
+# (MSVC-only) keeps the Windows build readable without changing any code or
+# touching the Linux/GCC/Clang flags. Genuinely suspicious codes (e.g. C4334,
+# C4245, C4133) are deliberately NOT suppressed and are handled separately.
 target_compile_options(dlp_compiler_flags INTERFACE
-    $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # Disable deprecation warnings
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4996>  # Deprecation (CRT/POSIX names): intentional cross-platform usage
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4305>  # double->float truncation: benign _mm*_set1_ps(literal) idioms missing an 'f' suffix
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4146>  # unary minus on unsigned: benign mask/sign idioms in the SIMD math macros
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4244>  # narrowing conversion (double->float / int): benign kernel arithmetic
+    $<$<CXX_COMPILER_ID:MSVC>:/wd4324>  # padding due to alignment specifier: INTENTIONAL cache-line alignment of structs
 )
 
 # Force-include the centralized portability header for all MSVC compilation units.

@@ -163,7 +163,7 @@ archConfigManager::setIsAvx512Fp16Supported()
 void
 archConfigManager::setFpDatapathWidth()
 {
-    fpDatapathWidth = [&]() -> uint32_t {
+    fpDatapathWidth = [&]() -> dlp_datapath_width {
         if (dlp::cpu_utils::cpuFeaturesInstance().getCpuVendor()
             == dlp::cpu_utils::cpuVendor::amd) {
             if (dlp::cpu_utils::cpuFeaturesInstance().hasFeature(

@@ -30,6 +30,8 @@
 
 #include <cstdint>
 
+#include "bindings/c_wrappers/capi_cpu_features.h"
+
 namespace dlp::arch_utils {
 
 /**
@@ -123,9 +125,11 @@ class archConfigManager
 
     /**
      * @brief Get the floating-point/SIMD execution datapath width
-     * @return Datapath width value (128, 256, or 512 bits typically)
+     * @return A dlp_datapath_width enumerator: DATAPATH_FP128, DATAPATH_FP256
+     *         or DATAPATH_FP512 on supported AMD parts, or DATAPATH_INVALID
+     *         when the width cannot be determined. Not a literal bit-width.
      */
-    std::uint32_t getFpDatapathWidthOfArch() const noexcept
+    dlp_datapath_width getFpDatapathWidthOfArch() const noexcept
     {
         return fpDatapathWidth;
     }
@@ -300,17 +304,17 @@ class archConfigManager
     void setIsZenConfigured();
 
     // Actual architectural feature support flags based on hardware detection.
-    bool             isAvx2Fma3Supported;
-    bool             isAvx512Supported;
-    bool             isAvx512VnniSupported;
-    bool             isAvx512Bf16Supported;
-    bool             isAvx512Fp16Supported;
-    uint32_t         fpDatapathWidth;
-    bool             isZen6;
-    bool             isZen5;
-    bool             isZen4;
-    bool             isZen;
-    ArchitectureType actualArch;
+    bool               isAvx2Fma3Supported;
+    bool               isAvx512Supported;
+    bool               isAvx512VnniSupported;
+    bool               isAvx512Bf16Supported;
+    bool               isAvx512Fp16Supported;
+    dlp_datapath_width fpDatapathWidth;
+    bool               isZen6;
+    bool               isZen5;
+    bool               isZen4;
+    bool               isZen;
+    ArchitectureType   actualArch;
 
     // Configured architecture based on environment variable or actual hardware
     // if env variable is not set or invalid.
