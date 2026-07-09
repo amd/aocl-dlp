@@ -362,6 +362,10 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::storeResult()
 {
+    // Scope-local labels: the GLU path emits storeResult() twice per kernel
+    // (pre-fold raw-C store + non-last-k full-width store), so global labels
+    // would collide with "label is redefined".
+    inLocalLabel();
     mov(regTmpCptr, regCPtr);
     if (c_downscale < DLP_F32) {
         // Check for is_last_k
@@ -369,7 +373,7 @@ jitGEMMBF16<KType>::storeResult()
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
-        je("STOREOP", T_NEAR);
+        je(".STOREOP", T_NEAR);
 
         mov(regTmpCptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
@@ -377,7 +381,7 @@ jitGEMMBF16<KType>::storeResult()
 
         // NULL check
         cmp(regTmpCptr, 0);
-        je("STOREOP", T_NEAR);
+        je(".STOREOP", T_NEAR);
 
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
@@ -414,8 +418,8 @@ jitGEMMBF16<KType>::storeResult()
             add(regTmpCptr, regTmp1);
         }
 
-        jmp("STOREOP_END", T_NEAR);
-        L("STOREOP");
+        jmp(".STOREOP_END", T_NEAR);
+        L(".STOREOP");
     }
     for (iter_t i = 0; i < MR; i++) {
         for (iter_t j = 0; j < bFullReg; j++) {
@@ -429,8 +433,147 @@ jitGEMMBF16<KType>::storeResult()
         }
         add(regTmpCptr, regRsC);
     }
-    L("STOREOP_END");
+    L(".STOREOP_END");
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMBF16<KType>::emitHalfWidthResult(bool colMajor)
+{
+    // Halve the 2I tile to I outputs into the caller's D buffer (buf_d) at this
+    // tile's disjoint home; raw 2I already went to C, only on is_last_k. Always
+    // a row-major store; the axis differs by output layout:
+    //   colMajor==false (row-major): MR rows, low I lanes; fringe mask_regs[1].
+    //   colMajor==true  (col-major): MR/2 rows, full NR lanes; fringe
+    //   mask_regs[0].
+    // base = buf_d + og_col*elt + og_row*(ld_d*elt), storeTile advances
+    // ld_d*elt per row (row-major: ld_d=I, og_col=c_j/2, og_row=c_i; col-major:
+    // ld_d=m, og_col=c_j, og_row=c_i/2).
+    const int    f32HalfBytes  = halfRegBytes;     // 8 f32  = 32 B (low Ymm)
+    const int    bf16HalfBytes = halfRegBytes / 2; // 8 bf16 = 16 B (low Xmm)
+    const int    eltBytes      = (c_downscale < DLP_F32) ? (int)sizeof(int16_t)
+                                                         : (int)sizeof(float);
+    const iter_t rows          = colMajor ? (MR / 2) : MR;
+
+    // Row-major halves the lanes: derive the half-width fringe mask
+    // (mask_regs[1]) as (1 << (popcnt(mask_regs[0])/2)) - 1. Column-major keeps
+    // full lanes and reuses mask_regs[0].
+    if (!colMajor && bMaskReg > 0) {
+        kmovw(regTmp1.cvt32(), mask_regs[0]);
+        popcnt(regKIter.cvt32(), regTmp1.cvt32());
+        shr(regKIter.cvt32(), 1);
+        mov(regTmp1.cvt32(), 0xFFFF);
+        bzhi(regTmp1.cvt32(), regTmp1.cvt32(), regKIter.cvt32());
+        kmovw(mask_regs[1], regTmp1.cvt32());
+    }
+    const Xbyak::Opmask& fringeMask = colMajor ? mask_regs[0] : mask_regs[1];
+
+    // Emit `rows` stores from regTmpCptr, advancing rowStrideBytes per row.
+    // Column-major writes the full register; row-major writes the low half.
+    auto storeTile = [&](const Xbyak::Reg64& rowStrideBytes) {
+        for (iter_t i = 0; i < rows; i++) {
+            for (iter_t j = 0; j < bFullReg; j++) {
+                if (c_downscale < DLP_F32) {
+                    if (colMajor) {
+                        vcvtneps2bf16(Xbyak::Ymm(bRegIdx + j),
+                                      Xbyak::Zmm(cRegIdx + i * bReg + j));
+                        vmovdqu16(ptr[regTmpCptr + j * halfRegBytes],
+                                  Xbyak::Ymm(bRegIdx + j));
+                    } else {
+                        vcvtneps2bf16(Xbyak::Xmm(bRegIdx + j),
+                                      Xbyak::Ymm(cRegIdx + i * bReg + j));
+                        vmovdqu16(ptr[regTmpCptr + j * bf16HalfBytes],
+                                  Xbyak::Xmm(bRegIdx + j));
+                    }
+                } else {
+                    if (colMajor)
+                        vmovups(ptr[regTmpCptr + j * RegBytes],
+                                Xbyak::Zmm(cRegIdx + i * bReg + j));
+                    else
+                        vmovups(ptr[regTmpCptr + j * f32HalfBytes],
+                                Xbyak::Ymm(cRegIdx + i * bReg + j));
+                }
+            }
+            if (bMaskReg > 0) {
+                if (c_downscale < DLP_F32) {
+                    if (colMajor) {
+                        vcvtneps2bf16(
+                            Xbyak::Ymm(bRegIdx + bFullReg),
+                            Xbyak::Zmm(cRegIdx + i * bReg + bFullReg));
+                        vmovdqu16(ptr[regTmpCptr + bFullReg * halfRegBytes]
+                                      | fringeMask,
+                                  Xbyak::Ymm(bRegIdx + bFullReg));
+                    } else {
+                        vcvtneps2bf16(
+                            Xbyak::Xmm(bRegIdx + bFullReg),
+                            Xbyak::Ymm(cRegIdx + i * bReg + bFullReg));
+                        vmovdqu16(ptr[regTmpCptr + bFullReg * bf16HalfBytes]
+                                      | fringeMask,
+                                  Xbyak::Xmm(bRegIdx + bFullReg));
+                    }
+                } else {
+                    if (colMajor)
+                        vmovups(ptr[regTmpCptr + bFullReg * RegBytes]
+                                    | fringeMask,
+                                Xbyak::Zmm(cRegIdx + i * bReg + bFullReg));
+                    else
+                        vmovups(ptr[regTmpCptr + bFullReg * f32HalfBytes]
+                                    | fringeMask,
+                                Xbyak::Ymm(cRegIdx + i * bReg + bFullReg));
+                }
+            }
+            add(regTmpCptr, rowStrideBytes);
+        }
+    };
+
+    // base = buf_d + og_col*elt + og_row*(ld_d*elt). Row-major halves the
+    // column (c_j/2), column-major halves the row (c_i/2).
+    mov(regTmpCptr,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, buf_d)]);
+
+    // og_col = post_op_c_j (halved for row-major); base += og_col * elt.
+    mov(regTmp1,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+    if (!colMajor)
+        shr(regTmp1, 1);
+    lea(regTmp1, ptr[regTmp1 * eltBytes]);
+    add(regTmpCptr, regTmp1);
+
+    mov(regKIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, ld_d)]);
+    lea(regKIter, ptr[regKIter * eltBytes]); // row stride bytes
+
+    // og_row = post_op_c_i (halved for column-major); base += og_row * stride.
+    mov(regTmp1,
+        ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
+    if (colMajor)
+        shr(regTmp1, 1);
+    imul(regTmp1, regKIter);
+    add(regTmpCptr, regTmp1);
+    storeTile(regKIter);
+    return dlp::jit::jitGeneratorError::success;
+}
+
+// Row-major GLU half-width store: halve along the lanes (MR rows, low I lanes).
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMBF16<KType>::storeHalfWidthResult()
+{
+    return emitHalfWidthResult(/*colMajor=*/false);
+}
+
+// Column-major GLU half-width store: halve along M (MR/2 full-width rows).
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMBF16<KType>::storeHalfWidthResultAlongM()
+{
+    return emitHalfWidthResult(/*colMajor=*/true);
 }
 
 template<utils::kernelInstrType KType>
@@ -520,6 +663,13 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
     test(regTmp1, regTmp1);
     je(label_store_result, T_NEAR);
 
+    // Pre-fold raw-C store (terminal GLU): on the last K-block store the raw
+    // pre-GLU 2I accumulators to C *before* the fold overwrites them; the fold
+    // then writes the compacted result to D. storeResult() only reads the regs.
+    if (params.storeHalfWidthResults) {
+        RETURN_IF_ERROR(storeResult());
+    }
+
     // Create kernel ops handler if there are post-ops
     std::unique_ptr<gen::kernelOpsHandler<KType>> kernelOpsHandlerPtr;
     if (!params.kernelOps.empty()) {
@@ -534,7 +684,6 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
             utils::registerPool<Xbyak::Opmask, Traits::numMaskRegs>;
 
         VecPoolType vecPool;
-        vecPool.addPreserve(bRegIdx, cRegIdx - bRegIdx);
         vecPool.setAccumulators(cRegIdx, cReg);
         RETURN_IF_ERROR(vecPool.init(this, Traits::regBytes));
 
@@ -556,7 +705,37 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
 
     // store C
     L(label_store_result);
-    RETURN_IF_ERROR(storeResult());
+    if (params.storeHalfWidthResults) {
+        // Terminal shape-changing post-op (e.g. GLU): on the last K-block store
+        // the folded result half-width; earlier blocks store raw 2I partials so
+        // the next block can accumulate. Branch at runtime on is_last_k.
+        mov(regTmp1,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp1, regTmp1);
+        je(".HW_FULL", T_NEAR);
+        // Column-major output (realized by an upstream m/n swap) puts gate/up
+        // pairs across accumulator ROWS, so it halves along M instead of lanes.
+        // Pick the axis from the shape-changing op's storage format.
+        bool colMajor = false;
+        for (const auto& kop : params.kernelOps) {
+            if (dlp::kernel_frame::isShapeChangingOp(kop.type)) {
+                colMajor = (kop.cMatFormat
+                            == dlp::kernel_frame::storageFormat::colMajor);
+            }
+        }
+        if (colMajor) {
+            RETURN_IF_ERROR(storeHalfWidthResultAlongM());
+        } else {
+            RETURN_IF_ERROR(storeHalfWidthResult());
+        }
+        jmp(".HW_DONE", T_NEAR);
+        L(".HW_FULL");
+        RETURN_IF_ERROR(storeResult());
+        L(".HW_DONE");
+    } else {
+        RETURN_IF_ERROR(storeResult());
+    }
 
     if (params.mLoop) {
         // Update A pointer

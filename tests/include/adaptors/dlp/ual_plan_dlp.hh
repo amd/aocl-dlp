@@ -97,6 +97,10 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
         m_matrix_add_ops;
     std::vector<std::unique_ptr<dlp::testing::framework::MatrixMulParam>>
         m_matrix_mul_ops;
+    // Terminal, shape-changing GLU op (at most one per chain). Its scalar slots
+    // (when set) are read in place via GluParam::getAlphaPtr/getBetaPtr; the
+    // param outlives execute(), so no separate backing storage is needed.
+    std::unique_ptr<dlp::testing::framework::GluParam> m_glu_op;
 
     // Cleanup metadata
     void cleanupMetadata();
@@ -107,6 +111,7 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
     void convertBiasOperations();
     void convertMatrixAddOperations();
     void convertMatrixMulOperations();
+    void convertGluOperations();
     void buildSequenceVector();
 
     // Quant conversion (moved from DlpOperation)

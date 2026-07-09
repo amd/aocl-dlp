@@ -231,6 +231,24 @@ dlp_gemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str)
             case MATRIX_MUL: {
                 DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, "mat_mul");
             } break;
+            case GLU: {
+                DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, "glu=");
+                // GLU algo dispatcher.
+                if (metadata->glu != NULL) {
+                    switch (metadata->glu->algo_type) {
+                        case GATED_SWIGLU: {
+                            DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len,
+                                                       "gated_swiglu");
+                        } break;
+                        case GATED_SWIGLU_AND_MUL: {
+                            DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len,
+                                                       "gated_swiglu_and_mul");
+                        } break;
+                        default:
+                            break;
+                    }
+                }
+            } break;
             default:
                 break;
         }

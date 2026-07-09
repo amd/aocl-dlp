@@ -114,8 +114,22 @@ enum class kernelOps : uint16_t
     sigmoid,
     aDQuantize,
     mish,
+    gatedSwiglu, // Fused GLU: SiLU(gate) * up     (shape-changing, terminal)
+    gatedSwigluAndMul, // Fused GLU: clamp+SiLU(gate)*up (shape-changing,
+                       // terminal)
     max_kernel_ops
 };
+
+// True for terminal GLU ops that consume an interleaved 2I-wide gate/up tile
+// and emit width I (the JIT OR-folds this into generatorParams
+// .storeHalfWidthResults to pick a half-width store). Derived from the op type
+// so there is no separate flag to keep in sync.
+inline bool
+isShapeChangingOp(kernelOps op)
+{
+    return (op == kernelOps::gatedSwiglu)
+           || (op == kernelOps::gatedSwigluAndMul);
+}
 
 // This enum is only applicable for jit generated kernels and is consumed
 // only by the jit generator. This gives info to the jit generator as to

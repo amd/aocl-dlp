@@ -141,6 +141,32 @@ namespace tables {
         0x40e00000  // rbound (7.0f)
     };
 
+    // GLU lane de-interleave indices for vpermps.
+    //
+    // For a column-interleaved (gate, up) accumulator, gate lives in the even
+    // lanes and up in the odd lanes. glu_perm_even gathers the even lanes into
+    // the low half of the register (the half-width result), glu_perm_odd does
+    // the same for the odd lanes.
+    //
+    // One 16-wide table serves both zmm and ymm: embedKernelOpsAttributes()
+    // emits only regBytes bytes (16 dwords for zmm, 8 for ymm). The low half is
+    // always the correct gate/up packing; the upper half is don't-care (it is
+    // discarded by the half-width store), and vpermps masks each index to the
+    // register's lane count, so the out-of-range entries are harmless.
+    inline constexpr uint32_t glu_perm_even[16] = { 0, 2, 4, 6, 8, 10, 12, 14,
+                                                    0, 2, 4, 6, 8, 10, 12, 14 };
+    inline constexpr uint32_t glu_perm_odd[16]  = { 1, 3, 5, 7, 9, 11, 13, 15,
+                                                    1, 3, 5, 7, 9, 11, 13, 15 };
+
+    // GATED_SWIGLU_AND_MUL (gpt-oss / OpenAI clamped GLU) scalar constants,
+    // baked into the kernel: the alpha (SiLU scale), clamp limit, and +1 bias
+    // are fixed by the gpt-oss spec, so they are compile-time constants rather
+    // than runtime post-op args. Index order (broadcast via gluConstAddr):
+    // [0]=limit, [1]=-limit, [2]=alpha, [3]=+1 bias. The +1 bias is held here
+    // (not borrowed from the gelu table) so GLU codegen does not depend on the
+    // gelu constant pool's layout.
+    inline constexpr float glu_consts[4] = { 7.0f, -7.0f, 1.702f, 1.0f };
+
 } // namespace tables
 
 } // namespace amdzen::gen

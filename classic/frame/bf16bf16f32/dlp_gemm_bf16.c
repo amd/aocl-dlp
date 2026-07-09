@@ -90,6 +90,14 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
     else
         post_ops_attr.buf_downscale = NULL;
 
+    // Terminal shape-changing GLU writes its compacted (m x I) result straight
+    // into the caller's disjoint D buffer, so there is no in-place C
+    // compaction, no beta*C race, and no scratch/copy-back. buf_d/ld_d are
+    // NULL/0 off the GLU path (post_op_list absent), so no separate branch is
+    // needed.
+    post_ops_attr.buf_d = (post_op_list != NULL) ? post_op_list->glu_d : NULL;
+    post_ops_attr.ld_d  = (post_op_list != NULL) ? post_op_list->glu_ld_d : 0;
+
     msz_t mem_a_size_req = 0;
     msz_t mem_b_size_req = 0;
 
@@ -126,6 +134,7 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
 
         // Compute the IC loop thread range for the current thread.
         md_t ic_start, ic_end;
+
         thread_ic.n_way   = (thread_ic.n_way == 1) ? (thread->n_threads)
                                                    : (thread_ic.n_way);
         thread_ic.work_id = thread->tid;
@@ -374,6 +383,11 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
     } else {
         post_ops_attr.buf_downscale = NULL;
     }
+
+    // Terminal GLU writes its compacted (m x I) tile to the caller's disjoint D
+    // buffer (no in-place C compaction / scratch); NULL/0 off the GLU path.
+    post_ops_attr.buf_d = (post_op_list != NULL) ? post_op_list->glu_d : NULL;
+    post_ops_attr.ld_d  = (post_op_list != NULL) ? post_op_list->glu_ld_d : 0;
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;
@@ -751,6 +765,11 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
     } else {
         post_ops_attr.buf_downscale = NULL;
     }
+
+    // Terminal GLU writes its compacted (m x I) tile to the caller's disjoint D
+    // buffer (no in-place C compaction / scratch); NULL/0 off the GLU path.
+    post_ops_attr.buf_d = (post_op_list != NULL) ? post_op_list->glu_d : NULL;
+    post_ops_attr.ld_d  = (post_op_list != NULL) ? post_op_list->glu_ld_d : 0;
     /* The thread calculations would still follow DLP_BF16 dimensions*/
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;
@@ -1081,6 +1100,12 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
     } else {
         post_ops_attr.buf_downscale = NULL;
     }
+
+    // Terminal GLU writes its compacted (m x I) tile to the caller's disjoint D
+    // buffer (no in-place C compaction / scratch); NULL/0 off the GLU path.
+    post_ops_attr.buf_d = (post_op_list != NULL) ? post_op_list->glu_d : NULL;
+    post_ops_attr.ld_d  = (post_op_list != NULL) ? post_op_list->glu_ld_d : 0;
+
     /* The thread calculations would still follow DLP_BF16 dimensions*/
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;

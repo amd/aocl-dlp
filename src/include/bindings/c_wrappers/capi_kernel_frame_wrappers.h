@@ -47,22 +47,24 @@ typedef enum
 // Post-ops codes.
 typedef enum
 {
-    POST_OPS_DISABLE    = 0,
-    POST_OPS_BIAS       = 1,
-    POST_OPS_RELU       = 2,
-    POST_OPS_RELU_SCALE = 3,
-    POST_OPS_GELU_TANH  = 4,
-    POST_OPS_GELU_ERF   = 5,
-    POST_OPS_CLIP       = 6,
-    POST_OPS_DOWNSCALE  = 7,
-    POST_OPS_MATRIX_ADD = 8,
-    POST_OPS_SWISH      = 9,
-    POST_OPS_MATRIX_MUL = 10,
-    POST_OPS_TANH       = 11,
-    POST_OPS_SIGMOID    = 12,
-    POST_OPS_SUM        = 13,
-    POST_OPS_ADQUANTIZE = 14,
-    POST_OPS_MISH       = 15,
+    POST_OPS_DISABLE              = 0,
+    POST_OPS_BIAS                 = 1,
+    POST_OPS_RELU                 = 2,
+    POST_OPS_RELU_SCALE           = 3,
+    POST_OPS_GELU_TANH            = 4,
+    POST_OPS_GELU_ERF             = 5,
+    POST_OPS_CLIP                 = 6,
+    POST_OPS_DOWNSCALE            = 7,
+    POST_OPS_MATRIX_ADD           = 8,
+    POST_OPS_SWISH                = 9,
+    POST_OPS_MATRIX_MUL           = 10,
+    POST_OPS_TANH                 = 11,
+    POST_OPS_SIGMOID              = 12,
+    POST_OPS_SUM                  = 13,
+    POST_OPS_ADQUANTIZE           = 14,
+    POST_OPS_MISH                 = 15,
+    POST_OPS_GATED_SWIGLU         = 16,
+    POST_OPS_GATED_SWIGLU_AND_MUL = 17,
     POST_OPS_MAX
 } DLP_GEMM_POST_OP_CODE;
 
@@ -84,7 +86,17 @@ typedef struct dlp_gemm_post_op_t
      * per-output-column) or per-token (length M, per-output-row). Mirrors
      * dlp_sf_t::scale_factor_dim from the user-facing metadata so the consumer
      * does not have to re-derive it from a flag. */
-    DLP_PARAM_DIM_TYPE         scale_factor_dim;
+    DLP_PARAM_DIM_TYPE scale_factor_dim;
+    /* Head-node-only fact cached by the translator for O(1) lookup: whether
+     * the list holds a shape-changing GLU (GatedSwiglu / GatedSwigluAndMul). */
+    bool list_has_shape_changing_glu;
+    /* Caller-provided compacted GLU output buffer D (m x I) and its leading
+     * dimension, resolved from the user metadata (dlp_post_op_glu). The
+     * terminal GLU writes its half-width result straight into D, so no scratch
+     * or copy-back is needed. Meaningful only when
+     * list_has_shape_changing_glu is true. */
+    void*                      glu_d;
+    uint64_t                   glu_ld_d;
     struct dlp_gemm_post_op_t* next;
 } dlp_gemm_post_op;
 
@@ -102,6 +114,17 @@ typedef struct dlp_gemm_post_op_attr_t
     uint64_t b_sum_offset;
     int32_t* b_col_sum_vec;
     int16_t* b_col_sum_vec_s16;
+    /* Caller-provided compacted GLU output buffer D (mandatory for a
+     * shape-changing GLU). The terminal GLU half-width store writes its
+     * converted (output-typed) result straight into D at the tile home
+     * (row-major: column post_op_c_j/2; column-major: row post_op_c_i/2),
+     * disjoint per thread -- so no scratch or copy-back is needed. Applies to
+     * both f32 and bf16 output. */
+    void* buf_d;
+    /* Leading dimension of D (in OUTPUT elements): row-major row stride (>= I),
+     * column-major column stride (>= m). Used as the compacted-axis stride by
+     * the half-width store; the other axis is unit-stride. */
+    uint64_t ld_d;
 } dlp_gemm_post_op_attr;
 
 // Type definitions that can be used by both C and C++ code. The enum tokens

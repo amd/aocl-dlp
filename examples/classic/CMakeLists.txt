@@ -43,6 +43,7 @@ set(EXAMPLE_SOURCES
     simple_gemm_per_token_quant.c
     post_ops_combinations.c
     eltwise_ops.c
+    simple_gemm_with_glu_swiglu_and_mul_bf16.c
     version.c
 )
 

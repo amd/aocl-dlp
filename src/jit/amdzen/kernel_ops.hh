@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "kernel_ops_glu.hh"
 #include "x86_kernel_ops_generator.hh"
 
 namespace amdzen::x86gen {
@@ -226,8 +227,11 @@ class Swish : public kernelopsBase<Swish<KType>, KType>
     using typename opBase::RegType;
     using typename opBase::Traits;
 
+  public:
     static constexpr int NUM_SCRATCH_NEEDED = 9;
 
+    // Public so composite post-ops (e.g. the GLU strategies) can reuse the f32
+    // swish kernel and its scratch budget without duplicating the math.
     void swishF32(int reg,
                   int x_tanh,
                   int x,
@@ -239,10 +243,8 @@ class Swish : public kernelopsBase<Swish<KType>, KType>
                   int dn,
                   int q);
 
-    int                                 expCmpMaskIdx = -1;
-    utils::registerGuard<Xbyak::Opmask> expMaskGuard;
+    int expCmpMaskIdx = -1;
 
-  public:
     explicit Swish(kernelOpsGeneratorX86<KType>& base)
         : opBase(base)
     {
@@ -254,6 +256,9 @@ class Swish : public kernelopsBase<Swish<KType>, KType>
 
     dlp::jit::jitGeneratorError generateImpl(
         dlp::kernel_frame::kernelOpsMetaData& op);
+
+  private:
+    utils::registerGuard<Xbyak::Opmask> expMaskGuard;
 };
 
 // GeluTanh: GELU via tanh approximation
@@ -664,6 +669,22 @@ generateKernelOp(kernelOpsGeneratorX86<KType>&         base,
         case dlp::kernel_frame::kernelOps::mish: {
             Mish<KType> mishImpl(base);
             return mishImpl.generate(op);
+        }
+        case dlp::kernel_frame::kernelOps::gatedSwiglu: {
+            /* Terminal shape-changing post-op: the strategy emits the GLU
+             * compute (permute to pick gate/up, swish on gate, multiply) in the
+             * accumulators (packed into the low lanes for row-major, low MR/2
+             * rows for column-major); the per-dtype generator's
+             * storeHalfWidthResult() / storeHalfWidthResultAlongM() then writes
+             * the compacted tile to the caller-owned D buffer. */
+            GatedSwiglu<KType> gatedSwigluImpl(base);
+            return gatedSwigluImpl.generate(op);
+        }
+        case dlp::kernel_frame::kernelOps::gatedSwigluAndMul: {
+            /* Same terminal shape-changing contract as gatedSwiglu, plus the
+             * OAI clamp and fused (up + 1) weight. */
+            GatedSwigluAndMul<KType> gatedSwigluAndMulImpl(base);
+            return gatedSwigluAndMulImpl.generate(op);
         }
         default:
             return dlp::jit::jitGeneratorError::notSupported;

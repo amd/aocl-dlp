@@ -86,6 +86,10 @@ VALID_OPERATION_TYPES = {
     "Scale",
     "Matrix-Add",
     "Matrix-Mul",
+    # Fused GLU (shape-changing, terminal post-op). Must be last/unique in a
+    # chain; the GEMM N is the interleaved width 2I.
+    "GLU-GATED_SWIGLU",
+    "GLU-GATED_SWIGLU_AND_MUL",
     "A_Quant",
     "GroupScale",
     "WOQ",

@@ -180,6 +180,12 @@ DlpUalPlan::cleanupMetadata()
             delete m_metadata->pre_ops;
         }
 
+        // Clean up the GLU op (single struct, no nested allocations)
+        if (m_metadata->glu) {
+            delete m_metadata->glu;
+            m_metadata->glu = nullptr;
+        }
+
         // Clean up all allocated arrays
         delete[] m_metadata->eltwise;
         delete[] m_metadata->scale;
@@ -203,6 +209,7 @@ DlpUalPlan::prepare()
     m_bias_ops.clear();
     m_matrix_add_ops.clear();
     m_matrix_mul_ops.clear();
+    m_glu_op.reset();
 
     // Allocate fresh metadata
     m_metadata = new dlp_metadata_t;
@@ -245,6 +252,11 @@ DlpUalPlan::prepare()
                 m_matrix_mul_ops.push_back(std::move(mat_mul_param));
                 break;
             }
+            case OperationType::GLU: {
+                m_glu_op = std::unique_ptr<GluParam>(
+                    static_cast<GluParam*>(param->clone().release()));
+                break;
+            }
             default:
                 throw std::runtime_error("Unsupported post-op type in plan");
         }
@@ -269,6 +281,10 @@ DlpUalPlan::prepare()
 
     if (!m_matrix_mul_ops.empty()) {
         convertMatrixMulOperations();
+    }
+
+    if (m_glu_op) {
+        convertGluOperations();
     }
 
     // Build the sequence vector based on post-op order
@@ -1051,6 +1067,49 @@ DlpUalPlan::convertMatrixMulOperations()
 }
 
 void
+DlpUalPlan::convertGluOperations()
+{
+    if (!m_glu_op)
+        return;
+
+    // GLU lives in a single metadata slot (at most one per chain).
+    m_metadata->glu = new dlp_post_op_glu;
+    std::memset(m_metadata->glu, 0, sizeof(dlp_post_op_glu));
+    switch (m_glu_op->getOperation()) {
+        case GluOperation::GatedSwiglu:
+            m_metadata->glu->algo_type = GATED_SWIGLU;
+            break;
+        case GluOperation::GatedSwigluAndMul:
+            m_metadata->glu->algo_type = GATED_SWIGLU_AND_MUL;
+            break;
+        default:
+            throw std::runtime_error("Unsupported GLU operation");
+    }
+
+    // Scalar slots point at the GluParam's own storage (m_glu_op outlives
+    // execute()). Both are NULL for current variants (constants baked into the
+    // kernel); the slots remain for future runtime-scalar variants.
+    m_metadata->glu->alpha = m_glu_op->getAlphaPtr();
+    m_metadata->glu->beta  = m_glu_op->getBetaPtr();
+
+    // stor_type is meaningful only when a scalar is supplied; leave it
+    // DLP_INVALID otherwise (see aocl_gemm_metadata.h).
+    m_metadata->glu->stor_type =
+        (m_metadata->glu->alpha != nullptr || m_metadata->glu->beta != nullptr)
+            ? DLP_F32
+            : DLP_INVALID;
+
+    // Mandatory compacted output buffer D (m x I), owned by the harness. The
+    // library folds the 2I (gate, up) accumulator to width I here; ld_d carries
+    // the layout (I for row-major, m for column-major).
+    if (m_glu_out != nullptr) {
+        m_metadata->glu->d = m_glu_out->getMatrixData().getMatrixPtr();
+        m_metadata->glu->ld_d =
+            static_cast<md_t>(m_glu_out->getLeadingDimension());
+    }
+}
+
+void
 DlpUalPlan::buildSequenceVector()
 {
     // Build sequence vector based on original post-op order
@@ -1073,6 +1132,9 @@ DlpUalPlan::buildSequenceVector()
                 break;
             case OperationType::MatMul:
                 sequence.push_back(MATRIX_MUL);
+                break;
+            case OperationType::GLU:
+                sequence.push_back(GLU);
                 break;
             default:
                 throw std::runtime_error(
@@ -1461,6 +1523,8 @@ DlpUalPlan::getPostOpType(OperationType type)
             return MATRIX_ADD;
         case OperationType::MatMul:
             return MATRIX_MUL;
+        case OperationType::GLU:
+            return GLU;
         default:
             throw std::runtime_error("Unsupported operation type");
     }

@@ -117,6 +117,15 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError storeResult();
 
+    // GLU half-width store into the compacted D buffer; axis encoded in the
+    // name:
+    //   storeHalfWidthResult()       -- row-major: MR rows, low I lanes.
+    //   storeHalfWidthResultAlongM() -- column-major: MR/2 full-width rows.
+    // Both delegate to emitHalfWidthResult(colMajor).
+    dlp::jit::jitGeneratorError storeHalfWidthResult();
+    dlp::jit::jitGeneratorError storeHalfWidthResultAlongM();
+    dlp::jit::jitGeneratorError emitHalfWidthResult(bool colMajor);
+
     dlp::jit::jitGeneratorError loadMask();
 
     // dlp::jit::jitGeneratorError prefetchB();

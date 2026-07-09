@@ -35,6 +35,7 @@
 namespace dlp::testing::classic {
 
 using dlp::testing::framework::BatchGroup;
+using dlp::testing::framework::GluOperation;
 using dlp::testing::framework::GroupScaleParam;
 using dlp::testing::framework::IUal;
 using dlp::testing::framework::Matrix;
@@ -266,6 +267,24 @@ class UalRef : public IUal
     void applyMatrixMul(Matrix&       matrix,
                         const Matrix& other,
                         const Matrix* scaleFactor);
+
+    // Fused, shape-changing GLU post-op. The applyPostOperation<GluParam>
+    // specialization dispatches to one of the per-variant implementations
+    // below. Each consumes the 2I-wide interleaved gate/up accumulator (gate =
+    // even lanes, up = odd lanes) and writes the I results into the low I
+    // columns in place; columns [I, 2I) are left untouched (software twin of
+    // the kernel's half-width store). Kept separate so a future GLU variant is
+    // added as its own method plus a dispatch case, rather than another branch
+    // inside a shared body. Current variants bake their OAI constants in.
+    void applyGatedSwiglu(Matrix& matrix);
+    void applyGatedSwigluAndMul(Matrix& matrix);
+
+    // Shared half-width GLU traversal: for each row and each j in [0, I), reads
+    // the interleaved (gate = col 2j, up = col 2j+1) pair, applies `op`, and
+    // writes the result to column j. Increasing-j order is alias-safe (column j
+    // is never a later iteration's source). Expects an f32, row-major matrix.
+    void applyGluHalfWidth(Matrix&                                   matrix,
+                           const std::function<float(float, float)>& op);
 };
 
 } // namespace dlp::testing::classic

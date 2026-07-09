@@ -36,11 +36,13 @@
 #include <random>
 #include <stdexcept>
 
+using dlp::testing::framework::GluOperation;
 using dlp::testing::framework::postops::createAQuant;
 using dlp::testing::framework::postops::createBias;
 using dlp::testing::framework::postops::createClip;
 using dlp::testing::framework::postops::createGeluErf;
 using dlp::testing::framework::postops::createGeluTanh;
+using dlp::testing::framework::postops::createGlu;
 using dlp::testing::framework::postops::createGroupScale;
 using dlp::testing::framework::postops::createMatrixAdd;
 using dlp::testing::framework::postops::createMatrixMul;
@@ -490,6 +492,16 @@ MicroTest::createOperationParam(
     } else if (config.type == "Elementwise-MISH") {
         // MISH requires no parameters: x * tanh(softplus(x))
         return createMish().build();
+
+    } else if (config.type == "GLU-GATED_SWIGLU") {
+        // Fused GLU: silu(gate) * up. No runtime params.
+        return createGlu().setOperation(GluOperation::GatedSwiglu).build();
+
+    } else if (config.type == "GLU-GATED_SWIGLU_AND_MUL") {
+        // Fused clamped OAI GLU. Constants (1.702/7.0) baked into the kernel.
+        return createGlu()
+            .setOperation(GluOperation::GatedSwigluAndMul)
+            .build();
 
     } else if (config.type == "Elementwise-CLIP") {
         // CLIP: Parse alpha (lower bound) and beta (upper bound) parameters

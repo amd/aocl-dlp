@@ -50,14 +50,17 @@ template<utils::kernelInstrType KType>
 class jitBF16GEMVN1 : public Xbyak::CodeGenerator
 {
   private:
-    int                              RegBytes; // Size of ZMM register in bytes
-    int                              numRegs;  // Number of ZMM registers
-    int                              simdWidthF32;  // SIMD width for F32
-    int                              simdWidthBF16; // SIMD width for BF16
-    int                              MR; // Number of rows to process at once
-    int                              M_LEFT; // M-dimension left over elements
-    int                              c_downscale; // Downscale factor for C
-    dlp::kernel_frame::storageFormat yFormat;     // Storage format of C matrix
+    int RegBytes;      // Size of ZMM register in bytes
+    int numRegs;       // Number of ZMM registers
+    int simdWidthF32;  // SIMD width for F32
+    int simdWidthBF16; // SIMD width for BF16
+    int MR;            // Number of rows to process at once
+    int M_LEFT;        // M-dimension left over elements
+    int c_downscale;   // Downscale factor for C
+    // True when a shape-changing post-op (GLU) halves the output along M; the
+    // store compacts 2I->I rows. Folded by the orchestrator.
+    bool                             storeHalfWidthResults;
+    dlp::kernel_frame::storageFormat yFormat; // Storage format of C matrix
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
 
@@ -148,6 +151,11 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError storeYValuesRowStored(int);
 
+    // Fused GLU half-width store: the lane-wise de-interleave leaves the I
+    // results packed low in each accumulator; this compacts them along M into
+    // the caller passed D buffer at the half row position (post_op_c_i/2).
+    dlp::jit::jitGeneratorError storeHalfWidthResult(int);
+
     dlp::jit::jitGeneratorError reduceToXmm(int, int, int);
 
   public:
@@ -184,6 +192,7 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     int                              KC;
     int                              K_SUB_ITER;
     int                              c_downscale;
+    bool                             storeHalfWidthResults;
     AOCL_DLP_MEMORY_TAG              mtag_b;
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
@@ -307,6 +316,11 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeYValuesFringe();
 
     dlp::jit::jitGeneratorError storeYValues(int n_size);
+
+    // Fused GLU half-width store: compacts the de-interleaved I results (packed
+    // low by the lane-wise de-interleave) and stores them to the caller's
+    // passed D buffer (buf_d)
+    dlp::jit::jitGeneratorError storeHalfWidthResult(int n_size);
 
     //------------------------------------------------
 

@@ -131,6 +131,14 @@ class IUalPlan
         m_group_scale = std::move(param);
     }
 
+    // ─── GLU output buffer D ─────────────────────────────────────
+    // A terminal shape-changing GLU folds the 2I-wide accumulator to width I
+    // and writes the compacted (m x I) result into this caller-owned buffer D
+    // (C keeps the raw 2I result). The harness owns D and passes it to both the
+    // DLP and REF plans so they can be compared directly. NULL when the chain
+    // has no terminal GLU.
+    void setGluOutput(Matrix* d) { m_glu_out = d; }
+
     // ─── Post-Operations (real fusion ops only) ─────────────────
     void addPostOp(std::unique_ptr<IOperationParam> param)
     {
@@ -145,8 +153,24 @@ class IUalPlan
         if (!isPostOp(param->getType())) {
             throw std::runtime_error(
                 "addPostOp() only accepts post-op types "
-                "(ElementWise, Bias, Scale, MatAdd, MatMul). "
+                "(ElementWise, Bias, Scale, MatAdd, MatMul, GLU). "
                 "Use setAQuant/setBQuant/setWOQ for quant params.");
+        }
+        // GLU is a terminal, shape-changing post-op: it must be last in the
+        // chain and may appear at most once. Reject anything added after a GLU,
+        // and reject a second GLU.
+        if (!m_post_ops.empty()
+            && isTerminalPostOp(m_post_ops.back()->getType())) {
+            throw std::runtime_error(
+                "No post-op may follow a terminal GLU op (GLU must be last).");
+        }
+        if (isTerminalPostOp(param->getType())) {
+            for (const auto& existing : m_post_ops) {
+                if (isTerminalPostOp(existing->getType())) {
+                    throw std::runtime_error(
+                        "At most one terminal GLU op is allowed per chain.");
+                }
+            }
         }
         m_post_ops.push_back(std::move(param));
     }
@@ -292,6 +316,9 @@ class IUalPlan
     std::unique_ptr<GroupScaleParam> m_group_scale;
     // Post-ops (fusion only)
     std::vector<std::unique_ptr<IOperationParam>> m_post_ops;
+    // Caller-owned compacted GLU output buffer D (m x I). NULL unless the chain
+    // ends in a terminal shape-changing GLU.
+    Matrix* m_glu_out = nullptr;
 };
 
 } // namespace dlp::testing::framework

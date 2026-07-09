@@ -66,12 +66,13 @@ jitBF16GEMVN1<KType>::initializeParameters(
     const utils::gemvN1GeneratorParams& params)
 {
     // Set dimensions from params
-    MR               = params.MR; // Number of rows to process
-    M_LEFT           = params.M_LEFT;
-    c_downscale      = params.c_downscale;
-    yFormat          = params.yFormat;          // Storage format of C matrix
-    alphaScalingType = params.alphaScalingType; // Type of alpha scaling
-    betaScalingType  = params.betaScalingType;  // Type of beta scaling
+    MR                    = params.MR; // Number of rows to process
+    M_LEFT                = params.M_LEFT;
+    c_downscale           = params.c_downscale;
+    storeHalfWidthResults = params.storeHalfWidthResults;
+    yFormat               = params.yFormat; // Storage format of C matrix
+    alphaScalingType      = params.alphaScalingType; // Type of alpha scaling
+    betaScalingType       = params.betaScalingType;  // Type of beta scaling
 
     RegBytes = Traits::regBytes;
     numRegs  = Traits::numRegs;
@@ -950,8 +951,107 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
+jitBF16GEMVN1<KType>::storeHalfWidthResult(int mSize)
+{
+    // Terminal shape-changing GLU (column-major m=1, swapped into this N1
+    // kernel): the lane-wise de-interleave has packed the mSize/2 GLU results
+    // into the low lanes of each accumulator (gate = even rows, up = odd rows).
+    // The fold halves along the kernel's M dimension, so the compacted results
+    // are written to the caller's D buffer in D's column-major storage order:
+    // element (post_op_c_j, p) lives at buf_d + post_op_c_j*elt + p*ld_d*elt,
+    // so consecutive results (global index p = post_op_c_i/2 + local) are ld_d
+    // apart -- a strided scatter, correct for any ld_d >= m (padded D
+    // included). C keeps the raw 2I partials via the full-width store; only D
+    // receives the GLU result. Called only on is_last_k (storeYValues already
+    // branched).
+    const int m_iter   = mSize / simdWidthF32;
+    const int m_left   = mSize % simdWidthF32; // remaining rows (even for GLU)
+    const int regs     = (mSize + simdWidthF32 - 1) / simdWidthF32;
+    const int eltBytes = (c_downscale < DLP_F32) ? (int)sizeof(bfloat16)
+                                                 : (int)sizeof(float);
+
+    // base = buf_d + post_op_c_j*elt + (post_op_c_i/2)*ld_d*elt. regTmp2 keeps
+    // the per-result byte stride (ld_d*elt) live across the scatter loop.
+    mov(regTmpYptr,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, buf_d)]);
+    mov(regKIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+    lea(regKIter, ptr[regKIter * eltBytes]);
+    add(regTmpYptr, regKIter);
+
+    mov(regTmp2,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, ld_d)]);
+    lea(regTmp2, ptr[regTmp2 * eltBytes]); // per-result byte stride (ld_d*elt)
+
+    mov(regKIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
+    shr(regKIter, 1);
+    imul(regKIter, regTmp2);
+    add(regTmpYptr, regKIter); // base += (post_op_c_i/2)*ld_d*elt
+
+    // Scatter each compacted result into D, advancing by ld_d*elt (regTmp2).
+    for (iter_t i = 0; i < regs; i++) {
+        int rows_in_reg    = (i < m_iter) ? simdWidthF32 : m_left;
+        int results_in_reg = rows_in_reg / 2; // packed low by the de-interleave
+        if (results_in_reg == 0)
+            break;
+
+        if (c_downscale < DLP_F32) {
+            vcvtneps2bf16(Xbyak::Xmm(tmpBaseIdx), Xbyak::Ymm(accumBaseIdx + i));
+            for (iter_t j = 0; j < results_in_reg; j++) {
+                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx), j);
+                add(regTmpYptr, regTmp2);
+            }
+        } else {
+            for (iter_t j = 0; j < results_in_reg; j += 4) {
+                vextractf32x4(Xbyak::Xmm(tmpBaseIdx + j / 4),
+                              RegType(accumBaseIdx + i), j / 4);
+            }
+            for (iter_t j = 0; j < results_in_reg; j++) {
+                int tmp_reg    = j / 4;
+                int pos_in_reg = j % 4;
+                if (pos_in_reg == 0) {
+                    vmovss(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg));
+                } else {
+                    vpextrd(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
+                            pos_in_reg);
+                }
+                add(regTmpYptr, regTmp2);
+            }
+        }
+    }
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::storeYValues(int mSize)
 {
+    inLocalLabel();
+    Xbyak::Label label_store_end;
+
+    if (storeHalfWidthResults) {
+        // Terminal shape-changing GLU: on the last K-block the accumulators
+        // hold the de-interleaved I results and are stored half-width; earlier
+        // K-blocks store the full-width 2I partials so the next block can
+        // accumulate on top. The same kernel runs for every K-block, so branch
+        // at runtime on is_last_k.
+        Xbyak::Label label_full_width;
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp2, regTmp2);
+        je(label_full_width, T_NEAR);
+        RETURN_IF_ERROR((storeHalfWidthResult(mSize)));
+        jmp(label_store_end, T_NEAR);
+        L(label_full_width);
+    }
+
     // Store values from Y
     mov(regTmpYptr, regYptr);
     if (yFormat == dlp::kernel_frame::storageFormat::colMajor) {
@@ -960,6 +1060,8 @@ jitBF16GEMVN1<KType>::storeYValues(int mSize)
         RETURN_IF_ERROR((storeYValuesRowStored(mSize)));
     }
 
+    L(label_store_end);
+    outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
 }
 
@@ -1377,7 +1479,8 @@ jitBF16GEMVM1<KType>::initializeParameters(utils::gemvM1GeneratorParams& params)
     betaScalingType  = params.betaScalingType;
     mtag_b           = params.mtag_b;
 
-    c_downscale = params.c_downscale;
+    c_downscale           = params.c_downscale;
+    storeHalfWidthResults = params.storeHalfWidthResults;
 
     RegBytes = Traits::regBytes;
     numRegs  = Traits::numRegs;
@@ -1910,6 +2013,25 @@ jitBF16GEMVM1<KType>::storeYValues(int n_size)
 
     inLocalLabel();
     Xbyak::Label label_store, label_store_end;
+
+    if (storeHalfWidthResults) {
+        // Terminal shape-changing GLU: on the last K-block the accumulators
+        // hold the de-interleaved I results (packed low by the lane-wise
+        // de-interleave) and are stored half-width; earlier K-blocks store the
+        // full-width 2I partials so the next block can accumulate on top. The
+        // same kernel runs for every K-block, so branch at runtime on
+        // is_last_k.
+        Xbyak::Label label_full_width;
+        mov(regTmp2,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+                + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
+        test(regTmp2, regTmp2);
+        je(label_full_width, T_NEAR);
+        RETURN_IF_ERROR(storeHalfWidthResult(n_size));
+        jmp(label_store_end, T_NEAR);
+        L(label_full_width);
+    }
+
     if (c_downscale < DLP_F32) {
         // Check for is_last_k
         mov(regTmp2,
@@ -1977,6 +2099,80 @@ jitBF16GEMVM1<KType>::storeYValues(int n_size)
 
     L(label_store_end);
     outLocalLabel();
+
+    return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitBF16GEMVM1<KType>::storeHalfWidthResult(int n_size)
+{
+    // GLU compacts the 2I-wide accumulator to I results; the lane-wise
+    // de-interleave leaves them in the low simdWidth/2 lanes of each register.
+    // M1 is row-major (single row), so this writes each accumulator's low half
+    // contiguously into the caller's compacted D buffer at the home column
+    // post_op_c_j/2 (row post_op_c_i, m==1 so 0), output-typed (bf16 or f32).
+    // C keeps the raw 2I partials via the full-width store; only D receives the
+    // GLU result. Called only on is_last_k. n_size is compile-time.
+    const int half     = simdWidth / 2; // 8 f32 / 8 bf16 valid low lanes
+    const int n_iter   = n_size / simdWidth;
+    const int n_left   = n_size % simdWidth;
+    const int halfLeft = n_left / 2; // de-interleaved fringe result count
+    const int eltBytes = (c_downscale < DLP_F32) ? (int)sizeof(bfloat16)
+                                                 : (int)sizeof(float);
+
+    // Half-width fringe mask: the de-interleave packs halfLeft results low.
+    if (n_left) {
+        mov(regTmp2.cvt32(), (1 << halfLeft) - 1);
+        kmovw(mask_regs[1], regTmp2.cvt32());
+    }
+
+    // base = buf_d + (post_op_c_j/2)*elt + post_op_c_i*ld_d*elt.
+    mov(regTmpYptr,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, buf_d)]);
+    mov(regTmp2,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
+    shr(regTmp2, 1);
+    lea(regTmp2, ptr[regTmp2 * eltBytes]);
+    add(regTmpYptr, regTmp2);
+
+    mov(regTmp2,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, ld_d)]);
+    lea(regTmp2, ptr[regTmp2 * eltBytes]);
+    mov(regKIter,
+        ptr[stackPtr + offsetof(dlp::kernels::gemvM1Params, kernelOpsAttr)
+            + offsetof(dlp_gemm_post_op_attr, post_op_c_i)]);
+    imul(regKIter, regTmp2);
+    add(regTmpYptr, regKIter);
+
+    if (c_downscale < DLP_F32) {
+        for (iter_t i = 0; i < n_iter; i++) {
+            vcvtneps2bf16(Xbyak::Xmm(accumBaseIdx + i),
+                          Xbyak::Ymm(accumBaseIdx + i));
+            vmovdqu16(ptr[regTmpYptr + i * half * sizeof(bfloat16)],
+                      Xbyak::Xmm(accumBaseIdx + i));
+        }
+        if (n_left) {
+            vcvtneps2bf16(Xbyak::Xmm(accumBaseIdx + n_iter),
+                          Xbyak::Ymm(accumBaseIdx + n_iter));
+            vmovdqu16(ptr[regTmpYptr + n_iter * half * sizeof(bfloat16)]
+                          | mask_regs[1],
+                      Xbyak::Xmm(accumBaseIdx + n_iter));
+        }
+    } else {
+        for (iter_t i = 0; i < n_iter; i++) {
+            vmovups(ptr[regTmpYptr + i * half * sizeof(float)],
+                    Xbyak::Ymm(accumBaseIdx + i));
+        }
+        if (n_left) {
+            vmovups(ptr[regTmpYptr + n_iter * half * sizeof(float)]
+                        | mask_regs[1],
+                    Xbyak::Ymm(accumBaseIdx + n_iter));
+        }
+    }
 
     return dlp::jit::jitGeneratorError::success;
 }

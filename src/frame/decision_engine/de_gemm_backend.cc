@@ -426,6 +426,35 @@ gemmDEBackendUtils::setKernelOps(
         case POST_OPS_MISH:
             metaData->type = kernel_frame::kernelOps::mish;
             break;
+        case POST_OPS_GATED_SWIGLU: {
+            metaData->type = kernel_frame::kernelOps::gatedSwiglu;
+            // Layout signal ('r'/'c') is carried in op_args2 (see
+            // dlp_gemm_post_ops.c). Both layouts are supported: the JIT compute
+            // de-interleaves gate/up along SIMD lanes for row-major C and
+            // across accumulator rows for column-major C (m/n swapped
+            // upstream). The decoded cMatFormat selects that path and keys the
+            // kernel cache.
+            char storFormatC =
+                (post_op->op_args2 != nullptr)
+                    ? std::tolower(*(static_cast<char*>(post_op->op_args2)))
+                    : 'r';
+            metaData->cMatFormat = (storFormatC == 'c')
+                                       ? kernel_frame::storageFormat::colMajor
+                                       : kernel_frame::storageFormat::rowMajor;
+            break; /* No scalars; paramStorageDt left at default. */
+        }
+        case POST_OPS_GATED_SWIGLU_AND_MUL: {
+            metaData->type = kernel_frame::kernelOps::gatedSwigluAndMul;
+            char storFormatC =
+                (post_op->op_args2 != nullptr)
+                    ? std::tolower(*(static_cast<char*>(post_op->op_args2)))
+                    : 'r';
+            metaData->cMatFormat = (storFormatC == 'c')
+                                       ? kernel_frame::storageFormat::colMajor
+                                       : kernel_frame::storageFormat::rowMajor;
+            break; /* OAI constants baked into the kernel; no runtime scalars.
+                    */
+        }
         case POST_OPS_DOWNSCALE: {
             metaData->type = kernel_frame::kernelOps::downscale;
             char storFormatC =

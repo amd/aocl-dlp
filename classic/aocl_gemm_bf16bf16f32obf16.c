@@ -201,7 +201,7 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
 
     // Convert post op struct to post op linked list format.
     dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
-    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
+    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list_allow_glu(
         metadata, post_op_list, (void*)c, (void*)(&order), m, n);
 
     if (err != DLP_CLSC_SUCCESS) {
@@ -329,6 +329,15 @@ aocl_gemm_bf16bf16f32obf16(const char      order,
     if ((dlp_cpuid_is_avx512bf16_supported() == FALSE)
         || (arch_id == DLP_ARCH_ZEN3) || (arch_id == DLP_ARCH_ZEN2)
         || (arch_id == DLP_ARCH_ZEN)) {
+        // On these architectures BF16 reroutes to the F32 GEMM kernels, which
+        // do not implement the shape-changing GLU compacted half-width store.
+        // Return NOT_SUPPORTED early (a clean skip) instead of letting JIT
+        // generation fail later with INVALID_JIT_KERNEL (a hard error).
+        if (dlp_gemm_post_op_list_has_shape_changing_glu(post_op_list)) {
+            DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+            goto err_hndl;
+        }
+
         // No native BF16 support - will use F32 kernels
         // Get F32 context for proper block sizes
         dlp_gemm_cntx_t* lcntx_f32 =

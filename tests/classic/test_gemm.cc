@@ -39,6 +39,7 @@
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
 #include "utils/conversion_utils.hh"
+#include "utils/matrix_conversion_utils.hh"
 
 #include <algorithm>
 #include <filesystem>
@@ -526,6 +527,23 @@ extractPostOpsDescription(
             case OperationType::Scale:
                 op_names.push_back("Scale");
                 break;
+            case OperationType::GLU: {
+                const auto& glu_param = static_cast<const GluParam&>(*param);
+                std::string op_name;
+                switch (glu_param.getOperation()) {
+                    case GluOperation::GatedSwiglu:
+                        op_name = "GLU_GATED_SWIGLU";
+                        break;
+                    case GluOperation::GatedSwigluAndMul:
+                        op_name = "GLU_GATED_SWIGLU_AND_MUL";
+                        break;
+                    default:
+                        op_name = "UnknownGlu";
+                        break;
+                }
+                op_names.push_back(op_name);
+                break;
+            }
             case OperationType::A_Quant:
                 op_names.push_back("A_Quant");
                 break;
@@ -988,6 +1006,31 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         Matrix C_ref(config_.m, config_.n, config_.c_type, layout, config_.ldc,
                      false);
 
+        // A terminal (shape-changing) GLU folds the 2I-wide accumulator to
+        // width I and writes the compacted (m x I) result into a separate,
+        // caller-owned D buffer (C keeps the raw 2I result). The harness owns
+        // D / D_ref, binds them to the DLP / REF plans (setGluOutput), and
+        // compares them directly. D's leading dim follows the layout (I for
+        // row-major, m for column-major) via the auto (-1) leading dim.
+        const bool gluTerminal =
+            config_.has_postops && config_.post_op_params
+            && !config_.post_op_params->empty()
+            && isTerminalPostOp(config_.post_op_params->back()->getType());
+
+        // A terminal (shape-changing) GLU folds an interleaved gate/up
+        // accumulator of width n = 2I down to width I, so n must be even. An
+        // odd n (e.g. the GEMV N=1 case) has no gate/up pairing -- a known
+        // non-existent configuration. It is validated (and skipped) after the
+        // DLP plan runs, once we can confirm the framework rejected it.
+        const bool gluOddWidth = gluTerminal && (config_.n % 2 != 0);
+
+        Matrix D, D_ref;
+        if (gluTerminal) {
+            const md_t I = config_.n / 2;
+            D     = Matrix(config_.m, I, config_.c_type, layout, -1, false);
+            D_ref = Matrix(config_.m, I, config_.c_type, layout, -1, false);
+        }
+
         // =====================================================================
         // MATRIX INITIALIZATION STRATEGY (IMPORTANT FOR
         // DEBUGGING/REPRODUCIBILITY)
@@ -1164,6 +1207,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             test_plan->setGroupScale(
                 std::make_unique<GroupScaleParam>(*config_.group_scale_param));
         }
+        if (gluTerminal)
+            test_plan->setGluOutput(&D);
         test_plan->prepare();
         UALError test_status = test_plan->executeWith(A, B, C);
         if (test_status == UALError::UAL_NOT_SUPPORTED) {
@@ -1172,6 +1217,24 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         }
 
         bool test_result = (test_status == UALError::UAL_SUCCESS);
+
+        // Odd interleaved width for a terminal GLU is a known non-existent
+        // shape. Confirm the GEMM framework rejected it with an early-return
+        // failure (not a silent success), then skip: the reference may
+        // trivially "succeed" with I = 0, so there is nothing to compare.
+        if (gluOddWidth) {
+            EXPECT_FALSE(test_result)
+                << "Terminal GLU with odd interleaved width n=" << config_.n
+                << " must be rejected by the GEMM framework (early return), "
+                   "not silently succeed:"
+                << printConfigDetails(config_);
+            GTEST_SKIP()
+                << "Terminal GLU requires an even interleaved width (n = 2I); "
+                   "odd n="
+                << config_.n
+                << " is a known non-existent GEMV/odd-n config (framework "
+                   "rejection validated above).";
+        }
 
         // Perform GEMM with reference UAL implementation using plan API
         auto ref_plan = ual_ref_->createPlan();
@@ -1190,6 +1253,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             ref_plan->setGroupScale(
                 std::make_unique<GroupScaleParam>(*config_.group_scale_param));
         }
+        if (gluTerminal)
+            ref_plan->setGluOutput(&D_ref);
         ref_plan->prepare();
         UALError ref_status = ref_plan->executeWith(A_ref, B_ref, C_ref);
 
@@ -1208,6 +1273,13 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
             // And produce the same results
             C.setK(config_.k);
+            // GLU compares D, not C. Give D the same K so its bf16 tolerance is
+            // K-scaled like C; otherwise D defaults to k_factor=1 and fails at
+            // large K on benign rounding the nonlinear activation amplifies.
+            if (gluTerminal) {
+                D.setK(config_.k);
+                D_ref.setK(config_.k);
+            }
             // Ensure both result matrices have the same packing state for
             // comparison Since packing is an optimization hint that shouldn't
             // affect results
@@ -1250,8 +1322,15 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                 compare_opts.intTolerance = 1;
             }
 
+            // A terminal (shape-changing) GLU writes its compacted (m x I)
+            // result into the separate D buffer; compare D vs D_ref directly
+            // (fully defined, no scratch tail to mask). All other chains
+            // compare the C output as usual.
+            Matrix& lhs = gluTerminal ? D : C;
+            Matrix& rhs = gluTerminal ? D_ref : C_ref;
+
             // Detailed comparison with mismatch reporting
-            auto compare_result = C.compare(C_ref, compare_opts);
+            auto compare_result = lhs.compare(rhs, compare_opts);
 
             if (!compare_result.equal) {
                 std::ostringstream detailed_error;
@@ -1262,7 +1341,7 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
                 if (g_verbosity_level >= VerbosityLevel::BASIC) {
                     detailed_error
-                        << FormatCompareResult(compare_result, C, C_ref);
+                        << FormatCompareResult(compare_result, lhs, rhs);
                 }
                 FAIL() << detailed_error.str();
             }

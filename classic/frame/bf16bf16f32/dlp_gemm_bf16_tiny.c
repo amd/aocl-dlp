@@ -206,6 +206,12 @@ DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
     bool is_last_k           = TRUE;
     post_ops_attr.is_last_k  = is_last_k;
 
+    // Terminal GLU writes its compacted (m x I) tile to the caller's disjoint D
+    // buffer. Single-threaded here, but buf_d must still be set or the GLU
+    // kernel reads stack garbage; NULL/0 off the GLU path.
+    post_ops_attr.buf_d = (post_op_list != NULL) ? post_op_list->glu_d : NULL;
+    post_ops_attr.ld_d  = (post_op_list != NULL) ? post_op_list->glu_ld_d : 0;
+
     // k needs to be a multiple of 2 so that it can be used with dpbf16_ps
     // instruction. Padding is added in cases this condition is not
     // satisfied, and therefore the k offsets used for packed/reordered

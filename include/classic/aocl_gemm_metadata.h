@@ -61,6 +61,30 @@ typedef enum
 } DLP_ELT_ALGO_TYPE;
 
 /**
+ * @enum DLP_GLU_ALGO_TYPE
+ * @brief Gated Linear Unit (GLU) variants supported as a fused, shape-changing
+ * terminal post-op.
+ *
+ * Every variant operates on an interleaved gate/up tile of width `2I`
+ * produced by the GEMM (columns alternate `g, u, g, u, ...`) and emits
+ * a tile of width `I`. The split is `gate = X[..., 0::2]`,
+ * `up = X[..., 1::2]`, matching vLLM's `swiglu_oai_and_mul` family.
+ *
+ * Only the P0 variants are listed today. Values are explicitly numbered so
+ * future additions never re-number the existing entries.
+ */
+typedef enum
+{
+    GATED_SWIGLU         = 0, /**< SiLU(gate) * up (vLLM `silu_and_mul`) */
+    GATED_SWIGLU_AND_MUL = 1, /**< gpt-oss clamped GLU (vLLM
+                           `swigluoai_and_mul`): with g = min(gate, limit),
+                           (g * sigmoid(alpha * g)) * (clip(up, -limit, limit)
+                           + 1) */
+
+    DLP_GLU_ALGO_MAX, /**< Sentinel — keep last */
+} DLP_GLU_ALGO_TYPE;
+
+/**
  * @brief Enumeration of post-operation types that can be applied to GEMM
  * results.
  *
@@ -80,6 +104,8 @@ typedef enum
     SCALE      = 3, /**< Scaling operation */
     MATRIX_ADD = 4, /**< Matrix addition operation */
     MATRIX_MUL = 5, /**< Matrix multiplication operation */
+    GLU        = 6, /**< Gated Linear Unit family (shape-changing terminal
+                         post-op on interleaved gate/up data). */
 } DLP_POST_OP_TYPE;
 
 /**
@@ -305,6 +331,48 @@ typedef struct
 } dlp_post_op_matrix_mul;
 
 /**
+ * @struct dlp_post_op_glu
+ * @brief Gated Linear Unit (GLU) post-operation parameters.
+ *
+ * GLU is a shape-changing, terminal post-op: it folds the `M x 2I` GEMM
+ * accumulator (N-axis interleaved `g, u, g, u, ...`) into an `M x I` result.
+ * `C` still receives the full raw `M x 2I` accumulator; the folded output is
+ * written to the separate, caller-owned `D` buffer (`d`, `ld_d`).
+ *
+ * Constraints (enforced by the chain validator):
+ *   - At most one GLU op per chain, and it must be the last op in the chain.
+ *   - `n` (columns of B) must equal `2*I`, hence even (`I` itself may be odd).
+ *   - `C` is `M x 2I`, so `ldc >= 2I` is required (else
+ *     `DLP_CLSC_INVALID_LEADING_DIMENSION`).
+ */
+typedef struct
+{
+    DLP_GLU_ALGO_TYPE algo_type; /**< Which GLU variant to apply. */
+
+    void* d;   /**< Compacted GLU output buffer (MANDATORY). Receives the folded
+                    `M x I` result (I = n/2), output-typed (same DLP_TYPE as C),
+                    in the caller's storage order. */
+    md_t ld_d; /**< Leading dimension of `d`: row stride (>= I) for row-major,
+                    column stride (>= m) for column-major. May exceed the
+                    minimum for padded/embedded D. */
+    /*
+     * Scalar convention: neither current variant takes a runtime scalar.
+     * GATED_SWIGLU is SiLU(gate)*up; GATED_SWIGLU_AND_MUL is the gpt-oss
+     * clamped GLU with its constants (SiLU scale 1.702, clamp 7.0, +1
+     * linear-branch bias) baked into the kernel. So `alpha`/`beta`/`stor_type`
+     * are ignored — leave them `NULL`/`DLP_INVALID`. The slots remain for
+     * future parameterized variants.
+     */
+    void* alpha; /**< Optional per-variant scalar parameter; no current GLU
+                      variant uses it, so leave it `NULL`. */
+    void* beta;  /**< Optional per-variant scalar parameter; no current GLU
+                      variant uses it, so leave it `NULL`. */
+
+    DLP_TYPE stor_type; /**< Storage type of `alpha`/`beta`; set `DLP_INVALID`
+                             while both are `NULL`. */
+} dlp_post_op_glu;
+
+/**
  * @brief Structure defining pre-operation parameters.
  *
  * This structure contains parameters for operations that are applied
@@ -509,13 +577,14 @@ typedef struct
 
     dlp_error_hndl_t error_hndl; /**< Error handle for the routine, currently
                                       wrapped as part of the metadata. */
-
     dlp_gemm_blocking_t*
         block_params; /**< Blocking parameters for GEMM kernels */
     dlp_gemm_sup_threshold_t*
-        sup_thresholds; /**< Threshold parameters to decide whether to enable
-                            packing or not. Currently only applicable for f32
-                            and fp16 APIs only. */
+        sup_thresholds;   /**< Threshold parameters to decide whether to enable
+                              packing or not. Currently only applicable for f32
+                              and fp16 APIs only. */
+    dlp_post_op_glu* glu; /**< Gated Linear Unit post-op
+                               (terminal, shape-changing). */
 } dlp_metadata_t;
 
 #define DLP_METADATA_SET_ERROR(metadata, err_no)                               \

@@ -98,6 +98,25 @@ typedef struct dlp_gemm_pre_op_attr_t
     md_t  pre_op_ld;
 } dlp_gemm_pre_op_attr;
 
+/* Post-op translator (GLU-permitting variant). Builds the post-op linked list
+ * and stamps the list-level GLU facts, but does NOT reject a shape-changing GLU
+ * post-op (GatedSwiglu / GatedSwigluAndMul). Used directly only by datapaths
+ * that implement the GLU half-width store -- currently the BF16 GEMM APIs
+ * (which must still gate on AVX512-BF16 support, as the BF16->F32 fallback does
+ * not implement the half-width store). */
+dlp_clsc_err_t
+dlp_gemm_translate_to_post_ops_list_allow_glu(dlp_metadata_t*   metadata,
+                                              dlp_gemm_post_op* post_op_list,
+                                              void*             scale_buffer,
+                                              void*             meta_arg,
+                                              md_t              m,
+                                              md_t              n);
+
+/* Default post-op translator. Same as the _allow_glu variant above, but rejects
+ * a shape-changing GLU post-op with DLP_CLSC_NOT_SUPPORTED, since most
+ * datapaths do not yet implement the GLU half-width store. As GLU support is
+ * added to an API, switch that API's single call from this to the _allow_glu
+ * variant. */
 dlp_clsc_err_t
 dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                                     dlp_gemm_post_op* post_op_list,
@@ -143,6 +162,16 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
  * JIT micro-kernel). NULL list returns false. */
 bool
 dlp_gemm_post_op_list_has_jit_only_op(const dlp_gemm_post_op* post_op_list);
+
+/* True if the list contains a shape-changing GLU post-op (GatedSwiglu /
+ * GatedSwigluAndMul), which halves the output width via a half-width store.
+ * O(1) read of the fact the translator cached on the head node. NULL list
+ * returns false. The frame/decorator add the runtime engagement gate (beta/k +
+ * split).
+ */
+bool
+dlp_gemm_post_op_list_has_shape_changing_glu(
+    const dlp_gemm_post_op* post_op_list);
 
 /*
  * POST_OP_LABEL_LASTK_SAFE_JUMP, POST_OP_LABEL_LASTK_SAFE_JUMP_WITH_NEXT_PTR,

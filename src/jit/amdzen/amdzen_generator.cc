@@ -1342,6 +1342,25 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+            params.storeHalfWidthResults |=
+                dlp::kernel_frame::isShapeChangingOp((jI.kI).kOpsArr[ii].type);
+        }
+
+        // GEMV-M1 (row-major m=1) fused GLU: the lane-wise de-interleave packs
+        // the I results low and storeHalfWidthResult() writes them to the
+        // caller's D buffer.
+        // Column-major m=1 is swapped upstream to the N1 kernel, so a colMajor
+        // shape-changing op must never reach M1; fail closed if one does
+        // (column-major m=1 / N1 is a separate follow-up).
+        if (params.storeHalfWidthResults) {
+            for (const auto& kop : params.kernelOps) {
+                if (dlp::kernel_frame::isShapeChangingOp(kop.type)
+                    && kop.cMatFormat
+                           == dlp::kernel_frame::storageFormat::colMajor) {
+                    err = dlp::jit::jitGeneratorError::notSupported;
+                    goto cleanup;
+                }
+            }
         }
 
         params.NR               = NR;
@@ -1418,6 +1437,8 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+            params.storeHalfWidthResults |=
+                dlp::kernel_frame::isShapeChangingOp((jI.kI).kOpsArr[ii].type);
         }
 
         params.MR           = MR;
@@ -1492,6 +1513,10 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
         for (std::size_t ii = 0; ii < (jI.kI).kOpsArrSize; ++ii) {
             // Copy the kernelOps from the kernelInfo to params
             params.kernelOps.push_back((jI.kI).kOpsArr[ii]);
+            // A shape-changing op (GLU) makes the kernel store half-width
+            // results; OR-folded here into the existing copy loop.
+            params.storeHalfWidthResults |=
+                dlp::kernel_frame::isShapeChangingOp((jI.kI).kOpsArr[ii].type);
         }
 
         // Generate all kernels for the given MR and NR. Any per-variant

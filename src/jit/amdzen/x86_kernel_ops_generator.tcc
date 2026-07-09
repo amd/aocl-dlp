@@ -33,18 +33,6 @@
 
 #include <memory>
 #include <vector>
-#include <cstdio>  // For debug prints
-
-#ifndef DEBUG_LAYOUT_DISPATCH
-#define DEBUG_LAYOUT_DISPATCH 0
-#endif
-
-#if DEBUG_LAYOUT_DISPATCH
-#define LAYOUT_DEBUG_PRINT(fmt, ...) \
-    fprintf(stderr, "[LAYOUT_DEBUG:x86_kernel_ops] " fmt "\n", ##__VA_ARGS__)
-#else
-#define LAYOUT_DEBUG_PRINT(fmt, ...) ((void)0)
-#endif
 
 namespace amdzen::x86gen {
 
@@ -363,6 +351,21 @@ kernelOpsGeneratorX86<KType>::embedKernelOpsAttributes()
                  sizeof(gen::tables::erf_f32_coeffs_hex));
         jit->db(reinterpret_cast<const uint8_t*>(gen::tables::erf_f32_constants_hex),
                  sizeof(gen::tables::erf_f32_constants_hex));
+    }
+
+    if (requiredTables & TABLE_GLU) {
+        { size_t r = jit->getSize() % 64; if (r) jit->nop(64 - r); }
+        jit->L(gluTable);
+        // Emit only RegBytes per index vector so gluAddr(0)/gluAddr(RegBytes)
+        // land on the even/odd arrays at the active register width.
+        jit->db(reinterpret_cast<const uint8_t*>(gen::tables::glu_perm_even),
+                 RegBytes);
+        jit->db(reinterpret_cast<const uint8_t*>(gen::tables::glu_perm_odd),
+                 RegBytes);
+        // Baked GATED_SWIGLU_AND_MUL scalars, addressed via gluConstAddr() at
+        // offset 2*RegBytes (just past the two perm-index vectors).
+        jit->db(reinterpret_cast<const uint8_t*>(gen::tables::glu_consts),
+                 sizeof(gen::tables::glu_consts));
     }
 
     jit->L(tableEnd);
@@ -1629,6 +1632,287 @@ Swish<KType>::generateImpl(kernelOpsMetaData& op)
         }));
 
     return jitGeneratorError::success;
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Op: GatedSwiglu -- fused GLU: out[j] = silu(gate[j]) * up[j]
+//   gate[j] = acc[2j] (even lanes), up[j] = acc[2j+1] (odd lanes).
+//
+// The compute de-interleaves each accumulator's (gate, up) lane pairs, applies
+// SiLU (= swish with alpha=1) to the gate lanes, and multiplies by the up
+// lanes -- leaving the half-width result packed in the low lanes of each
+// accumulator. The per-dtype generator's storeHalfWidthResult() writes the low
+// half out (selected via params.storeHalfWidthResults).
+// ═══════════════════════════════════════════════════════════════════════════════
+
+template<utils::kernelInstrType KType>
+jitGeneratorError
+GatedSwiglu<KType>::generateImpl(kernelOpsMetaData& op)
+{
+    // De-interleaving the (gate, up) lane pairs needs vpermps, which requires a
+    // 256-/512-bit vector. Narrower configs are not supported.
+    if constexpr (Traits::regBytes < 32) {
+        return jitGeneratorError::notSupported;
+    } else {
+        // swishF32() reuses the GELU + EXP tables; the de-interleave indices
+        // live in TABLE_GLU.
+        this->requestTable(this->TABLE_GELU | this->TABLE_EXP
+                           | this->TABLE_GLU);
+
+        // Compose the f32 swish kernel. The local Swish shares this generator's
+        // jit pointer and register pools (copied by the strategy ctor) and owns
+        // its own exp-compare mask.
+        Swish<KType> sw(*this);
+        if constexpr (Traits::hasMaskSupport) {
+            if (sw.expCmpMaskIdx < 0)
+                return jitGeneratorError::notSupported;
+        }
+
+        // Column-major (m/n swapped -> C^T): gate/up land across accumulator
+        // ROWS (gate=even, up=odd), not lanes. Pass 1 SiLUs gate rows; Pass 2
+        // compacts (gate 2i)*(up 2i+1) into row i; storeHalfWidthResultAlongM
+        // writes the low MR/2 rows. GEMM-only: GEMV N1 reduces each row to a
+        // scalar packed into LANES, so there the vpermps de-interleave applies.
+        if (op.cMatFormat == storageFormat::colMajor && !this->isGEMVN1()) {
+            const int base = this->cRegStartIdx;
+            const int nrpr = this->numRegsPerRow;
+            const int rows = this->MR;
+
+            // SiLU scale alpha = 1.0, taken from the GLU-owned constant table
+            // (glu_consts[3]) so it does not depend on the gelu pool layout.
+            utils::registerGuard<RegType> alphaGuard;
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(alphaGuard));
+            const int alpha = alphaGuard.idx();
+            this->jit->vbroadcastss(RegType(alpha), this->gluConstAddr(3));
+
+            // Pass 1: SiLU the even (gate) rows in place; odd (up) rows survive
+            // intact (applyOp's rotation preserves every row across spill).
+            RETURN_IF_ERROR(this->vecPool->applyOp(
+                Swish<KType>::NUM_SCRATCH_NEEDED - 1, nullptr,
+                [this, &sw, alpha, base, nrpr](int reg, const int* s, int) {
+                    if ((((reg - base) / nrpr) & 1) == 0) {
+                        int x = s[0], c1 = s[1], c2 = s[2];
+                        int r = s[3], r2 = s[4], z = s[5], dn = s[6], q = s[7];
+                        sw.swishF32(reg, alpha, x, c1, c2, r, r2, z, dn, q);
+                    }
+                }));
+
+            // Pass 2: out[i] = silu(gate[2i]) * up[2i+1] into the low MR/2 rows.
+            // Writing row i (< MR/2) never clobbers an unread source row.
+            for (int i = 0; i < rows / 2; ++i) {
+                for (int j = 0; j < nrpr; ++j) {
+                    int gate = base + (2 * i) * nrpr + j;
+                    int up   = base + (2 * i + 1) * nrpr + j;
+                    int out  = base + i * nrpr + j;
+                    this->jit->vmulps(RegType(out), RegType(gate),
+                                      RegType(up));
+                }
+            }
+            return jitGeneratorError::success;
+        }
+
+        const int regBytes = Traits::regBytes;
+
+        // Loop-invariant registers, acquired outside applyOp so swishF32's
+        // scratch budget stays separate: the even/odd de-interleave indices,
+        // the SiLU alpha (= 1.0), and a scratch holding the `up` lane group.
+        utils::registerGuard<RegType> evenGuard, oddGuard, alphaGuard, upGuard;
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(evenGuard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(oddGuard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(alphaGuard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(upGuard));
+        const int evenIdx = evenGuard.idx();
+        const int oddIdx  = oddGuard.idx();
+        const int alpha   = alphaGuard.idx();
+        const int up      = upGuard.idx();
+
+        // even -> gate lanes packed low; odd -> up lanes packed low.
+        this->jit->vmovups(RegType(evenIdx), this->gluAddr(0));
+        this->jit->vmovups(RegType(oddIdx), this->gluAddr(regBytes));
+        // SiLU == swish with alpha = 1.0, taken from the GLU-owned constant
+        // table (glu_consts[3]) so it does not depend on the gelu pool
+        // layout.
+        this->jit->vbroadcastss(RegType(alpha), this->gluConstAddr(3));
+
+        RETURN_IF_ERROR(this->vecPool->applyOp(
+            Swish<KType>::NUM_SCRATCH_NEEDED - 1, nullptr,
+            [this, &sw, evenIdx, oddIdx, alpha, up](int reg, const int* s, int) {
+                int x = s[0], c1 = s[1], c2 = s[2];
+                int r = s[3], r2 = s[4], z = s[5], dn = s[6], q = s[7];
+                // De-interleave: up = acc[odd]; gate overwrites acc = acc[even].
+                this->jit->vpermps(RegType(up), RegType(oddIdx), RegType(reg));
+                this->jit->vpermps(RegType(reg), RegType(evenIdx), RegType(reg));
+                // SiLU(gate) then gate * up -> low half-width lanes. The
+                // de-interleave leaves a duplicate of the result in the upper
+                // half (and garbage in masked-tail lanes), but only the valid
+                // low lanes are ever read back: storeHalfWidthResult() writes
+                // exactly the low N/2 lanes for full registers and the r/2
+                // masked lanes for the fringe, so the invalid lanes need no
+                // cleanup here.
+                sw.swishF32(reg, alpha, x, c1, c2, r, r2, z, dn, q);
+                this->jit->vmulps(RegType(reg), RegType(reg), RegType(up));
+            }));
+
+        return jitGeneratorError::success;
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Op: GatedSwigluAndMul -- gpt-oss / OpenAI clamped GLU (vLLM swigluoai_and_mul):
+//   out[j] = (clip(up[j], -limit, +limit) + 1)
+//            * clip(gate[j], max=limit) * sigmoid(alpha * clip(gate[j], max=limit))
+//   gate[j] = acc[2j] (even lanes), up[j] = acc[2j+1] (odd lanes).
+//
+// Mirrors GatedSwiglu (same de-interleave + SiLU(gate)*up skeleton) with three
+// additions: clamp gate (max=limit), clamp up ([-limit, +limit]) then (up+1),
+// and the OAI SiLU scale alpha=1.702 instead of 1.0. The gpt-oss constants
+// (alpha, limit, +1 bias) are fixed by spec, so they are baked into the kernel
+// (gen::tables::glu_consts) rather than read from runtime post-op args. One
+// extra loop-invariant register (`limit`) over GatedSwiglu; the per-iteration
+// -limit and 1.0 reuse the Swish scratch.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+template<utils::kernelInstrType KType>
+jitGeneratorError
+GatedSwigluAndMul<KType>::generateImpl(kernelOpsMetaData& op)
+{
+    // De-interleaving the (gate, up) lane pairs needs vpermps, which requires a
+    // 256-/512-bit vector. Narrower configs are not supported.
+    if constexpr (Traits::regBytes < 32) {
+        return jitGeneratorError::notSupported;
+    } else {
+        // swishF32() reuses the GELU + EXP tables; the de-interleave indices
+        // and the baked OAI scalars live in TABLE_GLU.
+        this->requestTable(this->TABLE_GELU | this->TABLE_EXP
+                           | this->TABLE_GLU);
+
+        Swish<KType> sw(*this);
+        if constexpr (Traits::hasMaskSupport) {
+            if (sw.expCmpMaskIdx < 0)
+                return jitGeneratorError::notSupported;
+        }
+
+        // Column-major (m/n swapped -> C^T): gate/up land across accumulator
+        // ROWS (gate=even, up=odd), not lanes. Pass 1 clamps+SiLUs gate rows,
+        // clamps+biases up rows; Pass 2 compacts (gate 2i)*(up 2i+1) into row i;
+        // storeHalfWidthResultAlongM writes the low MR/2 rows. OAI consts
+        // (glu_consts): [0]=limit 7, [1]=-limit, [2]=1.702, [3]=+1.
+        // GEMM-only: GEMV N1 packs rows into LANES, so the vpermps path applies.
+        if (op.cMatFormat == storageFormat::colMajor && !this->isGEMVN1()) {
+            const int base = this->cRegStartIdx;
+            const int nrpr = this->numRegsPerRow;
+            const int rows = this->MR;
+
+            utils::registerGuard<RegType> alphaGuard, limitGuard;
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(alphaGuard));
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(limitGuard));
+            const int alpha = alphaGuard.idx();
+            const int limit = limitGuard.idx();
+            this->jit->vbroadcastss(RegType(alpha), this->gluConstAddr(2));
+            this->jit->vbroadcastss(RegType(limit), this->gluConstAddr(0));
+
+            RETURN_IF_ERROR(this->vecPool->applyOp(
+                Swish<KType>::NUM_SCRATCH_NEEDED - 1, nullptr,
+                [this, &sw, alpha, limit, base, nrpr](int reg, const int* s,
+                                                      int) {
+                    if ((((reg - base) / nrpr) & 1) == 0) {
+                        // gate: clamp(max = limit) then SiLU(gate, alpha).
+                        this->jit->vminps(RegType(reg), RegType(reg),
+                                          RegType(limit));
+                        int x = s[0], c1 = s[1], c2 = s[2];
+                        int r = s[3], r2 = s[4], z = s[5], dn = s[6], q = s[7];
+                        sw.swishF32(reg, alpha, x, c1, c2, r, r2, z, dn, q);
+                    } else {
+                        // up: clamp([-limit, +limit]) then (up + 1). s[0] is a
+                        // transient (the up rows skip swishF32, so the full
+                        // scratch set is free here).
+                        this->jit->vminps(RegType(reg), RegType(reg),
+                                          RegType(limit));
+                        this->jit->vbroadcastss(RegType(s[0]),
+                                                this->gluConstAddr(1));
+                        this->jit->vmaxps(RegType(reg), RegType(reg),
+                                          RegType(s[0]));
+                        this->jit->vbroadcastss(RegType(s[0]),
+                                                this->gluConstAddr(3));
+                        this->jit->vaddps(RegType(reg), RegType(reg),
+                                          RegType(s[0]));
+                    }
+                }));
+
+            for (int i = 0; i < rows / 2; ++i) {
+                for (int j = 0; j < nrpr; ++j) {
+                    int gate = base + (2 * i) * nrpr + j;
+                    int up   = base + (2 * i + 1) * nrpr + j;
+                    int out  = base + i * nrpr + j;
+                    this->jit->vmulps(RegType(out), RegType(gate),
+                                      RegType(up));
+                }
+            }
+            return jitGeneratorError::success;
+        }
+
+        const int regBytes = Traits::regBytes;
+
+        // Loop-invariant registers: even/odd de-interleave indices, the SiLU
+        // scale alpha, the `up` lane group, and the clamp limit.
+        utils::registerGuard<RegType> evenGuard, oddGuard, alphaGuard, upGuard,
+            limitGuard;
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(evenGuard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(oddGuard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(alphaGuard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(upGuard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(limitGuard));
+        const int evenIdx = evenGuard.idx();
+        const int oddIdx  = oddGuard.idx();
+        const int alpha   = alphaGuard.idx();
+        const int up      = upGuard.idx();
+        const int limit   = limitGuard.idx();
+
+        // even -> gate lanes packed low; odd -> up lanes packed low.
+        this->jit->vmovups(RegType(evenIdx), this->gluAddr(0));
+        this->jit->vmovups(RegType(oddIdx), this->gluAddr(regBytes));
+
+        // Baked gpt-oss / OAI constants (gen::tables::glu_consts):
+        //   [0] = limit (7.0f), [1] = -limit (-7.0f), [2] = alpha (1.702f).
+        this->jit->vbroadcastss(RegType(alpha), this->gluConstAddr(2));
+        this->jit->vbroadcastss(RegType(limit), this->gluConstAddr(0));
+
+        RETURN_IF_ERROR(this->vecPool->applyOp(
+            Swish<KType>::NUM_SCRATCH_NEEDED - 1, nullptr,
+            [this, &sw, evenIdx, oddIdx, alpha, up, limit](int reg, const int* s,
+                                                           int) {
+                int x = s[0], c1 = s[1], c2 = s[2];
+                int r = s[3], r2 = s[4], z = s[5], dn = s[6], q = s[7];
+                // De-interleave: up = acc[odd]; gate overwrites acc = acc[even].
+                this->jit->vpermps(RegType(up), RegType(oddIdx), RegType(reg));
+                this->jit->vpermps(RegType(reg), RegType(evenIdx),
+                                   RegType(reg));
+
+                // gate.clamp(max = limit)
+                this->jit->vminps(RegType(reg), RegType(reg), RegType(limit));
+
+                // up.clamp(min = -limit, max = +limit), then (up + 1). c1 holds
+                // -limit then the +1 bias (both baked in glu_consts);
+                // consumed before swishF32 clobbers the scratch. `up` is
+                // invariant, surviving the swish.
+                this->jit->vminps(RegType(up), RegType(up), RegType(limit));
+                this->jit->vbroadcastss(RegType(c1), this->gluConstAddr(1));
+                this->jit->vmaxps(RegType(up), RegType(up), RegType(c1));
+                this->jit->vbroadcastss(RegType(c1), this->gluConstAddr(3));
+                this->jit->vaddps(RegType(up), RegType(up), RegType(c1));
+
+                // SiLU(clamped gate) = swish(gate, alpha); then * (up + 1). The
+                // de-interleave leaves a duplicate in the upper half (and
+                // garbage in masked-tail lanes); storeHalfWidthResult() reads
+                // only the valid low lanes, so no cleanup is needed here.
+                sw.swishF32(reg, alpha, x, c1, c2, r, r2, z, dn, q);
+                this->jit->vmulps(RegType(reg), RegType(reg), RegType(up));
+            }));
+
+        return jitGeneratorError::success;
+    }
 }
 
 

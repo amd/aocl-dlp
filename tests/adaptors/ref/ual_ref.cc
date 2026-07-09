@@ -2031,4 +2031,84 @@ UalRef::applyMatrixMul(Matrix&       matrix,
                                              MatrixLayout::ROW_MAJOR);
 }
 
+template<>
+void
+UalRef::applyPostOperation(Matrix&                                  matrix,
+                           const dlp::testing::framework::GluParam& op)
+{
+    // Dispatch to the per-variant implementation. No default case: a future
+    // GluOperation left unhandled here triggers a -Wswitch compiler warning.
+    switch (op.getOperation()) {
+        case GluOperation::GatedSwiglu:
+            applyGatedSwiglu(matrix);
+            break;
+        case GluOperation::GatedSwigluAndMul:
+            applyGatedSwigluAndMul(matrix);
+            break;
+    }
+}
+
+void
+UalRef::applyGluHalfWidth(Matrix&                                   matrix,
+                          const std::function<float(float, float)>& op)
+{
+    // Operates on the f32 post-op intermediate (M x 2I). For each row, the low
+    // I = cols/2 columns are overwritten with op(gate, up) computed from the
+    // column-interleaved (gate = col 2j, up = col 2j+1) pair; columns [I, 2I)
+    // are left as-is. The gate/up interleaving is along the N (column) axis, so
+    // element addressing must honor the storage layout: row-major uses a column
+    // stride of 1 and a row stride of ld; column-major uses a row stride of 1
+    // and a column stride of ld. Processing j in increasing order is alias-safe
+    // in BOTH layouts: writing output column j never clobbers a source column
+    // 2j'/2j'+1 of a later j' (all > j), and each row's writes only touch that
+    // same row's elements, so distinct rows never interfere.
+    float*     data     = reinterpret_cast<float*>(matrix.getData());
+    const md_t rows     = matrix.getRows();
+    const md_t cols     = matrix.getCols(); // = 2I
+    const md_t ld       = matrix.getLeadingDimension();
+    const md_t I        = cols / 2;
+    const bool rowMajor = (matrix.getLayout() == MatrixLayout::ROW_MAJOR);
+
+    for (iter_t i = 0; i < rows; ++i) {
+        for (iter_t j = 0; j < I; ++j) {
+            const size_t gateIdx = rowMajor
+                                       ? (static_cast<size_t>(i) * ld + 2 * j)
+                                       : (static_cast<size_t>(2 * j) * ld + i);
+            const size_t upIdx =
+                rowMajor ? (static_cast<size_t>(i) * ld + 2 * j + 1)
+                         : (static_cast<size_t>(2 * j + 1) * ld + i);
+            const size_t outIdx = rowMajor ? (static_cast<size_t>(i) * ld + j)
+                                           : (static_cast<size_t>(j) * ld + i);
+            const float  gate   = data[gateIdx];
+            const float  up     = data[upIdx];
+            data[outIdx]        = op(gate, up);
+        }
+    }
+}
+
+void
+UalRef::applyGatedSwiglu(Matrix& matrix)
+{
+    // silu(gate) * up  (unclamped; no runtime scalars).
+    applyGluHalfWidth(matrix, [](float gate, float up) {
+        const float silu = gate / (1.0f + std::exp(-gate));
+        return silu * up;
+    });
+}
+
+void
+UalRef::applyGatedSwigluAndMul(Matrix& matrix)
+{
+    // (clip(up,-limit,limit)+1) * clip(gate,max=limit)
+    //                          * sigmoid(alpha*clip(gate,max=limit))
+    // OAI constants baked in, mirroring the kernel.
+    applyGluHalfWidth(matrix, [](float gate, float up) {
+        constexpr float kAlpha = 1.702f;
+        constexpr float kLimit = 7.0f;
+        const float     g      = std::min(gate, kLimit);
+        const float     u      = std::max(-kLimit, std::min(up, kLimit));
+        return (u + 1.0f) * g / (1.0f + std::exp(-kAlpha * g));
+    });
+}
+
 } // namespace dlp::testing::classic

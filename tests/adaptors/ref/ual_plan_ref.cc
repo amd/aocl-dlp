@@ -42,6 +42,44 @@ using dlp::testing::utils::truncateF32ToMicro;
 
 namespace dlp::testing::classic {
 
+namespace {
+
+    // Software twin of the kernel's storeHalfWidthResult(): copies the low half
+    // (I = N/2) columns of the f32 source (M x N) into dst, honoring each
+    // matrix's leading dimension and layout. dst's columns [I, N) are left
+    // untouched so they keep their init (matching the DLP half-width store,
+    // which never writes them).
+    //
+    // The f32 source values are converted to dst's element type via
+    // convertFrom<>, so this works for any output dtype (f32, bf16, integer).
+    // Writing through a hardcoded float* would overflow a narrower buffer (e.g.
+    // bf16 = 2 bytes/elem) and corrupt the heap.
+    void copyHalfWidthResult(const Matrix& src, Matrix& dst)
+    {
+        const float*     s     = reinterpret_cast<const float*>(src.getData());
+        void*            d     = dst.getData();
+        const MatrixType dtype = dst.getMatrixType();
+        const md_t       rows  = src.getRows();
+        const md_t       I     = src.getCols() / 2;
+        const md_t       sld   = src.getLeadingDimension();
+        const md_t       dld   = dst.getLeadingDimension();
+        const bool       srow  = (src.getLayout() == MatrixLayout::ROW_MAJOR);
+        const bool       drow  = (dst.getLayout() == MatrixLayout::ROW_MAJOR);
+
+        for (md_t i = 0; i < rows; ++i) {
+            for (md_t j = 0; j < I; ++j) {
+                const size_t sidx = srow ? (static_cast<size_t>(i) * sld + j)
+                                         : (static_cast<size_t>(j) * sld + i);
+                const size_t didx = drow ? (static_cast<size_t>(i) * dld + j)
+                                         : (static_cast<size_t>(j) * dld + i);
+                dlp::testing::utils::convertFrom<float>(d, dtype, didx,
+                                                        s[sidx]);
+            }
+        }
+    }
+
+} // namespace
+
 void
 RefUalPlan::prepare()
 {
@@ -290,6 +328,41 @@ RefUalPlan::execute()
         }
 
         applyPostOps(tempC_f32);
+
+        // A terminal GLU op is shape-changing: it produces only the low
+        // I = N/2 output columns (in tempC_f32's columns [0, I)); columns
+        // [I, N) hold the raw pre-GLU accumulator and are not part of the
+        // result. The compacted low I columns are written to the D buffer
+        // below (never back into C), mirroring the kernel's half-width store.
+        const bool gluTerminal =
+            hasPostOps && !m_post_ops.empty()
+            && isTerminalPostOp(m_post_ops.back()->getType());
+
+        if (gluTerminal) {
+            // Match the non-GLU path: integer outputs truncate the f32 result
+            // before the dtype conversion. Only the low I columns are valid,
+            // but truncating the full buffer is harmless (the tail is unused)
+            // and keeps this in lockstep with the standard conversion.
+            if (isIntegerType(outputType)) {
+                truncateF32ToMicro(
+                    reinterpret_cast<float*>(tempC_f32.getData()),
+                    static_cast<size_t>(tempC_f32.getRows())
+                        * tempC_f32.getCols());
+            }
+            // The compacted (m x I) GLU result goes solely to the caller-owned
+            // D buffer (m_glu_out): copyHalfWidthResult writes the low I
+            // columns of the 2I source into D's [0, I) columns (all of D),
+            // honoring D's layout/leading-dim/dtype. C is left untouched as the
+            // raw 2I workspace -- the harness compares D vs D_ref, never C, so
+            // there is no half-width store into C. A terminal GLU without a
+            // bound D buffer is a harness misconfiguration.
+            if (m_glu_out == nullptr) {
+                return UALError::UAL_FAILURE;
+            }
+            copyHalfWidthResult(tempC_f32, *m_glu_out);
+            return UALError::UAL_SUCCESS;
+        }
+
         if (isIntegerType(outputType)) {
             truncateF32ToMicro(reinterpret_cast<float*>(tempC_f32.getData()),
                                static_cast<size_t>(tempC_f32.getRows())
@@ -472,6 +545,10 @@ RefUalPlan::applyPostOps(Matrix& C)
             case OperationType::MatMul:
                 ualRef.applyPostOperation(
                     C, static_cast<const MatrixMulParam&>(*param));
+                break;
+            case OperationType::GLU:
+                ualRef.applyPostOperation(C,
+                                          static_cast<const GluParam&>(*param));
                 break;
             default:
                 break;

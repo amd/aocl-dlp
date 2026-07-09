@@ -113,12 +113,14 @@ class kernelOpsGeneratorX86
         TABLE_GELU = 1 << 0,
         TABLE_EXP  = 1 << 1,
         TABLE_ERF  = 1 << 2,
+        TABLE_GLU  = 1 << 3,
     };
     uint8_t      requiredTables = TABLE_NONE;
     bool         tablesEmbedded = false;
     Xbyak::Label geluTable;
     Xbyak::Label expTable;
     Xbyak::Label erfTable;
+    Xbyak::Label gluTable;
     Xbyak::Label tableEnd;
 
     // Table helpers for strategy classes (access root's labels/flags)
@@ -138,6 +140,23 @@ class kernelOpsGeneratorX86
     Xbyak::Address erfAddr(int byteOffset)
     {
         return jit->ptr[jit->rip + tableOwner->erfTable + byteOffset];
+    }
+
+    // Base of the GLU lane de-interleave indices. The even-lane (gate) index
+    // vector lives at offset 0 and the odd-lane (up) index vector at offset
+    // regBytes; both are emitted by embedKernelOpsAttributes() (TABLE_GLU).
+    Xbyak::Address gluAddr(int byteOffset)
+    {
+        return jit->ptr[jit->rip + tableOwner->gluTable + byteOffset];
+    }
+
+    // GATED_SWIGLU_AND_MUL baked scalars (gen::tables::glu_consts) follow the
+    // 2 * RegBytes-wide perm-index vectors in TABLE_GLU. idx: 0=limit,
+    // 1=-limit, 2=alpha, 3=+1 bias.
+    Xbyak::Address gluConstAddr(int idx)
+    {
+        return jit->ptr[jit->rip + tableOwner->gluTable + 2 * RegBytes
+                        + idx * static_cast<int>(sizeof(float))];
     }
 
     // Shared elementwise subroutines (used by multiple post-ops)

@@ -30,6 +30,7 @@
 
 #include "framework/matrix.hh"
 #include <memory>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -50,6 +51,7 @@ enum class OperationType : uint8_t
     WOQ         = 6, // Weight-Only Quantization for bf16s4
     B_Quant     = 7, // B matrix quantization (b_pre_quant / b_post_quant)
     GroupScale  = 8, // Group-level symmetric quantization scale factors
+    GLU         = 9, // Gated Linear Unit (shape-changing, terminal post-op)
 };
 
 /**
@@ -70,7 +72,20 @@ isPostOp(OperationType type)
 {
     return type == OperationType::ElementWise || type == OperationType::Bias
            || type == OperationType::Scale || type == OperationType::MatAdd
-           || type == OperationType::MatMul;
+           || type == OperationType::MatMul || type == OperationType::GLU;
+}
+
+/**
+ * @brief Check if an operation type is a terminal, shape-changing post-op.
+ *
+ * A terminal post-op must be the last entry in a chain and may appear at most
+ * once. GLU is the only such op today: it consumes a 2I-wide interleaved
+ * gate/up accumulator and emits I columns.
+ */
+inline bool
+isTerminalPostOp(OperationType type)
+{
+    return type == OperationType::GLU;
 }
 
 /**
@@ -97,6 +112,22 @@ enum class ElementWiseOperation : uint8_t
     Tanh      = 6,
     Sigmoid   = 7,
     Mish      = 8
+};
+
+/**
+ * @enum GluOperation
+ * @brief Fused GLU variants (maps to DLP_GLU_ALGO_TYPE). Both operate on an
+ * interleaved gate/up accumulator (gate = even lanes, up = odd lanes):
+ *   - GatedSwiglu    : silu(gate) * up                  (vLLM silu_and_mul)
+ *   - GatedSwigluAndMul : (clip(up,-7,7)+1) * clip(gate,max=7)
+ *                     * sigmoid(1.702 * clip(gate,max=7))  (vLLM
+ * swigluoai_and_mul). Neither variant takes runtime scalars (constants are
+ * baked into the kernel).
+ */
+enum class GluOperation : uint8_t
+{
+    GatedSwiglu       = 0,
+    GatedSwigluAndMul = 1
 };
 
 /**
@@ -165,6 +196,55 @@ class ElementWiseParam : public IOperationParam
     const Matrix* getBeta() const { return m_beta.get(); }
     bool          hasAlpha() const { return m_alpha != nullptr; }
     bool          hasBeta() const { return m_beta != nullptr; }
+};
+
+/**
+ * @class GluParam
+ * @brief Parameter class for the fused, shape-changing GLU post-op.
+ *
+ * Carries the variant plus two optional per-variant scalars. No current GLU
+ * variant takes runtime operands (the OAI constants alpha=1.702 / limit=7.0 are
+ * baked into the kernel), so the scalars are normally left unset. They are
+ * plumbed
+ * here for forward compatibility with future variants that parameterize these
+ * values (e.g. a runtime-configurable SiLU scale / clamp limit), mirroring the
+ * `alpha` / `beta` slots of `dlp_post_op_glu`. GLU consumes a 2I-wide
+ * interleaved gate/up accumulator and emits I columns.
+ */
+class GluParam : public IOperationParam
+{
+  private:
+    GluOperation         m_operation;
+    std::optional<float> m_alpha; // SiLU scale (OAI: 1.702); baked into kernel
+    std::optional<float> m_beta;  // clamp limit (OAI: 7.0); baked into kernel
+
+  public:
+    explicit GluParam(GluOperation         operation,
+                      std::optional<float> alpha = std::nullopt,
+                      std::optional<float> beta  = std::nullopt)
+        : m_operation(operation)
+        , m_alpha(alpha)
+        , m_beta(beta)
+    {
+    }
+
+    GluParam(const GluParam& other) = default;
+
+    OperationType getType() const override { return OperationType::GLU; }
+
+    std::unique_ptr<IOperationParam> clone() const override
+    {
+        return std::make_unique<GluParam>(*this);
+    }
+
+    GluOperation getOperation() const { return m_operation; }
+
+    // Stable pointers to the stored scalars, valid for the param's lifetime, or
+    // nullptr when unset. Lets the DLP adaptor point the void* metadata slots
+    // straight at param-owned storage (no copy), mirroring how eltwise points
+    // at its Matrix data.
+    float* getAlphaPtr() { return m_alpha ? &*m_alpha : nullptr; }
+    float* getBetaPtr() { return m_beta ? &*m_beta : nullptr; }
 };
 
 /**
@@ -854,6 +934,46 @@ class MishBuilder
 };
 
 /**
+ * @class GluBuilder
+ * @brief Type-safe builder for the fused GLU post-op (GATED_SWIGLU /
+ * GATED_SWIGLU_AND_MUL).
+ */
+class GluBuilder
+{
+  private:
+    GluOperation         m_operation = GluOperation::GatedSwigluAndMul;
+    std::optional<float> m_alpha;
+    std::optional<float> m_beta;
+
+  public:
+    GluBuilder& setOperation(GluOperation operation)
+    {
+        m_operation = operation;
+        return *this;
+    }
+
+    // Optional per-variant scalars (SiLU scale / clamp limit). Current variants
+    // bake their constants into the kernel and ignore these; they are plumbed
+    // for forward compatibility with future parameterized variants.
+    GluBuilder& setAlpha(float alpha)
+    {
+        m_alpha = alpha;
+        return *this;
+    }
+
+    GluBuilder& setBeta(float beta)
+    {
+        m_beta = beta;
+        return *this;
+    }
+
+    std::unique_ptr<IOperationParam> build()
+    {
+        return std::make_unique<GluParam>(m_operation, m_alpha, m_beta);
+    }
+};
+
+/**
  * @class ScaleBuilder
  * @brief Type-safe builder for Scale operations
  */
@@ -1275,6 +1395,10 @@ namespace postops {
     inline MishBuilder createMish()
     {
         return MishBuilder{};
+    }
+    inline GluBuilder createGlu()
+    {
+        return GluBuilder{};
     }
     // Scale operation factories
     inline ScaleBuilder createScale()

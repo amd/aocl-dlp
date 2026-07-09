@@ -103,6 +103,13 @@ struct generatorParams
     kernelInstrType                                   kType;
     std::vector<dlp::kernel_frame::kernelOpsMetaData> kernelOps;
 
+    // OR-folded by the orchestrator over isShapeChangingOp(op.type) for the
+    // chain: true when a shape-changing GLU is present. The per-dtype generator
+    // reads it to pick storeHalfWidthResult() over storeResult(). On
+    // generatorParams (not kernelInfo), so it never enters the cache key or
+    // ABI.
+    bool storeHalfWidthResults = false;
+
     generatorParams(md_t                           _MR,
                     md_t                           _NR,
                     int                            _K_UNROLL,
@@ -146,25 +153,27 @@ struct generatorParams
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
         , kernelOps(other.kernelOps)
+        , storeHalfWidthResults(other.storeHalfWidthResults)
     {
     }
 
     generatorParams& operator=(const generatorParams& other)
     {
         if (this != std::addressof(other)) {
-            MR               = other.MR;
-            NR               = other.NR;
-            K_UNROLL         = other.K_UNROLL;
-            PREFETCH_C_DIST  = other.PREFETCH_C_DIST;
-            c_downscale      = other.c_downscale;
-            numMaskRegs      = other.numMaskRegs;
-            useMask          = other.useMask;
-            mLoop            = other.mLoop;
-            is_k1            = other.is_k1;
-            alphaScalingType = other.alphaScalingType;
-            betaScalingType  = other.betaScalingType;
-            kType            = other.kType;
-            kernelOps        = other.kernelOps;
+            MR                    = other.MR;
+            NR                    = other.NR;
+            K_UNROLL              = other.K_UNROLL;
+            PREFETCH_C_DIST       = other.PREFETCH_C_DIST;
+            c_downscale           = other.c_downscale;
+            numMaskRegs           = other.numMaskRegs;
+            useMask               = other.useMask;
+            mLoop                 = other.mLoop;
+            is_k1                 = other.is_k1;
+            alphaScalingType      = other.alphaScalingType;
+            betaScalingType       = other.betaScalingType;
+            kType                 = other.kType;
+            kernelOps             = other.kernelOps;
+            storeHalfWidthResults = other.storeHalfWidthResults;
         }
         return *this;
     }
@@ -183,25 +192,27 @@ struct generatorParams
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
         , kernelOps(std::move(other.kernelOps))
+        , storeHalfWidthResults(other.storeHalfWidthResults)
     {
     }
 
     generatorParams& operator=(generatorParams&& other)
     {
         if (this != std::addressof(other)) {
-            MR               = other.MR;
-            NR               = other.NR;
-            K_UNROLL         = other.K_UNROLL;
-            PREFETCH_C_DIST  = other.PREFETCH_C_DIST;
-            c_downscale      = other.c_downscale;
-            numMaskRegs      = other.numMaskRegs;
-            useMask          = other.useMask;
-            mLoop            = other.mLoop;
-            is_k1            = other.is_k1;
-            alphaScalingType = other.alphaScalingType;
-            betaScalingType  = other.betaScalingType;
-            kType            = other.kType;
-            kernelOps        = std::move(other.kernelOps);
+            MR                    = other.MR;
+            NR                    = other.NR;
+            K_UNROLL              = other.K_UNROLL;
+            PREFETCH_C_DIST       = other.PREFETCH_C_DIST;
+            c_downscale           = other.c_downscale;
+            numMaskRegs           = other.numMaskRegs;
+            useMask               = other.useMask;
+            mLoop                 = other.mLoop;
+            is_k1                 = other.is_k1;
+            alphaScalingType      = other.alphaScalingType;
+            betaScalingType       = other.betaScalingType;
+            kType                 = other.kType;
+            kernelOps             = std::move(other.kernelOps);
+            storeHalfWidthResults = other.storeHalfWidthResults;
         }
         return *this;
     }
@@ -237,6 +248,11 @@ struct gemvN1GeneratorParams
     // shape. The generator emits a two-pass MR/2 k-loop body instead
     // of the single-pass MR body. No runtime stride check is emitted.
     bool aliasMrSplit = false;
+
+    // True when a shape-changing post-op (GLU) is present, which halves the
+    // output width. Folded by the orchestrator. For N1 (column-major m=1) the
+    // store compacts the de-interleaved I results 2I->I along M.
+    bool storeHalfWidthResults = false;
 
     // Constructor
     gemvN1GeneratorParams(int                              _MR,
@@ -279,25 +295,27 @@ struct gemvN1GeneratorParams
         , kType(other.kType)
         , kernelOps(other.kernelOps)
         , aliasMrSplit(other.aliasMrSplit)
+        , storeHalfWidthResults(other.storeHalfWidthResults)
     {
     }
     // Copy assignment operator
     gemvN1GeneratorParams& operator=(const gemvN1GeneratorParams& other)
     {
         if (this != std::addressof(other)) {
-            MR               = other.MR;
-            M_LEFT           = other.M_LEFT;
-            c_downscale      = other.c_downscale;
-            mloop            = other.mloop;
-            kloop            = other.kloop;
-            mfringe          = other.mfringe;
-            kfringe          = other.kfringe;
-            yFormat          = other.yFormat;
-            alphaScalingType = other.alphaScalingType;
-            betaScalingType  = other.betaScalingType;
-            kType            = other.kType;
-            kernelOps        = other.kernelOps;
-            aliasMrSplit     = other.aliasMrSplit;
+            MR                    = other.MR;
+            M_LEFT                = other.M_LEFT;
+            c_downscale           = other.c_downscale;
+            mloop                 = other.mloop;
+            kloop                 = other.kloop;
+            mfringe               = other.mfringe;
+            kfringe               = other.kfringe;
+            yFormat               = other.yFormat;
+            alphaScalingType      = other.alphaScalingType;
+            betaScalingType       = other.betaScalingType;
+            kType                 = other.kType;
+            kernelOps             = other.kernelOps;
+            aliasMrSplit          = other.aliasMrSplit;
+            storeHalfWidthResults = other.storeHalfWidthResults;
         }
         return *this;
     }
@@ -317,6 +335,7 @@ struct gemvN1GeneratorParams
         , kType(other.kType)
         , kernelOps(std::move(other.kernelOps))
         , aliasMrSplit(other.aliasMrSplit)
+        , storeHalfWidthResults(other.storeHalfWidthResults)
     {
     }
 
@@ -324,19 +343,20 @@ struct gemvN1GeneratorParams
     gemvN1GeneratorParams& operator=(gemvN1GeneratorParams&& other) noexcept
     {
         if (this != std::addressof(other)) {
-            MR               = other.MR;
-            M_LEFT           = other.M_LEFT;
-            c_downscale      = other.c_downscale;
-            mloop            = other.mloop;
-            kloop            = other.kloop;
-            mfringe          = other.mfringe;
-            kfringe          = other.kfringe;
-            yFormat          = other.yFormat;
-            alphaScalingType = other.alphaScalingType;
-            betaScalingType  = other.betaScalingType;
-            kType            = other.kType;
-            kernelOps        = std::move(other.kernelOps);
-            aliasMrSplit     = other.aliasMrSplit;
+            MR                    = other.MR;
+            M_LEFT                = other.M_LEFT;
+            c_downscale           = other.c_downscale;
+            mloop                 = other.mloop;
+            kloop                 = other.kloop;
+            mfringe               = other.mfringe;
+            kfringe               = other.kfringe;
+            yFormat               = other.yFormat;
+            alphaScalingType      = other.alphaScalingType;
+            betaScalingType       = other.betaScalingType;
+            kType                 = other.kType;
+            kernelOps             = std::move(other.kernelOps);
+            aliasMrSplit          = other.aliasMrSplit;
+            storeHalfWidthResults = other.storeHalfWidthResults;
         }
         return *this;
     }
@@ -381,6 +401,11 @@ struct gemvM1GeneratorParams
     kernelInstrType kType; // Instruction type for the kernel
     std::vector<dlp::kernel_frame::kernelOpsMetaData>
         kernelOps; // List of post-ops
+
+    // True when a shape-changing post-op (GLU) is present, which halves the
+    // output width. Folded by the orchestrator. For M1 (row-major m=1) the
+    // store compacts the de-interleaved I results 2I->I along N.
+    bool storeHalfWidthResults = false;
 
     // Constructor
     gemvM1GeneratorParams(int                              _c_downscale,
@@ -441,6 +466,7 @@ struct gemvM1GeneratorParams
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
         , kernelOps(other.kernelOps)
+        , storeHalfWidthResults(other.storeHalfWidthResults)
     {
     }
 
@@ -448,27 +474,28 @@ struct gemvM1GeneratorParams
     gemvM1GeneratorParams& operator=(const gemvM1GeneratorParams& other)
     {
         if (this != std::addressof(other)) {
-            c_downscale      = other.c_downscale;
-            NR               = other.NR;
-            N_LEFT           = other.N_LEFT;
-            N_LEFT_16        = other.N_LEFT_16;
-            N_LEFT_LT16      = other.N_LEFT_LT16;
-            RS_B_N_LEFT_16   = other.RS_B_N_LEFT_16;
-            RS_B_N_LEFT_LT16 = other.RS_B_N_LEFT_LT16;
-            KC               = other.KC;
-            K_SUB_ITER       = other.K_SUB_ITER;
-            mtag_b           = other.mtag_b;
-            nloop            = other.nloop;
-            kloop            = other.kloop;
-            nfringe          = other.nfringe;
-            nfringe_main     = other.nfringe_main;
-            nfringe_left     = other.nfringe_left;
-            kfringe          = other.kfringe;
-            yFormat          = other.yFormat;
-            alphaScalingType = other.alphaScalingType;
-            betaScalingType  = other.betaScalingType;
-            kType            = other.kType;
-            kernelOps        = other.kernelOps;
+            c_downscale           = other.c_downscale;
+            NR                    = other.NR;
+            N_LEFT                = other.N_LEFT;
+            N_LEFT_16             = other.N_LEFT_16;
+            N_LEFT_LT16           = other.N_LEFT_LT16;
+            RS_B_N_LEFT_16        = other.RS_B_N_LEFT_16;
+            RS_B_N_LEFT_LT16      = other.RS_B_N_LEFT_LT16;
+            KC                    = other.KC;
+            K_SUB_ITER            = other.K_SUB_ITER;
+            mtag_b                = other.mtag_b;
+            nloop                 = other.nloop;
+            kloop                 = other.kloop;
+            nfringe               = other.nfringe;
+            nfringe_main          = other.nfringe_main;
+            nfringe_left          = other.nfringe_left;
+            kfringe               = other.kfringe;
+            yFormat               = other.yFormat;
+            alphaScalingType      = other.alphaScalingType;
+            betaScalingType       = other.betaScalingType;
+            kType                 = other.kType;
+            kernelOps             = other.kernelOps;
+            storeHalfWidthResults = other.storeHalfWidthResults;
         }
         return *this;
     }
@@ -496,6 +523,7 @@ struct gemvM1GeneratorParams
         , betaScalingType(other.betaScalingType)
         , kType(other.kType)
         , kernelOps(std::move(other.kernelOps))
+        , storeHalfWidthResults(other.storeHalfWidthResults)
     {
     }
 
@@ -503,27 +531,28 @@ struct gemvM1GeneratorParams
     gemvM1GeneratorParams& operator=(gemvM1GeneratorParams&& other)
     {
         if (this != std::addressof(other)) {
-            c_downscale      = other.c_downscale;
-            NR               = other.NR;
-            N_LEFT           = other.N_LEFT;
-            N_LEFT_16        = other.N_LEFT_16;
-            N_LEFT_LT16      = other.N_LEFT_LT16;
-            RS_B_N_LEFT_16   = other.RS_B_N_LEFT_16;
-            RS_B_N_LEFT_LT16 = other.RS_B_N_LEFT_LT16;
-            KC               = other.KC;
-            K_SUB_ITER       = other.K_SUB_ITER;
-            mtag_b           = other.mtag_b;
-            nloop            = other.nloop;
-            kloop            = other.kloop;
-            nfringe          = other.nfringe;
-            nfringe_main     = other.nfringe_main;
-            nfringe_left     = other.nfringe_left;
-            kfringe          = other.kfringe;
-            yFormat          = other.yFormat;
-            alphaScalingType = other.alphaScalingType;
-            betaScalingType  = other.betaScalingType;
-            kType            = other.kType;
-            kernelOps        = std::move(other.kernelOps);
+            c_downscale           = other.c_downscale;
+            NR                    = other.NR;
+            N_LEFT                = other.N_LEFT;
+            N_LEFT_16             = other.N_LEFT_16;
+            N_LEFT_LT16           = other.N_LEFT_LT16;
+            RS_B_N_LEFT_16        = other.RS_B_N_LEFT_16;
+            RS_B_N_LEFT_LT16      = other.RS_B_N_LEFT_LT16;
+            KC                    = other.KC;
+            K_SUB_ITER            = other.K_SUB_ITER;
+            mtag_b                = other.mtag_b;
+            nloop                 = other.nloop;
+            kloop                 = other.kloop;
+            nfringe               = other.nfringe;
+            nfringe_main          = other.nfringe_main;
+            nfringe_left          = other.nfringe_left;
+            kfringe               = other.kfringe;
+            yFormat               = other.yFormat;
+            alphaScalingType      = other.alphaScalingType;
+            betaScalingType       = other.betaScalingType;
+            kType                 = other.kType;
+            kernelOps             = std::move(other.kernelOps);
+            storeHalfWidthResults = other.storeHalfWidthResults;
         }
         return *this;
     }
