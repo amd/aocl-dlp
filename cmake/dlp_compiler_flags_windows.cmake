@@ -333,9 +333,11 @@ endfunction()
 # Function to setup atomic support for C11 _Atomic and C++ std::atomic operations.
 # See dlp_compiler_flags_linux.cmake for detailed rationale.
 function(dlp_setup_atomic_support)
-    if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
-        # MSVC has built-in atomic support, no additional linking needed
-        message(STATUS "MSVC: atomic support built-in, no additional linking needed")
+    if(MSVC)
+        # MSVC-like (cl.exe and clang-cl) have built-in atomic support via the
+        # MSVC runtime / Interlocked intrinsics; libatomic is a GCC/Linux-only
+        # runtime and does not exist for this toolchain.
+        message(STATUS "MSVC-like: atomic support built-in, no additional linking needed")
     elseif(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|IntelLLVM")
         # MinGW/Clang/IntelLLVM on Windows — uses GCC's libatomic runtime
         find_library(ATOMIC_LIBRARY NAMES atomic

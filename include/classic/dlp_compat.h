@@ -153,8 +153,13 @@
 
 /* ======================================================================
  * 7. __builtin_clz — count leading zeros
+ *
+ * Only real MSVC (cl.exe) lacks __builtin_clz. clang-cl defines _MSC_VER too
+ * but is Clang underneath and already provides __builtin_clz as a real
+ * builtin, so exclude __clang__ to avoid "definition of builtin function".
  * ====================================================================== */
-#if defined(_MSC_VER) && !defined(DLP_BUILTIN_CLZ_DEFINED)
+#if defined(_MSC_VER) && !defined(__clang__)                                   \
+    && !defined(DLP_BUILTIN_CLZ_DEFINED)
 #define DLP_BUILTIN_CLZ_DEFINED
 static __forceinline int
 __builtin_clz(unsigned int x)
