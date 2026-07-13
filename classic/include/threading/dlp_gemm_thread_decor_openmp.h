@@ -45,7 +45,7 @@
                                               C_type_actual, DLP_GEMM_SFX)     \
     void dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(                    \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
+        const md_t rs_a, const md_t cs_a, AOCL_DLP_MEMORY_TAG mtag_a,          \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
         AOCL_DLP_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,         \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
@@ -89,7 +89,7 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type** c,             \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
@@ -151,7 +151,7 @@ GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(float,
     void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
@@ -179,7 +179,7 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR_FN(float, float, f32of32)
                                        DLP_GEMM_SFX)                           \
     void dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                           \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
+        const md_t rs_a, const md_t cs_a, AOCL_DLP_MEMORY_TAG mtag_a,          \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
         AOCL_DLP_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,         \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
@@ -214,7 +214,7 @@ GEN_DLP_GEMM_DECORATOR_FN_DECL(float, int8_t, int32_t, int32_t, f32s8s32os32)
     void batch_dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                     \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type** c,             \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
@@ -252,7 +252,7 @@ GEN_BATCH_DLP_GEMM_DECORATOR_FN_DECL(float, int8_t, int32_t, f32s8s32os32)
     void batch_dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                     \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \

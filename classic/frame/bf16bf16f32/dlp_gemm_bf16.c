@@ -163,19 +163,13 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
                 a_use = pack_a_buffer_bf16;
             }
             // Call dlp_gemv_n_one kernel
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
-                                   (bfloat16*)a_use, rs_a_use, cs_a_use, 1,
-                                   (bfloat16*)b_use, rs_b_use, cs_b_use, 0, 0,
-                                   c_use, rs_c, cs_c, (void*)&alpha,
-                                   (void*)&beta, post_op_list, post_ops_attr);
-
-            } else {
-                dlp_gemv_n_one_bf16bf16f32of32(
-                    mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
-                    post_op_list, &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and will
+            // not reach the gemv loop. Therefore no null check required here.
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
+                               (bfloat16*)a_use, rs_a_use, cs_a_use, 1,
+                               (bfloat16*)b_use, rs_b_use, cs_b_use, 0, 0,
+                               c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                               post_op_list, post_ops_attr);
         }
 
         // Release pack buffers
@@ -283,19 +277,13 @@ DLP_GEMV(bfloat16, bfloat16, float, bf16bf16f32of32)
             post_ops_attr.post_op_c_j    = jc;
             post_ops_attr.rs_c_downscale = rs_c;
 
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(
-                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (bfloat16*)a_use,
-                    rs_a_use, cs_a_use, 1, (bfloat16*)b_use, rs_b_use, cs_b_use,
-                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
-                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
-            } else {
-                dlp_gemv_m_one_bf16bf16f32of32(
-                    nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
-                    n_sub_updated, jc_cur_loop_rem, post_op_list,
-                    &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and will
+            // not reach the gemv loop. Therefore no null check required here.
+            dlp_execute_kernel(
+                &(lcntx->dlp_kernel_hndl), 1, nc0, k, (bfloat16*)a_use,
+                rs_a_use, cs_a_use, 1, (bfloat16*)b_use, rs_b_use, cs_b_use,
+                n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
+                (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
 
             if (mtag_b == REORDERED) {
                 dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
@@ -604,21 +592,16 @@ DLP_GEMM_5LOOP_AVX512BF16(bfloat16, bfloat16, float, bf16bf16f32of32)
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
                     // Reorder/Packed B, Reorder/Packed/Unpacked A call.
-                    if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                        dlp_execute_kernel(
-                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
-                            (int16_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
-                            (int16_t*)(b_use + (jr * kc0_updated)), rs_b_use,
-                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
-                            (void*)&alpha, (void*)&beta0, post_op_list,
-                            post_ops_attr);
-                    } else {
-                        ((dlp_gemm_rowvar_bf16)lcntx->kern_fun_ptr)(
-                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                            a_block_stride, (b_use + (jr * kc0_updated)),
-                            rs_b_use, cs_b_use, (c_use_ic + jr), rs_c_use, 1,
-                            alpha, beta0, post_op_list, post_ops_attr);
-                    }
+                    // If JIT kernel is not generated, the code early returns
+                    // and will not reach the gemm loop. Therefore no null
+                    // check required here.
+                    dlp_execute_kernel(
+                        &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
+                        (int16_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                        (int16_t*)(b_use + (jr * kc0_updated)), rs_b_use,
+                        cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                        (void*)&alpha, (void*)&beta0, post_op_list,
+                        post_ops_attr);
                 }
             }
         }
@@ -717,20 +700,23 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 {
     (void)rntm; /* Threading handled via thread object, not rntm. */
 
-    // DLP_BF16 Contexts
+    // DLP_BF16 fallback F32 context here is not the one corresponding to the
+    // API but rather that of the underlying F32 kernel used. Hence any updates
+    // to the API cntx via metadata will be nullified here.
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
 
-    // DLP_F32 contexts for the GEMM
-    // The cntx queried here is not the one corresponding to the API but
-    // rather that of the underlying kernel used. Hence any updates to the
-    // API cntx via metadata will be nullified here.
-    dlp_gemm_cntx_t*    lcntx_f32 = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
-    md_t                f32_MR; // This will be modified
-    md_t                f32_NR = lcntx_f32->blksz.NR;
+    // There is an inherent expectation here that the BF16 and F32 NR are
+    // multiples or factors of each other. This is because the BF16 -> F32
+    // converter kernel assumes the original BF16 NR is used for reordering/
+    // packing, and the F32 NR is used for the final converted buffer.
+    dlp_gemm_cntx_t* lcntx_og_bf16 =
+        dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
+    md_t                og_bf16_MR = lcntx_og_bf16->blksz.MR;
+    md_t                og_bf16_NR = lcntx_og_bf16->blksz.NR;
     AOCL_DLP_MEMORY_TAG f32_mtag_b;
 
     const float* a_use    = NULL;
@@ -779,24 +765,6 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 
     if (n == 1) // n = 1 case.
     {
-        dlp_gemv_n_one_ker_ft ker_fp;
-#ifdef DLP_KERNELS_ZEN4
-        if (dlp_cpuid_is_avx512_supported() == TRUE) {
-            if (dlp_gemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
-                f32_MR = 16;
-                ker_fp = dlp_gemv_n_one_f32f32f32of32_avx512_256;
-            } else {
-                f32_MR = 16;
-                ker_fp = dlp_gemv_n_one_f32f32f32of32;
-            }
-        } else {
-#endif
-            // Increased MR from 6 to 16 to make use of 32 ZMM registers
-            f32_MR = 8;
-            ker_fp = dlp_gemv_n_one_f32f32f32of32_avx2;
-#ifdef DLP_KERNELS_ZEN4
-        }
-#endif
         // for bf16 inputs no matter if it's packed/re-ordered and unpacked,
         // the matrix to be given to the kernels has to be in bf16.
         mem_b_size_req = sizeof(float) * k;
@@ -827,7 +795,8 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
         thread_ic.n_way   = (thread_ic.n_way == 1) ? (thread->n_threads)
                                                    : (thread_ic.n_way);
         thread_ic.work_id = thread->tid;
-        dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
+        dlp_thread_task_range(&thread_ic, m, og_bf16_MR, FALSE, &ic_start,
+                              &ic_end);
 
         for (iter_t ic = ic_start; ic < ic_end; ic += MC) {
             md_t mc0 = dlp_min((ic_end - ic), MC);
@@ -854,18 +823,14 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 
             a_use = cvt_a_buffer_bf16_f32;
 
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
-                                   (float*)a_use, rs_a_use, cs_a_use, 1,
-                                   (float*)b_use, rs_b_use, cs_b_use, 0, 0,
-                                   c_use, rs_c, cs_c, (void*)&alpha,
-                                   (void*)&beta, post_op_list, post_ops_attr);
-
-            } else {
-                ker_fp(mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use,
-                       rs_b_use, cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha,
-                       beta, f32_MR, KC, post_op_list, &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and
+            // will not reach the fallback gemv loop. Therefore no null
+            // check required here.
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
+                               (float*)a_use, rs_a_use, cs_a_use, 1,
+                               (float*)b_use, rs_b_use, cs_b_use, 0, 0, c_use,
+                               rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                               post_op_list, post_ops_attr);
         }
 
         if (cvt_a_buffer_bf16_f32 != NULL) {
@@ -876,28 +841,15 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
         }
     } else // m = 1 case
     {
-        dlp_gemv_m_one_ker_ft ker_fp;
-        float*                b_unreorder = NULL;
+        float* b_unreorder = NULL;
 
-#ifdef DLP_KERNELS_ZEN4
-        if (dlp_cpuid_is_avx512_supported() == TRUE) {
-            if (dlp_gemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
-                ker_fp = dlp_gemv_m_one_f32f32f32of32_avx512_256;
-            } else {
-                ker_fp = dlp_gemv_m_one_f32f32f32of32;
-            }
-        } else {
-#endif
-            ker_fp = dlp_gemv_m_one_f32f32f32of32_avx2;
-#ifdef DLP_KERNELS_ZEN4
-        }
-#endif
         // Compute the JC loop thread range for the current thread.
         md_t jc_start, jc_end;
         thread_jc.n_way   = (thread_jc.n_way == 1) ? (thread->n_threads)
                                                    : (thread_jc.n_way);
         thread_jc.work_id = thread->tid;
-        dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
+        dlp_thread_task_range(&thread_jc, n, og_bf16_NR, FALSE, &jc_start,
+                              &jc_end);
 
         md_t packb_min_NR = 16;
 
@@ -992,18 +944,14 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
             post_ops_attr.rs_c_downscale = rs_c;
             post_ops_attr.is_first_k     = TRUE;
 
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(
-                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float*)a_use,
-                    rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use,
-                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
-                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
-            } else {
-                ker_fp(nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use,
-                       rs_b_use, cs_b_use, f32_mtag_b, c_use, rs_c, cs_c, alpha,
-                       beta, f32_NR, KC, n_sub_updated, jc_cur_loop_rem,
-                       post_op_list, &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and
+            // will not reach the fallback gemv loop. Therefore no null
+            // check required here.
+            dlp_execute_kernel(
+                &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float*)a_use, rs_a_use,
+                cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use, n_sub_updated,
+                jc_cur_loop_rem, c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                post_op_list, post_ops_attr);
 
             if (mtag_b == REORDERED) {
                 dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
@@ -1034,20 +982,23 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
         return;
     }
 #endif
-    // DLP_BF16 Contexts
+    // DLP_BF16 fallback F32 context here is not the one corresponding to the
+    // API but rather that of the underlying F32 kernel used. Hence any updates
+    // to the API cntx via metadata will be nullified here.
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
     md_t MC = lcntx->blksz.MC;
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
 
-    // DLP_F32 contexts for the GEMM
-    // The cntx queried here is not the one corresponding to the API but
-    // rather that of the underlying kernel used. Hence any updates to the
-    // API cntx via metadata will be nullified here.
-    dlp_gemm_cntx_t* lcntx_f32 = dlp_gemm_get_global_cntx_obj(F32F32F32OF32);
-    md_t             f32_MR    = lcntx_f32->blksz.MR;
-    md_t             f32_NR    = lcntx_f32->blksz.NR;
+    // There is an inherent expectation here that the BF16 and F32 NR are
+    // multiples or factors of each other. This is because the BF16 -> F32
+    // converter kernel assumes the original BF16 NR is used for reordering/
+    // packing, and the F32 NR is used for the final converted buffer.
+    dlp_gemm_cntx_t* lcntx_og_bf16 =
+        dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32);
+    md_t og_bf16_MR = lcntx_og_bf16->blksz.MR;
+    md_t og_bf16_NR = lcntx_og_bf16->blksz.NR;
 
     const float* a_use          = NULL;
     md_t         cs_a_use       = cs_a;
@@ -1113,12 +1064,13 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
 
     dlp_gemm_gen_dlp_task_ids(thread, &thread_jc, &thread_ic);
 
-    // Compute the JC, IC loop thread range for the current thread.
+    // Compute the JC, IC loop thread range for the current thread using the
+    // original BF16 context.
     md_t jc_start, jc_end;
-    dlp_thread_task_range(&thread_jc, n, NR, FALSE, &jc_start, &jc_end);
+    dlp_thread_task_range(&thread_jc, n, og_bf16_NR, FALSE, &jc_start, &jc_end);
 
     md_t ic_start, ic_end;
-    dlp_thread_task_range(&thread_ic, m, MR, FALSE, &ic_start, &ic_end);
+    dlp_thread_task_range(&thread_ic, m, og_bf16_MR, FALSE, &ic_start, &ic_end);
     for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
         md_t nc0 = dlp_min((jc_end - jc), NC);
 
@@ -1235,11 +1187,11 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                 // ic_ways threads can be used, the thread_ic attributes are
                 // used to split the loop range.
                 md_t jc_packb_start, jc_packb_end;
-                dlp_thread_task_range(&thread_ic, nc0, NR, FALSE,
+                dlp_thread_task_range(&thread_ic, nc0, og_bf16_NR, FALSE,
                                       &jc_packb_start, &jc_packb_end);
                 // Ensure thread ranges are valid, especially cases where no:
                 // of threads available for parallelization are greater than
-                // no: of B panel NR chunks.
+                // no: of B panel original BF16 NR chunks.
                 if ((jc_packb_end > jc_packb_start)
                     && (jc_packb_start < (jc + nc0))) {
                     rs_b_use = nc0;
@@ -1275,7 +1227,7 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                     (float*)thread->comm[jc_work_id].sent_object;
                 md_t jc_packb_start, jc_packb_end;
 
-                dlp_thread_task_range(&thread_ic, nc0, NR, FALSE,
+                dlp_thread_task_range(&thread_ic, nc0, og_bf16_NR, FALSE,
                                       &jc_packb_start, &jc_packb_end);
 
                 rs_b_use = nc0;
@@ -1324,32 +1276,26 @@ DLP_GEMM_5LOOP_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32)
                                  (a + (rs_a * ic) + (cs_a * pc)), rs_a, cs_a,
                                  mc0, kc0, rs_a_use, cs_a_use);
                 a_use          = cvt_a_buffer_bf16_f32;
-                a_block_stride = f32_MR * kc0;
+                a_block_stride = MR * kc0;
 
                 /*The NR loop should use the DLP_F32 kernel dimesnions*/
-                for (iter_t jr = 0; jr < nc0; jr += f32_NR) {
-                    md_t nr0 = dlp_min((nc0 - jr), f32_NR);
+                for (iter_t jr = 0; jr < nc0; jr += NR) {
+                    md_t nr0 = dlp_min((nc0 - jr), NR);
 
                     // Post ops meta attributes.
                     post_ops_attr.post_op_c_i    = ic;
                     post_ops_attr.post_op_c_j    = (jc + jr);
                     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
-                    /*To support AVX2, the DLP_F32 kernels are called.*/
-                    if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                        dlp_execute_kernel(
-                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
-                            (float*)a_use, rs_a_use, cs_a_use, a_block_stride,
-                            (float*)(b_use + jr), rs_b_use, cs_b_use, 0, 0,
-                            (c_use_ic + jr), rs_c_use, 1, (void*)&alpha,
-                            (void*)&beta0, post_op_list, post_ops_attr);
-                    } else {
-                        ((dlp_gemm_rowvar_f32)lcntx_f32->kern_fun_ptr)(
-                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                            a_block_stride, (b_use + jr), rs_b_use, cs_b_use,
-                            (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                            post_op_list, post_ops_attr);
-                    }
+                    // If JIT kernel is not generated, the code early returns
+                    // and will not reach the fallback gemm loop. Therefore no
+                    // null check required here.
+                    dlp_execute_kernel(
+                        &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0, (float*)a_use,
+                        rs_a_use, cs_a_use, a_block_stride,
+                        (float*)(b_use + jr), rs_b_use, cs_b_use, 0, 0,
+                        (c_use_ic + jr), rs_c_use, 1, (void*)&alpha,
+                        (void*)&beta0, post_op_list, post_ops_attr);
                 }
             }
         }

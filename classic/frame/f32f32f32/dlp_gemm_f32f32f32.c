@@ -131,6 +131,7 @@ DLP_GEMV(float, float, float, f32f32f32of32)
     const md_t KC = lcntx->blksz.KC;
     const md_t MC = lcntx->blksz.MC;
     const md_t NR = lcntx->blksz.NR;
+    const md_t MR = lcntx->blksz.MR;
 
     // Strides are updated based on matrix packing/reordering.
     float* c_use = NULL;
@@ -156,9 +157,7 @@ DLP_GEMV(float, float, float, f32f32f32of32)
     dlp_gemm_gen_dlp_task_ids(thread, &thread_jc, &thread_ic);
 
     if (n == 1) {
-        md_t                  MR;
-        dlp_gemv_n_one_ker_ft ker_fp;
-        dlp_gemv_a_pack_ft    packa_fp;
+        dlp_gemv_a_pack_ft packa_fp;
 
         // Workaround to select right kernel and blocksizes based on arch
         // since GEMV parameters are not available in dlp_gemm context.
@@ -171,21 +170,12 @@ DLP_GEMV(float, float, float, f32f32f32of32)
         //        and generating the appropriate kernels.
         if (dlp_cpuid_is_avx512_supported() == TRUE) {
             if (dlp_gemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
-                // BUG: MR=8 in DE, 16 here. Also packa_mr8 called,
-                // seems to imply MR=8 is correct.
-                MR       = 16;
-                ker_fp   = dlp_gemv_n_one_f32f32f32of32_avx512_256;
                 packa_fp = dlp_packa_mr8_f32f32f32of32_col_major;
             } else {
-                MR       = 16;
-                ker_fp   = dlp_gemv_n_one_f32f32f32of32;
                 packa_fp = dlp_packa_mr16_f32f32f32of32_col_major;
             }
         } else {
 #endif
-            //  Increased MR from 6 to 16 to make use of 32 ZMM registers
-            MR       = 8;
-            ker_fp   = dlp_gemv_n_one_f32f32f32of32_avx2;
             packa_fp = dlp_packa_mr8_f32f32f32of32_col_major;
 
 #ifdef DLP_KERNELS_ZEN4
@@ -244,17 +234,13 @@ DLP_GEMV(float, float, float, f32f32f32of32)
                 a_use = pack_a_buffer_f32f32f32of32;
             }
 
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
-                                   (float*)a_use, rs_a_use, cs_a_use, 1,
-                                   (float*)b_use, rs_b_use, cs_b_use, 0, 0,
-                                   c_use, rs_c, cs_c, (void*)&alpha,
-                                   (void*)&beta, post_op_list, post_ops_attr);
-            } else {
-                ker_fp(mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use,
-                       rs_b_use, cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha,
-                       beta, MR, KC, post_op_list, &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and will
+            // not reach the gemv loop. Therefore no null check required here.
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
+                               (float*)a_use, rs_a_use, cs_a_use, 1,
+                               (float*)b_use, rs_b_use, cs_b_use, 0, 0, c_use,
+                               rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                               post_op_list, post_ops_attr);
         }
         if (pack_a_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_a_buffer_f32f32f32of32);
@@ -265,21 +251,17 @@ DLP_GEMV(float, float, float, f32f32f32of32)
     } else {
         // m = 1 case is not implemented yet for AVX2
 
-        dlp_gemv_m_one_ker_ft ker_fp;
-        dlp_gemv_a_pack_ft    packa_fp;
+        dlp_gemv_a_pack_ft packa_fp;
 
 #ifdef DLP_KERNELS_ZEN4
         if (dlp_cpuid_is_avx512_supported() == TRUE) {
             if (dlp_gemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
-                ker_fp   = dlp_gemv_m_one_f32f32f32of32_avx512_256;
                 packa_fp = dlp_packa_mr8_f32f32f32of32_col_major;
             } else {
-                ker_fp   = dlp_gemv_m_one_f32f32f32of32;
                 packa_fp = dlp_packa_mr16_f32f32f32of32_col_major;
             }
         } else {
 #endif
-            ker_fp   = dlp_gemv_m_one_f32f32f32of32_avx2;
             packa_fp = dlp_packa_mr8_f32f32f32of32_col_major;
 #ifdef DLP_KERNELS_ZEN4
         }
@@ -362,19 +344,13 @@ DLP_GEMV(float, float, float, f32f32f32of32)
             // update post-op pointer
             post_ops_attr.post_op_c_j = jc;
 
-            // Call kernel
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(
-                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float*)a_use,
-                    rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use,
-                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
-                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
-            } else {
-                ker_fp(nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use,
-                       rs_b_use, cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha,
-                       beta, NR, KC, n_sub_updated, jc_cur_loop_rem,
-                       post_op_list, &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and will
+            // not reach the gemv loop. Therefore no null check required here.
+            dlp_execute_kernel(
+                &(lcntx->dlp_kernel_hndl), 1, nc0, k, (float*)a_use, rs_a_use,
+                cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use, n_sub_updated,
+                jc_cur_loop_rem, c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                post_op_list, post_ops_attr);
 
             if (mtag_b == REORDERED) {
                 dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
@@ -410,12 +386,8 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
     const md_t NC = lcntx->blksz.NC;
     const md_t KC = lcntx->blksz.KC;
     const md_t MC = lcntx->blksz.MC;
-    const md_t NR = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
-                        ? lcntx->dlp_kernel_hndl.nr
-                        : lcntx->blksz.NR;
-    const md_t MR = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
-                        ? lcntx->dlp_kernel_hndl.mr
-                        : lcntx->blksz.MR;
+    const md_t NR = lcntx->blksz.NR;
+    const md_t MR = lcntx->blksz.MR;
 
     bool invokeRD = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
                         ? lcntx->dlp_kernel_hndl.invokeRD
@@ -442,16 +414,9 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
     md_t ps_a_use;
     md_t ps_b_use;
 
-    // Check if packing of A is required.
-    // TODO: mtag_a for tranpose needs to be honored.
-    bool should_pack_A = rntm->pack_a;
-
     // Pack buffer for A.
     float* pack_a_buffer_f32f32f32of32 = NULL;
     msz_t  mem_a_size_req              = 0;
-
-    // Check if packing of B is required.
-    bool should_pack_B = rntm->pack_b;
 
     // Pack buffer for B.
     float* pack_b_buffer_f32f32f32of32 = NULL;
@@ -500,11 +465,9 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
         // RD kernels require A to be row-major and B to be column-major. There
         // are multiple ways to reach this configuration from the user input.
         // Ex: Row-major inputs with B transpose set to true. In case of the
-        // library deciding to set mtag_b to PACK or should_pack_B to true, we
-        // should reset both to UNPACKED and FALSE respectively.
-        mtag_b        = UNPACKED;
-        should_pack_A = FALSE;
-        should_pack_B = FALSE;
+        // library deciding to set mtag_b to PACK should reset both to UNPACKED.
+        mtag_b = UNPACKED;
+        mtag_a = UNPACKED;
     }
 
     for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
@@ -543,7 +506,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                 rs_b_use = NR;
                 cs_b_use = 1;
                 ps_b_use = kc0;
-            } else if ((mtag_b == PACK) || (should_pack_B == TRUE)) {
+            } else if (mtag_b == PACK) {
                 // Pack B chunks are based on jc work id.
                 md_t jc_work_id = thread_jc.work_id;
 
@@ -630,7 +593,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                     rs_a_use = 1;
                     cs_a_use = MR;
                     ps_a_use = MR * kc0;
-                } else if (should_pack_A == TRUE) {
+                } else if (mtag_a == PACK) {
                     // Extra space since packing does width in multiples of MR.
                     const md_t mc0_updated = ((mc0 + MR - 1) / MR) * MR;
                     mem_a_size_req         = sizeof(float) * mc0_updated * kc0;
@@ -661,7 +624,9 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
                 post_ops_attr.rs_c_downscale = rs_c_downscale;
                 post_ops_attr.post_op_c_j    = jc;
 
-                // Call the micro-kernel
+                // If JIT kernel is not generated, the code early returns and
+                // will not reach the gemm loop. Therefore no null check
+                // required here.
                 dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, nc0, kc0,
                                    (float*)a_use, rs_a_use, cs_a_use, ps_a_use,
                                    (float*)b_use, rs_b_use, cs_b_use, ps_b_use,
@@ -675,7 +640,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
     }
 
     // Release pack buffers.
-    if ((mtag_b == PACK) || (should_pack_B == TRUE)) {
+    if (mtag_b == PACK) {
         // All threads in work group should wait till B matrix usage is
         // completed by the participating threads.
         dlp_atomic_barrier(thread_jc.ocomm_id,
@@ -687,7 +652,7 @@ DLP_GEMM_5LOOP_UNIFIED(float, float, float, float, f32f32f32of32, /* mutable */)
             }
         }
     }
-    if (should_pack_A == TRUE) {
+    if (mtag_a == PACK) {
         if (pack_a_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_a_buffer_f32f32f32of32);
         }

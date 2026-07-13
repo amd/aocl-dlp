@@ -475,11 +475,13 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     // JIT pack B: required for F32 GEMM path.
     lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
-    dlp_init_and_get_packb_kernel_hndl(
-        DLP_KERNEL_F32F32F32OF32, n_use, lcntx_l.blksz.KC, rs_b_use, cs_b_use,
-        lcntx_l.blksz.NR, &lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl);
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_F32F32F32OF32, n_use,
+                                       rs_b_use, cs_b_use, &lcntx_l);
 
-    if (lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL) {
+    // n=1 gemv does not require a pack B kernel and is array copy if rs_b > 1.
+    // Need to avoid null check in that case.
+    if ((lcntx_l.blksz.NR > 1)
+        && (lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL)) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         goto err_hndl;
     }
@@ -497,7 +499,6 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     // Create ops bundle for standard GEMM (post-ops only)
     dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
-
 #ifdef DLP_ENABLE_OPENMP
     if (dlp_is_single_thread(&rntm_g) == FALSE) {
         dlp_gemm_f32f32f32of32_openmp_thread_decorator(

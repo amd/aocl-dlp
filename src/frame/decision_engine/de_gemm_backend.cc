@@ -159,28 +159,22 @@ gemmBF16DEBackend::gemmBF16DEBackend()
                               "AOCL_DLP_ENABLE_INSTRUCTIONS");
 
     isAvx512Bf16 = arch_utils::archConfigManager::getInstance()
-                       .isAvx512Bf16SupportedByArch();
-    isAvx512 =
-        arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
+                       .isAvx512Bf16SupportedByConfiguredArch();
+    isAvx512 = arch_utils::archConfigManager::getInstance()
+                   .isAvx512SupportedByConfiguredArch();
 
     isAvx2 = arch_utils::archConfigManager::getInstance()
-                 .isAvx2Fma3SupportedByArch();
+                 .isAvx2Fma3SupportedByConfiguredArch();
 
     if (!isAvx512Bf16) {
         // Instantiate the F32 DE Backend for rerouting to F32 JIT
         // for any machine without AVX512BF16 support
         // where kernel instruction would be set to avx512_zmm_favour
         f32Backend = std::make_unique<gemmF32DEBackend>();
-    } else if (eKernelInstPref
-               == kernel_frame::kernelInstrPreference::avx2_ymm_favour) {
-        // This would be the scenario where the machine supports AVX512BF16, but
-        // we choose to run the F32(AVX2) code-path.
-        f32Backend = std::make_unique<gemmF32DEBackend>();
     } else {
-        // In scenarios where the AOCL_DLP_ENABLE_INSTRUCTIONS is set to AVX512
-        // or AVX512_256, or not set at all, we generate the AVX512BF16 JIT
-        // kernels. Once the hybrid version is implemented, we will avoid this
-        // hardcoding.
+        // In this branch, the configured arch will support AVX512BF16
+        // (machine has it and env did not downgrade below it), so we
+        // generate AVX512BF16 JIT kernels.
         // kernel instruction preference is set avx512_zmm_bf16_favour when
         // underlying machine has avx512_bf16 support
         eKernelInstPref =
@@ -244,8 +238,8 @@ gemmU8S8DEBackend::gemmU8S8DEBackend()
     isAvx512Vnni = cpu_utils::cpuFeaturesInstance().hasFeature(
         cpu_utils::isaFeature::avx512vnni);
 
-    // If Avx512 is not supported, we cannot generate kernel info.
-    if (!isAvx512 || !isAvx512Vnni) {
+    // If VNNI is not supported, we cannot generate kernel info.
+    if (!isAvx512Vnni) {
         canGenerateKernelInfo = false;
     }
 }
@@ -289,7 +283,6 @@ gemmU8S8DEBackend::getKernelInfoForInput(iDEInput* in)
 gemmS8DEBackend::gemmS8DEBackend()
     : isAvx512(false)
     , isAvx2(false)
-    , isAvx512Bf16(false)
     , isAvx512Vnni(false)
     , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
     , canGenerateKernelInfo(true)
@@ -307,9 +300,8 @@ gemmS8DEBackend::gemmS8DEBackend()
     isAvx512Vnni = cpu_utils::cpuFeaturesInstance().hasFeature(
         cpu_utils::isaFeature::avx512vnni);
 
-    // If either of AVX512, VNNI or BF16 is unsupport, kernel info
-    // cannot be generated.
-    if (!isAvx512 || !isAvx512Vnni) {
+    // If VNNI is unsupported, kernel info cannot be generated.
+    if (!isAvx512Vnni) {
         canGenerateKernelInfo = false;
     }
 }

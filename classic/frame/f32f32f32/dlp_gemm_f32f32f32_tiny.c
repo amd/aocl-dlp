@@ -120,6 +120,10 @@ DLP_GEMV_TINY(float, float, float, f32f32f32of32)
     float*         pack_b_buffer_f32f32f32of32 = NULL;
     dlp_clsc_err_t err                         = DLP_CLSC_SUCCESS;
 
+    md_t NR = lcntx->blksz.NR;
+    md_t MR = lcntx->blksz.MR;
+    md_t KC = lcntx->blksz.KC;
+
     dlp_gemm_post_op_attr post_ops_attr;
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -136,8 +140,6 @@ DLP_GEMV_TINY(float, float, float, f32f32f32of32)
         post_ops_attr.buf_downscale = NULL;
 
     if (n == 1) {
-        md_t                     MR;
-        dlp_gemv_n_one_ker_ft    ker_fp;
         dlp_gemv_n_one_a_pack_ft packa_fp;
 
         // Workaround to select right kernel and blocksizes based on arch
@@ -151,19 +153,13 @@ DLP_GEMV_TINY(float, float, float, f32f32f32of32)
         //        and generating the appropriate kernels.
         if (dlp_cpuid_is_avx512_supported() == TRUE) {
             if (dlp_gemm_get_enabled_arch() == DLP_ARCH_ZEN3) {
-                MR       = 16;
-                ker_fp   = dlp_gemv_n_one_f32f32f32of32_avx512_256;
                 packa_fp = dlp_packa_mr8_f32f32f32of32_col_major;
             } else {
-                MR     = 16;
-                ker_fp = dlp_gemv_n_one_f32f32f32of32; // This can be commented
                 packa_fp = dlp_packa_mr16_f32f32f32of32_col_major;
             }
         } else {
 #endif
             //  Increased MR from 6 to 16 to make use of 32 ZMM registers
-            MR       = 8;
-            ker_fp   = dlp_gemv_n_one_f32f32f32of32_avx2;
             packa_fp = dlp_packa_mr8_f32f32f32of32_col_major;
 #ifdef DLP_KERNELS_ZEN4
         }
@@ -201,16 +197,12 @@ DLP_GEMV_TINY(float, float, float, f32f32f32of32)
         post_ops_attr.post_op_c_i = 0;
         post_ops_attr.post_op_c_j = 0;
 
-        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(
-                &(lcntx->dlp_kernel_hndl), m, 1, k, (float*)a_use, rs_a_use,
-                cs_a_use, 1, (float*)b_use, rs_b_use, cs_b_use, 0, 0, c, rs_c,
-                cs_c, (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
-        } else {
-            ker_fp(m, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                   cs_b_use, mtag_b, c, rs_c, cs_c, alpha, beta, MR, k,
-                   post_op_list, &post_ops_attr);
-        }
+        // If JIT kernel is not generated, the code early returns and will not
+        // reach the tiny gemv loop. Therefore no null check required here.
+        dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, 1, k, (float*)a_use,
+                           rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use,
+                           cs_b_use, 0, 0, c, rs_c, cs_c, (void*)&alpha,
+                           (void*)&beta, post_op_list, post_ops_attr);
 
         if (pack_a_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_a_buffer_f32f32f32of32);
@@ -219,9 +211,6 @@ DLP_GEMV_TINY(float, float, float, f32f32f32of32)
             dlp_free_page_aligned(pack_b_buffer_f32f32f32of32);
         }
     } else { // m == 1 case
-        md_t NR = lcntx->blksz.NR;
-        md_t KC = lcntx->blksz.KC;
-
         /*In single threaded scenarios, B matrix would be travesered in
           blocks of NR x KC and will not have any split of panel boundary .*/
         md_t n_sub_updated = 0;
@@ -284,18 +273,13 @@ DLP_GEMV_TINY(float, float, float, f32f32f32of32)
         post_ops_attr.post_op_c_i = 0;
         post_ops_attr.post_op_c_j = 0;
 
-        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), 1, n, k,
-                               (float*)a_use, rs_a_use, cs_a_use, 1,
-                               (float*)b_use, rs_b_use, cs_b_use, n_sub_updated,
-                               jc_loop_rem, c, rs_c, cs_c, (void*)&alpha,
-                               (void*)&beta, post_op_list, post_ops_attr);
-        } else {
-            (ker_fp)(n, k, (float*)a_use, rs_a_use, cs_a_use, mtag_a,
-                     (float*)b_use, rs_b_use, cs_b_use, mtag_b, c, rs_c, cs_c,
-                     alpha, beta, NR, KC, n_sub_updated, jc_loop_rem,
-                     post_op_list, &post_ops_attr);
-        }
+        // If JIT kernel is not generated, the code early returns and will not
+        // reach the tiny gemv loop. Therefore no null check required here.
+        dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), 1, n, k, (float*)a_use,
+                           rs_a_use, cs_a_use, 1, (float*)b_use, rs_b_use,
+                           cs_b_use, n_sub_updated, jc_loop_rem, c, rs_c, cs_c,
+                           (void*)&alpha, (void*)&beta, post_op_list,
+                           post_ops_attr);
 
         if (pack_b_buffer_f32f32f32of32 != NULL) {
             dlp_free_page_aligned(pack_b_buffer_f32f32f32of32);
@@ -318,12 +302,8 @@ DLP_GEMM_TINY(float, float, float, f32f32f32of32)
         return;
     }
 
-    md_t NR = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
-                  ? lcntx->dlp_kernel_hndl.nr
-                  : lcntx->blksz.NR;
-    md_t MR = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
-                  ? lcntx->dlp_kernel_hndl.mr
-                  : lcntx->blksz.MR;
+    md_t NR = lcntx->blksz.NR;
+    md_t MR = lcntx->blksz.MR;
 
     bool invokeRD = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
                         ? lcntx->dlp_kernel_hndl.invokeRD
@@ -432,6 +412,8 @@ DLP_GEMM_TINY(float, float, float, f32f32f32of32)
     post_ops_attr.post_op_c_j    = 0;
     post_ops_attr.rs_c_downscale = rs_c_downscale;
 
+    // If JIT kernel is not generated, the code early returns and will not
+    // reach the tiny gemm loop. Therefore no null check required here.
     dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, n, k, (float*)a_use,
                        rs_a_use, cs_a_use, ps_a_use, (float*)b_use, rs_b_use,
                        cs_b_use, ps_b_use, 0, c, rs_c, cs_c_use, (void*)&alpha,

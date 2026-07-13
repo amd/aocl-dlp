@@ -282,9 +282,9 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
         (kernPtr.isValid() && kernPtr.getPtr()->isValid)
             ? static_cast<void*>(kernPtr.getPtr())
             : nullptr;
-    cntx->dlp_kernel_hndl.mr = fastKI.mr;
-    cntx->dlp_kernel_hndl.nr = fastKI.nr;
-    cntx->blksz.KC           = fastKI.kc;
+    cntx->blksz.MR = cntx->dlp_kernel_hndl.mr = fastKI.mr;
+    cntx->blksz.NR = cntx->dlp_kernel_hndl.nr = fastKI.nr;
+    cntx->blksz.KC                            = fastKI.kc;
     cntx->blksz.MC =
         ((cntx->blksz.MC % fastKI.mr) == 0)
             ? cntx->blksz.MC
@@ -347,31 +347,36 @@ dlp_get_packb_kernelInfo_by_dtype(
 }
 
 void
-dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t     k_dtype,
-                                   md_t                  nc,
-                                   md_t                  kc,
-                                   md_t                  rs_src,
-                                   md_t                  cs_src,
-                                   md_t                  nr_hint,
-                                   dlp_pack_info_hndl_t* kernel_hndl)
+dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
+                                   md_t              n,
+                                   md_t              rs_src,
+                                   md_t              cs_src,
+                                   dlp_gemm_cntx_t*  cntx)
 {
     (void)rs_src;
 
-    if (!kernel_hndl) {
+    if (!cntx) {
         return;
     }
+
+    dlp_pack_info_hndl_t* b_hndl =
+        std::addressof((cntx->dlp_pack_kernel_hndl).pack_b_hndl);
 
     kernelDatatype kDType = getKernelDatatype(k_dtype);
     if (kDType == kernelDatatype::invalid) {
-        kernel_hndl->kernel_base = nullptr;
+        b_hndl->kernel_base = nullptr;
         return;
     }
 
+    // Currently n is passed in place of nc. Need to revisit this when there
+    // is clarity on what is required.
+    md_t                              nc = n;
     dlp::kernel_frame::packKernelInfo packKI =
-        dlp_get_packb_kernelInfo_by_dtype(kDType, nc, kc, cs_src, nr_hint);
+        dlp_get_packb_kernelInfo_by_dtype(kDType, nc, cntx->blksz.KC, cs_src,
+                                          cntx->blksz.NR);
 
     if (packKI.panel_dim <= 0) {
-        kernel_hndl->kernel_base = nullptr;
+        b_hndl->kernel_base = nullptr;
         return;
     }
 
@@ -381,15 +386,20 @@ dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t     k_dtype,
         kernPtr = dlp_generate_packb_jit_kernel(packKI, kDType);
     }
 
-    auto* rawPtr             = (kernPtr.isValid() && kernPtr.getPtr()->isValid)
-                                   ? kernPtr.getPtr()
-                                   : nullptr;
-    kernel_hndl->kernel_base = static_cast<void*>(rawPtr);
-    kernel_hndl->panel_dim   = packKI.panel_dim;
-    kernel_hndl->k_factor    = packKI.k_factor;
-    kernel_hndl->kDtype      = k_dtype;
-    kernel_hndl->src_type    = static_cast<uint8_t>(packKI.src_type);
-    kernel_hndl->dst_type    = static_cast<uint8_t>(packKI.dst_type);
+    auto* rawPtr        = (kernPtr.isValid() && kernPtr.getPtr()->isValid)
+                              ? kernPtr.getPtr()
+                              : nullptr;
+    b_hndl->kernel_base = static_cast<void*>(rawPtr);
+    cntx->blksz.NR = b_hndl->panel_dim = packKI.panel_dim;
+    cntx->blksz.NC =
+        ((cntx->blksz.NC % packKI.panel_dim) == 0)
+            ? cntx->blksz.NC
+            : (((cntx->blksz.NC + packKI.panel_dim - 1) / packKI.panel_dim)
+               * packKI.panel_dim);
+    b_hndl->k_factor = packKI.k_factor;
+    b_hndl->kDtype   = k_dtype;
+    b_hndl->src_type = static_cast<uint8_t>(packKI.src_type);
+    b_hndl->dst_type = static_cast<uint8_t>(packKI.dst_type);
 }
 
 [[gnu::aligned(64)]] void

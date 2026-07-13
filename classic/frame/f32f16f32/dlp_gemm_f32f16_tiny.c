@@ -191,12 +191,8 @@ DLP_GEMM_TINY(float, float16, float, f32f16f32of32)
         return;
     }
 
-    md_t NR = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
-                  ? lcntx->dlp_kernel_hndl.nr
-                  : lcntx->blksz.NR;
-    md_t MR = (lcntx->dlp_kernel_hndl.kernel_base != NULL)
-                  ? lcntx->dlp_kernel_hndl.mr
-                  : lcntx->blksz.MR;
+    md_t NR = lcntx->blksz.NR;
+    md_t MR = lcntx->blksz.MR;
 
     const float* a_use    = NULL;
     md_t         rs_a_use = rs_a;

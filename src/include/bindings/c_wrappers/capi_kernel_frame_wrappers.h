@@ -248,13 +248,11 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t   k_dtype,
                              md_t                c_downscale);
 
 void
-dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t     k_dtype,
-                                   md_t                  nc,
-                                   md_t                  kc,
-                                   md_t                  rs_src,
-                                   md_t                  cs_src,
-                                   md_t                  nr_hint,
-                                   dlp_pack_info_hndl_t* kernel_hndl);
+dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
+                                   md_t              n,
+                                   md_t              rs_src,
+                                   md_t              cs_src,
+                                   dlp_gemm_cntx_t*  cntx);
 
 // Packs B with the JIT pack-B kernel. The caller must only invoke this with a
 // valid (non-NULL) handle; the kernel ladder covers the full NR panel plus the

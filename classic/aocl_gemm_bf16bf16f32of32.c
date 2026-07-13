@@ -378,15 +378,8 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     // BF16 machine the handle comes back NULL (the BF16->F32 fallback path
     // converts/unreorders B instead), so a NULL handle here is not an error.
     lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
-    dlp_init_and_get_packb_kernel_hndl(
-        DLP_KERNEL_BF16BF16F32OF32, n_use, lcntx_l.blksz.KC, rs_b_use, cs_b_use,
-        lcntx_l.blksz.NR, &lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl);
-
-    // Revert back to original block sizes in the BF16 context after JIT kernel
-    // and pack-B generation, so the execution 5-loop uses BF16 block sizes.
-    lcntx_l.blksz.MR = og_mr_hint;
-    lcntx_l.blksz.NR = og_nr_hint;
-    lcntx_l.blksz.KC = og_kc_hint;
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n_use,
+                                       rs_b_use, cs_b_use, &lcntx_l);
 
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
     /* While AOCL_DLP_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that

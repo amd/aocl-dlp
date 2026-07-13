@@ -812,18 +812,13 @@ class gemmU8S8DEBackend : public iDEBackend
         // In case the environment variable was not set at all, resort to
         // setting it based on the native hardware support.
         if (kInstPref == kernel_frame::kernelInstrPreference::none) {
-            if (isAvx512) {
+            if (isAvx512Vnni) {
                 kInstPref =
                     kernel_frame::kernelInstrPreference::avx512_zmm_favour;
             } else {
                 // This is an invalid case, disable jit kernel generation.
                 return INVALID_KERNEL_INFO;
             }
-        } else if (kInstPref
-                   != kernel_frame::kernelInstrPreference::avx512_zmm_favour) {
-            kInstPref = kernel_frame::kernelInstrPreference::
-                avx512_zmm_favour; // At this point we know that it is an AVX512
-                                   // machine
         }
 
         if (n == 1) {
@@ -898,16 +893,13 @@ class gemmU8S8DEBackend : public iDEBackend
         // In case the environment variable was not set at all, resort to
         // setting it based on the native hardware support.
         if (kInstPref == kernel_frame::kernelInstrPreference::none) {
-            if (isAvx512) {
+            if (isAvx512Vnni) {
                 kInstPref =
                     kernel_frame::kernelInstrPreference::avx512_zmm_favour;
             } else {
                 // This is an invalid case, disable jit kernel generation.
                 return INVALID_KERNEL_INFO;
             }
-        } else if (kInstPref
-                   != kernel_frame::kernelInstrPreference::avx512_zmm_favour) {
-            kInstPref = kernel_frame::kernelInstrPreference::avx512_zmm_favour;
         }
 
         // Currently only general GEMM is supported, specific GEMM optimizations
@@ -923,7 +915,6 @@ class gemmS8DEBackend : public iDEBackend
 {
     bool                                isAvx512;
     bool                                isAvx2;
-    bool                                isAvx512Bf16;
     bool                                isAvx512Vnni;
     kernel_frame::kernelInstrPreference eKernelInstPref;
     bool                                canGenerateKernelInfo;
@@ -997,7 +988,7 @@ class gemmS8DEBackend : public iDEBackend
         // In case the environment variable was not set at all, resort to
         // setting it based on the native hardware support.
         if (kInstPref == kernel_frame::kernelInstrPreference::none) {
-            if (isAvx512) {
+            if (isAvx512Vnni) {
                 kInstPref =
                     kernel_frame::kernelInstrPreference::avx512_zmm_favour;
             } else {
@@ -1081,7 +1072,7 @@ class gemmS8DEBackend : public iDEBackend
         // In case the environment variable was not set at all, resort to
         // setting it based on the native hardware support.
         if (kInstPref == kernel_frame::kernelInstrPreference::none) {
-            if (isAvx512) {
+            if (isAvx512Vnni) {
                 kInstPref =
                     kernel_frame::kernelInstrPreference::avx512_zmm_favour;
             } else {

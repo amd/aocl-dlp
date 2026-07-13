@@ -279,9 +279,10 @@ dlp_init_threading(void)
 void
 dlp_update_threading_priority_order(dlp_rntm_t* rntm)
 {
-    md_t act_ic = -1;
-    md_t act_jc = -1;
-    md_t act_nt = -1;
+    md_t act_ic         = -1;
+    md_t act_jc         = -1;
+    md_t act_nt         = -1;
+    bool ext_mt_ctr_var = FALSE;
 
     // Thread local rntm gets highest priority.
     if (dlp_tl_rntm.ext_mt_ctr_var == FALSE) {
@@ -389,6 +390,7 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
             dlp_tl_rntm.ext_mt_ctr_var = TRUE;
             DLP_LIB_ATOMIC_STORE_BOOL(&lib_ext_mt_ctr_var, TRUE,
                                       memory_order_release);
+            ext_mt_ctr_var = TRUE;
         }
     }
 #endif
@@ -429,9 +431,10 @@ dlp_update_threading_priority_order(dlp_rntm_t* rntm)
     }
 #endif
 
-    rntm->num_threads = act_nt;
-    rntm->ic_ways     = act_ic;
-    rntm->jc_ways     = act_jc;
+    rntm->num_threads    = act_nt;
+    rntm->ic_ways        = act_ic;
+    rntm->jc_ways        = act_jc;
+    rntm->ext_mt_ctr_var = ext_mt_ctr_var;
 }
 
 /**

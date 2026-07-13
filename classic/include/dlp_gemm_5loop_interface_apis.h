@@ -64,7 +64,7 @@ DLP_GEMM_TINY(float, float16, float, f32f16f32of32);
                                MTAG_B_CONST)                                   \
     void dlp_gemm_rowvar_##LP_SFX(                                             \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
+        const md_t rs_a, const md_t cs_a, AOCL_DLP_MEMORY_TAG mtag_a,          \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
         MTAG_B_CONST AOCL_DLP_MEMORY_TAG mtag_b, C_type_actual* c,             \
         const md_t rs_c, const md_t cs_c, const C_type alpha,                  \

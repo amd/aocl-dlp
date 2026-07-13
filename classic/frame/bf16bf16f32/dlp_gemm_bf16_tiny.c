@@ -66,6 +66,8 @@ DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
     md_t      rs_b_use = rs_b;
     md_t      cs_b_use = cs_b;
 
+    md_t MR = lcntx->blksz.MR;
+
     dlp_gemm_post_op_attr post_ops_attr;
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -86,9 +88,6 @@ DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         bfloat16*      pack_a_buffer_bf16 = NULL;
         bfloat16*      pack_b_buffer_bf16 = NULL;
         dlp_clsc_err_t err                = DLP_CLSC_SUCCESS;
-
-        // Increased MR from 6 to 16 to make use of 32 ZMM registers
-        md_t MR = 16;
 
         // pack B matrix if rs_b > 1
         if ((mtag_b == PACK) && (rs_b != 1)) {
@@ -119,19 +118,12 @@ DLP_GEMV_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
             a_use = pack_a_buffer_bf16;
         }
         // Call dlp_gemv_n_one kernel
-        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, 1, k,
-                               (bfloat16*)a_use, rs_a_use, cs_a_use, 1,
-                               (bfloat16*)b_use, rs_b_use, cs_b_use, 0, 0, c,
-                               rs_c, cs_c, (void*)&alpha, (void*)&beta,
-                               post_op_list, post_ops_attr);
-
-        } else {
-            dlp_gemv_n_one_bf16bf16f32of32(m, k, a_use, rs_a_use, cs_a_use,
-                                           mtag_a, b_use, rs_b_use, cs_b_use,
-                                           mtag_b, c, rs_c, cs_c, alpha, beta,
-                                           MR, k, post_op_list, &post_ops_attr);
-        }
+        // If JIT kernel is not generated, the code early returns and will not
+        // reach the tiny gemv loop. Therefore no null check required here.
+        dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, 1, k, (bfloat16*)a_use,
+                           rs_a_use, cs_a_use, 1, (bfloat16*)b_use, rs_b_use,
+                           cs_b_use, 0, 0, c, rs_c, cs_c, (void*)&alpha,
+                           (void*)&beta, post_op_list, post_ops_attr);
 
         // Release pack buffers.
         if (pack_a_buffer_bf16 != NULL) {
@@ -278,18 +270,13 @@ DLP_GEMM_TINY(bfloat16, bfloat16, float, bf16bf16f32of32)
         post_ops_attr.rs_c_downscale = rs_c_downscale;
 
         // Reorder/Packed B, Reorder/Packed/Unpacked A call.
-        if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-            dlp_execute_kernel(
-                &(lcntx->dlp_kernel_hndl), m, nr0, k, (int16_t*)a_use, rs_a_use,
-                cs_a_use, a_block_stride, (int16_t*)(b_use + (jr * k0_updated)),
-                rs_b_use, cs_b_use, 0, 0, (c + jr), rs_c_use, 1, (void*)&alpha,
-                (void*)&beta, post_op_list, post_ops_attr);
-        } else {
-            ((dlp_gemm_rowvar_bf16)lcntx->kern_fun_ptr)(
-                m, nr0, k, a_use, rs_a_use, cs_a_use, a_block_stride,
-                (b_use + (jr * k0_updated)), rs_b_use, cs_b_use, (c + jr),
-                rs_c_use, 1, alpha, beta, post_op_list, post_ops_attr);
-        }
+        // If JIT kernel is not generated, the code early returns and will not
+        // reach the tiny gemm loop. Therefore no null check required here.
+        dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), m, nr0, k,
+                           (int16_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                           (int16_t*)(b_use + (jr * k0_updated)), rs_b_use,
+                           cs_b_use, 0, 0, (c + jr), rs_c_use, 1, (void*)&alpha,
+                           (void*)&beta, post_op_list, post_ops_attr);
     }
 
     // Release pack buffers.

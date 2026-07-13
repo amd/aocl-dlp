@@ -94,6 +94,89 @@ dlp_mtag_b_pick(md_t                    m,
     return mtag;
 }
 
+#define DLP_GEN_RECONCILE_PACKAB(THREADING_SFX)                                \
+    DLP_INLINE void dlp_gemm_##THREADING_SFX##_reconcile_packab(               \
+        md_t m, md_t n, md_t k, md_t ic_ways, md_t jc_ways,                    \
+        AOCL_DLP_MEMORY_TAG* mtag_a, AOCL_DLP_MEMORY_TAG* mtag_b,              \
+        dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx)                            \
+    {                                                                          \
+        (void)m;                                                               \
+        (void)n;                                                               \
+        (void)k;                                                               \
+        (void)ic_ways;                                                         \
+        (void)jc_ways;                                                         \
+        (void)mtag_a;                                                          \
+        (void)mtag_b;                                                          \
+        (void)rntm_g;                                                          \
+        (void)lcntx;                                                           \
+        /* No-op for non F32 APIs. */                                          \
+    }
+
+DLP_GEN_RECONCILE_PACKAB(u8s8s32o32)
+DLP_GEN_RECONCILE_PACKAB(bf16bf16f32of32)
+DLP_GEN_RECONCILE_PACKAB(s8s8s32o32)
+DLP_GEN_RECONCILE_PACKAB(f16f16f16of16)
+DLP_GEN_RECONCILE_PACKAB(f32f16f32of32)
+DLP_GEN_RECONCILE_PACKAB(bf16s4f32of32)
+DLP_GEN_RECONCILE_PACKAB(bf16u4f32of32)
+DLP_GEN_RECONCILE_PACKAB(s8s8s32o32_sym_quant)
+DLP_GEN_RECONCILE_PACKAB(bf16s8s32os32)
+DLP_GEN_RECONCILE_PACKAB(f32s8s32os32)
+
+DLP_INLINE void
+dlp_gemm_f32f32f32of32_reconcile_packab(md_t                 m,
+                                        md_t                 n,
+                                        md_t                 k,
+                                        md_t                 ic_ways,
+                                        md_t                 jc_ways,
+                                        AOCL_DLP_MEMORY_TAG* mtag_a,
+                                        AOCL_DLP_MEMORY_TAG* mtag_b,
+                                        dlp_rntm_t*          rntm_g,
+                                        dlp_gemm_cntx_t*     lcntx)
+{
+    // Query the context for SUP limits.
+    const md_t MT   = lcntx->sup_thres.MT;
+    const md_t NT   = lcntx->sup_thres.NT;
+    const md_t KT   = lcntx->sup_thres.KT;
+    const md_t MT_2 = MT / 2;
+
+    // Native -> SUP path.
+    const md_t m_ic                = m / ic_ways;
+    const md_t n_jc                = n / jc_ways;
+    const md_t page_size           = dlp_get_page_size();
+    const md_t page_size_b_floatx2 = 2 * (page_size / sizeof(float));
+
+    if ((m >= MT) && (n >= NT) && (k >= KT)) {
+        if (((k >= page_size_b_floatx2) && (m_ic > MT_2) && (n_jc >= NT))
+            || ((dlp_cpuid_is_avx512_supported() == FALSE)
+                && (k > page_size_b_floatx2))) {
+            rntm_g->pack_b = TRUE;
+            rntm_g->pack_a = TRUE;
+        }
+    }
+
+    // Cannot enable A packing if local cntx MR is not the same as default MR
+    // for F32F32F32OF32. Can be enabled later once we have JIT based A pack.
+    md_t MR        = lcntx->blksz.MR;
+    md_t MR_og_f32 = dlp_gemm_get_block_size_MR_global_cntx(F32F32F32OF32);
+    if (MR != MR_og_f32) {
+        rntm_g->pack_a = FALSE;
+    }
+
+    // rntm->pack_a has higher precedence than mtag_a for f32.
+    if ((rntm_g->pack_a == TRUE) && ((*mtag_a) == UNPACKED)) {
+        (*mtag_a) = PACK;
+    } else if ((rntm_g->pack_a == FALSE) && ((*mtag_a) != UNPACKED)
+               && ((*mtag_a) != REORDERED)) {
+        (*mtag_a) = UNPACKED;
+    }
+
+    // mtag_b has higher precedence than rntm->pack_b for f32.
+    if ((rntm_g->pack_b == TRUE) && ((*mtag_b) == UNPACKED)) {
+        (*mtag_b) = PACK;
+    }
+}
+
 #ifdef DLP_ENABLE_OPENMP
 
 #include <omp.h>
@@ -884,10 +967,6 @@ dlp_gemm_f32f32f32of32_get_threading(md_t*            n_threads,
                                      dlp_rntm_t*      rntm_g,
                                      dlp_gemm_cntx_t* lcntx)
 {
-    // Query the context for SUP limits.
-    const md_t MT = lcntx->sup_thres.MT;
-    const md_t NT = lcntx->sup_thres.NT;
-    const md_t KT = lcntx->sup_thres.KT;
 
     // Query the context for various blocksizes.
     md_t NR = lcntx->blksz.NR;
@@ -895,8 +974,6 @@ dlp_gemm_f32f32f32of32_get_threading(md_t*            n_threads,
     md_t MC = lcntx->blksz.MC;
     md_t NC = lcntx->blksz.NC;
     md_t KC = lcntx->blksz.KC;
-
-    const md_t MT_2 = MT / 2;
 
     *n_threads = rntm_g->num_threads;
     *jc_ways   = rntm_g->jc_ways;
@@ -944,21 +1021,6 @@ dlp_gemm_f32f32f32of32_get_threading(md_t*            n_threads,
         *n_threads = 1;
         *jc_ways   = 1;
         *ic_ways   = 1;
-    }
-
-    // Native -> SUP path.
-    const md_t m_ic                = m / (*ic_ways);
-    const md_t n_jc                = n / (*jc_ways);
-    const md_t page_size           = dlp_get_page_size();
-    const md_t page_size_b_floatx2 = 2 * (page_size / sizeof(float));
-
-    if ((m >= MT) && (n >= NT) && (k >= KT)) {
-        if (((k >= page_size_b_floatx2) && (m_ic > MT_2) && (n_jc >= NT))
-            || ((dlp_cpuid_is_avx512_supported() == FALSE)
-                && (k > page_size_b_floatx2))) {
-            rntm_g->pack_b = TRUE;
-            rntm_g->pack_a = TRUE;
-        }
     }
 }
 
@@ -1154,7 +1216,7 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
                                                                                \
     void dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(                    \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
+        const md_t rs_a, const md_t cs_a, AOCL_DLP_MEMORY_TAG mtag_a,          \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
         AOCL_DLP_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,         \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
@@ -1172,6 +1234,10 @@ dlp_gemm_modify_tid_on_distr_type(md_t*                   tid,
         /* Get thread distribution type */                                     \
         AOCL_DLP_TID_DISTR_TYPE tid_distr = dlp_gemm_get_tid_distr_type(       \
             m, n, k, n_threads, ic_ways, jc_ways, lcntx);                      \
+                                                                               \
+        /* Reconcile rntm->pack<a|b> and mtag_<a|b>*/                          \
+        dlp_gemm_##THREADING_SFX##_reconcile_packab(                           \
+            m, n, k, ic_ways, jc_ways, &mtag_a, &mtag_b, rntm_g, lcntx);       \
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
         if (HAS_MC_LOGIC) {                                                    \
@@ -1298,7 +1364,7 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
     void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type** c,             \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
@@ -1313,6 +1379,11 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
         batch_dlp_gemm_##THREADING_SFX##_get_threading(                        \
             group_size, &n_threads, &n_gemms_in_parallel, &n_threads_per_gemm, \
             &ic_ways, &jc_ways, m[0], n[0], k[0], rntm_g, lcntx);              \
+                                                                               \
+        /* Reconcile rntm->pack<a|b> and mtag_<a|b>*/                          \
+        dlp_gemm_##THREADING_SFX##_reconcile_packab(m[0], n[0], k[0], ic_ways, \
+                                                    jc_ways, mtag_a, mtag_b,   \
+                                                    rntm_g, lcntx);            \
                                                                                \
         dlp_task_comm_t  static_dlp_gemm_comms[DLP_NUM_STATIC_COMMS];          \
         dlp_task_comm_t* cur_dlp_gemm_comms = static_dlp_gemm_comms;           \
@@ -1429,7 +1500,7 @@ GEN_BATCH_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
     void batch_dlp_gemm_##DLP_GEMM_SFX##_openmp_thread_decorator(              \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
@@ -1655,7 +1726,7 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
     DLP_ALIGN_FUNC(64)                                                         \
     void dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                           \
         const md_t m, const md_t n, const md_t k, const A_type* a,             \
-        const md_t rs_a, const md_t cs_a, const AOCL_DLP_MEMORY_TAG mtag_a,    \
+        const md_t rs_a, const md_t cs_a, AOCL_DLP_MEMORY_TAG mtag_a,          \
         const B_type* b, const md_t rs_b, const md_t cs_b,                     \
         AOCL_DLP_MEMORY_TAG mtag_b, C_type_actual* c, const md_t rs_c,         \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
@@ -1666,6 +1737,10 @@ GEN_UTIL_ELTWISE_OPS_OPENMP_DECORATOR(float, float, f32of32)
         md_t n_threads = 1;                                                    \
         md_t ic_ways   = 1;                                                    \
         md_t jc_ways   = 1;                                                    \
+                                                                               \
+        /* Reconcile rntm->pack<a|b> and mtag_<a|b>*/                          \
+        dlp_gemm_##DLP_GEMM_SFX##_reconcile_packab(                            \
+            m, n, k, ic_ways, jc_ways, &mtag_a, &mtag_b, rntm_g, lcntx);       \
                                                                                \
         /* MP-specific: Decide mtag_b based on MC threshold */                 \
         if (HAS_MC_LOGIC) {                                                    \
@@ -1747,7 +1822,7 @@ GEN_DLP_GEMM_DECORATOR_UNIFIED(
     void batch_dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                     \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type** c,             \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \
@@ -1756,6 +1831,11 @@ GEN_DLP_GEMM_DECORATOR_UNIFIED(
         md_t n_threads = 1;                                                    \
         md_t ic_ways   = 1;                                                    \
         md_t jc_ways   = 1;                                                    \
+                                                                               \
+        /* Reconcile rntm->pack<a|b> and mtag_<a|b>*/                          \
+        dlp_gemm_##DLP_GEMM_SFX##_reconcile_packab(m[0], n[0], k[0], ic_ways,  \
+                                                   jc_ways, mtag_a, mtag_b,    \
+                                                   rntm_g, lcntx);             \
                                                                                \
         dlp_task_comm_t  static_dlp_gemm_comm;                                 \
         dlp_task_comm_t* cur_dlp_gemm_comm = &static_dlp_gemm_comm;            \
@@ -1806,7 +1886,7 @@ GEN_BATCH_DLP_GEMM_DECORATOR_UNIFIED(float, int8_t, int32_t, f32s8s32os32)
     void batch_dlp_gemm_##DLP_GEMM_SFX##_thread_decorator(                     \
         const md_t group_size, const md_t* m, const md_t* n, const md_t* k,    \
         const A_type** a, const md_t* rs_a, const md_t* cs_a,                  \
-        const AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b, \
+        AOCL_DLP_MEMORY_TAG* mtag_a, const B_type** b, const md_t* rs_b,       \
         const md_t* cs_b, AOCL_DLP_MEMORY_TAG* mtag_b, C_type_actual** c,      \
         const md_t* rs_c, const md_t* cs_c, const C_type alpha,                \
         const C_type beta, dlp_rntm_t* rntm_g, dlp_gemm_cntx_t* lcntx,         \

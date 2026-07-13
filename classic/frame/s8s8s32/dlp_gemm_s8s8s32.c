@@ -171,19 +171,13 @@ DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
                 a_use = pack_a_buffer_s8s8s32os32;
             }
 
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
-                                   (int8_t*)a_use, rs_a_use, cs_a_use, 1,
-                                   (int8_t*)(b_use), rs_b_use, cs_b_use, 0, 0,
-                                   c_use, rs_c, 1, (void*)&alpha, (void*)&beta,
-                                   post_op_list, post_ops_attr);
-            } else {
-                // Call dlp_gemv_n_one kernel
-                dlp_gemv_n_one_s8s8s32os32(
-                    mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
-                    post_op_list, &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and will
+            // not reach the gemv loop. Therefore no null check required here.
+            dlp_execute_kernel(&(lcntx->dlp_kernel_hndl), mc0, 1, k,
+                               (int8_t*)a_use, rs_a_use, cs_a_use, 1,
+                               (int8_t*)(b_use), rs_b_use, cs_b_use, 0, 0,
+                               c_use, rs_c, 1, (void*)&alpha, (void*)&beta,
+                               post_op_list, post_ops_attr);
         }
 
         // Release pack buffers
@@ -287,19 +281,13 @@ DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
             post_ops_attr.rs_c_downscale = rs_c;
             post_ops_attr.b_sum_offset   = 0;
 
-            if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                dlp_execute_kernel(
-                    &(lcntx->dlp_kernel_hndl), 1, nc0, k, (int8_t*)a_use,
-                    rs_a_use, cs_a_use, 1, (int8_t*)b_use, rs_b_use, cs_b_use,
-                    n_sub_updated, jc_cur_loop_rem, c_use, rs_c, cs_c,
-                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr);
-            } else {
-                dlp_gemv_m_one_s8s8s32os32(
-                    nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
-                    n_sub_updated, jc_cur_loop_rem, post_op_list,
-                    &post_ops_attr);
-            }
+            // If JIT kernel is not generated, the code early returns and will
+            // not reach the gemv loop. Therefore no null check required here.
+            dlp_execute_kernel(
+                &(lcntx->dlp_kernel_hndl), 1, nc0, k, (int8_t*)a_use, rs_a_use,
+                cs_a_use, 1, (int8_t*)b_use, rs_b_use, cs_b_use, n_sub_updated,
+                jc_cur_loop_rem, c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                post_op_list, post_ops_attr);
 
             if (mtag_b == REORDERED) {
                 dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
@@ -637,21 +625,16 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
                     // rs_b * kc0_updated ) );
 
                     // Reorder/Packed B, Reorder/Packed/Unpacked A call.
-                    if (lcntx->dlp_kernel_hndl.kernel_base != NULL) {
-                        dlp_execute_kernel(
-                            &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
-                            (int8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
-                            (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
-                            cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
-                            (void*)&alpha, (void*)&beta0, post_op_list,
-                            post_ops_attr);
-                    } else {
-                        ((dlp_gemm_rowvar_s32_s8)lcntx->kern_fun_ptr)(
-                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                            a_block_stride, (b_use + (jr * kc0_updated)),
-                            rs_b_use, cs_b_use, (c_use_ic + jr), rs_c_use, 1,
-                            alpha, beta0, post_op_list, post_ops_attr);
-                    }
+                    // If JIT kernel is not generated, the code early returns
+                    // and will not reach the gemm loop. Therefore no null
+                    // check required here.
+                    dlp_execute_kernel(
+                        &(lcntx->dlp_kernel_hndl), mc0, nr0, kc0,
+                        (int8_t*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                        (int8_t*)(b_use + (jr * kc0_updated)), rs_b_use,
+                        cs_b_use, 0, 0, (c_use_ic + jr), rs_c_use, 1,
+                        (void*)&alpha, (void*)&beta0, post_op_list,
+                        post_ops_attr);
                     post_ops_attr.b_sum_offset += NR;
                 }
             }

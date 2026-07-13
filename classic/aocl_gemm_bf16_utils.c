@@ -380,9 +380,8 @@ aocl_reorder_bf16bf16f32of32(const char      order,
     // local copy (with metadata-tuned block sizes applied above), so installing
     // the handle here does not mutate the shared global context object.
     lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
-    dlp_init_and_get_packb_kernel_hndl(
-        DLP_KERNEL_BF16BF16F32OF32, n, lcntx_g.blksz.KC, rs_b, cs_b,
-        lcntx_g.blksz.NR, &lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl);
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, rs_b,
+                                       cs_b, &lcntx_g);
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
