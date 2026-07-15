@@ -56,7 +56,8 @@ bool
 dlp_gemm_post_op_list_has_shape_changing_glu(
     const dlp_gemm_post_op* post_op_list)
 {
-    return (post_op_list != NULL) && post_op_list->list_has_shape_changing_glu;
+    return ((post_op_list != NULL) && (post_op_list->glu_d != NULL)
+            && (post_op_list->glu_ld_d > 0));
 }
 
 static inline DLP_TYPE
@@ -380,6 +381,8 @@ dlp_gemm_set_node_params(dlp_gemm_post_op*     post_op_node,
     post_op_node->zp_stor_type     = zp_stor_type;
     post_op_node->sf_stor_type     = sf_stor_type;
     post_op_node->scale_factor_dim = scale_factor_dim;
+    post_op_node->glu_d            = NULL;
+    post_op_node->glu_ld_d         = 0;
     post_op_node->next             = NULL;
 }
 
@@ -473,23 +476,18 @@ dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
 }
 
 dlp_clsc_err_t
-dlp_gemm_translate_to_post_ops_list_allow_glu(dlp_metadata_t*   metadata,
-                                              dlp_gemm_post_op* post_op_list,
-                                              void*             scale_buffer,
-                                              void*             meta_arg,
-                                              md_t              m,
-                                              md_t              n)
+dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
+                                    dlp_gemm_post_op* post_op_list,
+                                    void*             scale_buffer,
+                                    void*             meta_arg,
+                                    md_t              m,
+                                    md_t              n)
 {
     (void)(scale_buffer); // Unused for now, potential to be used later.
 
     if (post_op_list == NULL) {
         return DLP_CLSC_NULL_POINTER;
     }
-
-    /* Head-node list-level facts, initialized on every return path. */
-    post_op_list->list_has_shape_changing_glu = false;
-    post_op_list->glu_d                       = NULL;
-    post_op_list->glu_ld_d                    = 0;
 
     if (metadata == NULL || (metadata->seq_length <= 0)) {
         dlp_gemm_set_node_params(
@@ -514,19 +512,6 @@ dlp_gemm_translate_to_post_ops_list_allow_glu(dlp_metadata_t*   metadata,
     if (metadata->seq_vector == NULL) {
         dlp_print_msg(" seq_vector is NULL. Exiting..", __FILE__, __LINE__);
         return DLP_CLSC_NULL_POINTER;
-    }
-
-    /* GLU is shape-changing (2I -> I), so at most one is allowed per chain. */
-    md_t glu_count = 0;
-    for (iter_t i = 0; i < metadata->seq_length; ++i) {
-        if (*(metadata->seq_vector + i) == GLU) {
-            glu_count += 1;
-        }
-    }
-    if (glu_count > 1) {
-        dlp_print_msg(" Only one GLU post-op is supported per chain. Exiting..",
-                      __FILE__, __LINE__);
-        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
     }
 
     md_t        e_i         = 0; // Multiple eltwise supported.
@@ -994,91 +979,13 @@ dlp_gemm_translate_to_post_ops_list_allow_glu(dlp_metadata_t*   metadata,
 
                 mul_i += 1;
             } break;
-            case GLU: {
-                if (metadata->glu == NULL) {
-                    dlp_print_msg(" Post_op.glu is NULL. Exiting..", __FILE__,
-                                  __LINE__);
-                    return DLP_CLSC_NULL_POINTER;
-                }
-
-                /* Shape-changing GLU must be the last post-op. */
-                if (i != metadata->seq_length - 1) {
-                    dlp_print_msg(" GLU must be the last post-op in "
-                                  "seq_vector. Exiting..",
-                                  __FILE__, __LINE__);
-                    return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
-                }
-
-                /* n = 2I (interleaved gate/up); odd n has no pairing. */
-                if ((n % 2) != 0) {
-                    dlp_print_msg(
-                        " GLU requires an even output width n (= 2I). "
-                        "Exiting..",
-                        __FILE__, __LINE__);
-                    return DLP_CLSC_INVALID_MATRIX_DIMENSION;
-                }
-
-                /* The fused GLU writes its compacted (m x I) result
-                   into the caller's D buffer, so D is mandatory. */
-                if (metadata->glu->d == NULL) {
-                    dlp_print_msg(" GLU requires a non-NULL output buffer D. "
-                                  "Exiting..",
-                                  __FILE__, __LINE__);
-                    return DLP_CLSC_NULL_POINTER;
-                }
-
-                /* ld_d minimum: I (= n/2) for row-major D, m for column-major
-                   D. Order comes from the caller-resolved meta_arg. */
-                {
-                    const bool glu_col_major =
-                        (meta_arg != NULL)
-                        && ((*(const char*)meta_arg == 'c')
-                            || (*(const char*)meta_arg == 'C'));
-                    const md_t glu_I    = n / 2;
-                    const md_t min_ld_d = glu_col_major ? m : glu_I;
-                    if ((md_t)metadata->glu->ld_d < min_ld_d) {
-                        dlp_print_msg(
-                            " GLU ld_d is smaller than the D leading dimension "
-                            "(I for row-major, m for column-major). Exiting..",
-                            __FILE__, __LINE__);
-                        return DLP_CLSC_INVALID_LEADING_DIMENSION;
-                    }
-                }
-
-                DLP_GEMM_POST_OP_CODE tmp_code = POST_OPS_DISABLE;
-                DLP_TYPE              tmp_stor_type =
-                    dlp_gemm_get_stor_type(metadata->glu->stor_type);
-
-                switch (metadata->glu->algo_type) {
-                    case GATED_SWIGLU:
-                        tmp_code = POST_OPS_GATED_SWIGLU;
-                        break;
-                    case GATED_SWIGLU_AND_MUL:
-                        tmp_code = POST_OPS_GATED_SWIGLU_AND_MUL;
-                        break;
-                    default:
-                        dlp_print_msg(" Unknown GLU algo_type. Exiting..",
-                                      __FILE__, __LINE__);
-                        return DLP_CLSC_NOT_SUPPORTED;
-                }
-
-                dlp_gemm_set_node_params((post_op_list + i), tmp_code,
-                                         metadata->glu->alpha, meta_arg,
-                                         metadata->glu->beta, NULL, 0, NULL, 0,
-                                         tmp_stor_type, DLP_INVALID,
-                                         DLP_INVALID, DLP_PARAM_DIM_INVALID);
-
-                /* Both current GLU variants are shape-changing (the default
-                   case above rejects anything else). Record the list-level
-                   property on the head node for O(1) lookup by consumers,
-                   along with the caller's D output buffer + leading dim so the
-                   frame can point the half-width store straight at D. */
-                post_op_list->list_has_shape_changing_glu = true;
-                post_op_list->glu_d                       = metadata->glu->d;
-                post_op_list->glu_ld_d = (uint64_t)metadata->glu->ld_d;
-            } break;
-            default:
+            default: {
+                dlp_print_msg(
+                    " Unsupported post-op type in seq_vector. Exiting..",
+                    __FILE__, __LINE__);
+                return DLP_CLSC_NOT_SUPPORTED;
                 break;
+            }
         }
 
         // Simulating linked list using an array.
@@ -1090,27 +997,98 @@ dlp_gemm_translate_to_post_ops_list_allow_glu(dlp_metadata_t*   metadata,
     return DLP_CLSC_SUCCESS;
 }
 
+/* GLU is shape-changing (2I -> I), so at most one is allowed per chain
+ * at the very end of the post-op list.*/
 dlp_clsc_err_t
-dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
-                                    dlp_gemm_post_op* post_op_list,
-                                    void*             scale_buffer,
-                                    void*             meta_arg,
-                                    md_t              m,
-                                    md_t              n)
+dlp_gemm_translate_glu_term_op(dlp_metadata_t*   metadata,
+                               dlp_gemm_post_op* post_op_list,
+                               dlp_gemm_post_op* post_op_list_start,
+                               void*             meta_arg,
+                               md_t              m,
+                               md_t              n)
 {
-    dlp_clsc_err_t err = dlp_gemm_translate_to_post_ops_list_allow_glu(
-        metadata, post_op_list, scale_buffer, meta_arg, m, n);
-
-    /* Shape-changing GLU is only implemented on the AVX512-BF16 BF16 GEMM
-     * datapath; those callers use the _allow_glu variant directly. Everyone
-     * else routes through here and is rejected early with NOT_SUPPORTED. */
-    if ((err == DLP_CLSC_SUCCESS)
-        && post_op_list->list_has_shape_changing_glu) {
-        dlp_print_msg(" Shape-changing GLU post-op is only supported on the "
-                      "AVX512-BF16 BF16 GEMM datapath. Exiting..",
-                      __FILE__, __LINE__);
-        return DLP_CLSC_NOT_SUPPORTED;
+    if (post_op_list_start == NULL || post_op_list == NULL) {
+        return DLP_CLSC_NULL_POINTER;
     }
 
-    return err;
+    /* Head-node list-level facts, initialized on every return path. */
+    post_op_list_start->glu_d    = NULL;
+    post_op_list_start->glu_ld_d = 0;
+
+    if (metadata == NULL || metadata->glu == NULL) {
+        dlp_gemm_set_node_params(
+            post_op_list, POST_OPS_DISABLE, NULL, NULL, NULL, NULL, 0, NULL, 0,
+            DLP_INVALID, DLP_INVALID, DLP_INVALID, DLP_PARAM_DIM_INVALID);
+        // glu is optional, so if it's not present, just return success.
+        return DLP_CLSC_SUCCESS;
+    }
+
+    /* The fused GLU writes its compacted (m x I) result
+        into the caller's D buffer, so D is mandatory. */
+    if (metadata->glu->d == NULL) {
+        dlp_print_msg(" GLU requires a non-NULL output buffer D. "
+                      "Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    /* n = 2I (interleaved gate/up); odd n has no pairing. */
+    if ((n % 2) != 0) {
+        dlp_print_msg(" GLU requires an even output width n (= 2I). "
+                      "Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_INVALID_MATRIX_DIMENSION;
+    }
+
+    /* ld_d minimum: I (= n/2) for row-major D, m for column-major
+        D. Order comes from the caller-resolved meta_arg. */
+    const bool glu_col_major =
+        (meta_arg != NULL)
+        && ((*(const char*)meta_arg == 'c') || (*(const char*)meta_arg == 'C'));
+    const md_t glu_n    = n / 2;
+    const md_t min_ld_d = glu_col_major ? m : glu_n;
+    if ((md_t)metadata->glu->ld_d < min_ld_d) {
+        dlp_print_msg(" GLU ld_d is smaller than the D leading dimension "
+                      "(I for row-major, m for column-major). Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_INVALID_LEADING_DIMENSION;
+    }
+
+    DLP_GEMM_POST_OP_CODE tmp_code = POST_OPS_DISABLE;
+    DLP_TYPE tmp_stor_type = dlp_gemm_get_stor_type(metadata->glu->stor_type);
+
+    switch (metadata->glu->algo_type) {
+        case GATED_SWIGLU:
+            tmp_code = POST_OPS_GATED_SWIGLU;
+            break;
+        case GATED_SWIGLU_AND_MUL:
+            tmp_code = POST_OPS_GATED_SWIGLU_AND_MUL;
+            break;
+        default:
+            dlp_print_msg(" Unknown GLU algo_type. Exiting..", __FILE__,
+                          __LINE__);
+            return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    dlp_gemm_set_node_params(post_op_list, tmp_code, metadata->glu->alpha,
+                             meta_arg, metadata->glu->beta, NULL, 0, NULL, 0,
+                             tmp_stor_type, DLP_INVALID, DLP_INVALID,
+                             DLP_PARAM_DIM_INVALID);
+
+    // Chain the last post-op with the terminal glu op. Only valid if the
+    // caller has already filled post_op_list[0..seq_length-1].
+    if (post_op_list_start != post_op_list) {
+        (post_op_list - 1)->next = post_op_list;
+    }
+
+    /* Both current GLU variants are shape-changing (the default case above
+     * rejects anything else). Record the list-level property on the head node
+     * for O(1) lookup by consumers, along with the caller's D output buffer +
+     * leading dim so the frame can point the half-width store at D. */
+    post_op_list_start->glu_d    = metadata->glu->d;
+    post_op_list_start->glu_ld_d = (uint64_t)metadata->glu->ld_d;
+    post_op_list->glu_d          = metadata->glu->d;
+    post_op_list->glu_ld_d       = (uint64_t)metadata->glu->ld_d;
+
+    return DLP_CLSC_SUCCESS;
 }

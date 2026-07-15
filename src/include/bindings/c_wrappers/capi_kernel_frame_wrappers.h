@@ -87,14 +87,10 @@ typedef struct dlp_gemm_post_op_t
      * dlp_sf_t::scale_factor_dim from the user-facing metadata so the consumer
      * does not have to re-derive it from a flag. */
     DLP_PARAM_DIM_TYPE scale_factor_dim;
-    /* Head-node-only fact cached by the translator for O(1) lookup: whether
-     * the list holds a shape-changing GLU (GatedSwiglu / GatedSwigluAndMul). */
-    bool list_has_shape_changing_glu;
     /* Caller-provided compacted GLU output buffer D (m x I) and its leading
-     * dimension, resolved from the user metadata (dlp_post_op_glu). The
+     * dimension, resolved from the user metadata (dlp_term_op_glu). The
      * terminal GLU writes its half-width result straight into D, so no scratch
-     * or copy-back is needed. Meaningful only when
-     * list_has_shape_changing_glu is true. */
+     * or copy-back is needed. */
     void*                      glu_d;
     uint64_t                   glu_ld_d;
     struct dlp_gemm_post_op_t* next;

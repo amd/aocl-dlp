@@ -49,7 +49,7 @@ run_glu(md_t m, md_t n, md_t k, const std::vector<DLP_POST_OP_TYPE>& seq)
     md.seq_length                      = (md_t)seqv.size();
     md.seq_vector                      = seqv.data();
 
-    dlp_post_op_glu glu;
+    dlp_term_op_glu glu;
     std::memset(&glu, 0, sizeof(glu));
     glu.algo_type = GATED_SWIGLU;
     glu.alpha     = NULL;
@@ -70,7 +70,7 @@ run_glu(md_t m, md_t n, md_t k, const std::vector<DLP_POST_OP_TYPE>& seq)
 // n must be even (n = 2I); an odd interleaved width has no gate/up pairing.
 TEST(GluValidation, RejectsOddInterleavedWidth)
 {
-    EXPECT_EQ(run_glu(4, 15, 32, { GLU }), DLP_CLSC_INVALID_MATRIX_DIMENSION);
+    EXPECT_EQ(run_glu(4, 15, 32, {}), DLP_CLSC_INVALID_MATRIX_DIMENSION);
 }
 
 // GEMV n == 1: the odd-width case that shows up in practice (a single output
@@ -79,21 +79,7 @@ TEST(GluValidation, RejectsOddInterleavedWidth)
 // shape, not a valid GEMV.
 TEST(GluValidation, RejectsGemvSingleColumnWidth)
 {
-    EXPECT_EQ(run_glu(6, 1, 64, { GLU }), DLP_CLSC_INVALID_MATRIX_DIMENSION);
-}
-
-// GLU is unique: at most one per chain (n stays even so the rejection is due
-// to the duplicate GLU, not the width).
-TEST(GluValidation, RejectsGluChain)
-{
-    EXPECT_EQ(run_glu(8, 32, 16, { GLU, GLU }), DLP_CLSC_UNEXPECTED_VECTOR_DIM);
-}
-
-// GLU is terminal: nothing may follow it (it changes the shape 2I -> I). n
-// stays even so the rejection is due to the trailing op, not the width.
-TEST(GluValidation, RejectsGluNotLast)
-{
-    EXPECT_EQ(run_glu(2, 8, 48, { GLU, BIAS }), DLP_CLSC_UNEXPECTED_VECTOR_DIM);
+    EXPECT_EQ(run_glu(6, 1, 64, {}), DLP_CLSC_INVALID_MATRIX_DIMENSION);
 }
 
 // Positive control: a valid even-width single GLU must not be rejected by the
@@ -107,7 +93,7 @@ TEST(GluValidation, RejectsGluNotLast)
 // DIMENSION / UNEXPECTED_VECTOR_DIM) would still fail the EXPECT_EQ below.
 TEST(GluValidation, AcceptsEvenWidthSingleGlu)
 {
-    const dlp_clsc_err_t err = run_glu(4, 16, 32, { GLU });
+    const dlp_clsc_err_t err = run_glu(4, 16, 32, {});
     if (err == DLP_CLSC_NOT_SUPPORTED) {
         GTEST_SKIP() << "Shape-changing GLU is not supported on this platform "
                         "(BF16 reroutes to F32; no half-width store). The "

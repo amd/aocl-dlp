@@ -202,10 +202,23 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     }
 
     // Convert post op struct to post op linked list format.
-    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS];
-    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list_allow_glu(
+    // +1 for GLU terminal ops.
+    dlp_gemm_post_op post_op_list[AOCL_DLP_MAX_POST_OPS + 1];
+    dlp_clsc_err_t   err = dlp_gemm_translate_to_post_ops_list(
         metadata, post_op_list, (void*)c, (void*)(&order), m, n);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
 
+    md_t term_glu_offset =
+        (metadata != NULL)
+            ? ((metadata->seq_length > 0) ? metadata->seq_length : 0)
+            : 0;
+    // GLU terminal ops.
+    err =
+        dlp_gemm_translate_glu_term_op(metadata, post_op_list + term_glu_offset,
+                                       post_op_list, (void*)(&order), m, n);
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
         goto err_hndl;

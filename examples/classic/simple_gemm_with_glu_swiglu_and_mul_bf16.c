@@ -175,11 +175,10 @@ run_gated_swiglu_and_mul_only(void)
 
     // ---- Build the GLU-only post-op metadata ----
     dlp_metadata_t* md = (dlp_metadata_t*)calloc(1, sizeof(dlp_metadata_t));
-    md->seq_length     = 1;
-    md->seq_vector     = (DLP_POST_OP_TYPE*)malloc(sizeof(DLP_POST_OP_TYPE));
-    md->seq_vector[0]  = GLU; // terminal op (and the only op here)
+    md->seq_length     = 0;
+    md->seq_vector     = NULL; // no pre-ops, GLU is terminal
 
-    md->glu            = (dlp_post_op_glu*)calloc(1, sizeof(dlp_post_op_glu));
+    md->glu            = (dlp_term_op_glu*)calloc(1, sizeof(dlp_term_op_glu));
     md->glu->algo_type = GATED_SWIGLU_AND_MUL;
     md->glu->alpha     = NULL; // no runtime scalars (OAI consts baked in)
     md->glu->beta      = NULL;
@@ -269,10 +268,9 @@ run_bias_then_gated_swiglu_and_mul(void)
 
     // ---- Build the BIAS -> GLU post-op chain ----
     dlp_metadata_t* md = (dlp_metadata_t*)calloc(1, sizeof(dlp_metadata_t));
-    md->seq_length     = 2;
-    md->seq_vector    = (DLP_POST_OP_TYPE*)malloc(2 * sizeof(DLP_POST_OP_TYPE));
+    md->seq_length     = 1;
+    md->seq_vector    = (DLP_POST_OP_TYPE*)malloc(1 * sizeof(DLP_POST_OP_TYPE));
     md->seq_vector[0] = BIAS; // runs on the M x 2I accumulator
-    md->seq_vector[1] = GLU;  // TERMINAL: folds 2I -> I into D
 
     // BIAS post-op (f32 bias, no scale/zero-point needed).
     md->bias         = (dlp_post_op_bias*)calloc(1, sizeof(dlp_post_op_bias));
@@ -283,7 +281,7 @@ run_bias_then_gated_swiglu_and_mul(void)
     md->bias[0].zp        = NULL;
 
     // GLU post-op (terminal).
-    md->glu            = (dlp_post_op_glu*)calloc(1, sizeof(dlp_post_op_glu));
+    md->glu            = (dlp_term_op_glu*)calloc(1, sizeof(dlp_term_op_glu));
     md->glu->algo_type = GATED_SWIGLU_AND_MUL;
     md->glu->alpha     = NULL;
     md->glu->beta      = NULL;

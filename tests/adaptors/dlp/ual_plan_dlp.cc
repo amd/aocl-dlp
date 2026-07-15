@@ -283,12 +283,16 @@ DlpUalPlan::prepare()
         convertMatrixMulOperations();
     }
 
+    // Build the sequence vector based on post-op order
+    // Caveat: GLU is not included in the sequence vector, as it is a
+    // terminal shape-changing op, and is handled separately in the
+    // metadata. However GLU is still included in the m_post_ops vector,
+    // so that it can be easily validated and converted to metadata.
+    buildSequenceVector();
+
     if (m_glu_op) {
         convertGluOperations();
     }
-
-    // Build the sequence vector based on post-op order
-    buildSequenceVector();
 
     // Convert quantization parameters
     if (m_a_quant) {
@@ -1073,8 +1077,8 @@ DlpUalPlan::convertGluOperations()
         return;
 
     // GLU lives in a single metadata slot (at most one per chain).
-    m_metadata->glu = new dlp_post_op_glu;
-    std::memset(m_metadata->glu, 0, sizeof(dlp_post_op_glu));
+    m_metadata->glu = new dlp_term_op_glu;
+    std::memset(m_metadata->glu, 0, sizeof(dlp_term_op_glu));
     switch (m_glu_op->getOperation()) {
         case GluOperation::GatedSwiglu:
             m_metadata->glu->algo_type = GATED_SWIGLU;
@@ -1134,8 +1138,7 @@ DlpUalPlan::buildSequenceVector()
                 sequence.push_back(MATRIX_MUL);
                 break;
             case OperationType::GLU:
-                sequence.push_back(GLU);
-                break;
+                break; // Ignore GLU in sequence; it has its own metadata slot.
             default:
                 throw std::runtime_error(
                     "Unsupported operation type in sequence");
@@ -1523,8 +1526,6 @@ DlpUalPlan::getPostOpType(OperationType type)
             return MATRIX_ADD;
         case OperationType::MatMul:
             return MATRIX_MUL;
-        case OperationType::GLU:
-            return GLU;
         default:
             throw std::runtime_error("Unsupported operation type");
     }

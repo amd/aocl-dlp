@@ -98,25 +98,23 @@ typedef struct dlp_gemm_pre_op_attr_t
     md_t  pre_op_ld;
 } dlp_gemm_pre_op_attr;
 
-/* Post-op translator (GLU-permitting variant). Builds the post-op linked list
- * and stamps the list-level GLU facts, but does NOT reject a shape-changing GLU
- * post-op (GatedSwiglu / GatedSwigluAndMul). Used directly only by datapaths
- * that implement the GLU half-width store -- currently the BF16 GEMM APIs
- * (which must still gate on AVX512-BF16 support, as the BF16->F32 fallback does
- * not implement the half-width store). */
+/* Terminal GLU op (GatedSwiglu / GatedSwigluAndMul) translator. This should
+ * be the last node in the post-op list, and its expected post_op_list[last]
+ * is passed to this function. The GLU op is shape-changing (2I -> I) only
+ * supported on BF16 GEMM APIs, and only when the AVX512-BF16 instruction set
+ * is available. It is not supported on BF16 F32 fallback path.
+ * There is this expectation that glu stor buffer info is part of the
+ * first node in the post-op list for O(1) lookup of GLU buffer. Note that
+ * post_op_list_start is the start node. */
 dlp_clsc_err_t
-dlp_gemm_translate_to_post_ops_list_allow_glu(dlp_metadata_t*   metadata,
-                                              dlp_gemm_post_op* post_op_list,
-                                              void*             scale_buffer,
-                                              void*             meta_arg,
-                                              md_t              m,
-                                              md_t              n);
+dlp_gemm_translate_glu_term_op(dlp_metadata_t*   metadata,
+                               dlp_gemm_post_op* post_op_list,
+                               dlp_gemm_post_op* post_op_list_start,
+                               void*             meta_arg,
+                               md_t              m,
+                               md_t              n);
 
-/* Default post-op translator. Same as the _allow_glu variant above, but rejects
- * a shape-changing GLU post-op with DLP_CLSC_NOT_SUPPORTED, since most
- * datapaths do not yet implement the GLU half-width store. As GLU support is
- * added to an API, switch that API's single call from this to the _allow_glu
- * variant. */
+/* Default post-op translator. */
 dlp_clsc_err_t
 dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                                     dlp_gemm_post_op* post_op_list,

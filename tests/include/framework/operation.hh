@@ -208,7 +208,7 @@ class ElementWiseParam : public IOperationParam
  * plumbed
  * here for forward compatibility with future variants that parameterize these
  * values (e.g. a runtime-configurable SiLU scale / clamp limit), mirroring the
- * `alpha` / `beta` slots of `dlp_post_op_glu`. GLU consumes a 2I-wide
+ * `alpha` / `beta` slots of `dlp_term_op_glu`. GLU consumes a 2I-wide
  * interleaved gate/up accumulator and emits I columns.
  */
 class GluParam : public IOperationParam

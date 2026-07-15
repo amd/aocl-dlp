@@ -26,8 +26,8 @@
  *
  */
 
-#ifndef AOCL_DLP_GEMM_POST_OPS_H
-#define AOCL_DLP_GEMM_POST_OPS_H
+#ifndef AOCL_DLP_GEMM_METADATA_H
+#define AOCL_DLP_GEMM_METADATA_H
 
 #include "classic/dlp_base_types.h"
 
@@ -104,8 +104,6 @@ typedef enum
     SCALE      = 3, /**< Scaling operation */
     MATRIX_ADD = 4, /**< Matrix addition operation */
     MATRIX_MUL = 5, /**< Matrix multiplication operation */
-    GLU        = 6, /**< Gated Linear Unit family (shape-changing terminal
-                         post-op on interleaved gate/up data). */
 } DLP_POST_OP_TYPE;
 
 /**
@@ -331,8 +329,8 @@ typedef struct
 } dlp_post_op_matrix_mul;
 
 /**
- * @struct dlp_post_op_glu
- * @brief Gated Linear Unit (GLU) post-operation parameters.
+ * @struct dlp_term_op_glu
+ * @brief Gated Linear Unit (GLU) terminal-operation parameters.
  *
  * GLU is a shape-changing, terminal post-op: it folds the `M x 2I` GEMM
  * accumulator (N-axis interleaved `g, u, g, u, ...`) into an `M x I` result.
@@ -370,7 +368,7 @@ typedef struct
 
     DLP_TYPE stor_type; /**< Storage type of `alpha`/`beta`; set `DLP_INVALID`
                              while both are `NULL`. */
-} dlp_post_op_glu;
+} dlp_term_op_glu;
 
 /**
  * @brief Structure defining pre-operation parameters.
@@ -583,8 +581,9 @@ typedef struct
         sup_thresholds;   /**< Threshold parameters to decide whether to enable
                               packing or not. Currently only applicable for f32
                               and fp16 APIs only. */
-    dlp_post_op_glu* glu; /**< Gated Linear Unit post-op
-                               (terminal, shape-changing). */
+    dlp_term_op_glu* glu; /**< Gated Linear Unit terminal-op (shape-changing
+                               2I -> I). When non-NULL, it is applied after all
+                               seq_vector post-ops. Only 1 GLU op supported. */
 } dlp_metadata_t;
 
 #define DLP_METADATA_SET_ERROR(metadata, err_no)                               \
@@ -592,4 +591,4 @@ typedef struct
         ((metadata)->error_hndl).error_code = err_no;                          \
     }
 
-#endif // DLP_GEMM_POST_OPS_H
+#endif // AOCL_DLP_GEMM_METADATA_H
