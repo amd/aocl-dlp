@@ -42,10 +42,12 @@
 #include "utils/matrix_conversion_utils.hh"
 
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <iomanip>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -110,10 +112,30 @@ static VerbosityLevel g_verbosity_level = VerbosityLevel::SILENT;
 // GLOBAL CONFIGURATION VARIABLES
 // ============================================================================
 
-// Global variable to store configurable YAML file path
-// This can be set via command line arguments or defaults to the built-in config
-static std::string g_yaml_config_file = TEST_CONFIG_DIR
-    "/gemm_test_config.yaml";
+// Global variable to store configurable YAML file paths
+// These can be set via command line arguments (one or more -f/--file flags)
+// or default to the single built-in config file.
+static std::vector<std::string> g_yaml_config_files = {
+    TEST_CONFIG_DIR "/gemm_test_config.yaml"
+};
+
+// Helper to derive a sanitized, GoogleTest-safe identifier from a YAML file
+// path (uses the file stem, replacing any non-alphanumeric characters with
+// underscores). Used to keep test names unique across multiple YAML files.
+static std::string
+sanitizeFileStem(const std::string& yaml_file)
+{
+    std::string stem = std::filesystem::path(yaml_file).stem().string();
+    for (char& c : stem) {
+        if (!std::isalnum(static_cast<unsigned char>(c))) {
+            c = '_';
+        }
+    }
+    if (stem.empty()) {
+        stem = "file";
+    }
+    return stem;
+}
 
 // ============================================================================
 // CONFIGURATION STRUCTURES AND TYPES
@@ -574,13 +596,24 @@ extractPostOpsDescription(
 // ============================================================================
 
 // Helper function to generate meaningful test names
+//
+// filePrefix disambiguates test names across multiple YAML files so that
+// GoogleTest does not encounter duplicate parameterized test names when more
+// than one config file is supplied. It is empty for the single-file case
+// (preserving the original naming).
 std::string
 generateTestName(const MicroTest&   microTest,
                  const std::string& testSetName,
                  size_t             testSetIndex,
-                 size_t             configIndex)
+                 size_t             configIndex,
+                 const std::string& filePrefix = "")
 {
     std::ostringstream name;
+
+    // Prefix with the (sanitized) source file identifier when provided.
+    if (!filePrefix.empty()) {
+        name << filePrefix << "_";
+    }
 
     // Start with testset name and base information
     name << "yaml_" << testSetIndex << "_" << testSetName << "_M"
@@ -667,9 +700,14 @@ generateTestName(const MicroTest&   microTest,
 // HELPER FUNCTIONS - CONFIGURATION LOADING
 // ============================================================================
 
-// Function to load test configurations from YAML
+// Function to load test configurations from a single YAML file.
+//
+// filePrefix (optional) is prepended to every generated test name to keep
+// names unique when loading multiple YAML files in one run. Pass an empty
+// string for single-file usage to preserve the original naming scheme.
 std::vector<GemmTestConfig>
-loadTestConfigurations(const std::string& yaml_file)
+loadTestConfigurations(const std::string& yaml_file,
+                       const std::string& filePrefix = "")
 {
     std::vector<GemmTestConfig> configs;
 
@@ -694,9 +732,10 @@ loadTestConfigurations(const std::string& yaml_file)
                 // "bf16_mr_variants")
                 std::string currentTestName = parser.getCurrentTestName();
 
-                // Generate meaningful test name
-                std::string testName =
-                    generateTestName(microTest, currentTestName, i, j);
+                // Generate meaningful test name (with per-file prefix so
+                // names stay unique across multiple YAML files).
+                std::string testName = generateTestName(
+                    microTest, currentTestName, i, j, filePrefix);
 
                 // Extract PostOps params from MicroTest
                 auto post_op_params_vec = std::make_shared<
@@ -894,18 +933,36 @@ initializeTestConfigurations()
 {
     std::vector<GemmTestConfig> all_configs;
 
-    // Load YAML configurations
-    auto yaml_configs = loadTestConfigurations(g_yaml_config_file);
+    // Load YAML configurations from every specified file. When multiple files
+    // are provided, a per-file prefix is applied to generated test names to
+    // keep them globally unique. The prefix combines a file index with the
+    // sanitized file stem ("f<idx>_<stem>_") so that even files that share the
+    // same filename (in different directories) never produce duplicate test
+    // names. For a single file, the prefix is left empty to preserve the
+    // original naming scheme.
+    const bool multiple_files = g_yaml_config_files.size() > 1;
+    for (size_t fi = 0; fi < g_yaml_config_files.size(); ++fi) {
+        const std::string& yaml_file = g_yaml_config_files[fi];
+        std::string        prefix =
+            multiple_files
+                       ? ("f" + std::to_string(fi) + "_" + sanitizeFileStem(yaml_file))
+                       : "";
+        auto yaml_configs = loadTestConfigurations(yaml_file, prefix);
+        // Reserve to avoid repeated reallocations across files (each file can
+        // contribute up to MAX_CONFIGS_PER_TEST_SET configs per test set).
+        all_configs.reserve(all_configs.size() + yaml_configs.size());
+        all_configs.insert(all_configs.end(),
+                           std::make_move_iterator(yaml_configs.begin()),
+                           std::make_move_iterator(yaml_configs.end()));
+    }
 
     // Load programmatic configurations
     auto prog_configs = createAdditionalTestConfigs();
 
-    // Combine all configurations
-    all_configs.reserve(yaml_configs.size() + prog_configs.size());
-    all_configs.insert(all_configs.end(), yaml_configs.begin(),
-                       yaml_configs.end());
-    all_configs.insert(all_configs.end(), prog_configs.begin(),
-                       prog_configs.end());
+    all_configs.reserve(all_configs.size() + prog_configs.size());
+    all_configs.insert(all_configs.end(),
+                       std::make_move_iterator(prog_configs.begin()),
+                       std::make_move_iterator(prog_configs.end()));
 
     std::cout << "Total test configurations initialized: " << all_configs.size()
               << std::endl;
@@ -913,7 +970,18 @@ initializeTestConfigurations()
     return all_configs;
 }
 
-// Function to get test configurations (initialized on first call)
+// Function to get test configurations (initialized on first call).
+//
+// IMPORTANT (multi-file -f/--file support):
+// The configurations are built lazily via a function-local static, so the
+// vector is populated the FIRST time this function is invoked -- NOT at
+// static-initialization time. GoogleTest evaluates the ValuesIn(...) parameter
+// generator during test registration (inside InitGoogleTest / RUN_ALL_TESTS),
+// which runs from main() AFTER command-line arguments have been parsed and
+// g_yaml_config_files has been updated from -f/--file. Therefore the -f/--file
+// selection (including multiple files) DOES affect which tests are
+// instantiated. Do not convert this to a namespace-scope global initializer,
+// which would run before main() and freeze the default config.
 static const std::vector<GemmTestConfig>&
 getTestConfigurations()
 {
@@ -2410,26 +2478,41 @@ main(int argc, char** argv)
         std::cout << "Verbosity level: " << g_verbosity_level << std::endl;
     }
 
-    // Update global YAML configuration file path if specified
-    std::string yaml_file = parser.getYamlFile();
-    if (!yaml_file.empty()) {
-        g_yaml_config_file = yaml_file;
-        std::cout << "Using YAML configuration file: " << g_yaml_config_file
-                  << std::endl;
-    } else {
-        std::cout << "Using default YAML configuration file: "
-                  << g_yaml_config_file << std::endl;
-    }
+    // Resolve the YAML configuration file paths. Multiple files may be provided
+    // via repeated -f/--file flags and/or comma-separated values. The built-in
+    // default (g_yaml_config_files) is threaded through getYamlFiles() so it is
+    // only used when no -f/--file flag was given. Non-existent files passed via
+    // -f are skipped with a warning.
+    const std::string default_yaml =
+        g_yaml_config_files.empty() ? std::string() : g_yaml_config_files[0];
+    std::vector<std::string> yaml_files = parser.getYamlFiles(default_yaml);
 
-    // Check if specified file exists (if custom file was provided)
-    if (parser.getYamlFile().empty() == false
-        && !std::filesystem::exists(g_yaml_config_file)) {
-        std::cerr << "Error: YAML configuration file '" << g_yaml_config_file
-                  << "' does not exist!" << std::endl;
-        std::cerr << "Please check the file path or run with -h for usage "
+    if (yaml_files.empty()) {
+        // Reaching here means either the user explicitly passed -f but every
+        // supplied path was invalid, or the default itself is missing. In
+        // either case fail loudly rather than silently running a different
+        // suite (e.g. a mistyped -f path in CI must not pass by running the
+        // default configuration).
+        std::cerr << "Error: No valid YAML configuration file(s) provided!"
+                  << std::endl;
+        if (parser.hasYamlFileArg()) {
+            std::cerr << "All paths given via -f/--file were invalid."
+                      << std::endl;
+        }
+        std::cerr << "Please check the file path(s) or run with -h for usage "
                      "information."
                   << std::endl;
         return 1;
+    }
+
+    g_yaml_config_files = yaml_files;
+    if (parser.hasYamlFileArg()) {
+        std::cout << "Using YAML configuration file(s):" << std::endl;
+    } else {
+        std::cout << "Using default YAML configuration file(s):" << std::endl;
+    }
+    for (const auto& f : g_yaml_config_files) {
+        std::cout << "  - " << f << std::endl;
     }
 
     // Initialize GoogleTest with remaining arguments

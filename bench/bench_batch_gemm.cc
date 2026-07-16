@@ -65,8 +65,10 @@
 
 #include <benchmark/benchmark.h>
 
+#include <cctype>
 #include <filesystem>
 #include <iostream>
+#include <iterator>
 #include <memory>
 #include <stdexcept>
 #include <string>
@@ -369,29 +371,72 @@ main(int argc, char** argv)
         std::cout << std::string(60, '=') << std::endl;
     }
 
-    // Get YAML configuration file path
-    std::string yaml_file = parser.getYamlFile();
-    if (yaml_file.empty()) {
-        yaml_file = BENCH_CONFIG_DIR "/batch_gemm_bench_config.yaml";
-        std::cout << "Using default YAML configuration file: " << yaml_file
-                  << std::endl;
-    } else {
-        std::cout << "Using YAML configuration file: " << yaml_file
-                  << std::endl;
-    }
+    // Get YAML configuration file path(s). Multiple files may be provided via
+    // repeated -f/--file flags and/or comma-separated values. The built-in
+    // default is threaded through getYamlFiles() so it is only used when no
+    // -f/--file flag was given.
+    std::vector<std::string> yaml_files =
+        parser.getYamlFiles(BENCH_CONFIG_DIR "/batch_gemm_bench_config.yaml");
 
-    // Check if specified file exists
-    if (!std::filesystem::exists(yaml_file)) {
-        std::cerr << "Error: YAML configuration file '" << yaml_file
-                  << "' does not exist!" << std::endl;
-        std::cerr << "Please check the file path or run with -h for usage "
+    if (yaml_files.empty()) {
+        // The user explicitly passed -f/--file but every supplied path was
+        // invalid (or the default itself is missing). Fail loudly rather than
+        // silently benchmarking a different configuration (a mistyped -f path
+        // in CI must not pass by running the default suite).
+        std::cerr << "Error: No valid YAML configuration file(s) provided!"
+                  << std::endl;
+        if (parser.hasYamlFileArg()) {
+            std::cerr << "All paths given via -f/--file were invalid."
+                      << std::endl;
+        }
+        std::cerr << "Please check the file path(s) or run with -h for usage "
                      "information."
                   << std::endl;
         return 1;
     }
 
-    // Load batch GEMM configurations
-    auto configs = loadBatchGemmBenchmarkConfigs(yaml_file);
+    if (parser.hasYamlFileArg()) {
+        std::cout << "Using YAML configuration file(s):" << std::endl;
+    } else {
+        std::cout << "Using default YAML configuration file: "
+                  << yaml_files.front() << std::endl;
+    }
+    for (const auto& f : yaml_files) {
+        std::cout << "  - " << f << std::endl;
+    }
+
+    // Load batch GEMM configurations from every file. When multiple files are
+    // provided a per-file prefix (the sanitized file stem) is added to each
+    // benchmark name so results remain distinguishable across files.
+    std::vector<BatchGemmBenchConfig> configs;
+    const bool                        multiple_files = yaml_files.size() > 1;
+    for (size_t fi = 0; fi < yaml_files.size(); ++fi) {
+        const std::string& yaml_file = yaml_files[fi];
+        // Paths returned by getYamlFiles() are already validated to exist, so
+        // no further existence check is required here.
+        auto file_configs = loadBatchGemmBenchmarkConfigs(yaml_file);
+        if (multiple_files) {
+            std::string stem = std::filesystem::path(yaml_file).stem().string();
+            for (char& c : stem) {
+                if (!std::isalnum(static_cast<unsigned char>(c))) {
+                    c = '_';
+                }
+            }
+            // Combine a file index with the sanitized stem ("f<idx>_<stem>/")
+            // so names are guaranteed unique even when two files share the
+            // same filename in different directories.
+            const std::string prefix =
+                "f" + std::to_string(fi) + "_" + stem + "/";
+            for (auto& cfg : file_configs) {
+                cfg.name = prefix + cfg.name;
+            }
+        }
+        // Reserve to avoid repeated reallocations when loading multiple files.
+        configs.reserve(configs.size() + file_configs.size());
+        configs.insert(configs.end(),
+                       std::make_move_iterator(file_configs.begin()),
+                       std::make_move_iterator(file_configs.end()));
+    }
 
     if (configs.empty()) {
         std::cerr << "No batch GEMM configurations loaded!" << std::endl;
@@ -399,8 +444,8 @@ main(int argc, char** argv)
     }
 
     std::cout << "=== AOCL-DLP Batch GEMM Benchmark ===" << std::endl;
-    std::cout << "Configuration file: " << yaml_file << std::endl;
-    std::cout << "Loaded " << configs.size() << " configurations" << std::endl;
+    std::cout << "Loaded " << configs.size() << " configurations from "
+              << yaml_files.size() << " file(s)" << std::endl;
 
 #ifdef DLP_ENABLE_OPENMP
     std::cout << "OpenMP: Enabled" << std::endl;

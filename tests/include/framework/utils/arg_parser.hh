@@ -32,6 +32,7 @@
 #include "framework/types.hh"
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -111,6 +112,65 @@ class ArgParser
     }
 
     /**
+     * @brief Get all YAML configuration file paths
+     * @param default_file Default file path if none specified via command line
+     * @return Vector of YAML configuration file paths
+     *
+     * Supports specifying multiple YAML files in a single command using the
+     * -f / --file flag. Two forms are accepted and can be combined:
+     * - Repeated flags:      ./test_gemm -f a.yaml -f b.yaml -f c.yaml
+     * - Comma-separated:     ./test_gemm -f a.yaml,b.yaml,c.yaml
+     *
+     * Non-existent files are reported with a warning and skipped so a single
+     * bad path does not block the rest of the run. If no valid files are
+     * specified (or none exist), the provided default_file is returned as the
+     * sole entry (when non-empty).
+     */
+    std::vector<std::string> getYamlFiles(
+        const std::string& default_file = "") const
+    {
+        std::vector<std::string> files;
+
+        for (const auto& file : yaml_files_) {
+            if (file.empty()) {
+                continue;
+            }
+            if (!std::filesystem::exists(file)) {
+                std::cerr << "Warning: Specified YAML file '" << file
+                          << "' does not exist. Skipping." << std::endl;
+                continue;
+            }
+            files.push_back(file);
+        }
+
+        // Only fall back to the built-in default when the user did NOT pass
+        // any -f/--file flag. If the user explicitly specified file(s) but all
+        // of them were invalid, we deliberately return an empty list so the
+        // caller can error out instead of silently running the default suite.
+        if (files.empty() && yaml_files_.empty() && !default_file.empty()) {
+            if (std::filesystem::exists(default_file)) {
+                files.push_back(default_file);
+            } else {
+                std::cerr << "Warning: Default YAML file '" << default_file
+                          << "' does not exist. No YAML files will be used."
+                          << std::endl;
+            }
+        }
+
+        return files;
+    }
+
+    /**
+     * @brief Check whether the user explicitly passed a -f/--file flag
+     * @return true if at least one -f/--file value was provided on the command
+     *         line, false otherwise
+     *
+     * Useful to distinguish "no config specified (use default)" from "config
+     * specified but invalid (should be an error)".
+     */
+    bool hasYamlFileArg() const { return !yaml_files_.empty(); }
+
+    /**
      * @brief Check if a flag is present in command line arguments
      * @param flag Flag to check (e.g., "--verbose", "-v")
      * @return true if flag is present, false otherwise
@@ -188,8 +248,12 @@ class ArgParser
         std::cout << "DLPTestSuite Help\n";
         std::cout << "Usage: " << program_name << " [OPTIONS]\n\n";
         std::cout << "Options:\n";
-        std::cout
-            << "  -f, --file <path>       Specify YAML configuration file\n";
+        std::cout << "  -f, --file <path>       Specify YAML configuration "
+                     "file. May be given\n";
+        std::cout << "                          multiple times, and/or as a "
+                     "comma-separated\n";
+        std::cout << "                          list, to run multiple YAML "
+                     "files in one run\n";
         std::cout << "  -n <count>              Number of benchmark iterations "
                      "(overrides MinTime)\n";
         std::cout << "  --ual-test <type>       UAL implementation to test "
@@ -439,9 +503,32 @@ class ArgParser
         for (iter_t i = 1; i < argc_; ++i) {
             std::string arg = argv_[i];
 
-            // Handle YAML file specification
+            // Handle YAML file specification. Supports multiple files via
+            // repeated -f/--file flags and/or comma-separated values.
             if ((arg == "-f" || arg == "--file") && i + 1 < argc_) {
-                yaml_file_ = argv_[i + 1];
+                std::string value = argv_[i + 1];
+
+                // Split on commas to support "-f a.yaml,b.yaml" and append
+                // every entry to the multi-file list.
+                std::stringstream ss(value);
+                std::string       token;
+                while (std::getline(ss, token, ',')) {
+                    // Trim surrounding whitespace from each token.
+                    size_t start = token.find_first_not_of(" \t");
+                    size_t end   = token.find_last_not_of(" \t");
+                    if (start != std::string::npos
+                        && end != std::string::npos) {
+                        const std::string trimmed =
+                            token.substr(start, end - start + 1);
+                        // First specified file is retained in yaml_file_ for
+                        // backward compatibility with getYamlFile().
+                        if (yaml_file_.empty()) {
+                            yaml_file_ = trimmed;
+                        }
+                        yaml_files_.push_back(trimmed);
+                    }
+                }
+
                 ++i; // Skip the next argument (the file path)
             }
 
@@ -483,12 +570,14 @@ class ArgParser
         }
     }
 
-    int         argc_;
-    char**      argv_;
-    std::string yaml_file_;
-    std::string ual_test_;
-    std::string ual_ref_;
-    int64_t     iterations_ = -1; // -1 means use default MinTime behavior
+    int                      argc_;
+    char**                   argv_;
+    std::string              yaml_file_;
+    std::vector<std::string> yaml_files_;
+    std::string              ual_test_;
+    std::string              ual_ref_;
+    int64_t                  iterations_ = -1; // -1 means use default MinTime
+                                               // behavior
 };
 
 } // namespace dlp::testing::utils

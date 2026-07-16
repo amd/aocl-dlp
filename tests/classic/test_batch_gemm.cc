@@ -33,8 +33,12 @@
 #include "framework/utils/arg_parser.hh"
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
+#include <cctype>
 #include <filesystem>
 #include <gtest/gtest.h>
+#include <iterator>
+#include <string>
+#include <vector>
 
 using namespace dlp::testing::framework;
 using namespace dlp::testing::framework::postops;
@@ -42,9 +46,30 @@ using namespace dlp::testing::utils;
 
 constexpr size_t MAX_CONFIGS_PER_TEST_SET = 50000;
 
-// Global variable to store configurable YAML file path
-static std::string g_batch_gemm_yaml_file = TEST_CONFIG_DIR
-    "/batch_gemm_test_config.yaml";
+// Global variable to store configurable YAML file paths. These can be set via
+// command line arguments (one or more -f/--file flags, and/or comma-separated
+// values) or default to the single built-in config file.
+static std::vector<std::string> g_batch_gemm_yaml_files = {
+    TEST_CONFIG_DIR "/batch_gemm_test_config.yaml"
+};
+
+// Helper to derive a sanitized, GoogleTest-safe identifier from a YAML file
+// path (uses the file stem, replacing any non-alphanumeric characters with
+// underscores). Used to keep test names unique across multiple YAML files.
+static std::string
+sanitizeBatchFileStem(const std::string& yaml_file)
+{
+    std::string stem = std::filesystem::path(yaml_file).stem().string();
+    for (char& c : stem) {
+        if (!std::isalnum(static_cast<unsigned char>(c))) {
+            c = '_';
+        }
+    }
+    if (stem.empty()) {
+        stem = "file";
+    }
+    return stem;
+}
 
 // ============================================================================
 // CONFIGURATION STRUCTURE
@@ -287,11 +312,22 @@ compareGroupResults(const std::vector<BatchGroup>& lhs,
  *
  * For CARTESIAN_PRODUCT mode: Each MicroTest iteration = separate test
  * For SIMPLE_PRODUCT mode: All MicroTest iterations = groups in ONE test
+ *
+ * @param yaml_file   Path to the YAML config file to load.
+ * @param namePrefix  Optional prefix prepended to every generated test name so
+ *                    that names remain unique when multiple YAML files are
+ *                    loaded in a single run. Empty for the single-file case
+ *                    (preserving the original naming scheme).
  */
 std::vector<BatchGemmTestConfig>
-loadBatchGemmTestConfigurations(const std::string& yaml_file)
+loadBatchGemmTestConfigurations(const std::string& yaml_file,
+                                const std::string& namePrefix = "")
 {
     std::vector<BatchGemmTestConfig> configs;
+
+    // Build the prefix fragment applied to each generated test name.
+    const std::string prefix = namePrefix.empty() ? std::string()
+                                                  : (namePrefix + "_");
 
     try {
         YamlParser parser(yaml_file, "batch_gemm_tests");
@@ -322,9 +358,10 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                 // "batch_test_name")
                 std::string currentTestName = parser.getCurrentTestName();
 
-                // Generate test name
-                config.name = "yaml_" + std::to_string(i) + "_"
-                              + currentTestName + +"_MultiGroup";
+                // Generate test name (with per-file prefix so names stay
+                // unique across multiple YAML files).
+                config.name = prefix + "yaml_" + std::to_string(i) + "_"
+                              + currentTestName + "_MultiGroup";
                 config.config_index = total_configs;
 
                 // Extract common parameters from first iteration
@@ -414,8 +451,9 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file)
                     // Get the current test set name from YAML
                     std::string currentTestName = parser.getCurrentTestName();
 
-                    // Generate test name
-                    config.name = "yaml_" + std::to_string(i) + "_"
+                    // Generate test name (with per-file prefix so names stay
+                    // unique across multiple YAML files).
+                    config.name = prefix + "yaml_" + std::to_string(i) + "_"
                                   + currentTestName + "_" + std::to_string(j);
                     config.config_index = total_configs;
 
@@ -1142,12 +1180,55 @@ TEST_P(BatchGemmYamlTest, YamlDrivenTest)
  * a separate test case for each configuration. Test names are derived from
  * the "name" field in the YAML.
  */
-// Function to get batch GEMM test configurations (initialized on first call)
+// Load batch GEMM configurations from all specified YAML files. When multiple
+// files are provided, a per-file prefix is applied to generated test names to
+// keep them globally unique. For a single file, the prefix is left empty to
+// preserve the original naming scheme.
+static std::vector<BatchGemmTestConfig>
+loadBatchGemmTestConfigurationsFromFiles(
+    const std::vector<std::string>& yaml_files)
+{
+    std::vector<BatchGemmTestConfig> all_configs;
+
+    // The prefix combines a file index with the sanitized file stem
+    // ("f<idx>_<stem>") so that even files that share the same filename (in
+    // different directories) never produce duplicate test names.
+    const bool multiple_files = yaml_files.size() > 1;
+    for (size_t fi = 0; fi < yaml_files.size(); ++fi) {
+        const std::string& yaml_file = yaml_files[fi];
+        std::string        prefix    = multiple_files
+                                           ? ("f" + std::to_string(fi) + "_"
+                                    + sanitizeBatchFileStem(yaml_file))
+                                           : "";
+        auto configs = loadBatchGemmTestConfigurations(yaml_file, prefix);
+        // Reserve to avoid repeated reallocations across files (each file can
+        // contribute a large number of configs).
+        all_configs.reserve(all_configs.size() + configs.size());
+        all_configs.insert(all_configs.end(),
+                           std::make_move_iterator(configs.begin()),
+                           std::make_move_iterator(configs.end()));
+    }
+
+    return all_configs;
+}
+
+// Function to get batch GEMM test configurations (initialized on first call).
+//
+// IMPORTANT (multi-file -f/--file support):
+// The configurations are built lazily via a function-local static, so the
+// vector is populated the FIRST time this function is invoked -- NOT at
+// static-initialization time. GoogleTest evaluates the ValuesIn(...) parameter
+// generator during test registration (inside InitGoogleTest / RUN_ALL_TESTS),
+// which runs from main() AFTER command-line arguments have been parsed and
+// g_batch_gemm_yaml_files has been updated from -f/--file. Therefore the
+// -f/--file selection (including multiple files) DOES affect which tests are
+// instantiated. Do not convert this to a namespace-scope global initializer,
+// which would run before main() and freeze the default config.
 static const std::vector<BatchGemmTestConfig>&
 getBatchGemmTestConfigurations()
 {
     static std::vector<BatchGemmTestConfig> all_test_configs =
-        loadBatchGemmTestConfigurations(g_batch_gemm_yaml_file);
+        loadBatchGemmTestConfigurationsFromFiles(g_batch_gemm_yaml_files);
     return all_test_configs;
 }
 
@@ -1178,23 +1259,42 @@ main(int argc, char** argv)
         std::cout << std::string(60, '=') << std::endl;
     }
 
-    // Update YAML configuration file path if specified
-    std::string yaml_file = parser.getYamlFile();
-    if (!yaml_file.empty()) {
-        g_batch_gemm_yaml_file = yaml_file;
-        std::cout << "Using custom YAML configuration: "
-                  << g_batch_gemm_yaml_file << std::endl;
-    } else {
-        std::cout << "Using default YAML configuration: "
-                  << g_batch_gemm_yaml_file << std::endl;
+    // Resolve the YAML configuration file paths. Multiple files may be provided
+    // via repeated -f/--file flags and/or comma-separated values. The built-in
+    // default (g_batch_gemm_yaml_files) is threaded through getYamlFiles() so
+    // it is only used when no -f/--file flag was given. Non-existent files
+    // passed via -f are skipped with a warning.
+    const std::string        default_yaml = g_batch_gemm_yaml_files.empty()
+                                                ? std::string()
+                                                : g_batch_gemm_yaml_files[0];
+    std::vector<std::string> yaml_files   = parser.getYamlFiles(default_yaml);
+
+    if (yaml_files.empty()) {
+        // Reaching here means either the user explicitly passed -f but every
+        // supplied path was invalid, or the default itself is missing. In
+        // either case fail loudly rather than silently running a different
+        // suite (e.g. a mistyped -f path in CI must not pass by running the
+        // default configuration).
+        std::cerr << "Error: No valid YAML configuration file(s) provided!"
+                  << std::endl;
+        if (parser.hasYamlFileArg()) {
+            std::cerr << "All paths given via -f/--file were invalid."
+                      << std::endl;
+        }
+        std::cerr << "Please check the file path(s) or run with -h for usage "
+                     "information."
+                  << std::endl;
+        return 1;
     }
 
-    // Check if specified file exists
-    if (!parser.getYamlFile().empty()
-        && !std::filesystem::exists(g_batch_gemm_yaml_file)) {
-        std::cerr << "Error: YAML file '" << g_batch_gemm_yaml_file
-                  << "' does not exist!" << std::endl;
-        return 1;
+    g_batch_gemm_yaml_files = yaml_files;
+    if (parser.hasYamlFileArg()) {
+        std::cout << "Using YAML configuration file(s):" << std::endl;
+    } else {
+        std::cout << "Using default YAML configuration file(s):" << std::endl;
+    }
+    for (const auto& f : g_batch_gemm_yaml_files) {
+        std::cout << "  - " << f << std::endl;
     }
 
     // Initialize GoogleTest
