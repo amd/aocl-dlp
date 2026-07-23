@@ -143,7 +143,11 @@ dlp::jit::jitGeneratorError
 jitGEMVS8N1<KType>::loadXValues(bool isFringe)
 {
     if (isFringe) {
-        vmovdqu32(RegType(xBaseIdx) | k1 | T_z, ptr[regXptr]);
+        // kmask_i8_avx512 (k1) is a byte-granular K-remainder mask
+        // (k_left ones), so it must be consumed with a byte-granular load.
+        // Use vmovdqu8 so only the k_left valid K bytes of X are read and
+        // the masked-out bytes are suppressed.
+        vmovdqu8(RegType(xBaseIdx) | k1 | T_z, ptr[regXptr]);
     } else {
         vmovdqu32(RegType(xBaseIdx), ptr[regXptr]);
     }
@@ -160,8 +164,12 @@ jitGEMVS8N1<KType>::loadAValues(int aRegIdx, bool isFringe)
     vpbroadcastb(RegType(vec128Idx), regTmp3.cvt8());
 
     if (isFringe) {
-        vmovdqu32(RegType(tmpBaseIdx + aRegIdx) | k1 | T_z,
-                  ptr[regTmpAptr + regTmp1]);
+        // k1 is a byte-granular K-remainder mask (see loadXValues). Load A
+        // with vmovdqu8 so only the k_left valid K bytes are read and the
+        // rest are suppressed. vpaddb below is already byte-granular and
+        // matches this mask.
+        vmovdqu8(RegType(tmpBaseIdx + aRegIdx) | k1 | T_z,
+                 ptr[regTmpAptr + regTmp1]);
         vpaddb(RegType(tmpBaseIdx + aRegIdx) | k1 | T_z,
                RegType(tmpBaseIdx + aRegIdx), RegType(vec128Idx));
     } else {
