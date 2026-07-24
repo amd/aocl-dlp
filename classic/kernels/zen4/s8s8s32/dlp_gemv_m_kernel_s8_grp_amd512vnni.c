@@ -287,10 +287,14 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 inter2 = _mm512_cvtepi32_ps(zmm16);
                 inter3 = _mm512_cvtepi32_ps(zmm20);
 
-                __m512    b_scl0, b_scl1, b_scl2, b_scl3;
-                __mmask16 scl_mask = _cvtu32_mask16(0xFFFF);
+                __m512 b_scl0, b_scl1, b_scl2, b_scl3;
 
-                // Load B scale factors.
+                // Per-16-column-group scale-load masks. The B scale factor is
+                // per-N-channel (length n), so the vector load must be masked
+                // to the number of valid columns in each 16-lane group (k1..k4,
+                // computed above from nr0). Using a hardcoded 0xFFFF here reads
+                // up to 64 scales and over-runs the scale buffer whenever
+                // nr0 < 64.
                 if (grp_post_ops_attr.sf_stor_type == DLP_BF16) {
                     // load scales for B matrix.
                     bfloat16* b_scale_ptr =
@@ -298,14 +302,10 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         + (group * grp_post_ops_attr.grp_post_op_ldb)
                         + grp_post_ops_attr.grp_post_op_j;
 
-                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask,
-                                                0)
-                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl1, b_scale_ptr, scl_mask,
-                                                1)
-                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl2, b_scale_ptr, scl_mask,
-                                                2)
-                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl3, b_scale_ptr, scl_mask,
-                                                3)
+                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl0, b_scale_ptr, k1, 0);
+                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl1, b_scale_ptr, k2, 1);
+                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl2, b_scale_ptr, k3, 2);
+                    SYM_QUANT_BF16_F32_SCL_LOAD(b_scl3, b_scale_ptr, k4, 3);
                 } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
                 {
                     // load scales for B matrix
@@ -314,10 +314,10 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         + (group * grp_post_ops_attr.grp_post_op_ldb)
                         + grp_post_ops_attr.grp_post_op_j;
 
-                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
-                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl1, b_scale_ptr, scl_mask, 1)
-                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl2, b_scale_ptr, scl_mask, 2)
-                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl3, b_scale_ptr, scl_mask, 3)
+                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl0, b_scale_ptr, k1, 0);
+                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl1, b_scale_ptr, k2, 1);
+                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl2, b_scale_ptr, k3, 2);
+                    SYM_QUANT_F32_F32_SCL_LOAD(b_scl3, b_scale_ptr, k4, 3);
                 }
 
                 // Broadcast A scale factors.

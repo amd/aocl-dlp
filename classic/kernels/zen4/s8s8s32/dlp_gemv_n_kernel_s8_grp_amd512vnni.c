@@ -337,7 +337,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
             } // group loop
             a_use += 64;
 
-            post_ops_attr.post_op_c_i += MR;
             grp_post_ops_attr.grp_post_op_i += MR;
 
             mr0_use = 16;
@@ -351,7 +350,12 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
             // Dot-product kernel for m_fringe >= 8; [8, 16).
             if (mr0_use >= 8) {
                 mr0_use = 8;
-                k2      = (0xFFFF >> (MR - mr0_use));
+                // Keep mr0 consistent with the number of rows actually
+                // computed/masked (mr0_use) so the epilogue scalar loops
+                // (i < mr0) and downscale stores do not touch rows that were
+                // not produced in this iteration.
+                mr0 = mr0_use;
+                k2  = (0xFFFF >> (MR - mr0_use));
 
                 md_t group_start =
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
@@ -528,10 +532,10 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 a_use_fringe = a_use;
                 b_use        = b;
 
-                post_ops_attr.post_op_c_i += 8;
                 grp_post_ops_attr.grp_post_op_i += 8;
             } else if (mr0_use >= 4) {
                 mr0_use = 4;
+                mr0     = mr0_use;
                 k2      = (0xFFFF >> (MR - mr0_use));
 
                 md_t group_start =
@@ -682,10 +686,10 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 a_use_fringe = a_use;
                 b_use        = b;
 
-                post_ops_attr.post_op_c_i += 4;
                 grp_post_ops_attr.grp_post_op_i += 4;
             } else if (mr0_use >= 2) {
                 mr0_use = 2;
+                mr0     = mr0_use;
                 k2      = (0xFFFF >> (MR - mr0_use));
 
                 md_t group_start =
@@ -836,7 +840,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     f32_acc0 = _mm512_maskz_add_ps(k2, f32_acc0, inter0);
                 } // group loop
 
-                post_ops_attr.post_op_c_i += 2;
                 grp_post_ops_attr.grp_post_op_i += 2;
 
                 a_use        = a_use_fringe + 2 * rs_a;
@@ -845,6 +848,7 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 regidx++;
             } else if (mr0_use == 1) {
                 mr0_use = 1;
+                mr0     = mr0_use;
                 k2      = (0xFFFF >> (MR - mr0_use));
 
                 md_t group_start =
@@ -984,7 +988,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     f32_acc0 = _mm512_maskz_add_ps(k2, f32_acc0, inter0);
                 } // group loop
 
-                post_ops_attr.post_op_c_i += 1;
                 grp_post_ops_attr.grp_post_op_i += 1;
 
                 a_use        = a_use_fringe + 1 * rs_a;
@@ -1485,6 +1488,12 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
                 }
             }
         }
+
+        // Advance the C row offset for the next M tile. This must run after
+        // the store epilogue above: the downscale (bf16/s8/u8) store paths
+        // address C via post_op_c_i, so it has to hold the current tile's
+        // base row while that store executes.
+        post_ops_attr.post_op_c_i += mr0_use;
     }
     }
 }
