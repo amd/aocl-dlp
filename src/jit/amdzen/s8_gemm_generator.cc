@@ -905,72 +905,78 @@ jitGEMMS8<KType>::generateIrLoop(utils::generatorParams& params)
 
     initializeRegisters(); // zero-out accumulators
 
-    // Broadcast 128 to a vector register.
-    // This value will be added to A to convert the broadcasted A values from
-    // signed int8 to unsigned int8 for the VNNI instruction.
-    mov(regTmp1, 128);
-    vxorps(RegType(vec128RegIdx), RegType(vec128RegIdx), RegType(vec128RegIdx));
-    vpbroadcastb(RegType(vec128RegIdx), regTmp1.cvt8());
+    // No k-loop accumulation if alpha scaling is zero, as the result will be
+    // zero regardless of the k-loop computation.
+    if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+        // Broadcast 128 to a vector register.
+        // This value will be added to A to convert the broadcasted A values
+        // from signed int8 to unsigned int8 for the VNNI instruction.
+        mov(regTmp1, 128);
+        vxorps(RegType(vec128RegIdx), RegType(vec128RegIdx),
+               RegType(vec128RegIdx));
+        vpbroadcastb(RegType(vec128RegIdx), regTmp1.cvt8());
 
-    // Jump to K-left loop if kIter is zero.
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
-    test(regKIter, regKIter);    // if regKIter == 0, jump to k-left loop.
-    je(".BCONSIDKLEFT", T_NEAR); // using T_NEAR, since size between jmp and
-                                 // label is larger than 127 byte.
-                                 // Xbyak throws error otherwise.
-
-    // K-loop
-    L(".BLOOPKITER");
-    RETURN_IF_ERROR(kLoop(params.K_UNROLL, false));
-    sub(regKIter, 1);
-    jne(".BLOOPKITER", T_NEAR);
-
-    L(".BCONSIDKLEFT");
-    if (params.K_UNROLL == 1) {
-        // Legacy single-stage tail: with K_UNROLL=1, kLeft is already the
-        // 0..3 K-element residual consumed by the masked VNNI load.
-        // Skipping the two-stage tail dispatch removes a per-call test
-        // and branch from every K_UNROLL=1 microkernel invocation.
+        // Jump to K-left loop if kIter is zero.
         mov(regKIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
-        test(regKIter, regKIter);
-        je(".BPOSTACCUM", T_NEAR);
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
+        test(regKIter, regKIter);    // if regKIter == 0, jump to k-left loop.
+        je(".BCONSIDKLEFT", T_NEAR); // using T_NEAR, since size between jmp and
+                                     // label is larger than 127 byte.
+                                     // Xbyak throws error otherwise.
 
-        RETURN_IF_ERROR(kLoop(1, true));
-    } else {
-        // K_UNROLL>1 needs the two-stage tail: kLeftIter full VNNI
-        // groups followed by the 0..3 masked K-element residual.
-        L(".BCONSIDKLEFTITER");
-        mov(regKIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftIter)]);
-        test(regKIter, regKIter);
-        je(".BCONSIDKLEFTREM", T_NEAR);
-
-        L(".BLOOPKLEFTITER");
-        RETURN_IF_ERROR(kLoop(1, false));
+        // K-loop
+        L(".BLOOPKITER");
+        RETURN_IF_ERROR(kLoop(params.K_UNROLL, false));
         sub(regKIter, 1);
-        jne(".BLOOPKLEFTITER", T_NEAR);
+        jne(".BLOOPKITER", T_NEAR);
 
-        L(".BCONSIDKLEFTREM");
-        mov(regKIter,
-            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftRem)]);
-        test(regKIter, regKIter);
-        je(".BPOSTACCUM", T_NEAR);
+        L(".BCONSIDKLEFT");
+        if (params.K_UNROLL == 1) {
+            // Legacy single-stage tail: with K_UNROLL=1, kLeft is already the
+            // 0..3 K-element residual consumed by the masked VNNI load.
+            // Skipping the two-stage tail dispatch removes a per-call test
+            // and branch from every K_UNROLL=1 microkernel invocation.
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
+            test(regKIter, regKIter);
+            je(".BPOSTACCUM", T_NEAR);
 
-        RETURN_IF_ERROR(kLoop(1, true));
-    }
+            RETURN_IF_ERROR(kLoop(1, true));
+        } else {
+            // K_UNROLL>1 needs the two-stage tail: kLeftIter full VNNI
+            // groups followed by the 0..3 masked K-element residual.
+            L(".BCONSIDKLEFTITER");
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftIter)]);
+            test(regKIter, regKIter);
+            je(".BCONSIDKLEFTREM", T_NEAR);
 
-    // Post-accumulation operations
-    L(".BPOSTACCUM");
+            L(".BLOOPKLEFTITER");
+            RETURN_IF_ERROR(kLoop(1, false));
+            sub(regKIter, 1);
+            jne(".BLOOPKLEFTITER", T_NEAR);
 
-    // Compensate for conversion of A from int8 to uint8 for the VNNI
-    // instruction.
-    RETURN_IF_ERROR(conversionCompensation());
+            L(".BCONSIDKLEFTREM");
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeftRem)]);
+            test(regKIter, regKIter);
+            je(".BPOSTACCUM", T_NEAR);
 
-    L(".SCALING");
-    if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
-        // Scale by alpha
-        RETURN_IF_ERROR(scaleAlpha());
+            RETURN_IF_ERROR(kLoop(1, true));
+        }
+
+        // Post-accumulation operations
+        L(".BPOSTACCUM");
+
+        // Compensate for conversion of A from int8 to uint8 for the VNNI
+        // instruction.
+        RETURN_IF_ERROR(conversionCompensation());
+
+        L(".SCALING");
+        if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
+            // Scale by alpha
+            RETURN_IF_ERROR(scaleAlpha());
+        }
     }
 
     if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {

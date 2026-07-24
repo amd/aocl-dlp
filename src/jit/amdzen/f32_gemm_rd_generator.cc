@@ -308,85 +308,91 @@ jitGEMMF32RD<KType>::generateIrLoop(utils::generatorParams& params)
 
     regInit();
 
-    // Reconstruct regCsB3 = 3 * cs_b before K-loop entry.
-    // Required because regRsC (aliased to same register) overwrites it
-    // during the previous iteration's store phase.
-    lea(regCsB3, ptr[regCsB + regCsB * 2]);
+    // No k-loop accumulation if alpha scaling is zero, as the result will be
+    // zero regardless of the k-loop computation.
+    if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+        // Reconstruct regCsB3 = 3 * cs_b before K-loop entry.
+        // Required because regRsC (aliased to same register) overwrites it
+        // during the previous iteration's store phase.
+        lea(regCsB3, ptr[regCsB + regCsB * 2]);
 
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
-    test(regKIter, regKIter);
-    je(".CONSIDER_K_LEFT", T_NEAR);
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
+        test(regKIter, regKIter);
+        je(".CONSIDER_K_LEFT", T_NEAR);
 
-    L(".K_UNROLL_LOOP");
+        L(".K_UNROLL_LOOP");
 
-    RETURN_IF_ERROR(generateKrLoop(params.K_UNROLL, false));
+        RETURN_IF_ERROR(generateKrLoop(params.K_UNROLL, false));
 
-    sub(regKIter, 1);
-    jne(".K_UNROLL_LOOP", T_NEAR);
+        sub(regKIter, 1);
+        jne(".K_UNROLL_LOOP", T_NEAR);
 
-    L(".CONSIDER_K_LEFT");
+        L(".CONSIDER_K_LEFT");
 
-    // handle remaining k_iter
-    if (params.K_UNROLL > 1) {
-        // if unrolled by more than 1, we can generate a single unroll loop
-        // to handle multiples of nElemsPerReg.
+        // handle remaining k_iter
+        if (params.K_UNROLL > 1) {
+            // if unrolled by more than 1, we can generate a single unroll loop
+            // to handle multiples of nElemsPerReg.
 
-        // load k_left
+            // load k_left
+            mov(regKIter,
+                ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
+            // divide k_left by nElemsPerReg, use shift right operation
+            shr(regKIter, amdzen::utils::int_log2(nElemsPerReg));
+            test(regKIter, regKIter);
+            je(".HANDLE_K_LEFT_WITH_MASK", T_NEAR);
+
+            L(".K_UNROLL_1");
+
+            RETURN_IF_ERROR(generateKrLoop(1, false));
+
+            sub(regKIter, 1);
+            jne(".K_UNROLL_1", T_NEAR);
+        }
+
+        L(".HANDLE_K_LEFT_WITH_MASK");
+        // load k_left and calculate k_left % nElemsPerReg
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
-        // divide k_left by nElemsPerReg, use shift right operation
-        shr(regKIter, amdzen::utils::int_log2(nElemsPerReg));
+        and_(regKIter, nElemsPerReg - 1);
         test(regKIter, regKIter);
-        je(".HANDLE_K_LEFT_WITH_MASK", T_NEAR);
+        je(".POST_ACCUMULATE", T_NEAR);
 
-        L(".K_UNROLL_1");
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            L(".LOOP_K_LEFT1");
+        }
 
-        RETURN_IF_ERROR(generateKrLoop(1, false));
+        RETURN_IF_ERROR(generateKrLoop(1, true));
 
-        sub(regKIter, 1);
-        jne(".K_UNROLL_1", T_NEAR);
+        // For avx2 config, for k < nElemsPerReg, we generate code that
+        // processes one element at a time using vmovss instruction.
+        // For avx512/avx512_256 config, we generate code that processes
+        // all kLeft elements at once using masked load instructions.
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            sub(regKIter, 1);
+            jne(".LOOP_K_LEFT1", T_NEAR);
+        }
+
+        L(".POST_ACCUMULATE");
+
+        // Reconstruct regTmpCptr = regCptr after K-loop.
+        // Required because regKIter (aliased to same register) overwrites it
+        // during the K-loop.
+        mov(regTmpCptr, regCptr);
+
+        // Accumulate results convert ZMM or YMM to XMM
+        RETURN_IF_ERROR(reduceAccumulation());
+
+        // alpha scale
+        if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
+            RETURN_IF_ERROR(alphaScale());
+        }
     }
-
-    L(".HANDLE_K_LEFT_WITH_MASK");
-    // load k_left and calculate k_left % nElemsPerReg
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
-    and_(regKIter, nElemsPerReg - 1);
-    test(regKIter, regKIter);
-    je(".POST_ACCUMULATE", T_NEAR);
-
-    if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-        L(".LOOP_K_LEFT1");
-    }
-
-    RETURN_IF_ERROR(generateKrLoop(1, true));
-
-    // For avx2 config, for k < nElemsPerReg, we generate code that
-    // processes one element at a time using vmovss instruction.
-    // For avx512/avx512_256 config, we generate code that processes
-    // all kLeft elements at once using masked load instructions.
-    if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
-        sub(regKIter, 1);
-        jne(".LOOP_K_LEFT1", T_NEAR);
-    }
-
-    L(".POST_ACCUMULATE");
-
-    // Reconstruct regTmpCptr = regCptr after K-loop.
-    // Required because regKIter (aliased to same register) overwrites it
-    // during the K-loop.
-    mov(regTmpCptr, regCptr);
-
-    // Accumulate results convert ZMM or YMM to XMM
-    RETURN_IF_ERROR(reduceAccumulation());
 
     // create n-dimension mask
     if (useMask) {
         createMaskFromConstant(nSubBlockSize);
-    }
-
-    // alpha scale
-    if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
-        RETURN_IF_ERROR(alphaScale());
     }
 
     // check if is_last_k is set

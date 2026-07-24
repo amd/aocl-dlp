@@ -849,7 +849,8 @@ jitU8S8VNNI_GEMM<KType>::generatePostOps(utils::generatorParams& params)
     Xbyak::Label local_end_store;
 
     // Handle alpha scaling
-    if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
+    if ((params.alphaScalingType != dlp::kernel_frame::scalingType::one)
+        && (params.alphaScalingType != dlp::kernel_frame::scalingType::zero)) {
         RETURN_IF_ERROR(scaleAlpha());
     }
 

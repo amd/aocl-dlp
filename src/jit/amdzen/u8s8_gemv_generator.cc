@@ -1364,53 +1364,60 @@ jitU8S8VNNI_GEMVN1<KType>::generateIrLoop(int mSize)
 {
 
     inLocalLabel();
+
     // Generate the inner loop for GEMV N=1
+    regInit(accumBaseIdx, MR);
+
     // This loop iterates over the columns of the matrix A
     // and performs the dot product for each SIMD column chunk
     // with the vector X
+    // No k-loop accumulation if alpha scaling is zero, as the result will be
+    // zero regardless of the k-loop computation.
+    if (alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+        mov(regTmpAptr, regAptr);
+        mov(regTmpYptr, regAptr); // To trace the columns for A matrix
 
-    mov(regTmpAptr, regAptr);
-    mov(regTmpYptr, regAptr); // To trace the columns for A matrix
+        mov(regXptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, x)]);
 
-    mov(regXptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, x)]);
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
 
-    regInit(accumBaseIdx, MR);
+        test(regKIter, regKIter);
+        jz(".KLOOP_FRINGE", T_NEAR);
 
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
+        L(".KLOOP_START");
 
-    test(regKIter, regKIter);
-    jz(".KLOOP_FRINGE", T_NEAR);
+        // Load X elements(64 elements)
+        vmovdqu32(Zmm(xBaseIdx), ptr[regXptr]);
 
-    L(".KLOOP_START");
+        RETURN_IF_ERROR(processMRBlock(mSize, false));
 
-    // Load X elements(64 elements)
-    vmovdqu32(Zmm(xBaseIdx), ptr[regXptr]);
+        add(regTmpYptr,
+            RegBytes); // Move the A column pointer to the next K chunk
+        mov(regTmpAptr, regTmpYptr); // Update the A pointer
+        add(regXptr, RegBytes);      // Update the X pointer to the next K chunk
 
-    RETURN_IF_ERROR(processMRBlock(mSize, false));
+        sub(regKIter, 1);
+        jnz(".KLOOP_START", T_NEAR);
 
-    add(regTmpYptr, RegBytes); // Move the A column pointer to the next K chunk
-    mov(regTmpAptr, regTmpYptr); // Update the A pointer
-    add(regXptr, RegBytes);      // Update the X pointer to the next K chunk
+        L(".KLOOP_FRINGE");
 
-    sub(regKIter, 1);
-    jnz(".KLOOP_START", T_NEAR);
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_left)]);
+        test(regKIter, regKIter);
+        jz(".KLOOP_FRINGE_END", T_NEAR);
 
-    L(".KLOOP_FRINGE");
+        // Load remaining X elements (kLeft - 8 bit elements)
+        vmovdqu8(Zmm(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
+        processMRBlock(mSize, true);
 
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_left)]);
-    test(regKIter, regKIter);
-    jz(".KLOOP_FRINGE_END", T_NEAR);
+        L(".KLOOP_FRINGE_END");
 
-    // Load remaining X elements (kLeft - 8 bit elements)
-    vmovdqu8(Zmm(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
-    processMRBlock(mSize, true);
+        RETURN_IF_ERROR(reduceAccumulation(mSize));
 
-    L(".KLOOP_FRINGE_END");
-
-    RETURN_IF_ERROR(reduceAccumulation(mSize));
-
-    if (alphaScalingType != dlp::kernel_frame::scalingType::one) {
-        RETURN_IF_ERROR(scaleAlpha(mSize));
+        if (alphaScalingType != dlp::kernel_frame::scalingType::one) {
+            RETURN_IF_ERROR(scaleAlpha(mSize));
+        }
     }
 
     if (betaScalingType != dlp::kernel_frame::scalingType::zero) {

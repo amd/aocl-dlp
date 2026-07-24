@@ -608,46 +608,53 @@ jitGEMMBF16<KType>::generateIrLoop(utils::generatorParams& params)
     // Zero out F32 accumulators
     regInit();
 
-    // Generate K-loop
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
-    test(regKIter, regKIter);
-    je(".BCONSIDKITERAP", T_NEAR);
+    // No k-loop accumulation if alpha scaling is zero, as the result will be
+    // zero regardless of the k-loop computation.
+    if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+        // Generate K-loop
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
+        test(regKIter, regKIter);
+        je(".BCONSIDKITERAP", T_NEAR);
 
-    // Kernel unroll loop
-    L(".BLOOPKITERBP");
-    RETURN_IF_ERROR(kLoopCompute(false, 1));
-    // B prefetch
-    sub(regKIter, 1);
-    jne(".BLOOPKITERBP", T_NEAR);
+        // Kernel unroll loop
+        L(".BLOOPKITERBP");
+        RETURN_IF_ERROR(kLoopCompute(false, 1));
+        // B prefetch
+        sub(regKIter, 1);
+        jne(".BLOOPKITERBP", T_NEAR);
 
-    if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
-        RETURN_IF_ERROR(prefetchC());
-    }
+        if (params.betaScalingType != dlp::kernel_frame::scalingType::zero) {
+            RETURN_IF_ERROR(prefetchC());
+        }
 
-    L(".BCONSIDKITERAP");
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterAP)]);
-    test(regKIter, regKIter);
-    je(".BCONSIDKLEFTREM", T_NEAR);
+        L(".BCONSIDKITERAP");
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterAP)]);
+        test(regKIter, regKIter);
+        je(".BCONSIDKLEFTREM", T_NEAR);
 
-    L(".BLOOPKITERAP");
-    RETURN_IF_ERROR(kLoopCompute(false, 1));
-    sub(regKIter, 1);
-    jne(".BLOOPKITERAP", T_NEAR);
+        L(".BLOOPKITERAP");
+        RETURN_IF_ERROR(kLoopCompute(false, 1));
+        sub(regKIter, 1);
+        jne(".BLOOPKITERAP", T_NEAR);
 
-    L(".BCONSIDKLEFTREM");
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
-    test(regKIter, regKIter);
-    je(".BPOSTACCUM", T_NEAR);
+        L(".BCONSIDKLEFTREM");
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
+        test(regKIter, regKIter);
+        je(".BPOSTACCUM", T_NEAR);
 
-    RETURN_IF_ERROR(kLoopCompute(true, 1));
-    // No need to decrement regKIter as it could only be 1 or 0
-    // This is due to the BF16 packing factor being 2
+        RETURN_IF_ERROR(kLoopCompute(true, 1));
+        // No need to decrement regKIter as it could only be 1 or 0
+        // This is due to the BF16 packing factor being 2
 
-    L(".BPOSTACCUM");
+        L(".BPOSTACCUM");
 
-    if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
-        // alpha scaling
-        RETURN_IF_ERROR(scaleAlpha());
+        if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
+            // alpha scaling
+            RETURN_IF_ERROR(scaleAlpha());
+        }
     }
 
     // To-Do: add support for beta scaling if beta is 1 using vaddps

@@ -1245,32 +1245,36 @@ jitGEMMF32<KType>::generateIrLoop(utils::generatorParams& params)
     // zero out accumulators
     regInit();
 
-    // Generate K-loop
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
-    test(regKIter, regKIter);
-    je(".BCONSIDKLEFT", T_NEAR);
+    // No k-loop accumulation if alpha scaling is zero, as the result will be
+    // zero regardless of the k-loop computation.
+    if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+        // Generate K-loop
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kIterBP)]);
+        test(regKIter, regKIter);
+        je(".BCONSIDKLEFT", T_NEAR);
 
-    // Kernel unroll loop
-    L(".BLOOPKITER");
-    RETURN_IF_ERROR(kernelUnroll(params.K_UNROLL));
-    sub(regKIter, 1); // i -= 1
-    jne(".BLOOPKITER", T_NEAR);
+        // Kernel unroll loop
+        L(".BLOOPKITER");
+        RETURN_IF_ERROR(kernelUnroll(params.K_UNROLL));
+        sub(regKIter, 1); // i -= 1
+        jne(".BLOOPKITER", T_NEAR);
 
-    L(".BCONSIDKLEFT");
-    // load k_left
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
-    test(regKIter, regKIter);
-    je(".BPOSTACCUM", T_NEAR);
+        L(".BCONSIDKLEFT");
+        // load k_left
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kLeft)]);
+        test(regKIter, regKIter);
+        je(".BPOSTACCUM", T_NEAR);
 
-    RETURN_IF_ERROR(kernelUnroll(1));
+        RETURN_IF_ERROR(kernelUnroll(1));
 
-    L(".BPOSTACCUM");
+        L(".BPOSTACCUM");
 
-    if (params.alphaScalingType == dlp::kernel_frame::scalingType::one) {
-        // skip alpha scaling if alpha is 1
-    } else {
-        // alpha scaling
-        RETURN_IF_ERROR(scaleAlpha());
+        if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
+            // alpha scaling
+            RETURN_IF_ERROR(scaleAlpha());
+        }
     }
 
     // check if is_last_k is set
@@ -1469,16 +1473,18 @@ jitGEMMF32<KType>::generateKernelBodyK1(
     // zero out accumulators
     regInit();
 
-    // k is always 1 for k=1 kernel
-    RETURN_IF_ERROR(kernelUnroll(1));
+    // No k-loop accumulation if alpha scaling is zero, as the result will be
+    // zero regardless of the k-loop computation.
+    if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+        // k is always 1 for k=1 kernel
+        RETURN_IF_ERROR(kernelUnroll(1));
 
-    L(".BPOSTACCUM");
+        L(".BPOSTACCUM");
 
-    if (params.alphaScalingType == dlp::kernel_frame::scalingType::one) {
-        // skip alpha scaling if alpha is 1
-    } else {
-        // alpha scaling
-        RETURN_IF_ERROR(scaleAlpha());
+        if (params.alphaScalingType != dlp::kernel_frame::scalingType::one) {
+            // alpha scaling
+            RETURN_IF_ERROR(scaleAlpha());
+        }
     }
 
     // check if is_last_k is set

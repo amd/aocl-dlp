@@ -49,11 +49,15 @@ class gemmDEBackendUtils
     static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
     getScalingTypesF32(void* alpha, void* beta, md_t k, md_t kc_hint)
     {
+        float                     alpha_val = *(static_cast<float*>(alpha));
         kernel_frame::scalingType alphaScalingType =
             kernel_frame::scalingType::generic;
-        if (*(static_cast<float*>(alpha)) == 1.0f) {
+        if (alpha_val == 1.0f) {
             alphaScalingType = kernel_frame::scalingType::one;
+        } else if (alpha_val == 0.0f) {
+            alphaScalingType = kernel_frame::scalingType::zero;
         }
+
         kernel_frame::scalingType betaScalingType =
             kernel_frame::scalingType::generic;
         if ((*(static_cast<float*>(beta)) == 0.0f) && (k <= kc_hint)) {
@@ -67,11 +71,15 @@ class gemmDEBackendUtils
     static std::pair<kernel_frame::scalingType, kernel_frame::scalingType>
     getScalingTypesInt32(void* alpha, void* beta, md_t k, md_t kc_hint)
     {
+        int32_t                   alpha_val = *(static_cast<int32_t*>(alpha));
         kernel_frame::scalingType alphaScalingType =
             kernel_frame::scalingType::generic;
-        if (*(static_cast<int*>(alpha)) == 1) {
+        if (alpha_val == 1) {
             alphaScalingType = kernel_frame::scalingType::one;
+        } else if (alpha_val == 0) {
+            alphaScalingType = kernel_frame::scalingType::zero;
         }
+
         kernel_frame::scalingType betaScalingType =
             kernel_frame::scalingType::generic;
         if ((*(static_cast<int*>(beta)) == 0) && (k <= kc_hint)) {
