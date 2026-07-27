@@ -92,6 +92,12 @@ namespace dlp { namespace testing { namespace framework {
         bool useInputPrecision =
             false; ///< If true, use inputPrecisionType for epsilon calculation
                    ///< instead of output matrix type.
+        bool treatNaNEqual =
+            false; ///< How to compare two NaNs at the same position.
+                   ///< Default (false): a NaN in the output is a mismatch even
+                   ///< when both sides are NaN, so a leak cannot be masked by a
+                   ///< reference that reproduces it. Set true only for tests
+                   ///< that deliberately assert NaN propagation.
 
         /**
          * @brief Create options for fast mode (boolean comparison only)

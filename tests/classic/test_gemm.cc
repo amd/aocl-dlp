@@ -177,6 +177,10 @@ struct GemmTestConfig
     double tolerance_relative = -1.0; // -1 means use default
     double tolerance_absolute = -1.0; // -1 means use default
 
+    // Optional NaN-equality opt-in for deliberate NaN-propagation tests.
+    // Default (false) treats a NaN in the output as a mismatch.
+    bool treat_nan_equal = false;
+
     // Default constructor (required by GoogleTest)
     GemmTestConfig() = default;
 
@@ -806,6 +810,8 @@ loadTestConfigurations(const std::string& yaml_file,
                     config.tolerance_absolute = tol.absolute;
                 }
 
+                config.treat_nan_equal = microTest.getTreatNaNEqual();
+
                 configs.push_back(config);
 
                 if (j < test_count - 1) {
@@ -1365,6 +1371,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
                 compare_opts.absToleranceMultiplier =
                     config_.tolerance_absolute;
             }
+
+            compare_opts.treatNaNEqual = config_.treat_nan_equal;
 
             // For mixed-precision tests (e.g., bf16×bf16→f32), use input
             // precision for epsilon calculation. The error accumulation comes

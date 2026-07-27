@@ -123,13 +123,18 @@ aocl_gemm_f32f32f32of32_ref(const char      order,
                 }
             }
 
-            // Main k loop using pointer increments
-            const float* a_k = a_ptr;
-            const float* b_k = b_ptr;
-            for (l = 0; l < k; ++l) {
-                sum += (*a_k) * (*b_k);
-                a_k += a_stride;
-                b_k += b_stride;
+            // BLAS contract: when alpha == 0 the result is independent of A and
+            // B, which must not be referenced. Skipping the accumulation leaves
+            // sum at 0 so the write-back below reduces to beta * C_initial (or
+            // 0 when beta == 0), never propagating NaN/Inf from A or B.
+            if (alpha != 0.0f) {
+                const float* a_k = a_ptr;
+                const float* b_k = b_ptr;
+                for (l = 0; l < k; ++l) {
+                    sum += (*a_k) * (*b_k);
+                    a_k += a_stride;
+                    b_k += b_stride;
+                }
             }
 
             if (beta != 0.0f) {

@@ -270,6 +270,11 @@ struct TestCaseIterators
     bool            has_tolerances = false; ///< Whether tolerance is present
     ToleranceConfig tolerances; ///< Tolerance configuration if present
 
+    // Optional NaN-equality opt-in: when true, two NaNs at the same output
+    // position are treated as equal (for deliberate NaN-propagation tests).
+    // Default (false) treats a NaN in the output as a mismatch.
+    bool treat_nan_equal = false;
+
     /**
      * @brief Default constructor - creates default-constructed
      * TypeErasedIterators
@@ -869,6 +874,15 @@ class MicroTest
     const ToleranceConfig& getTolerances() const
     {
         return m_test_case_iterators.tolerances;
+    }
+
+    /**
+     * @brief Whether two NaNs at the same output position should compare equal
+     * @return bool True if NaN==NaN equality is opted in, false otherwise
+     */
+    bool getTreatNaNEqual() const
+    {
+        return m_test_case_iterators.treat_nan_equal;
     }
 
     /**

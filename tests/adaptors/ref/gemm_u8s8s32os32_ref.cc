@@ -90,8 +90,13 @@ aocl_gemm_u8s8s32os32_ref(const char      order,
             const uint8_t* a_k = a_ptr;
             const int8_t*  b_k = b_ptr;
 
-            // Loop over k dimension
-            for (l = 0; l < k; l++) {
+            // Loop over k dimension.
+            // BLAS contract: when alpha == 0 the result is independent of A and
+            // B, which must not be referenced. The alpha guard on the loop
+            // condition skips the accumulation entirely, leaving sum at 0 so
+            // the result reduces to the beta * C term below, independent of
+            // A/B.
+            for (l = 0; alpha != 0 && l < k; l++) {
                 uint8_t a_unsigned = *a_k; // Already unsigned: 0-255
                 int8_t  b_signed   = *b_k; // Signed: -128 to 127
 

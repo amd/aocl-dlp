@@ -93,8 +93,14 @@ aocl_gemm_f32f16f32of32_ref(const char     order,
     for (iter_t i = 0; i < m; i++) {
         for (iter_t j = 0; j < n; j++) {
             float sum = 0.0f;
-            for (iter_t p = 0; p < k; p++) {
-                sum += getA(i, p) * getB(p, j);
+            // BLAS contract: when alpha == 0 the result is independent of A and
+            // B, which must not be referenced. Skipping the accumulation leaves
+            // sum at 0 so the write-back below reduces to beta * C_initial (or
+            // 0 when beta == 0), never propagating NaN/Inf from A or B.
+            if (alpha != 0.0f) {
+                for (iter_t p = 0; p < k; p++) {
+                    sum += getA(i, p) * getB(p, j);
+                }
             }
             if (beta != 0.0f) {
                 getC(i, j) = alpha * sum + beta * getC(i, j);

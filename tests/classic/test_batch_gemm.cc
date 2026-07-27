@@ -115,6 +115,10 @@ struct BatchGemmTestConfig
     double tolerance_relative = -1.0;
     double tolerance_absolute = -1.0;
 
+    // Optional NaN-equality opt-in for deliberate NaN-propagation tests.
+    // Default (false) treats a NaN in the output as a mismatch.
+    bool treat_nan_equal = false;
+
     // PostOps support (per-group to handle dimension-dependent PostOps)
     bool has_postops = false;
     std::vector<std::vector<std::unique_ptr<IOperationParam>>>
@@ -156,6 +160,7 @@ struct BatchGemmTestConfig
         , has_tolerances(other.has_tolerances)
         , tolerance_relative(other.tolerance_relative)
         , tolerance_absolute(other.tolerance_absolute)
+        , treat_nan_equal(other.treat_nan_equal)
         , has_postops(other.has_postops)
         , config_index(other.config_index)
     {
@@ -379,6 +384,8 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file,
                     config.tolerance_absolute = tol.absolute;
                 }
 
+                config.treat_nan_equal = microTest.getTreatNaNEqual();
+
                 // Collect all iterations as groups
                 size_t j = 0;
                 do {
@@ -489,6 +496,8 @@ loadBatchGemmTestConfigurations(const std::string& yaml_file,
                         config.tolerance_relative = tol.relative;
                         config.tolerance_absolute = tol.absolute;
                     }
+
+                    config.treat_nan_equal = microTest.getTreatNaNEqual();
 
                     // CARTESIAN: Extract PostOps once (single group per test)
                     auto params  = microTest.getPostOpParams();
@@ -1121,6 +1130,7 @@ class BatchGemmYamlTest : public ::testing::TestWithParam<BatchGemmTestConfig>
                             compare_opts.absToleranceOverride =
                                 config.tolerance_absolute;
                         }
+                        compare_opts.treatNaNEqual = config.treat_nan_equal;
 
                         // Compare matrices
                         auto result = dlp_group.C_matrices[i].compare(

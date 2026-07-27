@@ -98,8 +98,13 @@ aocl_gemm_s8s8s32os32_ref(const char      order,
             int32_t dot_product = 0;
             int32_t b_sum       = 0; // Sum of B elements for bias correction
 
-            // Loop over k dimension
-            for (l = 0; l < k; l++) {
+            // Loop over k dimension.
+            // BLAS contract: when alpha == 0 the result is independent of A and
+            // B, which must not be referenced. The alpha guard on the loop
+            // condition skips the accumulation entirely, leaving sum at 0 so
+            // the result reduces to the beta * C term below, independent of
+            // A/B.
+            for (l = 0; alpha != 0 && l < k; l++) {
                 // Convert signed A to unsigned (equivalent to adding 128)
                 uint8_t a_unsigned = static_cast<uint8_t>(*a_k + 128);
                 int8_t  b_signed   = *b_k;

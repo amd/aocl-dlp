@@ -654,6 +654,13 @@ namespace dlp { namespace testing { namespace utils {
                 }
             }
 
+            // Parse NaN-equality opt-in if present. Only tests that
+            // deliberately assert NaN propagation should set this; the default
+            // treats a NaN in the output as a mismatch.
+            if (node["treat_nan_equal"]) {
+                iterators.treat_nan_equal = node["treat_nan_equal"].as<bool>();
+            }
+
             // Parse PostOps and PreOps if present.
             // Pre-operations (e.g. WOQ for bf16s4) and post_operations are
             // combined into one iterator: pre_ops first, then post_ops, so

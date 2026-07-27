@@ -1608,10 +1608,8 @@ TEST_F(MatrixCompareTest, VerboseModeStatisticsAccuracy)
 }
 
 // Test: NaN handling
-// NOTE: Special handling for NaN values.
-// Even though NaN is mathematically undefined and NaN == NaN is false, but
-// since we are testing for NaN propagation, we treat the two NaNs at the same
-// position to be equal
+// Same-position NaNs mismatch by default. Deliberate NaN-propagation tests can
+// opt in to treating them as equal.
 TEST_F(MatrixCompareTest, NaNHandling)
 {
     Matrix m1(2, 2, MatrixType::f32);
@@ -1630,13 +1628,25 @@ TEST_F(MatrixCompareTest, NaNHandling)
     m1 = Matrix::fromData(data1, MatrixType::f32);
     m2 = Matrix::fromData(data2, MatrixType::f32);
 
-    // NaN != NaN, but since we're comparing individual elements
-    // using std::isnan checks, TRUE will be reported.
+    // Default comparison must expose a NaN instead of allowing a reference
+    // result with the same NaN to mask it.
     auto result = m1.compare(m2, MatrixCompareOptions::Fast());
+    EXPECT_FALSE(result.equal);
+
+    result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+    EXPECT_FALSE(result.equal);
+    EXPECT_EQ(result.mismatchCount, 1);
+
+    // Tests that deliberately validate NaN propagation may opt in for both
+    // fast and verbose comparisons.
+    auto fast_opts          = MatrixCompareOptions::Fast();
+    fast_opts.treatNaNEqual = true;
+    result                  = m1.compare(m2, fast_opts);
     EXPECT_TRUE(result.equal);
 
-    // Verbose mode should report equality.
-    result = m1.compare(m2, MatrixCompareOptions::Verbose(10));
+    auto verbose_opts          = MatrixCompareOptions::Verbose(10);
+    verbose_opts.treatNaNEqual = true;
+    result                     = m1.compare(m2, verbose_opts);
     EXPECT_TRUE(result.equal);
     EXPECT_EQ(result.mismatchCount, 0);
 }

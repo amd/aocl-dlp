@@ -743,16 +743,14 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 float val2 = data2[i];
 
                 // NOTE: Special handling for NaN values.
-                // Even though NaN is mathematically undefined and
-                // NaN == NaN is false, but since we are testing for NaN
-                // propagation, we treat the two NaNs at the same position
-                // to be equal for the following scenarios:
-                // 1. If A/B matrices contain NaNs, the resulting C matrix
-                //    should also have NaNs.
-                // 2. Edge cases where operations result in NaN (0.0f/0.0f)
-                //    or beta * C(NaN).
+                // Two NaNs at the same position are treated as equal only when
+                // the caller opts in via treatNaNEqual (a deliberate NaN
+                // propagation test). By default a NaN in the output is a
+                // mismatch even when both sides are NaN, so a leak is not
+                // masked by a reference that reproduces it.
                 if (val1 == val2 // Check for exact equality
-                    || (std::isnan(val1) && std::isnan(val2))) {
+                    || (opts.treatNaNEqual && std::isnan(val1)
+                        && std::isnan(val2))) {
                     continue;
                 }
 
@@ -875,16 +873,14 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 float val2 = bf16_to_f32(bf16_val2);
 
                 // NOTE: Special handling for NaN values.
-                // Even though NaN is mathematically undefined and
-                // NaN == NaN is false, but since we are testing for NaN
-                // propagation, we treat the two NaNs at the same position
-                // to be equal for the following scenarios:
-                // 1. If A/B matrices contain NaNs, the resulting C matrix
-                //    should also have NaNs.
-                // 2. Edge cases where operations result in NaN (0.0f/0.0f)
-                //    or beta * C(NaN).
+                // Two NaNs at the same position are treated as equal only when
+                // the caller opts in via treatNaNEqual (a deliberate NaN
+                // propagation test). By default a NaN in the output is a
+                // mismatch even when both sides are NaN, so a leak is not
+                // masked by a reference that reproduces it.
                 if (val1 == val2 // Check for exact equality
-                    || (std::isnan(val1) && std::isnan(val2))) {
+                    || (opts.treatNaNEqual && std::isnan(val1)
+                        && std::isnan(val2))) {
                     continue;
                 }
 
@@ -1007,16 +1003,14 @@ Matrix::compare(const Matrix& other, const MatrixCompareOptions& opts) const
                 float val2 = fp16_to_f32(fp16_val2);
 
                 // NOTE: Special handling for NaN values.
-                // Even though NaN is mathematically undefined and
-                // NaN == NaN is false, but since we are testing for NaN
-                // propagation, we treat the two NaNs at the same position
-                // to be equal for the following scenarios:
-                // 1. If A/B matrices contain NaNs, the resulting C matrix
-                //    should also have NaNs.
-                // 2. Edge cases where operations result in NaN (0.0f/0.0f)
-                //    or beta * C(NaN).
+                // Two NaNs at the same position are treated as equal only when
+                // the caller opts in via treatNaNEqual (a deliberate NaN
+                // propagation test). By default a NaN in the output is a
+                // mismatch even when both sides are NaN, so a leak is not
+                // masked by a reference that reproduces it.
                 if (val1 == val2 // Check for exact equality
-                    || (std::isnan(val1) && std::isnan(val2))) {
+                    || (opts.treatNaNEqual && std::isnan(val1)
+                        && std::isnan(val2))) {
                     continue;
                 }
 

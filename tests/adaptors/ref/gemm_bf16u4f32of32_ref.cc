@@ -177,26 +177,32 @@ aocl_gemm_bf16u4f32of32_ref(const char            order,
             };
 
             float sum = 0.0f;
-            for (l = 0; l + 1 < k; l += 2) {
-                // dequant B to f32
-                float b0 = dequant_b_f32(b_u4_at(l));
-                float b1 = dequant_b_f32(b_u4_at(l + 1));
-                // convert f32 to bf16
-                float b_bf0 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b0));
-                float b_bf1 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b1));
-                // convert a_ptr to f32
-                float a_f32   = bf16_to_f32(*a_ptr);
-                float a_f32_1 = bf16_to_f32(*(a_ptr + a_stride));
-                // accumulate fma
-                sum = std::fma(a_f32_1, b_bf1, sum);
-                sum = std::fma(a_f32, b_bf0, sum);
-                a_ptr += 2 * a_stride;
-            }
-            if (l < k) {
-                float b_bf = bf16_to_f32(
-                    f32_to_bf16_vcvtneps2bf16(dequant_b_f32(b_u4_at(l))));
-                float a_f32 = bf16_to_f32(*a_ptr);
-                sum         = std::fma(a_f32, b_bf, sum);
+            // BLAS contract: when alpha == 0 the result is independent of A and
+            // B, which must not be referenced. Skipping the accumulation leaves
+            // sum at 0 so the write-back below reduces to beta * C_initial (or
+            // 0 when beta == 0), never propagating NaN/Inf from A or B.
+            if (alpha != 0.0f) {
+                for (l = 0; l + 1 < k; l += 2) {
+                    // dequant B to f32
+                    float b0 = dequant_b_f32(b_u4_at(l));
+                    float b1 = dequant_b_f32(b_u4_at(l + 1));
+                    // convert f32 to bf16
+                    float b_bf0 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b0));
+                    float b_bf1 = bf16_to_f32(f32_to_bf16_vcvtneps2bf16(b1));
+                    // convert a_ptr to f32
+                    float a_f32   = bf16_to_f32(*a_ptr);
+                    float a_f32_1 = bf16_to_f32(*(a_ptr + a_stride));
+                    // accumulate fma
+                    sum = std::fma(a_f32_1, b_bf1, sum);
+                    sum = std::fma(a_f32, b_bf0, sum);
+                    a_ptr += 2 * a_stride;
+                }
+                if (l < k) {
+                    float b_bf = bf16_to_f32(
+                        f32_to_bf16_vcvtneps2bf16(dequant_b_f32(b_u4_at(l))));
+                    float a_f32 = bf16_to_f32(*a_ptr);
+                    sum         = std::fma(a_f32, b_bf, sum);
+                }
             }
 
             if (beta != 0.0f)

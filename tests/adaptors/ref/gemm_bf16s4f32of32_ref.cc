@@ -140,24 +140,30 @@ aocl_gemm_bf16s4f32of32_ref(const char            order,
 
             float scale_j = getScale(j);
             float sum     = 0.0f;
-            for (l = 0; l < k; l++) {
-                int8_t b_s8;
-                if (transb == 'N' || transb == 'n') {
-                    if (reorder_b)
-                        b_s8 = unpack_s4(B, b_ldb, j, l);
-                    else
-                        b_s8 = unpack_s4(B, b_ldb, l, j);
-                } else {
-                    if (reorder_b)
-                        b_s8 = unpack_s4(B, b_ldb, l, j);
-                    else
-                        b_s8 = unpack_s4(B, b_ldb, j, l);
+            // BLAS contract: when alpha == 0 the result is independent of A and
+            // B, which must not be referenced. Skipping the accumulation leaves
+            // sum at 0 so the write-back below reduces to beta * C_initial (or
+            // 0 when beta == 0), never propagating NaN/Inf from A or B.
+            if (alpha != 0.0f) {
+                for (l = 0; l < k; l++) {
+                    int8_t b_s8;
+                    if (transb == 'N' || transb == 'n') {
+                        if (reorder_b)
+                            b_s8 = unpack_s4(B, b_ldb, j, l);
+                        else
+                            b_s8 = unpack_s4(B, b_ldb, l, j);
+                    } else {
+                        if (reorder_b)
+                            b_s8 = unpack_s4(B, b_ldb, l, j);
+                        else
+                            b_s8 = unpack_s4(B, b_ldb, j, l);
+                    }
+                    float b_f32 = static_cast<float>(b_s8) * scale_j;
+                    // Match DLP: kernel converts scaled B to bf16 before matmul
+                    b_f32 = bf16_to_f32(f32_to_bf16(b_f32));
+                    sum += bf16_to_f32(*a_ptr) * b_f32;
+                    a_ptr += a_stride;
                 }
-                float b_f32 = static_cast<float>(b_s8) * scale_j;
-                // Match DLP: kernel converts scaled B to bf16 before matmul
-                b_f32 = bf16_to_f32(f32_to_bf16(b_f32));
-                sum += bf16_to_f32(*a_ptr) * b_f32;
-                a_ptr += a_stride;
             }
             if (beta != 0.0f)
                 C[i * ldc + j] = alpha * sum + beta * C[i * ldc + j];

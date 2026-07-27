@@ -201,7 +201,12 @@ aocl_gemm_s8s8s32of32_sym_quant_ref(const char    order,
                 const md_t g_first = pc / gs;
                 const md_t g_last  = (pc + kc0 - 1) / gs;
 
-                for (md_t g = g_first; g <= g_last; ++g) {
+                // BLAS contract: when alpha == 0 the result is independent of A
+                // and B, which must not be referenced. The alpha guard on the
+                // loop condition skips the segment dot products, leaving
+                // chunk_acc at 0 so each KC block collapses to beta * C, never
+                // propagating NaN/Inf from A or B.
+                for (md_t g = g_first; alpha_f != 0.0f && g <= g_last; ++g) {
                     md_t l0 = std::max(g * gs, pc);
                     md_t l1 = std::min(std::min(g * gs + gs, k), seg_end);
                     if (l0 >= l1) {

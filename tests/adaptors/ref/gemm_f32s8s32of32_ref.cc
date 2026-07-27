@@ -192,7 +192,12 @@ aocl_gemm_f32s8s32of32_ref(const char            order,
             // -----------------------------------------------------------------
             // Inner product computation with on-the-fly quantization
             // -----------------------------------------------------------------
-            for (l = 0; l < k; l++) {
+            // BLAS contract: when alpha == 0 the result is independent of A and
+            // B, which must not be referenced. The alpha guard on the loop
+            // condition skips the accumulation entirely, leaving the dot
+            // product (and the B-derived bias correction) at 0 so the result
+            // reduces to the beta * C term below, independent of A/B.
+            for (l = 0; alpha != 0 && l < k; l++) {
                 // Step 1: Quantize A element from F32 to S8
 
                 // Apply quantization formula:
