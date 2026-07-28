@@ -26,6 +26,7 @@
  *
  */
 
+#include "aocl_dlp.h"
 #include "framework/matrix.hh"
 #include "framework/operation.hh"
 #include "framework/ual.hh"
@@ -34,6 +35,7 @@
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
 #include <cctype>
+#include <cstring>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <iterator>
@@ -1026,6 +1028,99 @@ TEST(BatchGemmTest, GlobalPostOpsMultipleGroups)
                 << FormatCompareResult(result, dlp_group.C_matrices[i],
                                        ref_group.C_matrices[i]);
         }
+    }
+}
+
+// When a group fails parameter validation the batch aborts before the later
+// groups are computed. Callers routinely zero-initialise their metadata and
+// DLP_CLSC_SUCCESS is zero, so a group the routine never processes must be
+// left flagged as failed rather than inheriting an implicit success over
+// output that was never written. This drives the C API directly because the
+// per-group error codes are not observable through the UAL wrapper.
+TEST(BatchGemmTest, SkippedGroupsReportFailureNotSuccess)
+{
+    constexpr int   group_count   = 4;
+    constexpr int   dim           = 8; // square M = N = K
+    constexpr int   invalid_group = 1; // made invalid via lda = 0
+    constexpr float sentinel      = -999.0f;
+    constexpr float expected_c0   = static_cast<float>(dim); // ones·ones over K
+
+    // One matrix per group. A and B are all-ones so a correctly computed
+    // C[0] equals K (== dim); C starts at a sentinel so untouched output is
+    // recognisable.
+    std::vector<std::vector<float>> a_data(group_count,
+                                           std::vector<float>(dim * dim, 1.0f));
+    std::vector<std::vector<float>> b_data(group_count,
+                                           std::vector<float>(dim * dim, 1.0f));
+    std::vector<std::vector<float>> c_data(
+        group_count, std::vector<float>(dim * dim, sentinel));
+
+    std::vector<char> order(group_count, 'r');
+    std::vector<char> transa(group_count, 'n');
+    std::vector<char> transb(group_count, 'n');
+    std::vector<char> mem_format_a(group_count, 'n');
+    std::vector<char> mem_format_b(group_count, 'n');
+
+    std::vector<md_t> m(group_count, dim);
+    std::vector<md_t> n(group_count, dim);
+    std::vector<md_t> k(group_count, dim);
+    std::vector<md_t> lda(group_count, dim);
+    std::vector<md_t> ldb(group_count, dim);
+    std::vector<md_t> ldc(group_count, dim);
+    std::vector<md_t> group_size(group_count, 1);
+
+    std::vector<float> alpha(group_count, 1.0f);
+    std::vector<float> beta(group_count, 0.0f);
+
+    std::vector<const float*> a_ptrs(group_count);
+    std::vector<const float*> b_ptrs(group_count);
+    std::vector<float*>       c_ptrs(group_count);
+
+    std::vector<dlp_metadata_t>  metadata(group_count);
+    std::vector<dlp_metadata_t*> metadata_ptrs(group_count);
+
+    for (int g = 0; g < group_count; ++g) {
+        a_ptrs[g] = a_data[g].data();
+        b_ptrs[g] = b_data[g].data();
+        c_ptrs[g] = c_data[g].data();
+
+        // Zero-init mirrors the common caller pattern where an unset error
+        // code equals DLP_CLSC_SUCCESS.
+        std::memset(&metadata[g], 0, sizeof(dlp_metadata_t));
+        metadata_ptrs[g] = &metadata[g];
+    }
+
+    // Invalidate a middle group: lda < k fails the leading-dimension check and
+    // aborts the shared validate/compute loop before the later groups run.
+    lda[invalid_group] = 0;
+
+    aocl_batch_gemm_f32f32f32of32(
+        order.data(), transa.data(), transb.data(), m.data(), n.data(),
+        k.data(), alpha.data(), a_ptrs.data(), lda.data(), b_ptrs.data(),
+        ldb.data(), beta.data(), c_ptrs.data(), ldc.data(), group_count,
+        group_size.data(), mem_format_a.data(), mem_format_b.data(),
+        metadata_ptrs.data());
+
+    if (metadata[0].error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
+        GTEST_SKIP() << "F32 batch GEMM not supported on this processor "
+                        "(missing AVX2)";
+    }
+
+    // The group before the failure is computed and reports success.
+    EXPECT_EQ(metadata[0].error_hndl.error_code, DLP_CLSC_SUCCESS);
+    EXPECT_EQ(c_data[0][0], expected_c0);
+    // The invalid group reports its specific validation error.
+    EXPECT_NE(metadata[invalid_group].error_hndl.error_code, DLP_CLSC_SUCCESS);
+    EXPECT_EQ(metadata[invalid_group].error_hndl.error_code,
+              DLP_CLSC_INVALID_LEADING_DIMENSION);
+
+    // Groups after the failure are never processed: they must report failure
+    // rather than an implicit success, and their output must be untouched.
+    for (int g = invalid_group + 1; g < group_count; ++g) {
+        EXPECT_EQ(metadata[g].error_hndl.error_code, DLP_CLSC_FAILURE)
+            << "skipped group " << g << " must not report success";
+        EXPECT_EQ(c_data[g][0], sentinel)
+            << "skipped group " << g << " output was unexpectedly written";
     }
 }
 

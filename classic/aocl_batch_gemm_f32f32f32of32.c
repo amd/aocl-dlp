@@ -83,9 +83,16 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
     // offset to get subsequent matrix when group_count > 1
     md_t mat_idx = 0;
 
+    // Default every group to a failure state so a group only reports success
+    // once it has actually been computed. Aborting the batch on a group error
+    // leaves later groups unprocessed, and a zero-initialised metadata code
+    // equals DLP_CLSC_SUCCESS, so without this they would falsely report
+    // success over uncomputed output.
     for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
+        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_FAILURE);
+    }
 
-        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+    for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         // Group_size is used across
         md_t g_sz = group_size[gc_i];
@@ -309,6 +316,9 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
             &c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i], &rntm_g,
             &lcntx_l, &ops, DLP_F32);
 #endif
+        // The group completed compute; record success only now.
+        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+
         // Increment the matrix index to get the next matrix in the group.
         mat_idx += g_sz;
     }

@@ -1306,7 +1306,26 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
                                const char*      mem_format_b,
                                dlp_metadata_t** metadata);
 
-/// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
+/**
+ * @copydoc aocl_batch_gemm_bf16bf16f32of32
+ *
+ * @details Processing stops at the first group that fails. On return, each
+ * non-NULL element of @p metadata reports one of the following:
+ * - @c DLP_CLSC_SUCCESS: the group was computed successfully.
+ * - @c DLP_CLSC_FAILURE: the group was not processed because an earlier group
+ *   failed, or the group was processed and encountered a generic failure.
+ * - Any other non-success @c dlp_clsc_err_t value: the group was processed and
+ *   encountered the reported error. Batch-level errors (for example,
+ *   @c DLP_CLSC_NOT_SUPPORTED) may be reported even when no groups were
+ * processed.
+ *
+ * Callers must not rely on the initial value of an error code to indicate that
+ * its group was processed.
+ *
+ * @param[in,out] metadata Array of pointers to per-group post-operation
+ * structures. On return, each non-NULL element contains its group status in
+ * @c error_hndl.error_code as described above.
+ */
 DLP_CLASSIC_EXPORT void
 aocl_batch_gemm_f32f32f32of32(const char*      order,
                               const char*      transa,
