@@ -810,3 +810,210 @@ gemm_tests:
             b_scale_type: ["f32"]
             b_scale_len: ["1"]
             group_size: ["32"]
+
+# --------------------------------------------------------------------------
+  # sym_quant (GroupScale) N==1 GEMV regression cases.
+  #
+  # These guard three defects previously found in the s8s8s32 symmetric
+  # group-quant GEMV path (aocl_gemm_s8s8s32of32_sym_quant):
+  #
+  #   Defect 1 - N==1, group_size >= 128, M >= 4, B reordered: the N==1
+  #              micro-kernel failed to advance the A pointer to the next
+  #              64-wide k-block, so every k iteration after the first
+  #              re-read the first block. Only triggers when a group spans
+  #              more than one 64-element k iteration (group_size >= 128).
+  #   Defect 2 - group straddling a KC (2048) boundary (K > KC and
+  #              KC % group_size != 0): the group was split across two KC
+  #              panels and mis-accumulated.
+  #   Defect 3 - row-major + transA: A is packed, but the N==1 GEMV kernel
+  #              read it as plain row-major and ran off the end (OOB).
+  #
+  # The N==1 harness can only describe a single quantization group with
+  # per-row/per-col scales (a_scale_len "m" yields m scales while a multi
+  # -group kernel needs m*num_groups). So the multi-group case (defect 2)
+  # uses scalar scales (len 1), which both the DLP and reference adaptors
+  # broadcast to the full per-group size.
+
+  # Defect 1: N==1, group_size >= 128, M >= 4. k == group_size keeps a
+  # single group so per-row/per-col scales stay exact. M sweep covers the
+  # >=4 / >=8 / primary(16) / multi-tile(>16) micro-kernel paths.
+  - name: "regress_symquant_defect1_gemv_n1_gs128"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 48]
+    n: [1]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["128"]
+
+  # Defect 1 (deeper): group_size 256 gives k_iter == 4 inside one group.
+  - name: "regress_symquant_defect1_gemv_n1_gs256"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [4, 8, 16, 17, 33]
+    n: [1]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["256"]
+
+  # Defect 3: row-major + transA with N==1 forces A-packing. Single group
+  # (k == group_size) keeps scales exact. Before the fix this read out of
+  # bounds; after it, the case routes to the general 5-loop GEMM path.
+  - name: "regress_symquant_defect3_gemv_n1_transA"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [true]
+    transB: [false]
+    m: [1, 4, 8, 16, 17, 64]
+    n: [1]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["128"]
+
+  # Defect 2: group straddles a KC (2048) boundary. K > 2048 and
+  # 2048 % group_size != 0 (2048 % 20 == 8). Multi-group, so scalar scales.
+  - name: "regress_symquant_defect2_kc_straddle_gs20"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 4, 16]
+    n: [1, 16]
+    k: [2180]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["20"]
+
+  # Defect 2 (larger group): 2048 % 160 == 128, K == 2560 (16 groups).
+  - name: "regress_symquant_defect2_kc_straddle_gs160"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16]
+    n: [1, 16]
+    k: [2560]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["160"]
+
+  # --------------------------------------------------------------------------
+  # u8s8s32 N==1 GEMV alpha==0 regression (aocl_gemm_u8s8s32o*).
+  #
+  # A #596 regression ("skip k-loop + alpha mul when alpha==0") gated the whole
+  # MR-row tile loop of the JIT u8s8 N==1 GEMV kernel on alpha!=0, so for
+  # M >= MR (16) the full MR-row tiles were never written and C kept garbage;
+  # only the M%MR fringe rows below were stored. With alpha==0 the result must
+  # be exactly beta*C. M sweep crosses the MR=16 tile boundary; beta 0 (all
+  # zero) and 1 (C preserved) both exercise the store path.
+  # --------------------------------------------------------------------------
+  - name: "regress_u8s8_gemv_n1_alpha0"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32", "s8", "bf16", "f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 15, 16, 17, 32, 33, 64]
+    n: [1]
+    k: [64]
+    alpha: [0]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0

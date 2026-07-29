@@ -193,8 +193,12 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // Load 4x64 elements from row12-row15 of A
                     DLP_GEMV_N_KERNEL_4_LOADS(zmm0, zmm1, zmm2, zmm3, a_group,
                                               rs_a)
-                    a_group -=
-                        (12 * rs_a); // Update aptr back to move horizontally
+                    a_group -= (12 * rs_a); // Move back to row 0.
+                    // Advance horizontally to the next 64-element k-block.
+                    // Required when a group spans more than one 64-wide k
+                    // iteration (group_size >= 128); without it every k
+                    // iteration after the first re-reads the first k-block.
+                    a_group += 64;
 
                     DLP_GEMV_N_KERNEL_4_FMA(zmm12, zmm13, zmm14, zmm15, zmm6,
                                             zmm24, zmm25, zmm26, zmm27)
@@ -404,8 +408,12 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         DLP_GEMV_N_KERNEL_4_LOADS(zmm24, zmm25, zmm26, zmm27,
                                                   a_group, rs_a)
 
-                        a_group -=
-                            (4 * rs_a); // Update aptr back to move horizontally
+                        a_group -= (4 * rs_a); // Move back to row 0.
+                        // Advance horizontally to the next 64-element k-block.
+                        // Required when a group spans more than one 64-wide k
+                        // iteration (group_size >= 128); without it every k
+                        // iteration after the first re-reads the first k-block.
+                        a_group += 64;
 
                         // Perform FMA on two 4x64 block of A with 64x1
                         DLP_GEMV_N_KERNEL_4_FMA(zmm8, zmm9, zmm10, zmm11, zmm6,
@@ -582,6 +590,12 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // Perform FMA on two 4x64 block of A with 64x1
                         DLP_GEMV_N_KERNEL_4_FMA(zmm16, zmm17, zmm18, zmm19,
                                                 zmm6, zmm0, zmm1, zmm2, zmm3)
+
+                        // Advance horizontally to the next 64-element k-block.
+                        // Required when a group spans more than one 64-wide k
+                        // iteration (group_size >= 128); without it every k
+                        // iteration after the first re-reads the first k-block.
+                        a_group += 64;
                     } // k loop
 
                     if (k_rem) {

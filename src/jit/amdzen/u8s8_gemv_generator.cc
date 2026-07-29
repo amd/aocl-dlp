@@ -1502,7 +1502,13 @@ jitU8S8VNNI_GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
     //     prefetcht0(ptr[regYptr]);
     // }
 
-    if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+    // The main M-loop must execute for every alpha value, including alpha==0.
+    // generateIrLoop() already zeroes the accumulators and skips only the
+    // k-loop compute when alpha==0, while still storing the (zeroed) result.
+    // Gating the whole tile loop on alpha!=0 left the full MR-row tiles
+    // unwritten for alpha==0 (only the M%MR fringe rows below were stored),
+    // so C retained garbage for M >= MR.
+    {
 
         RETURN_IF_ERROR(
             generateIrLoop(MR)); // Processes and Accumulates entire K dim

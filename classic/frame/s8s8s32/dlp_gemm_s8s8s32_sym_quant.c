@@ -40,6 +40,100 @@
 // 1. Mandatory for matrix B to be reordered, i.e., mtag_b == REORDERED.
 // 2. K should be divisible by group_size.
 #ifdef DLP_KERNELS_ZEN4
+#include <immintrin.h>
+#include <string.h>
+
+// Transpose a 16x16 int8 tile with SSE2 (no lane crossing). in[i] is the
+// 16-byte row at (src + i*src_rs); out row j (dst + j*dst_rs) is filled with
+// the i-th byte of every in[i], i.e. dst[j][i] = src[i][j].
+static inline void
+dlp_transpose16x16_i8(const int8_t* src, md_t src_rs, int8_t* dst, md_t dst_rs)
+{
+    __m128i x[16];
+    for (int i = 0; i < 16; ++i) {
+        x[i] = _mm_loadu_si128((const __m128i*)(src + i * src_rs));
+    }
+    __m128i b[16];
+    for (int i = 0; i < 8; ++i) {
+        b[2 * i]     = _mm_unpacklo_epi8(x[2 * i], x[2 * i + 1]);
+        b[2 * i + 1] = _mm_unpackhi_epi8(x[2 * i], x[2 * i + 1]);
+    }
+    static const int p16[8][2] = {
+        { 0, 2 },  { 1, 3 },  { 4, 6 },   { 5, 7 },
+        { 8, 10 }, { 9, 11 }, { 12, 14 }, { 13, 15 }
+    };
+    __m128i c[16];
+    for (int i = 0; i < 8; ++i) {
+        c[2 * i]     = _mm_unpacklo_epi16(b[p16[i][0]], b[p16[i][1]]);
+        c[2 * i + 1] = _mm_unpackhi_epi16(b[p16[i][0]], b[p16[i][1]]);
+    }
+    static const int p32[8][2] = {
+        { 0, 4 },  { 1, 5 },  { 2, 6 },   { 3, 7 },
+        { 8, 12 }, { 9, 13 }, { 10, 14 }, { 11, 15 }
+    };
+    __m128i d[16];
+    for (int i = 0; i < 8; ++i) {
+        d[2 * i]     = _mm_unpacklo_epi32(c[p32[i][0]], c[p32[i][1]]);
+        d[2 * i + 1] = _mm_unpackhi_epi32(c[p32[i][0]], c[p32[i][1]]);
+    }
+    static const int p64[8][2] = { { 0, 8 },  { 1, 9 },  { 2, 10 }, { 3, 11 },
+                                   { 4, 12 }, { 5, 13 }, { 6, 14 }, { 7, 15 } };
+    for (int i = 0; i < 8; ++i) {
+        _mm_storeu_si128((__m128i*)(dst + (2 * i) * dst_rs),
+                         _mm_unpacklo_epi64(d[p64[i][0]], d[p64[i][1]]));
+        _mm_storeu_si128((__m128i*)(dst + (2 * i + 1) * dst_rs),
+                         _mm_unpackhi_epi64(d[p64[i][0]], d[p64[i][1]]));
+    }
+}
+
+// Gather a (possibly transposed / strided) source A block into a plain
+// row-major (mc0 x k) buffer with k contiguous, as required by the n == 1
+// GEMV micro-kernel (dst[r*k + kk] == a_src[r*rs_a + kk*cs_a]).
+//   - cs_a == 1 : source rows are already k-contiguous -> per-row copy.
+//   - rs_a == 1 : transposed layout (row-major + transA) -> 16x16 int8 tile
+//                 transpose with contiguous loads along r; scalar for the
+//                 mc0 % 16 / k % 16 fringes.
+//   - otherwise : scalar gather (general strided fallback).
+static void
+dlp_gather_a_rowmajor_s8(
+    int8_t* dst, const int8_t* a_src, md_t mc0, md_t k, md_t rs_a, md_t cs_a)
+{
+    if (cs_a == 1) {
+        for (md_t r = 0; r < mc0; ++r) {
+            memcpy(dst + r * k, a_src + r * rs_a, (size_t)k);
+        }
+        return;
+    }
+    if (rs_a == 1) {
+        const md_t r16 = (mc0 / 16) * 16;
+        const md_t k16 = (k / 16) * 16;
+        for (md_t r0 = 0; r0 < r16; r0 += 16) {
+            for (md_t kk0 = 0; kk0 < k16; kk0 += 16) {
+                dlp_transpose16x16_i8(a_src + r0 + kk0 * cs_a, cs_a,
+                                      dst + r0 * k + kk0, k);
+            }
+            // k fringe for these full r-rows.
+            for (md_t r = r0; r < r0 + 16; ++r) {
+                for (md_t kk = k16; kk < k; ++kk) {
+                    dst[r * k + kk] = a_src[r + kk * cs_a];
+                }
+            }
+        }
+        // r fringe (all k).
+        for (md_t r = r16; r < mc0; ++r) {
+            for (md_t kk = 0; kk < k; ++kk) {
+                dst[r * k + kk] = a_src[r + kk * cs_a];
+            }
+        }
+        return;
+    }
+    for (md_t r = 0; r < mc0; ++r) {
+        for (md_t kk = 0; kk < k; ++kk) {
+            dst[r * k + kk] = a_src[r * rs_a + kk * cs_a];
+        }
+    }
+}
+
 DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 {
     (void)rntm; /* Threading handled via thread object, not rntm. */
@@ -48,13 +142,27 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
     md_t MC = lcntx->blksz.MC;
     md_t NR = lcntx->blksz.NR;
 
-    // Group size should always be <= KC to make sure that entire group is
-    // processed within one micro-kernel call. If group size is greater than KC,
-    // then KC will be updated to group size. This same change is done in
-    // reorder function to maintain consistency between reorder and GEMM
-    // execution.
+    // A quantization group must be processed entirely within one KC block so
+    // that its int32 accumulation completes before the group scale is applied;
+    // a group that straddles a KC boundary is split and scaled incorrectly.
+    // Keep KC aligned to the group size (grow up to group_size when it is
+    // larger than KC, otherwise shrink to the largest multiple of group_size).
+    // The same adjustment is done in the reorder function to keep the
+    // reordered-B layout consistent with GEMM execution.
+    //
+    // NOTE: reorder and GEMM are separate API calls with no channel to hand a
+    // chosen KC across, so each side recomputes the SAME adjusted KC here. This
+    // is safe only because it is a pure function of (base KC, group_size): base
+    // KC is the static S8S8S32OS32 block-size table value (identical for a
+    // given arch/config -- already a precondition for reusing reordered B) and
+    // group_size comes from the same metadata. If a runtime KC override is ever
+    // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
+    // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
+    // and GEMM panel boundaries diverge.
     if (grp_post_op_list->group_size > KC) {
         KC = grp_post_op_list->group_size;
+    } else if ((KC % grp_post_op_list->group_size) != 0) {
+        KC = (KC / grp_post_op_list->group_size) * grp_post_op_list->group_size;
     }
 
     // Strides are updated based on matrix packing/reordering.
@@ -151,6 +259,15 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
             post_ops_attr.rs_c_downscale = rs_c;
 
             if (mtag_a == PACK) {
+                // The n == 1 micro-kernel reads A as plain row-major with a
+                // contiguous k dimension (row stride rs_a_use, column stride
+                // 1). It cannot consume the VNNI-packed layout produced by
+                // packa_fun_ptr. When A is packed (e.g. row-major + transposed
+                // A, where rs_a == 1 and cs_a == lda), gather it into a
+                // row-major (mc0 x k) scratch buffer so the kernel sees
+                // k-contiguous rows. dlp_gather_a_rowmajor_s8() vectorizes this
+                // (16x16 int8 tile transpose for the transposed layout, per-row
+                // copy when k is already contiguous).
                 mem_a_size_req = sizeof(int8_t) * mc0 * k;
 
                 if (pack_a_buffer_s8s8s32os32 == NULL) {
@@ -159,11 +276,11 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                         dlp_malloc_page_aligned(mem_a_size_req, &ret_err);
                 }
 
-                ((packa_s32)lcntx->packa_fun_ptr)(
-                    (uint8_t*)pack_a_buffer_s8s8s32os32,
-                    (uint8_t*)(a + (rs_a * ic)), rs_a, cs_a, mc0, k, &rs_a_use,
-                    &cs_a_use);
-                a_use = pack_a_buffer_s8s8s32os32;
+                dlp_gather_a_rowmajor_s8(pack_a_buffer_s8s8s32os32,
+                                         a + (rs_a * ic), mc0, k, rs_a, cs_a);
+                a_use    = pack_a_buffer_s8s8s32os32;
+                rs_a_use = k;
+                cs_a_use = 1;
             }
 
             // Call dlp_gemv_n_one kernel
@@ -294,7 +411,7 @@ DLP_GEMM_5LOOP_UNIFIED(
 #ifdef DLP_KERNELS_ZEN4
     // Invoke sym_quant gemv kernels for m = 1 or n = 1.
     // Quantized GEMV is supported iff K and KC are divisible by group_size.
-    // Fall back to GEMM Path otherwise.
+    // Fall back to GEMM path otherwise.
     if (((k % grp_post_op_list->group_size) == 0)
         && ((KC % grp_post_op_list->group_size) == 0) && (mtag_b == REORDERED)
         && ((m == 1) || (n == 1))) {
@@ -308,13 +425,30 @@ DLP_GEMM_5LOOP_UNIFIED(
     }
 #endif
 
-    // Group size should always be <= KC to make sure that entire group is
-    // processed within one micro-kernel call. If group size is greater than KC,
-    // then KC will be updated to group size. This same change is done in
-    // reorder function to maintain consistency between reorder and GEMM
-    // execution.
+    // A quantization group must be processed entirely within one KC block so
+    // that its int32 accumulation completes before the group scale is applied;
+    // a group that straddles a KC boundary is split across two pc iterations
+    // and scaled incorrectly. Keep KC aligned to the group size:
+    //  - if group_size > KC, grow KC up to group_size;
+    //  - if group_size < KC but does not divide KC, shrink KC down to the
+    //    largest multiple of group_size (so KC boundaries fall on group
+    //    boundaries).
+    // The same adjustment is done in the reorder function to keep the
+    // reordered-B layout consistent with GEMM execution.
+    //
+    // NOTE: reorder and GEMM are separate API calls with no channel to hand a
+    // chosen KC across, so each side recomputes the SAME adjusted KC here. This
+    // is safe only because it is a pure function of (base KC, group_size): base
+    // KC is the static S8S8S32OS32 block-size table value (identical for a
+    // given arch/config -- already a precondition for reusing reordered B) and
+    // group_size comes from the same metadata. If a runtime KC override is ever
+    // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
+    // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
+    // and GEMM panel boundaries diverge.
     if (grp_post_op_list->group_size > KC) {
         KC = grp_post_op_list->group_size;
+    } else if ((KC % grp_post_op_list->group_size) != 0) {
+        KC = (KC / grp_post_op_list->group_size) * grp_post_op_list->group_size;
     }
 
     // Strides are updated based on matrix packing/reordering.

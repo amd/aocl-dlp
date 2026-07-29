@@ -249,12 +249,30 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
     md_t KC = lcntx->blksz.KC;
     md_t NR = lcntx->blksz.NR;
 
-    // Group size should always be <= KC to make sure that entire group is
-    // processed within one micro-kernel call. If group size is greater than KC,
-    // then KC will be updated to group size. This same change will be done in
-    // GEMM 5-loop to maintain consistency between reorder and GEMM execution.
+    // A quantization group must be processed entirely within one KC block so
+    // that its int32 accumulation completes before the group scale is applied;
+    // a group that straddles a KC boundary is split across two pc iterations
+    // and scaled incorrectly. Keep KC aligned to the group size:
+    //  - if group_size > KC, grow KC up to group_size;
+    //  - if group_size < KC but does not divide KC, shrink KC down to the
+    //    largest multiple of group_size (so KC boundaries fall on group
+    //    boundaries).
+    // The same adjustment is done in the GEMM 5-loop to keep the reordered-B
+    // layout consistent with GEMM execution.
+    //
+    // NOTE: reorder and GEMM are separate API calls with no channel to hand a
+    // chosen KC across, so each side recomputes the SAME adjusted KC here. This
+    // is safe only because it is a pure function of (base KC, group_size): base
+    // KC is the static S8S8S32OS32 block-size table value (identical for a
+    // given arch/config -- already a precondition for reusing reordered B) and
+    // group_size comes from the same metadata. If a runtime KC override is ever
+    // enabled (dlp_gemm_upd_cntx_with_metadata() is currently a no-op), it MUST
+    // be applied to blksz.KC BEFORE this rounding on BOTH sides, or the reorder
+    // and GEMM panel boundaries diverge.
     if (group_size > KC) {
         KC = group_size;
+    } else if ((KC % group_size) != 0) {
+        KC = (KC / group_size) * group_size;
     }
 
     md_t rs_b         = b->rs;
