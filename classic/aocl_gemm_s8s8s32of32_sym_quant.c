@@ -199,9 +199,10 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
     }
 
     // Add early returns for NULL group quantization parameters.
-    if (metadata == NULL || metadata->post_op_grp == NULL
-        || metadata->post_op_grp->a_scl == NULL
-        || metadata->post_op_grp->b_scl == NULL) {
+    if (metadata == NULL || metadata->a_quant_op == NULL
+        || metadata->b_quant_op == NULL
+        || metadata->a_quant_op->dequant_scale_factors == NULL
+        || metadata->b_quant_op->dequant_scale_factors == NULL) {
         dlp_print_msg(
             "Required parameters for symmetric quantized GEMM missing."
             " Exiting..",
@@ -213,7 +214,7 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
     // convert group-level post-op struct to linked list format.
     dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
     dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
-        metadata->post_op_grp, grp_post_op_list, m, n, k);
+        metadata->a_quant_op, metadata->b_quant_op, grp_post_op_list, m, n, k);
 
     if (err != DLP_CLSC_SUCCESS) {
         DLP_METADATA_SET_ERROR(metadata, err);
@@ -268,26 +269,23 @@ aocl_gemm_s8s8s32of32_sym_quant(const char      order,
                                    num_groups, sf_elem_size);
         }
 
-        // Swap the pointers and lengths in grp_post_op_list.
-        for (iter_t i = 0; i < metadata->post_op_grp->seq_length; ++i) {
-            // Swap scale factor pointers to transposed buffers.
-            grp_post_op_list[i].a_scale_factor = colmaj_a_scale_buf;
-            grp_post_op_list[i].b_scale_factor = colmaj_b_scale_buf;
+        // Swap scale factor pointers to transposed buffers.
+        grp_post_op_list[0].a_scale_factor = colmaj_a_scale_buf;
+        grp_post_op_list[0].b_scale_factor = colmaj_b_scale_buf;
 
-            // Swap scale factor lengths.
-            md_t tmp_sf_len = grp_post_op_list[i].a_scale_factor_len;
-            grp_post_op_list[i].a_scale_factor_len =
-                grp_post_op_list[i].b_scale_factor_len;
-            grp_post_op_list[i].b_scale_factor_len = tmp_sf_len;
+        // Swap scale factor lengths.
+        md_t tmp_sf_len = grp_post_op_list[0].a_scale_factor_len;
+        grp_post_op_list[0].a_scale_factor_len =
+            grp_post_op_list[0].b_scale_factor_len;
+        grp_post_op_list[0].b_scale_factor_len = tmp_sf_len;
 
-            // Swap zero-point pointers and lengths.
-            void* tmp_zp                 = grp_post_op_list[i].a_zp;
-            md_t  tmp_zp_len             = grp_post_op_list[i].a_zp_len;
-            grp_post_op_list[i].a_zp     = grp_post_op_list[i].b_zp;
-            grp_post_op_list[i].a_zp_len = grp_post_op_list[i].b_zp_len;
-            grp_post_op_list[i].b_zp     = tmp_zp;
-            grp_post_op_list[i].b_zp_len = tmp_zp_len;
-        }
+        // Swap zero-point pointers and lengths.
+        void* tmp_zp                 = grp_post_op_list[0].a_zp;
+        md_t  tmp_zp_len             = grp_post_op_list[0].a_zp_len;
+        grp_post_op_list[0].a_zp     = grp_post_op_list[0].b_zp;
+        grp_post_op_list[0].a_zp_len = grp_post_op_list[0].b_zp_len;
+        grp_post_op_list[0].b_zp     = tmp_zp;
+        grp_post_op_list[0].b_zp_len = tmp_zp_len;
     }
 
     // Convert post op struct to post op linked list format.

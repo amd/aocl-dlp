@@ -84,12 +84,14 @@
  *   - B memory format: Packed, Reordered, or Unpacked (auto-packed at runtime)
  *
  * Quantization requirements (via metadata):
- *   - Pre-quantization (BF16 -> S8): Requires a_pre_quant_sf scale factors
- *     Optional: zero_point for asymmetric quantization
- *   - Post-quantization (downscaling): Requires a_post_quant_sf scale factors
+ *   - A quantization (BF16 -> S8): requires
+ *     metadata->a_quant_op->quant_scale_factors.
+ *   - A dequantization/downscaling: requires
+ *     metadata->a_quant_op->dequant_scale_factors.
+ *   - Optional: metadata->a_quant_op->zero_point for asymmetric quantization.
  *   - Supports per-tensor (scale_factor_len = 1) or per-row (scale_factor_len =
  * m)
- *   - See dlp_quant_op structure for complete quantization parameter details
+ *   - See dlp_quant_op_t for complete quantization parameter details.
  *
  * Post-Operations Support:
  *   - Dequantization (pre-quantization, post-quantization)
@@ -97,29 +99,23 @@
  *
  * Example Usage:
  * @code
- *   // Per-tensor symmetric quantization (BF16 output)
- *   dlp_sf_t a_pre_quant_scl = {&a_pre_quant_sf, 1, DLP_F32};
- *   dlp_sf_t a_post_quant_scl = {&a_post_quant_sf, 1, DLP_F32};
- *   dlp_quant_op a_pre_quant = {0, DLP_BF16, DLP_S8, &a_pre_quant_scl, NULL,
- * true}; dlp_quant_op a_post_quant = {0, DLP_BF16, DLP_S8, &a_post_quant_scl,
- * NULL, true}; dlp_metadata_t metadata = {&a_pre_quant, &a_post_quant};
+ *   dlp_qparam_t quant_sf = { &a_quant_sf, 1, DLP_F32,
+ *                             DLP_PARAM_DIM_PER_TENSOR };
+ *   dlp_qparam_t dequant_sf = { &a_dequant_sf, 1, DLP_F32,
+ *                               DLP_PARAM_DIM_PER_TENSOR };
+ *   dlp_quant_op_t a_quant = { DLP_QUANT_OP_QUANTIZE, DLP_BF16, DLP_S8, 0,
+ *                              &quant_sf, &dequant_sf, NULL };
+ *   dlp_metadata_t metadata = { 0 };
+ *   metadata.a_quant_op = &a_quant;
  *
  *   aocl_gemm_bf16s8s32obf16('R', 'N', 'N', m, n, k, 1.0f,
  *                            a, lda, 'N', b, ldb, 'N', 0.0f, c_bf16, ldc,
  * &metadata);
- *
- *   // Per-row asymmetric quantization (use scale_factor_len = m, add
- * zero_point) float *sf_row = ..., *inv_sf_row = ..., *zp_row = ...; dlp_sf_t
- * pre_scl = {sf_row, m, DLP_F32}; dlp_sf_t post_scl = {inv_sf_row, m, DLP_F32};
- *   dlp_zp_t zp = {zp_row, m, DLP_F32};
- *   dlp_quant_op pre_quant = {0, DLP_BF16, DLP_S8, &pre_scl, &zp, false};
- *   dlp_quant_op post_quant = {0, DLP_BF16, DLP_S8, &post_scl, &zp, false};
- *   dlp_metadata_t meta = {&pre_quant, &post_quant, NULL, NULL};
  * @endcode
  *
  * See Also:
  *   - dlp_metadata_t: Metadata structure definition
- *   - dlp_quant_op: Quantization operation structure
+ *   - dlp_quant_op_t: Quantization operation structure
  *   - dlp_sf_t: Scale factor structure
  *   - dlp_zp_t: Zero point structure
  */
@@ -192,11 +188,12 @@ aocl_gemm_bf16s8s32_impl(const char        order,
         goto err_hndl;
     }
 
-    // Add early returns for NULL pointers.
-    if (metadata == NULL || metadata->a_pre_quant == NULL
-        || metadata->a_post_quant == NULL) {
-        dlp_print_msg("One or more required parameters (metadata, a_pre_quant, "
-                      "a_post_quant) are NULL. Exiting..",
+    // Add early returns for NULL quantization parameters.
+    if (metadata == NULL || metadata->a_quant_op == NULL
+        || metadata->a_quant_op->quant_scale_factors == NULL
+        || metadata->a_quant_op->dequant_scale_factors == NULL) {
+        dlp_print_msg("One or more required A quantization parameters are "
+                      "NULL. Exiting..",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NULL_POINTER);
         goto err_hndl;
@@ -315,7 +312,7 @@ aocl_gemm_bf16s8s32_impl(const char        order,
     }
 
     dlp_gemm_ops_bundle_t ops =
-        DLP_GEMM_OPS_BUNDLE_INIT_QUANT(metadata->a_pre_quant, post_op_list);
+        DLP_GEMM_OPS_BUNDLE_INIT_QUANT(metadata->a_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
     // Multi-threaded execution using OpenMP parallel regions.

@@ -132,14 +132,15 @@ dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
                                       md_t              m);
 
 dlp_clsc_err_t
-dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
+dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
                                    dlp_gemm_pre_op* pre_op_list,
                                    md_t             m,
                                    md_t             n,
                                    md_t             k);
 
 dlp_clsc_err_t
-dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
+dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
+                                         dlp_quant_op_t*         b_quant_op,
                                          dlp_gemm_group_post_op* post_op_list,
                                          md_t                    m,
                                          md_t                    n,

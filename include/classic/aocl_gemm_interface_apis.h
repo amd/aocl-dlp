@@ -118,19 +118,16 @@ aocl_get_reorder_buf_size_f32f16f32of32(const char      order,
  * matrix B).
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
- * @param[in] symq_meta_data Metadata for symmetric quantization.
- * @param[in] metadata Metadata for the post-operations.
+ * @param[in,out] metadata Metadata containing B quantization group size.
  * @return Size of the buffer in bytes.
  */
 DLP_CLASSIC_EXPORT msz_t
-aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
-    const char           order,
-    const char           trans,
-    const char           mat_type,
-    const md_t           k,
-    const md_t           n,
-    DLP_SYMM_STAT_QUANT* symq_meta_data,
-    dlp_metadata_t*      metadata);
+aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
+                                                const char      trans,
+                                                const char      mat_type,
+                                                const md_t      k,
+                                                const md_t      n,
+                                                dlp_metadata_t* metadata);
 
 /**
  * @brief Performs reordering of the input matrix. Expanded from
@@ -267,20 +264,18 @@ aocl_reorder_f32f16f32of32(const char      order,
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
  * @param[in] ldb Leading dimension of the matrix.
- * @param[in] symq_meta_data Metadata for symmetric quantization.
- * @param[in] metadata Metadata for the post-operations.
+ * @param[in,out] metadata Metadata containing B quantization group size.
  */
 DLP_CLASSIC_EXPORT void
-aocl_reorder_s8s8s32os32_sym_quant(const char           order,
-                                   const char           trans,
-                                   const char           mat_type,
-                                   const int8_t*        input_buf_addr,
-                                   int8_t*              reorder_buf_addr,
-                                   const md_t           k,
-                                   const md_t           n,
-                                   const md_t           ldb,
-                                   DLP_SYMM_STAT_QUANT* symq_meta_data,
-                                   dlp_metadata_t*      metadata);
+aocl_reorder_s8s8s32os32_sym_quant(const char      order,
+                                   const char      trans,
+                                   const char      mat_type,
+                                   const int8_t*   input_buf_addr,
+                                   int8_t*         reorder_buf_addr,
+                                   const md_t      k,
+                                   const md_t      n,
+                                   const md_t      ldb,
+                                   dlp_metadata_t* metadata);
 
 /**
  * @brief Performs reordering of the input matrix for mixed precision

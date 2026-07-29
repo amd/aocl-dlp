@@ -139,26 +139,11 @@ aocl_gemm_f16f16f16of32(const char      order,
     dlp_param_map_char_to_lpmtag(mem_format_a, &mtag_a);
     dlp_param_map_char_to_lpmtag(mem_format_b, &mtag_b);
 
-    if ((metadata != NULL) && (metadata->a_post_quant != NULL)) {
-        dlp_print_msg(" A-dequantization post-op is not supported for "
+    if ((metadata != NULL)
+        && ((metadata->a_quant_op != NULL) || (metadata->b_quant_op != NULL))) {
+        dlp_print_msg(" Quantization ops are not supported for "
                       "f16f16f16of32 gemm.",
                       __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-
-    if ((metadata != NULL) && (metadata->pre_ops != NULL)
-        && (metadata->pre_ops->seq_length > 0)) {
-        dlp_print_msg(" Pre-ops are not supported for f16f16f16of32 gemm.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-
-    if ((metadata != NULL) && (metadata->post_op_grp != NULL)) {
-        dlp_print_msg(
-            " Group post-ops are not supported for f16f16f16of32 gemm.",
-            __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
     }

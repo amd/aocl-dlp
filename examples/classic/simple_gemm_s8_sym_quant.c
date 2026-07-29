@@ -30,8 +30,8 @@
  * Example: S8×S8→F32 symmetric static quantization GEMM
  * (aocl_gemm_s8s8s32of32_sym_quant).
  *
- * Scales live in metadata->post_op_grp (dlp_group_post_op): a_scl, b_scl
- * (DLP_F32 here).
+ * Scales live in metadata.a_quant_op and metadata.b_quant_op as DLP_F32
+ * dequant_scale_factors.
  */
 
 #include "aocl_dlp.h"
@@ -94,7 +94,7 @@ int
 main(void)
 {
     printf("S8×S8→F32 GEMM with symmetric static quantization "
-           "(post_op_grp scales)\n\n");
+           "(a/b quant-op scales)\n\n");
 
     md_t m   = 64;
     md_t n   = 64;
@@ -129,10 +129,7 @@ main(void)
     const int32_t alpha        = 1;
     const int32_t beta0        = 0;
 
-    dlp_metadata_t    metadata;
-    dlp_group_post_op grp;
-    dlp_sf_t          a_scl;
-    dlp_sf_t          b_scl;
+    dlp_metadata_t metadata;
 
     /* Example 1: group_size 0 → ng = 1 */
     printf("--- Example 1: group_size=0 (full K) ---\n\n");
@@ -153,23 +150,34 @@ main(void)
         b_sf1[j] = 0.03f + 0.0002f * (float)j;
     }
 
-    memset(&grp, 0, sizeof(grp));
-    grp.group_size = 0;
-    grp.seq_length = 1;
-    grp.a_scl      = &a_scl;
-    grp.b_scl      = &b_scl;
-    grp.a_zp       = NULL;
-    grp.b_zp       = NULL;
-
-    a_scl.scale_factor      = a_sf1;
-    a_scl.scale_factor_len  = m * ng1;
-    a_scl.scale_factor_type = DLP_F32;
-    b_scl.scale_factor      = b_sf1;
-    b_scl.scale_factor_len  = ng1 * n;
-    b_scl.scale_factor_type = DLP_F32;
+    dlp_qparam_t a_scl_q = { .data      = a_sf1,
+                             .len       = m * ng1,
+                             .stor_type = DLP_F32,
+                             .outer_dim = DLP_PARAM_DIM_PER_TOKEN };
+    dlp_qparam_t b_scl_q = { .data      = b_sf1,
+                             .len       = ng1 * n,
+                             .stor_type = DLP_F32,
+                             .outer_dim = DLP_PARAM_DIM_PER_CHANNEL };
 
     memset(&metadata, 0, sizeof(metadata));
-    metadata.post_op_grp = &grp;
+    // QUANTIZE means S8 operands are consumed by the INT8 path and the
+    // supplied scales dequantize/correct the accumulator after accumulation.
+    dlp_quant_op_t a_quant_op = { .quant_op_kind       = DLP_QUANT_OP_QUANTIZE,
+                                  .src_type            = DLP_S8,
+                                  .dst_type            = DLP_S8,
+                                  .group_size          = 0,
+                                  .quant_scale_factors = NULL,
+                                  .dequant_scale_factors = &a_scl_q,
+                                  .zero_point            = NULL };
+    dlp_quant_op_t b_quant_op = { .quant_op_kind       = DLP_QUANT_OP_QUANTIZE,
+                                  .src_type            = DLP_S8,
+                                  .dst_type            = DLP_S8,
+                                  .group_size          = 0,
+                                  .quant_scale_factors = NULL,
+                                  .dequant_scale_factors = &b_scl_q,
+                                  .zero_point            = NULL };
+    metadata.a_quant_op       = &a_quant_op;
+    metadata.b_quant_op       = &b_quant_op;
     memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
 
     aocl_gemm_s8s8s32of32_sym_quant(order, transa, transb, m, n, k, alpha, a,
@@ -216,23 +224,34 @@ main(void)
         }
     }
 
-    memset(&grp, 0, sizeof(grp));
-    grp.group_size = 32;
-    grp.seq_length = 1;
-    grp.a_scl      = &a_scl;
-    grp.b_scl      = &b_scl;
-    grp.a_zp       = NULL;
-    grp.b_zp       = NULL;
-
-    a_scl.scale_factor      = a_sf2;
-    a_scl.scale_factor_len  = m * ng2;
-    a_scl.scale_factor_type = DLP_F32;
-    b_scl.scale_factor      = b_sf2;
-    b_scl.scale_factor_len  = ng2 * n;
-    b_scl.scale_factor_type = DLP_F32;
+    a_scl_q = (dlp_qparam_t){ .data      = a_sf2,
+                              .len       = m * ng2,
+                              .stor_type = DLP_F32,
+                              .outer_dim = DLP_PARAM_DIM_PER_GROUP };
+    b_scl_q = (dlp_qparam_t){ .data      = b_sf2,
+                              .len       = ng2 * n,
+                              .stor_type = DLP_F32,
+                              .outer_dim = DLP_PARAM_DIM_PER_GROUP };
 
     memset(&metadata, 0, sizeof(metadata));
-    metadata.post_op_grp = &grp;
+    // QUANTIZE means S8 operands are consumed by the INT8 path and the
+    // supplied scales dequantize/correct the accumulator after accumulation.
+    a_quant_op = (dlp_quant_op_t){ .quant_op_kind       = DLP_QUANT_OP_QUANTIZE,
+                                   .src_type            = DLP_S8,
+                                   .dst_type            = DLP_S8,
+                                   .group_size          = 32,
+                                   .quant_scale_factors = NULL,
+                                   .dequant_scale_factors = &a_scl_q,
+                                   .zero_point            = NULL };
+    b_quant_op = (dlp_quant_op_t){ .quant_op_kind       = DLP_QUANT_OP_QUANTIZE,
+                                   .src_type            = DLP_S8,
+                                   .dst_type            = DLP_S8,
+                                   .group_size          = 32,
+                                   .quant_scale_factors = NULL,
+                                   .dequant_scale_factors = &b_scl_q,
+                                   .zero_point            = NULL };
+    metadata.a_quant_op = &a_quant_op;
+    metadata.b_quant_op = &b_quant_op;
     memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
 
     aocl_gemm_s8s8s32of32_sym_quant(order, transa, transb, m, n, k, alpha, a,

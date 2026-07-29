@@ -196,7 +196,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
         const AOCL_DLP_MEMORY_TAG mtag_b, C_type* c, const md_t rs_c,          \
         const md_t cs_c, const C_type alpha, const C_type beta,                \
         dlp_rntm_t* rntm, dlp_gemm_thrinfo_t* thread, dlp_gemm_cntx_t* lcntx,  \
-        dlp_quant_op* a_pre_quant, dlp_gemm_post_op* post_op_list,             \
+        dlp_quant_op_t* a_quant_op, dlp_gemm_post_op* post_op_list,            \
         DLP_TYPE c_downscale)
 
 DLP_GEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32);

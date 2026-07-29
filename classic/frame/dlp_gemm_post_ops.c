@@ -90,6 +90,39 @@ dlp_gemm_get_stor_type(DLP_TYPE pstor_type)
     return stor_type;
 }
 
+static inline dlp_sf_t
+dlp_gemm_qparam_to_sf(const dlp_qparam_t* qparam)
+{
+    dlp_sf_t sf = { 0 };
+    if (qparam != NULL) {
+        sf.scale_factor_len  = qparam->len;
+        sf.scale_factor_type = qparam->stor_type;
+        sf.scale_factor_dim  = qparam->outer_dim;
+        // Keep len/type/dim so caller-side validation can report the error
+        // when a non-empty qparam has no backing data.
+        if (qparam->data != NULL) {
+            sf.scale_factor = qparam->data;
+        }
+    }
+    return sf;
+}
+
+static inline dlp_zp_t
+dlp_gemm_qparam_to_zp(const dlp_qparam_t* qparam)
+{
+    dlp_zp_t zp = { 0 };
+    if (qparam != NULL) {
+        zp.zero_point_len  = qparam->len;
+        zp.zero_point_type = qparam->stor_type;
+        // Keep len/type so caller-side validation can report the error when a
+        // non-empty qparam has no backing data.
+        if (qparam->data != NULL) {
+            zp.zero_point = qparam->data;
+        }
+    }
+    return zp;
+}
+
 DLP_INLINE void
 dlp_gemm_set_pre_ops_node_params(dlp_gemm_pre_op* pre_op_node,
                                  md_t             group_size,
@@ -139,13 +172,28 @@ dlp_gemm_set_group_post_ops_node_params(dlp_gemm_group_post_op* post_op_node,
 }
 
 dlp_clsc_err_t
-dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
+dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
+                                         dlp_quant_op_t*         b_quant_op,
                                          dlp_gemm_group_post_op* post_op_list,
                                          md_t                    m,
                                          md_t                    n,
                                          md_t                    k)
 {
-    if ((metadata == NULL) || (metadata->seq_length <= 0)) {
+    dlp_sf_t a_scl = dlp_gemm_qparam_to_sf(
+        a_quant_op == NULL ? NULL : a_quant_op->dequant_scale_factors);
+    dlp_sf_t b_scl = dlp_gemm_qparam_to_sf(
+        b_quant_op == NULL ? NULL : b_quant_op->dequant_scale_factors);
+
+    dlp_sf_t* a_scl_ptr =
+        (a_quant_op == NULL || a_quant_op->dequant_scale_factors == NULL)
+            ? NULL
+            : &a_scl;
+    dlp_sf_t* b_scl_ptr =
+        (b_quant_op == NULL || b_quant_op->dequant_scale_factors == NULL)
+            ? NULL
+            : &b_scl;
+
+    if ((a_quant_op == NULL) && (b_quant_op == NULL)) {
         dlp_gemm_set_group_post_ops_node_params(post_op_list, 0, NULL, NULL, 0,
                                                 0, NULL, NULL, 0, 0,
                                                 DLP_INVALID, DLP_INVALID);
@@ -153,122 +201,109 @@ dlp_gemm_translate_to_group_postops_list(dlp_group_post_op*      metadata,
         return DLP_CLSC_SUCCESS;
     }
 
-    md_t group_size = metadata->group_size;
+    if ((a_quant_op != NULL)
+        && (a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE)) {
+        dlp_print_msg(
+            " A grouped quant metadata must use DLP_QUANT_OP_QUANTIZE. "
+            "Exiting..",
+            __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+    if ((b_quant_op != NULL)
+        && (b_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE)) {
+        dlp_print_msg(
+            " B grouped quant metadata must use DLP_QUANT_OP_QUANTIZE. "
+            "Exiting..",
+            __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    if ((a_quant_op != NULL) && (a_quant_op->zero_point != NULL)) {
+        dlp_print_msg(" A zero-point is not supported for grouped "
+                      "symmetric quantization. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+    if ((b_quant_op != NULL) && (b_quant_op->zero_point != NULL)) {
+        dlp_print_msg(" B zero-point is not supported for grouped "
+                      "symmetric quantization. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    md_t a_group_size = (a_quant_op != NULL) ? a_quant_op->group_size : 0;
+    md_t b_group_size = (b_quant_op != NULL) ? b_quant_op->group_size : 0;
+
+    if (a_group_size == 0) {
+        a_group_size = k;
+    }
+    if (b_group_size == 0) {
+        b_group_size = k;
+    }
+
+    if ((a_quant_op != NULL) && (b_quant_op != NULL)
+        && (a_group_size != b_group_size)) {
+        dlp_print_msg(" A and B group size mismatch. Exiting..", __FILE__,
+                      __LINE__);
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    md_t group_size = (a_quant_op != NULL) ? a_group_size : b_group_size;
 
     // Group ops may pass group_size 0 to mean "default"
     // (one group over full k).
-    if (group_size == 0) {
-        group_size = k;
-    }
     if ((group_size > k) || (group_size < 0)) {
         return DLP_CLSC_INVALID_GROUP_DIMENSION;
     } else if ((group_size != k) && (group_size % 4 != 0)) {
         return DLP_CLSC_INVALID_GROUP_DIMENSION;
     }
 
-    for (iter_t i = 0; i < metadata->seq_length; ++i) {
-        if (metadata->a_zp != NULL) {
-            /* check for validity of pre-ops */
-            if (((metadata->a_zp)->zero_point_len > 0)
-                && ((metadata->a_zp)->zero_point == NULL))
-                return DLP_CLSC_NULL_POINTER;
+    if (a_scl_ptr != NULL) {
+        if ((a_scl_ptr->scale_factor_len > 0)
+            && (a_scl_ptr->scale_factor == NULL))
+            return DLP_CLSC_NULL_POINTER;
 
-            if ((metadata->a_zp)->zero_point_len
-                < (m * ((k + group_size - 1) / group_size)))
-                return DLP_CLSC_INVALID_ZP_LEN;
-        }
-
-        if (metadata->a_scl != NULL) {
-            if (((metadata->a_scl)->scale_factor_len > 0)
-                && ((metadata->a_scl)->scale_factor == NULL))
-                return DLP_CLSC_NULL_POINTER;
-
-            if ((metadata->a_scl)->scale_factor_len
-                < (m * ((k + group_size - 1) / group_size)))
-                return DLP_CLSC_INVALID_SF_LEN;
-        }
-
-        if (metadata->b_zp != NULL) {
-            /* check for validity of pre-ops */
-            if (((metadata->b_zp)->zero_point_len > 0)
-                && ((metadata->b_zp)->zero_point == NULL))
-                return DLP_CLSC_NULL_POINTER;
-
-            if ((metadata->b_zp)->zero_point_len
-                < (n * ((k + group_size - 1) / group_size)))
-                return DLP_CLSC_INVALID_ZP_LEN;
-        }
-
-        if (metadata->b_scl != NULL) {
-            if (((metadata->b_scl)->scale_factor_len > 0)
-                && ((metadata->b_scl)->scale_factor == NULL))
-                return DLP_CLSC_NULL_POINTER;
-
-            if ((metadata->b_scl)->scale_factor_len
-                < (n * ((k + group_size - 1) / group_size)))
-                return DLP_CLSC_INVALID_SF_LEN;
-        }
-
-        if ((metadata->a_scl != NULL) && (metadata->b_scl != NULL)
-            && (((metadata->a_scl)->scale_factor_type)
-                != ((metadata->b_scl)->scale_factor_type))) {
-            dlp_print_msg(" A and B scale factor type mismatch. Exiting..",
-                          __FILE__, __LINE__);
-            return DLP_CLSC_TYPE_MISMATCH;
-        }
-
-        // Not supporting zero-point for now.
-        // if( ( ( metadata->a_zp )->zero_point_type ) != ( (
-        // metadata->b_zp )->zero_point_type ) )
-        // {
-        // 	dlp_print_msg(" A and B zero point type mismatch. Exiting..",
-        // __FILE__, __LINE__ ); 	return DLP_CLSC_TYPE_MISMATCH;
-        // }
-
-        DLP_TYPE tmp_zp_stor_type =
-            DLP_INVALID; // dlp_gemm_get_stor_type( ( metadata->a_zp
-                         // )->zero_point_type
-                         // );
-
-        // At this point we are sure that sf and zp types of both matrices
-        // match.
-        DLP_TYPE tmp_sf_stor_type = DLP_INVALID;
-        if (metadata->a_scl != NULL) {
-            tmp_sf_stor_type =
-                dlp_gemm_get_stor_type((metadata->a_scl)->scale_factor_type);
-        }
-
-        dlp_gemm_set_group_post_ops_node_params(
-            (post_op_list + i), group_size,
-            // A zero-point
-            (metadata->a_zp == NULL) ? NULL : (metadata->a_zp)->zero_point,
-            // A scale factor
-            (metadata->a_scl == NULL) ? NULL : (metadata->a_scl)->scale_factor,
-            // A zero-point length
-            (metadata->a_zp == NULL) ? 0 : (metadata->a_zp)->zero_point_len,
-            // A scale factor length
-            (metadata->a_scl == NULL) ? 0 : (metadata->a_scl)->scale_factor_len,
-            // B zero-point
-            (metadata->b_zp == NULL) ? NULL : (metadata->b_zp)->zero_point,
-            // B scale factor
-            (metadata->b_scl == NULL) ? NULL : (metadata->b_scl)->scale_factor,
-            // B zero-point length
-            (metadata->b_zp == NULL) ? 0 : (metadata->b_zp)->zero_point_len,
-            // B scale factor length
-            (metadata->b_scl == NULL) ? 0 : (metadata->b_scl)->scale_factor_len,
-            tmp_sf_stor_type, tmp_zp_stor_type);
-
-        // Simulating linked list using an array.
-        if (i < (metadata->seq_length - 1)) {
-            (post_op_list + i)->next = (post_op_list + i + 1);
-        }
+        if (a_scl_ptr->scale_factor_len
+            < (m * ((k + group_size - 1) / group_size)))
+            return DLP_CLSC_INVALID_SF_LEN;
     }
+
+    if (b_scl_ptr != NULL) {
+        if ((b_scl_ptr->scale_factor_len > 0)
+            && (b_scl_ptr->scale_factor == NULL))
+            return DLP_CLSC_NULL_POINTER;
+
+        if (b_scl_ptr->scale_factor_len
+            < (n * ((k + group_size - 1) / group_size)))
+            return DLP_CLSC_INVALID_SF_LEN;
+    }
+
+    if ((a_scl_ptr != NULL) && (b_scl_ptr != NULL)
+        && (a_scl_ptr->scale_factor_type != b_scl_ptr->scale_factor_type)) {
+        dlp_print_msg(" A and B scale factor type mismatch. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_TYPE_MISMATCH;
+    }
+
+    DLP_TYPE tmp_sf_stor_type = DLP_INVALID;
+    if (a_scl_ptr != NULL) {
+        tmp_sf_stor_type = dlp_gemm_get_stor_type(a_scl_ptr->scale_factor_type);
+    }
+
+    dlp_gemm_set_group_post_ops_node_params(
+        post_op_list, group_size, NULL,
+        (a_scl_ptr == NULL) ? NULL : a_scl_ptr->scale_factor, 0,
+        (a_scl_ptr == NULL) ? 0 : a_scl_ptr->scale_factor_len, NULL,
+        (b_scl_ptr == NULL) ? NULL : b_scl_ptr->scale_factor, 0,
+        (b_scl_ptr == NULL) ? 0 : b_scl_ptr->scale_factor_len, tmp_sf_stor_type,
+        DLP_INVALID);
+    post_op_list->next = NULL;
 
     return DLP_CLSC_SUCCESS;
 }
 
 dlp_clsc_err_t
-dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
+dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
                                    dlp_gemm_pre_op* pre_op_list,
                                    md_t             m,
                                    md_t             n,
@@ -277,25 +312,30 @@ dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
     (void)(m); // Unused for now, potential to be used later.
     (void)(n); // Unused for now, potential to be used later.
 
-    if ((pre_op_unparsed == NULL) || (pre_op_unparsed->seq_length <= 0)) {
+    if (b_quant_op == NULL) {
         dlp_gemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
                                          DLP_INVALID, DLP_INVALID);
 
         return DLP_CLSC_SUCCESS;
     }
 
-    if ((pre_op_unparsed->seq_length > AOCL_DLP_MAX_PRE_OPS)) {
-        dlp_gemm_set_pre_ops_node_params(pre_op_list, 0, NULL, NULL, 0, 0,
-                                         DLP_INVALID, DLP_INVALID);
-
-        dlp_print_msg(" Max supported pre-ops is 2, supplied input pre-ops"
-                      " are more. Exiting..",
-                      __FILE__, __LINE__);
-        return DLP_CLSC_UNEXPECTED_VECTOR_DIM; // Error, seq length exceeds max
-                                               // pre ops permitted.
+    if ((b_quant_op->quant_op_kind != DLP_QUANT_OP_DEQUANTIZE)
+        && (b_quant_op->quant_op_kind != DLP_QUANT_OP_EXPAND)) {
+        dlp_print_msg(
+            " B pre-op quant metadata must use DLP_QUANT_OP_DEQUANTIZE or "
+            "DLP_QUANT_OP_EXPAND. Exiting..",
+            __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
     }
 
-    md_t group_size = pre_op_unparsed->group_size;
+    dlp_sf_t b_scl = dlp_gemm_qparam_to_sf(b_quant_op->dequant_scale_factors);
+    dlp_zp_t b_zp  = dlp_gemm_qparam_to_zp(b_quant_op->zero_point);
+
+    dlp_sf_t* b_scl_ptr = (b_quant_op->dequant_scale_factors == NULL) ? NULL
+                                                                      : &b_scl;
+    dlp_zp_t* b_zp_ptr  = (b_quant_op->zero_point == NULL) ? NULL : &b_zp;
+
+    md_t group_size = b_quant_op->group_size;
 
     // WOQ and similar pre-ops may pass group_size 0 to mean "default"
     // (one group over full k).
@@ -309,46 +349,37 @@ dlp_gemm_translate_to_pre_ops_list(dlp_pre_op*      pre_op_unparsed,
         return DLP_CLSC_INVALID_GROUP_DIMENSION;
     }
 
-    for (iter_t i = 0; i < pre_op_unparsed->seq_length; ++i) {
-        if (pre_op_unparsed->b_zp != NULL) {
+    for (iter_t i = 0; i < 1; ++i) {
+        if (b_zp_ptr != NULL) {
             /* check for validity of pre-ops */
-            if (((pre_op_unparsed->b_zp)->zero_point_len > 0)
-                && ((pre_op_unparsed->b_zp)->zero_point == NULL))
+            if ((b_zp_ptr->zero_point_len > 0)
+                && (b_zp_ptr->zero_point == NULL))
                 return DLP_CLSC_NULL_POINTER;
         }
 
-        if (pre_op_unparsed->b_scl != NULL) {
-            if (((pre_op_unparsed->b_scl)->scale_factor_len > 0)
-                && ((pre_op_unparsed->b_scl)->scale_factor == NULL))
+        if ((b_quant_op->quant_op_kind == DLP_QUANT_OP_DEQUANTIZE)
+            && (b_scl_ptr == NULL)) {
+            return DLP_CLSC_NULL_POINTER;
+        }
+
+        if (b_scl_ptr != NULL) {
+            if ((b_scl_ptr->scale_factor_len > 0)
+                && (b_scl_ptr->scale_factor == NULL))
                 return DLP_CLSC_NULL_POINTER;
         }
         dlp_gemm_set_pre_ops_node_params(
             (pre_op_list + i), group_size,
-            (pre_op_unparsed->b_zp == NULL)
-                ? NULL
-                : (pre_op_unparsed->b_zp)->zero_point,
-            (pre_op_unparsed->b_scl == NULL)
-                ? NULL
-                : (pre_op_unparsed->b_scl)->scale_factor,
-            (pre_op_unparsed->b_zp == NULL)
-                ? 0
-                : (pre_op_unparsed->b_zp)->zero_point_len,
-            (pre_op_unparsed->b_scl == NULL)
-                ? 0
-                : (pre_op_unparsed->b_scl)->scale_factor_len,
-            (pre_op_unparsed->b_scl == NULL)
+            (b_zp_ptr == NULL) ? NULL : b_zp_ptr->zero_point,
+            (b_scl_ptr == NULL) ? NULL : b_scl_ptr->scale_factor,
+            (b_zp_ptr == NULL) ? 0 : b_zp_ptr->zero_point_len,
+            (b_scl_ptr == NULL) ? 0 : b_scl_ptr->scale_factor_len,
+            (b_scl_ptr == NULL)
                 ? DLP_INVALID
-                : (((pre_op_unparsed->b_scl)->scale_factor_type == DLP_BF16)
-                       ? DLP_BF16
-                       : DLP_F32),
-            (pre_op_unparsed->b_zp == NULL)
-                ? DLP_INVALID
-                : ((pre_op_unparsed->b_zp)->zero_point_type));
+                : ((b_scl_ptr->scale_factor_type == DLP_BF16) ? DLP_BF16
+                                                              : DLP_F32),
+            (b_zp_ptr == NULL) ? DLP_INVALID : b_zp_ptr->zero_point_type);
 
-        // Simulating linked list using an array.
-        if (i < (pre_op_unparsed->seq_length - 1)) {
-            (pre_op_list + i)->next = (pre_op_list + i + 1);
-        }
+        (pre_op_list + i)->next = NULL;
     }
 
     return DLP_CLSC_SUCCESS;
@@ -392,83 +423,81 @@ dlp_gemm_translate_adquantize_post_op(dlp_metadata_t*   metadata,
                                       void*             meta_arg,
                                       md_t              m)
 {
-    // Step 1: Validate metadata, a_pre_quant, and a_post_quant
-    if (metadata == NULL || metadata->a_pre_quant == NULL
-        || metadata->a_post_quant == NULL || post_op_list == NULL) {
-        dlp_print_msg("One or more required parameters (metadata, a_pre_quant, "
-                      "a_post_quant) are NULL. Exiting..",
+    // Step 1: Validate metadata and A quantization parameters.
+    if (metadata == NULL || post_op_list == NULL || metadata->a_quant_op == NULL
+        || metadata->a_quant_op->quant_scale_factors == NULL
+        || metadata->a_quant_op->dequant_scale_factors == NULL) {
+        dlp_print_msg("One or more required A quantization parameters are "
+                      "NULL. Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_NULL_POINTER;
     }
+
+    if (metadata->a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE) {
+        dlp_print_msg(
+            " a_quant_op quant metadata must use DLP_QUANT_OP_QUANTIZE. "
+            "Exiting..",
+            __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    dlp_qparam_t* a_dequant_scl = metadata->a_quant_op->dequant_scale_factors;
+    dlp_qparam_t* a_zp          = metadata->a_quant_op->zero_point;
+
     // --- Step 2: Validate scale factor ---
-    if (((metadata->a_post_quant)->scl
-         && (metadata->a_post_quant)->scl->scale_factor_len > 0)
-        && ((metadata->a_post_quant)->scl->scale_factor == NULL)) {
-        dlp_print_msg(" a_post_quant.scl scale_factor is NULL. Exiting..",
+    if ((a_dequant_scl->len > 0) && (a_dequant_scl->data == NULL)) {
+        dlp_print_msg(" a_quant_op.dequant_scale_factors data is NULL. "
+                      "Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_NULL_POINTER;
     }
-    if ((metadata->a_post_quant)->scl
-        && ((metadata->a_post_quant)->scl->scale_factor_len != 1)
-        && ((metadata->a_post_quant)->scl->scale_factor_len < m)) {
-        dlp_print_msg(" a_post_quant.scl scale factor length is < m. Exiting..",
+    if ((a_dequant_scl->len != 1) && (a_dequant_scl->len < m)) {
+        dlp_print_msg(" a_quant_op.dequant_scale_factors len is < m. "
+                      "Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
     }
 
     // --- Step 3: Validate zero-point ---
-    if (((metadata->a_post_quant)->zp
-         && (metadata->a_post_quant)->zp->zero_point_len > 0)
-        && ((metadata->a_post_quant)->zp->zero_point == NULL)) {
-        dlp_print_msg(" a_post_quant.zp zero_point is NULL. Exiting..",
+    if ((a_zp != NULL) && (a_zp->len > 0) && (a_zp->data == NULL)) {
+        dlp_print_msg(" a_quant_op.zero_point data is NULL. Exiting..",
                       __FILE__, __LINE__);
         return DLP_CLSC_NULL_POINTER;
     }
-    if ((metadata->a_post_quant)->zp
-        && ((metadata->a_post_quant)->zp->zero_point_len != 1)
-        && ((metadata->a_post_quant)->zp->zero_point_len < m)) {
-        dlp_print_msg(" a_post_quant.zp zero point length is < m. Exiting..",
-                      __FILE__, __LINE__);
+    if ((a_zp != NULL) && (a_zp->len != 1) && (a_zp->len < m)) {
+        dlp_print_msg(" a_quant_op.zero_point len is < m. Exiting..", __FILE__,
+                      __LINE__);
         return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
     }
 
     // --- Step 4: Extract storage types ---
-    DLP_TYPE tmp_zp_stor_type =
-        (metadata->a_post_quant)->zp
-            ? dlp_gemm_get_stor_type(
-                  (metadata->a_post_quant)->zp->zero_point_type)
-            : DLP_INVALID;
+    DLP_TYPE tmp_zp_stor_type = a_zp ? dlp_gemm_get_stor_type(a_zp->stor_type)
+                                     : DLP_INVALID;
     DLP_TYPE tmp_sf_stor_type =
-        (metadata->a_post_quant)->scl
-            ? dlp_gemm_get_stor_type(
-                  (metadata->a_post_quant)->scl->scale_factor_type)
-            : DLP_INVALID;
+        dlp_gemm_get_stor_type(a_dequant_scl->stor_type);
 
-    // --- Step 5: Setup zero-point length pointer ---
+    // --- Step 5: Validate outer_dim ---
+    if ((a_dequant_scl->outer_dim != DLP_PARAM_DIM_PER_TENSOR)
+        && (a_dequant_scl->outer_dim != DLP_PARAM_DIM_PER_TOKEN)) {
+        dlp_print_msg(" a_quant_op.dequant_scale_factors outer_dim must be "
+                      "PER_TENSOR or PER_TOKEN for ADQUANTIZE. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_UNEXPECTED_VECTOR_DIM;
+    }
+
+    // --- Step 6: Setup zero-point length pointer ---
     // For symmetric quantization (no zero-point), use zero_zp_len = 0
-    static md_t zero_zp_len = 0;
-    md_t*       zero_point_len_ptr =
-        (metadata->a_post_quant)->zp
-                  ? &((metadata->a_post_quant)->zp->zero_point_len)
-                  : &zero_zp_len;
+    static md_t zero_zp_len        = 0;
+    md_t*       zero_point_len_ptr = a_zp ? &(a_zp->len) : &zero_zp_len;
 
-    // --- Step 6: Create ADQUANTIZE node at post_op_list[0] ---
+    // --- Step 7: Create ADQUANTIZE node at post_op_list[0] ---
     dlp_gemm_set_node_params(
-        post_op_list, POST_OPS_ADQUANTIZE,
-        (metadata->a_post_quant)->zp ? (metadata->a_post_quant)->zp->zero_point
-                                     : NULL,
-        meta_arg, zero_point_len_ptr,
-        (metadata->a_post_quant)->scl
-            ? (metadata->a_post_quant)->scl->scale_factor
-            : NULL,
-        (metadata->a_post_quant)->scl
-            ? (metadata->a_post_quant)->scl->scale_factor_len
-            : 0,
-        NULL, 0, DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type,
-        (metadata->a_post_quant)->scl ? DLP_PARAM_DIM_PER_TOKEN
-                                      : DLP_PARAM_DIM_INVALID);
+        post_op_list, POST_OPS_ADQUANTIZE, a_zp ? a_zp->data : NULL, meta_arg,
+        zero_point_len_ptr, a_dequant_scl->data, a_dequant_scl->len, NULL, 0,
+        DLP_INVALID, tmp_zp_stor_type, tmp_sf_stor_type,
+        a_dequant_scl->outer_dim);
 
-    // --- Step 7: Link to seq_vector post-ops (filled at post_op_list+1) ---
+    // --- Step 8: Link to seq_vector post-ops (filled at post_op_list+1) ---
     if (metadata->seq_length > 0) {
         (post_op_list)->next = (post_op_list + 1);
     }

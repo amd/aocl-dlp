@@ -127,6 +127,7 @@ UalDlp::reorder(const Matrix&          in,
     dlp_metadata_t meta;
     std::memset(std::addressof(meta), 0, sizeof(dlp_metadata_t));
     meta.error_hndl.error_code = DLP_CLSC_SUCCESS;
+    dlp_quant_op_t b_quant_op{};
 
     // Use effective (logical) dimensions for reordering
     md_t effective_rows = in.getEffectiveRows();
@@ -138,6 +139,14 @@ UalDlp::reorder(const Matrix&          in,
         (group_scale != nullptr) && (in.getMatrixType() == MatrixType::s8)
         && (accType == MatrixType::s32)
         && (C_type == MatrixType::f32 || C_type == MatrixType::bf16);
+
+    if (sym_quant) {
+        b_quant_op.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+        b_quant_op.src_type      = DLP_S8;
+        b_quant_op.dst_type      = DLP_S8;
+        b_quant_op.group_size    = group_scale->getGroupSize();
+        meta.b_quant_op          = &b_quant_op;
+    }
 
     // Determine appropriate reorder function based on input type and GEMM
     // context The A, B, C types provide context for optimal reordering strategy
@@ -177,17 +186,10 @@ UalDlp::reorder(const Matrix&          in,
     } else if (in.getMatrixType() == MatrixType::s8) {
         // For s8, select sym_quant or standard reorder based on GEMM context
         if (sym_quant) {
-            // group_size=0 means "full K dimension"; normalize before calling
-            // the AOCL sym_quant APIs which require a strictly positive value.
-            md_t gs = group_scale->getGroupSize();
-            if (gs == 0) {
-                gs = effective_rows; // effective_rows == K for B matrix
-            }
-            DLP_SYMM_STAT_QUANT symq = { gs };
             alloc_bytes = aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
                 in.isTransposed() ? 't' : 'n', 'B', effective_rows,
-                effective_cols, &symq, &meta);
+                effective_cols, &meta);
         } else {
             alloc_bytes = aocl_get_reorder_buf_size_s8s8s32os32(
                 in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
@@ -290,12 +292,6 @@ UalDlp::reorder(const Matrix&          in,
             break;
         case MatrixType::s8:
             if (sym_quant) {
-                // group_size=0 means "full K"; normalize to avoid div-by-zero.
-                md_t gs = group_scale->getGroupSize();
-                if (gs == 0) {
-                    gs = effective_rows;
-                }
-                DLP_SYMM_STAT_QUANT symq = { gs };
                 aocl_reorder_s8s8s32os32_sym_quant(
                     layout, in.isTransposed() ? 't' : 'n', 'B',
                     reinterpret_cast<const int8_t*>(
@@ -303,7 +299,7 @@ UalDlp::reorder(const Matrix&          in,
                     reinterpret_cast<int8_t*>(
                         out.getMatrixData().getMatrixPtr()),
                     effective_rows, effective_cols, in.getLeadingDimension(),
-                    &symq, &meta);
+                    &meta);
             } else {
                 aocl_reorder_s8s8s32os32(
                     layout, in.isTransposed() ? 't' : 'n', 'B',

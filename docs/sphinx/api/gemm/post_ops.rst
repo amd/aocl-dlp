@@ -46,19 +46,11 @@ Post-Op Building Blocks
    :project: aocl-dlp
    :members:
 
-.. doxygenstruct:: dlp_pre_op
+.. doxygenstruct:: dlp_qparam_t
    :project: aocl-dlp
    :members:
 
-.. doxygenstruct:: dlp_group_post_op
-   :project: aocl-dlp
-   :members:
-
-.. doxygenstruct:: DLP_SYMM_STAT_QUANT
-   :project: aocl-dlp
-   :members:
-
-.. doxygenstruct:: dlp_quant_op
+.. doxygenstruct:: dlp_quant_op_t
    :project: aocl-dlp
    :members:
 

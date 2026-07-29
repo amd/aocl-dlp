@@ -55,27 +55,29 @@ DLP_GEMV3(bfloat16, int8_t, int32_t, bf16s8s32os32)
     md_t NR = lcntx->blksz.NR;
 
     // Scale factor parameters for A matrix quantization.
-    void*    sf      = a_pre_quant->scl->scale_factor;
-    md_t     sf_len  = a_pre_quant->scl->scale_factor_len;
-    DLP_TYPE sf_type = a_pre_quant->scl->scale_factor_type;
+    void*    sf      = a_quant_op->quant_scale_factors->data;
+    md_t     sf_len  = a_quant_op->quant_scale_factors->len;
+    DLP_TYPE sf_type = a_quant_op->quant_scale_factors->stor_type;
+
+    dlp_qparam_t* a_zp_qparam = a_quant_op->zero_point;
+    if ((a_zp_qparam != NULL)
+        && ((a_zp_qparam->data == NULL) || (a_zp_qparam->len == 0))) {
+        dlp_print_msg(" Zero point parameters for A matrix quantization "
+                      "are invalid when asymmetric quantization is used.",
+                      __FILE__, __LINE__);
+        return;
+    }
 
     // Zero-point parameters for A matrix quantization.
-    bool     is_symmetric = a_pre_quant->symmetric;
-    void*    zp_val       = NULL;
-    md_t     zp_len       = 0;
-    DLP_TYPE zp_type      = DLP_INVALID;
+    void*    zp_val  = NULL;
+    md_t     zp_len  = 0;
+    DLP_TYPE zp_type = DLP_INVALID;
 
     // Initialize zero-point values for asymmetric quantization.
-    if (!is_symmetric) {
-        if (a_pre_quant->zp == NULL) {
-            dlp_print_msg(" Zero point parameters for A matrix quantization "
-                          "are missing when asymmetric quantization is used.",
-                          __FILE__, __LINE__);
-            return;
-        }
-        zp_val  = a_pre_quant->zp->zero_point;
-        zp_len  = a_pre_quant->zp->zero_point_len;
-        zp_type = a_pre_quant->zp->zero_point_type;
+    if (a_zp_qparam != NULL) {
+        zp_val  = a_zp_qparam->data;
+        zp_len  = a_zp_qparam->len;
+        zp_type = a_zp_qparam->stor_type;
     }
 
     // Strides are updated based on matrix packing/reordering.
@@ -370,8 +372,8 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
     }
 
     // Validate quantization parameters.
-    if (a_pre_quant == NULL || a_pre_quant->scl == NULL
-        || a_pre_quant->scl->scale_factor == NULL) {
+    if (a_quant_op == NULL || a_quant_op->quant_scale_factors == NULL
+        || a_quant_op->quant_scale_factors->data == NULL) {
         dlp_print_msg(
             " Scale factor parameters for A matrix quantization are missing.",
             __FILE__, __LINE__);
@@ -381,35 +383,37 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const)
     if (m == 1 || n == 1) {
         dlp_gemv_rowvar_bf16s8s32os32(m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b,
                                       cs_b, mtag_b, c, rs_c, cs_c, alpha, beta,
-                                      rntm, thread, lcntx, a_pre_quant,
+                                      rntm, thread, lcntx, a_quant_op,
                                       post_op_list, c_downscale);
         return;
     }
 
     // Scale factor parameters for A matrix quantization.
-    void*    sf      = a_pre_quant->scl->scale_factor;
-    md_t     sf_len  = a_pre_quant->scl->scale_factor_len;
-    DLP_TYPE sf_type = a_pre_quant->scl->scale_factor_type;
+    void*    sf      = a_quant_op->quant_scale_factors->data;
+    md_t     sf_len  = a_quant_op->quant_scale_factors->len;
+    DLP_TYPE sf_type = a_quant_op->quant_scale_factors->stor_type;
+
+    dlp_qparam_t* a_zp_qparam = a_quant_op->zero_point;
+    if ((a_zp_qparam != NULL)
+        && ((a_zp_qparam->data == NULL) || (a_zp_qparam->len == 0))) {
+        dlp_print_msg(" Zero point parameters for A matrix quantization "
+                      "are invalid when asymmetric quantization is used.",
+                      __FILE__, __LINE__);
+        return;
+    }
 
     // Zero-point parameters for A matrix quantization.
     // Symmetric quantization: zp = 0 (no zero-point correction needed)
     // Asymmetric quantization: zp != 0 (requires zero-point subtraction)
-    bool     is_symmetric = a_pre_quant->symmetric;
-    void*    zp_val       = NULL;
-    md_t     zp_len       = 0;
-    DLP_TYPE zp_type      = DLP_INVALID;
+    void*    zp_val  = NULL;
+    md_t     zp_len  = 0;
+    DLP_TYPE zp_type = DLP_INVALID;
 
     // Initialize zero-point values for asymmetric quantization.
-    if (!is_symmetric) {
-        if (a_pre_quant->zp == NULL) {
-            dlp_print_msg(" Zero point parameters for A matrix quantization "
-                          "are missing when asymmetric quantization is used.",
-                          __FILE__, __LINE__);
-            return;
-        }
-        zp_val  = a_pre_quant->zp->zero_point;
-        zp_len  = a_pre_quant->zp->zero_point_len;
-        zp_type = a_pre_quant->zp->zero_point_type;
+    if (a_zp_qparam != NULL) {
+        zp_val  = a_zp_qparam->data;
+        zp_len  = a_zp_qparam->len;
+        zp_type = a_zp_qparam->stor_type;
     }
 
     // Matrix pointers and strides - updated based on packing/reordering status.

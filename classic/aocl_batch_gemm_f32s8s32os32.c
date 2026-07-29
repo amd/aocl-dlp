@@ -105,11 +105,12 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
         }
 
         // Validate required quantization metadata.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->a_pre_quant == NULL
-            || metadata[gc_i]->a_post_quant == NULL) {
+        if (metadata[gc_i] == NULL || metadata[gc_i]->a_quant_op == NULL
+            || metadata[gc_i]->a_quant_op->quant_scale_factors == NULL
+            || metadata[gc_i]->a_quant_op->dequant_scale_factors == NULL) {
             dlp_print_msg(
-                "One or more required parameters (metadata, a_pre_quant, "
-                "a_post_quant) are NULL. Exiting..",
+                "One or more required A quantization parameters are NULL. "
+                "Exiting..",
                 __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
             goto err_hndl;
@@ -252,7 +253,7 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
 
         // Create ops bundle with quantization info for A matrix.
         dlp_gemm_ops_bundle_t ops = DLP_GEMM_OPS_BUNDLE_INIT_QUANT(
-            metadata[gc_i]->a_pre_quant, post_op_list);
+            metadata[gc_i]->a_quant_op, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
         batch_dlp_gemm_f32s8s32os32_openmp_thread_decorator(

@@ -42,6 +42,38 @@ using namespace dlp::testing::framework;
 
 namespace dlp::testing::classic {
 
+namespace {
+
+    DLP_PARAM_DIM_TYPE
+    getScalarOrVectorDim(md_t len, DLP_PARAM_DIM_TYPE vector_dim)
+    {
+        return (len == 1) ? DLP_PARAM_DIM_PER_TENSOR : vector_dim;
+    }
+
+    DLP_TYPE
+    getQuantComputeDstType(MatrixType src_type)
+    {
+        switch (src_type) {
+            case MatrixType::s4:
+            case MatrixType::u4:
+                // Weight-only 4-bit B operands are dequantized to BF16 so the
+                // BF16 GEMM/VNNI kernels can consume them.
+                return DLP_BF16;
+            case MatrixType::f32:
+            case MatrixType::bf16:
+            case MatrixType::s8:
+                // F32/BF16 quant APIs target S8 operands for INT8 S8S8 VNNI.
+                // Existing S8 operands remain in the S8 compute domain.
+                return DLP_S8;
+            case MatrixType::u8:
+                return DLP_U8;
+            default:
+                return DLP_INVALID;
+        }
+    }
+
+} // namespace
+
 DlpUalPlan::DlpUalPlan()
 {
     m_metadata = new dlp_metadata_t;
@@ -115,69 +147,18 @@ DlpUalPlan::cleanupMetadata()
             }
         }
 
-        // Clean up manually allocated memory for A matrix quantization scale
-        // factors and zero points
-        if (m_metadata->a_pre_quant) {
-            if (m_metadata->a_pre_quant->scl) {
-                delete m_metadata->a_pre_quant->scl;
-            }
-            if (m_metadata->a_pre_quant->zp) {
-                delete m_metadata->a_pre_quant->zp;
-            }
-            delete m_metadata->a_pre_quant;
+        // Clean up manually allocated quantization parameter descriptors.
+        if (m_metadata->a_quant_op) {
+            delete m_metadata->a_quant_op->quant_scale_factors;
+            delete m_metadata->a_quant_op->dequant_scale_factors;
+            delete m_metadata->a_quant_op->zero_point;
+            delete m_metadata->a_quant_op;
         }
-        if (m_metadata->a_post_quant) {
-            if (m_metadata->a_post_quant->scl) {
-                delete m_metadata->a_post_quant->scl;
-            }
-            if (m_metadata->a_post_quant->zp) {
-                delete m_metadata->a_post_quant->zp;
-            }
-            delete m_metadata->a_post_quant;
-        }
-
-        // Clean up manually allocated memory for B matrix quantization scale
-        // factors and zero points
-        if (m_metadata->b_pre_quant) {
-            if (m_metadata->b_pre_quant->scl) {
-                delete m_metadata->b_pre_quant->scl;
-            }
-            if (m_metadata->b_pre_quant->zp) {
-                delete m_metadata->b_pre_quant->zp;
-            }
-            delete m_metadata->b_pre_quant;
-        }
-        if (m_metadata->b_post_quant) {
-            if (m_metadata->b_post_quant->scl) {
-                delete m_metadata->b_post_quant->scl;
-            }
-            if (m_metadata->b_post_quant->zp) {
-                delete m_metadata->b_post_quant->zp;
-            }
-            delete m_metadata->b_post_quant;
-        }
-
-        // Clean up manually allocated memory for group-level scale factors
-        if (m_metadata->post_op_grp) {
-            if (m_metadata->post_op_grp->a_scl) {
-                delete m_metadata->post_op_grp->a_scl;
-            }
-            if (m_metadata->post_op_grp->b_scl) {
-                delete m_metadata->post_op_grp->b_scl;
-            }
-            delete m_metadata->post_op_grp;
-            m_metadata->post_op_grp = nullptr;
-        }
-
-        // Clean up manually allocated memory for B matrix WOQ quantization
-        if (m_metadata->pre_ops) {
-            if (m_metadata->pre_ops->b_scl) {
-                delete m_metadata->pre_ops->b_scl;
-            }
-            if (m_metadata->pre_ops->b_zp) {
-                delete m_metadata->pre_ops->b_zp;
-            }
-            delete m_metadata->pre_ops;
+        if (m_metadata->b_quant_op) {
+            delete m_metadata->b_quant_op->quant_scale_factors;
+            delete m_metadata->b_quant_op->dequant_scale_factors;
+            delete m_metadata->b_quant_op->zero_point;
+            delete m_metadata->b_quant_op;
         }
 
         // Clean up the GLU op (single struct, no nested allocations)
@@ -1164,69 +1145,66 @@ DlpUalPlan::convertA_QuantOperations()
 
     const auto& param = *m_a_quant;
 
-    // Ensure the quant structure is allocated and zeroed
-    if (!m_metadata->a_pre_quant) {
-        m_metadata->a_pre_quant = new dlp_quant_op;
-        std::memset(m_metadata->a_pre_quant, 0, sizeof(dlp_quant_op));
-        m_metadata->a_pre_quant->symmetric = true;
+    if (!m_metadata->a_quant_op) {
+        m_metadata->a_quant_op = new dlp_quant_op_t{};
     }
-    m_metadata->a_pre_op_seq_length = 1;
-
-    if (!m_metadata->a_post_quant) {
-        m_metadata->a_post_quant = new dlp_quant_op;
-        std::memset(m_metadata->a_post_quant, 0, sizeof(dlp_quant_op));
-        m_metadata->a_post_quant->symmetric = true;
-    }
-    m_metadata->a_post_op_seq_length = 1;
+    auto& a_quant         = *m_metadata->a_quant_op;
+    a_quant.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+    a_quant.src_type      = getStorageType(m_a_type);
+    a_quant.dst_type      = DLP_S8;
 
     // Scale factor assignment
     if (param.hasA_PreOpScaleFactor()) {
-        if (!m_metadata->a_pre_quant->scl) {
-            m_metadata->a_pre_quant->scl = new dlp_sf_t{};
+        if (!a_quant.quant_scale_factors) {
+            a_quant.quant_scale_factors = new dlp_qparam_t{};
         }
-        auto* scl         = m_metadata->a_pre_quant->scl;
-        scl->scale_factor = convertMatrixToPtr(*param.getA_PreOpScaleFactor());
-        scl->scale_factor_len = param.getA_PreOpScaleFactor()->getCols();
-        scl->scale_factor_type =
+        auto* scl = a_quant.quant_scale_factors;
+        scl->data = convertMatrixToPtr(*param.getA_PreOpScaleFactor());
+        scl->len  = param.getA_PreOpScaleFactor()->getCols();
+        scl->stor_type =
             getStorageType(param.getA_PreOpScaleFactor()->getMatrixType());
+        scl->outer_dim =
+            getScalarOrVectorDim(scl->len, DLP_PARAM_DIM_PER_TOKEN);
     }
 
     // Zero point assignment
     if (param.hasA_PreOpZeroPoint()) {
-        if (!m_metadata->a_pre_quant->zp) {
-            m_metadata->a_pre_quant->zp = new dlp_zp_t;
+        if (!a_quant.zero_point) {
+            a_quant.zero_point = new dlp_qparam_t{};
         }
-        auto* zp           = m_metadata->a_pre_quant->zp;
-        zp->zero_point     = convertMatrixToPtr(*param.getA_PreOpZeroPoint());
-        zp->zero_point_len = param.getA_PreOpZeroPoint()->getCols();
-        zp->zero_point_type =
+        auto* zp = a_quant.zero_point;
+        zp->data = convertMatrixToPtr(*param.getA_PreOpZeroPoint());
+        zp->len  = param.getA_PreOpZeroPoint()->getCols();
+        zp->stor_type =
             getStorageType(param.getA_PreOpZeroPoint()->getMatrixType());
-        m_metadata->a_pre_quant->symmetric = false;
+        zp->outer_dim = getScalarOrVectorDim(zp->len, DLP_PARAM_DIM_PER_TOKEN);
     }
 
     // Scale factor assignment
     if (param.hasA_PostOpScaleFactor()) {
-        if (!m_metadata->a_post_quant->scl) {
-            m_metadata->a_post_quant->scl = new dlp_sf_t{};
+        if (!a_quant.dequant_scale_factors) {
+            a_quant.dequant_scale_factors = new dlp_qparam_t{};
         }
-        auto* scl         = m_metadata->a_post_quant->scl;
-        scl->scale_factor = convertMatrixToPtr(*param.getA_PostOpScaleFactor());
-        scl->scale_factor_len = param.getA_PostOpScaleFactor()->getCols();
-        scl->scale_factor_type =
+        auto* scl = a_quant.dequant_scale_factors;
+        scl->data = convertMatrixToPtr(*param.getA_PostOpScaleFactor());
+        scl->len  = param.getA_PostOpScaleFactor()->getCols();
+        scl->stor_type =
             getStorageType(param.getA_PostOpScaleFactor()->getMatrixType());
+        scl->outer_dim =
+            getScalarOrVectorDim(scl->len, DLP_PARAM_DIM_PER_TOKEN);
     }
 
-    // Zero point assignment
+    // Prefer the explicit post-op zero-point when present.
     if (param.hasA_PostOpZeroPoint()) {
-        if (!m_metadata->a_post_quant->zp) {
-            m_metadata->a_post_quant->zp = new dlp_zp_t;
+        if (!a_quant.zero_point) {
+            a_quant.zero_point = new dlp_qparam_t{};
         }
-        auto* zp           = m_metadata->a_post_quant->zp;
-        zp->zero_point     = convertMatrixToPtr(*param.getA_PostOpZeroPoint());
-        zp->zero_point_len = param.getA_PostOpZeroPoint()->getCols();
-        zp->zero_point_type =
+        auto* zp = a_quant.zero_point;
+        zp->data = convertMatrixToPtr(*param.getA_PostOpZeroPoint());
+        zp->len  = param.getA_PostOpZeroPoint()->getCols();
+        zp->stor_type =
             getStorageType(param.getA_PostOpZeroPoint()->getMatrixType());
-        m_metadata->a_post_quant->symmetric = false;
+        zp->outer_dim = getScalarOrVectorDim(zp->len, DLP_PARAM_DIM_PER_TOKEN);
     }
 }
 
@@ -1238,69 +1216,70 @@ DlpUalPlan::convertB_QuantOperations()
 
     const auto& param = *m_b_quant;
 
-    // Ensure the quant structure is allocated and zeroed
-    if (!m_metadata->b_pre_quant) {
-        m_metadata->b_pre_quant = new dlp_quant_op;
-        std::memset(m_metadata->b_pre_quant, 0, sizeof(dlp_quant_op));
-        m_metadata->b_pre_quant->symmetric = true;
+    if (!m_metadata->b_quant_op) {
+        m_metadata->b_quant_op = new dlp_quant_op_t{};
     }
-    m_metadata->b_pre_op_seq_length = 1;
-
-    if (!m_metadata->b_post_quant) {
-        m_metadata->b_post_quant = new dlp_quant_op;
-        std::memset(m_metadata->b_post_quant, 0, sizeof(dlp_quant_op));
-        m_metadata->b_post_quant->symmetric = true;
-    }
-    m_metadata->b_post_op_seq_length = 1;
+    auto& b_quant         = *m_metadata->b_quant_op;
+    b_quant.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+    b_quant.src_type      = getStorageType(m_b_type);
+    // Destination type describes the compute operand selected by the API/ISA,
+    // not the final C storage type.
+    b_quant.dst_type = getQuantComputeDstType(m_b_type);
 
     // Scale factor assignment for B pre-quant
     if (param.hasB_PreOpScaleFactor()) {
-        if (!m_metadata->b_pre_quant->scl) {
-            m_metadata->b_pre_quant->scl = new dlp_sf_t{};
+        if (!b_quant.quant_scale_factors) {
+            b_quant.quant_scale_factors = new dlp_qparam_t{};
         }
-        auto* scl         = m_metadata->b_pre_quant->scl;
-        scl->scale_factor = convertMatrixToPtr(*param.getB_PreOpScaleFactor());
-        scl->scale_factor_len = param.getB_PreOpScaleFactor()->getCols();
-        scl->scale_factor_type =
+        auto* scl = b_quant.quant_scale_factors;
+        scl->data = convertMatrixToPtr(*param.getB_PreOpScaleFactor());
+        scl->len  = param.getB_PreOpScaleFactor()->getCols();
+        scl->stor_type =
             getStorageType(param.getB_PreOpScaleFactor()->getMatrixType());
+        scl->outer_dim =
+            getScalarOrVectorDim(scl->len, DLP_PARAM_DIM_PER_CHANNEL);
     }
 
     // Zero point assignment for B pre-quant
     if (param.hasB_PreOpZeroPoint()) {
-        if (!m_metadata->b_pre_quant->zp) {
-            m_metadata->b_pre_quant->zp = new dlp_zp_t;
+        if (!b_quant.zero_point) {
+            b_quant.zero_point = new dlp_qparam_t{};
         }
-        auto* zp           = m_metadata->b_pre_quant->zp;
-        zp->zero_point     = convertMatrixToPtr(*param.getB_PreOpZeroPoint());
-        zp->zero_point_len = param.getB_PreOpZeroPoint()->getCols();
-        zp->zero_point_type =
+        auto* zp = b_quant.zero_point;
+        zp->data = convertMatrixToPtr(*param.getB_PreOpZeroPoint());
+        zp->len  = param.getB_PreOpZeroPoint()->getCols();
+        zp->stor_type =
             getStorageType(param.getB_PreOpZeroPoint()->getMatrixType());
-        m_metadata->b_pre_quant->symmetric = false;
+        zp->outer_dim =
+            getScalarOrVectorDim(zp->len, DLP_PARAM_DIM_PER_CHANNEL);
     }
 
     // Scale factor assignment for B post-quant
     if (param.hasB_PostOpScaleFactor()) {
-        if (!m_metadata->b_post_quant->scl) {
-            m_metadata->b_post_quant->scl = new dlp_sf_t{};
+        if (!b_quant.dequant_scale_factors) {
+            b_quant.dequant_scale_factors = new dlp_qparam_t{};
         }
-        auto* scl         = m_metadata->b_post_quant->scl;
-        scl->scale_factor = convertMatrixToPtr(*param.getB_PostOpScaleFactor());
-        scl->scale_factor_len = param.getB_PostOpScaleFactor()->getCols();
-        scl->scale_factor_type =
+        auto* scl = b_quant.dequant_scale_factors;
+        scl->data = convertMatrixToPtr(*param.getB_PostOpScaleFactor());
+        scl->len  = param.getB_PostOpScaleFactor()->getCols();
+        scl->stor_type =
             getStorageType(param.getB_PostOpScaleFactor()->getMatrixType());
+        scl->outer_dim =
+            getScalarOrVectorDim(scl->len, DLP_PARAM_DIM_PER_CHANNEL);
     }
 
-    // Zero point assignment for B post-quant
+    // Prefer the explicit post-op zero-point when present.
     if (param.hasB_PostOpZeroPoint()) {
-        if (!m_metadata->b_post_quant->zp) {
-            m_metadata->b_post_quant->zp = new dlp_zp_t;
+        if (!b_quant.zero_point) {
+            b_quant.zero_point = new dlp_qparam_t{};
         }
-        auto* zp           = m_metadata->b_post_quant->zp;
-        zp->zero_point     = convertMatrixToPtr(*param.getB_PostOpZeroPoint());
-        zp->zero_point_len = param.getB_PostOpZeroPoint()->getCols();
-        zp->zero_point_type =
+        auto* zp = b_quant.zero_point;
+        zp->data = convertMatrixToPtr(*param.getB_PostOpZeroPoint());
+        zp->len  = param.getB_PostOpZeroPoint()->getCols();
+        zp->stor_type =
             getStorageType(param.getB_PostOpZeroPoint()->getMatrixType());
-        m_metadata->b_post_quant->symmetric = false;
+        zp->outer_dim =
+            getScalarOrVectorDim(zp->len, DLP_PARAM_DIM_PER_CHANNEL);
     }
 }
 
@@ -1312,40 +1291,42 @@ DlpUalPlan::convertWOQOperations()
 
     const auto& param = *m_woq;
 
-    // Allocate and zero the pre_ops structure
-    if (!m_metadata->pre_ops) {
-        m_metadata->pre_ops = new dlp_pre_op;
-        std::memset(m_metadata->pre_ops, 0, sizeof(dlp_pre_op));
+    if (!m_metadata->b_quant_op) {
+        m_metadata->b_quant_op = new dlp_quant_op_t{};
     }
+    auto& b_quant         = *m_metadata->b_quant_op;
+    b_quant.quant_op_kind = DLP_QUANT_OP_DEQUANTIZE;
+    b_quant.src_type      = getStorageType(m_b_type);
+    b_quant.dst_type      = DLP_BF16;
 
     // Scale factor assignment for B matrix
     if (param.hasB_ScaleFactor()) {
-        if (!m_metadata->pre_ops->b_scl) {
-            m_metadata->pre_ops->b_scl = new dlp_sf_t{};
+        if (!b_quant.dequant_scale_factors) {
+            b_quant.dequant_scale_factors = new dlp_qparam_t{};
         }
-        auto* scl             = m_metadata->pre_ops->b_scl;
-        scl->scale_factor     = convertMatrixToPtr(*param.getB_ScaleFactor());
-        scl->scale_factor_len = param.getB_ScaleFactor()->getCols();
-        scl->scale_factor_type =
+        auto* scl = b_quant.dequant_scale_factors;
+        scl->data = convertMatrixToPtr(*param.getB_ScaleFactor());
+        scl->len  = param.getB_ScaleFactor()->getCols();
+        scl->stor_type =
             getStorageType(param.getB_ScaleFactor()->getMatrixType());
+        scl->outer_dim =
+            getScalarOrVectorDim(scl->len, DLP_PARAM_DIM_PER_CHANNEL);
     }
 
     // Zero point assignment for B matrix
     if (param.hasB_ZeroPoint()) {
-        if (!m_metadata->pre_ops->b_zp) {
-            m_metadata->pre_ops->b_zp = new dlp_zp_t;
+        if (!b_quant.zero_point) {
+            b_quant.zero_point = new dlp_qparam_t{};
         }
-        auto* zp           = m_metadata->pre_ops->b_zp;
-        zp->zero_point     = convertMatrixToPtr(*param.getB_ZeroPoint());
-        zp->zero_point_len = param.getB_ZeroPoint()->getCols();
-        zp->zero_point_type =
-            getStorageType(param.getB_ZeroPoint()->getMatrixType());
+        auto* zp      = b_quant.zero_point;
+        zp->data      = convertMatrixToPtr(*param.getB_ZeroPoint());
+        zp->len       = param.getB_ZeroPoint()->getCols();
+        zp->stor_type = getStorageType(param.getB_ZeroPoint()->getMatrixType());
+        zp->outer_dim =
+            getScalarOrVectorDim(zp->len, DLP_PARAM_DIM_PER_CHANNEL);
     }
 
-    // Set sequence information
-    m_metadata->pre_ops->seq_length = 1; // One WOQ operation
-    m_metadata->pre_ops->group_size =
-        0; // 0 here indicates no explicit group size for WOQ
+    b_quant.group_size = 0; // one group over full K
 }
 
 void
@@ -1362,18 +1343,24 @@ DlpUalPlan::convertGroupScaleOperations()
             "are required");
     }
 
-    // Allocate and zero the post_op_grp structure
-    m_metadata->post_op_grp = new dlp_group_post_op;
-    std::memset(m_metadata->post_op_grp, 0, sizeof(dlp_group_post_op));
+    if (!m_metadata->a_quant_op) {
+        m_metadata->a_quant_op = new dlp_quant_op_t{};
+    }
+    if (!m_metadata->b_quant_op) {
+        m_metadata->b_quant_op = new dlp_quant_op_t{};
+    }
+    auto& a_quant         = *m_metadata->a_quant_op;
+    auto& b_quant         = *m_metadata->b_quant_op;
+    a_quant.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+    b_quant.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+    a_quant.src_type      = DLP_S8;
+    b_quant.src_type      = DLP_S8;
+    a_quant.dst_type      = DLP_S8;
+    b_quant.dst_type      = DLP_S8;
 
-    // seq_length must be 1 so dlp_gemm_translate_to_group_postops_list()
-    // processes the a_scl/b_scl entries (seq_length=0 causes early return).
-    // group_size=0 defaults to k in the C API, which is correct for
-    // symmetric quantization over the full k dimension.
-    m_metadata->post_op_grp->seq_length = 1;
-
-    md_t gs                             = m_group_scale->getGroupSize();
-    m_metadata->post_op_grp->group_size = gs;
+    md_t gs            = m_group_scale->getGroupSize();
+    a_quant.group_size = gs;
+    b_quant.group_size = gs;
 
     // The sym_quant kernel indexes scale factors as 2D arrays:
     //   A scale: a_scale[row * num_groups + group], needing m * num_groups
@@ -1399,18 +1386,22 @@ DlpUalPlan::convertGroupScaleOperations()
 
     // Set A scale factor
     if (param.hasAScaleFactor()) {
-        m_metadata->post_op_grp->a_scl = new dlp_sf_t{};
-        auto* scl                      = m_metadata->post_op_grp->a_scl;
-        md_t  a_sf_len                 = param.getAScaleFactor()->getCols();
-        scl->scale_factor_type =
+        if (!a_quant.dequant_scale_factors) {
+            a_quant.dequant_scale_factors = new dlp_qparam_t{};
+        }
+        auto* scl      = a_quant.dequant_scale_factors;
+        md_t  a_sf_len = param.getAScaleFactor()->getCols();
+        scl->stor_type =
             getStorageType(param.getAScaleFactor()->getMatrixType());
+        scl->outer_dim =
+            (ng > 1) ? DLP_PARAM_DIM_PER_GROUP
+                     : getScalarOrVectorDim(a_sf_len, DLP_PARAM_DIM_PER_TOKEN);
 
         md_t eff_a_sf_len = m * ng;
         if (a_sf_len == 1 && eff_a_sf_len > 1) {
             // Broadcast scalar to m elements (one per row, single group)
-            size_t elem_size = (scl->scale_factor_type == DLP_BF16)
-                                   ? sizeof(int16_t)
-                                   : sizeof(float);
+            size_t elem_size = (scl->stor_type == DLP_BF16) ? sizeof(int16_t)
+                                                            : sizeof(float);
             m_broadcast_a_scale.resize(eff_a_sf_len * elem_size);
             const uint8_t* src = static_cast<const uint8_t*>(
                 convertMatrixToPtr(*param.getAScaleFactor()));
@@ -1418,28 +1409,33 @@ DlpUalPlan::convertGroupScaleOperations()
                 std::copy(src, src + elem_size,
                           m_broadcast_a_scale.data() + i * elem_size);
             }
-            scl->scale_factor     = m_broadcast_a_scale.data();
-            scl->scale_factor_len = eff_a_sf_len;
+            scl->data = m_broadcast_a_scale.data();
+            scl->len  = eff_a_sf_len;
         } else {
-            scl->scale_factor = convertMatrixToPtr(*param.getAScaleFactor());
-            scl->scale_factor_len = a_sf_len;
+            scl->data = convertMatrixToPtr(*param.getAScaleFactor());
+            scl->len  = a_sf_len;
         }
     }
 
     // Set B scale factor
     if (param.hasBScaleFactor()) {
-        m_metadata->post_op_grp->b_scl = new dlp_sf_t{};
-        auto* scl                      = m_metadata->post_op_grp->b_scl;
-        md_t  b_sf_len                 = param.getBScaleFactor()->getCols();
-        scl->scale_factor_type =
+        if (!b_quant.dequant_scale_factors) {
+            b_quant.dequant_scale_factors = new dlp_qparam_t{};
+        }
+        auto* scl      = b_quant.dequant_scale_factors;
+        md_t  b_sf_len = param.getBScaleFactor()->getCols();
+        scl->stor_type =
             getStorageType(param.getBScaleFactor()->getMatrixType());
+        scl->outer_dim =
+            (ng > 1)
+                ? DLP_PARAM_DIM_PER_GROUP
+                : getScalarOrVectorDim(b_sf_len, DLP_PARAM_DIM_PER_CHANNEL);
 
         md_t eff_b_sf_len = n * ng;
         if (b_sf_len == 1 && eff_b_sf_len > 1) {
             // Broadcast scalar to n elements (one per column, single group)
-            size_t elem_size = (scl->scale_factor_type == DLP_BF16)
-                                   ? sizeof(int16_t)
-                                   : sizeof(float);
+            size_t elem_size = (scl->stor_type == DLP_BF16) ? sizeof(int16_t)
+                                                            : sizeof(float);
             m_broadcast_b_scale.resize(eff_b_sf_len * elem_size);
             const uint8_t* src = static_cast<const uint8_t*>(
                 convertMatrixToPtr(*param.getBScaleFactor()));
@@ -1447,11 +1443,11 @@ DlpUalPlan::convertGroupScaleOperations()
                 std::copy(src, src + elem_size,
                           m_broadcast_b_scale.data() + i * elem_size);
             }
-            scl->scale_factor     = m_broadcast_b_scale.data();
-            scl->scale_factor_len = eff_b_sf_len;
+            scl->data = m_broadcast_b_scale.data();
+            scl->len  = eff_b_sf_len;
         } else {
-            scl->scale_factor = convertMatrixToPtr(*param.getBScaleFactor());
-            scl->scale_factor_len = b_sf_len;
+            scl->data = convertMatrixToPtr(*param.getBScaleFactor());
+            scl->len  = b_sf_len;
         }
     }
 }
@@ -1476,6 +1472,10 @@ DlpUalPlan::getStorageType(MatrixType type)
             return DLP_BF16;
         case MatrixType::s8:
             return DLP_S8;
+        case MatrixType::s4:
+            return DLP_S4;
+        case MatrixType::u4:
+            return DLP_U4;
         case MatrixType::u8:
             return DLP_U8;
         case MatrixType::s32:

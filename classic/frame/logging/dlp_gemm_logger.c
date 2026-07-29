@@ -26,7 +26,9 @@
  *
  */
 
-#include <string.h>
+#include <inttypes.h>
+#include <stdarg.h>
+#include <stdint.h>
 
 #include "bindings/c_wrappers/capi_env_config.h"
 #include "dlp_gemm_post_ops.h"
@@ -49,9 +51,9 @@ dlp_gemm_start_logger_fn(double* dlp_gemm_logger_start_time)
 
     if (dlp_env_is_logger_enabled() == TRUE) {
         char log_file[255] = { 0 };
-        sprintf(log_file, "%s_P%lu_T%lu%s", AOCL_DLP_GEMM_LOG_FILE_PRFX,
-                dlp_gemm_getpid(), dlp_gemm_gettid(),
-                AOCL_DLP_GEMM_LOG_FILE_EXT);
+        snprintf(log_file, sizeof(log_file), "%s_P%lu_T%lu%s",
+                 AOCL_DLP_GEMM_LOG_FILE_PRFX, dlp_gemm_getpid(),
+                 dlp_gemm_gettid(), AOCL_DLP_GEMM_LOG_FILE_EXT);
 
         fd = fopen(log_file, "a");
 
@@ -74,68 +76,132 @@ dlp_gemm_stop_logger_fn(FILE* fd, double* dlp_gemm_logger_start_time)
     }
 }
 
+static void
+dlp_gemm_logger_vstr_append(char*       ops_str,
+                            size_t*     ops_str_len,
+                            size_t      ops_str_max_len,
+                            const char* format,
+                            va_list     args)
+{
+    if ((ops_str == NULL) || (ops_str_len == NULL) || (format == NULL)
+        || (ops_str_max_len == 0) || (*ops_str_len >= (ops_str_max_len - 1))) {
+        return;
+    }
+
+    size_t remaining = ops_str_max_len - *ops_str_len;
+    int    written = vsnprintf(ops_str + *ops_str_len, remaining, format, args);
+
+    if (written < 0) {
+        return;
+    }
+
+    if ((size_t)written >= remaining) {
+        *ops_str_len = ops_str_max_len - 1;
+    } else {
+        *ops_str_len += (size_t)written;
+    }
+}
+
+static void
+dlp_gemm_logger_str_append(char*       ops_str,
+                           size_t*     ops_str_len,
+                           size_t      ops_str_max_len,
+                           const char* format,
+                           ...)
+{
+    va_list args;
+    va_start(args, format);
+    dlp_gemm_logger_vstr_append(ops_str, ops_str_len, ops_str_max_len, format,
+                                args);
+    va_end(args);
+}
+
 #define DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, p_str)                \
-    do {                                                                       \
-        char*  c_ops_str     = p_str;                                          \
-        size_t c_ops_str_len = strlen(c_ops_str);                              \
-        strcpy(ops_str + ops_str_len, c_ops_str);                              \
-        ops_str_len += c_ops_str_len;                                          \
-    } while (0);
+    dlp_gemm_logger_str_append((ops_str), &(ops_str_len),                      \
+                               DLP_GEMM_POST_OPS_STR_MAX_LEN, "%s", (p_str))
+
+static void
+dlp_gemm_quant_ops_str_append(char*       ops_str,
+                              size_t*     ops_str_len,
+                              const char* format,
+                              ...)
+{
+    va_list args;
+    va_start(args, format);
+    dlp_gemm_logger_vstr_append(ops_str, ops_str_len,
+                                DLP_GEMM_QUANT_OPS_STR_MAX_LEN, format, args);
+    va_end(args);
+}
+
+static void
+dlp_gemm_append_qparam_str(char*               ops_str,
+                           size_t*             ops_str_len,
+                           const char*         name,
+                           const dlp_qparam_t* qparam)
+{
+    dlp_gemm_quant_ops_str_append(ops_str, ops_str_len, "%s=", name);
+    if (qparam == NULL) {
+        dlp_gemm_quant_ops_str_append(ops_str, ops_str_len, "none");
+    } else if (qparam->len == 1) {
+        dlp_gemm_quant_ops_str_append(ops_str, ops_str_len, "scalar");
+    } else {
+        dlp_gemm_quant_ops_str_append(ops_str, ops_str_len, "vector");
+    }
+}
+
+static void
+dlp_gemm_append_quant_op_str(char*                 ops_str,
+                             size_t*               ops_str_len,
+                             const char*           name,
+                             const dlp_quant_op_t* quant_op)
+{
+    if (quant_op == NULL) {
+        return;
+    }
+
+    dlp_gemm_quant_ops_str_append(
+        ops_str, ops_str_len, "%s={kind=%d,src=%d,dst=%d,group_sz=%" PRId64 ",",
+        name, (int)quant_op->quant_op_kind, (int)quant_op->src_type,
+        (int)quant_op->dst_type, (int64_t)quant_op->group_size);
+    dlp_gemm_append_qparam_str(ops_str, ops_str_len, "quant",
+                               quant_op->quant_scale_factors);
+    dlp_gemm_quant_ops_str_append(ops_str, ops_str_len, ",");
+    dlp_gemm_append_qparam_str(ops_str, ops_str_len, "dequant",
+                               quant_op->dequant_scale_factors);
+    dlp_gemm_quant_ops_str_append(ops_str, ops_str_len, ",");
+    dlp_gemm_append_qparam_str(ops_str, ops_str_len, "zero_point",
+                               quant_op->zero_point);
+    dlp_gemm_quant_ops_str_append(ops_str, ops_str_len, "}");
+}
 
 void
-dlp_gemm_get_pre_ops_str(dlp_metadata_t* metadata, char* ops_str)
+dlp_gemm_get_quant_ops_str(dlp_metadata_t* metadata, char* ops_str)
 {
     if (metadata == NULL) {
-        strcpy(ops_str, "none");
+        size_t ops_str_len = 0;
+        dlp_gemm_quant_ops_str_append(ops_str, &ops_str_len, "none");
         return;
     }
 
-    dlp_pre_op* pre_ops = metadata->pre_ops;
-    if ((pre_ops == NULL) || (pre_ops->seq_length <= 0)) {
-        strcpy(ops_str, "none");
-        return;
-    }
-    if ((pre_ops->seq_length > AOCL_DLP_MAX_POST_OPS)) {
-        strcpy(ops_str, "ops over-limit");
+    if ((metadata->a_quant_op == NULL) && (metadata->b_quant_op == NULL)) {
+        size_t ops_str_len = 0;
+        dlp_gemm_quant_ops_str_append(ops_str, &ops_str_len, "none");
         return;
     }
 
-    size_t ops_str_len   = 0;
-    char*  delim_str     = "#";
-    size_t delim_str_len = strlen(delim_str);
+    size_t ops_str_len = 0;
+    char*  delim_str   = "#";
 
-    DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, "group_sz=");
-    int written = sprintf((ops_str + ops_str_len), "%ld", pre_ops->group_size);
-    if (written > 0) {
-        ops_str += written;
+    if (metadata->a_quant_op != NULL) {
+        dlp_gemm_append_quant_op_str(ops_str, &ops_str_len, "a_quant",
+                                     metadata->a_quant_op);
+        dlp_gemm_quant_ops_str_append(ops_str, &ops_str_len, "%s", delim_str);
     }
-    strcpy(ops_str + ops_str_len, delim_str);
-    ops_str_len += delim_str_len;
 
-    for (iter_t i = 0; i < pre_ops->seq_length; ++i) {
-        DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, "scale=");
-        if ((pre_ops->b_scl) != NULL) {
-            if ((pre_ops->b_scl + i)->scale_factor_len == 1) {
-                DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len,
-                                           "scalar_scale_factor,");
-            } else {
-                DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len,
-                                           "vector_scale_factor,");
-            }
-        }
-
-        if ((pre_ops->b_zp) != NULL) {
-            if ((pre_ops->b_zp + i)->zero_point_len == 1) {
-                DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len,
-                                           "scalar_zero_point,");
-            } else {
-                DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len,
-                                           "vector_zero_point,");
-            }
-        }
-
-        strcpy(ops_str + ops_str_len, delim_str);
-        ops_str_len += delim_str_len;
+    if (metadata->b_quant_op != NULL) {
+        dlp_gemm_append_quant_op_str(ops_str, &ops_str_len, "b_quant",
+                                     metadata->b_quant_op);
+        dlp_gemm_quant_ops_str_append(ops_str, &ops_str_len, "%s", delim_str);
     }
 }
 
@@ -143,19 +209,20 @@ void
 dlp_gemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str)
 {
     if ((metadata == NULL) || (metadata->seq_length <= 0)) {
-        strcpy(ops_str, "none");
+        size_t ops_str_len = 0;
+        DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, "none");
         return;
     }
     if ((metadata->seq_length > AOCL_DLP_MAX_POST_OPS)) {
-        strcpy(ops_str, "ops over-limit");
+        size_t ops_str_len = 0;
+        DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, "ops over-limit");
         return;
     }
 
-    size_t ops_str_len   = 0;
-    iter_t e_i           = 0; // Multiple eltwise supported.
-    iter_t s_i           = 0; // Multiple sum/scale supported.
-    char*  delim_str     = "#";
-    size_t delim_str_len = strlen(delim_str);
+    size_t ops_str_len = 0;
+    iter_t e_i         = 0; // Multiple eltwise supported.
+    iter_t s_i         = 0; // Multiple sum/scale supported.
+    char*  delim_str   = "#";
     for (iter_t i = 0; i < metadata->seq_length; ++i) {
         // Dispatcher code
         switch (*(metadata->seq_vector + i)) {
@@ -235,8 +302,7 @@ dlp_gemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str)
                 break;
         }
 
-        strcpy(ops_str + ops_str_len, delim_str);
-        ops_str_len += delim_str_len;
+        DLP_GEMM_POST_OPS_STR_COPY(ops_str, ops_str_len, delim_str);
     }
 
     // GLU is a terminal op and at most one per op chain.
@@ -277,17 +343,17 @@ dlp_gemm_write_logger_gemm_fn(FILE*           fd,
                               dlp_metadata_t* metadata)
 {
     if ((dlp_env_is_logger_enabled() == TRUE) && (fd != NULL)) {
-        char pre_ops_str[1024] = { 0 };
-        dlp_gemm_get_pre_ops_str(metadata, pre_ops_str);
+        char quant_ops_str[DLP_GEMM_QUANT_OPS_STR_MAX_LEN] = { 0 };
+        dlp_gemm_get_quant_ops_str(metadata, quant_ops_str);
 
-        char post_ops_str[2048] = { 0 };
+        char post_ops_str[DLP_GEMM_POST_OPS_STR_MAX_LEN] = { 0 };
         dlp_gemm_get_post_ops_str(metadata, post_ops_str);
 
         fprintf(fd,
                 "%c %c %c %c %c %ld %ld %ld %ld %ld %ld "
-                "%s:pre_ops=[%s]:metadata=[%s] %f %f ",
+                "%s:quant_ops=[%s]:metadata=[%s] %f %f ",
                 order, transa, transb, mem_format_a, mem_format_b, m, n, k, lda,
-                ldb, ldc, op_type, pre_ops_str, post_ops_str, alpha, beta);
+                ldb, ldc, op_type, quant_ops_str, post_ops_str, alpha, beta);
     }
 }
 
@@ -312,20 +378,20 @@ batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
                                     dlp_metadata_t** metadata)
 {
     if ((dlp_env_is_logger_enabled() == TRUE) && (fd != NULL)) {
-        char pre_ops_str[1024] = { 0 };
+        char quant_ops_str[DLP_GEMM_QUANT_OPS_STR_MAX_LEN] = { 0 };
 
-        char post_ops_str[2048] = { 0 };
+        char post_ops_str[DLP_GEMM_POST_OPS_STR_MAX_LEN] = { 0 };
 
         fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);
         for (iter_t i = 0; i < group_count; i++) {
-            dlp_gemm_get_pre_ops_str(metadata[i], pre_ops_str);
+            dlp_gemm_get_quant_ops_str(metadata[i], quant_ops_str);
             dlp_gemm_get_post_ops_str(metadata[i], post_ops_str);
             fprintf(fd,
                     "%c %c %c %c %c %ld %ld %ld %ld %ld %ld "
-                    ":pre_ops=[%s]:metadata=[%s] %f %f %ld\n",
+                    ":quant_ops=[%s]:metadata=[%s] %f %f %ld\n",
                     order[i], transa[i], transb[i], mem_format_a[i],
                     mem_format_b[i], m[i], n[i], k[i], lda[i], ldb[i], ldc[i],
-                    pre_ops_str, post_ops_str, (float)(alpha[i]),
+                    quant_ops_str, post_ops_str, (float)(alpha[i]),
                     (float)(beta[i]), group_size[i]);
         }
     }

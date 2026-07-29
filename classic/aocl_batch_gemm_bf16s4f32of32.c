@@ -110,8 +110,8 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
         }
 
         // Add early returns for NULL pointers.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->pre_ops == NULL
-            || metadata[gc_i]->pre_ops->b_scl == NULL) {
+        if (metadata[gc_i] == NULL || metadata[gc_i]->b_quant_op == NULL
+            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
             dlp_print_msg(
                 "Required parameters for symmetric woq missing. Exiting..",
                 __FILE__, __LINE__);
@@ -120,7 +120,7 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
         }
 
         // Note: b_zp is not required for this kernel.
-        if (metadata[gc_i]->pre_ops->b_zp != NULL) {
+        if (metadata[gc_i]->b_quant_op->zero_point != NULL) {
             dlp_print_msg(" zero-point is not required, asymmetric woq not "
                           "supported. Exiting..",
                           __FILE__, __LINE__);
@@ -145,7 +145,7 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
 
         // Convert pre op struct to pre op linked list format.
         dlp_clsc_err_t err = dlp_gemm_translate_to_pre_ops_list(
-            metadata[gc_i]->pre_ops, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
+            metadata[gc_i]->b_quant_op, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
@@ -364,8 +364,8 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
         }
 
         // Add early returns for NULL pointers.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->pre_ops == NULL
-            || metadata[gc_i]->pre_ops->b_scl == NULL) {
+        if (metadata[gc_i] == NULL || metadata[gc_i]->b_quant_op == NULL
+            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
             dlp_print_msg(
                 "Required parameters for symmetric woq missing. Exiting..",
                 __FILE__, __LINE__);
@@ -374,7 +374,7 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
         }
 
         // Note: b_zp is not required for this kernel.
-        if (metadata[gc_i]->pre_ops->b_zp != NULL) {
+        if (metadata[gc_i]->b_quant_op->zero_point != NULL) {
             dlp_print_msg(" zero-point is not required, asymmetric woq not "
                           "supported. Exiting..",
                           __FILE__, __LINE__);
@@ -403,7 +403,7 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
 
         // Convert pre op struct to pre op linked list format.
         dlp_clsc_err_t err = dlp_gemm_translate_to_pre_ops_list(
-            metadata[gc_i]->pre_ops, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
+            metadata[gc_i]->b_quant_op, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;

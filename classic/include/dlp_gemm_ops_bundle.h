@@ -51,8 +51,8 @@ typedef struct dlp_gemm_ops_bundle_t
         post_op_list; ///< Post-operations (most common, all variants)
     dlp_gemm_pre_op* pre_op_list; ///< Pre-operations (MP variants)
     dlp_gemm_group_post_op*
-        grp_post_op_list;      ///< Grouped post-ops (symmetric quantization)
-    dlp_quant_op* a_pre_quant; ///< A matrix pre-quantization
+        grp_post_op_list;       ///< Grouped post-ops (symmetric quantization)
+    dlp_quant_op_t* a_quant_op; ///< A matrix quantization metadata
 } dlp_gemm_ops_bundle_t;
 
 /**
@@ -63,7 +63,7 @@ typedef struct dlp_gemm_ops_bundle_t
     { .post_op_list     = (post_ops),                                          \
       .pre_op_list      = NULL,                                                \
       .grp_post_op_list = NULL,                                                \
-      .a_pre_quant      = NULL }
+      .a_quant_op       = NULL }
 
 /**
  * @brief Initialize ops bundle for MP variant (pre-ops + post-ops)
@@ -74,7 +74,7 @@ typedef struct dlp_gemm_ops_bundle_t
     { .post_op_list     = (post_ops),                                          \
       .pre_op_list      = (pre_ops),                                           \
       .grp_post_op_list = NULL,                                                \
-      .a_pre_quant      = NULL }
+      .a_quant_op       = NULL }
 
 /**
  * @brief Initialize ops bundle for grouped post-ops (symmetric quantization)
@@ -85,7 +85,7 @@ typedef struct dlp_gemm_ops_bundle_t
     { .post_op_list     = (post_ops),                                          \
       .pre_op_list      = NULL,                                                \
       .grp_post_op_list = (grp_post_ops),                                      \
-      .a_pre_quant      = NULL }
+      .a_quant_op       = NULL }
 
 /**
  * @brief Initialize ops bundle for quantization variant
@@ -96,7 +96,7 @@ typedef struct dlp_gemm_ops_bundle_t
     { .post_op_list     = (post_ops),                                          \
       .pre_op_list      = NULL,                                                \
       .grp_post_op_list = NULL,                                                \
-      .a_pre_quant      = (quant_op) }
+      .a_quant_op       = (quant_op) }
 
 /**
  * @brief Initialize empty ops bundle (no operations)
@@ -105,7 +105,7 @@ typedef struct dlp_gemm_ops_bundle_t
     { .post_op_list     = NULL,                                                \
       .pre_op_list      = NULL,                                                \
       .grp_post_op_list = NULL,                                                \
-      .a_pre_quant      = NULL }
+      .a_quant_op       = NULL }
 
 /**
  * @brief Extract operations from bundle into local non-const variables.
@@ -134,6 +134,6 @@ typedef struct dlp_gemm_ops_bundle_t
     dlp_gemm_post_op*       post_op_list     = (ops)->post_op_list;            \
     dlp_gemm_pre_op*        pre_op_list      = (ops)->pre_op_list;             \
     dlp_gemm_group_post_op* grp_post_op_list = (ops)->grp_post_op_list;        \
-    dlp_quant_op*           a_pre_quant      = (ops)->a_pre_quant
+    dlp_quant_op_t*         a_quant_op       = (ops)->a_quant_op
 
 #endif // DLP_GEMM_OPS_BUNDLE_H

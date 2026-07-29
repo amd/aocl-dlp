@@ -39,8 +39,10 @@
 
 #ifdef AOCL_DLP_LOGGER_SUPPORT
 
-#define AOCL_DLP_GEMM_LOG_FILE_PRFX "aocl_gemm_log"
-#define AOCL_DLP_GEMM_LOG_FILE_EXT  ".txt"
+#define AOCL_DLP_GEMM_LOG_FILE_PRFX    "aocl_gemm_log"
+#define AOCL_DLP_GEMM_LOG_FILE_EXT     ".txt"
+#define DLP_GEMM_QUANT_OPS_STR_MAX_LEN 1024
+#define DLP_GEMM_POST_OPS_STR_MAX_LEN  2048
 
 FILE*
 dlp_gemm_start_logger_fn(double* dlp_gemm_logger_start_time);
@@ -49,7 +51,7 @@ dlp_gemm_stop_logger_fn(FILE* fd, double* dlp_gemm_logger_start_time);
 void
 dlp_gemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str);
 void
-dlp_gemm_get_pre_ops_str(dlp_metadata_t* metadata, char* ops_str);
+dlp_gemm_get_quant_ops_str(dlp_metadata_t* metadata, char* ops_str);
 bool
 dlp_gemm_is_logger_enabled();
 void
@@ -105,20 +107,20 @@ batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
     lda, mem_format_a, ldb, mem_format_b, beta, ldc, metadata)                 \
     {                                                                          \
         if ((dlp_gemm_is_logger_enabled()) && (fd != NULL)) {                  \
-            char pre_ops_str[1024] = { 0 };                                    \
+            char quant_ops_str[DLP_GEMM_QUANT_OPS_STR_MAX_LEN] = { 0 };        \
                                                                                \
-            char post_ops_str[2048] = { 0 };                                   \
+            char post_ops_str[DLP_GEMM_POST_OPS_STR_MAX_LEN] = { 0 };          \
                                                                                \
             fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);         \
             for (iter_t i = 0; i < group_count; i++) {                         \
-                dlp_gemm_get_pre_ops_str(metadata[i], pre_ops_str);            \
+                dlp_gemm_get_quant_ops_str(metadata[i], quant_ops_str);        \
                 dlp_gemm_get_post_ops_str(metadata[i], post_ops_str);          \
                 fprintf(fd,                                                    \
                         "%ld %c %c %c %c %c %ld %ld %ld %ld %ld %ld "          \
-                        ":pre_ops=[%s]:metadata=[%s] %f %f\n",                 \
+                        ":quant_ops=[%s]:metadata=[%s] %f %f\n",               \
                         group_size[i], order[i], transa[i], transb[i],         \
                         mem_format_a[i], mem_format_b[i], m[i], n[i], k[i],    \
-                        lda[i], ldb[i], ldc[i], pre_ops_str, post_ops_str,     \
+                        lda[i], ldb[i], ldc[i], quant_ops_str, post_ops_str,   \
                         (float)(alpha[i]), (float)(beta[i]));                  \
             }                                                                  \
         }                                                                      \
@@ -130,20 +132,20 @@ batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
     metadata)                                                                  \
     {                                                                          \
         if ((dlp_gemm_is_logger_enabled()) && (fd != NULL)) {                  \
-            char pre_ops_str[1024] = { 0 };                                    \
+            char quant_ops_str[DLP_GEMM_QUANT_OPS_STR_MAX_LEN] = { 0 };        \
                                                                                \
-            char post_ops_str[2048] = { 0 };                                   \
+            char post_ops_str[DLP_GEMM_POST_OPS_STR_MAX_LEN] = { 0 };          \
                                                                                \
             fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);         \
             for (iter_t i = 0; i < group_count; i++) {                         \
-                dlp_gemm_get_pre_ops_str(metadata[i], pre_ops_str);            \
+                dlp_gemm_get_quant_ops_str(metadata[i], quant_ops_str);        \
                 dlp_gemm_get_post_ops_str(metadata[i], post_ops_str);          \
                 fprintf(fd,                                                    \
                         "%ld %c %c %c %c %c %ld %ld %ld %ld %ld %ld "          \
-                        ":pre_ops=[%s]:metadata=[%s] %f %f\n",                 \
+                        ":quant_ops=[%s]:metadata=[%s] %f %f\n",               \
                         group_size[i], order[i], transa[i], transb[i],         \
                         mem_format_a[i], mem_format_b[i], m[i], n[i], k[i],    \
-                        lda[i], ldb[i], ldc[i], pre_ops_str, post_ops_str,     \
+                        lda[i], ldb[i], ldc[i], quant_ops_str, post_ops_str,   \
                         fp16_to_f32(alpha_fp16[i]),                            \
                         fp16_to_f32(beta_fp16[i]));                            \
             }                                                                  \

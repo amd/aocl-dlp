@@ -101,8 +101,8 @@ aocl_gemm_bf16s4f32of32(const char      order,
     }
 
     // Add early returns for NULL pointers.
-    if (metadata == NULL || metadata->pre_ops == NULL
-        || metadata->pre_ops->b_scl == NULL) {
+    if (metadata == NULL || metadata->b_quant_op == NULL
+        || metadata->b_quant_op->dequant_scale_factors == NULL) {
         dlp_print_msg(
             "Required parameters for symmetric woq missing. Exiting..",
             __FILE__, __LINE__);
@@ -110,8 +110,8 @@ aocl_gemm_bf16s4f32of32(const char      order,
         goto err_hndl;
     }
 
-    // Note: b_zp is not required for this kernel.
-    if (metadata->pre_ops->b_zp != NULL) {
+    // Note: b zero-point is not required for this kernel.
+    if (metadata->b_quant_op->zero_point != NULL) {
         dlp_print_msg(" zero-point is not required, asymmetric woq not "
                       "supported. Exiting..",
                       __FILE__, __LINE__);
@@ -183,7 +183,7 @@ aocl_gemm_bf16s4f32of32(const char      order,
     // Convert pre op struct to pre op linked list format.
     dlp_gemm_pre_op pre_op_list[AOCL_DLP_MAX_PRE_OPS];
     dlp_clsc_err_t  err = dlp_gemm_translate_to_pre_ops_list(
-        metadata->pre_ops, pre_op_list, m, n, k);
+        metadata->b_quant_op, pre_op_list, m, n, k);
     if (err != DLP_CLSC_SUCCESS) {
         dlp_print_msg(" Failed to translate pre ops list. Invalid pre ops.",
                       __FILE__, __LINE__);
@@ -307,8 +307,8 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     }
 
     // Add early returns for NULL pointers.
-    if (metadata == NULL || metadata->pre_ops == NULL
-        || metadata->pre_ops->b_scl == NULL) {
+    if (metadata == NULL || metadata->b_quant_op == NULL
+        || metadata->b_quant_op->dequant_scale_factors == NULL) {
         dlp_print_msg(
             "Required parameters for symmetric woq missing. Exiting..",
             __FILE__, __LINE__);
@@ -316,8 +316,8 @@ aocl_gemm_bf16s4f32obf16(const char      order,
         goto err_hndl;
     }
 
-    // Note: b_zp is not required for this kernel.
-    if (metadata->pre_ops->b_zp != NULL) {
+    // Note: b zero-point is not required for this kernel.
+    if (metadata->b_quant_op->zero_point != NULL) {
         dlp_print_msg(" zero-point is not required, asymmetric woq not "
                       "supported. Exiting..",
                       __FILE__, __LINE__);
@@ -390,7 +390,7 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     // Convert pre op struct to pre op linked list format.
     dlp_gemm_pre_op pre_op_list[AOCL_DLP_MAX_PRE_OPS];
     dlp_clsc_err_t  err = dlp_gemm_translate_to_pre_ops_list(
-        metadata->pre_ops, pre_op_list, m, n, k);
+        metadata->b_quant_op, pre_op_list, m, n, k);
 
     if (err != DLP_CLSC_SUCCESS) {
         dlp_print_msg(" Failed to translate pre ops list. Invalid pre ops.",

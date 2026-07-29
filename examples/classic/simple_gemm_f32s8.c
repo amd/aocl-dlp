@@ -185,36 +185,30 @@ main()
     printf("Scale factors: pre-quantization=%.6f, post-quantization=%.6f\n\n",
            a_pre_quant_sf, a_post_quant_sf);
 
-    dlp_sf_t a_pre_quant_scl  = { .scale_factor      = &a_pre_quant_sf,
-                                  .scale_factor_len  = 1,
-                                  .scale_factor_type = DLP_F32 };
-    dlp_sf_t a_post_quant_scl = { .scale_factor      = &a_post_quant_sf,
-                                  .scale_factor_len  = 1,
-                                  .scale_factor_type = DLP_F32 };
-
-    dlp_quant_op a_pre_quant = { .group_size = 0,
-                                 .src_type   = DLP_F32,
-                                 .dst_type   = DLP_S8,
-                                 .scl        = &a_pre_quant_scl,
-                                 .zp         = NULL,
-                                 .symmetric  = true };
-
-    dlp_quant_op a_post_quant = { .group_size = 0,
-                                  .src_type   = DLP_F32,
-                                  .dst_type   = DLP_S8,
-                                  .scl        = &a_post_quant_scl,
-                                  .zp         = NULL,
-                                  .symmetric  = true };
+    dlp_qparam_t a_pre_quant_scl  = { .data      = &a_pre_quant_sf,
+                                      .len       = 1,
+                                      .stor_type = DLP_F32,
+                                      .outer_dim = DLP_PARAM_DIM_PER_TENSOR };
+    dlp_qparam_t a_post_quant_scl = { .data      = &a_post_quant_sf,
+                                      .len       = 1,
+                                      .stor_type = DLP_F32,
+                                      .outer_dim = DLP_PARAM_DIM_PER_TENSOR };
 
     // Set up metadata
-    // Note: a_post_quant corrects A matrix quantization (F32→S8), NOT a
-    // regular post-op like BIAS/RELU. seq_vector/seq_length are for post-ops
-    // after GEMM; set to NULL/0 when not needed.
-    dlp_metadata_t metadata = { 0 };
-    metadata.a_pre_quant    = &a_pre_quant;
-    metadata.a_post_quant   = &a_post_quant;
-    metadata.seq_length     = 0;
-    metadata.seq_vector     = NULL;
+    // Note: a_quant_op.dequant_scale_factors corrects A matrix quantization
+    // (F32->S8), NOT a regular post-op like BIAS/RELU. seq_vector/seq_length
+    // are for post-ops after GEMM; set to NULL/0 when not needed.
+    dlp_metadata_t metadata   = { 0 };
+    dlp_quant_op_t a_quant_op = { .quant_op_kind       = DLP_QUANT_OP_QUANTIZE,
+                                  .src_type            = DLP_F32,
+                                  .dst_type            = DLP_S8,
+                                  .group_size          = 0,
+                                  .quant_scale_factors = &a_pre_quant_scl,
+                                  .dequant_scale_factors = &a_post_quant_scl,
+                                  .zero_point            = NULL };
+    metadata.a_quant_op       = &a_quant_op;
+    metadata.seq_length       = 0;
+    metadata.seq_vector       = NULL;
 
     aocl_gemm_f32s8s32of32('R', 'N', 'N', m, n, k, 1, a, lda, 'N', b, ldb, 'N',
                            0, c, ldc, &metadata);
@@ -241,39 +235,35 @@ main()
     compute_per_token_quant_params(a, m, k, lda, a_pre_quant_sf_row,
                                    a_post_quant_sf_row, zero_points);
 
-    dlp_sf_t a_pre_quant_scl_row  = { .scale_factor      = a_pre_quant_sf_row,
-                                      .scale_factor_len  = m,
-                                      .scale_factor_type = DLP_F32 };
-    dlp_sf_t a_post_quant_scl_row = { .scale_factor      = a_post_quant_sf_row,
-                                      .scale_factor_len  = m,
-                                      .scale_factor_type = DLP_F32 };
-    dlp_zp_t zp_row               = { .zero_point      = zero_points,
-                                      .zero_point_len  = m,
-                                      .zero_point_type = DLP_F32 };
-
-    dlp_quant_op a_pre_quant_row = { .group_size = 0,
-                                     .src_type   = DLP_F32,
-                                     .dst_type   = DLP_S8,
-                                     .scl        = &a_pre_quant_scl_row,
-                                     .zp         = &zp_row,
-                                     .symmetric  = false };
-
-    dlp_quant_op a_post_quant_row = { .group_size = 0,
-                                      .src_type   = DLP_F32,
-                                      .dst_type   = DLP_S8,
-                                      .scl        = &a_post_quant_scl_row,
-                                      .zp         = &zp_row,
-                                      .symmetric  = false };
+    dlp_qparam_t a_pre_quant_scl_row  = { .data      = a_pre_quant_sf_row,
+                                          .len       = m,
+                                          .stor_type = DLP_F32,
+                                          .outer_dim = DLP_PARAM_DIM_PER_TOKEN };
+    dlp_qparam_t a_post_quant_scl_row = { .data      = a_post_quant_sf_row,
+                                          .len       = m,
+                                          .stor_type = DLP_F32,
+                                          .outer_dim =
+                                              DLP_PARAM_DIM_PER_TOKEN };
+    dlp_qparam_t zp_row               = { .data      = zero_points,
+                                          .len       = m,
+                                          .stor_type = DLP_F32,
+                                          .outer_dim = DLP_PARAM_DIM_PER_TOKEN };
 
     // Set up metadata (same structure as Example 1, but with per-row
     // quantization). No post-ops, so seq_vector/seq_length remain NULL/0.
-    dlp_metadata_t metadata_row = { 0 };
-    metadata_row.a_pre_quant    = &a_pre_quant_row;
-    metadata_row.a_post_quant   = &a_post_quant_row;
-    metadata_row.b_pre_quant    = NULL;
-    metadata_row.b_post_quant   = NULL;
-    metadata_row.seq_length     = 0;
-    metadata_row.seq_vector     = NULL;
+    dlp_metadata_t metadata_row   = { 0 };
+    dlp_quant_op_t a_quant_op_row = {
+        .quant_op_kind         = DLP_QUANT_OP_QUANTIZE,
+        .src_type              = DLP_F32,
+        .dst_type              = DLP_S8,
+        .group_size            = 0,
+        .quant_scale_factors   = &a_pre_quant_scl_row,
+        .dequant_scale_factors = &a_post_quant_scl_row,
+        .zero_point            = &zp_row
+    };
+    metadata_row.a_quant_op = &a_quant_op_row;
+    metadata_row.seq_length = 0;
+    metadata_row.seq_vector = NULL;
 
     aocl_gemm_f32s8s32of32('R', 'N', 'N', m, n, k, 1, a, lda, 'N', b, ldb, 'N',
                            0, c, ldc, &metadata_row);

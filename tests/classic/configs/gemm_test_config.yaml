@@ -287,7 +287,148 @@ gemm_tests:
             zero_point_type: ["s8"]
             zero_point_len: ["n"]
 
-  # --------------------------------------------------------------------------
+# Quantized API smoke tests for unified dlp_quant_op_t metadata.
+  - name: "quant_api_f32s8_a_quant"
+    a_type: ["f32"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8]
+    n: [1, 16]
+    k: [16, 32]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 5.0
+      absolute: 2.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["1", "m"]
+            a_quant_sf_type: ["f32"]
+            a_quant_zp_len: ["1", "m"]
+            a_quant_zp_type: ["f32"]
+
+  - name: "quant_api_bf16s8_a_quant"
+    a_type: ["bf16"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8]
+    n: [1, 16]
+    k: [16, 32]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 5.0
+      absolute: 2.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "A_Quant"
+          params:
+            a_quant_sf_len: ["1", "m"]
+            a_quant_sf_type: ["f32"]
+            a_quant_zp_len: ["1", "m"]
+            a_quant_zp_type: ["f32"]
+
+  - name: "quant_api_bf16s4_woq"
+    a_type: ["bf16"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8]
+    n: [16, 32]
+    k: [32, 64]
+    alpha: [1.0]
+    beta: [0.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "WOQ"
+          params:
+            scale_factor_len: ["1", "n"]
+            scale_factor_type: ["f32"]
+
+  - name: "quant_api_s8s8_sym_quant_f32"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8]
+    n: [1, 16]
+    k: [32, 64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 5.0
+      absolute: 2.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_len: ["1", "m"]
+            a_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            b_scale_type: ["f32"]
+            group_size: ["0"]
+
+  - name: "quant_api_s8s8_sym_quant_bf16"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8]
+    n: [16]
+    k: [32, 64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_len: ["1", "m"]
+            a_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            b_scale_type: ["f32"]
+            group_size: ["0"]
+
+# --------------------------------------------------------------------------
   # Odd / fringe dimensions (f32): small ODD m/n/k exercise the remainder /
   # partial-vector tail loops that power-of-two shapes (8/16/32/64) skip.
   # --------------------------------------------------------------------------
@@ -718,6 +859,30 @@ gemm_tests:
             zero_point_len: ["n"]
 
   # --------------------------------------------------------------------------
+
+  # To test unpack B routine when bf16 fallbacks to f32 on avx2 machines
+  - name: "bf16_reorderB_for_avx2"
+    a_type: ["bf16"]
+    b_type: ["bf16"]
+    c_type: ["f32"]
+    acc_type: ["f32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: 144
+    n:
+      lb: 1091
+      ub: 1100
+      step: 1
+    k: 1024
+    alpha: [1.0]
+    beta: [1.0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+
   # GLU (GATED_SWIGLU_AND_MUL) terminal post-op (bf16 in). N must be even
   # (n = 2I).
   # --------------------------------------------------------------------------
@@ -865,6 +1030,38 @@ gemm_tests:
             b_scale_type: ["f32"]
             b_scale_len: ["1", "n"]
             group_size: ["128"]
+
+  # Full-K single-group edge: group_size=0 normalizes to K. K=130 is not a
+  # multiple of 4, so this verifies that the intentional full-K alignment bypass
+  # is safe for the N==1 alternate reorder/GEMV path.
+  - name: "regress_symquant_gemv_n1_fullk_k130"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 4, 16]
+    n: [1]
+    k: [130]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["0"]
 
   # Defect 1 (deeper): group_size 256 gives k_iter == 4 inside one group.
   - name: "regress_symquant_defect1_gemv_n1_gs256"

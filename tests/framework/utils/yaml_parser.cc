@@ -661,10 +661,10 @@ namespace dlp { namespace testing { namespace utils {
                 iterators.treat_nan_equal = node["treat_nan_equal"].as<bool>();
             }
 
-            // Parse PostOps and PreOps if present.
-            // Pre-operations (e.g. WOQ for bf16s4) and post_operations are
-            // combined into one iterator: pre_ops first, then post_ops, so
-            // both appear in the benchmark name and in execution.
+            // Parse quant operations and post-operations if present. Quant
+            // operations (for example WOQ for bf16s4) are emitted before
+            // regular post-operations so both appear in the generated test name
+            // and are applied in execution order.
             std::unique_ptr<PostOpsIterator> postops_iterator = nullptr;
             bool has_post = (node["post_operations"] ? true : false);
             bool has_pre  = (node["pre_operations"] ? true : false);

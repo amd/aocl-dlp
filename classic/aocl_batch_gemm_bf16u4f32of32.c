@@ -122,20 +122,20 @@ aocl_batch_gemm_bf16u4f32_impl(const char*      order,
 
         // Add early returns for NULL or invalid pointers.
         // Asymmetric WOQ requires both b_scl and b_zp.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->pre_ops == NULL
-            || metadata[gc_i]->pre_ops->b_scl == NULL
-            || metadata[gc_i]->pre_ops->b_zp == NULL) {
-            dlp_print_msg("One or more required parameters (metadata, pre_ops, "
-                          "pre_ops->b_zp, pre_ops->b_scl) are NULL or invalid. "
-                          "Exiting..",
+        if (metadata[gc_i] == NULL || metadata[gc_i]->b_quant_op == NULL
+            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL
+            || metadata[gc_i]->b_quant_op->zero_point == NULL) {
+            dlp_print_msg("One or more required B quantization parameters "
+                          "(metadata, b_quant_op, dequant scale factors, "
+                          "zero point) are NULL or invalid. Exiting..",
                           __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
             goto err_hndl;
         }
 
         // Check if zero-point type is supported.
-        if (metadata[gc_i]->pre_ops->b_zp->zero_point_type != DLP_S8
-            && metadata[gc_i]->pre_ops->b_zp->zero_point_type != DLP_BF16) {
+        if (metadata[gc_i]->b_quant_op->zero_point->stor_type != DLP_S8
+            && metadata[gc_i]->b_quant_op->zero_point->stor_type != DLP_BF16) {
             dlp_print_msg(" zero-point type is not supported. Exiting..",
                           __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
@@ -159,7 +159,7 @@ aocl_batch_gemm_bf16u4f32_impl(const char*      order,
 
         // Convert pre op struct to pre op linked list format.
         dlp_clsc_err_t err = dlp_gemm_translate_to_pre_ops_list(
-            metadata[gc_i]->pre_ops, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
+            metadata[gc_i]->b_quant_op, pre_op_list, m[gc_i], n[gc_i], k[gc_i]);
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;

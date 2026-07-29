@@ -400,9 +400,6 @@ initPostOps(dlp_metadata_t* mData, md_t m, md_t n, int repeat_post_ops)
         return false;
     }
 
-    mData->post_op_grp = NULL;
-    mData->pre_ops     = NULL;
-
     mData->seq_length  = 6; // Number of post-operations
     mData->num_eltwise = repeat_post_ops;
     mData->seq_vector  = NULL;

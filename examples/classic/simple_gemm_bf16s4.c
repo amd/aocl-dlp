@@ -30,7 +30,8 @@
  * Example: BF16×S4→F32 GEMM with symmetric weight-only quantization (WOQ).
  *
  * B is packed (two s4 nibbles per byte), reordered for the kernel, with scales
- * in metadata.pre_ops->b_scl (per-tensor or per-channel on N).
+ * in metadata.b_quant_op.dequant_scale_factors (per-tensor or per-channel on
+ * N).
  */
 
 #include "aocl_dlp.h"
@@ -232,21 +233,26 @@ main()
     printf("\n--- Example 1: WOQ per-tensor B scale ---\n\n");
 
     // Initialize the per-tensor B scale
-    float      b_scale_tensor = 1.25f;
-    dlp_sf_t   b_scl_tensor   = { .scale_factor      = &b_scale_tensor,
-                                  .scale_factor_len  = 1,
-                                  .scale_factor_type = DLP_F32 };
-    dlp_pre_op pre_tensor     = { .b_zp       = NULL,
-                                  .b_scl      = &b_scl_tensor,
-                                  .seq_length = 1,
-                                  .group_size = 0 };
+    float        b_scale_tensor = 1.25f;
+    dlp_qparam_t b_scl_tensor   = { .data      = &b_scale_tensor,
+                                    .len       = 1,
+                                    .stor_type = DLP_F32,
+                                    .outer_dim = DLP_PARAM_DIM_PER_TENSOR };
 
     printf("B WOQ: scale_factor_len=1 (per-tensor), value=%.6f\n\n",
            b_scale_tensor);
 
     // Initialize the metadata
     memset(&metadata, 0, sizeof(metadata));
-    metadata.pre_ops = &pre_tensor;
+    dlp_quant_op_t b_quant_op_tensor = { .quant_op_kind =
+                                             DLP_QUANT_OP_DEQUANTIZE,
+                                         .src_type              = DLP_S4,
+                                         .dst_type              = DLP_BF16,
+                                         .group_size            = 0,
+                                         .quant_scale_factors   = NULL,
+                                         .dequant_scale_factors = &b_scl_tensor,
+                                         .zero_point            = NULL };
+    metadata.b_quant_op              = &b_quant_op_tensor;
     memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
 
     // Run the GEMM
@@ -277,13 +283,10 @@ main()
     }
 
     // Initialize the per-channel B scale metadata
-    dlp_sf_t   b_scl_channel = { .scale_factor      = b_scale_channel,
-                                 .scale_factor_len  = n,
-                                 .scale_factor_type = DLP_F32 };
-    dlp_pre_op pre_channel   = { .b_zp       = NULL,
-                                 .b_scl      = &b_scl_channel,
-                                 .seq_length = 1,
-                                 .group_size = 0 };
+    dlp_qparam_t b_scl_channel = { .data      = b_scale_channel,
+                                   .len       = n,
+                                   .stor_type = DLP_F32,
+                                   .outer_dim = DLP_PARAM_DIM_PER_CHANNEL };
 
     printf("B WOQ: scale_factor_len=%ld (per output channel), first 3: "
            "%.6f, %.6f, %.6f\n",
@@ -292,7 +295,16 @@ main()
 
     // Initialize the metadata
     memset(&metadata, 0, sizeof(metadata));
-    metadata.pre_ops = &pre_channel;
+    dlp_quant_op_t b_quant_op_channel = {
+        .quant_op_kind         = DLP_QUANT_OP_DEQUANTIZE,
+        .src_type              = DLP_S4,
+        .dst_type              = DLP_BF16,
+        .group_size            = 0,
+        .quant_scale_factors   = NULL,
+        .dequant_scale_factors = &b_scl_channel,
+        .zero_point            = NULL
+    };
+    metadata.b_quant_op = &b_quant_op_channel;
     memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
 
     // Run the GEMM

@@ -119,9 +119,10 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
         md_t           m_local, n_local, k_local;
 
         // Add early returns for NULL group quantization parameters.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->post_op_grp == NULL
-            || metadata[gc_i]->post_op_grp->a_scl == NULL
-            || metadata[gc_i]->post_op_grp->b_scl == NULL) {
+        if (metadata[gc_i] == NULL || metadata[gc_i]->a_quant_op == NULL
+            || metadata[gc_i]->b_quant_op == NULL
+            || metadata[gc_i]->a_quant_op->dequant_scale_factors == NULL
+            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
             dlp_print_msg(
                 "Required parameters for symmetric quantized GEMM missing."
                 " Exiting..",
@@ -133,8 +134,8 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
         // convert group-level post-op struct to linked list format.
         dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
         dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
-            metadata[gc_i]->post_op_grp, grp_post_op_list, m[gc_i], n[gc_i],
-            k[gc_i]);
+            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op,
+            grp_post_op_list, m[gc_i], n[gc_i], k[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);
@@ -425,9 +426,10 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
         md_t           m_local, n_local, k_local;
 
         // Add early returns for NULL group quantization parameters.
-        if (metadata[gc_i] == NULL || metadata[gc_i]->post_op_grp == NULL
-            || metadata[gc_i]->post_op_grp->a_scl == NULL
-            || metadata[gc_i]->post_op_grp->b_scl == NULL) {
+        if (metadata[gc_i] == NULL || metadata[gc_i]->a_quant_op == NULL
+            || metadata[gc_i]->b_quant_op == NULL
+            || metadata[gc_i]->a_quant_op->dequant_scale_factors == NULL
+            || metadata[gc_i]->b_quant_op->dequant_scale_factors == NULL) {
             dlp_print_msg(
                 "Required parameters for symmetric quantized GEMM missing."
                 " Exiting..",
@@ -439,8 +441,8 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
         // convert group-level post-op struct to linked list format.
         dlp_gemm_group_post_op grp_post_op_list[AOCL_DLP_MAX_POST_OPS];
         dlp_clsc_err_t         err = dlp_gemm_translate_to_group_postops_list(
-            metadata[gc_i]->post_op_grp, grp_post_op_list, m[gc_i], n[gc_i],
-            k[gc_i]);
+            metadata[gc_i]->a_quant_op, metadata[gc_i]->b_quant_op,
+            grp_post_op_list, m[gc_i], n[gc_i], k[gc_i]);
 
         if (err != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err);

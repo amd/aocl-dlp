@@ -163,7 +163,7 @@ typedef struct
 /**
  * @enum DLP_PARAM_DIM_TYPE
  * @brief Granularity at which a parameter varies: per-tensor, per-channel,
- *        or per-token.
+ *        per-token, or per-group.
  */
 typedef enum
 {
@@ -171,7 +171,47 @@ typedef enum
     DLP_PARAM_DIM_PER_TENSOR  = 1, /**< Scalar / per-tensor (single value) */
     DLP_PARAM_DIM_PER_CHANNEL = 2, /**< N values — one per output column */
     DLP_PARAM_DIM_PER_TOKEN   = 3, /**< M values — one per output row */
+    DLP_PARAM_DIM_PER_GROUP   = 4, /**< Values are indexed by quantization
+                                      group along the K dimension */
 } DLP_PARAM_DIM_TYPE;
+
+/**
+ * @enum DLP_QUANT_OP_KIND
+ * @brief Quantization operation category described by dlp_quant_op_t.
+ *
+ * The operation kind also describes where the scale is consumed:
+ * - @ref DLP_QUANT_OP_QUANTIZE is used when a source matrix is quantized at
+ *   pre-op/pack time and dequantized/corrected after accumulation, or when the
+ *   source operands are already quantized and only post-accumulation
+ *   dequantization/correction is required. The s8s8 symmetric-quant GEMM path
+ *   uses this kind.
+ * - @ref DLP_QUANT_OP_DEQUANTIZE is used when low-bit or quantized operands
+ *   are expanded/dequantized before accumulation, usually during packing or
+ *   pre-processing. WoQ paths such as bf16s4/bf16u4 use this kind.
+ * - @ref DLP_QUANT_OP_EXPAND is used for representation expansion without
+ *   scale or zero-point semantics.
+ */
+typedef enum
+{
+    DLP_QUANT_OP_NONE     = 0,   /**< Sentinel: no quantization operation. */
+    DLP_QUANT_OP_QUANTIZE = 1,   /**< Pre-op quantization with
+                                    post-accumulation dequantization/correction,
+                                    or only post-accumulation
+                                    dequantization/correction. Examples:
+                                    F32/BF16 A -> S8 with accumulator
+                                    correction, and s8s8 symmetric-quant
+                                    accumulator scaling. */
+    DLP_QUANT_OP_DEQUANTIZE = 2, /**< Pre-op/pack-time dequantization or
+                                    expansion using scale factors and optional
+                                    zero-points. Examples: bf16s4/bf16u4
+                                    weight-only quantization where packed
+                                    low-bit B is dequantized while packing or
+                                    before compute. */
+    DLP_QUANT_OP_EXPAND = 3,     /**< Pure representation expansion/conversion;
+                                    no scale or zero-point semantics are
+                                    implied. Example: unpacking low-bit data
+                                    when no scale/zero-point is consumed. */
+} DLP_QUANT_OP_KIND;
 
 /**
  * @brief Structure defining zero-point parameters for quantization.
@@ -226,6 +266,97 @@ typedef struct
                                             scale_factor_len). See
                                             ::DLP_PARAM_DIM_TYPE. */
 } dlp_sf_t;
+
+/**
+ * @struct dlp_qparam_t
+ * @brief Common scale-factor / zero-point parameter descriptor.
+ *
+ * Describes one quantization parameter buffer without tying it to a specific
+ * operation. The pointed-to data is owned by the caller and must remain valid
+ * for the duration of the GEMM or reorder call that consumes the surrounding
+ * metadata.
+ *
+ * The @ref outer_dim field declares how @ref data is indexed:
+ * - @ref DLP_PARAM_DIM_PER_TENSOR: one scalar value.
+ * - @ref DLP_PARAM_DIM_PER_CHANNEL: one value per output channel/column, or
+ *   the B-side grouped layout required by grouped quantization paths.
+ * - @ref DLP_PARAM_DIM_PER_TOKEN: one value per input token/row, or the A-side
+ *   grouped layout required by grouped quantization paths.
+ * - @ref DLP_PARAM_DIM_PER_GROUP: values are arranged by quantization group
+ *   along K, optionally combined with the matrix-specific outer dimension
+ *   expected by grouped quantization paths.
+ */
+typedef struct
+{
+    void* data; /**< Pointer to parameter values; may be NULL only when the
+                   parameter itself is absent. */
+    md_t len; /**< Number of elements in @ref data. Scalar parameters use 1. */
+    DLP_TYPE stor_type; /**< Storage type of each element in @ref data. */
+    DLP_PARAM_DIM_TYPE
+    outer_dim; /**< Granularity/layout used to index @ref data. */
+} dlp_qparam_t;
+
+/**
+ * @struct dlp_quant_op_t
+ * @brief Unified quantization metadata for one GEMM matrix.
+ *
+ * This structure describes all quantization metadata associated with either the
+ * A or B matrix. The containing @ref dlp_metadata_t field determines which
+ * matrix the operation applies to: @ref dlp_metadata_t::a_quant_op for A and
+ * @ref dlp_metadata_t::b_quant_op for B.
+ *
+ * @ref quant_scale_factors is used when the source matrix is quantized before
+ * compute (for example F32/BF16 A -> S8). @ref dequant_scale_factors is used
+ * when quantized data must be interpreted back in a wider domain (for example
+ * S4/U4 B -> BF16 WOQ, or grouped S8xS8 accumulator scaling). A NULL
+ * @ref zero_point denotes symmetric quantization; a non-NULL value enables
+ * asymmetric compensation where the API supports it.
+ * When both quant and dequant scale factors are provided for the same logical
+ * operation, callers are expected to provide reciprocal values
+ * (quant_scale_factor = 1 / dequant_scale_factor) for matching elements.
+ *
+ * @ref quant_op_kind makes the intended operation explicit:
+ * - @ref DLP_QUANT_OP_QUANTIZE for pre-op quantization with post-accumulation
+ *   dequantization/correction, or only post-accumulation dequantization.
+ * - @ref DLP_QUANT_OP_DEQUANTIZE for pre-op/pack-time dequantization into a
+ *   wider compute type, such as WoQ.
+ * - @ref DLP_QUANT_OP_EXPAND for pure low-bit expansion/conversion without
+ *   scale/zp semantics.
+ *
+ * The structure is referenced by pointer from @ref dlp_metadata_t. The caller
+ * owns the structure and all nested @ref dlp_qparam_t buffers, and they must
+ * remain valid for the duration of the call.
+ */
+typedef struct
+{
+    DLP_QUANT_OP_KIND
+    quant_op_kind;     /**< Operation kind for this quant metadata. */
+    DLP_TYPE src_type; /**< Source element type before quantization or
+                          dequantization. */
+    DLP_TYPE dst_type; /**< Destination element type after quantization or
+                          dequantization. */
+    md_t group_size;   /**< Group size along K for grouped quantization. A value
+                          of 0 means one group spanning the full K dimension. */
+    dlp_qparam_t*
+        quant_scale_factors; /**< Scale factors for source-to-quantized
+                                conversion; NULL when not applicable. When
+                                dequant_scale_factors is also supplied for the
+                                same logical operation, matching elements are
+                                expected to satisfy quant_scale_factor =
+                                1 / dequant_scale_factor. */
+    dlp_qparam_t* dequant_scale_factors; /**< Scale factors for interpreting
+                                            quantized data in the destination
+                                            domain; NULL when not applicable.
+                                            When quant_scale_factors is also
+                                            supplied for the same logical
+                                            operation, matching elements are
+                                            expected to satisfy
+                                            dequant_scale_factor =
+                                            1 / quant_scale_factor. */
+    dlp_qparam_t*
+        zero_point; /**< Zero-point parameters for asymmetric quantization; NULL
+                       for symmetric quantization. */
+} dlp_quant_op_t;
 
 /**
  * @brief Structure defining scale operation parameters.
@@ -370,127 +501,6 @@ typedef struct
                              while both are `NULL`. */
 } dlp_term_op_glu;
 
-/**
- * @brief Structure defining pre-operation parameters.
- *
- * This structure contains parameters for operations that are applied
- * before the main GEMM computation, typically for quantization adjustments.
- */
-/**
- * @struct dlp_pre_op
- * @brief Pre-operation parameters for GEMM.
- *
- * Contains zero-point and scale factor for matrix B, sequence length, and group
- * size.
- */
-typedef struct
-{
-    dlp_zp_t* b_zp;       /**< Zero-point parameters for matrix B */
-    dlp_sf_t* b_scl;      /**< Scale factor parameters for matrix B */
-    md_t      seq_length; /**< Sequence length for the operation */
-    md_t      group_size; /**< Group size for grouped operations */
-} dlp_pre_op;
-
-/**
- * @brief Structure defining grouped post-operation parameters.
- *
- * This structure contains parameters for grouped post-operations,
- * which apply different quantization parameters to different groups
- * of the matrices involved in GEMM.
- */
-/**
- * @struct dlp_group_post_op
- * @brief Grouped post-operation parameters for GEMM.
- *
- * Contains group size, sequence length, scale factors, and zero-points for
- * matrices A and B.
- */
-typedef struct
-{
-    md_t      group_size; /**< Size of each group for grouped operations */
-    md_t      seq_length; /**< Sequence length for the operation */
-    dlp_sf_t* a_scl;      /**< Scale factor parameters for matrix A */
-    dlp_sf_t* b_scl;      /**< Scale factor parameters for matrix B */
-    dlp_zp_t* a_zp;       /**< Zero-point parameters for matrix A */
-    dlp_zp_t* b_zp;       /**< Zero-point parameters for matrix B */
-} dlp_group_post_op;
-
-/**
- * @brief Quantization operation parameters for a single matrix.
- *
- * This structure defines the quantization/dequantization parameters for a
- * matrix involved in low-precision GEMM operations. It supports both symmetric
- * and asymmetric quantization via scale factors and zero-points.
- *
- * Quantization Formula:
- *   - Symmetric:  q = round(x * scale)
- *   - Asymmetric: q = round(x * scale) - zero_point
- *
- * Dequantization Formula:
- *   - Symmetric:  x = q / scale
- *   - Asymmetric: x = (q + zero_point) / scale
- *
- * Usage Context:
- *   - Can be applied as pre-operation (before GEMM) or post-operation (after
- * GEMM)
- *   - Examples: Converting BF16 to S8
- *   - Supports per-tensor (single value) or per-channel/per-row (array of
- * values) quantization
- *
- * Symmetric vs Asymmetric:
- *   - Symmetric: Zero-point = 0, quantization range is symmetric around zero
- *                Simpler and faster, suitable when data is centered around zero
- *   - Asymmetric: Non-zero zero-point, can represent arbitrary ranges
- *                 More accurate for non-centered distributions, requires
- * additional computation
- */
-/**
- * @struct dlp_quant_op
- * @brief Quantization operation parameters.
- *
- * Contains all parameters needed for quantizing or dequantizing a matrix,
- * including scale factors, zero-points, and data type information.
- */
-typedef struct
-{
-    md_t group_size; /**< Size of each group for grouped quantization operations
-                      */
-
-    DLP_TYPE src_type; /**< Source data type before quantization (e.g.,
-                          DLP_BF16, DLP_F32) */
-
-    DLP_TYPE dst_type; /**< Destination data type after quantization (e.g.,
-                          DLP_S8, DLP_U8) */
-
-    dlp_sf_t* scl; /**< Scale factor parameters for quantization/dequantization.
-                        Length: 1 for per-tensor, m for per-row/per-channel */
-
-    dlp_zp_t* zp; /**< Zero-point parameters for asymmetric quantization.
-                       Set to NULL for symmetric quantization (zero-point = 0).
-                       Length: 1 for per-tensor, m for per-row/per-channel */
-
-    bool symmetric; /**< true: Symmetric quantization (zero-point = 0), centered
-                         around zero. false: Asymmetric quantization (non-zero
-                         zero-point), supports arbitrary value ranges */
-} dlp_quant_op;
-
-/**
- * @brief Structure defining symmetric static quantization parameters.
- *
- * This structure contains parameters for symmetric static quantization,
- * where the quantization is performed with symmetric range around zero.
- */
-/**
- * @struct DLP_SYMM_STAT_QUANT
- * @brief Symmetric static quantization parameters.
- *
- * Contains group size for symmetric static quantization.
- */
-typedef struct
-{
-    md_t group_size; /**< Group size for grouped quantization */
-} DLP_SYMM_STAT_QUANT;
-
 typedef struct
 {
     md_t MR; // Micro-kernel M dimension
@@ -541,35 +551,12 @@ typedef struct
                                        seq_vector[1]=ELTWISE means bias
                                        followed by element-wise operation) */
 
-    // ========== START: DEPRECATED FIELDS ==========
-    // TODO: Deprecate these fields as they will be unified in dlp_quant_op
-    dlp_pre_op* pre_ops; /**< Pre-operations to be applied before GEMM */
-
-    dlp_group_post_op* post_op_grp; /**< Grouped post-operations for
-                                         different quantization groups */
-    // ========== END: DEPRECATED FIELDS ==========
-
-    // ========== START: QUANTIZED PARAMETERS ==========
-    dlp_quant_op* a_pre_quant; /**< Pre-quantization operations for matrix A
-                                    (applied before GEMM computation) */
-    md_t a_pre_op_seq_length;  /**< Number of pre-quantization operations for
-                                    matrix A */
-
-    dlp_quant_op* b_pre_quant; /**< Pre-quantization operations for matrix B
-                                    (applied before GEMM computation) */
-    md_t b_pre_op_seq_length;  /**< Number of pre-quantization operations for
-                                    matrix B */
-
-    dlp_quant_op* a_post_quant; /**< Post-quantization operations for matrix A
-                                     (applied after GEMM computation) */
-    md_t a_post_op_seq_length;  /**< Number of post-quantization operations for
-                                     matrix A */
-
-    dlp_quant_op* b_post_quant; /**< Post-quantization operations for matrix B
-                                     (applied after GEMM computation) */
-    md_t b_post_op_seq_length;  /**< Number of post-quantization operations for
-                                     matrix B */
-    // ========== END: QUANTIZED PARAMETERS ==========
+    dlp_quant_op_t* a_quant_op; /**< Optional unified quantization metadata for
+                                   matrix A. NULL means no A-side quantization
+                                   metadata is supplied. */
+    dlp_quant_op_t* b_quant_op; /**< Optional unified quantization metadata for
+                                   matrix B. NULL means no B-side quantization
+                                   metadata is supplied. */
 
     md_t num_eltwise; /**< Number of element-wise operations to track */
 

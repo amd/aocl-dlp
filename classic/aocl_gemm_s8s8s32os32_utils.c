@@ -36,6 +36,53 @@
 #include "gemm_utils/dlp_gemm_utils.h"
 #include "s8s8s32/dlp_gemm_reorder_s8.h"
 
+static dlp_clsc_err_t
+dlp_get_sym_quant_group_size_from_metadata(const dlp_metadata_t* metadata,
+                                           const md_t            k,
+                                           md_t*                 group_size)
+{
+    if ((metadata == NULL) || (group_size == NULL)) {
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    if (((metadata->a_quant_op != NULL)
+         && (metadata->a_quant_op->quant_op_kind != DLP_QUANT_OP_QUANTIZE))
+        || ((metadata->b_quant_op != NULL)
+            && (metadata->b_quant_op->quant_op_kind
+                != DLP_QUANT_OP_QUANTIZE))) {
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    md_t a_group_size =
+        (metadata->a_quant_op != NULL) ? metadata->a_quant_op->group_size : 0;
+    md_t b_group_size =
+        (metadata->b_quant_op != NULL) ? metadata->b_quant_op->group_size : 0;
+
+    if (a_group_size == 0) {
+        a_group_size = k;
+    }
+    if (b_group_size == 0) {
+        b_group_size = k;
+    }
+
+    if ((metadata->a_quant_op != NULL) && (metadata->b_quant_op != NULL)
+        && (a_group_size != b_group_size)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    md_t gs = (metadata->b_quant_op != NULL) ? b_group_size : a_group_size;
+
+    if ((gs <= 0) || (gs > k)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+    if ((gs != k) && ((gs & 3) != 0)) {
+        return DLP_CLSC_INVALID_GROUP_DIMENSION;
+    }
+
+    *group_size = gs;
+    return DLP_CLSC_SUCCESS;
+}
+
 msz_t
 aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
                                       const char      trans,
@@ -108,14 +155,12 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
 }
 
 msz_t
-aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
-    const char           order,
-    const char           trans,
-    const char           mat_type,
-    const md_t           k,
-    const md_t           n,
-    DLP_SYMM_STAT_QUANT* symq_meta_data,
-    dlp_metadata_t*      metadata)
+aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
+                                                const char      trans,
+                                                const char      mat_type,
+                                                const md_t      k,
+                                                const md_t      n,
+                                                dlp_metadata_t* metadata)
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
@@ -158,6 +203,15 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     }
 
     md_t KC = lcntx_g.blksz.KC;
+    md_t group_size;
+    err_no =
+        dlp_get_sym_quant_group_size_from_metadata(metadata, k, &group_size);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Invalid group size for s8s8s32os32_sym_quant reorder.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return 0; // Error.
+    }
 
     // Extra space since packing does width in multiples of 16. The vnni
     // instruction can be used as long as atleast one zmm register can be fully
@@ -167,8 +221,7 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
 #ifdef DLP_KERNELS_ZEN4
     md_t n_reorder;
     // Follow alternate reordering for n==1 iff k is divisible by group_size.
-    if ((n == 1) && (k % symq_meta_data->group_size == 0)
-        && (KC % symq_meta_data->group_size == 0)) {
+    if ((n == 1) && (k % group_size == 0) && (KC % group_size == 0)) {
         n_reorder = 1;
     } else {
         n_reorder = dlp_make_multiple_of_n(n, 16);
@@ -176,8 +229,7 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
 
     // Extra space since packing does length in multiples of 4.
     md_t k_reorder;
-    if ((n == 1) && (k % symq_meta_data->group_size == 0)
-        && (KC % symq_meta_data->group_size == 0)) {
+    if ((n == 1) && (k % group_size == 0) && (KC % group_size == 0)) {
         k_reorder = k;
     } else {
         k_reorder = dlp_make_multiple_of_n(k, 4);
@@ -186,16 +238,6 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(
     md_t n_reorder = dlp_make_multiple_of_n(n, 16);
     md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 #endif
-    md_t group_size = symq_meta_data->group_size;
-
-    if (group_size & 3) {
-        dlp_print_msg(
-            " Group size should be multiple of 4 for s8s8s32os32_sym_quant",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_GROUP_DIMENSION);
-        return 0; // Error.
-    }
-
     md_t num_groups = (k + group_size - 1) / group_size;
 
     // extra memory to store sum of every column per group of B matrix buffer
@@ -309,16 +351,15 @@ aocl_reorder_s8s8s32os32(const char      order,
 }
 
 void
-aocl_reorder_s8s8s32os32_sym_quant(const char           order,
-                                   const char           trans,
-                                   const char           mat_type,
-                                   const int8_t*        input_buf_addr,
-                                   int8_t*              reorder_buf_addr,
-                                   const md_t           k,
-                                   const md_t           n,
-                                   const md_t           ldb,
-                                   DLP_SYMM_STAT_QUANT* symq_meta_data,
-                                   dlp_metadata_t*      metadata)
+aocl_reorder_s8s8s32os32_sym_quant(const char      order,
+                                   const char      trans,
+                                   const char      mat_type,
+                                   const int8_t*   input_buf_addr,
+                                   int8_t*         reorder_buf_addr,
+                                   const md_t      k,
+                                   const md_t      n,
+                                   const md_t      ldb,
+                                   dlp_metadata_t* metadata)
 {
     DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_SUCCESS);
 
@@ -332,19 +373,20 @@ aocl_reorder_s8s8s32os32_sym_quant(const char           order,
         return; // Error.
     }
 
-    md_t group_size = symq_meta_data->group_size;
-    if (group_size & 3) {
-        dlp_print_msg(
-            " Group size should be multiple of 4 for s8s8s32os32_sym_quant",
-            __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_GROUP_DIMENSION);
+    md_t           group_size;
+    dlp_clsc_err_t err_no =
+        dlp_get_sym_quant_group_size_from_metadata(metadata, k, &group_size);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Invalid group size for s8s8s32os32_sym_quant reorder.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
     }
 
     // Set MC, NC, KC, NR, MR.
     dlp_init_global_cntx();
 
-    dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
+    err_no = DLP_CLSC_SUCCESS;
     AOCL_DLP_REORDER_CHECK("s8s8s32os32_sym_quant", order, trans, mat_type,
                            input_buf_addr, reorder_buf_addr, k, n, ldb, err_no);
     if (err_no != DLP_CLSC_SUCCESS) {

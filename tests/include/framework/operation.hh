@@ -49,7 +49,7 @@ enum class OperationType : uint8_t
     Scale       = 4,
     A_Quant     = 5,
     WOQ         = 6, // Weight-Only Quantization for bf16s4
-    B_Quant     = 7, // B matrix quantization (b_pre_quant / b_post_quant)
+    B_Quant     = 7, // B matrix quantization (b_quant_op metadata)
     GroupScale  = 8, // Group-level symmetric quantization scale factors
     GLU         = 9, // Gated Linear Unit (shape-changing, terminal post-op)
 };
@@ -420,7 +420,7 @@ class WOQParam : public IOperationParam
 /**
  * @class BQuantParam
  * @brief Parameter class for B matrix quantization operations
- * Mirrors AQuantParam but for the B matrix (b_pre_quant / b_post_quant)
+ * Mirrors AQuantParam but for the B matrix (b_quant_op metadata)
  */
 class BQuantParam : public IOperationParam
 {
