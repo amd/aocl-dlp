@@ -76,10 +76,10 @@
                    && (mat_type != 'w')) {                                     \
             arg_pos = 3;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_TYPE;                            \
-        } else if (k <= 0) {                                                   \
+        } else if ((k <= 0) || (k > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 4;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (n <= 0) {                                                   \
+        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 5;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
         }                                                                      \
@@ -120,10 +120,10 @@
         } else if (reorder_buf_addr == NULL) {                                 \
             arg_pos = 5;                                                       \
             err_no  = DLP_CLSC_NULL_POINTER;                                   \
-        } else if (k <= 0) {                                                   \
+        } else if ((k <= 0) || (k > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 6;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (n <= 0) {                                                   \
+        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 7;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
         } else if (row_stored                                                  \
@@ -164,10 +164,10 @@
         } else if (output_buf_addr == NULL) {                                  \
             arg_pos = 4;                                                       \
             err_no  = DLP_CLSC_NULL_POINTER;                                   \
-        } else if (k <= 0) {                                                   \
+        } else if ((k <= 0) || (k > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 5;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (n <= 0) {                                                   \
+        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 6;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
         } else if (row_stored && (ldb < n)) {                                  \
