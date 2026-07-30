@@ -48,6 +48,20 @@ class cpuFeatureDetectorBase
     virtual cpuVendor               getCpuVendor() const                = 0;
     virtual int32_t                 getNumVectorRegisters() const       = 0;
     virtual int32_t                 getNumVectorMaskRegisters() const   = 0;
+
+    // Cache hierarchy queries.
+    //
+    // For 'getCacheSize' and 'getCacheInfo' the caller must state which kind of
+    // cache is being asked for at the given level via 'type'. This removes the
+    // ambiguity of a split level (typically L1, which has separate data and
+    // instruction caches). A level that is unified (typically L2 / L3) serves
+    // both a 'data' and an 'instruction' request.
+    virtual int32_t                getNumCacheLevels() const = 0;
+    virtual int64_t                getCacheSize(int32_t   level,
+                                                cacheType type = cacheType::data) const = 0;
+    virtual cacheInfo              getCacheInfo(int32_t   level,
+                                                cacheType type = cacheType::data) const = 0;
+    virtual std::vector<cacheInfo> getAllCacheInfo() const = 0;
 };
 
 class cpuFeatures
@@ -94,6 +108,23 @@ class cpuFeatures
     int32_t getNumVectorMaskRegisters()
     {
         return pDetector->getNumVectorMaskRegisters();
+    }
+
+    int32_t getNumCacheLevels() { return pDetector->getNumCacheLevels(); }
+
+    int64_t getCacheSize(int32_t level, cacheType type = cacheType::data)
+    {
+        return pDetector->getCacheSize(level, type);
+    }
+
+    cacheInfo getCacheInfo(int32_t level, cacheType type = cacheType::data)
+    {
+        return pDetector->getCacheInfo(level, type);
+    }
+
+    std::vector<cacheInfo> getAllCacheInfo()
+    {
+        return pDetector->getAllCacheInfo();
     }
 };
 

@@ -82,4 +82,22 @@ enum class cpuVendor : uint32_t
     vendor_limit
 };
 
+enum class cacheType : uint32_t
+{
+    invalid = 0,
+
+    data,        // e.g. L1 data cache
+    instruction, // e.g. L1 instruction cache
+    unified,     // e.g. L2 / L3 unified cache
+
+    cache_type_limit
+};
+
+struct cacheInfo
+{
+    uint32_t  level       = 0;                  // 1, 2, 3 ...
+    cacheType type        = cacheType::invalid; // data / instruction / unified
+    uint64_t  sizeInBytes = 0; // total cache size at this level
+};
+
 } // namespace dlp::cpu_utils

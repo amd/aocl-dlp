@@ -37,9 +37,11 @@ namespace dlp::cpu_utils {
 class x86CpuFeatureDetector : public cpuFeatureDetectorBase
 {
     // Not using std::vector<bool> for now, its more of a bitset.
-    std::vector<uint8_t> featureMap;
-    cpuVendor            thisVendor;
-    void                 detectx86IsaFeatures();
+    std::vector<uint8_t>   featureMap;
+    cpuVendor              thisVendor;
+    std::vector<cacheInfo> cacheHierarchy;
+    void                   detectx86IsaFeatures();
+    void                   detectx86CacheInfo();
 
   public:
     x86CpuFeatureDetector();
@@ -52,6 +54,13 @@ class x86CpuFeatureDetector : public cpuFeatureDetectorBase
     cpuVendor               getCpuVendor() const final;
     int32_t                 getNumVectorRegisters() const final;
     int32_t                 getNumVectorMaskRegisters() const final;
+
+    int32_t                getNumCacheLevels() const final;
+    int64_t                getCacheSize(int32_t   level,
+                                        cacheType type = cacheType::data) const final;
+    cacheInfo              getCacheInfo(int32_t   level,
+                                        cacheType type = cacheType::data) const final;
+    std::vector<cacheInfo> getAllCacheInfo() const final;
 };
 
 } // namespace dlp::cpu_utils

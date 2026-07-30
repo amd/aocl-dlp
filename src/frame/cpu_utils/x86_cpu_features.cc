@@ -69,6 +69,15 @@ enum x86_bit_positions : uint32_t
     datapath_fp512_bit_pos = (1u << 3)  // cpuid[eax=0x8000001A] :eax[3]
 };
 
+// CPUID leaf numbers used for deterministic cache-parameter enumeration.
+// Both leaves share an identical output register bit-layout; only the leaf
+// number differs between vendors.
+enum x86_cache_leaf : uint32_t
+{
+    intel_cache_leaf = 0x00000004u, // Intel: Deterministic Cache Parameters
+    amd_cache_leaf   = 0x8000001Du  // AMD (Zen+): Cache Topology Information
+};
+
 DLP_INLINE bool
 dlp_cpuid_has_features(uint32_t have, uint32_t want)
 {
@@ -313,6 +322,100 @@ x86CpuFeatureDetector::detectx86IsaFeatures()
     }
 }
 
+void
+x86CpuFeatureDetector::detectx86CacheInfo()
+{
+    // Cache topology derivation relies on knowing the vendor to pick the
+    // correct (but bit-layout-identical) CPUID leaf. If the vendor could not
+    // be determined, we cannot reliably enumerate caches, so bail out and
+    // leave cacheHierarchy empty.
+    if (thisVendor == cpuVendor::invalid) {
+        return;
+    }
+
+    uint32_t cache_leaf;
+    if (thisVendor == cpuVendor::amd) {
+        // Ensure the AMD cache-topology leaf is available before using it.
+        uint32_t cpuid_max_ext = __get_cpuid_max(0x80000000u, 0);
+        if (cpuid_max_ext < amd_cache_leaf) {
+            return;
+        }
+        cache_leaf = amd_cache_leaf;
+    } else {
+        // Intel (and any other vendor mapped here). Ensure leaf 0x4 exists.
+        uint32_t cpuid_max = __get_cpuid_max(0, 0);
+        if (cpuid_max < intel_cache_leaf) {
+            return;
+        }
+        cache_leaf = intel_cache_leaf;
+    }
+
+    // Enumerate cache descriptors via successive sub-leaves. The same parsing
+    // logic works for both vendors since the register bit-layout is identical.
+    for (uint32_t sub_leaf = 0;; ++sub_leaf) {
+        uint32_t eax, ebx, ecx, edx;
+
+        // This is actually a macro that modifies the last four operands,
+        // hence why they are not passed by address.
+        __cpuid_count(cache_leaf, sub_leaf, eax, ebx, ecx, edx);
+
+        // EAX[4:0] encodes the cache type. A value of 0 indicates that there
+        // are no more cache descriptors to enumerate.
+        uint32_t type_field = eax & 0x1Fu;
+        if (type_field == 0) {
+            break;
+        }
+
+        cacheInfo info;
+
+        // EAX[7:5] encodes the cache level (1, 2, 3 ...).
+        info.level = (eax >> 5) & 0x7u;
+
+        switch (type_field) {
+            case 1:
+                info.type = cacheType::data;
+                break;
+            case 2:
+                info.type = cacheType::instruction;
+                break;
+            case 3:
+                info.type = cacheType::unified;
+                break;
+            default:
+                continue; // Skip any other type that we do not support.
+        }
+
+        // Cache size = (ways+1) * (partitions+1) * (line_size+1) * (sets+1).
+        // Each field is stored as (value - 1) in the respective register.
+        //
+        // This single formula is valid for every associativity type, which is
+        // the whole point of the deterministic cache-parameters leaf:
+        //   - Direct-mapped   : ways field is 0  => ways = 1.
+        //   - Set-associative : ways and sets both > 1 (the general case).
+        //   - Fully-associative: sets field (ECX) is 0 => sets = 1, and the
+        //                        ways field carries the total number of lines.
+        // In all three cases the product yields the correct total byte size, so
+        // no associativity-specific guard is required. (EAX[9] separately flags
+        // a fully-associative cache, but it is only needed to *report* the
+        // associativity kind, not to compute the size.)
+        //
+        // All fields are widened to 64-bit before the "+ 1" so that the "sets"
+        // field (a full 32-bit value from ECX) cannot overflow, and so the
+        // final product is computed in 64-bit arithmetic.
+        uint64_t line_size =
+            static_cast<uint64_t>(ebx & 0xFFFu) + 1u; // EBX[11:0]
+        uint64_t partitions =
+            static_cast<uint64_t>((ebx >> 12) & 0x3FFu) + 1u; // EBX[21:12]
+        uint64_t ways =
+            static_cast<uint64_t>((ebx >> 22) & 0x3FFu) + 1u; // EBX[31:22]
+        uint64_t sets = static_cast<uint64_t>(ecx) + 1u;      // ECX[31:0]
+
+        info.sizeInBytes = ways * partitions * line_size * sets;
+
+        cacheHierarchy.push_back(info);
+    }
+}
+
 x86CpuFeatureDetector::x86CpuFeatureDetector()
 {
     featureMap.resize(static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
@@ -320,6 +423,7 @@ x86CpuFeatureDetector::x86CpuFeatureDetector()
                       0);
 
     detectx86IsaFeatures();
+    detectx86CacheInfo();
 }
 
 bool
@@ -395,6 +499,72 @@ x86CpuFeatureDetector::getNumVectorMaskRegisters() const
         // AVX and SSE provides none.
         return 0;
     }
+}
+
+int32_t
+x86CpuFeatureDetector::getNumCacheLevels() const
+{
+    // The number of cache levels is the highest level reported across all the
+    // detected cache descriptors (handles machines that lack, say, an L3).
+    int32_t maxLevel = 0;
+    for (const auto& info : cacheHierarchy) {
+        if (static_cast<int32_t>(info.level) > maxLevel) {
+            maxLevel = static_cast<int32_t>(info.level);
+        }
+    }
+
+    return maxLevel;
+}
+
+cacheInfo
+x86CpuFeatureDetector::getCacheInfo(int32_t level, cacheType type) const
+{
+    // Find the cache at 'level' that services the requested content 'type'.
+    //
+    // A split level (typically L1) has separate 'data' and 'instruction'
+    // caches, so the caller's 'type' selects between them. A unified level
+    // (typically L2 / L3) has a single cache that serves both, so a unified
+    // descriptor satisfies either a 'data' or an 'instruction' request.
+    //
+    // If nothing matches (e.g. the level does not exist), a zero-initialized
+    // cacheInfo is returned.
+    cacheInfo unifiedMatch{};
+    bool      haveUnified = false;
+
+    for (const auto& info : cacheHierarchy) {
+        if (static_cast<int32_t>(info.level) != level) {
+            continue;
+        }
+
+        // Exact content-type match wins immediately.
+        if (info.type == type) {
+            return info;
+        }
+
+        // A unified cache can satisfy the request, but only as a fallback.
+        // We do not return here: since the order of 'cacheHierarchy' entries is
+        // not assumed, an exact-type match for this level may still appear
+        // later. Record the unified cache and keep scanning so that an exact
+        // match always takes priority.
+        if (info.type == cacheType::unified && !haveUnified) {
+            unifiedMatch = info;
+            haveUnified  = true;
+        }
+    }
+
+    return unifiedMatch;
+}
+
+int64_t
+x86CpuFeatureDetector::getCacheSize(int32_t level, cacheType type) const
+{
+    return static_cast<int64_t>(getCacheInfo(level, type).sizeInBytes);
+}
+
+std::vector<cacheInfo>
+x86CpuFeatureDetector::getAllCacheInfo() const
+{
+    return cacheHierarchy;
 }
 
 } // namespace dlp::cpu_utils

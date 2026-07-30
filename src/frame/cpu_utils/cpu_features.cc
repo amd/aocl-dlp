@@ -64,6 +64,25 @@ class referenceCpuFeatureDetector : public cpuFeatureDetectorBase
     int32_t getNumVectorRegisters() const final { return 0; }
 
     int32_t getNumVectorMaskRegisters() const final { return 0; }
+
+    int32_t getNumCacheLevels() const final { return 0; }
+
+    int64_t getCacheSize([[maybe_unused]] int32_t   level,
+                         [[maybe_unused]] cacheType type) const final
+    {
+        return 0;
+    }
+
+    cacheInfo getCacheInfo([[maybe_unused]] int32_t   level,
+                           [[maybe_unused]] cacheType type) const final
+    {
+        return cacheInfo{};
+    }
+
+    std::vector<cacheInfo> getAllCacheInfo() const final
+    {
+        return std::vector<cacheInfo>{};
+    }
 };
 
 cpuFeatures::cpuFeatures()
