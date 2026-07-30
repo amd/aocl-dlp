@@ -57,7 +57,10 @@
 #include <sstream>
 #include <stdexcept>
 
+#include "framework/allocator.hh"
+
 namespace dlp::testing::framework {
+
 using dlp::testing::utils::bf16_to_f32;
 using dlp::testing::utils::f32_to_bf16;
 using dlp::testing::utils::f32_to_fp16;
@@ -1445,8 +1448,11 @@ Matrix::operator!=(const Matrix& other) const
 uint8_t*
 Matrix::allocateAlignedMemory(size_t sizeBytes, size_t alignment)
 {
+    // Validate alignment requirements up-front (power-of-two and
+    // >= sizeof(void*)) so behavior matches the non-guard path AND so
+    // guard_alloc's power-of-two bitmask rounding is never fed an invalid
+    // alignment. This must run BEFORE the guard-page branch below.
     if (alignment > 0) {
-        // Validate alignment requirements for aligned allocation
         if ((alignment & (alignment - 1)) != 0) {
             throw std::invalid_argument("Alignment must be a power of 2");
         }
@@ -1454,7 +1460,16 @@ Matrix::allocateAlignedMemory(size_t sizeBytes, size_t alignment)
             throw std::invalid_argument(
                 "Alignment must be at least sizeof(void*)");
         }
+    }
 
+    // Guard-page mode (opt-in via DLP_TEST_GUARD_PAGE=1): place the buffer
+    // flush against a trailing PROT_NONE page so any over-read/write past the
+    // end faults immediately. Shared with MatrixMemory::allocateBytes.
+    if (guard_page_enabled() && sizeBytes > 0) {
+        return guard_alloc(sizeBytes, alignment);
+    }
+
+    if (alignment > 0) {
         // Ensure size is a multiple of alignment for aligned allocation
         size_t alignedSize = (sizeBytes + alignment - 1) & ~(alignment - 1);
 
@@ -1478,6 +1493,18 @@ void
 Matrix::deallocateAlignedMemory(uint8_t* ptr, size_t alignment)
 {
     if (ptr) {
+        // Guard-page mode: unmap our guard allocation. If the pointer is not a
+        // live guard mapping (e.g. an aliased / already-released harness buffer
+        // in the reorder/post-op ownership paths), intentionally LEAK it rather
+        // than calling delete[]/free — this guarantees the guard run emits NO
+        // spurious "bad-free" reports, so the ONLY ASAN output is a genuine
+        // library OOB (SEGV in dlp_*). The small leak is harmless for a
+        // short-lived diagnostic run. (Default, non-guard builds are
+        // unaffected.)
+        if (guard_page_enabled()) {
+            guard_free(ptr); // unmap if ours; otherwise leak (no false free)
+            return;
+        }
         if (alignment > 0) {
             dlp_aligned_free(ptr);
         } else {

@@ -29,6 +29,7 @@
 #pragma once
 
 #include "classic/dlp_compat.h"
+#include "framework/allocator.hh" // guard-page allocator hooks
 #include <cstdint>
 #include <memory>
 #include <ostream>
@@ -184,7 +185,6 @@ namespace testing {
                     return os << "UNKNOWN";
             }
         }
-
         /**
          * @brief Matrix memory allocation utilities
          */
@@ -281,9 +281,12 @@ namespace testing {
             {
                 uint8_t* data = nullptr;
 
-                // Allocate memory based on alignment requirements
+                // Validate alignment requirements up-front (power-of-two and
+                // >= sizeof(void*)) so behavior matches the non-guard path AND
+                // so guard_alloc's power-of-two bitmask rounding is never fed
+                // an invalid alignment. This must run BEFORE the guard-page
+                // branch below.
                 if (alignment > 0) {
-                    // Validate alignment requirements for aligned allocation
                     if ((alignment & (alignment - 1)) != 0) {
                         throw std::invalid_argument(
                             "Alignment must be a power of 2");
@@ -292,7 +295,18 @@ namespace testing {
                         throw std::invalid_argument(
                             "Alignment must be at least sizeof(void*)");
                     }
+                }
 
+                // Guard-page mode (opt-in via DLP_TEST_GUARD_PAGE=1): route
+                // through the shared guard allocator so reorder/external
+                // buffers are also flushed against a trailing PROT_NONE page
+                // and freed consistently by Matrix::deallocateAlignedMemory.
+                if (guard_page_enabled() && sizeBytes > 0) {
+                    return guard_alloc(sizeBytes, alignment);
+                }
+
+                // Allocate memory based on alignment requirements
+                if (alignment > 0) {
                     // Ensure size is a multiple of alignment for
                     // dlp_aligned_alloc
                     size_t alignedSize =

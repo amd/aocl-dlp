@@ -31,6 +31,7 @@
 // ============================================================================
 
 #include "classic/aocl_bf16_type.h"
+#include "framework/allocator.hh"
 #include "framework/operation.hh"
 #include "framework/ual.hh"
 #include "framework/ual_factory.hh"
@@ -43,16 +44,27 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cerrno>
+#include <csignal>
+#include <cstdlib>
+#include <cstring>
 #include <filesystem>
+#include <functional>
 #include <gtest/gtest.h>
 #include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <limits>
 #include <memory>
+#include <new>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#if defined(__linux__)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
 
 using namespace dlp::testing::utils;
 using namespace dlp::testing::framework;
@@ -1451,6 +1463,115 @@ std::shared_ptr<IUal> GemmParameterizedTest::ual_test_ = nullptr;
 std::shared_ptr<IUal> GemmParameterizedTest::ual_ref_  = nullptr;
 
 // ============================================================================
+// GUARD-PAGE EXECUTION WRAPPER
+// ============================================================================
+
+// Runs a single test-case body with guard-page-aware fault isolation.
+//
+// In guard-page mode (DLP_TEST_GUARD_PAGE=1) a genuine out-of-bounds access
+// faults with SIGSEGV against the trailing PROT_NONE page. If that happened in
+// the test process it would abort the ENTIRE suite, so every case after the
+// first offender would go unexercised. To capture ALL offending cases in a
+// single run, the body is executed inside a forked child: the child runs the
+// case and the parent inspects how it terminated:
+//   - normal exit 0        -> pass
+//   - normal exit 2        -> resource/allocation skip (bad_alloc)
+//   - normal exit 1        -> the child recorded a gtest failure
+//   - killed by SIGSEGV/BUS -> genuine guard-page OOB in this case
+// Because the fault occurs in the child, the parent's address space stays
+// intact and the suite continues to the next case.
+//
+// In the default (non-guard) mode there is no fork; the body runs directly and
+// a std::bad_alloc is converted into a graceful skip (a resource/VMA limit is
+// an environment condition, not a correctness failure).
+//
+// NOTE: Guard-page mode should be run with OMP_NUM_THREADS=1 (as the guard
+// sweeps already do) so the child is effectively single-threaded across fork.
+static void
+runGemmCaseGuarded(const std::function<void()>& body)
+{
+#if defined(__linux__)
+    if (guard_page_enabled()) {
+        pid_t pid = fork();
+        if (pid < 0) {
+            // Fork failed: fall back to direct execution.
+            try {
+                body();
+            } catch (const std::bad_alloc&) {
+                GTEST_SKIP() << "Skipping: allocation failed (resource/VMA "
+                                "limit), not a correctness failure";
+            }
+            return;
+        }
+        if (pid == 0) {
+            // Child: run the case and translate the outcome into an exit code.
+            //   0 -> pass, 1 -> gtest failure, 2 -> bad_alloc (resource skip),
+            //   3 -> the case called GTEST_SKIP() (preserve skip semantics).
+            int code = 0;
+            try {
+                body();
+                if (::testing::Test::IsSkipped()) {
+                    code = 3;
+                } else if (::testing::Test::HasFailure()) {
+                    code = 1;
+                }
+            } catch (const std::bad_alloc&) {
+                code = 2; // resource exhaustion -> skip in parent
+            } catch (...) {
+                code = 1;
+            }
+            std::cout.flush();
+            std::cerr.flush();
+            // Hard-exit so the child does not run shared atexit/global
+            // destructors (it shares the parent's gtest state and fds).
+            _exit(code);
+        }
+        // Parent: wait for the child and translate its termination status.
+        int status = 0;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            const int code = WEXITSTATUS(status);
+            if (code == 0) {
+                return; // pass
+            }
+            if (code == 2) {
+                GTEST_SKIP() << "Skipping: allocation failed (resource/VMA "
+                                "limit) in guard-mode child";
+            }
+            if (code == 3) {
+                // The case invoked GTEST_SKIP() in the child; preserve it.
+                GTEST_SKIP() << "Case was skipped (propagated from guard-mode "
+                                "child)";
+            }
+            FAIL() << "Guard-mode child reported a test failure (exit code "
+                   << code << ")";
+        } else if (WIFSIGNALED(status)) {
+            const int sig = WTERMSIG(status);
+            if (sig == SIGSEGV || sig == SIGBUS) {
+                FAIL() << "Guard-page OOB detected: child terminated by signal "
+                       << sig << " (" << strsignal(sig)
+                       << ") — genuine out-of-bounds access in this case";
+            }
+            FAIL() << "Guard-mode child terminated by signal " << sig << " ("
+                   << strsignal(sig) << ")";
+        } else {
+            FAIL() << "Guard-mode child did not terminate normally";
+        }
+        return;
+    }
+#endif // __linux__
+
+    // Default (non-guard) path: run directly, converting an allocation failure
+    // into a graceful skip rather than aborting.
+    try {
+        body();
+    } catch (const std::bad_alloc&) {
+        GTEST_SKIP() << "Skipping: allocation failed (resource/VMA limit), not "
+                        "a correctness failure";
+    }
+}
+
+// ============================================================================
 // PARAMETERIZED TESTS
 // ============================================================================
 
@@ -1458,7 +1579,7 @@ std::shared_ptr<IUal> GemmParameterizedTest::ual_ref_  = nullptr;
 // case
 TEST_P(GemmParameterizedTest, CompareImplementations)
 {
-    RunGemmTest();
+    runGemmCaseGuarded([this]() { RunGemmTest(); });
 }
 
 // Register all configurations as individual test cases
@@ -2447,6 +2568,23 @@ TEST_F(EmptyPostOpsTest, RowMajor_EmptyPostOps_EquivalentTo_NullptrPostOps)
 int
 main(int argc, char** argv)
 {
+    // Guard-page mode forks a child process per test case so a genuine OOB
+    // SIGSEGV in one case cannot abort the whole suite. Force single-threaded
+    // execution in that mode: forking a multithreaded (OpenMP) process is both
+    // slow (every child re-creates the thread pool) and unsafe (only the
+    // forking thread survives in the child). Pinning to one thread here —
+    // before any UAL / OpenMP initialization — makes DLP_TEST_GUARD_PAGE=1 fast
+    // and fork-safe regardless of the caller's environment. Default (non-guard)
+    // runs are untouched and keep full multithreading.
+#if defined(__linux__)
+    // setenv + fork-based guard isolation are POSIX-only; guard mode itself is
+    // Linux-only (see allocator.cc / runGemmCaseGuarded), so this block is
+    // compiled out on Windows/MSVC where setenv() does not exist.
+    if (dlp::testing::framework::guard_page_enabled()) {
+        setenv("OMP_NUM_THREADS", "1", /*overwrite=*/1);
+    }
+#endif
+
     // Parse custom arguments before GoogleTest processes them
     auto parser = dlp::testing::utils::ArgParser::parseTestArgs(argc, argv);
 
