@@ -47,7 +47,7 @@
  */
 
 #include "aocl_dlp.h"
-#include "classic/dlp_compat.h"
+#include "dlp_example_utils.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

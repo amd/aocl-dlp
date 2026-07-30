@@ -105,8 +105,11 @@ foreach(source ${EXAMPLE_SOURCES})
     )
 endforeach()
 
-# Copy example source files to the installation directory
-install(FILES ${EXAMPLE_SOURCES}
+# Copy example source files to the installation directory.
+# dlp_example_utils.h is a header shared only by the examples (it is not part
+# of the installed public API); it must sit next to the sources so the
+# standalone example build can resolve the "" include.
+install(FILES ${EXAMPLE_SOURCES} dlp_example_utils.h
     DESTINATION examples/classic/src
 )
 

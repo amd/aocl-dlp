@@ -45,6 +45,7 @@
 
 #include "aocl_dlp.h"
 #include "classic/dlp_compat.h"
+#include "dlp_example_utils.h"
 
 // Utility function to initialize a matrix with values
 void

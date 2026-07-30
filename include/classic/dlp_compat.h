@@ -49,7 +49,6 @@
  *   8.  Floating-point infinity
  *   9.  Aligned memory allocation
  *   10. Atomic operations
- *   11. High-resolution timer
  *   12. Environment variables
  *   13. OpenMP nested parallelism
  *   14. SIMD reinterpret-cast macros
@@ -251,44 +250,6 @@ __builtin_clz(unsigned int x)
     __atomic_store_n(ptr, val, __ATOMIC_RELEASE)
 
 #endif
-
-/* ======================================================================
- * 11. High-resolution timer
- * ====================================================================== */
-#ifndef DLP_COMPAT_TIMER_DEFINED
-#define DLP_COMPAT_TIMER_DEFINED
-
-#if defined(_WIN32) || defined(__CYGWIN__)
-
-static double
-dlp_get_time_sec(void)
-{
-    static LARGE_INTEGER freq = { 0 };
-    if (freq.QuadPart == 0) {
-        QueryPerformanceFrequency(&freq);
-    }
-    LARGE_INTEGER counter;
-    QueryPerformanceCounter(&counter);
-    return (double)counter.QuadPart / (double)freq.QuadPart;
-}
-
-#else /* POSIX */
-
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
-#endif
-#include <time.h>
-
-static double
-dlp_get_time_sec(void)
-{
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (double)ts.tv_sec + (double)ts.tv_nsec * 1.0e-9;
-}
-
-#endif /* _WIN32 */
-#endif /* DLP_COMPAT_TIMER_DEFINED */
 
 /* ======================================================================
  * 12. Environment variables

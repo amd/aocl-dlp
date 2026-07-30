@@ -53,6 +53,7 @@
 
 #include "aocl_dlp.h"
 #include "classic/dlp_compat.h"
+#include "dlp_example_utils.h"
 
 // Forward declaration for cleanup helper (defined at end of file)
 static void
