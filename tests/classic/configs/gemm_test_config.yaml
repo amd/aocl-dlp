@@ -1191,6 +1191,50 @@ gemm_tests:
             b_granularity: ["PER_GROUP", "PER_CHANNEL"]
 
   # --------------------------------------------------------------------------
+  # sym_quant N==1 GEMV BIAS broadcast regression
+  # (aocl_gemm_s8s8s32of32_sym_quant).
+  #
+  # In the N==1 GEMV kernel the 16 accumulator lanes hold 16 different ROWS of
+  # C (a single output column), so a length-1 bias must be broadcast to every
+  # lane. The bias post-op previously used a masked load of mask 0x0001, which
+  # wrote the bias into lane 0 (row 0) only and zeroed rows 1..15 for the bf16,
+  # s8, u8 and f32 bias storage types (only DLP_S32 broadcast correctly). This
+  # left every row past row 0 (and every M tile past the first) missing the
+  # bias. The M sweep crosses the >=4 / >=8 / primary(16) / multi-tile(>16)
+  # micro-kernel paths; the bias_type sweep covers each storage-type branch.
+  - name: "regress_symquant_gemv_n1_bias_broadcast"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [4, 8, 16, 17, 32]
+    n: [1]
+    k: [64]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["0"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32", "bf16", "s8", "u8", "s32"]
+
+  # --------------------------------------------------------------------------
   # u8s8s32 N==1 GEMV alpha==0 regression (aocl_gemm_u8s8s32o*).
   #
   # A #596 regression ("skip k-loop + alpha mul when alpha==0") gated the whole
