@@ -411,6 +411,13 @@ dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
     return DLP_CLSC_SUCCESS;
 }
 
+// Identity scale used when a MATRIX_ADD / MATRIX_MUL post-op carries no scale
+// factor. The grouped (sym_quant) micro-kernels only special-case
+// scale_factor_len == 1 and otherwise dereference scale_factor directly, so a
+// NULL/len-0 scale factor faults. Handing them a per-tensor 1.0f keeps the
+// operand un-scaled (identity) while taking the safe scalar-broadcast path.
+static const float dlp_matrix_op_identity_scale = 1.0f;
+
 DLP_INLINE void
 dlp_gemm_set_node_params(dlp_gemm_post_op*     post_op_node,
                          DLP_GEMM_POST_OP_CODE op_code,
@@ -914,12 +921,13 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                 DLP_TYPE tmp_stor_type = dlp_gemm_get_stor_type(
                     (metadata->matrix_add + m_i)->stor_type);
 
-                /* Get scale factor storage type */
+                /* Get scale factor storage type (default f32 identity when the
+                 * matrix operand carries no scale factor). */
                 DLP_TYPE sf_stor_type =
                     (metadata->matrix_add + m_i)->sf
                         ? dlp_gemm_get_stor_type((metadata->matrix_add + m_i)
                                                      ->sf->scale_factor_type)
-                        : DLP_INVALID;
+                        : DLP_F32;
 
                 if (((metadata->matrix_add + m_i)->sf
                      && (metadata->matrix_add + m_i)->sf->scale_factor_len > 0)
@@ -949,19 +957,20 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     &((metadata->matrix_add + m_i)->ldm),
                     (metadata->matrix_add + m_i)->sf
                         ? (metadata->matrix_add + m_i)->sf->scale_factor
-                        : NULL,
+                        : (void*)&dlp_matrix_op_identity_scale,
                     (metadata->matrix_add + m_i)->sf
                         ? (metadata->matrix_add + m_i)->sf->scale_factor_len
-                        : 0,
+                        : 1,
                     NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type,
                     /* MATRIX_ADD supports per-tensor or per-channel SF only;
-                     * len fully determines the dim. */
+                     * len fully determines the dim. A missing SF is an implicit
+                     * per-tensor identity (1.0). */
                     (metadata->matrix_add + m_i)->sf
                         ? (((metadata->matrix_add + m_i)->sf->scale_factor_len
                             == 1)
                                ? DLP_PARAM_DIM_PER_TENSOR
                                : DLP_PARAM_DIM_PER_CHANNEL)
-                        : DLP_PARAM_DIM_INVALID);
+                        : DLP_PARAM_DIM_PER_TENSOR);
 
                 m_i += 1;
             } break;
@@ -981,12 +990,13 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                 DLP_TYPE tmp_stor_type = dlp_gemm_get_stor_type(
                     (metadata->matrix_mul + mul_i)->stor_type);
 
-                /* Get scale factor storage type */
+                /* Get scale factor storage type (default f32 identity when the
+                 * matrix operand carries no scale factor). */
                 DLP_TYPE sf_stor_type =
                     (metadata->matrix_mul + mul_i)->sf
                         ? dlp_gemm_get_stor_type((metadata->matrix_mul + mul_i)
                                                      ->sf->scale_factor_type)
-                        : DLP_INVALID;
+                        : DLP_F32;
 
                 if (((metadata->matrix_mul + mul_i)->sf
                      && (metadata->matrix_mul + mul_i)->sf->scale_factor_len
@@ -1018,19 +1028,20 @@ dlp_gemm_translate_to_post_ops_list(dlp_metadata_t*   metadata,
                     &((metadata->matrix_mul + mul_i)->ldm),
                     (metadata->matrix_mul + mul_i)->sf
                         ? (metadata->matrix_mul + mul_i)->sf->scale_factor
-                        : NULL,
+                        : (void*)&dlp_matrix_op_identity_scale,
                     (metadata->matrix_mul + mul_i)->sf
                         ? (metadata->matrix_mul + mul_i)->sf->scale_factor_len
-                        : 0,
+                        : 1,
                     NULL, 0, tmp_stor_type, DLP_INVALID, sf_stor_type,
                     /* MATRIX_MUL supports per-tensor or per-channel SF only;
-                     * len fully determines the dim. */
+                     * len fully determines the dim. A missing SF is an implicit
+                     * per-tensor identity (1.0). */
                     (metadata->matrix_mul + mul_i)->sf
                         ? (((metadata->matrix_mul + mul_i)->sf->scale_factor_len
                             == 1)
                                ? DLP_PARAM_DIM_PER_TENSOR
                                : DLP_PARAM_DIM_PER_CHANNEL)
-                        : DLP_PARAM_DIM_INVALID);
+                        : DLP_PARAM_DIM_PER_TENSOR);
 
                 mul_i += 1;
             } break;

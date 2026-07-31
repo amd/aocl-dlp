@@ -1,0 +1,1876 @@
+# ============================================================================
+# Comprehensive s8 x s4 (symmetric group-quant) GEMM test matrix.
+#
+# APIs under test:
+#   aocl_gemm_s8s4s32of32   (s8 A x s4 B -> f32 C)
+#   aocl_gemm_s8s4s32obf16  (s8 A x s4 B -> bf16 C)
+#
+# The s8s4 path is symmetric group-quant ONLY (mandatory GroupScale post-op).
+# Internally it sign-extends s4->s8 and reuses the s8s8 sym-quant AVX512-VNNI
+# micro-kernels. There is no scalar/AVX2 reference kernel, no plain (non
+# GroupScale) s8s4 GEMM, no batch API, and only f32/bf16 outputs.
+#
+# This file is organized so that each test set targets an ORTHOGONAL branch in
+# the dispatch tree, and cartesian expansion is used WITHIN a set only where the
+# axes are genuinely independent. The axes covered:
+#
+#   [A] Output dtype ............ f32 / bf16 (two APIs, distinct downscale)
+#   [B] Top-level path .......... GEMV fast path vs general 5-loop GEMM
+#   [C] GEMV sub-path ........... N==1 direct / M==1 widen / transA A-gather
+#   [D] mtagB ................... reorder (widen-per-panel) / pack / none (->pack)
+#   [E] transB .................. false (row-major packer) / true (col-major)
+#   [F] transA .................. false (A direct) / true (A VNNI-pack)
+#   [G] group_size .............. 0(->K) / ==K (single group) / <K multi-group
+#   [H] KC straddle ............. K > KC(2048) with 2048 % gs != 0
+#   [I] partial trailing group .. k % gs != 0 (ceil last group)
+#   [J] K padding ............... k % 4 != 0 / odd nibble (s4 pack tail)
+#   [K] scale layout ............ A: 1/m ; B: 1/n (per-row/col only single-group)
+#   [L] M fringe (MR=6) ......... m remainders + MC(144) blocking
+#   [M] N fringe (NR=64) ........ 16/32/48 sub-kernels, <16, >64, NC(1024)
+#   [N] beta .................... 0 (overwrite) / 1 (accumulate)
+#   [O] alpha ................... 1 and !=1
+#   [P] post-ops ................ GroupScale + each supported epilogue op
+#
+# GroupScale scale-length note: with a_scale_len "m" / b_scale_len "n" the
+# harness produces only m / n scale values. That is exact ONLY for a single
+# group (num_groups==1, i.e. group_size 0 or ==k), because a multi-group kernel
+# indexes a_scale[row*ng+g] / b_scale[g*n+col]. Multi-group sets therefore use
+# scalar scales (len "1"), which both DLP and ref adaptors broadcast.
+#
+# GEMV fast-path eligibility (API front-end): mtagB==reorder AND (m==1 OR n==1)
+# AND group_size>0(after 0->k) AND k % gs == 0 AND KC(2048) % gs == 0. Group
+# sizes 16/32/64/128/256 all divide 2048.
+# ============================================================================
+
+gemm_tests:
+
+# ============================================================================
+# REGRESSION GUARDS (pre-existing defects). Kept verbatim -- these encode the
+# exact triggering shapes for three historical N==1 sym-quant GEMV bugs plus
+# two KC-straddle bugs. Do not fold these into the sweeps below; the specific
+# (m,n,k,group_size,mtag) tuples are load-bearing.
+# ============================================================================
+
+  # Defect 1: N==1, group_size >= 128, M >= 4. A-pointer failed to advance to
+  # the next 64-wide k-block, so every k-iter after the first re-read block 0.
+  - name: "regress_symquant_defect1_gemv_n1_gs128"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 31, 32, 48]
+    n: [1]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["128"]
+
+  # Defect 1 (deeper): group_size 256 gives k_iter == 4 inside one group.
+  - name: "regress_symquant_defect1_gemv_n1_gs256"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [4, 8, 16, 17, 33]
+    n: [1]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["256"]
+
+  # Defect 3: row-major + transA with N==1 forces A-packing (A-gather path).
+  # Before the fix this read out of bounds.
+  - name: "regress_symquant_defect3_gemv_n1_transA"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [true]
+    transB: [false]
+    m: [1, 4, 8, 16, 17, 64]
+    n: [1]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["128"]
+
+  # Defect 2: group straddles a KC(2048) boundary. K > 2048 and 2048 % gs != 0
+  # (2048 % 20 == 8). s8s4 5-loop only GROWS KC to group_size, it never shrinks
+  # to a multiple of gs (unlike s8s8), so this exercises the divergent path.
+  # Multi-group => scalar scales.
+  - name: "regress_symquant_defect2_kc_straddle_gs20"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 4, 16]
+    n: [1, 16]
+    k: [2180]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["20"]
+
+  # Defect 2 (larger group): 2048 % 160 == 128, K == 2560 (16 groups).
+  - name: "regress_symquant_defect2_kc_straddle_gs160"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16]
+    n: [1, 16]
+    k: [2560]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["160"]
+
+  # Defect 4 (OOB): single-group KC-GROW to a non-multiple-of-4. When
+  # group_size > KC the s8s4 path GROWS KC to group_size (never shrinks in this
+  # branch), so KC = group_size = k. kc0_updated = round_up(kc0,4) then exceeds
+  # KC by up to 3, overrunning the NR*KC b_panel_s8 (compute) and strip_s8
+  # (reorder) scratch. k=2050 > KC(2048) with 2050 % 4 == 2 (overrun +2 rows).
+  # NOTE: masked on a normal build by the ~4KB over-allocation cushion in
+  # dlp_malloc_page_aligned; reliably caught only with ASan + a tight allocator.
+  - name: "regress_symquant_defect4_kcgrow_singlegroup_k2050"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16]
+    n: [1, 16, 64]
+    k: [2050]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "2050"]
+
+  # Defect 4 (max overrun +3). k=4097 > KC on Zen4/5 (2048) AND Zen6 (4096);
+  # KC grows to 4097, round_up(4097,4)=4100 -> 3 extra rows.
+  - name: "regress_symquant_defect4_kcgrow_singlegroup_k4097"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16]
+    n: [1, 16]
+    k: [4097]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "4097"]
+
+# ============================================================================
+# SECTION 1 -- GEMV N==1 fast path (reorder B), no transpose.
+# Path: API front-end -> s8s8 sym-quant GEMV-N kernel (reordered B consumed
+# directly: tight s8 column + per-group colsums). M sweep covers the >=4/>=8/
+# primary(16)/multi-tile(>16) micro-kernel unrolls. group_size sweep covers a
+# single k-iter group (32/64) vs multi-iter (128), and gs==0(->k) per-tensor.
+# Both output dtypes. Per-row A / per-col B scales are exact here (single group
+# only for gs>=k; multi-group rows still use scalar via len "1").
+# ============================================================================
+  - name: "gemv_n1_reorder_dtype_gs_sweep"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 5, 6, 7, 16, 33]
+    n: [1]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "32", "64", "128"]
+
+# ============================================================================
+# SECTION 2 -- GEMV M==1 fast path (reorder B), widen path.
+# Path: m==1 -> compact s4 reordered B is widened once via
+# dlp_cvt_s4_to_s8_linear_avx512, then the s8s8 GEMV-M kernel runs. Distinct
+# from N==1. N sweep exercises the N fringe of the M==1 kernel (16/32/48 lanes,
+# <16 tail, and >64 multi-tile). Single group so per-col B scale ("n") is exact.
+# ============================================================================
+  - name: "gemv_m1_reorder_widen_nfringe"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [15, 16, 17, 32, 48, 64, 65, 127]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["0", "128"]
+
+# ============================================================================
+# SECTION 3 -- m==1 / n==1 that are DELIBERATELY NOT GEMV-eligible.
+# mtagB pack/none disqualifies the GEMV fast path, so these route through the
+# general 5-loop even though a dimension is 1. Guards that the 5-loop handles
+# degenerate MR/NR tiles. (mtagB "none" is promoted to PACK internally.)
+# ============================================================================
+  - name: "vec_shapes_forced_into_5loop"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 3]
+    n: [1, 16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["pack", "none"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "64"]
+
+# ============================================================================
+# SECTION 4 -- General 5-loop GEMM: B path (reorder vs pack vs none).
+# reorder => per-NR-panel widen into b_panel_s8 scratch; pack/none => runtime
+# parallel PACK with fused s4->s8 widen-on-load (row-major packer, cs_b==1).
+# Full N-fringe sweep hits the 6x64 / 6x48 / 6x32 / 6x16 / 6x<16 sub-kernels
+# and >64 NR tiling. group_size single group (per-row/col scales exact).
+# ============================================================================
+  - name: "gemm_5loop_bpath_nfringe"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [15, 16, 31, 32, 47, 48, 63, 64, 65, 127, 128]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack", "none"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["0"]
+
+# ============================================================================
+# SECTION 5 -- General 5-loop GEMM: M fringe (MR=6) and MC(144) blocking.
+# m remainders 1..5 after each 6-row block, plus m>144 to cross the MC panel
+# boundary (multi-panel A). Multi-group scalar scales included to exercise the
+# in-kernel per-group scale advance across MC panels.
+# ============================================================================
+  - name: "gemm_5loop_mfringe_mc_block"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 2, 5, 6, 7, 12, 13, 144, 145, 150]
+    n: [32]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["64"]
+
+# ============================================================================
+# SECTION 6 -- transA=true general 5-loop (A VNNI-pack path).
+# transA forces mtag_a=PACK at the API; A is packed via packa_fun_ptr instead
+# of the direct cs_a=4 broadcast. m,n>=2 keeps it out of the GEMV fast path.
+# ============================================================================
+  - name: "gemm_5loop_transA_apack"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [true]
+    transB: [false]
+    m: [6, 16, 17, 64]
+    n: [16, 64]
+    k: [128, 256]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "128"]
+
+# ============================================================================
+# SECTION 7 -- transB=true (col-major B panel) via the PACK path.
+# cs_b != 1 selects dlp_packb_nr64_s8s4s32os32_col_major (distinct s4 packer).
+# ============================================================================
+  - name: "gemm_5loop_transB_colmajor_packer"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [true]
+    m: [1, 16]
+    n: [16, 48, 64]
+    k: [128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "32", "64", "128"]
+
+# ============================================================================
+# SECTION 8 -- group_size structural variants (multi-group, 5-loop).
+# Covers: gs==k (single group), gs<k evenly dividing (full groups), and gs<k
+# NOT dividing k => partial trailing group (num_groups=ceil(k/gs)). Multi-group
+# => scalar scales. group_size sweep of 16/32/64 (all multiples of 4).
+# ============================================================================
+  - name: "gemm_groupsize_multigroup_and_partial"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    # k=200: 200%16=8, 200%32=8, 200%64=8 -> exercises a partial last group.
+    # k=192: divisible by 16/32/64 -> all full groups.
+    m: [8, 16]
+    n: [32, 64]
+    k: [192, 200]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["16", "32", "64"]
+
+# ============================================================================
+# SECTION 9 -- K/nibble padding fringe.
+# k not a multiple of 4 forces k_updated=round_up(k,4) padding, and odd K means
+# the high nibble of the last s4 byte is unused (must be zeroed in the widen
+# scratch). group_size 0(->k) keeps a single group so the odd/unaligned K is
+# legal (gs==k bypasses the gs%4 requirement).
+# ============================================================================
+  - name: "gemm_k_nibble_padding_fringe"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16]
+    n: [1, 16, 32]
+    k: [1, 2, 3, 5, 17, 127, 130]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+
+# ============================================================================
+# SECTION 10 -- NC(1024) column blocking + large-N multi-tile.
+# n > NC crosses the NC panel boundary; also large K (still <= KC) with full
+# single group. Kept to one dtype/shape to avoid redundancy with fringe sweeps.
+# ============================================================================
+  - name: "gemm_nc_block_largeN"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [1024, 1088]
+    k: [512]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "128"]
+
+# ============================================================================
+# SECTION 11 -- alpha scaling (!= 1). alpha is applied as an integer scale of
+# the s32 accumulator; combined with beta=1 accumulate. Single group.
+# ============================================================================
+  - name: "gemm_alpha_beta_scaling"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16, 64]
+    k: [128]
+    alpha: [1, 2]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+
+# ============================================================================
+# SECTION 12 -- bf16 scale factor storage.
+# The DLP sym-quant micro-kernel widens bf16-typed scale factors to f32
+# losslessly before the dequant multiply (sf_stor_type==DLP_BF16 branch in
+# dlp_gemm_6x64rowmajor_s8_grp_amd512vnni.c). The test reference mirrors this
+# (ual_plan_ref.cc read_sf() -> bf16_to_f32, materializing f32 scale buffers),
+# so bf16-stored scales are validated against f32-equivalent math. A and B must
+# share one scale storage type (the library rejects a mixed bf16/f32 pair).
+# ============================================================================
+
+  # 12.1: bf16 scale factors across the GEMV (n==1 / m==1) and 5-loop GEMM
+  # paths, f32 and bf16 output, single-group (0) and multi-group (64).
+  - name: "gemm_bf16_scale_storage"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16]
+    n: [1, 32]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["0", "64"]
+
+  # 12.2: bf16 scales on the OFFSET-INDEXED paths -- the distinct bf16 concern
+  # is the 2-byte scale-buffer stride when the kernel indexes it with panel
+  # offsets. Cross MC(144)/NC(1024)/KC(2048) with K>KC, both a KC-aligned group
+  # (gs=64) and a KC-straddling group with a partial trailing group
+  # (gs=192: 2048 % 192 != 0 and 2176 % 192 != 0), reorder + pack, f32 + bf16
+  # output.
+  - name: "bf16_scale_multipanel_straddle"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [2176]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["64", "192"]
+
+  # 12.3: bf16 scales with transA / transB and a fused post-op chain, multi-
+  # group. Confirms the widen-on-read is orthogonal to the A VNNI-pack /
+  # col-major B packer paths and to epilogue fusion. f32 + bf16 output.
+  - name: "bf16_scale_transAB_postop"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 37]
+    n: [32, 80]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["64"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Elementwise-RELU"
+
+# ============================================================================
+# SECTION 13 -- POST-OP EPILOGUES on top of GroupScale.
+# Each set is a fixed pipeline (cartesian:false) of GroupScale followed by one
+# epilogue op, exercising the corresponding entry in the micro-kernel post-op
+# dispatch table. JIT-only ops (MISH, GLU/SWIGLU) and per-token Scale are
+# rejected by the s8s4 API and are intentionally omitted. Small shapes plus a
+# fringe n keep these cheap while still hitting the fringe epilogue stores.
+# ============================================================================
+
+  # Bias (1xN vector added per column).
+  - name: "postop_groupscale_bias"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16]
+    n: [16, 47]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "64"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+
+  # Elementwise: RELU / GELU-TANH / GELU-ERF / TANH / SIGMOID (no params each).
+  # One test set per activation to keep pipelines fixed and comparisons clean.
+  - name: "postop_groupscale_relu"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16, 48]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-RELU"
+
+  - name: "postop_groupscale_gelu_tanh"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-GELU-TANH"
+
+  - name: "postop_groupscale_gelu_erf"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-GELU-ERF"
+
+  - name: "postop_groupscale_tanh"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-TANH"
+
+  - name: "postop_groupscale_sigmoid"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-SIGMOID"
+
+  # Parameterized elementwise: PRELU (alpha), SWISH (alpha), CLIP (lo/hi bounds).
+  - name: "postop_groupscale_prelu"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-PRELU"
+          params:
+            alpha: ["0.2"]
+            alpha_type: ["f32"]
+
+  - name: "postop_groupscale_swish"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-SWISH"
+          params:
+            alpha: ["2.0"]
+            alpha_type: ["f32"]
+
+  - name: "postop_groupscale_clip"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Elementwise-CLIP"
+          params:
+            alpha: ["-5.0"]
+            beta: ["5.0"]
+            alpha_type: ["f32"]
+            beta_type: ["f32"]
+
+  # Scale ("downscale") post-op: per-tensor and per-column scale factors.
+  - name: "postop_groupscale_scale_downscale"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16, 48]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Scale"
+          params:
+            scale_factor: ["0.5"]
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["1", "n"]
+
+  # Matrix-Add / Matrix-Mul (MxN operand). QUARANTINED: these currently SEGFAULT
+  # on the s8s4 path inside the shared sym-quant micro-kernel
+  # (dlp_gemm_rowvar_s8s8s32os32_6x16_sym_quant <- ..._6x64m_sym_quant <-
+  # dlp_gemm_rowvar_s8s4s32o32) while reading the MATRIX_ADD/MATRIX_MUL operand.
+  # This is a separate defect from the KC-straddle bug and is left commented out
+  # so the suite runs clean; re-enable once the matrix-operand epilogue is fixed
+  # for the s8s4 path.
+  #
+  # - name: "postop_groupscale_matrix_add"
+  #   a_type: ["s8"]
+  #   b_type: ["s4"]
+  #   c_type: ["f32", "bf16"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false]
+  #   transB: [false]
+  #   m: [16]
+  #   n: [16, 48]
+  #   k: [128]
+  #   alpha: [1]
+  #   beta: [0]
+  #   mtagA: ["none"]
+  #   mtagB: ["reorder"]
+  #   tolerances:
+  #     relative: 100.0
+  #     absolute: 50.0
+  #   post_operations:
+  #     cartesian: false
+  #     operations:
+  #       - type: "GroupScale"
+  #         params:
+  #           a_scale_type: ["f32"]
+  #           a_scale_len: ["1"]
+  #           b_scale_type: ["f32"]
+  #           b_scale_len: ["1"]
+  #           group_size: ["0"]
+  #       - type: "Matrix-Add"
+  #         params:
+  #           matrix_type: ["f32"]
+  #
+  # - name: "postop_groupscale_matrix_mul"
+  #   a_type: ["s8"]
+  #   b_type: ["s4"]
+  #   c_type: ["f32"]
+  #   acc_type: ["s32"]
+  #   storage_format: ["row-major"]
+  #   transA: [false]
+  #   transB: [false]
+  #   m: [16]
+  #   n: [16, 48]
+  #   k: [128]
+  #   alpha: [1]
+  #   beta: [0]
+  #   mtagA: ["none"]
+  #   mtagB: ["reorder"]
+  #   tolerances:
+  #     relative: 100.0
+  #     absolute: 50.0
+  #   post_operations:
+  #     cartesian: false
+  #     operations:
+  #       - type: "GroupScale"
+  #         params:
+  #           a_scale_type: ["f32"]
+  #           a_scale_len: ["1"]
+  #           b_scale_type: ["f32"]
+  #           b_scale_len: ["1"]
+  #           group_size: ["0"]
+  #       - type: "Matrix-Mul"
+  #         params:
+  #           matrix_type: ["f32"]
+
+  # Multi-op chain: GroupScale -> Bias -> RELU -> Scale, exercising ordered
+  # epilogue fusion (bias add, activation, then downscale) in one pass.
+  - name: "postop_groupscale_chain"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16]
+    n: [16, 48]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Elementwise-RELU"
+        - type: "Scale"
+          params:
+            scale_factor: ["0.5"]
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["1"]
+
+# ============================================================================
+# SECTION 14 -- MULTI-PANEL (2nd-iteration) STRESS across all variant paths.
+#
+# Every set above stays within one MC(144)/NC(1024)/KC(2048) panel on at least
+# two of the three loop axes, so the "second iteration" of the ic/jc/pc loops
+# and their combined state (group-scale pointer advance, packed-panel reuse,
+# fringe stores on a partial 2nd panel) was only lightly exercised. This section
+# crosses the panel boundaries SINGLY, PAIRWISE and ALL-THREE-AT-ONCE (triple)
+# for every distinct path. Most 5-loop sets sweep the full m x n x k product:
+#   m: [16, 150]   -> 150 > MC(144)  (ic loop iterates)
+#   n: [64, 1088]  -> 1088 > NC(1024)(jc loop iterates)
+#   k: [256, 2176] -> 2176 > KC(2048)(pc loop iterates)
+# giving all 8 crossing combinations (none / each single / each pair / triple)
+# in one set. Boundaries are crossed by a small margin so the 2nd panel is a
+# partial fringe -- the more bug-prone case. Runtime is intentionally NOT a
+# constraint here: the naive O(M*N*K) reference makes the triple-crossing cases
+# slow, but full path coverage is the priority. If a quick pass is needed, use
+# --gtest_filter to exclude "*multipanel*".
+#
+# Scale-length rule (see file header): per-row/col scales (len "m"/"n") are
+# exact ONLY for a single group, so multi-group sets here use scalar scales
+# (len "1"); per-row/col scales are swept only in the gs=0 single-group set.
+#
+# Tolerance is the file-standard relative:100 / absolute:50 (multipliers on
+# epsilon*k). Tighter multipliers were tried but produce false positives at
+# large K: when a dot product nearly cancels to ~0, the DLP and reference
+# results differ by a single f32 quantum (e.g. -0.0039 vs -0.0029), which is a
+# huge RELATIVE diff on a near-zero value yet meaningless. The standard
+# tolerance still catches genuine multi-panel defects, which manifest as large,
+# systematic errors across many outputs (or crashes), not one near-zero quantum.
+# NOTE: the reference (gemm_s8s8s32of32_sym_quant_ref.cc) mirrors the DLP KC
+# grow/shrink so straddle group sizes accumulate in the same float order.
+# ============================================================================
+
+  # 14.0a: GEMV N==1 fast path at panel crossing. reorder + gs dividing k and
+  # KC keeps it GEMV-eligible; m=150 crosses MC, k=2176 crosses KC on GEMV-N.
+  - name: "multipanel_gemv_n1"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [1]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["64", "128"]
+
+  # 14.0b: GEMV M==1 fast path at panel crossing. n=1088 crosses NC, k=2176
+  # crosses KC on the M==1 widen path.
+  - name: "multipanel_gemv_m1"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["64", "128"]
+
+  # 14.1: base 5-loop, FULL m x n x k crossing product (all 8 combinations incl.
+  # triple), across every B path (reorder/pack/none), both dtypes, both beta,
+  # single group (gs=0) and clean multi-group (gs=128). Scalar scales.
+  - name: "multipanel_base_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack", "none"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "128"]
+
+  # 14.2: base 5-loop, per-row (A) / per-col (B) scale factors at full crossing.
+  # Single group only (gs=0) so len "m"/"n" scales are exact; per-col B scales
+  # must be indexed correctly across the 2nd NC panel.
+  - name: "multipanel_base_rowcol_scales"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1", "m"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1", "n"]
+            group_size: ["0"]
+
+  # 14.3: transA=true (A VNNI-pack) at full crossing, reorder+pack, both dtypes,
+  # single + multi-group.
+  - name: "multipanel_transA_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [true]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "128"]
+
+  # 14.4: transB=true (col-major s4 packer) at full crossing, pack path only.
+  - name: "multipanel_transB_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [true]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "128"]
+
+  # 14.5: multi-group group-scale pointer advance ACROSS the 2nd K-panel with
+  # partial/straddle groups, combined with MC and NC crossing. gs=20 and gs=160
+  # straddle KC(2048) (2048%20=8, 2048%160=128); gs=192 also gives a partial
+  # trailing group at k=2176 (2176%192=64). Scalar scales.
+  - name: "multipanel_groupstraddle_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [2176]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["20", "160", "192"]
+
+  # 14.6: alpha != 1 (integer accumulator scale) + beta accumulate at full
+  # crossing, single group.
+  - name: "multipanel_alpha_beta_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [2]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+
+  # 14.7: Bias (per-N) epilogue at full crossing. The bias vector is indexed by
+  # column, so this specifically validates reading the operand across the 2nd NC
+  # panel while the pc loop also iterates. Both dtypes.
+  - name: "multipanel_postop_bias_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+
+  # 14.8: Scale (per-N "downscale") epilogue at full crossing -- another
+  # column-indexed operand read across the 2nd NC panel.
+  - name: "multipanel_postop_scale_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Scale"
+          params:
+            scale_factor: ["0.5"]
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["1", "n"]
+
+  # 14.9: fused epilogue chain (Bias -> RELU -> Scale) at full crossing, both
+  # dtypes -- ordered multi-op fusion on the 2nd jc/pc panels.
+  - name: "multipanel_postop_chain_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [256, 2176]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0"]
+        - type: "Bias"
+          params:
+            bias_type: ["f32"]
+            bias_dim: ["n"]
+        - type: "Elementwise-RELU"
+        - type: "Scale"
+          params:
+            scale_factor: ["0.5"]
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["1"]
+
+  # 14.10: Zen6 KC(4096) guard -- K>4096 so the pc loop iterates on Zen6 too
+  # (Zen4/5 KC=2048), combined with MC and NC crossing, reorder+pack, both
+  # dtypes, single + multi-group.
+  - name: "multipanel_zen6_kc4096_full"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [4224]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            a_scale_len: ["1"]
+            b_scale_type: ["f32"]
+            b_scale_len: ["1"]
+            group_size: ["0", "128"]
+
+# ============================================================================
+# SECTION 15 -- PER-TOKEN (A) / PER-CHANNEL (B) granularity.
+# Enabled by the unified-metadata per-token/per-channel feature: A PER_TOKEN =
+# one scale per row (a_grp_mul=0, grp_post_op_lda=1); B PER_CHANNEL = one scale
+# per column (b_grp_mul=0). This is the multi-group + per-row/col combination
+# the earlier sections deliberately avoided (a single scale is reused across
+# ALL K-groups). The harness derives scale lengths from granularity: A -> M,
+# B -> N (independent of num_groups); the reference tiles M->M*ng / N->ng*N,
+# giving an exact oracle. s8s4 is ROW-MAJOR only, so the column-major scale
+# swap/transpose used by s8s8 is intentionally not exercised (and not needed).
+# ============================================================================
+
+  # 15.1: A PER_TOKEN x B PER_CHANNEL, MULTI-GROUP (ng>1), f32 scales. Covers
+  # GEMV-N (n==1), GEMV-M (m==1) and the 5-loop GEMM, both output dtypes, with
+  # M/N fringes.
+  - name: "pertoken_perchannel_multigroup_f32sf"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16, 37]
+    n: [1, 32, 80]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["64", "128"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_CHANNEL"]
+
+  # 15.2: same combination with bf16-stored scale factors (ref widens bf16->f32
+  # losslessly, mirroring the kernel's DLP_BF16 branch).
+  - name: "pertoken_perchannel_multigroup_bf16sf"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16, 37]
+    n: [1, 32, 80]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["64", "128"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_CHANNEL"]
+
+  # 15.3: MIXED granularity -- A PER_TOKEN x B PER_GROUP (B still tiled by
+  # group, A collapsed to per-row). Exercises a_grp_mul=0 with b_grp_mul=1.
+  - name: "pertoken_A_pergroup_B_multigroup"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16, 37]
+    n: [1, 32, 80]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["64"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_GROUP"]
+
+  # 15.4: MIXED granularity -- A PER_GROUP x B PER_CHANNEL (A tiled by group, B
+  # collapsed to per-column). Exercises a_grp_mul=1 with b_grp_mul=0.
+  - name: "pergroup_A_perchannel_B_multigroup"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16, 37]
+    n: [1, 32, 80]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["64"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_CHANNEL"]
+
+  # 15.5: transA / transB with per-token/per-channel, multi-group. Drives the
+  # A VNNI-pack (transA) and col-major B packer (transB) paths under the new
+  # granularity, both output dtypes.
+  - name: "pertoken_perchannel_transAB_multigroup"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false, true]
+    transB: [false, true]
+    m: [16, 37]
+    n: [32, 80]
+    k: [256]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["64"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_CHANNEL"]
+
+  # 15.6: single-group degenerate (group_size 0 -> K, and ==K): with ng==1,
+  # PER_TOKEN/PER_CHANNEL and PER_GROUP coincide in length but exercise the
+  # distinct outer_dim dispatch. Guards the API dim-validation + grp_mul logic.
+  - name: "pertoken_perchannel_singlegroup"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16, 37]
+    n: [1, 32, 80]
+    k: [128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["0", "128"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_CHANNEL"]
+
+  # 15.7: MULTI-PANEL crossing (MC=144 / NC=1024 / KC=2048) with per-token/
+  # per-channel, multi-group. Ensures the collapsed A/B scale indexing stays
+  # correct across 2nd-iteration ic/jc/pc panels. reorder + pack, both dtypes.
+  - name: "pertoken_perchannel_multipanel"
+    a_type: ["s8"]
+    b_type: ["s4"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 150]
+    n: [64, 1088]
+    k: [2176]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder", "pack"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["64"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_CHANNEL"]

@@ -37,6 +37,7 @@
 #include "adaptors/dlp/ual_dlp.hh"
 #include "adaptors/ref/ual_ref.hh"
 #include "framework/matrix.hh"
+#include "framework/operation.hh"
 #include "framework/ual.hh"
 #include <gtest/gtest.h>
 
@@ -129,6 +130,43 @@ TEST_F(QuantisedReorderTest, ReorderNonSquareMatrix)
         ual_dlp->reorder(B_normal, B_reordered, MatrixType::bf16,
                          MatrixType::s8, MatrixType::f32, MatrixType::s32);
 
+    EXPECT_TRUE(status == UALError::UAL_SUCCESS
+                || status == UALError::UAL_NOT_SUPPORTED);
+}
+
+// Exercises the s8 x s4 symmetric-quantization reorder path
+// (aocl_reorder_s8s4s32os32) via a GroupScaleParam. B is nibble-packed s4.
+TEST_F(QuantisedReorderTest, ReorderS8S4GroupScale)
+{
+    md_t k = 32; // B rows (== K dimension)
+    md_t n = 16; // B cols
+
+    Matrix B_normal(k, n, MatrixType::s4, MatrixLayout::ROW_MAJOR);
+    B_normal.fillRandom();
+
+    Matrix B_reordered(k, n, MatrixType::s4, MatrixLayout::ROW_MAJOR);
+    B_reordered.setReordered(true);
+
+    // Scalar (per-tensor) f32 scale factors; reorder only consumes group_size,
+    // but both A and B scale factors are required to build the param.
+    Matrix a_scale(1, 1, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+    Matrix b_scale(1, 1, MatrixType::f32, MatrixLayout::ROW_MAJOR);
+    a_scale.fillRandom();
+    b_scale.fillRandom();
+
+    auto gs_param = dlp::testing::framework::postops::createGroupScale()
+                        .setAScaleFactor(a_scale)
+                        .setBScaleFactor(b_scale)
+                        .setGroupSize(16)
+                        .build();
+    auto* group_scale =
+        static_cast<dlp::testing::framework::GroupScaleParam*>(gs_param.get());
+
+    auto status =
+        ual_dlp->reorder(B_normal, B_reordered, MatrixType::s8, MatrixType::s4,
+                         MatrixType::f32, MatrixType::s32, group_scale);
+
+    // Reorder may return NOT_SUPPORTED on non-AMD hardware.
     EXPECT_TRUE(status == UALError::UAL_SUCCESS
                 || status == UALError::UAL_NOT_SUPPORTED);
 }

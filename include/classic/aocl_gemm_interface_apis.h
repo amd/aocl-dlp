@@ -278,6 +278,48 @@ aocl_reorder_s8s8s32os32_sym_quant(const char      order,
                                    dlp_metadata_t* metadata);
 
 /**
+ * @brief Returns the size (in bytes) of the reordered buffer required for the
+ * symmetric-quantized s8s4 GEMM path. The input B matrix is a signed 4-bit
+ * (nibble-packed) weight matrix. The reordered buffer stores the s8 VNNI-4
+ * packed weights compressed 2:1 back to nibbles, followed by the per-group
+ * int32 column sums (stored uncompressed).
+ * @param[in] order Memory layout (row-major or column-major).
+ * @param[in] trans Transpose option for the matrix.
+ * @param[in] mat_type Type of the matrix ('B'/'W' only).
+ * @param[in] k Number of rows in the matrix (inner dimension).
+ * @param[in] n Number of columns in the matrix.
+ * @param[in,out] metadata Metadata carrying the B-side quantization group size
+ * (via metadata->b_quant_op) and used for error reporting.
+ * @return Size of the buffer in bytes.
+ */
+DLP_CLASSIC_EXPORT msz_t
+aocl_get_reorder_buf_size_s8s4s32os32(const char      order,
+                                      const char      trans,
+                                      const char      mat_type,
+                                      const md_t      k,
+                                      const md_t      n,
+                                      dlp_metadata_t* metadata);
+
+/**
+ * @brief Reorders a signed 4-bit (nibble-packed) B matrix into the compact
+ * reordered layout consumed by the s8s4 symmetric-quantized GEMM. Refer to
+ * @ref aocl_reorder_s8s8s32os32_sym_quant for parameter semantics. The
+ * @p input_buf_addr points to nibble-packed s4 data; @p reorder_buf_addr must
+ * be sized via @ref aocl_get_reorder_buf_size_s8s4s32os32. The quantization
+ * group size is read from @p metadata->b_quant_op.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_reorder_s8s4s32os32(const char      order,
+                         const char      trans,
+                         const char      mat_type,
+                         const int8_t*   input_buf_addr,
+                         int8_t*         reorder_buf_addr,
+                         const md_t      k,
+                         const md_t      n,
+                         const md_t      ldb,
+                         dlp_metadata_t* metadata);
+
+/**
  * @brief Performs reordering of the input matrix for mixed precision
  * DLP_GEMM. Expanded from AOCL_DLP_GEMM_REORDER_MXP macro.
  * @param[in] order Memory layout (row-major or column-major).
@@ -706,6 +748,56 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
                                  bfloat16*       c,
                                  const md_t      ldc,
                                  dlp_metadata_t* metadata);
+
+/**
+ * @brief Symmetric-quantized GEMM with an s8 activation matrix A and a signed
+ * 4-bit (s4) weight matrix B, accumulating in s32 and downscaling the output
+ * to f32. Matrix B may be supplied either pre-reordered (mem_format_b == 'R',
+ * via @ref aocl_reorder_s8s4s32os32, the compact-memory fast path) or as a raw
+ * nibble-packed s4 matrix that is packed at runtime (mem_format_b == 'N', which
+ * is promoted to packing, or 'P' to request packing explicitly). In all cases
+ * the s4 weights are widened to s8 on the fly and consumed by the shared s8s8
+ * micro-kernel.
+ * Refer to @ref aocl_gemm_s8s8s32of32_sym_quant for the parameter semantics.
+ */
+DLP_CLASSIC_EXPORT void
+aocl_gemm_s8s4s32of32(const char      order,
+                      const char      transa,
+                      const char      transb,
+                      const md_t      m,
+                      const md_t      n,
+                      const md_t      k,
+                      const int32_t   alpha,
+                      const int8_t*   a,
+                      const md_t      lda,
+                      const char      mem_format_a,
+                      const int8_t*   b,
+                      const md_t      ldb,
+                      const char      mem_format_b,
+                      const int32_t   beta,
+                      float*          c,
+                      const md_t      ldc,
+                      dlp_metadata_t* metadata);
+
+/// Refer to @ref aocl_gemm_s8s4s32of32 for info on parameters.
+DLP_CLASSIC_EXPORT void
+aocl_gemm_s8s4s32obf16(const char      order,
+                       const char      transa,
+                       const char      transb,
+                       const md_t      m,
+                       const md_t      n,
+                       const md_t      k,
+                       const int32_t   alpha,
+                       const int8_t*   a,
+                       const md_t      lda,
+                       const char      mem_format_a,
+                       const int8_t*   b,
+                       const md_t      ldb,
+                       const char      mem_format_b,
+                       const int32_t   beta,
+                       bfloat16*       c,
+                       const md_t      ldc,
+                       dlp_metadata_t* metadata);
 
 /**
  * @param[in] order Memory layout (row-major or column-major).

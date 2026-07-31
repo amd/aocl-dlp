@@ -120,6 +120,7 @@ DLP_GEN_RECONCILE_PACKAB(f32f16f32of32)
 DLP_GEN_RECONCILE_PACKAB(bf16s4f32of32)
 DLP_GEN_RECONCILE_PACKAB(bf16u4f32of32)
 DLP_GEN_RECONCILE_PACKAB(s8s8s32o32_sym_quant)
+DLP_GEN_RECONCILE_PACKAB(s8s4s32o32)
 DLP_GEN_RECONCILE_PACKAB(bf16s8s32os32)
 DLP_GEN_RECONCILE_PACKAB(f32s8s32os32)
 
@@ -1337,6 +1338,10 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(bfloat16,
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
     int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, s8s8s32o32, 0, 0)
 
+// GRP s8s4 variant (grouped post-ops, reordered s4 B, C forced to float)
+GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
+    int8_t, int8_t, int32_t, float, s8s4s32o32, s8s8s32o32, 0, 0)
+
 // Q variants (quantization, mutable mtag_b)
 GEN_DLP_GEMM_OPENMP_DECORATOR_UNIFIED(
     bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, s8s8s32o32, 0, 0)
@@ -1801,6 +1806,9 @@ GEN_DLP_GEMM_DECORATOR_UNIFIED(
 // GRP variant (grouped post-ops, mutable mtag_b, C forced to float)
 GEN_DLP_GEMM_DECORATOR_UNIFIED(
     int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, 0, 0)
+
+// GRP s8s4 variant (grouped post-ops, reordered s4 B, C forced to float)
+GEN_DLP_GEMM_DECORATOR_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, 0, 0)
 
 // Q variants (quantization, mutable mtag_b)
 GEN_DLP_GEMM_DECORATOR_UNIFIED(

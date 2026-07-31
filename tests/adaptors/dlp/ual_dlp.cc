@@ -148,6 +148,26 @@ UalDlp::reorder(const Matrix&          in,
         meta.b_quant_op          = &b_quant_op;
     }
 
+    // s8 x s4 sym-quant reorder path: s4 B, s32 accumulation, f32/bf16 output,
+    // and group_scale provided. The s8s4 reorder API is always sym-quant based
+    // (there is no non-sym-quant s8s4 reorder); when no group_scale is given we
+    // fall back to the bf16s4 weight-only-quant reorder below.
+    const bool sym_quant_s4 =
+        (group_scale != nullptr) && (in.getMatrixType() == MatrixType::s4)
+        && (accType == MatrixType::s32)
+        && (C_type == MatrixType::f32 || C_type == MatrixType::bf16);
+
+    if (sym_quant_s4) {
+        // The s8s4 reorder reads only the B-side quantization group size from
+        // the unified quant metadata (mirroring the s8s8 sym-quant reorder).
+        // s4 weights are widened to s8 for the VNNI kernel, so dst_type is s8.
+        b_quant_op.quant_op_kind = DLP_QUANT_OP_QUANTIZE;
+        b_quant_op.src_type      = DLP_S4;
+        b_quant_op.dst_type      = DLP_S8;
+        b_quant_op.group_size    = group_scale->getGroupSize();
+        meta.b_quant_op          = &b_quant_op;
+    }
+
     // Determine appropriate reorder function based on input type and GEMM
     // context The A, B, C types provide context for optimal reordering strategy
     msz_t alloc_bytes = 0;
@@ -212,12 +232,23 @@ UalDlp::reorder(const Matrix&          in,
                 effective_cols, &meta);
         }
     } else if (in.getMatrixType() == MatrixType::s4) {
-        // For s4, bf16s4 with f32 accumulation
-        // Note: s4 is used with bf16 A matrix and f32 accumulation
-        alloc_bytes = aocl_get_reorder_buf_size_bf16s4f32of32(
-            in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
-            in.isTransposed() ? 't' : 'n', 'B', effective_rows, effective_cols,
-            &meta);
+        if (sym_quant_s4) {
+            // s8 x s4 symmetric static quantization reorder sizing. The
+            // quantization group size is carried in meta.b_quant_op; a
+            // group_size of 0 is treated as one group spanning the full K
+            // dimension by the reorder API.
+            alloc_bytes = aocl_get_reorder_buf_size_s8s4s32os32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, &meta);
+        } else {
+            // For s4, bf16s4 with f32 accumulation
+            // Note: s4 is used with bf16 A matrix and f32 accumulation
+            alloc_bytes = aocl_get_reorder_buf_size_bf16s4f32of32(
+                in.getLayout() == MatrixLayout::ROW_MAJOR ? 'r' : 'c',
+                in.isTransposed() ? 't' : 'n', 'B', effective_rows,
+                effective_cols, &meta);
+        }
     } else if (in.getMatrixType() == MatrixType::u4) {
         // For u4, bf16u4 with f32 accumulation (same buffer layout as bf16s4)
         alloc_bytes = aocl_get_reorder_buf_size_bf16s4f32of32(
@@ -334,14 +365,28 @@ UalDlp::reorder(const Matrix&          in,
             }
             break;
         case MatrixType::s4:
-            // For s4, use bf16s4 reorder function
-            aocl_reorder_bf16s4f32of32(
-                layout, in.isTransposed() ? 't' : 'n', 'B',
-                reinterpret_cast<const int8_t*>(
-                    in.getMatrixData().getMatrixPtr()),
-                reinterpret_cast<int8_t*>(out.getMatrixData().getMatrixPtr()),
-                effective_rows, effective_cols, in.getLeadingDimension(),
-                &meta);
+            if (sym_quant_s4) {
+                // s8 x s4 symmetric static quantization reorder. The
+                // quantization group size is carried in meta.b_quant_op.
+                aocl_reorder_s8s4s32os32(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const int8_t*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<int8_t*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    &meta);
+            } else {
+                // For s4, use bf16s4 reorder function
+                aocl_reorder_bf16s4f32of32(
+                    layout, in.isTransposed() ? 't' : 'n', 'B',
+                    reinterpret_cast<const int8_t*>(
+                        in.getMatrixData().getMatrixPtr()),
+                    reinterpret_cast<int8_t*>(
+                        out.getMatrixData().getMatrixPtr()),
+                    effective_rows, effective_cols, in.getLeadingDimension(),
+                    &meta);
+            }
             break;
         case MatrixType::u4:
             // For u4, same packed layout as s4; reuse bf16s4 reorder (uint8_t

@@ -531,24 +531,24 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x64)
         if (post_ops_list_temp->scale_factor_len > 1) {
             if (post_ops_list_temp->sf_stor_type == DLP_U8) {
                 U8_F32_SCALE_LOAD(scale0, k1, 0)
-                U8_F32_SCALE_LOAD(scale1, k1, 1)
-                U8_F32_SCALE_LOAD(scale2, k1, 2)
-                U8_F32_SCALE_LOAD(scale3, k1, 3)
+                U8_F32_SCALE_LOAD(scale1, k2, 1)
+                U8_F32_SCALE_LOAD(scale2, k3, 2)
+                U8_F32_SCALE_LOAD(scale3, k4, 3)
             } else if (post_ops_list_temp->sf_stor_type == DLP_S8) {
                 S8_F32_SCALE_LOAD(scale0, k1, 0)
-                S8_F32_SCALE_LOAD(scale1, k1, 1)
-                S8_F32_SCALE_LOAD(scale2, k1, 2)
-                S8_F32_SCALE_LOAD(scale3, k1, 3)
+                S8_F32_SCALE_LOAD(scale1, k2, 1)
+                S8_F32_SCALE_LOAD(scale2, k3, 2)
+                S8_F32_SCALE_LOAD(scale3, k4, 3)
             } else if (post_ops_list_temp->sf_stor_type == DLP_S32) {
                 S32_F32_SCALE_LOAD(scale0, k1, 0)
-                S32_F32_SCALE_LOAD(scale1, k1, 1)
-                S32_F32_SCALE_LOAD(scale2, k1, 2)
-                S32_F32_SCALE_LOAD(scale3, k1, 3)
+                S32_F32_SCALE_LOAD(scale1, k2, 1)
+                S32_F32_SCALE_LOAD(scale2, k3, 2)
+                S32_F32_SCALE_LOAD(scale3, k4, 3)
             } else if (post_ops_list_temp->sf_stor_type == DLP_BF16) {
                 BF16_F32_SCALE_LOAD(scale0, k1, 0)
-                BF16_F32_SCALE_LOAD(scale1, k1, 1)
-                BF16_F32_SCALE_LOAD(scale2, k1, 2)
-                BF16_F32_SCALE_LOAD(scale3, k1, 3)
+                BF16_F32_SCALE_LOAD(scale1, k2, 1)
+                BF16_F32_SCALE_LOAD(scale2, k3, 2)
+                BF16_F32_SCALE_LOAD(scale3, k4, 3)
             } else {
                 scale0 = _mm512_maskz_loadu_ps(
                     k1, (float*)post_ops_list_temp->scale_factor
@@ -606,29 +606,29 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_6x64)
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
             if (post_ops_list_temp->zp_stor_type == DLP_BF16) {
                 BF16_F32_ZP_LOAD(zero_point0, k1, 0)
-                BF16_F32_ZP_LOAD(zero_point1, k1, 1)
-                BF16_F32_ZP_LOAD(zero_point2, k1, 2)
-                BF16_F32_ZP_LOAD(zero_point3, k1, 3)
+                BF16_F32_ZP_LOAD(zero_point1, k2, 1)
+                BF16_F32_ZP_LOAD(zero_point2, k3, 2)
+                BF16_F32_ZP_LOAD(zero_point3, k4, 3)
             } else if (post_ops_list_temp->zp_stor_type == DLP_S32) {
                 S32_F32_ZP_LOAD(zero_point0, k1, 0)
-                S32_F32_ZP_LOAD(zero_point1, k1, 1)
-                S32_F32_ZP_LOAD(zero_point2, k1, 2)
-                S32_F32_ZP_LOAD(zero_point3, k1, 3)
+                S32_F32_ZP_LOAD(zero_point1, k2, 1)
+                S32_F32_ZP_LOAD(zero_point2, k3, 2)
+                S32_F32_ZP_LOAD(zero_point3, k4, 3)
             } else if (post_ops_list_temp->zp_stor_type == DLP_F32) {
                 F32_ZP_LOAD(zero_point0, k1, 0)
-                F32_ZP_LOAD(zero_point1, k1, 1)
-                F32_ZP_LOAD(zero_point2, k1, 2)
-                F32_ZP_LOAD(zero_point3, k1, 3)
+                F32_ZP_LOAD(zero_point1, k2, 1)
+                F32_ZP_LOAD(zero_point2, k3, 2)
+                F32_ZP_LOAD(zero_point3, k4, 3)
             } else if (post_ops_list_temp->zp_stor_type == DLP_U8) {
                 U8_F32_ZP_LOAD(zero_point0, k1, 0)
-                U8_F32_ZP_LOAD(zero_point1, k1, 1)
-                U8_F32_ZP_LOAD(zero_point2, k1, 2)
-                U8_F32_ZP_LOAD(zero_point3, k1, 3)
+                U8_F32_ZP_LOAD(zero_point1, k2, 1)
+                U8_F32_ZP_LOAD(zero_point2, k3, 2)
+                U8_F32_ZP_LOAD(zero_point3, k4, 3)
             } else {
                 S8_F32_ZP_LOAD(zero_point0, k1, 0)
-                S8_F32_ZP_LOAD(zero_point1, k1, 1)
-                S8_F32_ZP_LOAD(zero_point2, k1, 2)
-                S8_F32_ZP_LOAD(zero_point3, k1, 3)
+                S8_F32_ZP_LOAD(zero_point1, k2, 1)
+                S8_F32_ZP_LOAD(zero_point2, k3, 2)
+                S8_F32_ZP_LOAD(zero_point3, k4, 3)
             }
         } else if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
             if (post_ops_list_temp->zp_stor_type == DLP_BF16) {

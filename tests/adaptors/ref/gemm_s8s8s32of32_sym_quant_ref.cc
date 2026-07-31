@@ -175,10 +175,18 @@ aocl_gemm_s8s8s32of32_sym_quant_ref(const char    order,
     const md_t ng = num_groups;
 
     // Match dlp_gemm_s8s8s32_sym_quant.c K-paneling: KC from S8S8S32OS32 Zen4
-    // blksz (dlp_gemm_blksz_map.h), raised to at least group_size when needed.
+    // blksz (dlp_gemm_blksz_map.h), then adjusted so groups never straddle a KC
+    // boundary. The DLP driver (dlp_gemm_s8s4s32.c / _reorder_s8s4.c) GROWS KC
+    // to group_size when gs > KC, otherwise SHRINKS KC to the largest multiple
+    // of gs when KC is not already a multiple. Replicating both keeps the
+    // reference's float accumulation order identical to the kernel's, so
+    // straddle group sizes (KC % gs != 0) compare bit-consistently instead of
+    // only under loose tol.
     md_t KC = 2048;
     if (gs > KC) {
         KC = gs;
+    } else if ((KC % gs) != 0) {
+        KC = (KC / gs) * gs;
     }
 
     const bool  is_col_major = (order == 'c' || order == 'C');

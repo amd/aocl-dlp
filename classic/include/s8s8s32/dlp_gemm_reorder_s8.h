@@ -59,6 +59,25 @@ dlp_reorderb_nr64_s8s8s32o32_sym_quant(dlp_gemm_obj_t*  b,
                                        dlp_gemm_cntx_t* lcntx,
                                        md_t             group_size);
 
+// Reorder worker for the s8s4 symmetric-quantized GEMM. The input matrix B is
+// a signed 4-bit (nibble-packed) weight matrix; the reordered output is a
+// COMPACT s4 buffer holding the s8 VNNI-4 packed weights compressed 2:1 back
+// to nibbles, followed by the per-group int32 column sums (stored
+// uncompressed). Internally B is widened s4->s8, the existing s8 sym-quant
+// packer is reused to produce the VNNI-4 layout and column sums, and the packed
+// weights are then compressed s8->s4 for storage. See dlp_gemm_packb_s8s4.h for
+// the nibble convention.
+//
+// Returns DLP_CLSC_SUCCESS on success. On a scratch-buffer allocation failure
+// it returns DLP_CLSC_FAILURE WITHOUT marking b_reorder as REORDERED, so the
+// caller must not consume b_reorder as reordered data on a non-success return.
+dlp_clsc_err_t
+dlp_reorderb_nr64_s8s4s32o32(dlp_gemm_obj_t*  b,
+                             dlp_gemm_obj_t*  b_reorder,
+                             dlp_rntm_t*      rntm,
+                             dlp_gemm_cntx_t* lcntx,
+                             md_t             group_size);
+
 void
 dlp_reordera_mr6_s8s8s32o32(dlp_gemm_obj_t*  a,
                             dlp_gemm_obj_t*  a_reorder,

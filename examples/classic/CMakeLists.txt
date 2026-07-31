@@ -37,6 +37,7 @@ set(EXAMPLE_SOURCES
     quantization.c
     simple_gemm_bf16s8.c
     simple_gemm_s8_sym_quant.c
+    simple_gemm_s8s4.c
     simple_gemm_bf16s4.c
     simple_gemm_bf16u4.c
     simple_gemm_f32s8.c

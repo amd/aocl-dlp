@@ -535,6 +535,37 @@ DlpUalPlan::prepare()
             }
             break;
 
+        // s8 x s4 symmetric static quantization. Only the sym-quant API exists
+        // for s8s4 (there is no plain variant), so these require m_group_scale;
+        // B is nibble-packed s4 passed as int8_t*.
+        case encodeTypes<MatrixType::s8, MatrixType::s4, MatrixType::f32,
+                         MatrixType::s32>():
+            if (m_group_scale) {
+                m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                                 md_t ldc) {
+                    aocl_gemm_s8s4s32of32(
+                        layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
+                        reinterpret_cast<int8_t*>(a), lda, memA,
+                        reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
+                        reinterpret_cast<float*>(c), ldc, meta);
+                };
+            }
+            break;
+
+        case encodeTypes<MatrixType::s8, MatrixType::s4, MatrixType::bf16,
+                         MatrixType::s32>():
+            if (m_group_scale) {
+                m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,
+                                 md_t ldc) {
+                    aocl_gemm_s8s4s32obf16(
+                        layout, transA, transB, m_dim, n_dim, k_dim, alpha_i,
+                        reinterpret_cast<int8_t*>(a), lda, memA,
+                        reinterpret_cast<int8_t*>(b), ldb, memB, beta_i,
+                        reinterpret_cast<bfloat16*>(c), ldc, meta);
+                };
+            }
+            break;
+
         case encodeTypes<MatrixType::bf16, MatrixType::s8, MatrixType::bf16,
                          MatrixType::s32>():
             m_dispatch = [=](void* a, md_t lda, void* b, md_t ldb, void* c,

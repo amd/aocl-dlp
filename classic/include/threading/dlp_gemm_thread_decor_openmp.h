@@ -80,6 +80,8 @@ GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
 GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
 GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
+    int8_t, int8_t, int32_t, float, s8s4s32o32)
+GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32)
 GEN_DLP_GEMM_OPENMP_DECORATOR_FN_DECL(
     float, int8_t, int32_t, int32_t, f32s8s32os32)
@@ -205,6 +207,7 @@ GEN_DLP_GEMM_DECORATOR_FN_DECL(bfloat16, int8_t, float, float, bf16s4f32of32)
 GEN_DLP_GEMM_DECORATOR_FN_DECL(bfloat16, uint8_t, float, float, bf16u4f32of32)
 GEN_DLP_GEMM_DECORATOR_FN_DECL(
     int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant)
+GEN_DLP_GEMM_DECORATOR_FN_DECL(int8_t, int8_t, int32_t, float, s8s4s32o32)
 GEN_DLP_GEMM_DECORATOR_FN_DECL(
     bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32)
 GEN_DLP_GEMM_DECORATOR_FN_DECL(float, int8_t, int32_t, int32_t, f32s8s32os32)

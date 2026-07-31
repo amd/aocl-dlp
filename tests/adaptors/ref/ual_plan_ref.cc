@@ -303,8 +303,14 @@ RefUalPlan::execute()
     bool isS8S8GroupScale =
         (aType == MatrixType::s8 && bType == MatrixType::s8 && m_group_scale);
 
+    // s8 x s4 symmetric static quantization: unpack the nibble-packed s4 B to
+    // s8 and reuse the s8s8 sym-quant reference below.
+    bool isS8S4GroupScale =
+        (aType == MatrixType::s8 && bType == MatrixType::s4 && m_group_scale);
+
     bool needsF32Intermediate = (isIntegerGemm || isBf16Gemm || isF32Gemm)
-                                && hasPostOps && !isS8S8GroupScale;
+                                && hasPostOps && !isS8S8GroupScale
+                                && !isS8S4GroupScale;
 
     if (needsF32Intermediate && !ualRef.checkValidGemmParams(A, B, C, true)) {
         needsF32Intermediate = false;
@@ -378,7 +384,7 @@ RefUalPlan::execute()
     // Uses specialized ref that handles per-group scale application during
     // K-panel accumulation, which is required for correct results when
     // group_size > 0.
-    if (isS8S8GroupScale) {
+    if (isS8S8GroupScale || isS8S4GroupScale) {
         md_t gs = m_group_scale->getGroupSize();
 
         if (!ualRef.checkValidGemmParams(A, B, C, false, gs)) {
@@ -489,11 +495,32 @@ RefUalPlan::execute()
             std::memset(tempC_f32.getData(), 0, tempC_f32.getDataSizeBytes());
         }
 
+        // B pointer for the s8s8 sym-quant ref. For s8s8 this is the raw s8 B.
+        // For s8s4, unpack the nibble-packed s4 B into a contiguous s8 buffer
+        // with the same linear layout (low nibble first, sign-extended); the
+        // ref then reads it identically via B.getLeadingDimension().
+        const int8_t* b_ptr =
+            reinterpret_cast<const int8_t*>(B.getMatrixData().getMatrixPtr());
+        std::vector<int8_t> b_s8_unpacked;
+        if (isS8S4GroupScale) {
+            const int8_t* packed       = b_ptr;
+            size_t        nibble_count = B.getDataSizeBytes() * 2;
+            b_s8_unpacked.resize(nibble_count);
+            for (size_t idx = 0; idx < nibble_count; ++idx) {
+                int     shift = static_cast<int>((idx & 1) * 4);
+                uint8_t bits4 =
+                    (static_cast<uint8_t>(packed[idx / 2]) >> shift) & 0x0F;
+                b_s8_unpacked[idx] = (bits4 & 0x08)
+                                         ? static_cast<int8_t>(bits4 | 0xF0)
+                                         : static_cast<int8_t>(bits4);
+            }
+            b_ptr = b_s8_unpacked.data();
+        }
+
         dlp::testing::classic::ref::aocl_gemm_s8s8s32of32_sym_quant_ref(
             layout, transA_, transB_, M, N, K, alpha_s32,
             reinterpret_cast<const int8_t*>(A.getMatrixData().getMatrixPtr()),
-            static_cast<int>(A.getLeadingDimension()),
-            reinterpret_cast<const int8_t*>(B.getMatrixData().getMatrixPtr()),
+            static_cast<int>(A.getLeadingDimension()), b_ptr,
             static_cast<int>(B.getLeadingDimension()), beta_s32,
             reinterpret_cast<float*>(tempC_f32.getData()),
             static_cast<int>(tempC_f32.getLeadingDimension()), gs, a_sf_ptr,

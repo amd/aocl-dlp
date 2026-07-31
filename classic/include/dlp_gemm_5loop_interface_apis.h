@@ -103,6 +103,9 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const);
 DLP_GEMM_5LOOP_UNIFIED(
     int8_t, int8_t, int32_t, float, s8s8s32o32_sym_quant, const);
 
+// GRP s8s4 variant: A is s8, B is compact s4 (reordered). C forced to float.
+DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const);
+
 // Q variants (const rs_b/cs_b/mtag_b)
 DLP_GEMM_5LOOP_UNIFIED(
     bfloat16, int8_t, int32_t, int32_t, bf16s8s32os32, const);
@@ -187,6 +190,7 @@ DLP_GEMV_F32_FALLBACK(bfloat16, bfloat16, float, bf16bf16f32of32);
         dlp_gemm_post_op* post_op_list, DLP_TYPE c_downscale)
 
 DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant);
+DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32);
 
 #define DLP_GEMV3(A_type, B_type, C_type, LP_SFX)                              \
     void dlp_gemv_rowvar_##LP_SFX(                                             \
