@@ -2,6 +2,79 @@ gemm_tests:
   # ==========================================================================
   # Symmetric Quantization - Performance testing
   # ==========================================================================
+  #
+  # GroupScale scale factors follow the unified sym-quant YAML format:
+  #   a_scale_type / b_scale_type : scale storage type per matrix (f32 | bf16).
+  #                                 A and B must match; bf16 is widened to f32
+  #                                 losslessly before the dequant multiply.
+  #   group_size                  : K-group size; "0" == full K (single group).
+  #   a_granularity               : PER_GROUP | PER_TOKEN   (A: M x ng | M x 1)
+  #   b_granularity               : PER_GROUP | PER_CHANNEL (B: ng x N | 1 x N)
+  # Both granularities default to PER_GROUP when omitted.
+  # ==========================================================================
+
+  # Mixed granularity: per-token A (one scale per row) + per-group B
+  - name: "s8s8s32of32_sym_quant_per_tok_per_group"
+    a_type: "s8"
+    b_type: "s8"
+    c_type: ["f32", "bf16"]
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    # Small dimensions to test fringe kernels
+    m: [6]
+    n: [64]
+    k: [64]
+    alpha: [2]
+    beta: [-2]
+    lda: 64
+    ldb: 64
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            group_size: ["8", "16", "32", "64"]
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_GROUP"]
+    product_type: "cartesian"
+
+  # Mixed granularity: per-group A + per-channel B (one scale per column)
+  - name: "s8s8s32of32_sym_quant_per_group_per_channel"
+    a_type: "s8"
+    b_type: "s8"
+    c_type: ["f32", "bf16"]
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [6]
+    n: [64]
+    k: [64]
+    alpha: [2]
+    beta: [-2]
+    lda: 64
+    ldb: 64
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            group_size: ["8", "16", "32", "64"]
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_CHANNEL"]
+    product_type: "cartesian"
 
   # Test 1: Small matrices - f32 output
   - name: "s8s8s32of32_sym_quant"
@@ -29,7 +102,10 @@ gemm_tests:
         - type: "GroupScale"
           params:
             group_size: ["0", "8", "16", "32", "64"]
-            scale_factor_type: ["f32"]
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP"]
     post_operations:
       cartesian: false
       operations:
@@ -53,8 +129,8 @@ gemm_tests:
     m: [1, 8, 16, 32]
     n: [32, 64]
     k: [32, 64]
-    alpha: [1.0]
-    beta: [0.0]
+    alpha: [2]
+    beta: [-2]
     lda: 64
     ldb: 64
     ldc: 64
@@ -66,12 +142,50 @@ gemm_tests:
         - type: "GroupScale"
           params:
             group_size: ["0", "8", "16", "32", "64"]
-            scale_factor_type: ["f32"]
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP"]
     post_operations:
       cartesian: false
       operations:
         - type: "Elementwise-RELU"
           params: {}
+    tolerances:
+      relative: 200.0
+      absolute: 50.0
+    product_type: "cartesian"
+
+  # Test 3: bf16-stored scale factors (A and B matched). Scales are widened to
+  # f32 losslessly before dequant; both f32 and bf16 output types are covered.
+  - name: "s8s8s32_sym_quant_bf16_scale"
+    a_type: "s8"
+    b_type: "s8"
+    c_type: ["f32", "bf16"]
+    acc_type: "s32"
+    storage_format: "row-major"
+    transA: false
+    transB: false
+    m: [1, 8, 16, 32]
+    n: [32, 64]
+    k: [32, 64]
+    alpha: [2]
+    beta: [-2]
+    lda: 64
+    ldb: 64
+    ldc: 64
+    mtagA: ["none", "pack"]
+    mtagB: ["none", "pack", "reorder"]
+    pre_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            group_size: ["0", "16", "32", "64"]
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
     tolerances:
       relative: 200.0
       absolute: 50.0

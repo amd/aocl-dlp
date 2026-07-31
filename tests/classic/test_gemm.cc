@@ -702,8 +702,17 @@ generateTestName(const MicroTest&   microTest,
         name << postops_desc;
     }
 
-    if (microTest.getGroupScaleParam()) {
-        name << "_GroupScale";
+    if (auto group_scale = microTest.getGroupScaleParam()) {
+        const char* a_gran_str =
+            (group_scale->getAGranularity() == AScaleGranularity::PerToken)
+                ? "AToken"
+                : "AGroup";
+        const char* b_gran_str =
+            (group_scale->getBGranularity() == BScaleGranularity::PerChannel)
+                ? "BChannel"
+                : "BGroup";
+        name << "_GroupScale" << group_scale->getGroupSize() << "_"
+             << a_gran_str << "_" << b_gran_str;
     }
 
     // Add config index for uniqueness
@@ -1176,7 +1185,8 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
 
         /* --- CONSTANT FILL (Recommended for debugging) --- */
         // To enable constant fill for easier debugging, comment out the random
-        // fill block above and uncomment the following lines: A.fillValue(10);
+        // fill block above and uncomment the following lines:
+        // A.fillValue(10);
         // B.fillValue(-5);
         // C.fillValue(20);
         // A_ref.fillValue(10);

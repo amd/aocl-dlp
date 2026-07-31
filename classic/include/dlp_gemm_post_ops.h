@@ -57,6 +57,8 @@ typedef struct dlp_gemm_grp_post_op_attr_t
     void*    b_zp;
     uint64_t b_zp_len;
     uint64_t group_size;
+    char     a_grp_mul; // 0: A ignores group index (per-token), 1: per-group
+    char     b_grp_mul; // 0: B ignores group index (per-channel), 1: per-group
     uint64_t grp_post_op_i;
     uint64_t grp_post_op_j;
     uint64_t grp_post_op_k;
@@ -71,6 +73,8 @@ typedef struct dlp_gemm_grp_post_op_attr_t
 typedef struct dlp_gemm_group_post_op_t
 {
     md_t                             group_size;
+    DLP_PARAM_DIM_TYPE               a_scale_factor_dim;
+    DLP_PARAM_DIM_TYPE               b_scale_factor_dim;
     void*                            a_scale_factor;
     md_t                             a_scale_factor_len;
     void*                            a_zp;

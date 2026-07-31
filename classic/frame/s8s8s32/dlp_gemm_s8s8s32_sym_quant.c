@@ -214,8 +214,21 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
     grp_post_ops_attr.sf_stor_type       = grp_post_op_list->sf_stor_type;
     grp_post_ops_attr.zp_stor_type       = grp_post_op_list->zp_stor_type;
 
-    md_t num_groups                   = (k + group_size - 1) / group_size;
-    grp_post_ops_attr.grp_post_op_lda = num_groups;
+    // Derive per-matrix group strides from each matrix's scale-factor dim.
+    //   A PER_TOKEN:   A has one scale per row    (lda=1, a_grp_mul=0).
+    //   B PER_CHANNEL: B has one scale per column (b_grp_mul=0).
+    //   otherwise:     stride by group (legacy behaviour).
+    md_t num_groups = (k + group_size - 1) / group_size;
+    grp_post_ops_attr.a_grp_mul =
+        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 0
+                                                                          : 1;
+    grp_post_ops_attr.b_grp_mul =
+        (grp_post_op_list->b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 0
+                                                                            : 1;
+    grp_post_ops_attr.grp_post_op_lda =
+        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN)
+            ? 1
+            : num_groups;
     grp_post_ops_attr.grp_post_op_ldb = n;
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
@@ -523,8 +536,21 @@ DLP_GEMM_5LOOP_UNIFIED(
     grp_post_ops_attr.sf_stor_type       = grp_post_op_list->sf_stor_type;
     grp_post_ops_attr.zp_stor_type       = grp_post_op_list->zp_stor_type;
 
-    md_t num_groups                   = (k + group_size - 1) / group_size;
-    grp_post_ops_attr.grp_post_op_lda = num_groups;
+    // Derive per-matrix group strides from each matrix's scale-factor dim.
+    //   A PER_TOKEN:   A has one scale per row    (lda=1, a_grp_mul=0).
+    //   B PER_CHANNEL: B has one scale per column (b_grp_mul=0).
+    //   otherwise:     stride by group (legacy behaviour).
+    md_t num_groups = (k + group_size - 1) / group_size;
+    grp_post_ops_attr.a_grp_mul =
+        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 0
+                                                                          : 1;
+    grp_post_ops_attr.b_grp_mul =
+        (grp_post_op_list->b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 0
+                                                                            : 1;
+    grp_post_ops_attr.grp_post_op_lda =
+        (grp_post_op_list->a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN)
+            ? 1
+            : num_groups;
     grp_post_ops_attr.grp_post_op_ldb = n;
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.

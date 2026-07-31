@@ -269,6 +269,77 @@ main(void)
     free(a_sf2);
     free(b_sf2);
 
+    /* Example 3: mixed granularity - per-token A + per-group B (group_size 32)
+     */
+    printf("--- Example 3: PER_TOKEN A + per-group B, group_size=32 ---\n\n");
+
+    md_t   ng3   = (k + 32 - 1) / 32;
+    float* a_sf3 = (float*)malloc((size_t)m * sizeof(float)); /* one per row */
+    float* b_sf3 = (float*)malloc((size_t)ng3 * (size_t)n * sizeof(float));
+    if ((a_sf3 == NULL) || (b_sf3 == NULL)) {
+        printf("Scale allocation failed\n");
+        free(a_sf3);
+        free(b_sf3);
+        goto cleanup;
+    }
+    for (md_t i = 0; i < m; i++) {
+        a_sf3[i] =
+            0.02f + 0.0005f * (float)i; /* per-token: one scale per row */
+    }
+    for (md_t g = 0; g < ng3; g++) {
+        for (md_t j = 0; j < n; j++) {
+            b_sf3[g * n + j] = 0.025f + 0.00015f * (float)(g * n + j);
+        }
+    }
+
+    /* Per-token A: outer_dim PER_TOKEN, one scale per row (len == m).
+     * Per-group B: outer_dim PER_GROUP, ng3 groups per column. The kernel
+     * derives the mixed granularity from these outer_dim values. */
+    a_scl_q = (dlp_qparam_t){ .data      = a_sf3,
+                              .len       = m,
+                              .stor_type = DLP_F32,
+                              .outer_dim = DLP_PARAM_DIM_PER_TOKEN };
+    b_scl_q = (dlp_qparam_t){ .data      = b_sf3,
+                              .len       = ng3 * n,
+                              .stor_type = DLP_F32,
+                              .outer_dim = DLP_PARAM_DIM_PER_GROUP };
+
+    memset(&metadata, 0, sizeof(metadata));
+    // QUANTIZE means S8 operands are consumed by the INT8 path and the
+    // supplied scales dequantize/correct the accumulator after accumulation.
+    a_quant_op = (dlp_quant_op_t){ .quant_op_kind       = DLP_QUANT_OP_QUANTIZE,
+                                   .src_type            = DLP_S8,
+                                   .dst_type            = DLP_S8,
+                                   .group_size          = 32,
+                                   .quant_scale_factors = NULL,
+                                   .dequant_scale_factors = &a_scl_q,
+                                   .zero_point            = NULL };
+    b_quant_op = (dlp_quant_op_t){ .quant_op_kind       = DLP_QUANT_OP_QUANTIZE,
+                                   .src_type            = DLP_S8,
+                                   .dst_type            = DLP_S8,
+                                   .group_size          = 32,
+                                   .quant_scale_factors = NULL,
+                                   .dequant_scale_factors = &b_scl_q,
+                                   .zero_point            = NULL };
+    metadata.a_quant_op = &a_quant_op;
+    metadata.b_quant_op = &b_quant_op;
+    memset(c, 0, (size_t)ldc * (size_t)m * sizeof(float));
+
+    aocl_gemm_s8s8s32of32_sym_quant(order, transa, transb, m, n, k, alpha, a,
+                                    lda, mem_format_a, b, ldb, mem_format_b,
+                                    beta0, c, ldc, &metadata);
+    if (metadata.error_hndl.error_code != DLP_CLSC_SUCCESS) {
+        printf("GEMM failed, error_code=%d\n",
+               (int)metadata.error_hndl.error_code);
+        free(a_sf3);
+        free(b_sf3);
+        goto cleanup;
+    }
+
+    PrintF32Section("Result C (F32)", c, (int)m, (int)n, (int)ldc, 3, 3);
+    free(a_sf3);
+    free(b_sf3);
+
 cleanup:
     free(a);
     free(b);

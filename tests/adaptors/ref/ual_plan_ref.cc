@@ -397,15 +397,30 @@ RefUalPlan::execute()
             return UALError::UAL_FAILURE;
         }
 
-        const float* a_sf_src = reinterpret_cast<const float*>(
-            m_group_scale->getAScaleFactor()->getData());
-        const float* b_sf_src = reinterpret_cast<const float*>(
-            m_group_scale->getBScaleFactor()->getData());
-        md_t       a_sf_len = m_group_scale->getAScaleFactor()->getCols();
-        md_t       b_sf_len = m_group_scale->getBScaleFactor()->getCols();
-        MatrixType sf_type  = m_group_scale->getAScaleFactor()->getMatrixType();
+        const void* a_sf_src = m_group_scale->getAScaleFactor()->getData();
+        const void* b_sf_src = m_group_scale->getBScaleFactor()->getData();
+        md_t        a_sf_len = m_group_scale->getAScaleFactor()->getCols();
+        md_t        b_sf_len = m_group_scale->getBScaleFactor()->getCols();
 
-        if (sf_type != MatrixType::f32) {
+        // A and B scale factors must share one storage type: read_sf() reads
+        // both buffers with the same type, and the library likewise rejects a
+        // mixed bf16/f32 pair ("A and B scale factor type mismatch"). Reject a
+        // mismatch here before reinterpreting either buffer.
+        MatrixType a_sf_type =
+            m_group_scale->getAScaleFactor()->getMatrixType();
+        MatrixType b_sf_type =
+            m_group_scale->getBScaleFactor()->getMatrixType();
+        if (a_sf_type != b_sf_type) {
+            return UALError::UAL_NOT_SUPPORTED;
+        }
+        MatrixType sf_type = a_sf_type;
+
+        // The Zen4 sym-quant kernel accepts f32 or bf16 scale factors: bf16 is
+        // widened to f32 losslessly before the dequant multiply (see the
+        // sf_stor_type == DLP_BF16 branch in
+        // dlp_gemm_6x64rowmajor_s8_grp_amd512vnni.c). Mirror that here and
+        // treat any other storage type as genuinely unsupported.
+        if (sf_type != MatrixType::f32 && sf_type != MatrixType::bf16) {
             return UALError::UAL_NOT_SUPPORTED;
         }
 
@@ -418,35 +433,46 @@ RefUalPlan::execute()
             return UALError::UAL_NOT_SUPPORTED;
         }
 
+        // Read one source scale element as f32. bf16 -> f32 is a lossless
+        // widen, identical to the kernel's pre-multiply conversion, so the
+        // reference stays bit-consistent with the DLP path for bf16-stored
+        // scales.
+        auto read_sf = [sf_type](const void* base, md_t idx) -> float {
+            if (sf_type == MatrixType::bf16) {
+                return dlp::testing::utils::bf16_to_f32(
+                    static_cast<const bfloat16*>(base)[idx]);
+            }
+            return static_cast<const float*>(base)[idx];
+        };
+
         // The specialized ref indexes scale factors as 2D arrays:
         //   a_scale[i * ng + g]  — needs M * ng elements
         //   b_scale[g * n + j]   — needs ng * N elements
-        // Broadcast scalar/per-row/per-col to these sizes if needed.
-        std::vector<float> a_sf_buf;
-        std::vector<float> b_sf_buf;
-        const void*        a_sf_ptr = a_sf_src;
-        const void*        b_sf_ptr = b_sf_src;
+        // Always materialize widened f32 buffers, broadcasting scalar/per-row
+        // (A) or scalar/per-col (B) as needed, so the ref kernel reads plain
+        // f32 regardless of the source scale storage type.
+        std::vector<float> a_sf_buf(static_cast<size_t>(M) * ng);
+        std::vector<float> b_sf_buf(static_cast<size_t>(ng) * N);
 
-        if (a_sf_len != M * ng) {
-            a_sf_buf.resize(M * ng);
-            for (md_t i = 0; i < M; ++i) {
-                float val = a_sf_src[a_sf_len > 1 ? i : 0];
-                for (md_t g = 0; g < ng; ++g) {
-                    a_sf_buf[i * ng + g] = val;
-                }
-            }
-            a_sf_ptr = a_sf_buf.data();
-        }
-
-        if (b_sf_len != ng * N) {
-            b_sf_buf.resize(ng * N);
+        for (md_t i = 0; i < M; ++i) {
             for (md_t g = 0; g < ng; ++g) {
-                for (md_t j = 0; j < N; ++j) {
-                    b_sf_buf[g * N + j] = b_sf_src[b_sf_len > 1 ? j : 0];
-                }
+                md_t src             = (a_sf_len == M * ng) ? (i * ng + g)
+                                       : (a_sf_len == M)    ? i
+                                                            : 0;
+                a_sf_buf[i * ng + g] = read_sf(a_sf_src, src);
             }
-            b_sf_ptr = b_sf_buf.data();
         }
+        for (md_t g = 0; g < ng; ++g) {
+            for (md_t j = 0; j < N; ++j) {
+                md_t src            = (b_sf_len == ng * N) ? (g * N + j)
+                                      : (b_sf_len == N)    ? j
+                                                           : 0;
+                b_sf_buf[g * N + j] = read_sf(b_sf_src, src);
+            }
+        }
+
+        const void* a_sf_ptr = a_sf_buf.data();
+        const void* b_sf_ptr = b_sf_buf.data();
 
         char    layout = (A.getLayout() == MatrixLayout::ROW_MAJOR) ? 'r' : 'c';
         char    transA_   = A.isTransposed() ? 't' : 'n';
@@ -471,7 +497,7 @@ RefUalPlan::execute()
             static_cast<int>(B.getLeadingDimension()), beta_s32,
             reinterpret_cast<float*>(tempC_f32.getData()),
             static_cast<int>(tempC_f32.getLeadingDimension()), gs, a_sf_ptr,
-            b_sf_ptr, ng, sf_type);
+            b_sf_ptr, ng, MatrixType::f32);
 
         applyPostOps(tempC_f32);
         dlp::testing::utils::copyToMatrix<float>(

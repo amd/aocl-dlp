@@ -288,7 +288,8 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
                 // load scales for B matrix
                 bfloat16* b_scale_ptr =
                     ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_BF16_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -296,7 +297,8 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
                 // load scales for B matrix
                 float* b_scale_ptr =
                     ((float*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_F32_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -311,7 +313,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
                     ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_BF16_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
@@ -344,7 +346,7 @@ DLP_GEMM_N_LT_NR0_FRINGE_KERN2(int8_t,
                     ((float*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_F32_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
@@ -1714,7 +1716,8 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
                 // load scales for B matrix
                 bfloat16* b_scale_ptr =
                     ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_BF16_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -1722,7 +1725,8 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
                 // load scales for B matrix
                 float* b_scale_ptr =
                     ((float*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_F32_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -1737,7 +1741,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
                     ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_BF16_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
@@ -1770,7 +1774,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x16_sym_quant)
                     ((float*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_F32_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
@@ -3156,7 +3160,8 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
                 // load scales for B matrix
                 bfloat16* b_scale_ptr =
                     ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_BF16_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -3165,7 +3170,8 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
                 // load scales for B matrix
                 float* b_scale_ptr =
                     ((float*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_F32_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -3181,7 +3187,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
                     ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_BF16_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
@@ -3214,7 +3220,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x32_sym_quant)
                     ((float*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_F32_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
@@ -4932,7 +4938,8 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
                 // load scales for B matrix
                 bfloat16* b_scale_ptr =
                     ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_BF16_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -4942,7 +4949,8 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
                 // load scales for B matrix
                 float* b_scale_ptr =
                     ((float*)(grp_post_ops_attr.b_scale_factor))
-                    + (group * grp_post_ops_attr.grp_post_op_ldb)
+                    + (group * grp_post_ops_attr.grp_post_op_ldb
+                       * grp_post_ops_attr.b_grp_mul)
                     + grp_post_ops_attr.grp_post_op_j;
 
                 SYM_QUANT_F32_F32_SCL_LOAD(b_scl0, b_scale_ptr, scl_mask, 0)
@@ -4959,7 +4967,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
                     ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_BF16_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
@@ -4992,7 +5000,7 @@ DLP_GEMM_N_FRINGE_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x48_sym_quant)
                     ((float*)(grp_post_ops_attr.a_scale_factor))
                     + (grp_post_ops_attr.grp_post_op_i
                        * grp_post_ops_attr.grp_post_op_lda)
-                    + group;
+                    + (group * grp_post_ops_attr.a_grp_mul);
 
                 // ----------- rows 0 & 1 -----------------------------
                 SYM_QUANT_F32_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)

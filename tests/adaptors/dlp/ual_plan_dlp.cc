@@ -1362,6 +1362,13 @@ DlpUalPlan::convertGroupScaleOperations()
     a_quant.group_size = gs;
     b_quant.group_size = gs;
 
+    // In the unified metadata API the granularity mode is conveyed to DLP via
+    // each scale factor's own outer_dim (PER_TOKEN for A, PER_CHANNEL for B);
+    // the frame carries those per-matrix dims through to the kernels. A and B
+    // granularity are independent.
+    AScaleGranularity a_gran = m_group_scale->getAGranularity();
+    BScaleGranularity b_gran = m_group_scale->getBGranularity();
+
     // The sym_quant kernel indexes scale factors as 2D arrays:
     //   A scale: a_scale[row * num_groups + group], needing m * num_groups
     //   elems B scale: b_scale[group * n + col],          needing num_groups *
@@ -1384,6 +1391,11 @@ DlpUalPlan::convertGroupScaleOperations()
     md_t eff_gs = (gs == 0) ? k : gs;
     md_t ng     = (k + eff_gs - 1) / eff_gs; // number of groups
 
+    // Per-matrix group counts. A PER_TOKEN -> one scale per row (a_ng=1);
+    // B PER_CHANNEL -> one scale per column (b_ng=1); else per-group.
+    md_t a_ng = (a_gran == AScaleGranularity::PerToken) ? 1 : ng;
+    md_t b_ng = (b_gran == BScaleGranularity::PerChannel) ? 1 : ng;
+
     // Set A scale factor
     if (param.hasAScaleFactor()) {
         if (!a_quant.dequant_scale_factors) {
@@ -1393,11 +1405,15 @@ DlpUalPlan::convertGroupScaleOperations()
         md_t  a_sf_len = param.getAScaleFactor()->getCols();
         scl->stor_type =
             getStorageType(param.getAScaleFactor()->getMatrixType());
+        // PER_TOKEN collapses A to one scale per row regardless of the number
+        // of K-groups, so it takes precedence over the per-group layout.
         scl->outer_dim =
-            (ng > 1) ? DLP_PARAM_DIM_PER_GROUP
-                     : getScalarOrVectorDim(a_sf_len, DLP_PARAM_DIM_PER_TOKEN);
+            (a_gran == AScaleGranularity::PerToken) ? DLP_PARAM_DIM_PER_TOKEN
+            : (ng > 1)
+                ? DLP_PARAM_DIM_PER_GROUP
+                : getScalarOrVectorDim(a_sf_len, DLP_PARAM_DIM_PER_TOKEN);
 
-        md_t eff_a_sf_len = m * ng;
+        md_t eff_a_sf_len = m * a_ng;
         if (a_sf_len == 1 && eff_a_sf_len > 1) {
             // Broadcast scalar to m elements (one per row, single group)
             size_t elem_size = (scl->stor_type == DLP_BF16) ? sizeof(int16_t)
@@ -1426,12 +1442,16 @@ DlpUalPlan::convertGroupScaleOperations()
         md_t  b_sf_len = param.getBScaleFactor()->getCols();
         scl->stor_type =
             getStorageType(param.getBScaleFactor()->getMatrixType());
+        // PER_CHANNEL collapses B to one scale per column regardless of the
+        // number of K-groups, so it takes precedence over the per-group layout.
         scl->outer_dim =
-            (ng > 1)
+            (b_gran == BScaleGranularity::PerChannel)
+                ? DLP_PARAM_DIM_PER_CHANNEL
+            : (ng > 1)
                 ? DLP_PARAM_DIM_PER_GROUP
                 : getScalarOrVectorDim(b_sf_len, DLP_PARAM_DIM_PER_CHANNEL);
 
-        md_t eff_b_sf_len = n * ng;
+        md_t eff_b_sf_len = n * b_ng;
         if (b_sf_len == 1 && eff_b_sf_len > 1) {
             // Broadcast scalar to n elements (one per column, single group)
             size_t elem_size = (scl->stor_type == DLP_BF16) ? sizeof(int16_t)

@@ -1017,17 +1017,6 @@ MicroTest::createOperationParam(
         }
     } else if (config.type == "GroupScale") {
         // GroupScale: Group-level symmetric quantization scale factors
-        // Parse a_scale_len
-        std::string a_sf_len    = "1"; // default
-        auto        a_sf_len_it = config.params.find("a_scale_len");
-        if (a_sf_len_it != config.params.end()
-            && !a_sf_len_it->second.empty()) {
-            auto   idx_it = param_indices.find("a_scale_len");
-            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
-            idx        = std::min(idx, a_sf_len_it->second.size() - 1);
-            a_sf_len   = std::any_cast<std::string>(a_sf_len_it->second[idx]);
-        }
-
         // Parse a_scale_type
         MatrixType a_sf_type    = MatrixType::f32; // default
         auto       a_sf_type_it = config.params.find("a_scale_type");
@@ -1039,17 +1028,6 @@ MicroTest::createOperationParam(
             auto type_str =
                 std::any_cast<std::string>(a_sf_type_it->second[idx]);
             a_sf_type = stringToMatrixType(type_str);
-        }
-
-        // Parse b_scale_len
-        std::string b_sf_len    = "1"; // default
-        auto        b_sf_len_it = config.params.find("b_scale_len");
-        if (b_sf_len_it != config.params.end()
-            && !b_sf_len_it->second.empty()) {
-            auto   idx_it = param_indices.find("b_scale_len");
-            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
-            idx        = std::min(idx, b_sf_len_it->second.size() - 1);
-            b_sf_len   = std::any_cast<std::string>(b_sf_len_it->second[idx]);
         }
 
         // Parse b_scale_type
@@ -1078,36 +1056,63 @@ MicroTest::createOperationParam(
             group_size = static_cast<md_t>(std::stoul(gs_str));
         }
 
-        // Create A scale factor matrix
-        Matrix                                a_sf_matrix;
+        // Parse A and B granularity independently (each defaults to PER_GROUP).
+        // A accepts PER_GROUP / PER_TOKEN; B accepts PER_GROUP / PER_CHANNEL.
+        AScaleGranularity a_granularity = AScaleGranularity::PerGroup;
+        BScaleGranularity b_granularity = BScaleGranularity::PerGroup;
+
+        auto read_param = [&](const char* key) -> std::string {
+            auto it = config.params.find(key);
+            if (it == config.params.end() || it->second.empty()) {
+                return {};
+            }
+            auto   idx_it = param_indices.find(key);
+            size_t idx = (idx_it != param_indices.end()) ? idx_it->second : 0;
+            idx        = std::min(idx, it->second.size() - 1);
+            return std::any_cast<std::string>(it->second[idx]);
+        };
+
+        std::string a_gran_str = read_param("a_granularity");
+        if (a_gran_str == "PER_TOKEN")
+            a_granularity = AScaleGranularity::PerToken;
+        else if (a_gran_str == "PER_GROUP")
+            a_granularity = AScaleGranularity::PerGroup;
+
+        std::string b_gran_str = read_param("b_granularity");
+        if (b_gran_str == "PER_CHANNEL")
+            b_granularity = BScaleGranularity::PerChannel;
+        else if (b_gran_str == "PER_GROUP")
+            b_granularity = BScaleGranularity::PerGroup;
+
+        // Per-matrix group counts. A PER_TOKEN -> one scale per row;
+        // B PER_CHANNEL -> one scale per column; otherwise per-group.
+        md_t gs_eff = (group_size == 0) ? getK() : group_size;
+        md_t ng     = (getK() + gs_eff - 1) / gs_eff;
+        md_t a_ng   = (a_granularity == AScaleGranularity::PerToken) ? 1 : ng;
+        md_t b_ng   = (b_granularity == BScaleGranularity::PerChannel) ? 1 : ng;
+
+        // A scale is (M x a_ng), B scale is (b_ng x N). Distinct random values
+        // so each row / group / channel is exercised independently. The ref
+        // path tiles M->M*ng and N->ng*N, which matches PER_TOKEN/PER_CHANNEL.
         std::mt19937                          gen(RANDOM_SEED);
         std::uniform_real_distribution<float> dist(MIN_VALUE, MAX_VALUE);
-        if (a_sf_len == "m") {
-            std::vector<float> a_sf_data(getM());
-            for (std::size_t i = 0; i < a_sf_data.size(); ++i) {
-                a_sf_data[i] = dist(gen);
-            }
-            a_sf_matrix = Matrix::fromVector(a_sf_data, a_sf_type);
-        } else {
-            a_sf_matrix = Matrix::fromValue(dist(gen), a_sf_type);
-        }
 
-        // Create B scale factor matrix
-        Matrix b_sf_matrix;
-        if (b_sf_len == "n") {
-            std::vector<float> b_sf_data(getN());
-            for (std::size_t i = 0; i < b_sf_data.size(); ++i) {
-                b_sf_data[i] = dist(gen);
-            }
-            b_sf_matrix = Matrix::fromVector(b_sf_data, b_sf_type);
-        } else {
-            b_sf_matrix = Matrix::fromValue(dist(gen), b_sf_type);
-        }
+        std::vector<float> a_sf_data(getM() * a_ng);
+        for (auto& v : a_sf_data)
+            v = dist(gen);
+        Matrix a_sf_matrix = Matrix::fromVector(a_sf_data, a_sf_type);
+
+        std::vector<float> b_sf_data(b_ng * getN());
+        for (auto& v : b_sf_data)
+            v = dist(gen);
+        Matrix b_sf_matrix = Matrix::fromVector(b_sf_data, b_sf_type);
 
         return createGroupScale()
             .setAScaleFactor(a_sf_matrix)
             .setBScaleFactor(b_sf_matrix)
             .setGroupSize(group_size)
+            .setAGranularity(a_granularity)
+            .setBGranularity(b_granularity)
             .build();
 
     } else if (config.type == "WOQ") {

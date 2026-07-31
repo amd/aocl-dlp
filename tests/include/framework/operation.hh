@@ -55,6 +55,39 @@ enum class OperationType : uint8_t
 };
 
 /**
+ * @enum AScaleGranularity
+ * @brief Granularity of the A (activation) scale factor for GroupScale.
+ *
+ * A is M x K, so its scale varies over rows (M) and is grouped along K. The two
+ * meaningful choices are therefore independent of B and map directly onto the A
+ * scale factor's DLP_PARAM_DIM_TYPE outer_dim in the unified C API:
+ *   - PerGroup: one scale per (row, K-group)   -> DLP_PARAM_DIM_PER_GROUP
+ *   - PerToken: one scale per row (K collapsed) -> DLP_PARAM_DIM_PER_TOKEN
+ */
+enum class AScaleGranularity : uint8_t
+{
+    PerGroup = 0,
+    PerToken = 1,
+};
+
+/**
+ * @enum BScaleGranularity
+ * @brief Granularity of the B (weight) scale factor for GroupScale.
+ *
+ * B is K x N, so its scale varies over columns (N) and is grouped along K. The
+ * two meaningful choices are independent of A and map directly onto the B scale
+ * factor's DLP_PARAM_DIM_TYPE outer_dim in the unified C API:
+ *   - PerGroup:   one scale per (K-group, col)   -> DLP_PARAM_DIM_PER_GROUP
+ *   - PerChannel: one scale per column (K collapsed) ->
+ * DLP_PARAM_DIM_PER_CHANNEL
+ */
+enum class BScaleGranularity : uint8_t
+{
+    PerGroup   = 0,
+    PerChannel = 1,
+};
+
+/**
  * @brief Check if an operation type is a pre-GEMM (quantisation) operation
  */
 inline bool
@@ -500,12 +533,18 @@ class GroupScaleParam : public IOperationParam
     std::unique_ptr<Matrix> m_a_scale_factor;
     std::unique_ptr<Matrix> m_b_scale_factor;
     md_t                    m_group_size = 0; // 0 means full k dimension
+    // A and B granularity are fully independent (they map onto each scale
+    // factor's own outer_dim), so they are tracked separately.
+    AScaleGranularity m_a_granularity = AScaleGranularity::PerGroup;
+    BScaleGranularity m_b_granularity = BScaleGranularity::PerGroup;
 
   public:
     GroupScaleParam() = default;
 
     GroupScaleParam(const GroupScaleParam& other)
         : m_group_size(other.m_group_size)
+        , m_a_granularity(other.m_a_granularity)
+        , m_b_granularity(other.m_b_granularity)
     {
         if (other.m_a_scale_factor) {
             m_a_scale_factor =
@@ -535,12 +574,16 @@ class GroupScaleParam : public IOperationParam
     }
 
     void setGroupSize(md_t groupSize) { m_group_size = groupSize; }
+    void setAGranularity(AScaleGranularity g) { m_a_granularity = g; }
+    void setBGranularity(BScaleGranularity g) { m_b_granularity = g; }
 
     const Matrix* getAScaleFactor() const { return m_a_scale_factor.get(); }
     const Matrix* getBScaleFactor() const { return m_b_scale_factor.get(); }
     bool hasAScaleFactor() const { return m_a_scale_factor != nullptr; }
     bool hasBScaleFactor() const { return m_b_scale_factor != nullptr; }
     md_t getGroupSize() const { return m_group_size; }
+    AScaleGranularity getAGranularity() const { return m_a_granularity; }
+    BScaleGranularity getBGranularity() const { return m_b_granularity; }
 };
 
 /**
@@ -1199,7 +1242,9 @@ class GroupScaleBuilder
   private:
     std::unique_ptr<Matrix> m_a_scale_factor;
     std::unique_ptr<Matrix> m_b_scale_factor;
-    md_t                    m_group_size = 0;
+    md_t                    m_group_size    = 0;
+    AScaleGranularity       m_a_granularity = AScaleGranularity::PerGroup;
+    BScaleGranularity       m_b_granularity = BScaleGranularity::PerGroup;
 
   public:
     GroupScaleBuilder& setAScaleFactor(const Matrix& sf)
@@ -1220,6 +1265,18 @@ class GroupScaleBuilder
         return *this;
     }
 
+    GroupScaleBuilder& setAGranularity(AScaleGranularity g)
+    {
+        m_a_granularity = g;
+        return *this;
+    }
+
+    GroupScaleBuilder& setBGranularity(BScaleGranularity g)
+    {
+        m_b_granularity = g;
+        return *this;
+    }
+
     std::unique_ptr<IOperationParam> build()
     {
         if (!m_a_scale_factor || !m_b_scale_factor) {
@@ -1232,6 +1289,8 @@ class GroupScaleBuilder
         if (m_group_size > 0) {
             param->setGroupSize(m_group_size);
         }
+        param->setAGranularity(m_a_granularity);
+        param->setBGranularity(m_b_granularity);
         return param;
     }
 };

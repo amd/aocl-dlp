@@ -139,7 +139,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
             md_t group_end =
                 ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1) / group_size;
-            md_t num_groups = group_end - group_start + 1;
 
             for (iter_t group = group_start; group <= group_end; ++group) {
                 // Zero the accumulator registers.
@@ -276,7 +275,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // load scales for B matrix.
                     bfloat16* b_scale_ptr =
                         ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                        + (group * grp_post_ops_attr.grp_post_op_ldb);
+                        + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                     SYM_QUANT_BF16_F32_SCL_BCST(b_scale_factor, b_scale_ptr, 0)
                 } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
@@ -284,7 +284,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // load scales for B matrix
                     float* b_scale_ptr =
                         ((float*)(grp_post_ops_attr.b_scale_factor))
-                        + (group * grp_post_ops_attr.grp_post_op_ldb);
+                        + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                     SYM_QUANT_F32_F32_SCL_BCST(b_scale_factor, b_scale_ptr, 0)
                 }
@@ -296,13 +297,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                         + (grp_post_ops_attr.grp_post_op_i
                            * grp_post_ops_attr.grp_post_op_lda)
-                        + group;
+                        + (group * grp_post_ops_attr.a_grp_mul);
 
                     // TODO
                     // Devise an optimal approach to load Scale Factor of A.
                     bfloat16 a_sf[16];
                     for (iter_t i = 0; i < 16; ++i) {
-                        a_sf[i] = *(a_scale_ptr + i * num_groups);
+                        a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                     }
 
                     a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
@@ -319,13 +322,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         ((float*)(grp_post_ops_attr.a_scale_factor))
                         + (grp_post_ops_attr.grp_post_op_i
                            * grp_post_ops_attr.grp_post_op_lda)
-                        + group;
+                        + (group * grp_post_ops_attr.a_grp_mul);
 
                     // TODO
                     // Devise an optimal approach to load Scale Factor of A.
                     float a_sf[16];
                     for (iter_t i = 0; i < 16; ++i) {
-                        a_sf[i] = *(a_scale_ptr + i * num_groups);
+                        a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                     }
 
                     a_scale_factor = _mm512_set_ps(
@@ -365,7 +370,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
                                  / group_size;
-                md_t num_groups = group_end - group_start + 1;
 
                 for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
@@ -471,7 +475,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix.
                         bfloat16* b_scale_ptr =
                             ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_BF16_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                     0)
@@ -480,7 +485,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix
                         float* b_scale_ptr =
                             ((float*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_F32_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                    0)
@@ -493,13 +499,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[8];
                         for (iter_t i = 0; i < 8; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
@@ -515,13 +523,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((float*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[8];
                         for (iter_t i = 0; i < 8; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor = _mm512_set_ps(
@@ -550,7 +560,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
                                  / group_size;
-                md_t num_groups = group_end - group_start + 1;
 
                 for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
@@ -632,7 +641,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix.
                         bfloat16* b_scale_ptr =
                             ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_BF16_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                     0)
@@ -641,7 +651,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix
                         float* b_scale_ptr =
                             ((float*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_F32_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                    0)
@@ -654,13 +665,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[4];
                         for (iter_t i = 0; i < 4; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
@@ -675,13 +688,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((float*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[4];
                         for (iter_t i = 0; i < 4; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor =
@@ -710,7 +725,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
                                  / group_size;
-                md_t num_groups = group_end - group_start + 1;
 
                 for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
@@ -791,7 +805,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix.
                         bfloat16* b_scale_ptr =
                             ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_BF16_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                     0)
@@ -800,7 +815,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix
                         float* b_scale_ptr =
                             ((float*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_F32_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                    0)
@@ -813,13 +829,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[2];
                         for (iter_t i = 0; i < 2; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
@@ -834,13 +852,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((float*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[2];
                         for (iter_t i = 0; i < 2; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor =
@@ -869,7 +889,6 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     (md_t)grp_post_ops_attr.grp_post_op_k / group_size;
                 md_t group_end = ((md_t)grp_post_ops_attr.grp_post_op_k + k - 1)
                                  / group_size;
-                md_t num_groups = group_end - group_start + 1;
 
                 for (iter_t group = group_start; group <= group_end; ++group) {
                     /* zero the accumulator registers */
@@ -939,7 +958,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix.
                         bfloat16* b_scale_ptr =
                             ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_BF16_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                     0)
@@ -948,7 +968,8 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                         // load scales for B matrix
                         float* b_scale_ptr =
                             ((float*)(grp_post_ops_attr.b_scale_factor))
-                            + (group * grp_post_ops_attr.grp_post_op_ldb);
+                            + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul);
 
                         SYM_QUANT_F32_F32_SCL_BCST(b_scale_factor, b_scale_ptr,
                                                    0)
@@ -961,13 +982,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         bfloat16 a_sf[1];
                         for (iter_t i = 0; i < 1; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor = DLP_CAST_SI512_PS(_mm512_sllv_epi32(
@@ -982,13 +1005,15 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             ((float*)(grp_post_ops_attr.a_scale_factor))
                             + (grp_post_ops_attr.grp_post_op_i
                                * grp_post_ops_attr.grp_post_op_lda)
-                            + group;
+                            + (group * grp_post_ops_attr.a_grp_mul);
 
                         // TODO
                         // Devise an optimal approach to load Scale Factor of A.
                         float a_sf[1];
                         for (iter_t i = 0; i < 1; ++i) {
-                            a_sf[i] = *(a_scale_ptr + i * num_groups);
+                            a_sf[i] =
+                            *(a_scale_ptr
+                              + i * grp_post_ops_attr.grp_post_op_lda);
                         }
 
                         a_scale_factor =
@@ -1038,10 +1063,14 @@ DLP_GEMV_N_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                             _mm512_cvtepi16_epi32(
                                 _mm256_maskz_loadu_epi16(0xFFFF, ctemp)),
                             _mm512_set1_epi32(16)));
+
+                        // Strided path only loads C here; apply beta*C once.
+                        // The rs_c_downscale==1 branch above already applied
+                        // beta via BF16_F32_BETA_OP_NLT16F_MASK, so it must not
+                        // be FMA'd a second time.
+                        F32_BETA_FMA(f32_acc0, selector1, selector2);
                     }
                 }
-
-                F32_BETA_FMA(f32_acc0, selector1, selector2);
             } else {
                 if (rs_c == 1) {
                     F32_F32_BETA_OP_NLT16F_MASK(c_use, k2, f32_acc0, 0, 0, 0,

@@ -146,18 +146,22 @@ dlp_gemm_set_pre_ops_node_params(dlp_gemm_pre_op* pre_op_node,
 DLP_INLINE void
 dlp_gemm_set_group_post_ops_node_params(dlp_gemm_group_post_op* post_op_node,
                                         md_t                    group_size,
-                                        void*                   a_zero_point,
-                                        void*                   a_scale_factor,
-                                        md_t     a_zero_point_len,
-                                        md_t     a_scale_factor_len,
-                                        void*    b_zero_point,
-                                        void*    b_scale_factor,
-                                        md_t     b_zero_point_len,
-                                        md_t     b_scale_factor_len,
-                                        DLP_TYPE sf_stor_type,
-                                        DLP_TYPE zp_stor_type)
+                                        DLP_PARAM_DIM_TYPE a_scale_factor_dim,
+                                        DLP_PARAM_DIM_TYPE b_scale_factor_dim,
+                                        void*              a_zero_point,
+                                        void*              a_scale_factor,
+                                        md_t               a_zero_point_len,
+                                        md_t               a_scale_factor_len,
+                                        void*              b_zero_point,
+                                        void*              b_scale_factor,
+                                        md_t               b_zero_point_len,
+                                        md_t               b_scale_factor_len,
+                                        DLP_TYPE           sf_stor_type,
+                                        DLP_TYPE           zp_stor_type)
 {
     post_op_node->group_size         = group_size;
+    post_op_node->a_scale_factor_dim = a_scale_factor_dim;
+    post_op_node->b_scale_factor_dim = b_scale_factor_dim;
     post_op_node->a_zp               = a_zero_point;
     post_op_node->a_zp_len           = a_zero_point_len;
     post_op_node->a_scale_factor     = a_scale_factor;
@@ -194,9 +198,9 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
             : &b_scl;
 
     if ((a_quant_op == NULL) && (b_quant_op == NULL)) {
-        dlp_gemm_set_group_post_ops_node_params(post_op_list, 0, NULL, NULL, 0,
-                                                0, NULL, NULL, 0, 0,
-                                                DLP_INVALID, DLP_INVALID);
+        dlp_gemm_set_group_post_ops_node_params(
+            post_op_list, 0, DLP_PARAM_DIM_PER_GROUP, DLP_PARAM_DIM_PER_GROUP,
+            NULL, NULL, 0, 0, NULL, NULL, 0, 0, DLP_INVALID, DLP_INVALID);
 
         return DLP_CLSC_SUCCESS;
     }
@@ -258,13 +262,36 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
         return DLP_CLSC_INVALID_GROUP_DIMENSION;
     }
 
+    DLP_PARAM_DIM_TYPE a_scale_factor_dim = (a_scl_ptr != NULL)
+                                                ? a_scl_ptr->scale_factor_dim
+                                                : DLP_PARAM_DIM_INVALID;
+    DLP_PARAM_DIM_TYPE b_scale_factor_dim = (b_scl_ptr != NULL)
+                                                ? b_scl_ptr->scale_factor_dim
+                                                : DLP_PARAM_DIM_INVALID;
+
+    if (a_scale_factor_dim == DLP_PARAM_DIM_INVALID
+        || b_scale_factor_dim == DLP_PARAM_DIM_INVALID) {
+        dlp_print_msg(" A or B scale factor dimension is invalid. Exiting..",
+                      __FILE__, __LINE__);
+        return DLP_CLSC_NOT_SUPPORTED;
+    }
+
+    // Number of K-groups per matrix.
+    // A PER_TOKEN:   A has one scale per row (a_grp_mul=0)
+    // B PER_CHANNEL: B has one scale per column (b_grp_mul=0)
+    // otherwise:     per group (default)
+    md_t num_groups = (k + group_size - 1) / group_size;
+    md_t a_num_groups =
+        (a_scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN) ? 1 : num_groups;
+    md_t b_num_groups =
+        (b_scale_factor_dim == DLP_PARAM_DIM_PER_CHANNEL) ? 1 : num_groups;
+
     if (a_scl_ptr != NULL) {
         if ((a_scl_ptr->scale_factor_len > 0)
             && (a_scl_ptr->scale_factor == NULL))
             return DLP_CLSC_NULL_POINTER;
 
-        if (a_scl_ptr->scale_factor_len
-            < (m * ((k + group_size - 1) / group_size)))
+        if (a_scl_ptr->scale_factor_len < (m * a_num_groups))
             return DLP_CLSC_INVALID_SF_LEN;
     }
 
@@ -273,8 +300,7 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
             && (b_scl_ptr->scale_factor == NULL))
             return DLP_CLSC_NULL_POINTER;
 
-        if (b_scl_ptr->scale_factor_len
-            < (n * ((k + group_size - 1) / group_size)))
+        if (b_scl_ptr->scale_factor_len < (n * b_num_groups))
             return DLP_CLSC_INVALID_SF_LEN;
     }
 
@@ -291,7 +317,7 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
     }
 
     dlp_gemm_set_group_post_ops_node_params(
-        post_op_list, group_size, NULL,
+        post_op_list, group_size, a_scale_factor_dim, b_scale_factor_dim, NULL,
         (a_scl_ptr == NULL) ? NULL : a_scl_ptr->scale_factor, 0,
         (a_scl_ptr == NULL) ? 0 : a_scl_ptr->scale_factor_len, NULL,
         (b_scl_ptr == NULL) ? NULL : b_scl_ptr->scale_factor, 0,

@@ -299,7 +299,8 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // load scales for B matrix.
                     bfloat16* b_scale_ptr =
                         ((bfloat16*)(grp_post_ops_attr.b_scale_factor))
-                        + (group * grp_post_ops_attr.grp_post_op_ldb)
+                        + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul)
                         + grp_post_ops_attr.grp_post_op_j;
 
                     SYM_QUANT_BF16_F32_SCL_LOAD(b_scl0, b_scale_ptr, k1, 0);
@@ -311,7 +312,8 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                     // load scales for B matrix
                     float* b_scale_ptr =
                         ((float*)(grp_post_ops_attr.b_scale_factor))
-                        + (group * grp_post_ops_attr.grp_post_op_ldb)
+                        + (group * grp_post_ops_attr.grp_post_op_ldb
+                           * grp_post_ops_attr.b_grp_mul)
                         + grp_post_ops_attr.grp_post_op_j;
 
                     SYM_QUANT_F32_F32_SCL_LOAD(b_scl0, b_scale_ptr, k1, 0);
@@ -324,13 +326,15 @@ DLP_GEMV_M_EQ1_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_sym_quant)
                 __m512 a_scl0;
                 if (grp_post_ops_attr.sf_stor_type == DLP_BF16) {
                     bfloat16* a_scale_ptr =
-                        ((bfloat16*)(grp_post_ops_attr.a_scale_factor)) + group;
+                        ((bfloat16*)(grp_post_ops_attr.a_scale_factor))
+                        + (group * grp_post_ops_attr.a_grp_mul);
 
                     SYM_QUANT_BF16_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
                 } else // if ( grp_post_ops_attr.sf_stor_type == DLP_F32 )
                 {
                     float* a_scale_ptr =
-                        ((float*)(grp_post_ops_attr.a_scale_factor)) + group;
+                        ((float*)(grp_post_ops_attr.a_scale_factor))
+                        + (group * grp_post_ops_attr.a_grp_mul);
 
                     SYM_QUANT_F32_F32_SCL_BCST(a_scl0, a_scale_ptr, 0)
                 }

@@ -1,0 +1,548 @@
+# ============================================================================
+# quant_gemm_test_config.yaml
+# ============================================================================
+# Comprehensive functional test suite for the s8s8s32 symmetric-quant GEMM
+# APIs (aocl_gemm_s8s8s32of32_sym_quant / aocl_gemm_s8s8s32obf16_sym_quant),
+# exercising INDEPENDENT A and B scale-factor granularities together with the
+# full group_size, shape, storage-format and output-type space.
+#
+# ----------------------------------------------------------------------------
+# 1. INDEPENDENT A / B GRANULARITY
+# ----------------------------------------------------------------------------
+# A (M x K) and B (K x N) each pick their own scale-factor granularity. Each
+# maps directly onto that scale factor's DLP_PARAM_DIM_TYPE `outer_dim` in the
+# unified C API, so the two axes are fully orthogonal:
+#
+#   a_granularity:
+#     PER_GROUP - one A scale per (row, K-group)    (A scales: M x ng)
+#     PER_TOKEN - one A scale per row, K collapsed   (A scales: M x 1)
+#   b_granularity:
+#     PER_GROUP   - one B scale per (K-group, col)   (B scales: ng x N)
+#     PER_CHANNEL - one B scale per col, K collapsed  (B scales: 1 x N)
+#
+# The full space is 2 x 2 = 4 combinations:
+#     (A PER_GROUP , B PER_GROUP  )   fully grouped, both sides
+#     (A PER_TOKEN , B PER_GROUP  )   per-token activation, grouped weights
+#     (A PER_GROUP , B PER_CHANNEL)   grouped activation, per-channel weights
+#     (A PER_TOKEN , B PER_CHANNEL)   both collapse over K  (see section 3)
+#
+# Both keys default to PER_GROUP when omitted.
+#
+# ----------------------------------------------------------------------------
+# 2. group_size AS AN INDEPENDENT CARTESIAN AXIS
+# ----------------------------------------------------------------------------
+# `group_size` is expanded as its own cartesian axis, exactly like
+# `a_granularity` and `b_granularity`. The generated case count for a
+# GroupScale op is therefore the product of every param list:
+#
+#   #cases = len(group_size) x len(a_granularity) x len(b_granularity) x ...
+#
+# There is NO logic that inspects granularity to decide whether a group_size
+# value is meaningful - every group_size value is always run against every
+# granularity combination.
+#
+#   group_size = 0   -> full K, ng == 1 (single group). ALL granularities
+#                       collapse to the same layout here (per-group == per-token
+#                       for A, per-group == per-channel for B).
+#   group_size < k   -> multiple groups, ng = ceil(k / group_size). PER_GROUP
+#                       now differs from PER_TOKEN / PER_CHANNEL.
+#
+# ----------------------------------------------------------------------------
+# 3. IMPORTANT: group_size + granularity redundancy (design decision)
+# ----------------------------------------------------------------------------
+# When BOTH sides collapse over K (a_granularity=PER_TOKEN AND
+# b_granularity=PER_CHANNEL), the dequantized result is:
+#
+#     C[i][j] = a_scale[i] * b_scale[j] * sum_k( A[i][k] * B[k][j] )
+#
+# The scale factors carry no group index, so the result is MATHEMATICALLY
+# INDEPENDENT of group_size (sum_g(scale*dot_g) == scale*sum_g(dot_g)). The
+# parser also builds the identical M x 1 / 1 x N scale arrays regardless of
+# group_size. Consequently, listing several group_size values together with
+# (PER_TOKEN, PER_CHANNEL) produces numerically REDUNDANT cases - they all pass
+# with identical expected output and only differ in the kernel's internal
+# group-loop structure.
+#
+# DESIGN DECISION: the harness does NOT auto-deduplicate this. group_size stays
+# a pure cartesian axis; it is the CONFIG AUTHOR'S responsibility to write
+# sensible sweeps. Concretely:
+#
+#   * If at least one side is PER_GROUP  -> group_size is meaningful; sweep it.
+#   * If BOTH sides collapse (PER_TOKEN + PER_CHANNEL) -> pin group_size to a
+#     SINGLE representative value (or use a dedicated single-group entry with
+#     group_size=0) to avoid pointless duplicate cases.
+#
+# The entries below follow this rule: multi-value group_size lists are only
+# paired with granularity sets that include at least one PER_GROUP side, and
+# the (PER_TOKEN + PER_CHANNEL) collapse is covered by single-group /
+# single-group_size entries.
+#
+# ----------------------------------------------------------------------------
+# 4. OTHER CONSTRAINTS
+# ----------------------------------------------------------------------------
+#   * group_size must be a multiple of 4; k is kept a multiple of group_size so
+#     groups tile K evenly and PER_TOKEN / PER_CHANNEL broadcast is exact.
+#   * Scale factors may be stored as f32 OR bf16 (a_scale_type / b_scale_type;
+#     each defaults to f32). The kernel and reference both widen bf16 scales to
+#     f32 losslessly before the dequant multiply. A and B must use the SAME
+#     scale storage type - the library rejects a mixed bf16/f32 pair with
+#     "A and B scale factor type mismatch". Both f32 and bf16 OUTPUT types are
+#     covered independently of the scale storage type.
+#   * N==1 GEMV limitation: the specialized N==1 micro-kernel does not correctly
+#     apply a PER_TOKEN A scale when there is more than one K-group and M>1.
+#     N==1 PER_TOKEN is therefore only exercised on the single-group (ng==1)
+#     path; N==1 multi-group entries restrict A to PER_GROUP.
+#   * Column-major storage transposes the scale factors and swaps the A/B roles
+#     inside the API, so A PER_TOKEN <-> B PER_CHANNEL swap. Dedicated
+#     column-major entries guard that path. Column-major matrices cannot be
+#     reordered, so B is left un-reordered there.
+#
+# ----------------------------------------------------------------------------
+# 5. USAGE
+# ----------------------------------------------------------------------------
+#   Run the whole suite:
+#     ./build/tests/classic/test_gemm \
+#         -f tests/classic/configs/quant_gemm_test_config.yaml
+#
+#   Filter by entry / granularity (googletest filter on the generated names,
+#   which encode granularity as _A<mode>_B<mode>, e.g. _AToken_BChannel):
+#     ./build/tests/classic/test_gemm \
+#         -f tests/classic/configs/quant_gemm_test_config.yaml \
+#         --gtest_filter='*AToken_BChannel*'
+#
+#   List all generated cases without running them:
+#     ./build/tests/classic/test_gemm \
+#         -f tests/classic/configs/quant_gemm_test_config.yaml \
+#         --gtest_list_tests
+# ============================================================================
+
+gemm_tests:
+  # --------------------------------------------------------------------------
+  # [1] Row-major s8 x s8 -> f32, multi-group, group_size SWEEP.
+  #
+  # group_size is swept {16, 32, 64} against granularity sets that always keep
+  # at least one PER_GROUP side, so every group_size value is meaningful:
+  #   A in {PER_GROUP, PER_TOKEN}, B fixed PER_GROUP.
+  # (The PER_TOKEN+PER_CHANNEL collapse is intentionally NOT combined with this
+  # group_size sweep - see entry [4] and header section 3.)
+  # k is a multiple of every swept group_size so groups tile K evenly.
+  # --------------------------------------------------------------------------
+  - name: "quant_rowmajor_f32_groupsize_sweep"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 4, 16, 17]
+    n: [16, 33]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["16", "32", "64"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP"]
+
+  # --------------------------------------------------------------------------
+  # [2] Row-major s8 x s8 -> f32, per-channel B, group_size SWEEP.
+  #
+  # Mirror of [1] for the B axis: A fixed PER_GROUP, B in {PER_GROUP,
+  # PER_CHANNEL}. B PER_CHANNEL collapses B over K, but A stays grouped so
+  # group_size still changes A's layout and the result -> the sweep is
+  # meaningful.
+  # --------------------------------------------------------------------------
+  - name: "quant_rowmajor_f32_perchannel_groupsize_sweep"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [4, 16]
+    n: [16, 33]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["16", "32", "64"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [3] Row-major s8 x s8 -> bf16, multi-group (obf16 API). Full 2 x 2 matrix
+  # at a SINGLE pinned group_size (32). Because both-collapse is included here,
+  # group_size is deliberately a single value to avoid redundant duplicates
+  # (header section 3).
+  # --------------------------------------------------------------------------
+  - name: "quant_rowmajor_bf16_multigroup_full_matrix"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16]
+    n: [16, 33]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [4] Both-collapse case (A PER_TOKEN + B PER_CHANNEL) on the single-group
+  # (full-K) path. group_size=0 -> ng==1, so the collapse is exact and there is
+  # exactly ONE meaningful group_size. This is the canonical home for the
+  # PER_TOKEN+PER_CHANNEL combination (both output types).
+  # --------------------------------------------------------------------------
+  - name: "quant_token_channel_collapse_fullk"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16, 17]
+    n: [16, 33]
+    k: [32, 64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["0"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [5] Single-group / full-K degenerate path (group_size=0 -> ng==1) across
+  # the full 2 x 2 matrix and both output types. All granularities collapse to
+  # the same layout here; this guards the ng==1 scalar-broadcast handling.
+  # --------------------------------------------------------------------------
+  - name: "quant_fullk_singlegroup_full_matrix"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16]
+    n: [1, 16]
+    k: [32, 64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["0"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [6] Column-major s8 x s8 -> f32, multi-group. The API transposes the scale
+  # factors and swaps the A/B roles, so A PER_TOKEN <-> B PER_CHANNEL must swap
+  # too. Single pinned group_size (32) with the full 2 x 2 matrix. Column-major
+  # matrices cannot be reordered, so B is left un-reordered.
+  # --------------------------------------------------------------------------
+  - name: "quant_colmajor_f32_multigroup_full_matrix"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16]
+    n: [1, 16]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [7] Column-major s8 x s8 -> bf16, multi-group (obf16 transpose swap).
+  # Column-major matrices cannot be reordered, so B is left un-reordered.
+  # --------------------------------------------------------------------------
+  - name: "quant_colmajor_bf16_multigroup_full_matrix"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["bf16"]
+    acc_type: ["s32"]
+    storage_format: ["column-major"]
+    transA: [false]
+    transB: [false]
+    m: [8, 16]
+    n: [16]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [8] N==1 GEMV (decoder hot path), multi-group, group_size SWEEP. Exercises
+  # the specialized N==1 micro-kernel. M sweep crosses the MR=16 tile boundary.
+  #
+  # KNOWN LIMITATION: a_granularity PER_TOKEN is excluded here - the N==1 GEMV
+  # kernel does not correctly apply a per-token A scale with >1 K-group and M>1.
+  # A is pinned PER_GROUP; B sweeps PER_GROUP / PER_CHANNEL (B PER_CHANNEL is
+  # fine since A stays grouped, so group_size remains meaningful). N==1
+  # PER_TOKEN is covered by the single-group entry [9].
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_n1_multigroup_groupsize_sweep"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 4, 8, 16, 17, 32]
+    n: [1]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32", "64"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [9] N==1 GEMV, PER_TOKEN A on the single-group (full-K) path. group_size=0
+  # (ng==1) makes the per-token A layout exact, which the N==1 kernel handles
+  # correctly across the M tile sweep. B sweeps per-group / per-channel.
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_n1_pertoken_fullk"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 4, 8, 16, 17, 32]
+    n: [1]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["0"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [10] Odd / fringe M/N dimensions, multi-group. k is a multiple of the group
+  # size (64 = 2 x 32) so groups tile evenly while odd M/N exercise the
+  # remainder / partial-tile paths. A in {PER_GROUP, PER_TOKEN}, B fixed
+  # PER_GROUP so group_size stays meaningful. N >= 5 to avoid the N==1
+  # PER_TOKEN multi-group limitation (N==1 covered by [8]/[9]).
+  # --------------------------------------------------------------------------
+  - name: "quant_odd_dims_multigroup"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [3, 7, 17]
+    n: [5, 13]
+    k: [64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP"]
+
+  # --------------------------------------------------------------------------
+  # [11] BF16 SCALE FACTORS, multi-group, group_size SWEEP. Same coverage idea
+  # as [1]/[2] but the scale factors themselves are stored as bf16 (A and B
+  # matched - the library rejects a mixed pair). The kernel and reference both
+  # widen bf16 -> f32 losslessly before dequant, so results match the f32-scale
+  # path within bf16 rounding. Both output types are exercised. A and B each
+  # sweep across their non-collapsing granularity so group_size stays
+  # meaningful; the (PER_TOKEN + PER_CHANNEL) collapse with bf16 scales is
+  # covered by [12].
+  # --------------------------------------------------------------------------
+  - name: "quant_bf16scale_multigroup_groupsize_sweep"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [4, 16, 17]
+    n: [16, 33]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["16", "32", "64"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [12] BF16 SCALE FACTORS, both-collapse (A PER_TOKEN + B PER_CHANNEL) on the
+  # single-group (full-K) path (group_size=0 -> ng==1). Canonical home for the
+  # collapse case with bf16-stored scales; both output types covered.
+  # --------------------------------------------------------------------------
+  - name: "quant_bf16scale_token_channel_collapse_fullk"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16]
+    n: [16, 33]
+    k: [32, 64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["0"]
+            a_granularity: ["PER_TOKEN"]
+            b_granularity: ["PER_CHANNEL"]
