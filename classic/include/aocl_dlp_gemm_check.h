@@ -134,6 +134,9 @@
                    && ((notrans_b && (ldb < k)) || (trans_b && (ldb < n)))) {  \
             arg_pos = 8;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (ldb > DLP_MAX_GEMM_DIM) {                                   \
+            arg_pos = 8;                                                       \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         }                                                                      \
                                                                                \
         AOCL_DLP_ERROR_CHECK(op_str, arg_pos, err_no);                         \
@@ -174,6 +177,9 @@
             arg_pos = 7;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if (col_stored && (ldb < k)) {                                  \
+            arg_pos = 7;                                                       \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (ldb > DLP_MAX_GEMM_DIM) {                                   \
             arg_pos = 7;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         }                                                                      \
@@ -228,6 +234,9 @@
         } else if (col_stored && ((nota && (lda < m)) || (ta && (lda < k)))) { \
             arg_pos = 9;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (lda > DLP_MAX_GEMM_DIM) {                                   \
+            arg_pos = 9;                                                       \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if ((mtag_a != 'n') && (mtag_a != 'N') && (mtag_a != 'p')       \
                    && (mtag_a != 'P') && (mtag_a != 'r') && (mtag_a != 'R')) { \
             arg_pos = 10;                                                      \
@@ -241,6 +250,9 @@
         } else if (col_stored && ((notb && (ldb < k)) || (tb && (ldb < n)))) { \
             arg_pos = 12;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (ldb > DLP_MAX_GEMM_DIM) {                                   \
+            arg_pos = 12;                                                      \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if ((mtag_b != 'n') && (mtag_b != 'N') && (mtag_b != 'p')       \
                    && (mtag_b != 'P') && (mtag_b != 'r') && (mtag_b != 'R')) { \
             arg_pos = 13;                                                      \
@@ -252,6 +264,9 @@
             arg_pos = 16;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if (col_stored && (ldc < m)) {                                  \
+            arg_pos = 16;                                                      \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (ldc > DLP_MAX_GEMM_DIM) {                                   \
             arg_pos = 16;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         }                                                                      \
@@ -307,6 +322,9 @@
         } else if (col_stored && ((nota && (lda < m)) || (ta && (lda < k)))) { \
             arg_pos = 10;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (lda > DLP_MAX_GEMM_DIM) {                                   \
+            arg_pos = 10;                                                      \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if ((mtag_a != 'n') && (mtag_a != 'N') && (mtag_a != 'p')       \
                    && (mtag_a != 'P') && (mtag_a != 'r') && (mtag_a != 'R')) { \
             arg_pos = 11;                                                      \
@@ -320,6 +338,9 @@
         } else if (col_stored && ((notb && (ldb < k)) || (tb && (ldb < n)))) { \
             arg_pos = 13;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (ldb > DLP_MAX_GEMM_DIM) {                                   \
+            arg_pos = 13;                                                      \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if ((mtag_b != 'n') && (mtag_b != 'N') && (mtag_b != 'p')       \
                    && (mtag_b != 'P') && (mtag_b != 'r') && (mtag_b != 'R')) { \
             arg_pos = 14;                                                      \
@@ -331,6 +352,9 @@
             arg_pos = 17;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if (col_stored && (ldc < m)) {                                  \
+            arg_pos = 17;                                                      \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (ldc > DLP_MAX_GEMM_DIM) {                                   \
             arg_pos = 17;                                                      \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if ((group_size <= 0) || (group_size > DLP_MAX_GROUP_SIZE)) {   \
@@ -373,10 +397,10 @@
                    && (transb != 'T')) {                                       \
             arg_pos = 3;                                                       \
             err_no  = DLP_CLSC_INVALID_TRANSPOSE;                              \
-        } else if (m <= 0) {                                                   \
+        } else if ((m <= 0) || (m > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 4;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
-        } else if (n <= 0) {                                                   \
+        } else if ((n <= 0) || (n > DLP_MAX_GEMM_DIM)) {                       \
             arg_pos = 5;                                                       \
             err_no  = DLP_CLSC_INVALID_MATRIX_DIMENSION;                       \
         } else if (a == NULL) {                                                \
@@ -388,6 +412,9 @@
         } else if (col_stored && ((nota && (lda < m)) || (ta && (lda < n)))) { \
             arg_pos = 7;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (lda > DLP_MAX_GEMM_DIM) {                                   \
+            arg_pos = 7;                                                       \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if (b == NULL) {                                                \
             arg_pos = 8;                                                       \
             err_no  = DLP_CLSC_NULL_POINTER;                                   \
@@ -395,6 +422,9 @@
             arg_pos = 9;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         } else if (col_stored && ((notb && (ldb < m)) || (tb && (ldb < n)))) { \
+            arg_pos = 9;                                                       \
+            err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
+        } else if (ldb > DLP_MAX_GEMM_DIM) {                                   \
             arg_pos = 9;                                                       \
             err_no  = DLP_CLSC_INVALID_LEADING_DIMENSION;                      \
         }                                                                      \

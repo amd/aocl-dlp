@@ -85,6 +85,17 @@ dlp_setup_pgo()
 # Run the ZnVer support detection
 dlp_check_znver_support()
 
+# Configure security hardening flags. Must run after project()
+# (languages enabled) and after the build options are defined (sanitizer
+# toggles visible), but before the object/library targets consume the
+# compiler-flag interfaces. Inside the function the compile-time mitigations
+# apply on any UNIX toolchain that supports them, the RELRO/BIND_NOW link
+# flags are Linux-gated, and the whole thing is a no-op when
+# DLP_ENABLE_HARDENING=OFF.
+if(UNIX AND COMMAND dlp_setup_hardening)
+    dlp_setup_hardening()
+endif()
+
 # Add classic directory
 add_subdirectory(classic)
 add_subdirectory(src)
@@ -198,6 +209,13 @@ get_target_property(RELEASE_FLAGS dlp_compiler_flags_release INTERFACE_COMPILE_O
 if(RELEASE_FLAGS AND CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_options(${PROJECT_NAME} PRIVATE ${RELEASE_FLAGS})
     target_compile_options(${PROJECT_NAME}_static PRIVATE ${RELEASE_FLAGS})
+endif()
+
+# Apply security hardening link flags to the final shared library
+# so its GOT/PLT is read-only (RELRO + BIND_NOW). A static archive has no link
+# step, so the flags are only meaningful for the shared object.
+if(DLP_HARDENING_LINK_FLAGS)
+    target_link_options(${PROJECT_NAME} PRIVATE ${DLP_HARDENING_LINK_FLAGS})
 endif()
 
 # Apply installation rules from dlp_install.cmake

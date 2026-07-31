@@ -42,6 +42,15 @@ set(DLP_RELEASE_FLAGS -O3
                     #   -Werror
 )
 
+# --- Security hardening flags (CWE-693) -------------------------------------
+# The shipped 5.3 binary lacked standard exploit mitigations (no stack
+# canaries, no RELRO/BIND_NOW, no FORTIFY_SOURCE, no Intel CET). dlp_setup_
+# hardening() (below) adds them so every object library (classic/kernels/jit)
+# is rebuilt with the compile-time mitigations and the final shared object
+# links with a read-only GOT. Disable with -DDLP_ENABLE_HARDENING=OFF.
+option(DLP_ENABLE_HARDENING
+       "Enable security hardening compiler/linker flags" ON)
+
 set(DLP_COVERAGE_FLAGS -g
                        -O0
                        -fprofile-arcs
@@ -304,6 +313,75 @@ function(dlp_set_global_compile_flags target)
         $<$<CONFIG:Debug>:dlp_compiler_flags_debug>
         $<$<CONFIG:Coverage>:dlp_compiler_flags_coverage>
     )
+endfunction()
+
+# Configure security hardening flags (CWE-693).
+# MUST be called AFTER project() (so C/CXX languages are enabled for the
+# compiler feature checks) and AFTER the build options are defined (so the
+# sanitizer toggles are visible), but BEFORE the compiler-flag interface
+# options are consumed by the object/library targets. It appends compile-time
+# mitigations to the shared compiler-flag interface libraries and publishes the
+# link-time mitigations via the DLP_HARDENING_LINK_FLAGS cache variable.
+function(dlp_setup_hardening)
+    if(NOT DLP_ENABLE_HARDENING)
+        set(DLP_HARDENING_LINK_FLAGS "" CACHE INTERNAL
+            "DLP security hardening link flags")
+        message(STATUS "Security hardening disabled (DLP_ENABLE_HARDENING=OFF)")
+        return()
+    endif()
+
+    set(_harden_compile "")
+    set(_harden_release "")
+
+    # Stack canaries on functions with vulnerable stack layouts ("No Canary").
+    dlp_check_compiler_flag("-fstack-protector-strong" _dlp_have_sp)
+    if(_dlp_have_sp)
+        list(APPEND _harden_compile -fstack-protector-strong)
+    endif()
+
+    # Intel CET / indirect-branch tracking (endbr). The bare flag defaults to
+    # full protection on GCC/Clang; answers the CWE-693 "vtable indirect call"
+    # hardening ask. (Bare flag avoids an '=' in the generated cache-var name.)
+    dlp_check_compiler_flag("-fcf-protection" _dlp_have_cet)
+    if(_dlp_have_cet)
+        list(APPEND _harden_compile -fcf-protection)
+    endif()
+
+    # FORTIFY_SOURCE requires an optimizing build. It is attached to the
+    # dlp_compiler_flags_release interface, which dlp_set_global_compile_flags()
+    # links for the optimized configurations (Release and RelWithDebInfo), so it
+    # applies to both and not to unoptimized Debug/Coverage builds. Undefine
+    # first to avoid a redefinition warning if the toolchain predefines it. Skip
+    # for sanitizer builds (unoptimized + conflicts with ASAN/UBSAN/TSAN).
+    if(NOT (DLP_ENABLE_ASAN OR DLP_ENABLE_UBSAN OR DLP_ENABLE_TSAN))
+        list(APPEND _harden_release -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2)
+    endif()
+
+    if(_harden_compile)
+        target_compile_options(dlp_compiler_flags INTERFACE ${_harden_compile})
+    endif()
+    if(_harden_release)
+        target_compile_options(dlp_compiler_flags_release
+                               INTERFACE ${_harden_release})
+    endif()
+
+    # Full RELRO + eager binding => read-only GOT/PLT ("Writable PLT/GOT").
+    # These are GNU-ld / ELF-specific options, so gate them to Linux: this
+    # module is included for every UNIX (including Apple), and ld64 on macOS
+    # rejects '-z relro'/'-z now'. Consumed at the final link of the shared
+    # library in the top-level CMakeLists.txt.
+    set(_harden_link "")
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        set(_harden_link -Wl,-z,relro -Wl,-z,now)
+    endif()
+    set(DLP_HARDENING_LINK_FLAGS ${_harden_link} CACHE INTERNAL
+        "DLP security hardening link flags")
+
+    string(REPLACE ";" " " _c "${_harden_compile}")
+    string(REPLACE ";" " " _r "${_harden_release}")
+    string(REPLACE ";" " " _l "${_harden_link}")
+    message(STATUS "Security hardening: compile='${_c}' release='${_r}' "
+                   "link='${_l}'")
 endfunction()
 
 # Function to set architecture-specific flags for a target

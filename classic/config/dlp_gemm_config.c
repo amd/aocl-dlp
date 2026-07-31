@@ -351,6 +351,12 @@ dlp_gemm_get_jit_kernel(md_t m_index, md_t n_index)
     return global_jit_kernels[m_index][n_index];
 }
 
+/* Defined further below; forward-declared so the table setters can clamp the
+ * operation-type index too. An out-of-range write (CWE-787) is a worse threat
+ * than the reads the accessors already guard, so both directions use it. */
+static int
+dlp_gemm_clamp_op_index(int op, int len);
+
 DLP_INLINE void
 dlp_gemm_set_block_sizes_global_cntx(AOCL_DLP_OPERATION_TYPE op_type,
                                      md_t                    MC,
@@ -359,11 +365,13 @@ dlp_gemm_set_block_sizes_global_cntx(AOCL_DLP_OPERATION_TYPE op_type,
                                      md_t                    MR,
                                      md_t                    NR)
 {
-    global_cntx_t_list[op_type].blksz.MC = MC;
-    global_cntx_t_list[op_type].blksz.NC = NC;
-    global_cntx_t_list[op_type].blksz.KC = KC;
-    global_cntx_t_list[op_type].blksz.MR = MR;
-    global_cntx_t_list[op_type].blksz.NR = NR;
+    const int idx =
+        dlp_gemm_clamp_op_index((int)op_type, AOCL_DLP_OPERATION_TYPE_LEN);
+    global_cntx_t_list[idx].blksz.MC = MC;
+    global_cntx_t_list[idx].blksz.NC = NC;
+    global_cntx_t_list[idx].blksz.KC = KC;
+    global_cntx_t_list[idx].blksz.MR = MR;
+    global_cntx_t_list[idx].blksz.NR = NR;
 }
 
 DLP_INLINE void
@@ -373,10 +381,12 @@ dlp_gemm_set_pack_strides_global_cntx(AOCL_DLP_OPERATION_TYPE op_type,
                                       md_t                    packb_rs,
                                       md_t                    packb_cs)
 {
-    global_cntx_t_list[op_type].pack_s.packa_rs = packa_rs;
-    global_cntx_t_list[op_type].pack_s.packa_cs = packa_cs;
-    global_cntx_t_list[op_type].pack_s.packb_rs = packb_rs;
-    global_cntx_t_list[op_type].pack_s.packb_cs = packb_cs;
+    const int idx =
+        dlp_gemm_clamp_op_index((int)op_type, AOCL_DLP_OPERATION_TYPE_LEN);
+    global_cntx_t_list[idx].pack_s.packa_rs = packa_rs;
+    global_cntx_t_list[idx].pack_s.packa_cs = packa_cs;
+    global_cntx_t_list[idx].pack_s.packb_rs = packb_rs;
+    global_cntx_t_list[idx].pack_s.packb_cs = packb_cs;
 }
 
 static void
@@ -435,9 +445,11 @@ dlp_gemm_set_sup_thres_global_cntx(AOCL_DLP_OPERATION_TYPE op_type,
                                    md_t                    NT,
                                    md_t                    KT)
 {
-    global_cntx_t_list[op_type].sup_thres.MT = MT;
-    global_cntx_t_list[op_type].sup_thres.NT = NT;
-    global_cntx_t_list[op_type].sup_thres.KT = KT;
+    const int idx =
+        dlp_gemm_clamp_op_index((int)op_type, AOCL_DLP_OPERATION_TYPE_LEN);
+    global_cntx_t_list[idx].sup_thres.MT = MT;
+    global_cntx_t_list[idx].sup_thres.NT = NT;
+    global_cntx_t_list[idx].sup_thres.KT = KT;
 }
 
 static void
@@ -470,11 +482,13 @@ dlp_gemm_set_block_sizes_global_eltwise_ops_cntx(
     md_t                                MR,
     md_t                                NR)
 {
-    global_eltwise_ops_cntx_t_list[op_type].blksz.MC = MC;
-    global_eltwise_ops_cntx_t_list[op_type].blksz.NC = NC;
-    global_eltwise_ops_cntx_t_list[op_type].blksz.KC = KC;
-    global_eltwise_ops_cntx_t_list[op_type].blksz.MR = MR;
-    global_eltwise_ops_cntx_t_list[op_type].blksz.NR = NR;
+    const int idx = dlp_gemm_clamp_op_index(
+        (int)op_type, AOCL_DLP_ELTWISE_OPS_OPERATION_TYPE_LEN);
+    global_eltwise_ops_cntx_t_list[idx].blksz.MC = MC;
+    global_eltwise_ops_cntx_t_list[idx].blksz.NC = NC;
+    global_eltwise_ops_cntx_t_list[idx].blksz.KC = KC;
+    global_eltwise_ops_cntx_t_list[idx].blksz.MR = MR;
+    global_eltwise_ops_cntx_t_list[idx].blksz.NR = NR;
 }
 
 static void
@@ -521,10 +535,47 @@ dlp_init_global_cntx()
     dlp_gemm_init_thread_attrs();
 }
 
+/*
+ * Defense-in-depth (CWE-129): the operation-type context tables
+ * (global_cntx_t_list[], global_util_cntx_t_list[],
+ * global_eltwise_ops_cntx_t_list[]) are indexed by an operation-type enum.
+ * Callers pass compile-time enum constants today, so an out-of-range index is
+ * not reachable from a public API, but a stray/corrupted value must never be
+ * allowed to index a table out of bounds. Clamp any invalid index to a valid
+ * in-range slot and log it. The caller passes the extent of the specific table
+ * being indexed so this single helper guards all three. Both the read
+ * accessors and the write setters route through it: an out-of-range write
+ * (CWE-787) corrupts whatever follows the table and is the more dangerous
+ * direction, so it must not be left unguarded.
+ *
+ * The parameter is a plain int (not the enum) on purpose: taking the enum
+ * type lets the compiler assume the value is within the enumerator range and
+ * discard the bounds check (and emit a -Wtype-limits "always false" warning).
+ *
+ * Recovery: slot 0 is a real, fully-populated context, so the block-size /
+ * sup-threshold accessors keep operating on self-consistent blocking
+ * parameters rather than reading past the table, and the setters write into a
+ * valid slot rather than past the end. These entry points have no error
+ * channel to fail closed on; the clamp keeps the OOB access from happening at
+ * all, and the logged message surfaces the corrupted index.
+ */
+static int
+dlp_gemm_clamp_op_index(int op, int len)
+{
+    int clamped = op;
+    if ((op < 0) || (op >= len)) {
+        dlp_print_msg(" Invalid operation type index; clamping to 0.", __FILE__,
+                      __LINE__);
+        clamped = 0;
+    }
+    return clamped;
+}
+
 dlp_gemm_cntx_t*
 dlp_gemm_get_global_cntx_obj(AOCL_DLP_OPERATION_TYPE op)
 {
-    return &global_cntx_t_list[op];
+    return &global_cntx_t_list[dlp_gemm_clamp_op_index(
+        (int)op, AOCL_DLP_OPERATION_TYPE_LEN)];
 }
 
 /**
@@ -720,61 +771,79 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
 dlp_gemm_util_cntx_t*
 dlp_gemm_util_get_global_cntx_obj(AOCL_DLP_UTIL_OPERATION_TYPE op)
 {
-    return &global_util_cntx_t_list[op];
+    return &global_util_cntx_t_list[dlp_gemm_clamp_op_index(
+        (int)op, AOCL_DLP_UTIL_OPERATION_TYPE_LEN)];
 }
 
 dlp_gemm_eltwise_ops_cntx_t*
 dlp_gemm_eltwise_ops_get_global_cntx_obj(AOCL_DLP_ELTWISE_OPS_OPERATION_TYPE op)
 {
-    return &global_eltwise_ops_cntx_t_list[op];
+    return &global_eltwise_ops_cntx_t_list[dlp_gemm_clamp_op_index(
+        (int)op, AOCL_DLP_ELTWISE_OPS_OPERATION_TYPE_LEN)];
 }
 
 md_t
 dlp_gemm_get_block_size_MC_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].blksz.MC;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .blksz.MC;
 }
 
 md_t
 dlp_gemm_get_block_size_NC_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].blksz.NC;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .blksz.NC;
 }
 
 md_t
 dlp_gemm_get_block_size_KC_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].blksz.KC;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .blksz.KC;
 }
 
 md_t
 dlp_gemm_get_block_size_NR_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].blksz.NR;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .blksz.NR;
 }
 
 md_t
 dlp_gemm_get_block_size_MR_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].blksz.MR;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .blksz.MR;
 }
 
 md_t
 dlp_gemm_get_sup_thres_MT_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].sup_thres.MT;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .sup_thres.MT;
 }
 
 md_t
 dlp_gemm_get_sup_thres_NT_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].sup_thres.NT;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .sup_thres.NT;
 }
 
 md_t
 dlp_gemm_get_sup_thres_KT_global_cntx(AOCL_DLP_OPERATION_TYPE op_type)
 {
-    return global_cntx_t_list[op_type].sup_thres.KT;
+    return global_cntx_t_list[dlp_gemm_clamp_op_index(
+                                  (int)op_type, AOCL_DLP_OPERATION_TYPE_LEN)]
+        .sup_thres.KT;
 }
 
 void
