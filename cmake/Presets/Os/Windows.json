@@ -1,0 +1,21 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "windows",
+            "hidden": true,
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "windows",
+            "hidden": true,
+            "configurePreset": "windows"
+        }
+    ]
+}

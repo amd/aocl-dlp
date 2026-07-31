@@ -1,0 +1,25 @@
+{
+    "version": 6,
+    "include": [
+        "Arch/x64.json",
+        "Os/Windows.json",
+        "Compilers/Msvc.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "x64-windows-msvc",
+            "hidden": true,
+            "inherits": [ "x64", "windows", "msvc" ]
+        },
+        {
+            "name": "x64-windows-msvc-debug",
+            "hidden": true,
+            "inherits": [ "x64", "windows", "msvc-debug" ]
+        },
+        {
+            "name": "x64-windows-msvc-release",
+            "hidden": true,
+            "inherits": [ "x64", "windows", "msvc-release" ]
+        }
+    ]
+}

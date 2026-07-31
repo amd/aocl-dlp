@@ -1,0 +1,39 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "msvc",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "cl",
+                "CMAKE_CXX_COMPILER": "cl",
+                "CMAKE_C_FLAGS": "/W4 /permissive-",
+                "CMAKE_C_FLAGS_DEBUG": "/Zi /Od /RTC1",
+                "CMAKE_C_FLAGS_RELEASE": "/O2 /DNDEBUG",
+                "CMAKE_CXX_FLAGS": "/W4 /permissive- /EHsc",
+                "CMAKE_CXX_FLAGS_DEBUG": "/Zi /Od /RTC1",
+                "CMAKE_CXX_FLAGS_RELEASE": "/O2 /DNDEBUG",
+                "CMAKE_CXX_STANDARD_REQUIRED": "YES",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "msvc-debug",
+            "hidden": true,
+            "inherits": "msvc",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS_DEBUG": "/Zi /Od /RTC1",
+                "CMAKE_CXX_FLAGS_DEBUG": "/Zi /Od /RTC1"
+            }
+        },
+        {
+            "name": "msvc-release",
+            "hidden": true,
+            "inherits": "msvc",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS_RELEASE": "/O2 /DNDEBUG",
+                "CMAKE_CXX_FLAGS_RELEASE": "/O2 /DNDEBUG"
+            }
+        }
+    ]
+}

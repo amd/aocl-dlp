@@ -1,0 +1,32 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "project-vars",
+            "hidden": true,
+            "cacheVariables": {
+                "DLP_PROJECT_NAME": "AOCL-DLP",
+                "DLP_PROJECT_DESCRIPTION": "AOCL Data-Level Parallelism library.",
+                "DLP_VENDOR_URL": "https://www.amd.com/en/developer/aocl.html",
+                "DLP_VENDOR_NAME": "AMD",
+                "DLP_VENDOR_CONTACT": "AOCL <aocl@amd.com>"
+            }
+        },
+        {
+            "name": "project-options",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "BUILD_TESTING": "OFF",
+                "BUILD_BENCHMARKS": "OFF",
+                "BUILD_EXAMPLES": "OFF",
+                "BUILD_DOXYGEN": "OFF",
+                "BUILD_SPHINX": "OFF",
+                "DLP_ENABLE_ASAN": "OFF",
+                "DLP_ENABLE_UBSAN": "OFF",
+                "DLP_ENABLE_TSAN": "OFF",
+                "DLP_THREADING_MODEL": "none"
+            }
+        }
+    ]
+}

@@ -1,0 +1,25 @@
+{
+    "version": 6,
+    "include": [
+        "Arch/x64.json",
+        "Os/Windows.json",
+        "Compilers/ClangCl.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "x64-windows-clang-cl",
+            "hidden": true,
+            "inherits": [ "x64", "windows", "clang-cl" ]
+        },
+        {
+            "name": "x64-windows-clang-cl-debug",
+            "hidden": true,
+            "inherits": [ "x64", "windows", "clang-cl-debug" ]
+        },
+        {
+            "name": "x64-windows-clang-cl-release",
+            "hidden": true,
+            "inherits": [ "x64", "windows", "clang-cl-release" ]
+        }
+    ]
+}

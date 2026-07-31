@@ -123,6 +123,103 @@ AOCL-DLP is optimized for AMD processors and requires specific minimum architect
 
 While optimized for AMD processors, the library is compatible with any x86_64 CPU that meets these minimum requirements. For best performance on AMD processors, it is recommended to use Zen4 or newer architectures which support all instruction sets.
 
+## Quick Build with CMake Presets
+
+AOCL-DLP provides a modular set of CMake presets for easy, standardized builds. The
+presets are organized into reusable fragments under `cmake/Presets/` (project
+options, base build flavors, architecture, OS, compilers and generators) and are
+assembled into the user-facing presets via `cmake/Presets/Default.json`. The root
+`CMakePresets.json` simply includes this file.
+
+**Requirements:**
+- CMake 3.26 or later
+- A C/C++ compiler: GCC (`gcc`/`g++`) or Clang (`clang`/`clang++`)
+- A build tool: [Ninja](https://ninja-build.org/) (default) or GNU Make. On Debian/Ubuntu install Ninja with `sudo apt install ninja-build`.
+
+See [BUILD.md](BUILD.md#-system-requirements) for the full list of build requirements.
+
+### Preset Naming
+
+Presets follow the pattern `<flavor>-<compiler>[-make]`:
+
+- **flavor** – `dev` (Debug + tests), `sanitizers` (Debug + ASan/UBSan + tests),
+  `all` (Debug + tests + benchmarks + examples + OpenMP), or `release`
+  (optimized, extras off).
+- **compiler** – `gcc` or `clang`.
+- **generator** – Ninja by default; append `-make` for the GNU Make generator
+  (available for the `dev` and `release` flavors).
+
+### Available Configure / Build Presets
+
+| Preset | Compiler | Generator | Build Type | Notes |
+|--------|----------|-----------|-----------|-------|
+| `dev-gcc` / `dev-gcc-make` | GCC | Ninja / Make | Debug | tests enabled |
+| `dev-clang` / `dev-clang-make` | Clang | Ninja / Make | Debug | tests enabled |
+| `sanitizers-gcc` / `sanitizers-clang` | GCC / Clang | Ninja | Debug | ASan + UBSan + tests |
+| `all-gcc` / `all-clang` | GCC / Clang | Ninja | Debug | tests, benchmarks, examples, OpenMP |
+| `release-gcc` / `release-gcc-make` | GCC | Ninja / Make | Release | extras off (production) |
+| `release-clang` / `release-clang-make` | Clang | Ninja / Make | Release | extras off (production) |
+
+### Examples
+
+```bash
+# Clone and enter project
+git clone <repository-url> && cd aocl-dlp
+
+# Release build with GCC (recommended for production)
+cmake --preset=release-gcc
+cmake --build --preset=release-gcc
+
+# Developer (Debug) build with Clang
+cmake --preset=dev-clang
+cmake --build --preset=dev-clang
+
+# Build with sanitizers (memory and undefined behavior detection)
+cmake --preset=sanitizers-gcc
+cmake --build --preset=sanitizers-gcc
+
+# Build with all features (tests, benchmarks, examples, OpenMP)
+cmake --preset=all-gcc
+cmake --build --preset=all-gcc
+
+# Release build with Clang using GNU Make instead of Ninja
+cmake --preset=release-clang-make
+cmake --build --preset=release-clang-make
+```
+
+### Test Presets
+
+Test presets are provided for the flavors that build tests (`dev`, `sanitizers`,
+`all`) for both compilers. Sanitizer test runs stop on the first failure:
+
+```bash
+ctest --preset=dev-gcc
+ctest --preset=sanitizers-clang
+ctest --preset=all-gcc
+```
+
+### Workflow Presets
+
+Workflow presets chain configure → build (→ test) in a single command:
+
+| Workflow | Steps |
+|----------|-------|
+| `default` | configure + build `release-gcc` |
+| `full-gcc` | configure + build + test `all-gcc` |
+| `full-clang` | configure + build + test `all-clang` |
+
+```bash
+cmake --workflow --preset=default     # release build with GCC
+cmake --workflow --preset=full-gcc    # configure + build + test, all features (GCC)
+```
+
+List all available presets with `cmake --list-presets` (add `=build`, `=test`, or
+`=workflow` to list the other categories).
+
+> **Note:** Build output is placed in `build/<presetName>/`. The default generator
+> is Ninja, so `ninja-build` must be installed unless you use a `-make` preset.
+> For fully manual builds, see [BUILD.md](BUILD.md).
+
 ## Build
 
 Refer to [BUILD.md](BUILD.md) for detailed build instructions, including support for both GNU Make and Ninja.

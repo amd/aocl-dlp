@@ -1,0 +1,39 @@
+{
+    "version": 6,
+    "configurePresets": [
+        {
+            "name": "clang-cl",
+            "hidden": true,
+            "cacheVariables": {
+                "CMAKE_C_COMPILER": "clang-cl",
+                "CMAKE_CXX_COMPILER": "clang-cl",
+                "CMAKE_C_FLAGS": "/W4 /permissive-",
+                "CMAKE_C_FLAGS_DEBUG": "/Zi /Od /RTC1",
+                "CMAKE_C_FLAGS_RELEASE": "/O2 /DNDEBUG",
+                "CMAKE_CXX_FLAGS": "/W4 /permissive- /EHsc",
+                "CMAKE_CXX_FLAGS_DEBUG": "/Zi /Od /RTC1",
+                "CMAKE_CXX_FLAGS_RELEASE": "/O2 /DNDEBUG",
+                "CMAKE_CXX_STANDARD_REQUIRED": "YES",
+                "CMAKE_CXX_EXTENSIONS": "OFF"
+            }
+        },
+        {
+            "name": "clang-cl-debug",
+            "hidden": true,
+            "inherits": "clang-cl",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS_DEBUG": "/Zi /Od /RTC1",
+                "CMAKE_CXX_FLAGS_DEBUG": "/Zi /Od /RTC1"
+            }
+        },
+        {
+            "name": "clang-cl-release",
+            "hidden": true,
+            "inherits": "clang-cl",
+            "cacheVariables": {
+                "CMAKE_C_FLAGS_RELEASE": "/O2 /DNDEBUG",
+                "CMAKE_CXX_FLAGS_RELEASE": "/O2 /DNDEBUG"
+            }
+        }
+    ]
+}

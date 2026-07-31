@@ -92,11 +92,58 @@ Before contributing, you'll need to build the project from source. Comprehensive
 * Advanced configuration for threading models, sanitizers, and optimization options
 * Troubleshooting common build issues
 
+### Using CMake Presets (Recommended)
+
+AOCL-DLP provides a modular set of CMake presets for standardized development workflows. Using presets ensures consistent build configurations across all contributors. Presets are named `<flavor>-<compiler>[-make]` (e.g. `all-gcc`, `dev-clang`, `release-gcc-make`).
+
+> **Prerequisites:** The CMake presets require **CMake 3.26+**, a C/C++ compiler (**GCC** or **Clang**), and a build tool. The presets use **[Ninja](https://ninja-build.org/)** by default; on Debian/Ubuntu install it with `sudo apt install ninja-build`. Append `-make` to a `dev`/`release` preset to use GNU Make instead. See [BUILD.md](BUILD.md#-system-requirements) for the complete list of build dependencies.
+
+**Quick start for contributors:**
+```bash
+# Clone your fork
+git clone https://github.com/your-username/aocl-dlp.git
+cd aocl-dlp
+
+# Install Ninja if not already available (default generator for the presets)
+# Debian/Ubuntu: sudo apt install ninja-build
+
+# See all available presets
+cmake --list-presets
+
+# Full developer setup (tests, benchmarks, examples, OpenMP) with GCC
+cmake --preset=all-gcc
+cmake --build --preset=all-gcc
+```
+
+**Available presets:** (each combined with `gcc`/`clang`; `dev`/`release` also offer a `-make` variant)
+| Preset | Description |
+|--------|-------------|
+| `release-gcc` / `release-clang` | Optimized release build for production use |
+| `dev-gcc` / `dev-clang` | Debug build for development (tests enabled) |
+| `sanitizers-gcc` / `sanitizers-clang` | Debug build with ASAN + UBSAN for memory debugging |
+| `all-gcc` / `all-clang` | Debug build with tests, benchmarks, examples, and OpenMP |
+
 ### Testing Your Changes
 
 AOCL-DLP uses a comprehensive testing framework based on Google Test with YAML configuration. For complete testing instructions, see the [DLP-Testing wiki](https://github.com/amd/aocl-dlp/wiki/DLP-Testing).
 
-**Quick testing workflow:**
+**Using CMake presets (recommended):**
+```bash
+# Build with all features (includes tests)
+cmake --preset=all-gcc
+cmake --build --preset=all-gcc
+ctest --preset=all-gcc
+
+# Run tests with sanitizers for debugging
+cmake --preset=sanitizers-gcc
+cmake --build --preset=sanitizers-gcc
+ctest --preset=sanitizers-gcc
+
+# Or use the full workflow (configure + build + test)
+cmake --workflow --preset=full-gcc
+```
+
+**Traditional method:**
 ```bash
 # Build with tests enabled
 cmake -DBUILD_TESTING=ON -DDLP_TESTING_CTEST_DISABLED=OFF ..
@@ -110,7 +157,17 @@ ctest --output-on-failure
 
 AOCL-DLP includes a modern benchmarking framework using Google Benchmark with YAML configuration. For comprehensive benchmarking instructions, see the [DLP-Benching wiki](https://github.com/amd/aocl-dlp/wiki/DLP-Benching).
 
-**Quick benchmarking workflow:**
+**Using CMake presets (recommended):**
+```bash
+# Build with all features (includes benchmarks)
+cmake --preset=all-gcc
+cmake --build --preset=all-gcc
+
+# Run benchmarks
+./build/all-gcc/bench/bench_gemm
+```
+
+**Traditional method:**
 ```bash
 # Build with benchmarks enabled
 cmake -DBUILD_BENCHMARKS=ON ..

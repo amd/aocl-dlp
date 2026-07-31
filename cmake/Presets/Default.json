@@ -1,0 +1,71 @@
+{
+    "version": 6,
+    "include": [
+        "Base.json",
+        "Generators/Make.json",
+        "Generators/Ninja.json",
+        "x64-linux-gcc.json",
+        "x64-linux-llvm.json",
+        "x64-windows-msvc.json",
+        "x64-windows-clang-cl.json"
+    ],
+    "configurePresets": [
+        { "name": "dev-gcc", "displayName": "Developer Config with GCC-Debug", "inherits": [ "ninja", "base-config-debug", "x64-linux-gcc-debug" ] },
+        { "name": "dev-gcc-make", "displayName": "Developer Config with GCC-Debug (Make)", "inherits": [ "make", "base-config-debug", "x64-linux-gcc-debug" ] },
+        { "name": "dev-clang", "displayName": "Developer Config with Clang-Debug", "inherits": [ "ninja", "base-config-debug", "x64-linux-llvm-debug" ] },
+        { "name": "dev-clang-make", "displayName": "Developer Config with Clang-Debug (Make)", "inherits": [ "make", "base-config-debug", "x64-linux-llvm-debug" ] },
+        { "name": "sanitizers-gcc", "displayName": "Sanitizers Config with GCC", "inherits": [ "ninja", "base-config-sanitizers", "x64-linux-gcc-debug" ] },
+        { "name": "sanitizers-clang", "displayName": "Sanitizers Config with Clang", "inherits": [ "ninja", "base-config-sanitizers", "x64-linux-llvm-debug" ] },
+        { "name": "all-gcc", "displayName": "All Features Config with GCC", "inherits": [ "ninja", "base-config-all", "x64-linux-gcc-debug" ] },
+        { "name": "all-clang", "displayName": "All Features Config with Clang", "inherits": [ "ninja", "base-config-all", "x64-linux-llvm-debug" ] },
+        { "name": "release-gcc", "displayName": "Release Config with GCC", "inherits": [ "ninja", "base-config-release", "x64-linux-gcc-release" ] },
+        { "name": "release-gcc-make", "displayName": "Release Config with GCC (Make)", "inherits": [ "make", "base-config-release", "x64-linux-gcc-release" ] },
+        { "name": "release-clang", "displayName": "Release Config with Clang", "inherits": [ "ninja", "base-config-release", "x64-linux-llvm-release" ] },
+        { "name": "release-clang-make", "displayName": "Release Config with Clang (Make)", "inherits": [ "make", "base-config-release", "x64-linux-llvm-release" ] },
+        { "name": "dev-msvc", "displayName": "Developer Config with MSVC-Debug", "inherits": [ "ninja", "base-config-debug", "x64-windows-msvc-debug" ] },
+        { "name": "dev-clang-cl", "displayName": "Developer Config with clang-cl-Debug", "inherits": [ "ninja", "base-config-debug", "x64-windows-clang-cl-debug" ] },
+        { "name": "all-msvc", "displayName": "All Features Config with MSVC", "inherits": [ "ninja", "base-config-all", "x64-windows-msvc-debug" ] },
+        { "name": "all-clang-cl", "displayName": "All Features Config with clang-cl", "inherits": [ "ninja", "base-config-all", "x64-windows-clang-cl-debug" ] },
+        { "name": "release-msvc", "displayName": "Release Config with MSVC", "inherits": [ "ninja", "base-config-release", "x64-windows-msvc-release" ] },
+        { "name": "release-clang-cl", "displayName": "Release Config with clang-cl", "inherits": [ "ninja", "base-config-release", "x64-windows-clang-cl-release" ] }
+    ],
+    "buildPresets": [
+        { "name": "dev-gcc", "displayName": "Developer Build with GCC-Debug", "inherits": "build-debug", "configurePreset": "dev-gcc" },
+        { "name": "dev-gcc-make", "displayName": "Developer Build with GCC-Debug (Make)", "inherits": "build-debug", "configurePreset": "dev-gcc-make" },
+        { "name": "dev-clang", "displayName": "Developer Build with Clang-Debug", "inherits": "build-debug", "configurePreset": "dev-clang" },
+        { "name": "dev-clang-make", "displayName": "Developer Build with Clang-Debug (Make)", "inherits": "build-debug", "configurePreset": "dev-clang-make" },
+        { "name": "sanitizers-gcc", "displayName": "Sanitizers Build with GCC", "inherits": "build-sanitizers", "configurePreset": "sanitizers-gcc" },
+        { "name": "sanitizers-clang", "displayName": "Sanitizers Build with Clang", "inherits": "build-sanitizers", "configurePreset": "sanitizers-clang" },
+        { "name": "all-gcc", "displayName": "All Features Build with GCC", "inherits": "build-all", "configurePreset": "all-gcc" },
+        { "name": "all-clang", "displayName": "All Features Build with Clang", "inherits": "build-all", "configurePreset": "all-clang" },
+        { "name": "release-gcc", "displayName": "Release Build with GCC", "inherits": "build-release", "configurePreset": "release-gcc" },
+        { "name": "release-gcc-make", "displayName": "Release Build with GCC (Make)", "inherits": "build-release", "configurePreset": "release-gcc-make" },
+        { "name": "release-clang", "displayName": "Release Build with Clang", "inherits": "build-release", "configurePreset": "release-clang" },
+        { "name": "release-clang-make", "displayName": "Release Build with Clang (Make)", "inherits": "build-release", "configurePreset": "release-clang-make" },
+        { "name": "dev-msvc", "displayName": "Developer Build with MSVC-Debug", "inherits": "build-debug", "configurePreset": "dev-msvc" },
+        { "name": "dev-clang-cl", "displayName": "Developer Build with clang-cl-Debug", "inherits": "build-debug", "configurePreset": "dev-clang-cl" },
+        { "name": "all-msvc", "displayName": "All Features Build with MSVC", "inherits": "build-all", "configurePreset": "all-msvc" },
+        { "name": "all-clang-cl", "displayName": "All Features Build with clang-cl", "inherits": "build-all", "configurePreset": "all-clang-cl" },
+        { "name": "release-msvc", "displayName": "Release Build with MSVC", "inherits": "build-release", "configurePreset": "release-msvc" },
+        { "name": "release-clang-cl", "displayName": "Release Build with clang-cl", "inherits": "build-release", "configurePreset": "release-clang-cl" }
+    ],
+    "testPresets": [
+        { "name": "dev-gcc", "displayName": "Test Developer GCC-Debug", "configurePreset": "dev-gcc", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } },
+        { "name": "dev-clang", "displayName": "Test Developer Clang-Debug", "configurePreset": "dev-clang", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } },
+        { "name": "sanitizers-gcc", "displayName": "Test Sanitizers GCC", "configurePreset": "sanitizers-gcc", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": true } },
+        { "name": "sanitizers-clang", "displayName": "Test Sanitizers Clang", "configurePreset": "sanitizers-clang", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": true } },
+        { "name": "all-gcc", "displayName": "Test All Features GCC", "configurePreset": "all-gcc", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } },
+        { "name": "all-clang", "displayName": "Test All Features Clang", "configurePreset": "all-clang", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } },
+        { "name": "dev-msvc", "displayName": "Test Developer MSVC-Debug", "configurePreset": "dev-msvc", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } },
+        { "name": "dev-clang-cl", "displayName": "Test Developer clang-cl-Debug", "configurePreset": "dev-clang-cl", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } },
+        { "name": "all-msvc", "displayName": "Test All Features MSVC", "configurePreset": "all-msvc", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } },
+        { "name": "all-clang-cl", "displayName": "Test All Features clang-cl", "configurePreset": "all-clang-cl", "output": { "outputOnFailure": true }, "execution": { "noTestsAction": "error", "stopOnFailure": false } }
+    ],
+    "workflowPresets": [
+        { "name": "default", "displayName": "Default (Release GCC)", "description": "Standard release build with GCC", "steps": [ { "type": "configure", "name": "release-gcc" }, { "type": "build", "name": "release-gcc" } ] },
+        { "name": "full-gcc", "displayName": "Full (All Features GCC)", "description": "Configure, build and test with all features using GCC", "steps": [ { "type": "configure", "name": "all-gcc" }, { "type": "build", "name": "all-gcc" }, { "type": "test", "name": "all-gcc" } ] },
+        { "name": "full-clang", "displayName": "Full (All Features Clang)", "description": "Configure, build and test with all features using Clang", "steps": [ { "type": "configure", "name": "all-clang" }, { "type": "build", "name": "all-clang" }, { "type": "test", "name": "all-clang" } ] },
+        { "name": "full-msvc", "displayName": "Full (All Features MSVC)", "description": "Configure, build and test with all features using MSVC", "steps": [ { "type": "configure", "name": "all-msvc" }, { "type": "build", "name": "all-msvc" }, { "type": "test", "name": "all-msvc" } ] },
+        { "name": "full-clang-cl", "displayName": "Full (All Features clang-cl)", "description": "Configure, build and test with all features using clang-cl", "steps": [ { "type": "configure", "name": "all-clang-cl" }, { "type": "build", "name": "all-clang-cl" }, { "type": "test", "name": "all-clang-cl" } ] }
+    ]
+}

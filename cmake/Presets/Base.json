@@ -1,0 +1,112 @@
+{
+    "version": 6,
+    "include": [
+        "Project.json"
+    ],
+    "configurePresets": [
+        {
+            "name": "base-config",
+            "hidden": true,
+            "inherits": [
+                "project-vars",
+                "project-options"
+            ],
+            "binaryDir": "build/${presetName}",
+            "installDir": "build/${presetName}/install"
+        },
+        {
+            "name": "base-config-release",
+            "hidden": true,
+            "displayName": "Configure Release",
+            "description": "Optimized release build for production use",
+            "inherits": "base-config",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release",
+                "BUILD_TESTING": "OFF",
+                "BUILD_BENCHMARKS": "OFF",
+                "BUILD_EXAMPLES": "OFF",
+                "BUILD_DOXYGEN": "OFF",
+                "BUILD_SPHINX": "OFF"
+            }
+        },
+        {
+            "name": "base-config-debug",
+            "hidden": true,
+            "displayName": "Configure Debug",
+            "description": "Debug build for development with testing enabled",
+            "inherits": "base-config",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "BUILD_TESTING": "ON",
+                "DLP_TESTING_CTEST_DISABLED": "ON",
+                "DLP_TESTING_LINK_STATIC": "ON",
+                "BUILD_BENCHMARKS": "OFF",
+                "BUILD_EXAMPLES": "OFF",
+                "BUILD_DOXYGEN": "OFF",
+                "BUILD_SPHINX": "OFF"
+            }
+        },
+        {
+            "name": "base-config-sanitizers",
+            "hidden": true,
+            "displayName": "Configure Sanitizers",
+            "description": "Debug build with AddressSanitizer and UndefinedBehaviorSanitizer",
+            "inherits": "base-config",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "DLP_ENABLE_ASAN": "ON",
+                "DLP_ENABLE_UBSAN": "ON",
+                "BUILD_TESTING": "ON",
+                "DLP_TESTING_CTEST_DISABLED": "ON",
+                "DLP_TESTING_LINK_STATIC": "ON",
+                "BUILD_BENCHMARKS": "OFF",
+                "BUILD_EXAMPLES": "OFF"
+            }
+        },
+        {
+            "name": "base-config-all",
+            "hidden": true,
+            "displayName": "Configure All Features",
+            "description": "Debug build with all features enabled (tests, benchmarks, examples, OpenMP)",
+            "inherits": "base-config",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "BUILD_TESTING": "ON",
+                "DLP_TESTING_CTEST_DISABLED": "ON",
+                "DLP_TESTING_LINK_STATIC": "ON",
+                "BUILD_BENCHMARKS": "ON",
+                "DLP_BENCHMARKS_LINK_STATIC": "ON",
+                "BUILD_EXAMPLES": "ON",
+                "DLP_EXAMPLES_LINK_STATIC": "ON",
+                "DLP_THREADING_MODEL": "openmp",
+                "DLP_ENABLE_OPENMP": "ON"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "build-release",
+            "displayName": "Build Release",
+            "configurePreset": "base-config-release",
+            "hidden": true
+        },
+        {
+            "name": "build-debug",
+            "displayName": "Build Debug",
+            "configurePreset": "base-config-debug",
+            "hidden": true
+        },
+        {
+            "name": "build-sanitizers",
+            "displayName": "Build Sanitizers",
+            "configurePreset": "base-config-sanitizers",
+            "hidden": true
+        },
+        {
+            "name": "build-all",
+            "displayName": "Build All Features",
+            "configurePreset": "base-config-all",
+            "hidden": true
+        }
+    ]
+}

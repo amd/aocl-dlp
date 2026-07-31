@@ -2,6 +2,100 @@
 
 This document provides instructions for building the AOCL-DLP library from source code.
 
+## 🚀 Quick Start with CMake Presets
+
+AOCL-DLP provides a modular set of CMake presets for standardized, easy-to-use build configurations. Presets are named `<flavor>-<compiler>[-make]` so you can pick a build flavor, a compiler (GCC/Clang on Linux, MSVC/clang-cl on Windows), and a generator (Ninja by default, or GNU Make via the `-make` suffix on Linux).
+
+> **Requirements:** CMake presets require **CMake 3.26 or later**, a C/C++ compiler (**GCC** or **Clang** on Linux; **MSVC** or **clang-cl** on Windows), and a build tool. The presets use **[Ninja](https://ninja-build.org/)** by default; on Debian/Ubuntu install it with `sudo apt install ninja-build` (or use your platform's package manager). If you prefer GNU Make, use a `-make` preset (available for the `dev` and `release` flavors, Linux only) or the [manual build instructions](#quick-start-build) below.
+
+> **Windows note:** Run the Windows presets from a **Developer Command Prompt / Developer PowerShell for Visual Studio** (or a shell where `vcvarsall.bat` has been sourced) so that the MSVC toolchain and `ninja` are on `PATH`. The `clang-cl` presets additionally require an LLVM/Clang installation providing `clang-cl`. Presets are host-gated by an OS condition, so only presets valid for your current platform are listed by `cmake --list-presets`.
+
+### Available Presets
+
+Flavors (`dev`, `sanitizers`, `all`, `release`) are combined with a compiler (`gcc`/`clang` on Linux, `msvc`/`clang-cl` on Windows) and, optionally, the Make generator (`-make`, Linux only).
+
+**Linux presets** (available when building on Linux):
+
+| Preset | Compiler | Generator | Description |
+|--------|----------|-----------|-------------|
+| `release-gcc` / `release-gcc-make` | GCC | Ninja / Make | Optimized release build for production use |
+| `release-clang` / `release-clang-make` | Clang | Ninja / Make | Optimized release build for production use |
+| `dev-gcc` / `dev-gcc-make` | GCC | Ninja / Make | Debug build with testing enabled |
+| `dev-clang` / `dev-clang-make` | Clang | Ninja / Make | Debug build with testing enabled |
+| `sanitizers-gcc` / `sanitizers-clang` | GCC / Clang | Ninja | Debug build with AddressSanitizer and UndefinedBehaviorSanitizer |
+| `all-gcc` / `all-clang` | GCC / Clang | Ninja | Debug build with all features (tests, benchmarks, examples, OpenMP) |
+
+**Windows presets** (available when building on Windows):
+
+| Preset | Compiler | Generator | Description |
+|--------|----------|-----------|-------------|
+| `release-msvc` | MSVC | Ninja | Optimized release build for production use |
+| `release-clang-cl` | clang-cl | Ninja | Optimized release build for production use |
+| `dev-msvc` | MSVC | Ninja | Debug build with testing enabled |
+| `dev-clang-cl` | clang-cl | Ninja | Debug build with testing enabled |
+| `all-msvc` / `all-clang-cl` | MSVC / clang-cl | Ninja | Debug build with all features (tests, benchmarks, examples, OpenMP) |
+
+### Usage Examples
+
+> **Note:** Ninja-based presets require `ninja-build` to be installed. Use a `-make` preset to build with GNU Make instead.
+
+```bash
+# List all available presets (add =build, =test, or =workflow for other categories)
+cmake --list-presets
+
+# Release build with GCC (recommended for production)
+cmake --preset=release-gcc
+cmake --build --preset=release-gcc
+
+# Debug build for development with Clang
+cmake --preset=dev-clang
+cmake --build --preset=dev-clang
+
+# Build with sanitizers for debugging memory issues
+cmake --preset=sanitizers-gcc
+cmake --build --preset=sanitizers-gcc
+ctest --preset=sanitizers-gcc
+
+# Build with all features enabled
+cmake --preset=all-gcc
+cmake --build --preset=all-gcc
+ctest --preset=all-gcc
+
+# Release build with Clang using GNU Make instead of Ninja
+cmake --preset=release-clang-make
+cmake --build --preset=release-clang-make
+
+# One-command workflow (configure + build, release with GCC)
+cmake --workflow --preset=default
+
+# Full workflow (configure + build + test, all features)
+cmake --workflow --preset=full-gcc
+```
+
+On Windows, run the equivalent commands from a Developer Command Prompt / Developer PowerShell for Visual Studio:
+
+```bat
+:: Release build with MSVC (recommended for production)
+cmake --preset=release-msvc
+cmake --build --preset=release-msvc
+
+:: Debug build for development with clang-cl
+cmake --preset=dev-clang-cl
+cmake --build --preset=dev-clang-cl
+
+:: Build with all features enabled using MSVC
+cmake --preset=all-msvc
+cmake --build --preset=all-msvc
+ctest --preset=all-msvc
+
+:: Full workflow (configure + build + test, all features with clang-cl)
+cmake --workflow --preset=full-clang-cl
+```
+
+For detailed preset documentation, see the [CMake Presets Reference](#cmake-presets-reference) section below.
+
+---
+
 ## 📋 System Requirements
 
 Before building AOCL-DLP, ensure your system meets the following requirements:
@@ -10,7 +104,7 @@ Before building AOCL-DLP, ensure your system meets the following requirements:
 - CMake (≥ 3.26)
 - C/C++ compiler with C11/C++17 support (e.g., GCC 11+, Clang 14+)
 - OpenMP library (for multi-threading)
-- ninja-build (optional, for Ninja generator support)
+- ninja-build (default generator for the CMake presets; optional if you use a `-make` preset or the manual build)
 
 **Note: GCC 11 introduced AVX512_BF16 support, which is required for bfloat16 GEMM.**
 
@@ -278,3 +372,126 @@ make -j$(nproc)  # Linux
 
 - Warnings may appear during compilation (-Werror is currently disabled)
 - Some platforms may require specific environment setup for threading model detection
+
+---
+
+## CMake Presets Reference
+
+AOCL-DLP uses a modular CMake preset system. Reusable fragments live under
+`cmake/Presets/` (project options, base build flavors, architecture, OS,
+compilers, and generators) and are assembled into the user-facing presets by
+`cmake/Presets/Default.json`. The root `CMakePresets.json` simply includes that
+file. This mirrors the layout used by AOCL-Utils and makes it easy to add new
+compilers, generators, or flavors.
+
+Presets are named `<flavor>-<compiler>[-make]`:
+
+- **flavor** – `release` (optimized, extras off), `dev` (Debug + tests),
+  `sanitizers` (Debug + ASan/UBSan + tests, Linux only), or `all` (Debug +
+  tests + benchmarks + examples + OpenMP).
+- **compiler** – `gcc` or `clang` on Linux; `msvc` or `clang-cl` on Windows.
+- **generator** – Ninja by default; `-make` selects the GNU Make generator
+  (provided for the `dev` and `release` flavors, Linux only).
+
+Each preset carries an OS `condition` (via the `Os/Linux.json` or
+`Os/Windows.json` fragments), so `cmake --list-presets` only shows presets that
+match the current host. The modular fragments are assembled per platform:
+
+- Linux: `x64-linux-gcc.json`, `x64-linux-llvm.json`
+- Windows: `x64-windows-msvc.json`, `x64-windows-clang-cl.json`
+
+New compiler fragments live under `cmake/Presets/Compilers/` (`Gcc.json`,
+`Clang.json`, `Msvc.json`, `ClangCl.json`) and OS fragments under
+`cmake/Presets/Os/`.
+
+> **Windows note:** Run the Windows presets from a **Developer Command Prompt /
+> Developer PowerShell for Visual Studio** so the MSVC toolchain and `ninja` are
+> on `PATH`. `clang-cl` presets also require an LLVM/Clang install providing
+> `clang-cl`. The Windows compiler fragments use MSVC-style flags
+> (`/W4 /permissive- /EHsc`, `/Zi /Od /RTC1` for Debug, `/O2 /DNDEBUG` for
+> Release).
+
+### Configure & Build Presets
+
+Each configure preset has a build preset of the same name.
+
+**Linux presets:**
+
+| Preset | Compiler | Generator | Description | Use Case |
+|--------|----------|-----------|-------------|----------|
+| `release-gcc` / `release-gcc-make` | GCC | Ninja / Make | Optimized release build | Production builds, general use |
+| `release-clang` / `release-clang-make` | Clang | Ninja / Make | Optimized release build | Production builds, general use |
+| `dev-gcc` / `dev-gcc-make` | GCC | Ninja / Make | Debug build with tests | Development, debugging, testing |
+| `dev-clang` / `dev-clang-make` | Clang | Ninja / Make | Debug build with tests | Development, debugging, testing |
+| `sanitizers-gcc` / `sanitizers-clang` | GCC / Clang | Ninja | Debug + ASAN + UBSAN + tests | Memory error and undefined behavior detection |
+| `all-gcc` / `all-clang` | GCC / Clang | Ninja | Debug + tests + benchmarks + examples + OpenMP | Full development environment |
+
+**Windows presets:**
+
+| Preset | Compiler | Generator | Description | Use Case |
+|--------|----------|-----------|-------------|----------|
+| `release-msvc` | MSVC | Ninja | Optimized release build | Production builds, general use |
+| `release-clang-cl` | clang-cl | Ninja | Optimized release build | Production builds, general use |
+| `dev-msvc` | MSVC | Ninja | Debug build with tests | Development, debugging, testing |
+| `dev-clang-cl` | clang-cl | Ninja | Debug build with tests | Development, debugging, testing |
+| `all-msvc` / `all-clang-cl` | MSVC / clang-cl | Ninja | Debug + tests + benchmarks + examples + OpenMP | Full development environment |
+
+```bash
+# Configure then build
+cmake --preset=<preset-name>
+cmake --build --preset=<preset-name>
+```
+
+### Test Presets
+
+Test presets exist for the flavors that build tests (`dev`, `sanitizers`, `all`),
+for both compilers. Sanitizer test runs stop on the first failure.
+
+| Preset | Description |
+|--------|-------------|
+| `dev-gcc` / `dev-clang` | Run tests in debug configuration (Linux) |
+| `sanitizers-gcc` / `sanitizers-clang` | Run tests with sanitizers (Linux) |
+| `all-gcc` / `all-clang` | Run all tests, full feature build (Linux) |
+| `dev-msvc` / `dev-clang-cl` | Run tests in debug configuration (Windows) |
+| `all-msvc` / `all-clang-cl` | Run all tests, full feature build (Windows) |
+
+```bash
+ctest --preset=dev-gcc
+ctest --preset=sanitizers-clang
+ctest --preset=all-gcc
+
+# Windows
+ctest --preset=dev-msvc
+ctest --preset=all-clang-cl
+```
+
+### Workflow Presets
+
+Workflows combine configure, build, and (optionally) test steps:
+
+| Workflow | Steps | Description |
+|----------|-------|-------------|
+| `default` | configure → build (`release-gcc`) | Standard release build with GCC |
+| `full-gcc` | configure → build → test (`all-gcc`) | Build and test with all features (GCC) |
+| `full-clang` | configure → build → test (`all-clang`) | Build and test with all features (Clang) |
+| `full-msvc` | configure → build → test (`all-msvc`) | Build and test with all features (MSVC, Windows) |
+| `full-clang-cl` | configure → build → test (`all-clang-cl`) | Build and test with all features (clang-cl, Windows) |
+
+### IDE Integration
+
+CMake presets are supported by most modern IDEs:
+
+- **Visual Studio Code**: With CMake Tools extension, presets appear in the CMake sidebar
+- **CLion**: Presets are automatically detected and available in the CMake profile settings
+- **Visual Studio**: Presets are integrated into the CMake configuration UI
+
+### Tips for Using Presets
+
+1. **First-time setup**: Run `cmake --list-presets` to see all available options
+2. **Build location**: All presets use `build/<preset-name>` as the build directory
+3. **Switching presets**: Each preset builds in its own directory, so you can switch without reconfiguring
+4. **Inheritance**: Custom presets can inherit from existing presets using the `"inherits"` field
+5. **Combining with flags**: You can still pass additional `-D` flags after the preset:
+   ```bash
+   cmake --preset=release-gcc -DCMAKE_INSTALL_PREFIX=/custom/path
+   ```
