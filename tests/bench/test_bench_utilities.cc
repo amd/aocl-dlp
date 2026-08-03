@@ -50,7 +50,7 @@ namespace dlp::benchmarking {
 class BenchmarkMetrics
 {
   public:
-    static size_t getMatrixTypeSize(MatrixType type);
+        static double getMatrixTypeSize(MatrixType type);
 };
 } // namespace dlp::benchmarking
 
@@ -303,52 +303,52 @@ class MatrixTypeSizeTest : public ::testing::Test
 
 TEST_F(MatrixTypeSizeTest, U4TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u4), 1);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u4), 0.5);
 }
 
 TEST_F(MatrixTypeSizeTest, S4TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s4), 1);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s4), 0.5);
 }
 
 TEST_F(MatrixTypeSizeTest, U8TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u8), 1);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u8), 1.0);
 }
 
 TEST_F(MatrixTypeSizeTest, S8TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s8), 1);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s8), 1.0);
 }
 
 TEST_F(MatrixTypeSizeTest, U16TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u16), 2);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u16), 2.0);
 }
 
 TEST_F(MatrixTypeSizeTest, S16TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s16), 2);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s16), 2.0);
 }
 
 TEST_F(MatrixTypeSizeTest, BF16TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::bf16), 2);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::bf16), 2.0);
 }
 
 TEST_F(MatrixTypeSizeTest, U32TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u32), 4);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::u32), 4.0);
 }
 
 TEST_F(MatrixTypeSizeTest, S32TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s32), 4);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s32), 4.0);
 }
 
 TEST_F(MatrixTypeSizeTest, F32TypeSize)
 {
-    EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::f32), 4);
+    EXPECT_DOUBLE_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::f32), 4.0);
 }
 
 // ============================================================================
