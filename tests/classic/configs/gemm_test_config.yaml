@@ -1262,3 +1262,28 @@ gemm_tests:
     tolerances:
       relative: 100.0
       absolute: 50.0
+
+  # With alpha=0, the public GEMM contract reduces to C := beta*C. Fractional
+  - name: "regress_u8s8_gemv_n1_alpha0_fractional_c"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16", "fp16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [16, 17, 32]
+    n: [1]
+    k: [64]
+    alpha: [0]
+    beta: [1, 2, -1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    fill_value:
+      lb: 0.75
+      ub: 0.75
+      dist: "uniform"
+      force_int_distribution: false
+    tolerances:
+      relative: 0.0
+      absolute: 0.0

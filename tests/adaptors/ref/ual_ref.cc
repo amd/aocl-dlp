@@ -92,9 +92,29 @@ namespace {
 
         // Initialize with beta*C if beta != 0
         if (beta != static_cast<IntermediateT>(0)) {
-            dlp::testing::utils::copyMatrixTo<IntermediateT>(
-                C, reinterpret_cast<IntermediateT*>(temp.getData()),
-                temp.getLeadingDimension(), temp.getLayout());
+            if constexpr (std::is_same_v<IntermediateT, int32_t>) {
+                // Integer-accumulate GEMM (u8s8/s8s8 -> s32): the input C is
+                // quantized into the s32 accumulator. A direct
+                // copyMatrixTo<int32_t> would TRUNCATE a fractional C
+                // (e.g. 0.75 -> 0), which diverges from DLP. Instead route
+                // through the shared float conversion path: copyToMatrix<float>
+                // converts float -> s32 via std::rint (round-to-nearest-even,
+                // honoring FE_TONEAREST) with saturation, matching DLP's
+                // quantization of C (e.g. 0.75 -> 1, 0.5 -> 0). First
+                // materialize C as float (exact), then convert into the s32
+                const size_t count = temp.getDataSizeBytes() / sizeof(int32_t);
+                std::unique_ptr<float[]> c_as_float(new float[count]);
+                dlp::testing::utils::copyMatrixTo<float>(
+                    C, c_as_float.get(), temp.getLeadingDimension(),
+                    temp.getLayout());
+                dlp::testing::utils::copyToMatrix<float>(
+                    c_as_float.get(), temp.getLeadingDimension(), temp,
+                    temp.getLayout());
+            } else {
+                dlp::testing::utils::copyMatrixTo<IntermediateT>(
+                    C, reinterpret_cast<IntermediateT*>(temp.getData()),
+                    temp.getLeadingDimension(), temp.getLayout());
+            }
         }
 
         return temp;
