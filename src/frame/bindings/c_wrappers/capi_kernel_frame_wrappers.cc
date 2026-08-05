@@ -285,14 +285,10 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
     cntx->blksz.MR = cntx->dlp_kernel_hndl.mr = fastKI.mr;
     cntx->blksz.NR = cntx->dlp_kernel_hndl.nr = fastKI.nr;
     cntx->blksz.KC                            = fastKI.kc;
-    cntx->blksz.MC =
-        ((cntx->blksz.MC % fastKI.mr) == 0)
-            ? cntx->blksz.MC
-            : (((cntx->blksz.MC + fastKI.mr - 1) / fastKI.mr) * fastKI.mr);
-    cntx->blksz.NC =
-        ((cntx->blksz.NC % fastKI.nr) == 0)
-            ? cntx->blksz.NC
-            : (((cntx->blksz.NC + fastKI.nr - 1) / fastKI.nr) * fastKI.nr);
+    // Always round MC and NC to multiples of MR and NR respectively.
+    cntx->blksz.MC = ((cntx->blksz.MC + fastKI.mr - 1) / fastKI.mr) * fastKI.mr;
+    cntx->blksz.NC = ((cntx->blksz.NC + fastKI.nr - 1) / fastKI.nr) * fastKI.nr;
+
     cntx->dlp_kernel_hndl.kDtype   = k_dtype;
     cntx->dlp_kernel_hndl.invokeRD = fastKI.invokeRD;
 }
@@ -391,11 +387,10 @@ dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
                               : nullptr;
     b_hndl->kernel_base = static_cast<void*>(rawPtr);
     cntx->blksz.NR = b_hndl->panel_dim = packKI.panel_dim;
+    // Always round NC to multiples of panel_dim (NR) for PackB kernel.
     cntx->blksz.NC =
-        ((cntx->blksz.NC % packKI.panel_dim) == 0)
-            ? cntx->blksz.NC
-            : (((cntx->blksz.NC + packKI.panel_dim - 1) / packKI.panel_dim)
-               * packKI.panel_dim);
+        ((cntx->blksz.NC + packKI.panel_dim - 1) / packKI.panel_dim)
+        * packKI.panel_dim;
     b_hndl->k_factor = packKI.k_factor;
     b_hndl->kDtype   = k_dtype;
     b_hndl->src_type = static_cast<uint8_t>(packKI.src_type);
@@ -472,7 +467,9 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
 
     // Dont use new/delete and malloc/free calls here, since they are lock
     // based and will result in performance degradation.
-    if (kernel_hndl->mr == 1) {
+    // Extra m==1 check to ensure the mr=1 kernel used is intended for
+    // GEMV-shaped inputs, not a tiny shape GEMM. Similarly for nr=1.
+    if ((kernel_hndl->mr == 1) && (m == 1)) {
         gemvM1Params gemvM1ParamsIn{ A,
                                      B,
                                      C,
@@ -492,7 +489,7 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
                                      post_ops_attr };
         kernelBase*  kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
         kB->operator()(std::addressof(gemvM1ParamsIn));
-    } else if (kernel_hndl->nr == 1) {
+    } else if ((kernel_hndl->nr == 1) && (n == 1)) {
         gemvN1Params gemvN1ParamsIn{
             A,    B,    C,    m,     k,    rs_a,          cs_a,         rs_b,
             cs_b, rs_c, cs_c, alpha, beta, post_ops_list, post_ops_attr

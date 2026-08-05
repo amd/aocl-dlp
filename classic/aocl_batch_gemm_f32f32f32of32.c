@@ -298,6 +298,20 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
             goto err_hndl;
         }
 
+        err = dlp_gemm_validate_metadata_with_lcntx(metadata[gc_i], &lcntx_l);
+        if (err != DLP_CLSC_SUCCESS) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Local cntx diverged or corrupted from metadata, "
+                     "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                     "MR: %ld, NR: %ld\n",
+                     lcntx_l.blksz.MC, lcntx_l.blksz.NC, lcntx_l.blksz.KC,
+                     lcntx_l.blksz.MR, lcntx_l.blksz.NR);
+            dlp_print_msg(msg, __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Create ops bundle for standard GEMM (post-ops only)
         dlp_gemm_ops_bundle_t ops =
             DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);

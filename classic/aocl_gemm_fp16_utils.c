@@ -80,14 +80,7 @@ aocl_get_reorder_buf_size_f16f16f16of16(const char      order,
     }
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
-    err_no = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return 0; // Error.
-    }
-    const md_t NR = lcntx_l.blksz.NR;
+    const md_t      NR      = lcntx_l.blksz.NR;
 
     // Extra space since packing does width in multiples of NR (packb_min_NR).
     // One ZMM register = 32 FP16 elements.
@@ -178,13 +171,6 @@ aocl_reorder_f16f16f16of16(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
-    err_no = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
@@ -270,13 +256,6 @@ aocl_unreorder_f16f16f16of16(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
-    err_no = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;

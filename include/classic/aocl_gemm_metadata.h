@@ -501,6 +501,10 @@ typedef struct
                              while both are `NULL`. */
 } dlp_term_op_glu;
 
+/**
+ * @struct dlp_gemm_blocking_t
+ * @brief Structure defining GEMM blocking parameters.
+ */
 typedef struct
 {
     md_t MR; // Micro-kernel M dimension
@@ -510,12 +514,35 @@ typedef struct
     md_t KC; // Cache blocking K dimension
 } dlp_gemm_blocking_t;
 
+/**
+ * @struct dlp_gemm_sup_threshold_t
+ * @brief Structure defining GEMM packing thresholds. Only applicable to F32
+ * APIs.
+ */
 typedef struct
 {
     md_t MT; /**< M dim threshold to decide whether to enable packing or not */
     md_t NT; /**< N dim threshold to decide whether to enable packing or not */
     md_t KT; /**< K dim threshold to decide whether to enable packing or not */
 } dlp_gemm_sup_threshold_t;
+
+/**
+ * @struct dlp_gemm_hints_t
+ * @brief Structure defining GEMM hints for optimal kernel generation. A value
+ * of 0 indicates no hint is provided.
+ */
+typedef struct
+{
+    md_t m_hint;  /**< Hint for the M dimension. For instance, in reorder api
+                       m_hint=4 implies all the m values that uses this reorder
+                       buffer will be 4 and correspondingly the NR value can be
+                       modified to take advantage of this. */
+    md_t nt_hint; /**< Hint for the number of threads that will be used. For
+                      instance, in reorder api nt_hint=32 implies that 32
+                      threads will be used in GEMM calls consuming this
+                      reordered buffer. Subsequently NR can be modified to be
+                      more work distribution friendly based on this nt. */
+} dlp_gemm_hints_t;
 
 /**
  * @brief Main metadata structure containing all post-operation configurations.
@@ -565,9 +592,12 @@ typedef struct
     dlp_gemm_blocking_t*
         block_params; /**< Blocking parameters for GEMM kernels */
     dlp_gemm_sup_threshold_t*
-        sup_thresholds;   /**< Threshold parameters to decide whether to enable
-                              packing or not. Currently only applicable for f32
-                              and fp16 APIs only. */
+        sup_thresholds; /**< Threshold parameters to decide whether to enable
+                            packing or not. Currently only applicable for f32
+                            and fp16 APIs only. */
+    dlp_gemm_hints_t* gemm_hints; /**< GEMM hints for optimal kernel generation.
+                                      A value of 0 indicates no hint is
+                                      provided. */
     dlp_term_op_glu* glu; /**< Gated Linear Unit terminal-op (shape-changing
                                2I -> I). When non-NULL, it is applied after all
                                seq_vector post-ops. Only 1 GLU op supported. */

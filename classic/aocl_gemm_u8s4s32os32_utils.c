@@ -201,13 +201,6 @@ aocl_reorder_u8s4s32os32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(U8S4S32OS32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(U8S4S32OS32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;

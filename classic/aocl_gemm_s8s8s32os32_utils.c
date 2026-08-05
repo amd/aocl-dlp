@@ -194,13 +194,6 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
     }
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return 0; // Error.
-    }
 
     md_t KC = lcntx_g.blksz.KC;
     md_t group_size;
@@ -327,13 +320,6 @@ aocl_reorder_s8s8s32os32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
@@ -423,13 +409,6 @@ aocl_reorder_s8s8s32os32_sym_quant(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
     md_t KC = lcntx_g.blksz.KC;
 
@@ -536,13 +515,6 @@ aocl_unreorder_s8s8s32os32_reference(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;

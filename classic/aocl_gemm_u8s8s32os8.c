@@ -174,13 +174,6 @@ aocl_gemm_u8s8s32os8(const char      order,
     // Create local copy, since each thread in a multi-instance setup
     // modifies the context object.
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
-    err = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l, metadata);
-    if (err != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
 
     // Initialize extensible kernel framework path
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;

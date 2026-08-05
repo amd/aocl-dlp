@@ -394,6 +394,20 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n_use,
                                        rs_b_use, cs_b_use, &lcntx_l);
 
+    err = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_l);
+    if (err != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged or corrupted from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_l.blksz.MC, lcntx_l.blksz.NC, lcntx_l.blksz.KC,
+                 lcntx_l.blksz.MR, lcntx_l.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        return;
+    }
+
 #if (defined(DLP_KERNELS_ZEN4) && (!defined(DLP_GEMM_BF16_JIT)))
     /* While AOCL_DLP_ENABLE_INSTRUCTIONS=AVX2 is enabled in machines that
      * supports DLP_BF16/VNNI with only the ISA check the exeution could enter

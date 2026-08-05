@@ -235,13 +235,6 @@ aocl_gemm_f32f16f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(F32F16F32OF32));
-    err = dlp_gemm_upd_cntx_with_metadata(F32F16F32OF32, &lcntx_l, metadata);
-    if (err != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
 
     AOCL_DLP_MEMORY_TAG jit_mtag_a = mtag_a_use;
     AOCL_DLP_MEMORY_TAG jit_mtag_b = mtag_b_use;

@@ -312,14 +312,6 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-        err = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Create ops bundle for GRP GEMM (group post-ops + post-ops)
         dlp_gemm_ops_bundle_t ops =
@@ -602,14 +594,6 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-        err = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Create ops bundle for GRP GEMM (group post-ops + post-ops)
         dlp_gemm_ops_bundle_t ops =

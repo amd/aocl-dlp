@@ -216,14 +216,6 @@ aocl_batch_gemm_u8s8s32os32(const char*      order,
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
-        err = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
@@ -445,14 +437,6 @@ aocl_batch_gemm_u8s8s32os8(const char*      order,
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
-        err = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
@@ -675,14 +659,6 @@ aocl_batch_gemm_u8s8s32of32(const char*      order,
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
-        err = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
@@ -898,14 +874,6 @@ aocl_batch_gemm_u8s8s32obf16(const char*      order,
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
-        err = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
@@ -1127,14 +1095,6 @@ aocl_batch_gemm_u8s8s32ou8(const char*      order,
         // Create local copy, since each thread in a multi-instance setup
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(U8S8S32OS32));
-        err = dlp_gemm_upd_cntx_with_metadata(U8S8S32OS32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;

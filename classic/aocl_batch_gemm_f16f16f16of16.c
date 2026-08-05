@@ -261,14 +261,6 @@ aocl_batch_gemm_f16f16f16of16(const char*      order,
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l =
             *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
-        err = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         float16 alpha_fp16 = alpha[gc_i];
         float16 beta_fp16  = beta[gc_i];
@@ -527,14 +519,6 @@ aocl_batch_gemm_f16f16f16of32(const char*      order,
 
             dlp_gemm_cntx_t lcntx_l =
                 *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
-            err = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l,
-                                                  metadata[gc_i]);
-            if (err != DLP_CLSC_SUCCESS) {
-                dlp_print_msg(" Failed to update context with metadata.",
-                              __FILE__, __LINE__);
-                DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-                goto err_hndl_of32;
-            }
 
             float16 alpha_fp16 = alpha[gc_i];
             float16 beta_fp16  = beta[gc_i];

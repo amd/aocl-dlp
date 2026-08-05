@@ -149,12 +149,7 @@ aocl_get_reorder_buf_size_s8s4s32os32(const char      order,
     // s8s8 sym-quant dlp_gemv_n_one kernel consumes. This mirrors the s8s8
     // reorder so the s8s4 GEMV path can reuse the s8s8 GEMV kernels directly.
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return 0; // Error.
-    }
-    md_t KC = lcntx_g.blksz.KC;
+    md_t            KC      = lcntx_g.blksz.KC;
 
     if ((n == 1) && ((k % group_size) == 0) && ((KC % group_size) == 0)) {
         // k s8 weights (k is a multiple of 4, so the int32 colsums that follow
@@ -255,13 +250,6 @@ aocl_reorder_s8s4s32os32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
 #ifdef DLP_KERNELS_ZEN4
     // GEMV n==1 fast path (iff group_size divides both k and KC): emit the

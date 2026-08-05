@@ -43,7 +43,9 @@ typedef enum
     DLP_CLSC_NULL_POINTER,          /**< Null pointer passed as argument */
     DLP_CLSC_UNEXPECTED_VECTOR_DIM, /**< Vector dimension is unexpected or
                                         invalid */
-    DLP_CLSC_NOT_SUPPORTED,         /**< Operation or feature not supported */
+    DLP_CLSC_INVALID_DATA_TYPE,  /**< Invalid or unsupported data type specified
+                                  */
+    DLP_CLSC_NOT_SUPPORTED,      /**< Operation or feature not supported */
     DLP_CLSC_INVALID_ORDER,      /**< Invalid memory layout order specified */
     DLP_CLSC_INVALID_TRANSPOSE,  /**< Invalid transpose operation specified */
     DLP_CLSC_INVALID_MEMORY_TAG, /**< Invalid memory tag or format specified */

@@ -315,6 +315,13 @@ class gemmF32DEBackend : public iDEBackend
             return INVALID_KERNEL_INFO;
         }
 
+        if ((mr_hint <= 1) || (nr_hint <= 1)) {
+            // Invalid MR/NR hints for GEMM, these hints should only be used
+            // in GEMV path. The generators are hard set to only generate
+            // GEMV kernels for MR/NR <= 1.
+            return INVALID_KERNEL_INFO;
+        }
+
         kernel_frame::scalingType alphaScalingType;
         kernel_frame::scalingType betaScalingType;
         std::tie(alphaScalingType, betaScalingType) =
@@ -513,6 +520,8 @@ class gemmBF16DEBackend : public iDEBackend
         return prefetch_c_dist;
     }
 
+    const md_t k_pack_factor = 2; // BF16 packing: 2 x bf16 -> float
+
   public:
     gemmBF16DEBackend();
     ~gemmBF16DEBackend()                                   = default;
@@ -597,8 +606,10 @@ class gemmBF16DEBackend : public iDEBackend
                 ? alias_detection::shouldUseMrSplit(rs_a, sizeof(uint16_t), mr)
                 : false;
 
+        md_t kc_rounded =
+            ((kc + k_pack_factor - 1) / k_pack_factor) * k_pack_factor;
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
-            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata,
             /*skinnyN=*/false, aliasMrSplit);
@@ -638,6 +649,13 @@ class gemmBF16DEBackend : public iDEBackend
                 k_dtype, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
                 beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
                 c_downscale, true);
+        }
+
+        if ((mr_hint <= 1) || (nr_hint <= 1)) {
+            // Invalid MR/NR hints for GEMM, these hints should only be used
+            // in GEMV path. The generators are hard set to only generate
+            // GEMV kernels for MR/NR <= 1.
+            return INVALID_KERNEL_INFO;
         }
 
         // At this point, we know that the underlying architecture supports
@@ -700,8 +718,10 @@ class gemmBF16DEBackend : public iDEBackend
         // support.
         kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
 
+        md_t kc_rounded =
+            ((kc + k_pack_factor - 1) / k_pack_factor) * k_pack_factor;
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
-            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, skinnyN);
     }
@@ -752,6 +772,8 @@ class gemmU8S8DEBackend : public iDEBackend
         constexpr md_t prefetch_c_dist = 0;
         return prefetch_c_dist;
     }
+
+    const md_t k_pack_factor = 4; // U8/S8 packing: 4 x u8/s8 -> int32
 
   public:
     gemmU8S8DEBackend();
@@ -831,8 +853,10 @@ class gemmU8S8DEBackend : public iDEBackend
             k_unroll = 4;
         }
 
+        md_t kc_rounded =
+            ((kc + k_pack_factor - 1) / k_pack_factor) * k_pack_factor;
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
-            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
@@ -861,6 +885,13 @@ class gemmU8S8DEBackend : public iDEBackend
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        if ((mr_hint <= 1) || (nr_hint <= 1)) {
+            // Invalid MR/NR hints for GEMM, these hints should only be used
+            // in GEMV path. The generators are hard set to only generate
+            // GEMV kernels for MR/NR <= 1.
             return INVALID_KERNEL_INFO;
         }
 
@@ -902,10 +933,12 @@ class gemmU8S8DEBackend : public iDEBackend
             }
         }
 
+        md_t kc_rounded =
+            ((kc + k_pack_factor - 1) / k_pack_factor) * k_pack_factor;
         // Currently only general GEMM is supported, specific GEMM optimizations
         // will be added later
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
-            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
@@ -926,6 +959,8 @@ class gemmS8DEBackend : public iDEBackend
         constexpr md_t prefetch_c_dist = 40;
         return prefetch_c_dist;
     }
+
+    const md_t k_pack_factor = 4; // S8 packing: 4 x s8 -> int32
 
   public:
     gemmS8DEBackend();
@@ -1007,8 +1042,10 @@ class gemmS8DEBackend : public iDEBackend
             k_unroll = 4;
         }
 
+        md_t kc_rounded =
+            ((kc + k_pack_factor - 1) / k_pack_factor) * k_pack_factor;
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
-            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
@@ -1037,6 +1074,13 @@ class gemmS8DEBackend : public iDEBackend
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        if ((mr_hint <= 1) || (nr_hint <= 1)) {
+            // Invalid MR/NR hints for GEMM, these hints should only be used
+            // in GEMV path. The generators are hard set to only generate
+            // GEMV kernels for MR/NR <= 1.
             return INVALID_KERNEL_INFO;
         }
 
@@ -1081,8 +1125,10 @@ class gemmS8DEBackend : public iDEBackend
             }
         }
 
+        md_t kc_rounded =
+            ((kc + k_pack_factor - 1) / k_pack_factor) * k_pack_factor;
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
-            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
     }
@@ -1202,6 +1248,13 @@ class gemmFP16DEBackend : public iDEBackend
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        if ((mr_hint <= 1) || (nr_hint <= 1)) {
+            // Invalid MR/NR hints for GEMM, these hints should only be used
+            // in GEMV path. The generators are hard set to only generate
+            // GEMV kernels for MR/NR <= 1.
             return INVALID_KERNEL_INFO;
         }
 
@@ -1346,6 +1399,13 @@ class gemmF32FP16DEBackend : public iDEBackend
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
+            return INVALID_KERNEL_INFO;
+        }
+
+        if ((mr_hint <= 1) || (nr_hint <= 1)) {
+            // Invalid MR/NR hints for GEMM, these hints should only be used
+            // in GEMV path. The generators are hard set to only generate
+            // GEMV kernels for MR/NR <= 1.
             return INVALID_KERNEL_INFO;
         }
 

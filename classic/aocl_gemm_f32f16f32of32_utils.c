@@ -157,13 +157,6 @@ aocl_reorder_f32f16f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(F32F16F32OF32));
-    err_no = dlp_gemm_upd_cntx_with_metadata(F32F16F32OF32, &lcntx_g, metadata);
-    if (err_no != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err_no);
-        return; // Error.
-    }
 
     dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;

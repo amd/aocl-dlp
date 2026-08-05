@@ -486,6 +486,20 @@ aocl_gemm_f32f32f32of32(const char      order,
         goto err_hndl;
     }
 
+    err = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_l);
+    if (err != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_l.blksz.MC, lcntx_l.blksz.NC, lcntx_l.blksz.KC,
+                 lcntx_l.blksz.MR, lcntx_l.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
     if (dlp_is_single_thread(&rntm_g) == TRUE) {
         if (is_tiny_input_f32(m_use, n_use, k_use, &lcntx_l) == TRUE) {
             dlp_gemm_rowvar_tiny_f32f32f32of32(
