@@ -208,13 +208,6 @@ aocl_gemm_bf16s4f32of32(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
-    err = dlp_gemm_upd_cntx_with_metadata(BF16S4F32OF32, &lcntx_l, metadata);
-    if (err != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
 
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
     // Use BF16BF16F32OF32 kernel : S4->BF16 dequantization is done
@@ -417,13 +410,6 @@ aocl_gemm_bf16s4f32obf16(const char      order,
     dlp_rntm_init_from_global(&rntm_g);
 
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16S4F32OF32));
-    err = dlp_gemm_upd_cntx_with_metadata(BF16S4F32OF32, &lcntx_l, metadata);
-    if (err != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
 
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
     // Use BF16BF16F32OBF16 kernel : S4->BF16 dequantization is done

@@ -228,14 +228,6 @@ aocl_batch_gemm_f32f16f32of32(const char*      order,
         // modifies the context object.
         dlp_gemm_cntx_t lcntx_l =
             *(dlp_gemm_get_global_cntx_obj(F32F16F32OF32));
-        err = dlp_gemm_upd_cntx_with_metadata(F32F16F32OF32, &lcntx_l,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;

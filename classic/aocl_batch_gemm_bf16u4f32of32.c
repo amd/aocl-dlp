@@ -269,14 +269,6 @@ aocl_batch_gemm_bf16u4f32_impl(const char*      order,
 
         dlp_gemm_cntx_t lcntx_g =
             *(dlp_gemm_get_global_cntx_obj(BF16U4F32OF32));
-        err = dlp_gemm_upd_cntx_with_metadata(BF16U4F32OF32, &lcntx_g,
-                                              metadata[gc_i]);
-        if (err != DLP_CLSC_SUCCESS) {
-            dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                          __LINE__);
-            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
-            goto err_hndl;
-        }
 
         dlp_gemm_ops_bundle_t ops =
             DLP_GEMM_OPS_BUNDLE_INIT_MP(pre_op_list, post_op_list);

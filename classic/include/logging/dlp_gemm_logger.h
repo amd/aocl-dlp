@@ -41,6 +41,7 @@
 
 #define AOCL_DLP_GEMM_LOG_FILE_PRFX    "aocl_gemm_log"
 #define AOCL_DLP_GEMM_LOG_FILE_EXT     ".txt"
+#define DLP_GEMM_GEN_STR_MAX_LEN       256
 #define DLP_GEMM_QUANT_OPS_STR_MAX_LEN 1024
 #define DLP_GEMM_POST_OPS_STR_MAX_LEN  2048
 
@@ -50,6 +51,8 @@ void
 dlp_gemm_stop_logger_fn(FILE* fd, double* dlp_gemm_logger_start_time);
 void
 dlp_gemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str);
+void
+dlp_gemm_get_tuning_str(dlp_metadata_t* metadata, char* tuning_str);
 void
 dlp_gemm_get_quant_ops_str(dlp_metadata_t* metadata, char* ops_str);
 bool

@@ -222,13 +222,6 @@ aocl_gemm_f16f16f16of32(const char      order,
     // same. Only c_downscale differs, keyed in dlp_init_and_get_kernel_hndl
     // and forwarded to the JIT post-ops rail.
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(F16F16F16OF16));
-    err = dlp_gemm_upd_cntx_with_metadata(F16F16F16OF16, &lcntx_l, metadata);
-    if (err != DLP_CLSC_SUCCESS) {
-        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
-                      __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, err);
-        goto err_hndl;
-    }
 
     AOCL_DLP_MEMORY_TAG jit_mtag_a = mtag_a_use;
     AOCL_DLP_MEMORY_TAG jit_mtag_b = mtag_b_use;

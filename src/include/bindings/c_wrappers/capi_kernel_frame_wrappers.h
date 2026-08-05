@@ -207,6 +207,12 @@ typedef struct
 
 typedef struct
 {
+    md_t m_hint;
+    md_t nt_hint;
+} dlp_gemm_kernel_hints_t;
+
+typedef struct
+{
     dlp_gemm_block_size_t   blksz;
     opaq_fp_t               kern_fun_ptr;
     opaq_fp_t               packa_fun_ptr;
@@ -218,6 +224,7 @@ typedef struct
     dlp_gemm_sup_thres_t    sup_thres;
     dlp_kernel_hndl_t       dlp_kernel_hndl;
     dlp_pack_kernel_hndl_t  dlp_pack_kernel_hndl;
+    dlp_gemm_kernel_hints_t gemm_kernel_hints;
 } dlp_gemm_cntx_t;
 
 // C linkage for function declarations only

@@ -656,10 +656,15 @@ jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                             ? bMaskReg
                             : 0;
                     if (kNumRegs - cReg - bReg - maskVecReg < 1) {
-                        // Slot stays nullptr (zero-initialized by
-                        // resize). The dispatcher never reaches it for
-                        // any DE-blessed shape that bumped MR.
-                        continue;
+                        if (jI.kI.skinnyN) {
+                            // Slot stays nullptr (zero-initialized by
+                            // resize). The dispatcher never reaches it for
+                            // any DE-blessed shape that bumped MR.
+                            continue;
+                        } else {
+                            err = dlp::jit::jitGeneratorError::badKernelInfo;
+                            goto cleanup;
+                        }
                     }
                 }
 
@@ -1561,10 +1566,15 @@ jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
                 int bReg = (nr == 0) ? 1 : static_cast<int>(nr);
                 int cReg = params.MR * bReg;
                 if (kZmmRegs - cReg - bReg < aRegMin) {
-                    // Slot stays nullptr (zero-initialized by resize).
-                    // The dispatcher never reaches it for any DE-blessed
-                    // shape that bumped MR.
-                    continue;
+                    if (jI.kI.skinnyN) {
+                        // Slot stays nullptr (zero-initialized by resize).
+                        // The dispatcher never reaches it for any DE-blessed
+                        // shape that bumped MR.
+                        continue;
+                    } else {
+                        err = dlp::jit::jitGeneratorError::badKernelInfo;
+                        goto cleanup;
+                    }
                 }
 
                 auto gen = std::make_unique<GEMMcodeGenerator::jitGEMMBF16<

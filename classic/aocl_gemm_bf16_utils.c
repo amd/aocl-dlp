@@ -107,6 +107,20 @@ aocl_reorder_bf16bf16f32of32_reference(const char      order,
         return; // Error.
     }
 
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged or corrupted from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_g.blksz.MC, lcntx_g.blksz.NC, lcntx_g.blksz.KC,
+                 lcntx_g.blksz.MR, lcntx_g.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
+
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
     b_reorder.storage.aligned_buffer = reorder_buf_addr;
@@ -192,6 +206,20 @@ aocl_unreorder_bf16bf16f32of32_reference(const char      order,
                       __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
+    }
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged or corrupted from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_g.blksz.MC, lcntx_g.blksz.NC, lcntx_g.blksz.KC,
+                 lcntx_g.blksz.MR, lcntx_g.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
     }
 
     // create dummy b_reorder obj.
@@ -382,6 +410,20 @@ aocl_reorder_bf16bf16f32of32(const char      order,
     lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
     dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, rs_b,
                                        cs_b, &lcntx_g);
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged or corrupted from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_g.blksz.MC, lcntx_g.blksz.NC, lcntx_g.blksz.KC,
+                 lcntx_g.blksz.MR, lcntx_g.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
+    }
 
     // Create dummy b_reorder obj.
     dlp_gemm_obj_t b_reorder;
@@ -583,6 +625,20 @@ aocl_unreorder_bf16bf16f32of32(const char      order,
                       __LINE__);
         DLP_METADATA_SET_ERROR(metadata, err_no);
         return; // Error.
+    }
+
+    err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Local cntx diverged or corrupted from metadata, "
+                 "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                 "MR: %ld, NR: %ld\n",
+                 lcntx_g.blksz.MC, lcntx_g.blksz.NC, lcntx_g.blksz.KC,
+                 lcntx_g.blksz.MR, lcntx_g.blksz.NR);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return;
     }
 
     // create dummy b_reorder obj.

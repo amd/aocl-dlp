@@ -290,6 +290,20 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
             goto err_hndl;
         }
 
+        err = dlp_gemm_validate_metadata_with_lcntx(metadata[gc_i], &lcntx_l);
+        if (err != DLP_CLSC_SUCCESS) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Local cntx diverged or corrupted from metadata, "
+                     "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                     "MR: %ld, NR: %ld\n",
+                     lcntx_l.blksz.MC, lcntx_l.blksz.NC, lcntx_l.blksz.KC,
+                     lcntx_l.blksz.MR, lcntx_l.blksz.NR);
+            dlp_print_msg(msg, __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Create ops bundle for standard GEMM (post-ops only)
         dlp_gemm_ops_bundle_t ops =
             DLP_GEMM_OPS_BUNDLE_INIT_STANDARD(post_op_list);
@@ -567,6 +581,20 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
         // not attempt to execute the kernel, and return an error instead.
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
+        err = dlp_gemm_validate_metadata_with_lcntx(metadata[gc_i], &lcntx_l);
+        if (err != DLP_CLSC_SUCCESS) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Local cntx diverged or corrupted from metadata, "
+                     "local cntx values -> MC: %ld, NC: %ld, KC: %ld, "
+                     "MR: %ld, NR: %ld\n",
+                     lcntx_l.blksz.MC, lcntx_l.blksz.NC, lcntx_l.blksz.KC,
+                     lcntx_l.blksz.MR, lcntx_l.blksz.NR);
+            dlp_print_msg(msg, __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
             goto err_hndl;
         }
 

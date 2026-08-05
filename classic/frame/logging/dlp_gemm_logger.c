@@ -325,6 +325,58 @@ dlp_gemm_get_post_ops_str(dlp_metadata_t* metadata, char* ops_str)
 }
 
 void
+dlp_gemm_get_tuning_str(dlp_metadata_t* metadata, char* tuning_str)
+{
+    if (metadata == NULL) {
+        size_t tuning_str_len = 0;
+        dlp_gemm_logger_str_append(tuning_str, &tuning_str_len,
+                                   DLP_GEMM_GEN_STR_MAX_LEN, "none");
+        return;
+    }
+
+    size_t tuning_str_len = 0;
+    char*  delim_str      = "#";
+
+    if (metadata->block_params != NULL) {
+        dlp_gemm_logger_str_append(
+            tuning_str, &tuning_str_len, DLP_GEMM_GEN_STR_MAX_LEN,
+            "block_params={MR=%" PRId64 ",NR=%" PRId64 ",MC=%" PRId64
+            ",NC=%" PRId64 ",KC=%" PRId64 "}",
+            (metadata->block_params)->MR, (metadata->block_params)->NR,
+            (metadata->block_params)->MC, (metadata->block_params)->NC,
+            (metadata->block_params)->KC);
+    } else {
+        dlp_gemm_logger_str_append(tuning_str, &tuning_str_len,
+                                   DLP_GEMM_GEN_STR_MAX_LEN, "none");
+    }
+    dlp_gemm_logger_str_append(tuning_str, &tuning_str_len,
+                               DLP_GEMM_GEN_STR_MAX_LEN, delim_str);
+
+    if (metadata->sup_thresholds != NULL) {
+        dlp_gemm_logger_str_append(
+            tuning_str, &tuning_str_len, DLP_GEMM_GEN_STR_MAX_LEN,
+            "sup_thresholds={MT=%" PRId64 ",NT=%" PRId64 ",KT=%" PRId64 "}",
+            (metadata->sup_thresholds)->MT, (metadata->sup_thresholds)->NT,
+            (metadata->sup_thresholds)->KT);
+    } else {
+        dlp_gemm_logger_str_append(tuning_str, &tuning_str_len,
+                                   DLP_GEMM_GEN_STR_MAX_LEN, "none");
+    }
+    dlp_gemm_logger_str_append(tuning_str, &tuning_str_len,
+                               DLP_GEMM_GEN_STR_MAX_LEN, delim_str);
+
+    if (metadata->gemm_hints != NULL) {
+        dlp_gemm_logger_str_append(
+            tuning_str, &tuning_str_len, DLP_GEMM_GEN_STR_MAX_LEN,
+            "gemm_hints={m_hint=%" PRId64 ", nt_hint=%" PRId64 "}",
+            (metadata->gemm_hints)->m_hint, (metadata->gemm_hints)->nt_hint);
+    } else {
+        dlp_gemm_logger_str_append(tuning_str, &tuning_str_len,
+                                   DLP_GEMM_GEN_STR_MAX_LEN, "none");
+    }
+}
+
+void
 dlp_gemm_write_logger_gemm_fn(FILE*           fd,
                               const char*     op_type,
                               const char      order,
@@ -349,11 +401,15 @@ dlp_gemm_write_logger_gemm_fn(FILE*           fd,
         char post_ops_str[DLP_GEMM_POST_OPS_STR_MAX_LEN] = { 0 };
         dlp_gemm_get_post_ops_str(metadata, post_ops_str);
 
+        char tuning_str[DLP_GEMM_GEN_STR_MAX_LEN] = { 0 };
+        dlp_gemm_get_tuning_str(metadata, tuning_str);
+
         fprintf(fd,
                 "%c %c %c %c %c %ld %ld %ld %ld %ld %ld "
-                "%s:quant_ops=[%s]:metadata=[%s] %f %f ",
+                "%s:quant_ops=[%s]:metadata=[%s] %f %f tuning=[%s]\n",
                 order, transa, transb, mem_format_a, mem_format_b, m, n, k, lda,
-                ldb, ldc, op_type, quant_ops_str, post_ops_str, alpha, beta);
+                ldb, ldc, op_type, quant_ops_str, post_ops_str, alpha, beta,
+                tuning_str);
     }
 }
 
@@ -382,17 +438,20 @@ batch_dlp_gemm_write_logger_gemm_fn(FILE*            fd,
 
         char post_ops_str[DLP_GEMM_POST_OPS_STR_MAX_LEN] = { 0 };
 
+        char tuning_str[DLP_GEMM_GEN_STR_MAX_LEN] = { 0 };
+
         fprintf(fd, "%s:group_count=%ld\n", op_type, group_count);
         for (iter_t i = 0; i < group_count; i++) {
             dlp_gemm_get_quant_ops_str(metadata[i], quant_ops_str);
             dlp_gemm_get_post_ops_str(metadata[i], post_ops_str);
+            dlp_gemm_get_tuning_str(metadata[i], tuning_str);
             fprintf(fd,
                     "%c %c %c %c %c %ld %ld %ld %ld %ld %ld "
-                    ":quant_ops=[%s]:metadata=[%s] %f %f %ld\n",
+                    ":quant_ops=[%s]:metadata=[%s] %f %f %ld tuning=[%s]\n",
                     order[i], transa[i], transb[i], mem_format_a[i],
                     mem_format_b[i], m[i], n[i], k[i], lda[i], ldb[i], ldc[i],
                     quant_ops_str, post_ops_str, (float)(alpha[i]),
-                    (float)(beta[i]), group_size[i]);
+                    (float)(beta[i]), group_size[i], tuning_str);
         }
     }
 }

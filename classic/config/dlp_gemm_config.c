@@ -650,7 +650,7 @@ dlp_gemm_get_global_cntx_obj(AOCL_DLP_OPERATION_TYPE op)
 // A broadcasts, B loads. Subsequently A and B strides will calculated on
 // the basis of kr loop, in a way that each kr iteration gets the correct
 // A and B ptrs offsets.
-static dlp_clsc_err_t
+static inline dlp_clsc_err_t
 dlp_gemm_upd_pack_strides(AOCL_DLP_OPERATION_TYPE op,
                           md_t                    MR,
                           md_t                    NR,
@@ -664,40 +664,18 @@ dlp_gemm_upd_pack_strides(AOCL_DLP_OPERATION_TYPE op,
     // As it stands, pack strides needs to be derived from the supplied
     // metadata context, the data types and the underlying machine ISA.
     if ((dlp_cpuid_is_avx2fma3_supported() == TRUE)
-        || (dlp_cpuid_is_avx512_supported() == TRUE)
-        || (dlp_cpuid_is_avx512vnni_supported() == TRUE)
-        || (dlp_cpuid_is_avx512bf16_supported() == TRUE)
-        || (dlp_cpuid_is_avx512fp16_supported() == TRUE)) {
-        if (op == U8S8S32OS32) {
+        || (dlp_cpuid_is_avx512_supported() == TRUE)) {
+        if ((op == U8S8S32OS32) || (op == S8S8S32OS32) || (op == U8S4S32OS32)) {
             DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,
                                      NR, cache_line_size);
-        } else if (op == F32F32F32OF32) {
+        } else if ((op == F32F32F32OF32) || (op == F16F16F16OF16)
+                   || (op == F32F16F32OF32)) {
             DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
                                        MR, NR, cache_line_size);
-        } else if (op == BF16BF16F32OF32) {
+        } else if ((op == BF16BF16F32OF32) || (op == BF16S4F32OF32)
+                   || (op == F32OBF16) || (op == BF16U4F32OF32)) {
             DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
                                       MR, NR, cache_line_size);
-        } else if (op == S8S8S32OS32) {
-            DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,
-                                     NR, cache_line_size);
-        } else if (op == U8S4S32OS32) {
-            DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,
-                                     NR, cache_line_size);
-        } else if (op == BF16S4F32OF32) {
-            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
-                                      MR, NR, cache_line_size);
-        } else if (op == F32OBF16) {
-            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
-                                      MR, NR, cache_line_size);
-        } else if (op == F16F16F16OF16) {
-            DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
-                                       MR, NR, cache_line_size);
-        } else if (op == BF16U4F32OF32) {
-            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
-                                      MR, NR, cache_line_size);
-        } else if (op == F32F16F32OF32) {
-            DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
-                                       MR, NR, cache_line_size);
         } else {
             return DLP_CLSC_INVALID_BLOCK_PARAMS;
         }
@@ -713,9 +691,6 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
                                 dlp_gemm_cntx_t*        lcntx,
                                 dlp_metadata_t*         metadata)
 {
-    // NOTE: Making this a no-op for now, will enable this function later.
-    return DLP_CLSC_SUCCESS;
-
     if (!lcntx) {
         // Invalid context pointer, return error.
         return DLP_CLSC_NULL_POINTER;
@@ -728,23 +703,31 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
     // Set blocking parameters if applicable.
     if (metadata->block_params != NULL) {
         dlp_gemm_blocking_t* block_params = metadata->block_params;
-        if ((block_params->MR <= 0) || (block_params->NR <= 0)
-            || (block_params->MC <= 0) || (block_params->NC <= 0)
-            || (block_params->KC <= 0)
-            || ((block_params->MC % block_params->MR) != 0)
-            || ((block_params->NC % block_params->NR) != 0)) {
-            // Invalid blocking parameters in metadata, return error.
+
+        lcntx->blksz.MC = (block_params->MC > 0) ? block_params->MC
+                                                 : lcntx->blksz.MC;
+        lcntx->blksz.NC = (block_params->NC > 0) ? block_params->NC
+                                                 : lcntx->blksz.NC;
+        lcntx->blksz.KC = (block_params->KC > 0) ? block_params->KC
+                                                 : lcntx->blksz.KC;
+        lcntx->blksz.MR = (block_params->MR > 0) ? block_params->MR
+                                                 : lcntx->blksz.MR;
+        lcntx->blksz.NR = (block_params->NR > 0) ? block_params->NR
+                                                 : lcntx->blksz.NR;
+
+        // It can be the case MC or NC is not a multiple of default MR or NR
+        // respectively, but since MR/NR can now be modified by DE, the onus
+        // is on DE or a follow-up validator to flag incorrect block sizes.
+        // At this point none of the blksz parameters should be zero.
+        // Adding a guard to ensure that is the case.
+        if ((lcntx->blksz.MC <= 0) || (lcntx->blksz.NC <= 0)
+            || (lcntx->blksz.KC <= 0) || (lcntx->blksz.MR <= 0)
+            || (lcntx->blksz.NR <= 0)) {
             return DLP_CLSC_INVALID_BLOCK_PARAMS;
         }
 
-        lcntx->blksz.MC = block_params->MC;
-        lcntx->blksz.NC = block_params->NC;
-        lcntx->blksz.KC = block_params->KC;
-        lcntx->blksz.MR = block_params->MR;
-        lcntx->blksz.NR = block_params->NR;
-
         dlp_clsc_err_t err = dlp_gemm_upd_pack_strides(
-            op, block_params->MR, block_params->NR, &lcntx->pack_s.packa_rs,
+            op, lcntx->blksz.MR, lcntx->blksz.NR, &lcntx->pack_s.packa_rs,
             &lcntx->pack_s.packa_cs, &lcntx->pack_s.packb_rs,
             &lcntx->pack_s.packb_cs);
         if (err != DLP_CLSC_SUCCESS) {
@@ -755,14 +738,19 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
     // Set SUP thresholds if applicable.
     if (metadata->sup_thresholds != NULL) {
         dlp_gemm_sup_threshold_t* sup_thres = metadata->sup_thresholds;
-        if ((sup_thres->MT < 0) || (sup_thres->NT < 0) || (sup_thres->KT < 0)) {
-            // Invalid SUP threshold parameters in metadata, return error.
-            return DLP_CLSC_INVALID_SUP_THRESHOLDS;
-        }
+        lcntx->sup_thres.MT = (sup_thres->MT >= 0) ? sup_thres->MT
+                                                   : lcntx->sup_thres.MT;
+        lcntx->sup_thres.NT = (sup_thres->NT >= 0) ? sup_thres->NT
+                                                   : lcntx->sup_thres.NT;
+        lcntx->sup_thres.KT = (sup_thres->KT >= 0) ? sup_thres->KT
+                                                   : lcntx->sup_thres.KT;
+    }
 
-        lcntx->sup_thres.MT = sup_thres->MT;
-        lcntx->sup_thres.NT = sup_thres->NT;
-        lcntx->sup_thres.KT = sup_thres->KT;
+    if (metadata->gemm_hints != NULL) {
+        // No validation for hints, just copy over the values.
+        dlp_gemm_hints_t* hints            = metadata->gemm_hints;
+        (lcntx->gemm_kernel_hints).m_hint  = hints->m_hint;
+        (lcntx->gemm_kernel_hints).nt_hint = hints->nt_hint;
     }
 
     return DLP_CLSC_SUCCESS;
