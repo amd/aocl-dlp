@@ -174,7 +174,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
 
     float* c_use = NULL;
 
-    dlp_gemm_post_op_attr post_ops_attr;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -198,7 +198,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s4s32o32)
     // NC-wide reorder panel handed to the s8 GEMV kernel (n == 1 needs none).
     int8_t* b_panel_widen = NULL;
 
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr;
+    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
 
     md_t group_size = grp_post_op_list->group_size;
 
@@ -544,8 +544,8 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, float, s8s4s32o32, const)
     bool is_last_k  = FALSE;
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr     post_ops_attr;
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr;
+    dlp_gemm_post_op_attr     post_ops_attr     = { 0 };
+    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;

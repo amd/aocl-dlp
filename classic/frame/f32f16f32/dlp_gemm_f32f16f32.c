@@ -74,16 +74,16 @@ DLP_GEMV(float, float16, float, f32f16f32of32)
 
     md_t packb_min_NR = get_packb_f32f16f32of32_min_NR();
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type       = DLP_F32;
-    post_ops_attr.rs_c_downscale    = rs_c;
-    post_ops_attr.cs_c_downscale    = cs_c;
-    post_ops_attr.is_first_k        = TRUE;
-    post_ops_attr.is_last_k         = TRUE;
-    post_ops_attr.b_sum_offset      = 0;
-    post_ops_attr.b_col_sum_vec     = NULL;
-    post_ops_attr.b_col_sum_vec_s16 = NULL;
-    post_ops_attr.buf_downscale     = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    post_ops_attr.c_stor_type           = DLP_F32;
+    post_ops_attr.rs_c_downscale        = rs_c;
+    post_ops_attr.cs_c_downscale        = cs_c;
+    post_ops_attr.is_first_k            = TRUE;
+    post_ops_attr.is_last_k             = TRUE;
+    post_ops_attr.b_sum_offset          = 0;
+    post_ops_attr.b_col_sum_vec         = NULL;
+    post_ops_attr.b_col_sum_vec_s16     = NULL;
+    post_ops_attr.buf_downscale         = NULL;
 
     dlp_task_id_t thread_jc;
     dlp_task_id_t thread_ic;
@@ -284,14 +284,14 @@ DLP_GEMM_5LOOP_UNIFIED(float, float16, float, float, f32f16f32of32,
     bool is_last_k  = FALSE;
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type       = DLP_F32;
-    post_ops_attr.rs_c_downscale    = rs_c;
-    post_ops_attr.cs_c_downscale    = cs_c;
-    post_ops_attr.b_sum_offset      = 0;
-    post_ops_attr.b_col_sum_vec     = NULL;
-    post_ops_attr.b_col_sum_vec_s16 = NULL;
-    post_ops_attr.buf_downscale     = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    post_ops_attr.c_stor_type           = DLP_F32;
+    post_ops_attr.rs_c_downscale        = rs_c;
+    post_ops_attr.cs_c_downscale        = cs_c;
+    post_ops_attr.b_sum_offset          = 0;
+    post_ops_attr.b_col_sum_vec         = NULL;
+    post_ops_attr.b_col_sum_vec_s16     = NULL;
+    post_ops_attr.buf_downscale         = NULL;
 
     dlp_task_id_t thread_jc;
     dlp_task_id_t thread_ic;
