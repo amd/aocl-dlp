@@ -245,8 +245,9 @@ class CrashIsolation
                 result.completed  = true;
                 result.returnCode = msg.returnCode;
             } else {
-                result.threw            = true;
-                result.exceptionMessage = msg.message;
+                msg.message[sizeof(msg.message) - 1] = '\0';
+                result.threw                         = true;
+                result.exceptionMessage              = msg.message;
             }
         } else {
             result.crashed = true;

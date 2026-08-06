@@ -102,15 +102,15 @@ DLP_GEMV(float16, float16, float16, f16f16f16of16)
        beta via vbroadcastss in F32 (just like the GEMM of32 rail). */
     const float beta_f32 = fp16_to_f32(beta);
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type       = c_downscale;
-    post_ops_attr.rs_c_downscale    = rs_c;
-    post_ops_attr.cs_c_downscale    = cs_c;
-    post_ops_attr.is_first_k        = TRUE;
-    post_ops_attr.is_last_k         = TRUE;
-    post_ops_attr.b_sum_offset      = 0;
-    post_ops_attr.b_col_sum_vec     = NULL;
-    post_ops_attr.b_col_sum_vec_s16 = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    post_ops_attr.c_stor_type           = c_downscale;
+    post_ops_attr.rs_c_downscale        = rs_c;
+    post_ops_attr.cs_c_downscale        = cs_c;
+    post_ops_attr.is_first_k            = TRUE;
+    post_ops_attr.is_last_k             = TRUE;
+    post_ops_attr.b_sum_offset          = 0;
+    post_ops_attr.b_col_sum_vec         = NULL;
+    post_ops_attr.b_col_sum_vec_s16     = NULL;
 
     post_ops_attr.buf_downscale = c;
 
@@ -398,13 +398,13 @@ DLP_GEMM_5LOOP_UNIFIED(float16, float16, float16, float16, f16f16f16of16,
     bool is_last_k  = FALSE;
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type       = c_downscale;
-    post_ops_attr.rs_c_downscale    = rs_c;
-    post_ops_attr.cs_c_downscale    = cs_c;
-    post_ops_attr.b_sum_offset      = 0;
-    post_ops_attr.b_col_sum_vec     = NULL;
-    post_ops_attr.b_col_sum_vec_s16 = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    post_ops_attr.c_stor_type           = c_downscale;
+    post_ops_attr.rs_c_downscale        = rs_c;
+    post_ops_attr.cs_c_downscale        = cs_c;
+    post_ops_attr.b_sum_offset          = 0;
+    post_ops_attr.b_col_sum_vec         = NULL;
+    post_ops_attr.b_col_sum_vec_s16     = NULL;
     // The of32 post-ops rail writes user F32 C in place through regCPtr
     // (the kernel signature's float16* C handle, re-cast to float* by the
     // JIT under c_downscale = DLP_F32). buf_downscale is unused on this

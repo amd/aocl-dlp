@@ -52,6 +52,7 @@
 
 #include "framework/allocator.hh"
 
+#include <cstdint>   // SIZE_MAX
 #include <cstring>   // std::memcpy
 #include <new>       // std::bad_alloc
 #include <stdexcept> // std::invalid_argument
@@ -131,17 +132,37 @@ namespace dlp { namespace testing { namespace framework {
                 "in guard mode");
         }
 
+        // Each addition below is checked for wraparound immediately before it
+        // runs. size_t overflow is silent and produces a *smaller* value, so a
+        // wrapped length would let mmap succeed with a tiny mapping and leave
+        // the returned pointer outside it; the checks cannot be deferred until
+        // after the arithmetic. Note none of them assume a bound on `page`,
+        // which sysconf supplies at runtime.
         size_t usable = (sizeBytes == 0) ? 1 : sizeBytes;
         if (alignment > 0) {
+            if (usable > SIZE_MAX - alignment) {
+                throw std::bad_alloc();
+            }
             usable = (usable + alignment - 1) & ~(alignment - 1);
         }
 
         // Reserve room for the inline metadata header that precedes the
         // returned pointer, then round the data region up to whole pages
         // and add one trailing guard page.
-        const size_t needed    = usable + kHeaderBytes;
+        if (usable > SIZE_MAX - kHeaderBytes) {
+            throw std::bad_alloc();
+        }
+        const size_t needed = usable + kHeaderBytes;
+
+        if (needed > SIZE_MAX - page) {
+            throw std::bad_alloc();
+        }
         const size_t dataPages = ((needed + page - 1) / page) * page;
-        const size_t total     = dataPages + page; // + guard page
+
+        if (dataPages > SIZE_MAX - page) {
+            throw std::bad_alloc();
+        }
+        const size_t total = dataPages + page; // + guard page
 
         void* base = mmap(nullptr, total, PROT_READ | PROT_WRITE,
                           MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);

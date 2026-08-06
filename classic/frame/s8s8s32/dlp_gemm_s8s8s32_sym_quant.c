@@ -176,7 +176,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 
     float* c_use = NULL;
 
-    dlp_gemm_post_op_attr post_ops_attr;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;
@@ -197,7 +197,7 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
 
     int8_t* pack_a_buffer_s8s8s32os32 = NULL;
 
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr;
+    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
 
     md_t group_size = grp_post_op_list->group_size;
 
@@ -505,8 +505,8 @@ DLP_GEMM_5LOOP_UNIFIED(
     // To decide whether to use original s8 C or temp buffer for beta scale.
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr     post_ops_attr;
-    dlp_gemm_grp_post_op_attr grp_post_ops_attr;
+    dlp_gemm_post_op_attr     post_ops_attr     = { 0 };
+    dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;

@@ -78,15 +78,15 @@ DLP_GEMV(int8_t, int8_t, int32_t, s8s8s32o32)
 
     int32_t* pack_b_column_sum = NULL;
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type       = c_downscale;
-    post_ops_attr.rs_c_downscale    = rs_c;
-    post_ops_attr.cs_c_downscale    = cs_c;
-    post_ops_attr.is_first_k        = TRUE;
-    post_ops_attr.is_last_k         = TRUE;
-    post_ops_attr.b_sum_offset      = 0;
-    post_ops_attr.b_col_sum_vec     = NULL;
-    post_ops_attr.b_col_sum_vec_s16 = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    post_ops_attr.c_stor_type           = c_downscale;
+    post_ops_attr.rs_c_downscale        = rs_c;
+    post_ops_attr.cs_c_downscale        = cs_c;
+    post_ops_attr.is_first_k            = TRUE;
+    post_ops_attr.is_last_k             = TRUE;
+    post_ops_attr.b_sum_offset          = 0;
+    post_ops_attr.b_col_sum_vec         = NULL;
+    post_ops_attr.b_col_sum_vec_s16     = NULL;
 
     if (c_downscale < DLP_S32 || c_downscale == DLP_F32)
         post_ops_attr.buf_downscale = c;
@@ -375,13 +375,13 @@ DLP_GEMM_5LOOP_UNIFIED(int8_t, int8_t, int32_t, int32_t, s8s8s32o32,
     // To decide whether to use original s8 C or temp buffer for beta scale.
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type       = c_downscale;
-    post_ops_attr.rs_c_downscale    = rs_c;
-    post_ops_attr.cs_c_downscale    = cs_c;
-    post_ops_attr.b_sum_offset      = 0;
-    post_ops_attr.b_col_sum_vec     = NULL;
-    post_ops_attr.b_col_sum_vec_s16 = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    post_ops_attr.c_stor_type           = c_downscale;
+    post_ops_attr.rs_c_downscale        = rs_c;
+    post_ops_attr.cs_c_downscale        = cs_c;
+    post_ops_attr.b_sum_offset          = 0;
+    post_ops_attr.b_col_sum_vec         = NULL;
+    post_ops_attr.b_col_sum_vec_s16     = NULL;
 
     if (c_downscale < DLP_S32 || c_downscale == DLP_F32) {
         post_ops_attr.buf_downscale = c;

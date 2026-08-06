@@ -50,9 +50,9 @@ DLP_GEMM_ELTWISE_OPS_IFACE(bfloat16, float, bf16of32)
     md_t NR = lcntx->blksz.NR;
     md_t MR = lcntx->blksz.MR;
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    post_ops_attr.c_stor_type   = c_downscale;
-    post_ops_attr.buf_downscale = NULL;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    post_ops_attr.c_stor_type           = c_downscale;
+    post_ops_attr.buf_downscale         = NULL;
 
     // Generate thrinfo objects for jc and ic loops from dlp_gemm_thrinfo_t.
     dlp_task_id_t thread_jc;

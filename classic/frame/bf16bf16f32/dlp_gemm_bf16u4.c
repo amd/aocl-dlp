@@ -114,8 +114,8 @@ DLP_GEMM_5LOOP_UNIFIED(bfloat16, uint8_t, float, float, bf16u4f32of32, const)
     // To decide whether to use original C or temp buffer for beta scale.
     bool is_first_k = FALSE;
 
-    dlp_gemm_post_op_attr post_ops_attr;
-    dlp_gemm_pre_op_attr  pre_ops_attr;
+    dlp_gemm_post_op_attr post_ops_attr = { 0 };
+    dlp_gemm_pre_op_attr  pre_ops_attr  = { 0 };
 
     post_ops_attr.c_stor_type       = c_downscale;
     post_ops_attr.rs_c_downscale    = rs_c;

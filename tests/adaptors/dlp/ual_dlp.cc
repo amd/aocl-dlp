@@ -124,8 +124,7 @@ UalDlp::reorder(const Matrix&          in,
                 MatrixType             accType,
                 const GroupScaleParam* group_scale)
 {
-    dlp_metadata_t meta;
-    std::memset(std::addressof(meta), 0, sizeof(dlp_metadata_t));
+    dlp_metadata_t meta{};
     meta.error_hndl.error_code = DLP_CLSC_SUCCESS;
     dlp_quant_op_t b_quant_op{};
 
