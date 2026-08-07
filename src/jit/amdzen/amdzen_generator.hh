@@ -38,7 +38,7 @@
 namespace amdzen::gen {
 
 // Single generator for both AVX512 and AVX2 micro-kernels.
-class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
+class jitAmdZenFP32 : public dlp::jit::gemmJitGenerator
 {
 
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
@@ -72,7 +72,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     int getProcessBlockSize() const;
 
     dlp::jit::jitGeneratorError deriveGEMMNumNRVariants(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
     void deriveGEMMNRAndMaskUse(int                     nr,
                                 utils::generatorParams& params,
@@ -139,10 +139,10 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     }
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
     dlp::jit::jitGeneratorError generateAllKernelsRD(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
   public:
     jitAmdZenFP32();
@@ -153,7 +153,7 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     jitAmdZenFP32& operator=(jitAmdZenFP32&&)      = delete;
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::gemmJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -175,13 +175,13 @@ class jitAmdZenFP32 : public dlp::jit::jitGeneratorBase
     dlp::kernels::kernelError executeKernelRD(
         dlp::kernels::kernelParams* _params);
 
-    std::unique_ptr<jitGeneratorBase> clone() override
+    std::unique_ptr<dlp::jit::gemmJitGenerator> clone() override
     {
         return std::make_unique<jitAmdZenFP32>();
     }
 };
 
-class jitAmdZenBF16 : public dlp::jit::jitGeneratorBase
+class jitAmdZenBF16 : public dlp::jit::gemmJitGenerator
 {
 
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
@@ -214,10 +214,10 @@ class jitAmdZenBF16 : public dlp::jit::jitGeneratorBase
     int getProcessBlockSize() const;
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::gemmJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -236,13 +236,13 @@ class jitAmdZenBF16 : public dlp::jit::jitGeneratorBase
     dlp::kernels::kernelError executeKernel(
         dlp::kernels::kernelParams* _params) override;
 
-    std::unique_ptr<jitGeneratorBase> clone() override
+    std::unique_ptr<dlp::jit::gemmJitGenerator> clone() override
     {
         return std::make_unique<jitAmdZenBF16>();
     }
 };
 
-class jitAmdZenU8S8 : public dlp::jit::jitGeneratorBase
+class jitAmdZenU8S8 : public dlp::jit::gemmJitGenerator
 {
 
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
@@ -286,10 +286,10 @@ class jitAmdZenU8S8 : public dlp::jit::jitGeneratorBase
     bool isBPackingRequired() const { return requiresBPacking; }
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::gemmJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -308,13 +308,13 @@ class jitAmdZenU8S8 : public dlp::jit::jitGeneratorBase
     dlp::kernels::kernelError executeKernel(
         dlp::kernels::kernelParams* _params) override;
 
-    std::unique_ptr<jitGeneratorBase> clone() override
+    std::unique_ptr<dlp::jit::gemmJitGenerator> clone() override
     {
         return std::make_unique<jitAmdZenU8S8>();
     }
 };
 
-class jitAmdZenS8 : public dlp::jit::jitGeneratorBase
+class jitAmdZenS8 : public dlp::jit::gemmJitGenerator
 {
 
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
@@ -348,10 +348,10 @@ class jitAmdZenS8 : public dlp::jit::jitGeneratorBase
     int getProcessBlockSize() const;
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::gemmJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -370,7 +370,7 @@ class jitAmdZenS8 : public dlp::jit::jitGeneratorBase
     dlp::kernels::kernelError executeKernel(
         dlp::kernels::kernelParams* _params) override;
 
-    std::unique_ptr<jitGeneratorBase> clone() override
+    std::unique_ptr<dlp::jit::gemmJitGenerator> clone() override
     {
         return std::make_unique<jitAmdZenS8>();
     }
@@ -383,7 +383,7 @@ class jitAmdZenS8 : public dlp::jit::jitGeneratorBase
  * native AVX-512-FP16 instructions (vfmadd231ph, vmulph, etc.).
  * Supports MR=6, NR=128 blocking with 32 FP16 elements per ZMM register.
  */
-class jitAmdZenFP16 : public dlp::jit::jitGeneratorBase
+class jitAmdZenFP16 : public dlp::jit::gemmJitGenerator
 {
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
     std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
@@ -418,10 +418,10 @@ class jitAmdZenFP16 : public dlp::jit::jitGeneratorBase
     int getProcessBlockSize() const;
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::gemmJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -440,7 +440,7 @@ class jitAmdZenFP16 : public dlp::jit::jitGeneratorBase
     dlp::kernels::kernelError executeKernel(
         dlp::kernels::kernelParams* _params) override;
 
-    std::unique_ptr<jitGeneratorBase> clone() override
+    std::unique_ptr<dlp::jit::gemmJitGenerator> clone() override
     {
         return std::make_unique<jitAmdZenFP16>();
     }
@@ -453,7 +453,7 @@ class jitAmdZenFP16 : public dlp::jit::jitGeneratorBase
  * A, C, alpha, beta are all F32. FMA uses vfmadd231ps.
  * Supports MR=6, NR=64 blocking with 16 F32 elements per ZMM register.
  */
-class jitAmdZenF32FP16 : public dlp::jit::jitGeneratorBase
+class jitAmdZenF32FP16 : public dlp::jit::gemmJitGenerator
 {
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
     std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
@@ -487,10 +487,10 @@ class jitAmdZenF32FP16 : public dlp::jit::jitGeneratorBase
     int getProcessBlockSize() const;
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::gemmJitGeneratorContext& jI);
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::gemmJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -509,7 +509,7 @@ class jitAmdZenF32FP16 : public dlp::jit::jitGeneratorBase
     dlp::kernels::kernelError executeKernel(
         dlp::kernels::kernelParams* _params) override;
 
-    std::unique_ptr<jitGeneratorBase> clone() override
+    std::unique_ptr<dlp::jit::gemmJitGenerator> clone() override
     {
         return std::make_unique<jitAmdZenF32FP16>();
     }

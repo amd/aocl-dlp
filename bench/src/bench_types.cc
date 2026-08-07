@@ -179,7 +179,7 @@ generateBenchmarkName(const GemmBenchConfig& config)
     name << ",mtagB:" << mtagB;
 
     if (config.group_scale_param) {
-        name << ",group_scale";
+        name << ",group_scale:" << config.group_scale_param->getGroupSize();
     }
 
     // setAQuant / setWOQ (not in post_op_params; see

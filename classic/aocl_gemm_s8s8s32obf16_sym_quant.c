@@ -178,10 +178,9 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
     // fall back to UNPACKED and proceed with GEMM.
     if ((is_row_major == TRUE) && (mtag_a == PACK)) {
         mtag_a = UNPACKED;
-    } else if (is_column_major == TRUE && mtag_b == PACK) {
+    } else if ((is_column_major == TRUE) && (mtag_b == PACK)) {
         mtag_b = UNPACKED;
     }
-
     // From 5-loop function point of view
     // B matrix needs to be packed in a certain format in order to be loaded
     // and used in bf16 instrution. As such the mtag_b always needs to be either
@@ -364,9 +363,21 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
     /* Capability gate: sym_quant has no JIT alternative; post-ops with
      * op_code > DLP_CLASSIC_MAX_POST_OP_CODE have no entry in the
      * classic post_ops_labels[] dispatch table. Reject cleanly. */
-    if (dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true) {
+    if ((dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true)
+        && ((m == 1) || (n == 1))) {
         dlp_print_msg(" Requested post-op is not supported in the "
                       "classic kernel.",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+
+    // GLU is supported by BF16 with AVX512-BF16 ISA only and since it resides
+    // in its own metadata slot rather than in seq_vector, so seq_length does
+    // not capture it. Hence, adding a separate gate for it.
+    if (metadata->glu != NULL) {
+        dlp_print_msg(" GLU post-op is not supported for symmetric quantized "
+                      "GEMM. Exiting..",
                       __FILE__, __LINE__);
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
         goto err_hndl;
@@ -377,34 +388,119 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
     dlp_rntm_t rntm_g;
     dlp_rntm_init_from_global(&rntm_g);
 
-    dlp_gemm_cntx_t lcntx_g = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(S8S8S32OS32));
+    err = dlp_gemm_upd_cntx_with_metadata(S8S8S32OS32, &lcntx_l, metadata);
+    if (err != DLP_CLSC_SUCCESS) {
+        dlp_print_msg(" Failed to update context with metadata.", __FILE__,
+                      __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
+    lcntx_l.dlp_quant_kernel_hndl.kernel_base = NULL;
+
+    dlp_group_op group_ops;
+    err = dlp_gemm_translate_to_group_op_list(metadata, &group_ops, m, n, k);
+    if (err != DLP_CLSC_SUCCESS) {
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
+    // dlp_gemm_translate_to_group_op_list points straight at the caller's
+    // metadata, which still describes the ORIGINAL A and B. Column major runs
+    // the kernel on swapped operands (see the (n, m, ..., b, ..., a) call
+    // below), and grp_post_op_list was already swapped above to match. The
+    // decision engine derives the kernel's per-group scale layout from these
+    // dims, so it has to see the same swapped roles or it will configure the
+    // kernel for the wrong operand. Copy rather than mutate: the metadata
+    // belongs to the caller.
+    dlp_quant_op_t kernel_a_quant_op;
+    dlp_quant_op_t kernel_b_quant_op;
+    dlp_qparam_t   kernel_a_scale_factors;
+    dlp_qparam_t   kernel_b_scale_factors;
+
+    if (is_column_major == TRUE) {
+        kernel_a_quant_op      = *(metadata->b_quant_op);
+        kernel_b_quant_op      = *(metadata->a_quant_op);
+        kernel_a_scale_factors = *(metadata->b_quant_op->dequant_scale_factors);
+        kernel_b_scale_factors = *(metadata->a_quant_op->dequant_scale_factors);
+
+        // Re-label the granularities exactly as the grp_post_op_list swap
+        // above does: one scale per row of the original A is one scale per
+        // column of the kernel's B, and vice versa.
+        kernel_a_scale_factors.outer_dim =
+            (metadata->b_quant_op->dequant_scale_factors->outer_dim
+             == DLP_PARAM_DIM_PER_CHANNEL)
+                ? DLP_PARAM_DIM_PER_TOKEN
+                : DLP_PARAM_DIM_PER_GROUP;
+        kernel_b_scale_factors.outer_dim =
+            (metadata->a_quant_op->dequant_scale_factors->outer_dim
+             == DLP_PARAM_DIM_PER_TOKEN)
+                ? DLP_PARAM_DIM_PER_CHANNEL
+                : DLP_PARAM_DIM_PER_GROUP;
+
+        kernel_a_quant_op.dequant_scale_factors = &kernel_a_scale_factors;
+        kernel_b_quant_op.dequant_scale_factors = &kernel_b_scale_factors;
+
+        group_ops.a_post_quant_op = &kernel_a_quant_op;
+        group_ops.b_post_quant_op = &kernel_b_quant_op;
+    }
+
+    if (is_column_major == TRUE) {
+        dlp_init_and_get_gemm_quant_kernel_hndl(
+            DLP_KERNEL_S8S8S32OBF16, order, mtag_b, mtag_a, n, m, k, rs_b, cs_b,
+            rs_a, cs_a, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+            &group_ops, &lcntx_l, DLP_BF16);
+    } else {
+        dlp_init_and_get_gemm_quant_kernel_hndl(
+            DLP_KERNEL_S8S8S32OBF16, order, mtag_a, mtag_b, m, n, k, rs_a, cs_a,
+            rs_b, cs_b, rs_c, cs_c, (void*)&alpha, (void*)&beta, post_op_list,
+            &group_ops, &lcntx_l, DLP_BF16);
+    }
+
+    // The GEMM path is required to run on the JIT kernel. A NULL handle would
+    // otherwise let the 5-loop fall back to the classic micro-kernel per tile,
+    // which is not the intended coverage, so refuse the call instead.
+    if (lcntx_l.dlp_quant_kernel_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        goto err_hndl;
+    }
 
     dlp_gemm_ops_bundle_t ops =
         DLP_GEMM_OPS_BUNDLE_INIT_GRP(grp_post_op_list, post_op_list);
 
 #ifdef DLP_ENABLE_OPENMP
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
-    } else {
-        dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
-    }
-#else
-    // Swapping inputs to induce row major computation for column major inputs.
-    if (is_column_major == TRUE) {
-        dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
-            n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
-    } else {
-        dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
-            m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b, (float*)c,
-            rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_g, &ops, DLP_BF16);
-    }
+    if (dlp_is_single_thread(&rntm_g) == FALSE) {
+        // Swapping inputs to induce row major computation for column major
+        // inputs.
+        if (is_column_major == TRUE) {
+            dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
+                n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a,
+                (float*)c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops,
+                DLP_BF16);
+        } else {
+            dlp_gemm_s8s8s32o32_sym_quant_openmp_thread_decorator(
+                m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b,
+                (float*)c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops,
+                DLP_BF16);
+        }
+    } else
 #endif
+    {
+        // Swapping inputs to induce row major computation for column major
+        // inputs.
+        if (is_column_major == TRUE) {
+            dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
+                n, m, k, b, rs_b, cs_b, mtag_b, a, rs_a, cs_a, mtag_a,
+                (float*)c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops,
+                DLP_BF16);
+        } else {
+            dlp_gemm_s8s8s32o32_sym_quant_thread_decorator(
+                m, n, k, a, rs_a, cs_a, mtag_a, b, rs_b, cs_b, mtag_b,
+                (float*)c, rs_c, cs_c, alpha, beta, &rntm_g, &lcntx_l, &ops,
+                DLP_BF16);
+        }
+    }
 
 err_hndl:;
     // Free temporarily allocated buffers used for transpose in case of

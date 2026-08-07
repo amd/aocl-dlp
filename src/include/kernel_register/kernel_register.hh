@@ -113,6 +113,25 @@ struct packKeyComparator
     }
 };
 
+struct gemmQuantHashKeyGetter
+{
+    std::tuple<uint64_t, uint64_t> operator()(void* kI) const
+    {
+        auto t = static_cast<quantKernelInfo*>(kI);
+        return std::make_tuple(t->base.mr, t->base.nr);
+    }
+};
+
+struct gemmQuantKeyComparator
+{
+    bool operator()(void* kI1, void* kI2) const
+    {
+        auto tKI1 = static_cast<quantKernelInfo*>(kI1);
+        auto tKI2 = static_cast<quantKernelInfo*>(kI2);
+        return *tKI1 == *tKI2;
+    }
+};
+
 // This is a singleton class that collects the replaced kernel instances.
 // It is used to avoid double deletion of the same kernel instance.
 // It is also used to avoid the kernel instance being deleted before the
@@ -151,47 +170,32 @@ class storedKernelWatcher
     }
 };
 
+// Empty kernel registered when JIT generation fails for a given key, so the
+// dispatch table can tell "generation was attempted and failed" (an invalid
+// emptyKernel) from "never attempted" (nullptr).
+// Parameterised on the kernelInfo key type.
+template<typename KInfoT>
 class emptyKernel : public kernels::kernelBase
 {
-    kernel_frame::kernelInfo                  kInfo;
-    kernel_frame::packKernelInfo              packKInfo;
-    bool                                      hasPackKInfo = false;
+    KInfoT                                    kInfo;
     std::vector<cpu_utils::isaFeature>        isaVec;
     std::vector<kernel_frame::kernelDatatype> dTypeVec;
 
   public:
-    emptyKernel(const kernel_frame::kernelInfo& kI)
+    explicit emptyKernel(const KInfoT& kI)
         : kInfo(kI)
-    {
-        isValid = false;
-    }
-
-    emptyKernel(const kernel_frame::packKernelInfo& pKI)
-        : packKInfo(pKI)
-        , hasPackKInfo(true)
     {
         isValid = false;
     }
 
     emptyKernel(const emptyKernel&)            = delete;
     emptyKernel& operator=(const emptyKernel&) = delete;
+    emptyKernel(emptyKernel&&)                 = delete;
+    emptyKernel& operator=(emptyKernel&&)      = delete;
 
-    emptyKernel(emptyKernel&& other)
-    {
-        this->isValid      = false;
-        this->kInfo        = std::move(other.kInfo);
-        this->packKInfo    = std::move(other.packKInfo);
-        this->hasPackKInfo = other.hasPackKInfo;
-    }
-
-    emptyKernel& operator=(emptyKernel&& other)
-    {
-        this->isValid      = false;
-        this->kInfo        = std::move(other.kInfo);
-        this->packKInfo    = std::move(other.packKInfo);
-        this->hasPackKInfo = other.hasPackKInfo;
-        return *this;
-    }
+    // Registry key. Callers hold the concrete instantiation, so this needs no
+    // virtual dispatch and cannot return the wrong key type.
+    KInfoT* getKernelInfoKey() { return std::addressof(kInfo); }
 
     virtual std::vector<cpu_utils::isaFeature>& getIsaFeaturesForKernel()
         override final
@@ -201,12 +205,34 @@ class emptyKernel : public kernels::kernelBase
 
     virtual kernel_frame::kernelInfo* getKernelInfo() override final
     {
-        return std::addressof(kInfo);
+        if constexpr (std::is_same_v<KInfoT, kernel_frame::kernelInfo>) {
+            return std::addressof(kInfo);
+        } else if constexpr (std::is_same_v<KInfoT,
+                                            kernel_frame::quantKernelInfo>) {
+            // quantKernelInfo composes a kernelInfo, so the base is returned.
+            return std::addressof(kInfo.base);
+        } else {
+            return nullptr;
+        }
     }
 
     virtual kernel_frame::packKernelInfo* getPackKernelInfo() override final
     {
-        return hasPackKInfo ? std::addressof(packKInfo) : nullptr;
+        if constexpr (std::is_same_v<KInfoT, kernel_frame::packKernelInfo>) {
+            return std::addressof(kInfo);
+        } else {
+            return nullptr;
+        }
+    }
+
+    virtual kernel_frame::quantKernelInfo* getGemmQuantKernelInfo()
+        override final
+    {
+        if constexpr (std::is_same_v<KInfoT, kernel_frame::quantKernelInfo>) {
+            return std::addressof(kInfo);
+        } else {
+            return nullptr;
+        }
     }
 
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes()
@@ -221,6 +247,10 @@ class emptyKernel : public kernels::kernelBase
         return kernels::kernelError::error;
     }
 };
+
+using gemmEmptyKernel      = emptyKernel<kernel_frame::kernelInfo>;
+using packBEmptyKernel     = emptyKernel<kernel_frame::packKernelInfo>;
+using gemmQuantEmptyKernel = emptyKernel<kernel_frame::quantKernelInfo>;
 
 using kernelFunctionPtr =
     std::function<kernels::kernelError(kernels::kernelParams*)>;
@@ -345,6 +375,8 @@ class kernelRegister
         KEY_TYPE* keyPtr = nullptr;
         if constexpr (std::is_same_v<KEY_TYPE, packKernelInfo>) {
             keyPtr = kB->getPackKernelInfo();
+        } else if constexpr (std::is_same_v<KEY_TYPE, quantKernelInfo>) {
+            keyPtr = kB->getGemmQuantKernelInfo();
         } else {
             keyPtr = kB->getKernelInfo();
         }
@@ -417,6 +449,8 @@ class kernelRegister
         KEY_TYPE* keyPtr = nullptr;
         if constexpr (std::is_same_v<KEY_TYPE, packKernelInfo>) {
             keyPtr = kB->getPackKernelInfo();
+        } else if constexpr (std::is_same_v<KEY_TYPE, quantKernelInfo>) {
+            keyPtr = kB->getGemmQuantKernelInfo();
         } else {
             keyPtr = kB->getKernelInfo();
         }
@@ -601,7 +635,7 @@ class kernelRegister
      */
     void registerEmptyGemmKernel(const kernelInfo& kI, kernelDatatype kDtype)
     {
-        auto eK = new emptyKernel(kI);
+        auto eK = new gemmEmptyKernel(kI);
         auto routineIdx =
             utils::getUnderlyingValueOfEnum(kernelRoutineType::gemm);
         auto idx = utils::getUnderlyingValueOfEnum(kDtype);
@@ -609,7 +643,7 @@ class kernelRegister
         auto retPtr = vecKDTs[routineIdx][idx]
                           .template insert<gemmHashKeyGetter, gemmKeyComparator,
                                            kernelInfo, storedKernelWatcher>(
-                              eK->getKernelInfo(), eK);
+                              eK->getKernelInfoKey(), eK);
 
         if (!retPtr) {
             // Need to cleanup the pointer if insertion failed since there
@@ -642,7 +676,7 @@ class kernelRegister
     void registerEmptyPackBKernel(const packKernelInfo& pKI,
                                   kernelDatatype        kDtype)
     {
-        auto eK = new emptyKernel(pKI);
+        auto eK = new packBEmptyKernel(pKI);
         auto routineIdx =
             utils::getUnderlyingValueOfEnum(kernelRoutineType::pack_b);
         auto idx = utils::getUnderlyingValueOfEnum(kDtype);
@@ -650,7 +684,55 @@ class kernelRegister
         auto retPtr = vecKDTs[routineIdx][idx]
                           .template insert<packHashKeyGetter, packKeyComparator,
                                            packKernelInfo, storedKernelWatcher>(
-                              eK->getPackKernelInfo(), eK);
+                              eK->getKernelInfoKey(), eK);
+
+        if (!retPtr) {
+            delete eK;
+        }
+    }
+
+    // Quant GEMM kernel registration and query (gemm_quant routine)
+    // Uses quantKernelInfo as the key type. The generic
+    // registerKernel/getKernel templates handle this via the if-constexpr
+    // KEY_TYPE branch (calls getGemmQuantKernelInfo()).
+
+    [[nodiscard]] kernelFrameError registerGemmQuantKernel(
+        std::unique_ptr<kernels::kernelBase> _kB, std::string&& kernelFamily)
+    {
+        return registerKernel<gemmQuantHashKeyGetter, gemmQuantKeyComparator,
+                              quantKernelInfo, storedKernelWatcher>(
+            std::move(_kB), std::move(kernelFamily),
+            kernelRoutineType::gemm_quant);
+    }
+
+    [[nodiscard]] kernelBaseRef getGemmQuantKernel(quantKernelInfo* qKI,
+                                                   kernelDatatype   kDtype)
+    {
+        return getKernel<gemmQuantHashKeyGetter, gemmQuantKeyComparator,
+                         quantKernelInfo>(qKI, kernelRoutineType::gemm_quant,
+                                          kDtype);
+    }
+
+    [[nodiscard]] kernelBaseRef getGemmQuantKernelFallback(
+        quantKernelInfo* qKI, kernelDatatype kDtype)
+    {
+        return getKernelFallback<gemmQuantKeyComparator, quantKernelInfo>(
+            qKI, kernelRoutineType::gemm_quant, kDtype);
+    }
+
+    void registerEmptyGemmQuantKernel(const quantKernelInfo& qKI,
+                                      kernelDatatype         kDtype)
+    {
+        auto eK = new gemmQuantEmptyKernel(qKI);
+        auto routineIdx =
+            utils::getUnderlyingValueOfEnum(kernelRoutineType::gemm_quant);
+        auto idx = utils::getUnderlyingValueOfEnum(kDtype);
+
+        auto retPtr =
+            vecKDTs[routineIdx][idx]
+                .template insert<gemmQuantHashKeyGetter, gemmQuantKeyComparator,
+                                 quantKernelInfo, storedKernelWatcher>(
+                    eK->getKernelInfoKey(), eK);
 
         if (!retPtr) {
             delete eK;

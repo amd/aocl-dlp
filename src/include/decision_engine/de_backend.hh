@@ -63,6 +63,8 @@ static const kernel_frame::kernelInfo INVALID_KERNEL_INFO{
     false
 };
 
+static const kernel_frame::quantKernelInfo INVALID_GEMM_QUANT_KERNEL_INFO{};
+
 class iDEBackend
 {
   public:
@@ -122,6 +124,35 @@ class iDEBackend
     {
         return kernel_frame::INVALID_PACK_KERNEL_INFO;
     }
+};
+
+class iQuantDEBackend
+{
+  public:
+    virtual ~iQuantDEBackend() = default;
+
+    virtual dlp::kernel_frame::quantKernelInfo
+    getGemmQuantKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        dlp_group_op*                     group_ops,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) = 0;
 };
 
 class gemmF32DEBackend : public iDEBackend
@@ -1131,6 +1162,83 @@ class gemmS8DEBackend : public iDEBackend
             mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata);
+    }
+};
+
+class gemmQuantS8DEBackend : public iQuantDEBackend
+{
+    bool                                isAvx512;
+    bool                                isAvx2;
+    bool                                isAvx512Bf16;
+    bool                                isAvx512Vnni;
+    kernel_frame::kernelInstrPreference eKernelInstPref;
+    bool                                canGenerateKernelInfo;
+
+  public:
+    gemmQuantS8DEBackend();
+    ~gemmQuantS8DEBackend()                                      = default;
+    gemmQuantS8DEBackend(const gemmQuantS8DEBackend&)            = delete;
+    gemmQuantS8DEBackend(gemmQuantS8DEBackend&&)                 = delete;
+    gemmQuantS8DEBackend& operator=(const gemmQuantS8DEBackend&) = delete;
+    gemmQuantS8DEBackend& operator=(gemmQuantS8DEBackend&&)      = delete;
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::quantKernelInfo getGemmQuantKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        [[maybe_unused]] md_t             m,
+        [[maybe_unused]] md_t             n,
+        md_t                              k,
+        [[maybe_unused]] md_t             rs_a,
+        [[maybe_unused]] md_t             cs_a,
+        [[maybe_unused]] md_t             rs_b,
+        [[maybe_unused]] md_t             cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        dlp_group_op*                     group_ops,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) override final
+    {
+        if (!canGenerateKernelInfo || group_ops == nullptr) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
+                                                         kc_hint);
+
+        md_t           mr              = mr_hint;
+        md_t           nr              = nr_hint;
+        constexpr md_t kUnroll2MinK    = 256;
+        md_t           k_unroll        = (k >= kUnroll2MinK) ? 2 : 1;
+        md_t           kc              = kc_hint;
+        md_t           prefetch_c_dist = 0;
+        bool           anyKOpsOrder    = false;
+
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else {
+                // Invalid ISA, disable JIT kernel generation.
+                return INVALID_GEMM_QUANT_KERNEL_INFO;
+            }
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
+            mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
+            betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, group_ops);
     }
 };
 

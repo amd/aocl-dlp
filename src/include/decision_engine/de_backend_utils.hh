@@ -234,6 +234,126 @@ class gemmDEBackendUtils
             return kI;
         }
     }
+
+    // Translate the C API's granularity enum into the kernel-frame one. The
+    // two happen to share numeric values today, but a cast would silently
+    // produce an out-of-range ParamDim the moment either enum gains a member,
+    // so map every case explicitly and fall back to Invalid, which code-gen
+    // already rejects with badKernelInfo.
+    DLP_ALWAYS_INLINE
+    static kernel_frame::ParamDim mapParamDim(DLP_PARAM_DIM_TYPE dim)
+    {
+        switch (dim) {
+            case DLP_PARAM_DIM_PER_TENSOR:
+                return kernel_frame::ParamDim::Scalar;
+            case DLP_PARAM_DIM_PER_CHANNEL:
+                return kernel_frame::ParamDim::PerN;
+            case DLP_PARAM_DIM_PER_TOKEN:
+                return kernel_frame::ParamDim::PerM;
+            case DLP_PARAM_DIM_PER_GROUP:
+                return kernel_frame::ParamDim::PerGroup;
+            case DLP_PARAM_DIM_INVALID:
+            default:
+                return kernel_frame::ParamDim::Invalid;
+        }
+    }
+
+    // Whether a parameter array is tiled along K, mirroring the a_grp_mul /
+    // b_grp_mul derivation in dlp_gemm_s8s8s32_sym_quant.c exactly: A collapses
+    // the K axis only when PER_TOKEN, B only when PER_CHANNEL, and every other
+    // granularity (including PER_TENSOR) is stored fully tiled. Deriving this
+    // from the array length instead would misclassify a PER_TOKEN A scale,
+    // whose length is M rather than 1.
+    DLP_ALWAYS_INLINE
+    static bool isTiledAlongK(DLP_PARAM_DIM_TYPE dim, bool isBOperand)
+    {
+        const DLP_PARAM_DIM_TYPE collapsing =
+            isBOperand ? DLP_PARAM_DIM_PER_CHANNEL : DLP_PARAM_DIM_PER_TOKEN;
+        return dim != collapsing;
+    }
+
+    DLP_ALWAYS_INLINE
+    static kernel_frame::quantKernelInfo checkPostOpsAndCreateQuantKernelInfo(
+        md_t                                mr,
+        md_t                                nr,
+        md_t                                term_fringe_nr,
+        md_t                                k_unroll,
+        md_t                                kc,
+        md_t                                prefetch_c_dist,
+        kernel_frame::scalingType           alphaScalingType,
+        kernel_frame::scalingType           betaScalingType,
+        AOCL_DLP_MEMORY_TAG                 mtag_a,
+        AOCL_DLP_MEMORY_TAG                 mtag_b,
+        bool                                allLtFringeKernels,
+        bool                                invokeRD,
+        bool                                anyKOpsOrder,
+        kernel_frame::kernelInstrPreference kInstPref,
+        md_t                                c_downscale,
+        dlp::kernel_frame::kernelDatatype   k_dtype,
+        [[maybe_unused]] md_t               rs_c,
+        [[maybe_unused]] md_t               cs_c,
+        dlp_gemm_post_op*                   metadata,
+        dlp_group_op*                       group_ops,
+        bool                                skinnyN      = false,
+        bool                                aliasMrSplit = false)
+    {
+        kernel_frame::quantKernelInfo qKI;
+
+        // Reuse the kernelInfo creation to fill the base kernelInfo fields.
+        qKI.base = gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
+            mr, nr, term_fringe_nr, k_unroll, kc, prefetch_c_dist,
+            alphaScalingType, betaScalingType, mtag_a, mtag_b,
+            allLtFringeKernels, invokeRD, anyKOpsOrder, kInstPref, c_downscale,
+            k_dtype, rs_c, cs_c, metadata, skinnyN, aliasMrSplit);
+
+        // Handle group ops.
+        kernel_frame::opQuantInfo* aQuant = &qKI.aQuant;
+        dlp_quant_op_t*            a_pqo  = group_ops->a_post_quant_op;
+        aQuant->src_type = (kernel_frame::DataType)a_pqo->src_type;
+        aQuant->dst_type = (kernel_frame::DataType)a_pqo->dst_type;
+        // Hardcoded to dequantInKernel for group quantized kernels.
+        aQuant->mode = kernel_frame::opQuantMode::dequantInKernel;
+        aQuant->scale.storeDt =
+            (kernel_frame::DataType)a_pqo->dequant_scale_factors->stor_type;
+        aQuant->scale.outerDim =
+            mapParamDim(a_pqo->dequant_scale_factors->outer_dim);
+        aQuant->scale.perGroupK =
+            isTiledAlongK(a_pqo->dequant_scale_factors->outer_dim, false);
+        // Leave zeroPoint at its default(null) for symmetric quantization
+        if (a_pqo->zero_point != nullptr) {
+            aQuant->zeroPoint.storeDt =
+                (kernel_frame::DataType)a_pqo->zero_point->stor_type;
+            aQuant->zeroPoint.outerDim =
+                mapParamDim(a_pqo->zero_point->outer_dim);
+            aQuant->zeroPoint.perGroupK =
+                isTiledAlongK(a_pqo->zero_point->outer_dim, false);
+        }
+
+        kernel_frame::opQuantInfo* bQuant = &qKI.bQuant;
+        dlp_quant_op_t*            b_pqo  = group_ops->b_post_quant_op;
+        bQuant->src_type = (kernel_frame::DataType)b_pqo->src_type;
+        bQuant->dst_type = (kernel_frame::DataType)b_pqo->dst_type;
+        // Hardcoded to dequantInKernel for group quantized kernels.
+        bQuant->mode = kernel_frame::opQuantMode::dequantInKernel;
+
+        bQuant->scale.storeDt =
+            (kernel_frame::DataType)b_pqo->dequant_scale_factors->stor_type;
+        bQuant->scale.outerDim =
+            mapParamDim(b_pqo->dequant_scale_factors->outer_dim);
+        bQuant->scale.perGroupK =
+            isTiledAlongK(b_pqo->dequant_scale_factors->outer_dim, true);
+        // Leave zeroPoint at its default(null) for symmetric quantization
+        if (b_pqo->zero_point != nullptr) {
+            bQuant->zeroPoint.storeDt =
+                (kernel_frame::DataType)b_pqo->zero_point->stor_type;
+            bQuant->zeroPoint.outerDim =
+                mapParamDim(b_pqo->zero_point->outer_dim);
+            bQuant->zeroPoint.perGroupK =
+                isTiledAlongK(b_pqo->zero_point->outer_dim, true);
+        }
+
+        return qKI;
+    }
 };
 
 } // namespace dlp::de

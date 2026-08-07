@@ -84,26 +84,22 @@ jitAmdZenPackBFP32::setGeneratorKernelMetaInfo(
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenPackBFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenPackBFP32::generateAllKernels(
+    const dlp::jit::packBJitGeneratorContext& jI)
 {
-    if (jI.packKI == nullptr) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
-    setGeneratorKernelMetaInfo(jI.packKI->kInstPref);
+    setGeneratorKernelMetaInfo(jI.kI.kInstPref);
 
     if (kType == utils::kernelInstrType::none) {
         return dlp::jit::jitGeneratorError::notSupported;
     }
 
-    NR          = jI.packKI->panel_dim;
-    isColMajor_ = jI.packKI->isColMajor;
+    NR          = jI.kI.panel_dim;
+    isColMajor_ = jI.kI.isColMajor;
 
     constexpr int numKernels = 2;
     kernelCodeBlocks.resize(numKernels, nullptr);
 
-    utils::packBGeneratorParams genParams(0, jI.packKI->k_factor, kType, false,
-                                          0);
+    utils::packBGeneratorParams genParams(0, jI.kI.k_factor, kType, false, 0);
 
     for (int ki = 0; ki < numKernels; ++ki) {
         bool useMask     = (ki == 1);
@@ -340,7 +336,7 @@ jitAmdZenPackBFP32::executeKernel(dlp::kernels::kernelParams* _params)
     return dlp::kernels::kernelError::success;
 }
 
-std::unique_ptr<dlp::jit::jitGeneratorBase>
+std::unique_ptr<dlp::jit::packBJitGenerator>
 jitAmdZenPackBFP32::clone()
 {
     return std::make_unique<jitAmdZenPackBFP32>();
@@ -396,20 +392,17 @@ jitAmdZenPackBBF16::setGeneratorKernelMetaInfo(
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenPackBBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenPackBBF16::generateAllKernels(
+    const dlp::jit::packBJitGeneratorContext& jI)
 {
-    if (jI.packKI == nullptr) {
-        return dlp::jit::jitGeneratorError::badKernelInfo;
-    }
-
-    setGeneratorKernelMetaInfo(jI.packKI->kInstPref);
+    setGeneratorKernelMetaInfo(jI.kI.kInstPref);
 
     if (kType == utils::kernelInstrType::none) {
         return dlp::jit::jitGeneratorError::notSupported;
     }
 
-    NR          = jI.packKI->panel_dim;
-    isColMajor_ = jI.packKI->isColMajor;
+    NR          = jI.kI.panel_dim;
+    isColMajor_ = jI.kI.isColMajor;
 
     if (kType != utils::kernelInstrType::avx512_zmm_32_reg) {
         return dlp::jit::jitGeneratorError::notSupported;
@@ -442,7 +435,7 @@ jitAmdZenPackBBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
     const int numKernels = numFull + 1;
     kernelCodeBlocks.resize(numKernels, nullptr);
 
-    utils::packBGeneratorParams genParams(NR, jI.packKI->k_factor, kType,
+    utils::packBGeneratorParams genParams(NR, jI.kI.k_factor, kType,
                                           /*useMask=*/false, /*numMaskRegs=*/0);
 
     for (int ki = 0; ki < numKernels; ++ki) {
@@ -600,7 +593,7 @@ jitAmdZenPackBBF16::executeKernel(dlp::kernels::kernelParams* _params)
     return dlp::kernels::kernelError::success;
 }
 
-std::unique_ptr<dlp::jit::jitGeneratorBase>
+std::unique_ptr<dlp::jit::packBJitGenerator>
 jitAmdZenPackBBF16::clone()
 {
     return std::make_unique<jitAmdZenPackBBF16>();

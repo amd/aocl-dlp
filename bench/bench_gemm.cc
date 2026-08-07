@@ -218,9 +218,11 @@ class OptimizedGemmBenchmark : public ConcreteUAL
             benchmark::ClobberMemory();
         }
 
-        // Calculate and report metrics
+        md_t group_size = config_.group_scale_param
+                              ? config_.group_scale_param->getGroupSize()
+                              : 0;
         BenchmarkMetrics::calculateAndReport(state, m_, n_, k_, a_type_,
-                                             b_type_, c_type_);
+                                             b_type_, c_type_, group_size);
     }
 
   private:

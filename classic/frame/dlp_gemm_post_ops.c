@@ -329,6 +329,29 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
 }
 
 dlp_clsc_err_t
+dlp_gemm_translate_to_group_op_list(const dlp_metadata_t* metadata,
+                                    dlp_group_op*         group_op,
+                                    md_t                  m,
+                                    md_t                  n,
+                                    md_t                  k)
+{
+    (void)(m);
+    (void)(n);
+    (void)(k);
+
+    if ((group_op == NULL) || (metadata == NULL)) {
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    // Both quant ops are validated by dlp_gemm_translate_to_group_postops_list,
+    // which every caller runs (and error-checks) before reaching this point.
+    group_op->a_post_quant_op = metadata->a_quant_op;
+    group_op->b_post_quant_op = metadata->b_quant_op;
+
+    return DLP_CLSC_SUCCESS;
+}
+
+dlp_clsc_err_t
 dlp_gemm_translate_to_pre_ops_list(dlp_quant_op_t*  b_quant_op,
                                    dlp_gemm_pre_op* pre_op_list,
                                    md_t             m,

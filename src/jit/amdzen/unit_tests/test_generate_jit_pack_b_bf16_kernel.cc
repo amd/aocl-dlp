@@ -152,11 +152,10 @@ class JitPackBBF16Test : public ::testing::Test
     {
         auto gen = std::make_unique<jitAmdZenPackBBF16>();
 
-        kernelInfo          dummyKI;
-        packKernelInfo      packKI(NR, /*k_factor=*/2,
-                                   kernelInstrPreference::avx512_zmm_bf16_favour,
-                                   DataType::bf16, DataType::bf16, colMajor);
-        jitGeneratorContext ctx(dummyKI, packKI);
+        packKernelInfo           packKI(NR, /*k_factor=*/2,
+                                        kernelInstrPreference::avx512_zmm_bf16_favour,
+                                        DataType::bf16, DataType::bf16, colMajor);
+        packBJitGeneratorContext ctx(packKI);
 
         if ((*gen)(ctx) != jitGeneratorError::success) {
             return nullptr;

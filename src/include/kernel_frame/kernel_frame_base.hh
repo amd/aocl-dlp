@@ -51,6 +51,7 @@ enum class kernelRoutineType : uint8_t
     reorder,
     pack_a,
     pack_b,
+    gemm_quant, // for Quantized GEMM
     max_kernel_routines
 };
 
@@ -171,12 +172,18 @@ enum class storageFormat : uint8_t
 // Scalar  = single value broadcast to all elements.
 // PerN    = N values — one per output column (M x N output matrix).
 // PerM    = M values — one per output row  (M x N output matrix).
+// PerGroup= values indexed by K-group; used only by the grouped-quant path
+//           (quantParamLayout::outerDim), never by post-op kernelOpsMetaData.
+//           The post-op generators compare against Scalar / PerM / PerN and
+//           treat everything else as the non-scalar vector case, so they are
+//           unaffected by this enumerator.
 enum class ParamDim : uint8_t
 {
-    Invalid = 0,
-    Scalar  = 1,
-    PerN    = 2,
-    PerM    = 3
+    Invalid  = 0,
+    Scalar   = 1,
+    PerN     = 2,
+    PerM     = 3,
+    PerGroup = 4
 };
 
 // Enum for alpha/beta scaling type
@@ -673,5 +680,66 @@ struct packKernelInfo
 };
 
 inline const packKernelInfo INVALID_PACK_KERNEL_INFO{};
+
+// Quantized-GEMM Kernel Info
+struct quantParamLayout
+{
+    ParamDim outerDim  = ParamDim::Invalid; // Scalar | PerM (A) | PerN (B)
+    bool     perGroupK = false;             // ng values over K vs single value
+    DataType storeDt =
+        DataType::invalid; // f32|bf16 (sf); s8|s32 (zp); invalid => unused
+
+    bool operator==(const quantParamLayout& r) const
+    {
+        return (outerDim == r.outerDim) && (perGroupK == r.perGroupK)
+               && (storeDt == r.storeDt);
+    }
+    bool operator!=(const quantParamLayout& r) const { return !(*this == r); }
+};
+
+enum class opQuantMode : uint8_t
+{
+    ready, // consumed as-is (q/dq already done in prep, or none needed)
+    dequantInKernel, // kernel dequantizes / applies group scales
+    quantInKernel,   // kernel quantizes the operand
+};
+
+struct opQuantInfo
+{
+    DataType src_type = DataType::invalid; // element type handed to the kernel
+    DataType dst_type = DataType::invalid; // ACCUMULATOR type
+    opQuantMode      mode = opQuantMode::ready;
+    quantParamLayout scale;     // sf layout
+    quantParamLayout zeroPoint; // zp layout (absent => symmetric)
+
+    bool operator==(const opQuantInfo& r) const
+    {
+        return (src_type == r.src_type) && (dst_type == r.dst_type)
+               && (mode == r.mode) && (scale == r.scale)
+               && (zeroPoint == r.zeroPoint);
+    }
+    bool operator!=(const opQuantInfo& r) const { return !(*this == r); }
+};
+
+struct quantKernelInfo
+{
+    kernelInfo  base;   // Composition
+    opQuantInfo aQuant; // A operand quant metadata
+    opQuantInfo bQuant; // B operand quant metadata
+    // NOTE: post-full-K ops stay in base.kOpsArr (NOT a separate list).
+
+    quantKernelInfo()                                  = default;
+    quantKernelInfo(const quantKernelInfo&)            = default;
+    quantKernelInfo(quantKernelInfo&&)                 = default;
+    quantKernelInfo& operator=(const quantKernelInfo&) = default;
+    quantKernelInfo& operator=(quantKernelInfo&&)      = default;
+    ~quantKernelInfo()                                 = default;
+
+    bool operator==(const quantKernelInfo& r) const
+    {
+        return (base == r.base) && (aQuant == r.aQuant) && (bQuant == r.bQuant);
+    }
+    bool operator!=(const quantKernelInfo& r) const { return !(*this == r); }
+};
 
 } // namespace dlp::kernel_frame

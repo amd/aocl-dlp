@@ -142,7 +142,8 @@ jitAmdZenFP32::setGeneratorKernelMetaInfo(
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenFP32::deriveGEMMNumNRVariants(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenFP32::deriveGEMMNumNRVariants(
+    const dlp::jit::gemmJitGeneratorContext& jI)
 {
     // ToDo : This variable is supposed to hold the details of number of
     // blocks of N to be processed in each iteration. At a later stage, this
@@ -280,7 +281,7 @@ jitAmdZenFP32::deriveGEMMNRAndMaskUse(int                     nr,
 
 /* Function to generate all kernels */
 dlp::jit::jitGeneratorError
-jitAmdZenFP32::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenFP32::generateAllKernels(const dlp::jit::gemmJitGeneratorContext& jI)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
@@ -730,7 +731,7 @@ cleanup:
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenFP32::generateAllKernelsRD(const dlp::jit::gemmJitGeneratorContext& jI)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
@@ -1284,7 +1285,7 @@ jitAmdZenBF16::~jitAmdZenBF16()
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenBF16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenBF16::generateAllKernels(const dlp::jit::gemmJitGeneratorContext& jI)
 {
 
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
@@ -1878,7 +1879,7 @@ jitAmdZenU8S8::setGeneratorKernelMetaInfo(
 
 /* Function to generate all kernels */
 dlp::jit::jitGeneratorError
-jitAmdZenU8S8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenU8S8::generateAllKernels(const dlp::jit::gemmJitGeneratorContext& jI)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
@@ -2397,7 +2398,7 @@ jitAmdZenS8::setGeneratorKernelMetaInfo(
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenS8::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenS8::generateAllKernels(const dlp::jit::gemmJitGeneratorContext& jI)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
@@ -2963,7 +2964,7 @@ jitAmdZenFP16::setGeneratorKernelMetaInfo(
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenFP16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenFP16::generateAllKernels(const dlp::jit::gemmJitGeneratorContext& jI)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 
@@ -3467,7 +3468,8 @@ jitAmdZenF32FP16::setGeneratorKernelMetaInfo(
 }
 
 dlp::jit::jitGeneratorError
-jitAmdZenF32FP16::generateAllKernels(const dlp::jit::jitGeneratorContext& jI)
+jitAmdZenF32FP16::generateAllKernels(
+    const dlp::jit::gemmJitGeneratorContext& jI)
 {
     dlp::jit::jitGeneratorError err = dlp::jit::jitGeneratorError::error;
 

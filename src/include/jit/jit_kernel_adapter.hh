@@ -53,44 +53,71 @@ class jitKernelAdapter : public kernels::kernelBase
 {
   public:
     jitKernelAdapter(const kernel_frame::kernelInfo& kI,
-                     jitGeneratorBaseRef             jitGen,
+                     gemmJitGeneratorRef             jitGen,
                      bool shouldGenerateKernels = true)
         : mKernelInfo{ kI }
-        // A single JIT generator is registered for each kernel routine and
-        // datatype. Multiple threads will use the same JIT generator object.
-        // This can cause race conditions if the JIT generator is not thread
-        // safe. The clone is done here to avoid this issue.
-        , mJitGen(jitGen ? jitGen->clone() : nullptr)
         , mIsJitGenerated(false)
     {
+        auto gemmGen = jitGen ? jitGen->clone() : nullptr;
+
         // TODO: The shouldGenerateKernels flag is used to enable registration
         // of dummy kernels without actually running the JIT generator. This is
         // a temporary solution to help with simulating a kernelRegister that is
         // under extreme load from too many kernels being registered.
-        if ((shouldGenerateKernels) && (mJitGen)) {
-            jitGeneratorContext jC{ kI };
-            auto                ret = mJitGen->operator()(jC);
+        if ((shouldGenerateKernels) && (gemmGen)) {
+            gemmJitGeneratorContext jC{ mKernelInfo };
+            auto                    ret = gemmGen->operator()(jC);
             if (ret == jitGeneratorError::success) {
                 mIsJitGenerated = true;
             }
         }
+
+        mJitGen = std::move(gemmGen);
     }
 
     jitKernelAdapter(const kernel_frame::packKernelInfo& pKI,
-                     jitGeneratorBaseRef                 jitGen,
+                     packBJitGeneratorRef                jitGen,
                      bool shouldGenerateKernels = true)
         : mPackKernelInfo(pKI)
         , mHasPackKernelInfo(true)
-        , mJitGen(jitGen ? jitGen->clone() : nullptr)
         , mIsJitGenerated(false)
     {
-        if ((shouldGenerateKernels) && (mJitGen)) {
-            jitGeneratorContext jC{ mKernelInfo, pKI };
-            auto                ret = mJitGen->operator()(jC);
+        auto packBGen = jitGen ? jitGen->clone() : nullptr;
+
+        if ((shouldGenerateKernels) && (packBGen)) {
+            packBJitGeneratorContext jC{ mPackKernelInfo };
+            auto                     ret = packBGen->operator()(jC);
             if (ret == jitGeneratorError::success) {
                 mIsJitGenerated = true;
             }
         }
+
+        mJitGen = std::move(packBGen);
+    }
+
+    // Quant GEMM ctor. Stores the composed quantKernelInfo and
+    // drives the quant generator with a quant-aware context. getKernelInfo()
+    // returns &base so non-quant-aware readers still see a real kernelInfo;
+    // getGemmQuantKernelInfo() returns the full quant key for the register.
+    jitKernelAdapter(const kernel_frame::quantKernelInfo& qKI,
+                     gemmQuantJitGeneratorRef             jitGen,
+                     bool shouldGenerateKernels = true)
+        : mKernelInfo(qKI.base)
+        , mQuantKernelInfo(qKI)
+        , mHasQuantKernelInfo(true)
+        , mIsJitGenerated(false)
+    {
+        auto quantGen = jitGen ? jitGen->clone() : nullptr;
+
+        if ((shouldGenerateKernels) && (quantGen)) {
+            gemmQuantJitGeneratorContext jC{ mQuantKernelInfo };
+            auto                         ret = quantGen->operator()(jC);
+            if (ret == jitGeneratorError::success) {
+                mIsJitGenerated = true;
+            }
+        }
+
+        mJitGen = std::move(quantGen);
     }
 
     ~jitKernelAdapter() {}
@@ -102,6 +129,8 @@ class jitKernelAdapter : public kernels::kernelBase
         : mKernelInfo{ std::move(other.mKernelInfo) }
         , mPackKernelInfo{ std::move(other.mPackKernelInfo) }
         , mHasPackKernelInfo(other.mHasPackKernelInfo)
+        , mQuantKernelInfo{ std::move(other.mQuantKernelInfo) }
+        , mHasQuantKernelInfo(other.mHasQuantKernelInfo)
         , mJitGen(std::move(other.mJitGen))
         , mIsJitGenerated(std::move(other.mIsJitGenerated))
     {
@@ -114,6 +143,8 @@ class jitKernelAdapter : public kernels::kernelBase
         mKernelInfo           = std::move(other.mKernelInfo);
         mPackKernelInfo       = std::move(other.mPackKernelInfo);
         mHasPackKernelInfo    = other.mHasPackKernelInfo;
+        mQuantKernelInfo      = std::move(other.mQuantKernelInfo);
+        mHasQuantKernelInfo   = other.mHasQuantKernelInfo;
         mJitGen               = std::move(other.mJitGen);
         mIsJitGenerated       = std::move(other.mIsJitGenerated);
         other.mIsJitGenerated = false;
@@ -140,6 +171,11 @@ class jitKernelAdapter : public kernels::kernelBase
     virtual kernel_frame::packKernelInfo* getPackKernelInfo() override
     {
         return mHasPackKernelInfo ? std::addressof(mPackKernelInfo) : nullptr;
+    }
+
+    virtual kernel_frame::quantKernelInfo* getGemmQuantKernelInfo() override
+    {
+        return mHasQuantKernelInfo ? std::addressof(mQuantKernelInfo) : nullptr;
     }
 
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes()
@@ -173,6 +209,8 @@ class jitKernelAdapter : public kernels::kernelBase
     kernel_frame::kernelInfo          mKernelInfo;
     kernel_frame::packKernelInfo      mPackKernelInfo;
     bool                              mHasPackKernelInfo = false;
+    kernel_frame::quantKernelInfo     mQuantKernelInfo;
+    bool                              mHasQuantKernelInfo = false;
     std::unique_ptr<jitGeneratorBase> mJitGen;
     bool                              mIsJitGenerated;
 };

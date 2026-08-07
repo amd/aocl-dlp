@@ -34,6 +34,7 @@
 #include "decision_engine/decision_engine.hh"
 #include "jit/jit_kernel_adapter.hh"
 #include "jit_register/jit_register.hh"
+#include "kernel_frame/kernel_frame_base.hh"
 #include "kernel_register/kernel_register.hh"
 #include "utils/ctype_utils.hh"
 
@@ -523,6 +524,205 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
         kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
         kB->operator()(std::addressof(gemmParamsIn));
     }
+
+    return;
+}
+
+DLP_ALWAYS_INLINE static quantKernelInfo
+dlp_get_gemm_quant_kernelInfo_by_dtype(kernelDatatype      kDType,
+                                       md_t                m,
+                                       md_t                n,
+                                       md_t                k,
+                                       md_t                rs_a,
+                                       md_t                cs_a,
+                                       md_t                rs_b,
+                                       md_t                cs_b,
+                                       md_t                rs_c,
+                                       md_t                cs_c,
+                                       void*               alpha,
+                                       void*               beta,
+                                       AOCL_DLP_MEMORY_TAG mtag_a,
+                                       AOCL_DLP_MEMORY_TAG mtag_b,
+                                       dlp_gemm_post_op*   metadata,
+                                       dlp_group_op*       group_ops,
+                                       md_t                mr_hint,
+                                       md_t                nr_hint,
+                                       md_t                kc_hint,
+                                       md_t                c_downscale)
+{
+    if ((kDType == kernelDatatype::s8s8s32of32)
+        || (kDType == kernelDatatype::s8s8s32obf16)) {
+        return dlp::de::decisionEngineInstance()
+            .getGemmQuantKernelInfoForInputFastPath<
+                dlp::de::gemmQuantS8DEBackend>(
+                m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
+                c_downscale, kDType);
+    } else {
+        return dlp::kernel_frame::quantKernelInfo();
+    }
+}
+
+[[gnu::noinline]] static kernelBaseRef
+dlp_generate_gemm_quant_jit_kernel(quantKernelInfo& qKI, kernelDatatype kDType)
+{
+    // First check if the kernel is already present in the fallback table
+    // in kernel register.
+    auto fallKernPtr =
+        dlpKernelRegisterInstance().getGemmQuantKernelFallback(&qKI, kDType);
+    if (fallKernPtr) {
+        return fallKernPtr;
+    }
+
+    auto jitGen =
+        dlpJitGeneratorRegisterInstance().getGemmQuantJitGenerator(kDType);
+    if (!jitGen) {
+        dlpKernelRegisterInstance().registerEmptyGemmQuantKernel(qKI, kDType);
+        return kernelBaseRef(nullptr);
+    }
+
+    auto kB = std::make_unique<jitKernelAdapter>(qKI, std::move(jitGen), true);
+
+    if (!kB->isJitGenerated()) {
+        // Register a dummy kernel that will be used to denote a
+        // jit kernel cannot be generated for this kernelInfo.
+        dlpKernelRegisterInstance().registerEmptyGemmQuantKernel(qKI, kDType);
+    } else {
+        // Generate datatype-specific kernel name for proper registry
+        // management.
+        std::string kernelName = get_kernel_family_name(kDType);
+        auto retVal = dlpKernelRegisterInstance().registerGemmQuantKernel(
+            std::move(kB), std::move(kernelName));
+        if (retVal != kernelFrameError::success) {
+            std::cerr << "Quant kernel table insertion failed for datatype: "
+                      << static_cast<int>(kDType) << ". Fatal Error."
+                      << std::endl;
+        }
+    }
+
+    auto kernPtr = dlpKernelRegisterInstance().getGemmQuantKernel(&qKI, kDType);
+    if (kernPtr.isValid()) {
+        return kernPtr;
+    }
+
+    // The fallback is guaranteed to work at this point.
+    return dlpKernelRegisterInstance().getGemmQuantKernelFallback(&qKI, kDType);
+}
+
+void
+dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t     k_dtype,
+                                        [[maybe_unused]] char storage_format,
+                                        AOCL_DLP_MEMORY_TAG   mtag_a,
+                                        AOCL_DLP_MEMORY_TAG   mtag_b,
+                                        md_t                  m,
+                                        md_t                  n,
+                                        md_t                  k,
+                                        md_t                  rs_a,
+                                        md_t                  cs_a,
+                                        md_t                  rs_b,
+                                        md_t                  cs_b,
+                                        md_t                  rs_c,
+                                        md_t                  cs_c,
+                                        void*                 alpha,
+                                        void*                 beta,
+                                        dlp_gemm_post_op*     metadata,
+                                        dlp_group_op*         group_ops,
+                                        dlp_gemm_cntx_t*      cntx,
+                                        md_t                  c_downscale)
+{
+    if (!cntx)
+        return;
+
+    kernelDatatype kDType = getKernelDatatype(k_dtype);
+    if (kDType == kernelDatatype::invalid) {
+        cntx->dlp_quant_kernel_hndl.kernel_base = nullptr;
+        return;
+    }
+
+    dlp::kernel_frame::quantKernelInfo qKI =
+        dlp_get_gemm_quant_kernelInfo_by_dtype(
+            kDType, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+            mtag_a, mtag_b, metadata, group_ops, cntx->blksz.MR, cntx->blksz.NR,
+            cntx->blksz.KC, c_downscale);
+
+    if ((qKI.base.mr <= 0) || (qKI.base.nr <= 0)) {
+        cntx->dlp_quant_kernel_hndl.kernel_base = nullptr;
+        return;
+    }
+
+    auto kernPtr = dlpKernelRegisterInstance().getGemmQuantKernel(&qKI, kDType);
+    if (!kernPtr) {
+        kernPtr = dlp_generate_gemm_quant_jit_kernel(qKI, kDType);
+    }
+
+    cntx->dlp_quant_kernel_hndl.kernel_base =
+        (kernPtr.isValid() && kernPtr.getPtr()->isValid)
+            ? static_cast<void*>(kernPtr.getPtr())
+            : nullptr;
+
+    cntx->dlp_quant_kernel_hndl.mr     = qKI.base.mr;
+    cntx->dlp_quant_kernel_hndl.nr     = qKI.base.nr;
+    cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
+    cntx->blksz.KC                     = qKI.base.kc;
+    cntx->blksz.MC                     = ((cntx->blksz.MC % qKI.base.mr) == 0)
+                                             ? cntx->blksz.MC
+                                             : (((cntx->blksz.MC + qKI.base.mr - 1) / qKI.base.mr)
+                            * qKI.base.mr);
+    cntx->blksz.NC                     = ((cntx->blksz.NC % qKI.base.nr) == 0)
+                                             ? cntx->blksz.NC
+                                             : (((cntx->blksz.NC + qKI.base.nr - 1) / qKI.base.nr)
+                            * qKI.base.nr);
+    cntx->dlp_quant_kernel_hndl.kDtype = k_dtype;
+}
+
+void
+dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
+                              md_t                          m,
+                              md_t                          n,
+                              md_t                          k,
+                              void*                         A,
+                              md_t                          rs_a,
+                              md_t                          cs_a,
+                              md_t                          ps_a,
+                              void*                         B,
+                              md_t                          rs_b,
+                              md_t                          cs_b,
+                              void*                         C,
+                              md_t                          rs_c,
+                              md_t                          cs_c,
+                              void*                         alpha,
+                              void*                         beta,
+                              dlp_gemm_post_op*             post_ops_list,
+                              dlp_gemm_post_op_attr         post_ops_attr,
+                              dlp_gemm_grp_post_op_attr     grp_post_ops_attr)
+{
+    if (!kernel_hndl || !kernel_hndl->kernel_base) {
+        return;
+    }
+
+    md_t       ps_b = 0;
+    gemmParams gemmParamsIn{ A,
+                             B,
+                             C,
+                             m,
+                             n,
+                             k,
+                             rs_a,
+                             cs_a,
+                             ps_a,
+                             rs_b,
+                             cs_b,
+                             ps_b,
+                             rs_c,
+                             cs_c,
+                             alpha,
+                             beta,
+                             post_ops_list,
+                             post_ops_attr,
+                             grp_post_ops_attr };
+
+    kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
+    kB->operator()(std::addressof(gemmParamsIn));
 
     return;
 }

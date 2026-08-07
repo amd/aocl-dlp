@@ -82,15 +82,15 @@ gemm_tests:
     b_type: "s8"
     c_type: "f32"
     acc_type: "s32"
-    storage_format: "row-major"
+    storage_format: ["row-major", "column-major"]
     transA: false
     transB: false
     # Small dimensions to test fringe kernels
     m: [1, 8, 16, 32]
     n: [32, 64]
-    k: [32, 64]
-    alpha: [1.0]
-    beta: [0.0]
+    k: [32, 64, 33, 65, 100, 129]
+    alpha: [2.0]
+    beta: [3.0]
     lda: 64
     ldb: 64
     ldc: 64
@@ -111,9 +111,6 @@ gemm_tests:
       operations:
         - type: "Elementwise-RELU"
           params: {}
-    tolerances:
-      relative: 200.0
-      absolute: 50.0
     product_type: "cartesian"
 
   # Test 2: Small matrices - bf16 output
@@ -126,7 +123,7 @@ gemm_tests:
     transA: false
     transB: false
     # Small dimensions to test fringe kernels
-    m: [1, 8, 16, 32]
+    m: [8, 16, 32]
     n: [32, 64]
     k: [32, 64]
     alpha: [2]

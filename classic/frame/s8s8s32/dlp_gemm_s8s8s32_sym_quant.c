@@ -26,6 +26,7 @@
  *
  */
 
+#include "bindings/c_wrappers/capi_kernel_frame_wrappers.h"
 #include "config/dlp_gemm_config.h"
 #include "dlp_gemm_5loop_interface_apis.h"
 #include "gemm_utils/dlp_gemm_utils.h"
@@ -200,6 +201,13 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
     dlp_gemm_grp_post_op_attr grp_post_ops_attr = { 0 };
 
     md_t group_size = grp_post_op_list->group_size;
+
+    // Normalize group_size == 0 (no grouping) and group_size >= k to a single
+    // group over the full K, so num_groups == 1 and the frame/kernel agree on
+    // grp_post_op_lda. Also avoids the div-by-zero in num_groups below.
+    if ((group_size == 0) || (group_size > k)) {
+        group_size = k;
+    }
 
     // Initialize group post ops attributes.
     grp_post_ops_attr.a_scale_factor     = grp_post_op_list->a_scale_factor;
@@ -522,6 +530,13 @@ DLP_GEMM_5LOOP_UNIFIED(
     }
 
     md_t group_size = grp_post_op_list->group_size;
+
+    // Normalize group_size == 0 (no grouping) and group_size >= k to a single
+    // group over the full K, so num_groups == 1 and the frame/kernel agree on
+    // grp_post_op_lda. Also avoids the div-by-zero in num_groups below.
+    if ((group_size == 0) || (group_size > k)) {
+        group_size = k;
+    }
 
     // Initialize group post ops attributes.
     grp_post_ops_attr.a_scale_factor     = grp_post_op_list->a_scale_factor;
@@ -890,14 +905,23 @@ DLP_GEMM_5LOOP_UNIFIED(
 
                     grp_post_ops_attr.grp_post_op_j = jc + jr;
 
-// The kernels are defined in zen4 folder
 #ifdef DLP_KERNELS_ZEN4
-                    // Reorder/Packed B, Reorder/Packed/Unpacked A call.
-                    dlp_gemm_rowvar_s8s8s32os32_6x64m_sym_quant(
-                        mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
-                        a_block_stride, (b_use + (jr * kc0_updated)), rs_b_use,
-                        cs_b_use, (c_use_ic + jr), rs_c_use, 1, alpha, beta0,
-                        grp_post_ops_attr, post_op_list, post_ops_attr);
+                    if (lcntx->dlp_quant_kernel_hndl.kernel_base != NULL) {
+                        dlp_execute_gemm_quant_kernel(
+                            &(lcntx->dlp_quant_kernel_hndl), mc0, nr0, kc0,
+                            (void*)a_use, rs_a_use, cs_a_use, a_block_stride,
+                            (void*)(b_use + (jr * kc0_updated)), rs_b_use,
+                            cs_b_use, (void*)(c_use_ic + jr), rs_c_use, 1,
+                            (void*)&alpha, (void*)&beta0, post_op_list,
+                            post_ops_attr, grp_post_ops_attr);
+                    } else {
+                        dlp_gemm_rowvar_s8s8s32os32_6x64m_sym_quant(
+                            mc0, nr0, kc0, a_use, rs_a_use, cs_a_use,
+                            a_block_stride, (b_use + (jr * kc0_updated)),
+                            rs_b_use, cs_b_use, (c_use_ic + jr), rs_c_use, 1,
+                            alpha, beta0, grp_post_ops_attr, post_op_list,
+                            post_ops_attr);
+                    }
 #endif
                     post_ops_attr.b_sum_offset += NR;
                 }
