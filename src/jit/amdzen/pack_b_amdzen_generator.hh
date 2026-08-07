@@ -41,7 +41,7 @@
 
 namespace amdzen::gen {
 
-class jitAmdZenPackBFP32 : public dlp::jit::jitGeneratorBase
+class jitAmdZenPackBFP32 : public dlp::jit::packBJitGenerator
 {
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
     std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
@@ -60,7 +60,7 @@ class jitAmdZenPackBFP32 : public dlp::jit::jitGeneratorBase
         dlp::kernel_frame::kernelInstrPreference kInstPref);
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::packBJitGeneratorContext& jI);
 
   public:
     jitAmdZenPackBFP32();
@@ -71,7 +71,7 @@ class jitAmdZenPackBFP32 : public dlp::jit::jitGeneratorBase
     jitAmdZenPackBFP32& operator=(jitAmdZenPackBFP32&&)      = delete;
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::packBJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -81,7 +81,7 @@ class jitAmdZenPackBFP32 : public dlp::jit::jitGeneratorBase
     std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override;
     dlp::kernels::kernelError                executeKernel(
                        dlp::kernels::kernelParams* _params) override;
-    std::unique_ptr<jitGeneratorBase> clone() override;
+    std::unique_ptr<dlp::jit::packBJitGenerator> clone() override;
 };
 
 // Orchestrator for JIT-generated BF16 pack-B kernels. Mirrors
@@ -97,7 +97,7 @@ class jitAmdZenPackBFP32 : public dlp::jit::jitGeneratorBase
 // fringe panel, then one runtime-masked lt-block, matching the intrinsic
 // packer's layout byte-for-byte. Both row-major and column-major sources are
 // supported (column-major uses the shared 16x16 transpose path).
-class jitAmdZenPackBBF16 : public dlp::jit::jitGeneratorBase
+class jitAmdZenPackBBF16 : public dlp::jit::packBJitGenerator
 {
     std::vector<dlp::kernel_frame::kernelDatatype> mKernelDatatypes;
     std::vector<dlp::cpu_utils::isaFeature>        mIsaFeaturesRequired;
@@ -121,7 +121,7 @@ class jitAmdZenPackBBF16 : public dlp::jit::jitGeneratorBase
         dlp::kernel_frame::kernelInstrPreference kInstPref);
 
     dlp::jit::jitGeneratorError generateAllKernels(
-        const dlp::jit::jitGeneratorContext& jI);
+        const dlp::jit::packBJitGeneratorContext& jI);
 
   public:
     jitAmdZenPackBBF16();
@@ -132,7 +132,7 @@ class jitAmdZenPackBBF16 : public dlp::jit::jitGeneratorBase
     jitAmdZenPackBBF16& operator=(jitAmdZenPackBBF16&&)      = delete;
 
     dlp::jit::jitGeneratorError operator()(
-        const dlp::jit::jitGeneratorContext& jI) override
+        const dlp::jit::packBJitGeneratorContext& jI) override
     {
         return generateAllKernels(jI);
     }
@@ -142,7 +142,7 @@ class jitAmdZenPackBBF16 : public dlp::jit::jitGeneratorBase
     std::vector<dlp::cpu_utils::isaFeature>& getIsaFeaturesRequired() override;
     dlp::kernels::kernelError                executeKernel(
                        dlp::kernels::kernelParams* _params) override;
-    std::unique_ptr<jitGeneratorBase> clone() override;
+    std::unique_ptr<dlp::jit::packBJitGenerator> clone() override;
 };
 
 } // namespace amdzen::gen

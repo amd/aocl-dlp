@@ -65,6 +65,7 @@ jitGEMMS8<KType>::allocateReg()
     if (aReg < 1) {
         return dlp::jit::jitGeneratorError::badKernelInfo;
     }
+
     cRegIdx      = numRegs - cReg; // Starting index for C registers
     bRegIdx      = cRegIdx - bReg; // Starting index for B registers
     vec128RegIdx = bRegIdx - 1;    // Index for reserved vec128Register

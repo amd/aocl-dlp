@@ -682,4 +682,32 @@ gemmF32FP16DEBackend::getKernelInfoForInput(iDEInput* in)
     }
 }
 
+gemmQuantS8DEBackend::gemmQuantS8DEBackend()
+    : isAvx512(false)
+    , isAvx2(false)
+    , isAvx512Bf16(false)
+    , isAvx512Vnni(false)
+    , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
+    , canGenerateKernelInfo(true)
+{
+    // Use this eKernelInstPref to generate kernelInfo for kernel generation.
+    eKernelInstPref = dlp::env_utils::EnvironmentVariableManager::getInstance()
+                          .getKernelInstructionPreferenceFromEnv(
+                              "AOCL_DLP_ENABLE_INSTRUCTIONS");
+
+    // Check for AVX512 support
+    isAvx512 =
+        arch_utils::archConfigManager::getInstance().isAvx512SupportedByArch();
+
+    // Check for VNNI support, required for all s8 kernels
+    isAvx512Vnni = cpu_utils::cpuFeaturesInstance().hasFeature(
+        cpu_utils::isaFeature::avx512vnni);
+
+    // If either of AVX512 or VNNI is unsupported, kernel info
+    // cannot be generated.
+    if (!isAvx512 || !isAvx512Vnni) {
+        canGenerateKernelInfo = false;
+    }
+}
+
 } // namespace dlp::de

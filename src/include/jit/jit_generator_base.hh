@@ -54,24 +54,17 @@ enum class jitAlgoType
     unsupportedAlgo
 };
 
+// Parameterized jitGeneratorContext on the type of routine being generated.
+template<typename KInfoT>
 struct jitGeneratorContext
 {
-    const kernel_frame::kernelInfo& kI;
-
-    const kernel_frame::packKernelInfo* packKI = nullptr;
+    const KInfoT& kI;
 
     // Can expand to more entities in future, like profiler, compilation
     // target, etc.
 
-    jitGeneratorContext(const kernel_frame::kernelInfo& kernelInfo)
+    explicit jitGeneratorContext(const KInfoT& kernelInfo)
         : kI(kernelInfo)
-    {
-    }
-
-    jitGeneratorContext(const kernel_frame::kernelInfo&     kernelInfo,
-                        const kernel_frame::packKernelInfo& packInfo)
-        : kI(kernelInfo)
-        , packKI(&packInfo)
     {
     }
 
@@ -83,6 +76,12 @@ struct jitGeneratorContext
     jitGeneratorContext& operator=(jitGeneratorContext&& other)      = delete;
 };
 
+using gemmJitGeneratorContext = jitGeneratorContext<kernel_frame::kernelInfo>;
+using packBJitGeneratorContext =
+    jitGeneratorContext<kernel_frame::packKernelInfo>;
+using gemmQuantJitGeneratorContext =
+    jitGeneratorContext<kernel_frame::quantKernelInfo>;
+
 class jitGeneratorBase
 {
   public:
@@ -90,8 +89,6 @@ class jitGeneratorBase
 
     virtual std::vector<cpu_utils::isaFeature>& getIsaFeaturesRequired()    = 0;
     virtual std::vector<kernel_frame::kernelDatatype>& getKernelDatatypes() = 0;
-    virtual jitGeneratorError operator()(const jitGeneratorContext& jI)     = 0;
-    virtual std::unique_ptr<jitGeneratorBase> clone()                       = 0;
 
     // TODO: Remove this once the JIT generator and execution code are
     // separated.
@@ -101,5 +98,18 @@ class jitGeneratorBase
         return kernels::kernelError::error;
     }
 };
+
+template<typename KInfoT>
+class jitGenerator : public jitGeneratorBase
+{
+  public:
+    virtual jitGeneratorError operator()(
+        const jitGeneratorContext<KInfoT>& jI)            = 0;
+    virtual std::unique_ptr<jitGenerator<KInfoT>> clone() = 0;
+};
+
+using gemmJitGenerator      = jitGenerator<kernel_frame::kernelInfo>;
+using packBJitGenerator     = jitGenerator<kernel_frame::packKernelInfo>;
+using gemmQuantJitGenerator = jitGenerator<kernel_frame::quantKernelInfo>;
 
 } // namespace dlp::jit

@@ -47,6 +47,7 @@ class BenchmarkMetrics
      * @param state Google Benchmark state object
      * @param m, n, k Matrix dimensions
      * @param a_type, b_type, c_type Matrix data types
+     * @param group_size Quantization group size along K (0 = full K)
      */
     static void calculateAndReport(benchmark::State& state,
                                    md_t              m,
@@ -54,7 +55,8 @@ class BenchmarkMetrics
                                    md_t              k,
                                    MatrixType        a_type,
                                    MatrixType        b_type,
-                                   MatrixType        c_type);
+                                   MatrixType        c_type,
+                                   md_t              group_size);
 
     /**
      * @brief Get size in bytes for a matrix type

@@ -220,6 +220,25 @@ struct generatorParams
     ~generatorParams() = default;
 };
 
+// Quant GEMM generator parameters
+struct quantGeneratorParams
+{
+    generatorParams                base;
+    dlp::kernel_frame::opQuantInfo aQuant;
+    dlp::kernel_frame::opQuantInfo bQuant;
+
+    quantGeneratorParams(const generatorParams& _base)
+        : base(_base)
+    {
+    }
+
+    quantGeneratorParams(const quantGeneratorParams&)            = default;
+    quantGeneratorParams(quantGeneratorParams&&)                 = default;
+    quantGeneratorParams& operator=(const quantGeneratorParams&) = default;
+    quantGeneratorParams& operator=(quantGeneratorParams&&)      = default;
+    ~quantGeneratorParams()                                      = default;
+};
+
 // GEMV specific generator parameters
 // This is used by the JIT generator to generate the GEMV kernel
 struct gemvN1GeneratorParams

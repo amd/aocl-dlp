@@ -46,29 +46,6 @@ typedef struct dlp_gemm_pre_op_t
     struct dlp_gemm_pre_op_t* next;
 } dlp_gemm_pre_op;
 
-typedef struct dlp_gemm_grp_post_op_attr_t
-{
-    void*    a_scale_factor;
-    uint64_t a_scale_factor_len;
-    void*    a_zp;
-    uint64_t a_zp_len;
-    void*    b_scale_factor;
-    uint64_t b_scale_factor_len;
-    void*    b_zp;
-    uint64_t b_zp_len;
-    uint64_t group_size;
-    char     a_grp_mul; // 0: A ignores group index (per-token), 1: per-group
-    char     b_grp_mul; // 0: B ignores group index (per-channel), 1: per-group
-    uint64_t grp_post_op_i;
-    uint64_t grp_post_op_j;
-    uint64_t grp_post_op_k;
-    uint64_t grp_post_op_lda;
-    uint64_t grp_post_op_ldb;
-    uint64_t grp_post_op_sum_ld;
-    DLP_TYPE sf_stor_type;
-    DLP_TYPE zp_stor_type;
-} dlp_gemm_grp_post_op_attr;
-
 // Used as an internal structure
 typedef struct dlp_gemm_group_post_op_t
 {
@@ -149,6 +126,13 @@ dlp_gemm_translate_to_group_postops_list(dlp_quant_op_t*         a_quant_op,
                                          md_t                    m,
                                          md_t                    n,
                                          md_t                    k);
+
+dlp_clsc_err_t
+dlp_gemm_translate_to_group_op_list(const dlp_metadata_t* metadata,
+                                    dlp_group_op*         group_op,
+                                    md_t                  m,
+                                    md_t                  n,
+                                    md_t                  k);
 
 /* Highest op_code with an entry in classic kernels' post_ops_labels[]
  * dispatch table. Codes above this must be routed through the JIT

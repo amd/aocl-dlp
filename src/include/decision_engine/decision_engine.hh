@@ -48,6 +48,9 @@ namespace dlp::de {
  * provides specialized decision logic for optimal kernel selection based on
  * input characteristics.
  *
+ * Quantized GEMM selection is held in a second, identically indexed table of
+ * iQuantDEBackend, because a quant get*KernelInfo returns quantKernelInfo.
+ *
  * DESIGN PHILOSOPHY:
  * - 2D backend organization: routine_type × datatype
  * - Pluggable backend architecture for extensible decision strategies
@@ -154,6 +157,16 @@ class decisionEngine
         auto f32f16f32of32DtIdx = utils::getUnderlyingValueOfEnum(
             kernel_frame::kernelDatatype::f32f16f32of32);
         backends[kTypeIdx][f32f16f32of32DtIdx] = new gemmF32FP16DEBackend;
+
+        // Quantized GEMM backends live in their own table in quantBackends.
+        auto quantTypeIdx = utils::getUnderlyingValueOfEnum(
+            kernel_frame::kernelRoutineType::gemm_quant);
+
+        // Reusing s8s8s32o[f32/bf16]DtIdx
+        quantBackends[quantTypeIdx][s8s8s32of32DtIdx] =
+            new gemmQuantS8DEBackend;
+        quantBackends[quantTypeIdx][s8s8s32obf16DtIdx] =
+            new gemmQuantS8DEBackend;
     }
 
     decisionEngine()
@@ -163,6 +176,17 @@ class decisionEngine
                 dlp::kernel_frame::kernelRoutineType::max_kernel_routines)));
 
         for (auto& ele : backends) {
+            ele.resize(
+                static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
+                    dlp::kernel_frame::kernelDatatype::max_kernel_datatypes)),
+                nullptr);
+        }
+
+        quantBackends.resize(
+            static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
+                dlp::kernel_frame::kernelRoutineType::max_kernel_routines)));
+
+        for (auto& ele : quantBackends) {
             ele.resize(
                 static_cast<std::size_t>(utils::getUnderlyingValueOfEnum(
                     dlp::kernel_frame::kernelDatatype::max_kernel_datatypes)),
@@ -188,6 +212,16 @@ class decisionEngine
                 }
             }
         }
+
+        std::set<iQuantDEBackend*> quantValueSet;
+        for (auto& ele : quantBackends) {
+            for (auto& ele2 : ele) {
+                if ((ele2 != nullptr) && (quantValueSet.count(ele2) == 0)) {
+                    quantValueSet.insert(ele2);
+                    delete ele2;
+                }
+            }
+        }
     }
 
     // Copy/move operations disabled for singleton
@@ -198,6 +232,10 @@ class decisionEngine
 
     // 2D array of backend implementations: backends[routine_type][datatype]
     std::vector<std::vector<iDEBackend*>> backends;
+
+    // 2D array of quantized GEMM backend implementations:
+    // quantBackends[routine_type][datatype]
+    std::vector<std::vector<iQuantDEBackend*>> quantBackends;
 
   public:
     /**
@@ -342,6 +380,45 @@ class decisionEngine
         }
 
         return kernel_frame::INVALID_PACK_KERNEL_INFO;
+    }
+
+    // Quant fast path (routine gemm_quant)
+    template<typename T>
+    DLP_ALWAYS_INLINE dlp::kernel_frame::quantKernelInfo
+                      getGemmQuantKernelInfoForInputFastPath(md_t                m,
+                                                             md_t                n,
+                                                             md_t                k,
+                                                             md_t                rs_a,
+                                                             md_t                cs_a,
+                                                             md_t                rs_b,
+                                                             md_t                cs_b,
+                                                             md_t                rs_c,
+                                                             md_t                cs_c,
+                                                             void*               alpha,
+                                                             void*               beta,
+                                                             AOCL_DLP_MEMORY_TAG mtag_a,
+                                                             AOCL_DLP_MEMORY_TAG mtag_b,
+                                                             dlp_gemm_post_op*   metadata,
+                                                             dlp_group_op*       group_ops,
+                                                             md_t                mr_hint,
+                                                             md_t                nr_hint,
+                                                             md_t                kc_hint,
+                                                             md_t                c_downscale,
+                                                             dlp::kernel_frame::kernelDatatype dt)
+    {
+        auto kTypeIdx = utils::getUnderlyingValueOfEnum(
+            dlp::kernel_frame::kernelRoutineType::gemm_quant);
+        auto dtIdx = utils::getUnderlyingValueOfEnum(dt);
+        if (quantBackends[kTypeIdx][dtIdx] != nullptr) {
+            T* backend = static_cast<T*>(quantBackends[kTypeIdx][dtIdx]);
+
+            return backend->T::getGemmQuantKernelInfoForInputFastPath(
+                dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
+                mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
+                c_downscale);
+        }
+
+        return INVALID_GEMM_QUANT_KERNEL_INFO;
     }
 };
 

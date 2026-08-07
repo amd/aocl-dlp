@@ -1086,8 +1086,18 @@ MicroTest::createOperationParam(
 
         // Per-matrix group counts. A PER_TOKEN -> one scale per row;
         // B PER_CHANNEL -> one scale per column; otherwise per-group.
-        md_t gs_eff = (group_size == 0) ? getK() : group_size;
-        md_t ng     = (getK() + gs_eff - 1) / gs_eff;
+        //
+        // gs_eff mirrors the frame's normalization in
+        // dlp_gemm_s8s8s32_sym_quant.c: a group_size of 0 or one larger than K
+        // collapses to a single group over the full K. If the two disagree, the
+        // scale vectors sized here no longer match production's
+        // grp_post_op_lda, and the mismatch is indistinguishable from a kernel
+        // indexing bug. K == 0 is rejected by the API's dimension checks, so
+        // report zero groups rather than dividing by a gs_eff that is also 0.
+        md_t k_dim  = getK();
+        md_t gs_eff = ((group_size == 0) || (group_size > k_dim)) ? k_dim
+                                                                  : group_size;
+        md_t ng     = (k_dim == 0) ? 0 : (k_dim + gs_eff - 1) / gs_eff;
         md_t a_ng   = (a_granularity == AScaleGranularity::PerToken) ? 1 : ng;
         md_t b_ng   = (b_granularity == BScaleGranularity::PerChannel) ? 1 : ng;
 

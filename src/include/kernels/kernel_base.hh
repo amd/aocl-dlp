@@ -81,6 +81,7 @@ struct gemmParams : public kernelParams
     md_t nLeft;
     md_t kIterBP;
     md_t kIterAP;
+    md_t kIterAPLast; // full VNNI chunks in the trailing (partial) quant group
     md_t kLeft;
     // Generalised K-tail decomposition. kLeft holds the full residual K
     // count; kLeftIter and kLeftRem are derived host-side
@@ -104,27 +105,29 @@ struct gemmParams : public kernelParams
     // Quantization scaling fields
     void* quantScale; // Per-tensor or per-channel scale factor
 
-    dlp_gemm_post_op*     kernelOpsList;
-    dlp_gemm_post_op_attr kernelOpsAttr;
+    dlp_gemm_post_op*         kernelOpsList;
+    dlp_gemm_post_op_attr     kernelOpsAttr;
+    dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
 
-    gemmParams(void*                 A,
-               void*                 B,
-               void*                 C_acc,
-               md_t                  _m,
-               md_t                  _n,
-               md_t                  _k,
-               md_t                  rs_a,
-               md_t                  cs_a,
-               md_t                  ps_a,
-               md_t                  rs_b,
-               md_t                  cs_b,
-               md_t                  ps_b,
-               md_t                  rs_c,
-               md_t                  cs_c,
-               void*                 alpha_acc,
-               void*                 beta_acc,
-               dlp_gemm_post_op*     kernelOpsList,
-               dlp_gemm_post_op_attr kernelOpsAttr)
+    gemmParams(void*                     A,
+               void*                     B,
+               void*                     C_acc,
+               md_t                      _m,
+               md_t                      _n,
+               md_t                      _k,
+               md_t                      rs_a,
+               md_t                      cs_a,
+               md_t                      ps_a,
+               md_t                      rs_b,
+               md_t                      cs_b,
+               md_t                      ps_b,
+               md_t                      rs_c,
+               md_t                      cs_c,
+               void*                     alpha_acc,
+               void*                     beta_acc,
+               dlp_gemm_post_op*         kernelOpsList,
+               dlp_gemm_post_op_attr     kernelOpsAttr,
+               dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {})
         : a(A)
         , b(B)
         , c(C_acc)
@@ -147,6 +150,7 @@ struct gemmParams : public kernelParams
         , nLeft(0)
         , kIterBP(0)
         , kIterAP(0)
+        , kIterAPLast(0)
         , kLeft(0)
         , kLeftIter(0)
         , kLeftRem(0)
@@ -159,6 +163,7 @@ struct gemmParams : public kernelParams
         , quantScale(nullptr)
         , kernelOpsList(kernelOpsList)
         , kernelOpsAttr(kernelOpsAttr)
+        , grpKernelOpsAttr(grpKernelOpsAttr)
     {
     }
 
@@ -185,6 +190,7 @@ struct gemmParams : public kernelParams
         , nLeft(other.nLeft)
         , kIterBP(other.kIterBP)
         , kIterAP(other.kIterAP)
+        , kIterAPLast(other.kIterAPLast)
         , kLeft(other.kLeft)
         , kLeftIter(other.kLeftIter)
         , kLeftRem(other.kLeftRem)
@@ -194,6 +200,7 @@ struct gemmParams : public kernelParams
         , quantScale(other.quantScale)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , grpKernelOpsAttr(other.grpKernelOpsAttr)
     {
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
@@ -226,6 +233,7 @@ struct gemmParams : public kernelParams
         , nLeft(other.nLeft)
         , kIterBP(other.kIterBP)
         , kIterAP(other.kIterAP)
+        , kIterAPLast(other.kIterAPLast)
         , kLeft(other.kLeft)
         , kLeftIter(other.kLeftIter)
         , kLeftRem(other.kLeftRem)
@@ -237,6 +245,7 @@ struct gemmParams : public kernelParams
         , quantScale(other.quantScale)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , grpKernelOpsAttr(other.grpKernelOpsAttr)
     {
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
@@ -247,43 +256,45 @@ struct gemmParams : public kernelParams
 
     gemmParams& operator=(const gemmParams& other)
     {
-        a         = other.a;
-        b         = other.b;
-        c         = other.c;
-        m         = other.m;
-        n         = other.n;
-        k         = other.k;
-        rsA       = other.rsA;
-        csA       = other.csA;
-        psA       = other.psA;
-        rsB       = other.rsB;
-        csB       = other.csB;
-        psB       = other.psB;
-        rsC       = other.rsC;
-        csC       = other.csC;
-        alpha     = other.alpha;
-        beta      = other.beta;
-        mIter     = other.mIter;
-        mLeft     = other.mLeft;
-        nIter     = other.nIter;
-        nLeft     = other.nLeft;
-        kIterBP   = other.kIterBP;
-        kIterAP   = other.kIterAP;
-        kLeft     = other.kLeft;
-        kLeftIter = other.kLeftIter;
-        kLeftRem  = other.kLeftRem;
+        a           = other.a;
+        b           = other.b;
+        c           = other.c;
+        m           = other.m;
+        n           = other.n;
+        k           = other.k;
+        rsA         = other.rsA;
+        csA         = other.csA;
+        psA         = other.psA;
+        rsB         = other.rsB;
+        csB         = other.csB;
+        psB         = other.psB;
+        rsC         = other.rsC;
+        csC         = other.csC;
+        alpha       = other.alpha;
+        beta        = other.beta;
+        mIter       = other.mIter;
+        mLeft       = other.mLeft;
+        nIter       = other.nIter;
+        nLeft       = other.nLeft;
+        kIterBP     = other.kIterBP;
+        kIterAP     = other.kIterAP;
+        kIterAPLast = other.kIterAPLast;
+        kLeft       = other.kLeft;
+        kLeftIter   = other.kLeftIter;
+        kLeftRem    = other.kLeftRem;
         std::copy(std::begin(other.maskF32), std::end(other.maskF32),
                   std::begin(maskF32));
         std::copy(std::begin(other.maskF32_8), std::end(other.maskF32_8),
                   std::begin(maskF32_8));
         std::copy(std::begin(other.maskArray), std::end(other.maskArray),
                   std::begin(maskArray));
-        maskS32       = other.maskS32;
-        kLeftmask     = other.kLeftmask;
-        maskFP16      = other.maskFP16;
-        quantScale    = other.quantScale;
-        kernelOpsList = other.kernelOpsList;
-        kernelOpsAttr = other.kernelOpsAttr;
+        maskS32          = other.maskS32;
+        kLeftmask        = other.kLeftmask;
+        maskFP16         = other.maskFP16;
+        quantScale       = other.quantScale;
+        kernelOpsList    = other.kernelOpsList;
+        kernelOpsAttr    = other.kernelOpsAttr;
+        grpKernelOpsAttr = other.grpKernelOpsAttr;
         return *this;
     }
 
@@ -306,6 +317,7 @@ struct gemmParams : public kernelParams
         nLeft         = 0;
         kIterBP       = 0;
         kIterAP       = 0;
+        kIterAPLast   = 0;
         kLeft         = 0;
         kLeftIter     = 0;
         kLeftRem      = 0;
@@ -958,6 +970,10 @@ class kernelBase
     virtual std::vector<cpu_utils::isaFeature>& getIsaFeaturesForKernel() = 0;
     virtual kernel_frame::kernelInfo*           getKernelInfo()           = 0;
     virtual kernel_frame::packKernelInfo*       getPackKernelInfo()
+    {
+        return nullptr;
+    }
+    virtual kernel_frame::quantKernelInfo* getGemmQuantKernelInfo()
     {
         return nullptr;
     }

@@ -1420,7 +1420,8 @@ DlpUalPlan::convertGroupScaleOperations()
     // NOTE: The metadata passed to DLP still receives the original group_size
     // and not the effective group size.
     md_t eff_gs = (gs == 0) ? k : gs;
-    md_t ng     = (k + eff_gs - 1) / eff_gs; // number of groups
+    // If K == 0, set num_groups = 0
+    md_t ng = (k == 0) ? 0 : (k + eff_gs - 1) / eff_gs; // number of groups
 
     // Per-matrix group counts. A PER_TOKEN -> one scale per row (a_ng=1);
     // B PER_CHANNEL -> one scale per column (b_ng=1); else per-group.

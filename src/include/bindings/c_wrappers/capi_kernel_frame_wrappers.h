@@ -96,6 +96,12 @@ typedef struct dlp_gemm_post_op_t
     struct dlp_gemm_post_op_t* next;
 } dlp_gemm_post_op;
 
+typedef struct
+{
+    dlp_quant_op_t* a_post_quant_op;
+    dlp_quant_op_t* b_post_quant_op;
+} dlp_group_op;
+
 // Used as an internal structure.
 typedef struct dlp_gemm_post_op_attr_t
 {
@@ -122,6 +128,29 @@ typedef struct dlp_gemm_post_op_attr_t
      * the half-width store; the other axis is unit-stride. */
     uint64_t ld_d;
 } dlp_gemm_post_op_attr;
+
+typedef struct dlp_gemm_grp_post_op_attr_t
+{
+    void*    a_scale_factor;
+    uint64_t a_scale_factor_len;
+    void*    a_zp;
+    uint64_t a_zp_len;
+    void*    b_scale_factor;
+    uint64_t b_scale_factor_len;
+    void*    b_zp;
+    uint64_t b_zp_len;
+    uint64_t group_size;
+    char     a_grp_mul; // 0: A ignores group index (per-token), 1: per-group
+    char     b_grp_mul; // 0: B ignores group index (per-channel), 1: per-group
+    uint64_t grp_post_op_i;
+    uint64_t grp_post_op_j;
+    uint64_t grp_post_op_k;
+    uint64_t grp_post_op_lda;
+    uint64_t grp_post_op_ldb;
+    uint64_t grp_post_op_sum_ld;
+    DLP_TYPE sf_stor_type;
+    DLP_TYPE zp_stor_type;
+} dlp_gemm_grp_post_op_attr;
 
 // Type definitions that can be used by both C and C++ code. The enum tokens
 // should follow the exact sequence as in kernelDatatype(kernel_frame_base.h).
@@ -168,6 +197,14 @@ typedef struct
     uint8_t           dst_type;
 } dlp_pack_info_hndl_t;
 
+typedef struct
+{
+    void*             kernel_base;
+    md_t              mr;
+    md_t              nr;
+    kernel_datatype_t kDtype;
+} dlp_gemm_quant_kernel_hndl_t;
+
 typedef enum
 {
     DLP_PACK_A    = 0x1,
@@ -213,18 +250,19 @@ typedef struct
 
 typedef struct
 {
-    dlp_gemm_block_size_t   blksz;
-    opaq_fp_t               kern_fun_ptr;
-    opaq_fp_t               packa_fun_ptr;
-    opaq_fp_t               packb_mxp_fun_ptr;
-    opaq_fp_t               packb_fun_ptr;
-    opaq_fp_t               unpackb_fun_ptr;
-    opaq_fp_t               packsclb_fun_ptr;
-    dlp_gemm_pack_strides_t pack_s;
-    dlp_gemm_sup_thres_t    sup_thres;
-    dlp_kernel_hndl_t       dlp_kernel_hndl;
-    dlp_pack_kernel_hndl_t  dlp_pack_kernel_hndl;
-    dlp_gemm_kernel_hints_t gemm_kernel_hints;
+    dlp_gemm_block_size_t        blksz;
+    opaq_fp_t                    kern_fun_ptr;
+    opaq_fp_t                    packa_fun_ptr;
+    opaq_fp_t                    packb_mxp_fun_ptr;
+    opaq_fp_t                    packb_fun_ptr;
+    opaq_fp_t                    unpackb_fun_ptr;
+    opaq_fp_t                    packsclb_fun_ptr;
+    dlp_gemm_pack_strides_t      pack_s;
+    dlp_gemm_sup_thres_t         sup_thres;
+    dlp_kernel_hndl_t            dlp_kernel_hndl;
+    dlp_pack_kernel_hndl_t       dlp_pack_kernel_hndl;
+    dlp_gemm_kernel_hints_t      gemm_kernel_hints;
+    dlp_gemm_quant_kernel_hndl_t dlp_quant_kernel_hndl;
 } dlp_gemm_cntx_t;
 
 // C linkage for function declarations only
@@ -260,6 +298,48 @@ dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
 // Packs B with the JIT pack-B kernel. The caller must only invoke this with a
 // valid (non-NULL) handle; the kernel ladder covers the full NR panel plus the
 // fringe / lt16 cascade for every n, so there is no in-band failure to report.
+void
+dlp_init_and_get_gemm_quant_kernel_hndl(kernel_datatype_t   k_dtype,
+                                        char                storage_format,
+                                        AOCL_DLP_MEMORY_TAG mtag_a,
+                                        AOCL_DLP_MEMORY_TAG mtag_b,
+                                        md_t                m,
+                                        md_t                n,
+                                        md_t                k,
+                                        md_t                rs_a,
+                                        md_t                cs_a,
+                                        md_t                rs_b,
+                                        md_t                cs_b,
+                                        md_t                rs_c,
+                                        md_t                cs_c,
+                                        void*               alpha,
+                                        void*               beta,
+                                        dlp_gemm_post_op*   metadata,
+                                        dlp_group_op*       group_ops,
+                                        dlp_gemm_cntx_t*    cntx,
+                                        md_t                c_downscale);
+
+void
+dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
+                              md_t                          m,
+                              md_t                          n,
+                              md_t                          k,
+                              void*                         A,
+                              md_t                          rs_a,
+                              md_t                          cs_a,
+                              md_t                          ps_a,
+                              void*                         B,
+                              md_t                          rs_b,
+                              md_t                          cs_b,
+                              void*                         C,
+                              md_t                          rs_c,
+                              md_t                          cs_c,
+                              void*                         alpha,
+                              void*                         beta,
+                              dlp_gemm_post_op*             post_ops_list,
+                              dlp_gemm_post_op_attr         post_ops_attr,
+                              dlp_gemm_grp_post_op_attr     grp_post_ops_attr);
+
 void
 dlp_execute_packb_kernel(dlp_pack_info_hndl_t kernel_hndl,
                          void*                src,

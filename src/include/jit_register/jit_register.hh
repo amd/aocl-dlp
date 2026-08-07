@@ -47,6 +47,15 @@ using jitGeneratorBaseRef = utils::ptrWrapper<jitGeneratorBase,
                                               const kernel_frame::kernelInfo&,
                                               jitGeneratorError>;
 
+template<typename KInfoT>
+using jitGeneratorRef = utils::ptrWrapper<jitGenerator<KInfoT>,
+                                          const jitGeneratorContext<KInfoT>&,
+                                          jitGeneratorError>;
+
+using gemmJitGeneratorRef      = jitGeneratorRef<kernel_frame::kernelInfo>;
+using packBJitGeneratorRef     = jitGeneratorRef<kernel_frame::packKernelInfo>;
+using gemmQuantJitGeneratorRef = jitGeneratorRef<kernel_frame::quantKernelInfo>;
+
 enum class jitGeneratorFrameError
 {
     success,
@@ -186,6 +195,14 @@ class jitGeneratorRegister
         kernel_frame::kernelRoutineType kType,
         kernel_frame::kernelDatatype    kDtype);
 
+    template<typename KInfoT>
+    [[nodiscard]] static jitGeneratorRef<KInfoT> asGeneratorRef(
+        jitGeneratorBaseRef gen)
+    {
+        return jitGeneratorRef<KInfoT>(
+            static_cast<jitGenerator<KInfoT>*>(gen.getPtr()));
+    }
+
   public:
     /**
      * @brief Meyer's singleton instance accessor with thread-safe
@@ -222,7 +239,7 @@ class jitGeneratorRegister
      * error
      */
     [[nodiscard]] jitGeneratorFrameError registerGemmJitGenerator(
-        std::unique_ptr<jitGeneratorBase> jitGen, std::string&& kernelFamily)
+        std::unique_ptr<gemmJitGenerator> jitGen, std::string&& kernelFamily)
     {
         return registerJitGenerator(std::move(jitGen), std::move(kernelFamily),
                                     kernel_frame::kernelRoutineType::gemm);
@@ -244,14 +261,15 @@ class jitGeneratorRegister
      * @return Reference wrapper to registered JIT generator, or nullptr on
      * failure
      */
-    [[nodiscard]] jitGeneratorBaseRef registerAndGetGemmJitGenerator(
-        std::unique_ptr<jitGeneratorBase> jitGen,
+    [[nodiscard]] gemmJitGeneratorRef registerAndGetGemmJitGenerator(
+        std::unique_ptr<gemmJitGenerator> jitGen,
         std::string&&                     kernelFamily,
         kernel_frame::kernelDatatype      kDtype)
     {
-        return registerAndGetJitGenerator(
-            std::move(jitGen), std::move(kernelFamily),
-            kernel_frame::kernelRoutineType::gemm, kDtype);
+        return asGeneratorRef<kernel_frame::kernelInfo>(
+            registerAndGetJitGenerator(
+                std::move(jitGen), std::move(kernelFamily),
+                kernel_frame::kernelRoutineType::gemm, kDtype));
     }
 
     /**
@@ -265,23 +283,42 @@ class jitGeneratorRegister
      * @param kDtype Datatype for JIT generator lookup
      * @return Smart pointer reference to JIT generator, or nullptr if not found
      */
-    [[nodiscard]] jitGeneratorBaseRef getGemmJitGenerator(
+    [[nodiscard]] gemmJitGeneratorRef getGemmJitGenerator(
         kernel_frame::kernelDatatype kDtype)
     {
-        return getJitGenerator(kernel_frame::kernelRoutineType::gemm, kDtype);
+        return asGeneratorRef<kernel_frame::kernelInfo>(
+            getJitGenerator(kernel_frame::kernelRoutineType::gemm, kDtype));
     }
 
     [[nodiscard]] jitGeneratorFrameError registerPackBJitGenerator(
-        std::unique_ptr<jitGeneratorBase> jitGen, std::string&& kernelFamily)
+        std::unique_ptr<packBJitGenerator> jitGen, std::string&& kernelFamily)
     {
         return registerJitGenerator(std::move(jitGen), std::move(kernelFamily),
                                     kernel_frame::kernelRoutineType::pack_b);
     }
 
-    [[nodiscard]] jitGeneratorBaseRef getPackBJitGenerator(
+    [[nodiscard]] packBJitGeneratorRef getPackBJitGenerator(
         kernel_frame::kernelDatatype kDtype)
     {
-        return getJitGenerator(kernel_frame::kernelRoutineType::pack_b, kDtype);
+        return asGeneratorRef<kernel_frame::packKernelInfo>(
+            getJitGenerator(kernel_frame::kernelRoutineType::pack_b, kDtype));
+    }
+
+    // Quant GEMM generator register/lookup (routine gemm_quant).
+    [[nodiscard]] jitGeneratorFrameError registerGemmQuantJitGenerator(
+        std::unique_ptr<gemmQuantJitGenerator> jitGen,
+        std::string&&                          kernelFamily)
+    {
+        return registerJitGenerator(
+            std::move(jitGen), std::move(kernelFamily),
+            kernel_frame::kernelRoutineType::gemm_quant);
+    }
+
+    [[nodiscard]] gemmQuantJitGeneratorRef getGemmQuantJitGenerator(
+        kernel_frame::kernelDatatype kDtype)
+    {
+        return asGeneratorRef<kernel_frame::quantKernelInfo>(getJitGenerator(
+            kernel_frame::kernelRoutineType::gemm_quant, kDtype));
     }
 };
 
@@ -323,8 +360,8 @@ dlpJitGeneratorRegisterInstance()
     static_assert(                                                             \
         std::is_default_constructible_v<className>,                            \
         "Requires trivially constructible classes for jit generators.");       \
-    static_assert(std::is_base_of_v<dlp::jit::jitGeneratorBase, className>,    \
-                  "Requires classes derived from jitGeneratorBase.");          \
+    static_assert(std::is_base_of_v<dlp::jit::gemmJitGenerator, className>,    \
+                  "Requires classes derived from gemmJitGenerator.");          \
     DLP_ATTRIBUTE_USED static auto DLP_SUBS_CONCAT_3TOK(                       \
         static_mgc_dlp_jit_reg_var_, className, __LINE__) =                    \
         dlp::jit::dlpJitGeneratorRegisterInstance().registerGemmJitGenerator(  \
@@ -334,9 +371,22 @@ dlpJitGeneratorRegisterInstance()
     static_assert(                                                             \
         std::is_default_constructible_v<className>,                            \
         "Requires trivially constructible classes for jit generators.");       \
-    static_assert(std::is_base_of_v<dlp::jit::jitGeneratorBase, className>,    \
-                  "Requires classes derived from jitGeneratorBase.");          \
+    static_assert(std::is_base_of_v<dlp::jit::packBJitGenerator, className>,   \
+                  "Requires classes derived from packBJitGenerator.");         \
     static auto DLP_SUBS_CONCAT_3TOK(static_mgc_dlp_packb_jit_reg_var_,        \
                                      className, __LINE__) =                    \
         dlp::jit::dlpJitGeneratorRegisterInstance().registerPackBJitGenerator( \
             std::make_unique<className>(), std::string{ kernelFamily });
+
+#define DLP_REGISTER_STATIC_GEMM_QUANT_JIT_GENERATOR(className, kernelFamily)  \
+    static_assert(                                                             \
+        std::is_default_constructible_v<className>,                            \
+        "Requires trivially constructible classes for jit generators.");       \
+    static_assert(                                                             \
+        std::is_base_of_v<dlp::jit::gemmQuantJitGenerator, className>,         \
+        "Requires classes derived from gemmQuantJitGenerator.");               \
+    DLP_ATTRIBUTE_USED static auto DLP_SUBS_CONCAT_3TOK(                       \
+        static_mgc_dlp_gemm_quant_jit_reg_var_, className, __LINE__) =         \
+        dlp::jit::dlpJitGeneratorRegisterInstance()                            \
+            .registerGemmQuantJitGenerator(std::make_unique<className>(),      \
+                                           std::string{ kernelFamily });

@@ -63,7 +63,8 @@ BenchmarkMetrics::calculateAndReport(benchmark::State& state,
                                      md_t              k,
                                      MatrixType        a_type,
                                      MatrixType        b_type,
-                                     MatrixType        c_type)
+                                     MatrixType        c_type,
+                                     md_t              group_size)
 {
     // Calculate GFLOPS
     double ops = 2.0 * static_cast<double>(m) * n * k;
@@ -95,6 +96,9 @@ BenchmarkMetrics::calculateAndReport(benchmark::State& state,
     state.counters["M"] = static_cast<double>(m);
     state.counters["N"] = static_cast<double>(n);
     state.counters["K"] = static_cast<double>(k);
+
+    // Quantization group size along K (0 = full K)
+    state.counters["group_size"] = static_cast<double>(group_size);
 
     // Matrix size in MB
     double matrix_size_mb =

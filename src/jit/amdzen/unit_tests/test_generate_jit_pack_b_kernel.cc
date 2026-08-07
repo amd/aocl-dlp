@@ -219,12 +219,11 @@ class JitPackBTest : public JitGeneratorTestBase
     {
         auto gen = std::make_unique<jitAmdZenPackBFP32>();
 
-        kernelInfo     dummyKI;
         packKernelInfo packKI(cfg.NR, cfg.k_factor, cfg.kInstPref,
                               DataType::f32, DataType::f32, cfg.isColMajor);
 
-        jitGeneratorContext ctx(dummyKI, packKI);
-        auto                err = (*gen)(ctx);
+        packBJitGeneratorContext ctx(packKI);
+        auto                     err = (*gen)(ctx);
 
         if (err != jitGeneratorError::success) {
             return nullptr;
@@ -386,10 +385,9 @@ TEST_F(JitPackBTest, GenerateInvalidNR_ReturnsError)
 
                 auto gen = std::make_unique<jitAmdZenPackBFP32>();
 
-                kernelInfo          dummyKI;
-                packKernelInfo      packKI(NR, 1, kInstPref, DataType::f32,
-                                           DataType::f32, colMajor);
-                jitGeneratorContext ctx(dummyKI, packKI);
+                packKernelInfo           packKI(NR, 1, kInstPref, DataType::f32,
+                                                DataType::f32, colMajor);
+                packBJitGeneratorContext ctx(packKI);
 
                 auto result = CrashIsolation::runIsolated(
                     [&]() { return static_cast<int>((*gen)(ctx)); });
@@ -578,28 +576,15 @@ INSTANTIATE_TEST_SUITE_P(
 // 4. Negative Tests (bad inputs to generation / execution)
 // ============================================================================
 
-TEST_F(JitPackBTest, Negative_NullPackKI)
-{
-    auto gen = std::make_unique<jitAmdZenPackBFP32>();
-
-    kernelInfo          dummyKI;
-    jitGeneratorContext ctx(dummyKI);
-
-    auto err = (*gen)(ctx);
-    EXPECT_EQ(err, jitGeneratorError::badKernelInfo)
-        << "Expected badKernelInfo for null packKI";
-}
-
 TEST_F(JitPackBTest, Negative_InvalidKInstPref)
 {
     auto gen = std::make_unique<jitAmdZenPackBFP32>();
 
-    kernelInfo     dummyKI;
     packKernelInfo packKI(64, 1, kernelInstrPreference::none, DataType::f32,
                           DataType::f32, false);
 
-    jitGeneratorContext ctx(dummyKI, packKI);
-    auto                err = (*gen)(ctx);
+    packBJitGeneratorContext ctx(packKI);
+    auto                     err = (*gen)(ctx);
     EXPECT_EQ(err, jitGeneratorError::notSupported)
         << "Expected notSupported for kInstPref=none";
 }
