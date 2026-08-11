@@ -96,6 +96,10 @@ if(UNIX AND COMMAND dlp_setup_hardening)
     dlp_setup_hardening()
 endif()
 
+# Sanitizer flags must also reach the OBJECT libraries, so they go on the
+# shared dlp_compiler_flags interface rather than only the final targets.
+dlp_setup_sanitizers()
+
 # Add classic directory
 add_subdirectory(classic)
 add_subdirectory(src)
