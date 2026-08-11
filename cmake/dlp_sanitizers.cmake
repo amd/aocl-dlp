@@ -25,30 +25,30 @@
 #
 
 # Given a target, add the appropriate sanitizer flags to the targets
-function(dlp_add_asan targets)
+function(dlp_add_asan)
     if(DLP_ENABLE_ASAN)
         # Add sanitizer flags to target and all dependencies.
-        foreach(target ${targets})
+        foreach(target ${ARGV})
             target_compile_options(${target} PUBLIC -fsanitize=address)
             target_link_options(${target} PUBLIC -fsanitize=address)
         endforeach()
     endif()
 endfunction()
 
-function(dlp_add_ubsan targets)
+function(dlp_add_ubsan)
     if(DLP_ENABLE_UBSAN)
         # Add sanitizer flags to target and all dependencies.
-        foreach(target ${targets})
+        foreach(target ${ARGV})
             target_compile_options(${target} PUBLIC -fsanitize=undefined)
             target_link_options(${target} PUBLIC -fsanitize=undefined)
         endforeach()
     endif()
 endfunction()
 
-function(dlp_add_tsan targets)
+function(dlp_add_tsan)
     if(DLP_ENABLE_TSAN)
         # Add sanitizer flags to target and all dependencies.
-        foreach(target ${targets})
+        foreach(target ${ARGV})
             target_compile_options(${target} PUBLIC -fsanitize=thread)
             target_link_options(${target} PUBLIC -fsanitize=thread)
         endforeach()
@@ -56,8 +56,33 @@ function(dlp_add_tsan targets)
 endfunction()
 
 
-function(dlp_add_all_sanitizers targets)
-    dlp_add_asan(${targets})
-    dlp_add_ubsan(${targets})
-    dlp_add_tsan(${targets})
+function(dlp_add_all_sanitizers)
+    dlp_add_asan(${ARGV})
+    dlp_add_ubsan(${ARGV})
+    dlp_add_tsan(${ARGV})
+endfunction()
+
+# Route the sanitizer flags through the dlp_compiler_flags interface target so
+# they reach every translation unit, including the OBJECT libraries that hold
+# the library implementation. Applying them only to the final library targets
+# instruments nothing, because those targets compile no sources of their own on
+# a UNIX build. Mirrors how dlp_compiler_flags_coverage carries both compile
+# and link flags. Must be called after dlp_define_build_options().
+function(dlp_setup_sanitizers)
+    set(_san_flags "")
+    if(DLP_ENABLE_ASAN)
+        list(APPEND _san_flags -fsanitize=address -fno-omit-frame-pointer)
+    endif()
+    if(DLP_ENABLE_UBSAN)
+        list(APPEND _san_flags -fsanitize=undefined)
+    endif()
+    if(DLP_ENABLE_TSAN)
+        list(APPEND _san_flags -fsanitize=thread)
+    endif()
+
+    if(_san_flags AND TARGET dlp_compiler_flags)
+        target_compile_options(dlp_compiler_flags INTERFACE ${_san_flags})
+        target_link_options(dlp_compiler_flags INTERFACE ${_san_flags})
+        message(STATUS "Sanitizers enabled for all DLP targets: ${_san_flags}")
+    endif()
 endfunction()
