@@ -203,43 +203,6 @@ class ArgParser
     }
 
     /**
-     * @brief Get all non-flag arguments (positional arguments)
-     * @return Vector of positional arguments
-     */
-    std::vector<std::string> getPositionalArgs() const
-    {
-        std::vector<std::string> positional;
-
-        for (iter_t i = 1; i < argc_; ++i) {
-            std::string arg = argv_[i];
-
-            // Skip flags and their values
-            if (!arg.empty() && arg[0] == '-') {
-                // If this flag takes a value, skip the next argument too
-                if ((arg == "-f" || arg == "--file") && i + 1 < argc_) {
-                    ++i; // Skip the value
-                }
-                continue;
-            }
-
-            // Check if this is a value for a previous flag
-            bool is_flag_value = false;
-            if (i > 1) {
-                std::string prev_arg = argv_[i - 1];
-                if (prev_arg == "-f" || prev_arg == "--file") {
-                    is_flag_value = true;
-                }
-            }
-
-            if (!is_flag_value) {
-                positional.push_back(arg);
-            }
-        }
-
-        return positional;
-    }
-
-    /**
      * @brief Print usage information
      * @param program_name Name of the program (usually argv[0])
      */
