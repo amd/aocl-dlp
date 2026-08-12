@@ -58,6 +58,11 @@ aocl_batch_gemm_s8s8s32of32_sym_quant(const char*      order,
                                       const char*      mem_format_b,
                                       dlp_metadata_t** metadata)
 {
+    AOCL_DLP_BATCH_GEMM_NULL_ARGS_CHECK(
+        "batch_s8s8s32of32_sym_quant", order, transa, transb, m, n, k, alpha, a,
+        lda, b, ldb, beta, c, ldc, group_count, group_size, mem_format_a,
+        mem_format_b, metadata);
+
     DLP_GEMM_START_LOGGER();
     BATCH_DLP_GEMM_WRITE_LOGGER("s8s8s32of32_sym_quant", order, transa, transb,
                                 group_count, group_size, m, n, k, alpha, lda,
@@ -357,6 +362,11 @@ aocl_batch_gemm_s8s8s32obf16_sym_quant(const char*      order,
                                        const char*      mem_format_b,
                                        dlp_metadata_t** metadata)
 {
+    AOCL_DLP_BATCH_GEMM_NULL_ARGS_CHECK(
+        "batch_s8s8s32obf16_sym_quant", order, transa, transb, m, n, k, alpha,
+        a, lda, b, ldb, beta, c, ldc, group_count, group_size, mem_format_a,
+        mem_format_b, metadata);
+
     DLP_GEMM_START_LOGGER();
     BATCH_DLP_GEMM_WRITE_LOGGER("s8s8s32obf16_sym_quant", order, transa, transb,
                                 group_count, group_size, m, n, k, alpha, lda,

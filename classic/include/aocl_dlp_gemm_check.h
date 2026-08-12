@@ -274,6 +274,89 @@
         AOCL_DLP_ERROR_CHECK(op_str, arg_pos, err_no);                         \
     }
 
+/*
+ * Rejects NULL array arguments to a batch entry point.
+ *
+ * The batch APIs take every per-group parameter as an array and index all of
+ * them (order[i], group_size[i], metadata[i], ...). AOCL_DLP_BATCH_GEMM_CHECK
+ * validates the values those indexes produce, but the arrays themselves have to
+ * be checked before anything dereferences them -- including the logger, which
+ * walks metadata[i] and group_size[i] before any validation runs.
+ *
+ * Cost is a single pass of never-taken pointer comparisons per batch call. It
+ * sits outside every per-group loop, so it does not scale with group_count,
+ * group_size or problem size, and the compute path is untouched.
+ *
+ * Both failure paths return directly, which is why this must be placed before
+ * DLP_GEMM_START_LOGGER(): once the logger is open, only the err_hndl path may
+ * leave the function. A NULL metadata array leaves nowhere to record the
+ * failure, so that case can only return; every other case reports
+ * DLP_CLSC_NULL_POINTER on each group first.
+ */
+#define AOCL_DLP_BATCH_GEMM_NULL_ARGS_CHECK(                                   \
+    op_str, order, transa, transb, m, n, k, alpha, a, lda, b, ldb, beta, c,    \
+    ldc, group_count, group_size, mem_format_a, mem_format_b, metadata)        \
+    {                                                                          \
+        if ((metadata) == NULL) {                                              \
+            char print_msg[256];                                               \
+            snprintf(print_msg, sizeof(print_msg),                             \
+                     "** On entry to %s, the metadata array was NULL, so no "  \
+                     "error can be reported",                                  \
+                     op_str);                                                  \
+            dlp_print_msg(print_msg, __FILE__, __LINE__);                      \
+            return;                                                            \
+        }                                                                      \
+        const char* bad_arg = NULL;                                            \
+        if ((order) == NULL) {                                                 \
+            bad_arg = "order";                                                 \
+        } else if ((transa) == NULL) {                                         \
+            bad_arg = "transa";                                                \
+        } else if ((transb) == NULL) {                                         \
+            bad_arg = "transb";                                                \
+        } else if ((m) == NULL) {                                              \
+            bad_arg = "m";                                                     \
+        } else if ((n) == NULL) {                                              \
+            bad_arg = "n";                                                     \
+        } else if ((k) == NULL) {                                              \
+            bad_arg = "k";                                                     \
+        } else if ((alpha) == NULL) {                                          \
+            bad_arg = "alpha";                                                 \
+        } else if ((a) == NULL) {                                              \
+            bad_arg = "a";                                                     \
+        } else if ((lda) == NULL) {                                            \
+            bad_arg = "lda";                                                   \
+        } else if ((b) == NULL) {                                              \
+            bad_arg = "b";                                                     \
+        } else if ((ldb) == NULL) {                                            \
+            bad_arg = "ldb";                                                   \
+        } else if ((beta) == NULL) {                                           \
+            bad_arg = "beta";                                                  \
+        } else if ((c) == NULL) {                                              \
+            bad_arg = "c";                                                     \
+        } else if ((ldc) == NULL) {                                            \
+            bad_arg = "ldc";                                                   \
+        } else if ((group_size) == NULL) {                                     \
+            bad_arg = "group_size";                                            \
+        } else if ((mem_format_a) == NULL) {                                   \
+            bad_arg = "mem_format_a";                                          \
+        } else if ((mem_format_b) == NULL) {                                   \
+            bad_arg = "mem_format_b";                                          \
+        }                                                                      \
+        if (bad_arg != NULL) {                                                 \
+            char print_msg[256];                                               \
+            snprintf(print_msg, sizeof(print_msg),                             \
+                     "** On entry to %s, array argument '%s' was NULL, "       \
+                     "error code: %i",                                         \
+                     op_str, bad_arg, (int)DLP_CLSC_NULL_POINTER);             \
+            dlp_print_msg(print_msg, __FILE__, __LINE__);                      \
+            for (int64_t gc_i = 0; gc_i < (group_count); gc_i++) {             \
+                DLP_METADATA_SET_ERROR((metadata)[gc_i],                       \
+                                       DLP_CLSC_NULL_POINTER);                 \
+            }                                                                  \
+            return;                                                            \
+        }                                                                      \
+    }
+
 #define AOCL_DLP_BATCH_GEMM_CHECK(op_str, order, transa, transb,               \
                                   group_count_idx, group_size, m, n, k, a,     \
                                   lda, mtag_a, b, ldb, mtag_b, c, ldc, err_no) \
