@@ -40,8 +40,11 @@
 #include "framework/vector_iterable.hh"
 
 // Standard Headers
+#include <cmath>
+#include <cstdlib>
 #include <gtest/gtest.h>
 #include <limits>
+#include <string>
 #include <vector>
 
 using namespace dlp::testing::framework;
@@ -1218,8 +1221,36 @@ using dlp::testing::utils::ArgParser;
 class ArgParserTest : public ::testing::Test
 {
   protected:
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override
+    {
+        const char* value   = std::getenv("BENCH_MIN_TIME");
+        had_bench_min_time_ = value != nullptr;
+        if (value != nullptr)
+            bench_min_time_ = value;
+        setBenchMinTime(nullptr);
+    }
+
+    void TearDown() override
+    {
+        setBenchMinTime(had_bench_min_time_ ? bench_min_time_.c_str()
+                                            : nullptr);
+    }
+
+    static void setBenchMinTime(const char* value)
+    {
+#ifdef _WIN32
+        _putenv_s("BENCH_MIN_TIME", value != nullptr ? value : "");
+#else
+        if (value != nullptr)
+            setenv("BENCH_MIN_TIME", value, 1);
+        else
+            unsetenv("BENCH_MIN_TIME");
+#endif
+    }
+
+  private:
+    bool        had_bench_min_time_ = false;
+    std::string bench_min_time_;
 };
 
 // Test that UAL type parsing works correctly
@@ -1314,6 +1345,81 @@ TEST_F(ArgParserTest, ParseTestArgsFiltersUALArguments)
 
     // Verify program name is still there
     EXPECT_STREQ(argv[0], "test_program");
+}
+
+TEST_F(ArgParserTest, BenchMinTimeResolutionOrder)
+{
+    const char* default_argv[] = { "test_program" };
+    ArgParser   default_parser(1, const_cast<char**>(default_argv));
+    EXPECT_DOUBLE_EQ(default_parser.getBenchMinTime(1.25), 1.25);
+
+    setBenchMinTime("0.75");
+    ArgParser env_parser(1, const_cast<char**>(default_argv));
+    EXPECT_DOUBLE_EQ(env_parser.getBenchMinTime(), 0.75);
+
+    const char* cli_argv[] = { "test_program", "--benchmark_min_time=0.5s" };
+    ArgParser   cli_parser(2, const_cast<char**>(cli_argv));
+    EXPECT_DOUBLE_EQ(cli_parser.getBenchMinTime(), 0.5);
+}
+
+TEST_F(ArgParserTest, BenchMinTimeAcceptsCallerControlledInfinity)
+{
+    setBenchMinTime("inf");
+    const char* env_argv[] = { "test_program" };
+    ArgParser   env_parser(1, const_cast<char**>(env_argv));
+    EXPECT_TRUE(std::isinf(env_parser.getBenchMinTime()));
+
+    const char* cli_argv[] = { "test_program", "--benchmark_min_time=inf" };
+    ArgParser   cli_parser(2, const_cast<char**>(cli_argv));
+    EXPECT_TRUE(std::isinf(cli_parser.getBenchMinTime()));
+}
+
+TEST_F(ArgParserTest, ColdOptionsAreParsedAndFiltered)
+{
+    const char* original_argv[] = { "test_program", "--cold", "--cold-passes",
+                                    "3", "--benchmark_filter=gemm" };
+    std::vector<char*> argv_vec;
+    for (const char* arg : original_argv)
+        argv_vec.push_back(const_cast<char*>(arg));
+
+    int    argc   = static_cast<int>(argv_vec.size());
+    char** argv   = argv_vec.data();
+    auto   parser = ArgParser::parseTestArgs(argc, argv);
+
+    EXPECT_TRUE(parser.getColdCache());
+    EXPECT_EQ(parser.getColdPasses(), 3);
+    ASSERT_EQ(argc, 2);
+    EXPECT_STREQ(argv[1], "--benchmark_filter=gemm");
+}
+
+TEST_F(ArgParserTest, MissingColdPassesValuePreservesFollowingFlag)
+{
+    const char*        original_argv[] = { "test_program", "--cold-passes",
+                                           "--benchmark_filter=gemm" };
+    std::vector<char*> argv_vec;
+    for (const char* arg : original_argv)
+        argv_vec.push_back(const_cast<char*>(arg));
+
+    int    argc   = static_cast<int>(argv_vec.size());
+    char** argv   = argv_vec.data();
+    auto   parser = ArgParser::parseTestArgs(argc, argv);
+
+    EXPECT_EQ(parser.getColdPasses(), 1);
+    ASSERT_EQ(argc, 2);
+    EXPECT_STREQ(argv[1], "--benchmark_filter=gemm");
+}
+
+TEST_F(ArgParserTest, HelpDocumentsBenchMinTimeOverrides)
+{
+    const char* argv[] = { "test_program" };
+    ArgParser   parser(1, const_cast<char**>(argv));
+
+    testing::internal::CaptureStdout();
+    parser.printUsage("bench_gemm");
+    const std::string usage = testing::internal::GetCapturedStdout();
+
+    EXPECT_NE(usage.find("--benchmark_min_time=<N>[s]"), std::string::npos);
+    EXPECT_NE(usage.find("BENCH_MIN_TIME"), std::string::npos);
 }
 
 // ============================================================================

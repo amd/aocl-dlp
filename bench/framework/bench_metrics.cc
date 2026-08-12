@@ -32,6 +32,12 @@
 
 namespace dlp::benchmarking {
 
+// FIXME(#544): Duplicates dlp::testing::framework::getElementSizeBytes() in
+// tests/include/framework/types.hh. The two helpers disagree on packed types
+// (u4/s4 here returns 1 vs 0 there) and on the default arm (4 here vs 0
+// there). Pick one canonical implementation, fix packed-type accounting at
+// the call site (bytes = (rows*cols + 1) / 2 for u4/s4), and delete the
+// duplicate. Tracked in github.com/AMD-AOCL/aocl-dlp#544.
 size_t
 BenchmarkMetrics::getMatrixTypeSize(MatrixType type)
 {

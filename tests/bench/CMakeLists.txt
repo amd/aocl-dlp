@@ -34,10 +34,15 @@ configure_file(
 # Fetch google benchmark (needed for bench_metrics.cc compilation)
 fetch_benchmark()
 
-# Bench infrastructure sources (reuse from bench directory)
+# Bench infrastructure sources to test. NOT a glob over bench/framework/:
+# this test target verifies a specific subset of bench infrastructure (the
+# type marshalling and metric reporting helpers). Bench-only concerns like
+# the cold-cache flush primitive are intentionally excluded — they have no
+# test consumer here, and we don't want to drag their OMP/runtime code into
+# this binary.
 set(BENCH_INFRA_SOURCES
-    ${PROJECT_SOURCE_DIR}/bench/src/bench_types.cc
-    ${PROJECT_SOURCE_DIR}/bench/src/bench_metrics.cc
+    ${PROJECT_SOURCE_DIR}/bench/framework/bench_types.cc
+    ${PROJECT_SOURCE_DIR}/bench/framework/bench_metrics.cc
 )
 
 # Additional include directories for bench tests

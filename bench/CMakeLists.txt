@@ -52,10 +52,7 @@ dlp_glob_sources_recursive(UTILS_SOURCES "${PROJECT_SOURCE_DIR}/tests/utils")
 dlp_glob_sources_recursive(ADAPTORS_SOURCES "${PROJECT_SOURCE_DIR}/tests/adaptors")
 
 # Collect bench infrastructure source files
-set(BENCH_INFRA_SOURCES
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/bench_types.cc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/bench_metrics.cc
-)
+dlp_glob_sources_recursive(BENCH_INFRA_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/framework")
 
 # Collect benchmark source files
 dlp_glob_sources(OUTPUT BENCHMARK_SOURCES DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -68,7 +65,7 @@ dlp_create_test_object_library(
     NAME bench_infrastructure_obj
     SOURCES ${BENCH_INFRA_SOURCES} ${FRAMEWORK_SOURCES} ${UTILS_SOURCES} ${ADAPTORS_SOURCES}
     INCLUDE_DIRS ${BENCH_INCLUDE_DIRS}
-    DEPENDS yaml-cpp benchmark
+    DEPENDS yaml-cpp benchmark dlp::openmp
 )
 
 #
