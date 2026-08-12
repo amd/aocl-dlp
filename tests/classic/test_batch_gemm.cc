@@ -35,11 +35,17 @@
 #include "framework/utils/yaml_parser.hh"
 #include "test_config.hh"
 #include <cctype>
+#include <cstdint>
 #include <cstring>
 #include <filesystem>
 #include <gtest/gtest.h>
 #include <iterator>
 #include <string>
+#if !defined(_WIN32)
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+#include <tuple>
 #include <vector>
 
 using namespace dlp::testing::framework;
@@ -1122,6 +1128,534 @@ TEST(BatchGemmTest, SkippedGroupsReportFailureNotSuccess)
         EXPECT_EQ(c_data[g][0], sentinel)
             << "skipped group " << g << " output was unexpectedly written";
     }
+}
+
+// ============================================================================
+// INPUT VALIDATION (NEGATIVE PATHS)
+// ============================================================================
+
+/*
+ * Negative-path coverage for the batch entry points. These drive the C API
+ * directly because the per-group error codes are not observable through the UAL
+ * wrapper, and because the reject path is not reachable from the YAML configs.
+ *
+ * Both axes are table-driven, so covering a new entry point or a new invalid
+ * input is a single line:
+ *
+ *   BatchApiValidation   every entry point x every invalid parameter value
+ *   BatchNullArrayArgs   the array arguments themselves being NULL (CPUPL-9033)
+ *   BatchGroupCount      the by-value group_count bound
+ *
+ * Per-group error reporting is already pinned by
+ * BatchGemmTest.SkippedGroupsReportFailureNotSuccess above and is not repeated.
+ */
+
+namespace validation {
+
+constexpr md_t kM = 4, kN = 4, kK = 4;
+constexpr md_t kOverMax = static_cast<md_t>(INT32_MAX) + 100;
+
+/*
+ * Which top-level array argument to pass as NULL. The batch APIs take every
+ * per-group parameter as an array and index all of them (order[i],
+ * group_size[i], metadata[i], ...), so each array has to be rejected at entry
+ * rather than dereferenced.
+ */
+enum class NullArg
+{
+    None,
+    Order,
+    Transa,
+    Transb,
+    M,
+    N,
+    K,
+    Alpha,
+    A,
+    Lda,
+    B,
+    Ldb,
+    Beta,
+    C,
+    Ldc,
+    GroupSize,
+    MemFormatA,
+    MemFormatB,
+    Metadata
+};
+
+// Defaults describe a valid single-group batch; each case perturbs one field.
+struct Knobs
+{
+    char order = 'r', transa = 'n', transb = 'n';
+    md_t m = kM, n = kN, k = kK;
+    md_t lda = kK, ldb = kN, ldc = kN;
+    char mem_format_a = 'n', mem_format_b = 'n';
+    md_t group_size = 1, group_count = 1;
+    // A NULL matrix within an otherwise valid array, as opposed to null_arg
+    // below which nulls the array itself.
+    bool    null_a = false, null_b = false, null_c = false;
+    NullArg null_arg = NullArg::None;
+    // Pre-set on the metadata before the call. A sentinel no validator produces
+    // makes "never written" detectable.
+    dlp_clsc_err_t initial_code = DLP_CLSC_SUCCESS;
+};
+
+// The one shape every aocl_batch_gemm_* entry point has.
+template<typename AType, typename BType, typename CType, typename ScalarT>
+using BatchGemmFn = void (*)(const char*,
+                             const char*,
+                             const char*,
+                             const md_t*,
+                             const md_t*,
+                             const md_t*,
+                             const ScalarT*,
+                             const AType**,
+                             const md_t*,
+                             const BType**,
+                             const md_t*,
+                             const ScalarT*,
+                             CType**,
+                             const md_t*,
+                             md_t,
+                             const md_t*,
+                             const char*,
+                             const char*,
+                             dlp_metadata_t**);
+
+// Passes ptr, or NULL when this case is the one nulling that argument.
+template<typename T>
+T*
+arg_or_null(const Knobs& kn, NullArg which, T* ptr)
+{
+    return kn.null_arg == which ? nullptr : ptr;
+}
+
+/*
+ * Runs a single-group batch call and returns the code left on that group's
+ * metadata. Buffers are sized generously so a buffer bound is never what makes
+ * a case fail: the only thing under test is the validator.
+ */
+template<typename AType, typename BType, typename CType, typename ScalarT>
+dlp_clsc_err_t
+invoke_batch(BatchGemmFn<AType, BType, CType, ScalarT> fn, const Knobs& kn)
+{
+    std::vector<AType> a_buf(4096, AType{});
+    std::vector<BType> b_buf(4096, BType{});
+    std::vector<CType> c_buf(4096, CType{});
+
+    const AType* ap = kn.null_a ? nullptr : a_buf.data();
+    const BType* bp = kn.null_b ? nullptr : b_buf.data();
+    CType*       cp = kn.null_c ? nullptr : c_buf.data();
+
+    ScalarT alpha = static_cast<ScalarT>(1);
+    ScalarT beta  = static_cast<ScalarT>(0);
+
+    dlp_metadata_t md;
+    std::memset(&md, 0, sizeof(md));
+    md.error_hndl.error_code = kn.initial_code;
+    dlp_metadata_t* mdp      = &md;
+
+    fn(arg_or_null(kn, NullArg::Order, &kn.order),
+       arg_or_null(kn, NullArg::Transa, &kn.transa),
+       arg_or_null(kn, NullArg::Transb, &kn.transb),
+       arg_or_null(kn, NullArg::M, &kn.m), arg_or_null(kn, NullArg::N, &kn.n),
+       arg_or_null(kn, NullArg::K, &kn.k),
+       arg_or_null(kn, NullArg::Alpha, &alpha),
+       arg_or_null(kn, NullArg::A, &ap), arg_or_null(kn, NullArg::Lda, &kn.lda),
+       arg_or_null(kn, NullArg::B, &bp), arg_or_null(kn, NullArg::Ldb, &kn.ldb),
+       arg_or_null(kn, NullArg::Beta, &beta), arg_or_null(kn, NullArg::C, &cp),
+       arg_or_null(kn, NullArg::Ldc, &kn.ldc), kn.group_count,
+       arg_or_null(kn, NullArg::GroupSize, &kn.group_size),
+       arg_or_null(kn, NullArg::MemFormatA, &kn.mem_format_a),
+       arg_or_null(kn, NullArg::MemFormatB, &kn.mem_format_b),
+       arg_or_null(kn, NullArg::Metadata, &mdp));
+
+    return md.error_hndl.error_code;
+}
+
+struct BatchApi
+{
+    const char* name;
+    dlp_clsc_err_t (*invoke)(const Knobs&);
+};
+
+#define DLP_BATCH_API(api, AType, BType, CType, ScalarT)                       \
+    BatchApi                                                                   \
+    {                                                                          \
+        #api, [](const Knobs& kn) -> dlp_clsc_err_t {                          \
+            return invoke_batch<AType, BType, CType, ScalarT>(                 \
+                &aocl_batch_gemm_##api, kn);                                   \
+        }                                                                      \
+    }
+
+// All 32 public batch entry points.
+std::vector<BatchApi>
+all_batch_apis()
+{
+    return {
+        DLP_BATCH_API(f32f32f32of32, float, float, float, float),
+
+        DLP_BATCH_API(bf16bf16f32of32, bfloat16, bfloat16, float, float),
+        DLP_BATCH_API(bf16bf16f32obf16, bfloat16, bfloat16, bfloat16, float),
+
+        DLP_BATCH_API(bf16s4f32of32, bfloat16, int8_t, float, float),
+        DLP_BATCH_API(bf16s4f32obf16, bfloat16, int8_t, bfloat16, float),
+        DLP_BATCH_API(bf16u4f32of32, bfloat16, uint8_t, float, float),
+        DLP_BATCH_API(bf16u4f32obf16, bfloat16, uint8_t, bfloat16, float),
+
+        DLP_BATCH_API(bf16s8s32os32, bfloat16, int8_t, int32_t, int32_t),
+        DLP_BATCH_API(bf16s8s32os8, bfloat16, int8_t, int8_t, int32_t),
+        DLP_BATCH_API(bf16s8s32ou8, bfloat16, int8_t, uint8_t, int32_t),
+        DLP_BATCH_API(bf16s8s32of32, bfloat16, int8_t, float, int32_t),
+        DLP_BATCH_API(bf16s8s32obf16, bfloat16, int8_t, bfloat16, int32_t),
+
+        DLP_BATCH_API(u8s8s32os32, uint8_t, int8_t, int32_t, int32_t),
+        DLP_BATCH_API(u8s8s32os8, uint8_t, int8_t, int8_t, int32_t),
+        DLP_BATCH_API(u8s8s32ou8, uint8_t, int8_t, uint8_t, int32_t),
+        DLP_BATCH_API(u8s8s32of32, uint8_t, int8_t, float, int32_t),
+        DLP_BATCH_API(u8s8s32obf16, uint8_t, int8_t, bfloat16, int32_t),
+
+        DLP_BATCH_API(s8s8s32os32, int8_t, int8_t, int32_t, int32_t),
+        DLP_BATCH_API(s8s8s32os8, int8_t, int8_t, int8_t, int32_t),
+        DLP_BATCH_API(s8s8s32ou8, int8_t, int8_t, uint8_t, int32_t),
+        DLP_BATCH_API(s8s8s32of32, int8_t, int8_t, float, int32_t),
+        DLP_BATCH_API(s8s8s32obf16, int8_t, int8_t, bfloat16, int32_t),
+
+        DLP_BATCH_API(s8s8s32of32_sym_quant, int8_t, int8_t, float, int32_t),
+        DLP_BATCH_API(s8s8s32obf16_sym_quant, int8_t, int8_t, bfloat16,
+                      int32_t),
+
+        DLP_BATCH_API(f32s8s32os32, float, int8_t, int32_t, int32_t),
+        DLP_BATCH_API(f32s8s32os8, float, int8_t, int8_t, int32_t),
+        DLP_BATCH_API(f32s8s32ou8, float, int8_t, uint8_t, int32_t),
+        DLP_BATCH_API(f32s8s32of32, float, int8_t, float, int32_t),
+        DLP_BATCH_API(f32s8s32obf16, float, int8_t, bfloat16, int32_t),
+
+        DLP_BATCH_API(f16f16f16of16, float16, float16, float16, float16),
+        DLP_BATCH_API(f16f16f16of32, float16, float16, float, float16),
+        DLP_BATCH_API(f32f16f32of32, float, float16, float, float),
+    };
+}
+
+struct Scenario
+{
+    const char*    name;
+    Knobs          knobs;
+    dlp_clsc_err_t expected;
+};
+
+std::vector<Scenario>
+all_scenarios()
+{
+    std::vector<Scenario> s;
+    auto                  add = [&s](const char* name, dlp_clsc_err_t expected,
+                    void (*mutate)(Knobs&)) {
+        Knobs k;
+        mutate(k);
+        s.push_back({ name, k, expected });
+    };
+
+    add("NullA", DLP_CLSC_NULL_POINTER, [](Knobs& k) { k.null_a = true; });
+    add("NullB", DLP_CLSC_NULL_POINTER, [](Knobs& k) { k.null_b = true; });
+    add("NullC", DLP_CLSC_NULL_POINTER, [](Knobs& k) { k.null_c = true; });
+
+    add("InvalidOrder", DLP_CLSC_INVALID_ORDER,
+        [](Knobs& k) { k.order = 'x'; });
+    add("InvalidTransA", DLP_CLSC_INVALID_TRANSPOSE,
+        [](Knobs& k) { k.transa = 'x'; });
+    add("InvalidTransB", DLP_CLSC_INVALID_TRANSPOSE,
+        [](Knobs& k) { k.transb = 'x'; });
+
+    add("InvalidMemFormatA", DLP_CLSC_INVALID_MEMORY_TAG,
+        [](Knobs& k) { k.mem_format_a = 'x'; });
+    add("InvalidMemFormatB", DLP_CLSC_INVALID_MEMORY_TAG,
+        [](Knobs& k) { k.mem_format_b = 'x'; });
+
+    add("ZeroM", DLP_CLSC_INVALID_MATRIX_DIMENSION, [](Knobs& k) { k.m = 0; });
+    add("ZeroN", DLP_CLSC_INVALID_MATRIX_DIMENSION, [](Knobs& k) { k.n = 0; });
+    add("ZeroK", DLP_CLSC_INVALID_MATRIX_DIMENSION, [](Knobs& k) { k.k = 0; });
+    add("NegativeM", DLP_CLSC_INVALID_MATRIX_DIMENSION,
+        [](Knobs& k) { k.m = -1; });
+    add("OverMaxN", DLP_CLSC_INVALID_MATRIX_DIMENSION,
+        [](Knobs& k) { k.n = kOverMax; });
+
+    add("LdaBelowMin", DLP_CLSC_INVALID_LEADING_DIMENSION,
+        [](Knobs& k) { k.lda = kK - 1; });
+    add("LdbBelowMin", DLP_CLSC_INVALID_LEADING_DIMENSION,
+        [](Knobs& k) { k.ldb = kN - 1; });
+    add("LdcBelowMin", DLP_CLSC_INVALID_LEADING_DIMENSION,
+        [](Knobs& k) { k.ldc = kN - 1; });
+    add("LdcOverMax", DLP_CLSC_INVALID_LEADING_DIMENSION,
+        [](Knobs& k) { k.ldc = kOverMax; });
+
+    // Batch-only: the per-group size guard. No single-GEMM equivalent exists.
+    add("ZeroGroupSize", DLP_CLSC_INVALID_GROUP_DIMENSION,
+        [](Knobs& k) { k.group_size = 0; });
+    add("NegativeGroupSize", DLP_CLSC_INVALID_GROUP_DIMENSION,
+        [](Knobs& k) { k.group_size = -1; });
+    add("OverMaxGroupSize", DLP_CLSC_INVALID_GROUP_DIMENSION,
+        [](Knobs& k) { k.group_size = kOverMax; });
+
+    return s;
+}
+
+// Outcome of running a probe in a forked child.
+struct ChildResult
+{
+    int signal    = 0;
+    int exit_code = -1;
+};
+
+/*
+ * Runs `probe` in a forked child and reports how the child terminated, exiting
+ * with the value `probe` returns so a caller can assert on an error code and on
+ * survival in one test. Used where the library might dereference an argument
+ * before validating it: a fault stays in the child and becomes a normal
+ * assertion failure instead of taking the whole binary down and masking every
+ * later case. fork() is used directly because death-test support is not enabled
+ * in this build's GoogleTest configuration.
+ */
+template<typename Fn>
+ChildResult
+run_isolated(Fn&& probe)
+{
+#if defined(_WIN32)
+    ChildResult result;
+    result.exit_code = probe();
+    return result;
+#else
+    const pid_t pid = fork();
+    if (pid == 0) {
+        _exit(probe());
+    }
+
+    ChildResult result;
+    if (pid < 0) {
+        return result; // fork failed; reported by the caller's assertion
+    }
+
+    int status = 0;
+    waitpid(pid, &status, 0);
+    if (WIFEXITED(status)) {
+        result.exit_code = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        result.signal = WTERMSIG(status);
+    }
+    return result;
+#endif
+}
+
+} // namespace validation
+
+using namespace validation;
+
+// --- every entry point x every invalid parameter
+// ------------------------------
+
+using ApiScenario = std::tuple<BatchApi, Scenario>;
+
+class BatchApiValidation : public ::testing::TestWithParam<ApiScenario>
+{};
+
+TEST_P(BatchApiValidation, RejectsInvalidInput)
+{
+    const auto& api      = std::get<0>(GetParam());
+    const auto& scenario = std::get<1>(GetParam());
+
+    const dlp_clsc_err_t got = api.invoke(scenario.knobs);
+
+    if (got == DLP_CLSC_NOT_SUPPORTED) {
+        GTEST_SKIP() << api.name
+                     << " is not supported on this processor; the validation "
+                        "result is unobservable";
+    }
+
+    EXPECT_EQ(got, scenario.expected)
+        << "aocl_batch_gemm_" << api.name << " did not reject scenario '"
+        << scenario.name << "' with the documented error code. Expected "
+        << static_cast<int>(scenario.expected) << ", got "
+        << static_cast<int>(got)
+        << ". DLP_CLSC_SUCCESS means the bad input reached the kernel; "
+           "DLP_CLSC_FAILURE means the group was left in its default failed "
+           "state without the specific reason being recorded.";
+}
+
+INSTANTIATE_TEST_SUITE_P(AllApis,
+                         BatchApiValidation,
+                         ::testing::ValuesIn([] {
+                             std::vector<ApiScenario> out;
+                             for (const auto& api : all_batch_apis()) {
+                                 for (const auto& sc : all_scenarios()) {
+                                     out.emplace_back(api, sc);
+                                 }
+                             }
+                             return out;
+                         }()),
+                         [](const ::testing::TestParamInfo<ApiScenario>& info) {
+                             return std::string(std::get<0>(info.param).name)
+                                    + "_" + std::get<1>(info.param).name;
+                         });
+
+// --- NULL array arguments (CPUPL-9033) ---------------------------------------
+
+/*
+ * AOCL_DLP_BATCH_GEMM_NULL_ARGS_CHECK validates the array arguments at function
+ * entry. AOCL_DLP_BATCH_GEMM_CHECK cannot cover this: it is handed the
+ * already-indexed values (order[gc_i], a[gc_i]), so on a NULL array the fault
+ * happens while its arguments are evaluated, before its body runs.
+ *
+ * The guard sits ahead of the ISA check, so these cases report
+ * DLP_CLSC_NULL_POINTER on every processor and never skip.
+ */
+struct NullArgCase
+{
+    const char* name;
+    NullArg     arg;
+    // The metadata array is the one argument with nowhere to record an error,
+    // so its contract is a clean return rather than a reported code.
+    bool reports_code;
+};
+
+class BatchNullArrayArgs : public ::testing::TestWithParam<NullArgCase>
+{};
+
+TEST_P(BatchNullArrayArgs, RejectedAtEntry)
+{
+    const NullArgCase& c = GetParam();
+
+    const ChildResult r = run_isolated([&c] {
+        Knobs kn;
+        kn.null_arg = c.arg;
+        return static_cast<int>(invoke_batch<float, float, float, float>(
+            &aocl_batch_gemm_f32f32f32of32, kn));
+    });
+
+    ASSERT_EQ(r.signal, 0) << "aocl_batch_gemm_f32f32f32of32 died (signal "
+                           << r.signal << ") on a NULL " << c.name
+                           << " array instead of returning";
+
+    if (c.reports_code) {
+        EXPECT_EQ(r.exit_code, static_cast<int>(DLP_CLSC_NULL_POINTER))
+            << "a NULL " << c.name
+            << " array was not reported as DLP_CLSC_NULL_POINTER";
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(EveryArrayArg,
+                         BatchNullArrayArgs,
+                         ::testing::ValuesIn(std::vector<NullArgCase>{
+                             { "order", NullArg::Order, true },
+                             { "transa", NullArg::Transa, true },
+                             { "transb", NullArg::Transb, true },
+                             { "m", NullArg::M, true },
+                             { "n", NullArg::N, true },
+                             { "k", NullArg::K, true },
+                             { "alpha", NullArg::Alpha, true },
+                             { "a", NullArg::A, true },
+                             { "lda", NullArg::Lda, true },
+                             { "b", NullArg::B, true },
+                             { "ldb", NullArg::Ldb, true },
+                             { "beta", NullArg::Beta, true },
+                             { "c", NullArg::C, true },
+                             { "ldc", NullArg::Ldc, true },
+                             { "group_size", NullArg::GroupSize, true },
+                             { "mem_format_a", NullArg::MemFormatA, true },
+                             { "mem_format_b", NullArg::MemFormatB, true },
+                             { "metadata", NullArg::Metadata, false },
+                         }),
+                         [](const ::testing::TestParamInfo<NullArgCase>& info) {
+                             return std::string(info.param.name);
+                         });
+
+/*
+ * The guard is one shared macro, but it has to be invoked in each entry point,
+ * and a missed insertion is a live crash rather than a wrong error code. This
+ * drives every entry point with a NULL A array to prove the call site is there.
+ */
+class BatchNullArrayEveryApi : public ::testing::TestWithParam<BatchApi>
+{};
+
+TEST_P(BatchNullArrayEveryApi, GuardIsPresent)
+{
+    const BatchApi& api = GetParam();
+
+    const ChildResult r = run_isolated([&api] {
+        Knobs kn;
+        kn.null_arg = NullArg::A;
+        return static_cast<int>(api.invoke(kn));
+    });
+
+    ASSERT_EQ(r.signal, 0)
+        << "aocl_batch_gemm_" << api.name << " died (signal " << r.signal
+        << ") on a NULL A array, so it is missing the entry-level NULL guard";
+    EXPECT_EQ(r.exit_code, static_cast<int>(DLP_CLSC_NULL_POINTER))
+        << "aocl_batch_gemm_" << api.name
+        << " did not report a NULL A array as DLP_CLSC_NULL_POINTER";
+}
+
+INSTANTIATE_TEST_SUITE_P(AllApis,
+                         BatchNullArrayEveryApi,
+                         ::testing::ValuesIn(all_batch_apis()),
+                         [](const ::testing::TestParamInfo<BatchApi>& info) {
+                             return std::string(info.param.name);
+                         });
+
+// --- group_count -------------------------------------------------------------
+
+/*
+ * group_count is a by-value loop bound, so AOCL_DLP_BATCH_GEMM_CHECK never sees
+ * it: the macro validates the loop variable, which requires the loop to already
+ * be running. A count of zero or less therefore skips every loop in the
+ * function, including the one that seeds the metadata, so the call does nothing
+ * and reports nothing. The assertion is only that it returns, since with no
+ * group to report on there is no documented error code to demand. Forked
+ * because a bad bound would fault rather than return.
+ */
+class BatchGroupCount : public ::testing::TestWithParam<md_t>
+{};
+
+TEST_P(BatchGroupCount, NonPositiveCountReturnsWithoutCrashing)
+{
+    const md_t count = GetParam();
+
+    const ChildResult r = run_isolated([count] {
+        Knobs kn;
+        kn.group_count = count;
+        invoke_batch<float, float, float, float>(&aocl_batch_gemm_f32f32f32of32,
+                                                 kn);
+        return 0;
+    });
+
+    EXPECT_EQ(r.signal, 0)
+        << "aocl_batch_gemm_f32f32f32of32 died on group_count=" << count
+        << " (signal " << r.signal << ")";
+}
+
+INSTANTIATE_TEST_SUITE_P(NonPositive,
+                         BatchGroupCount,
+                         ::testing::Values(md_t{ 0 }, md_t{ -1 }),
+                         [](const ::testing::TestParamInfo<md_t>& info) {
+                             return info.param == 0 ? "Zero" : "Negative";
+                         });
+
+// A zero group_count means no group's metadata is ever touched, so the caller's
+// error code stays exactly as it was initialised. Pinning this documents that a
+// zero-count batch is silent: it reports neither success nor failure, and a
+// caller that pre-set SUCCESS cannot tell the work was skipped.
+TEST(BatchGroupCountContract, ZeroCountLeavesMetadataUntouched)
+{
+    Knobs kn;
+    kn.group_count = 0;
+    kn.initial_code =
+        DLP_CLSC_INVALID_MATRIX_TYPE; // no validator produces this
+
+    const dlp_clsc_err_t got = invoke_batch<float, float, float, float>(
+        &aocl_batch_gemm_f32f32f32of32, kn);
+
+    EXPECT_EQ(got, DLP_CLSC_INVALID_MATRIX_TYPE)
+        << "a group_count of 0 wrote an error code even though there is no "
+           "group to report on";
 }
 
 // ============================================================================
