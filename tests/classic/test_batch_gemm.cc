@@ -1274,19 +1274,92 @@ invoke_batch(BatchGemmFn<AType, BType, CType, ScalarT> fn, const Knobs& kn)
     return md.error_hndl.error_code;
 }
 
+/*
+ * Runs a single-group batch with a NULL matrix pointer in the group's flat
+ * range. This is intentionally a safety probe for every public batch entry
+ * point; datatype-specific metadata may cause a supported API to reject the
+ * call for another reason after the common pointer check. The exact cumulative
+ * offset/status contract is covered by the f32-specific test below.
+ */
+template<typename AType, typename BType, typename CType, typename ScalarT>
+dlp_clsc_err_t
+invoke_batch_interior_null(BatchGemmFn<AType, BType, CType, ScalarT> fn,
+                           int null_matrix)
+{
+    constexpr md_t        group_sizes[] = { 2 };
+    constexpr std::size_t matrix_count  = 2;
+
+    std::vector<std::vector<AType>> a_storage(
+        matrix_count, std::vector<AType>(kM * kK, AType{}));
+    std::vector<std::vector<BType>> b_storage(
+        matrix_count, std::vector<BType>(kK * kN, BType{}));
+    std::vector<std::vector<CType>> c_storage(
+        matrix_count, std::vector<CType>(kM * kN, CType{}));
+
+    const AType* a_ptrs[matrix_count];
+    const BType* b_ptrs[matrix_count];
+    CType*       c_ptrs[matrix_count];
+    for (std::size_t i = 0; i < matrix_count; ++i) {
+        a_ptrs[i] = a_storage[i].data();
+        b_ptrs[i] = b_storage[i].data();
+        c_ptrs[i] = c_storage[i].data();
+    }
+
+    if (null_matrix == 0) {
+        a_ptrs[1] = nullptr;
+    } else if (null_matrix == 1) {
+        b_ptrs[1] = nullptr;
+    } else {
+        c_ptrs[1] = nullptr;
+    }
+
+    const char    order[2]        = { 'r', 'r' };
+    const char    transa[2]       = { 'n', 'n' };
+    const char    transb[2]       = { 'n', 'n' };
+    const char    mem_format_a[2] = { 'n', 'n' };
+    const char    mem_format_b[2] = { 'n', 'n' };
+    const md_t    m[2]            = { kM, kM };
+    const md_t    n[2]            = { kN, kN };
+    const md_t    k[2]            = { kK, kK };
+    const md_t    lda[2]          = { kK, kK };
+    const md_t    ldb[2]          = { kN, kN };
+    const md_t    ldc[2]          = { kN, kN };
+    const ScalarT alpha[2]        = { static_cast<ScalarT>(1),
+                                      static_cast<ScalarT>(1) };
+    const ScalarT beta[2]         = { static_cast<ScalarT>(0),
+                                      static_cast<ScalarT>(0) };
+
+    dlp_metadata_t metadata[2];
+    std::memset(metadata, 0, sizeof(metadata));
+    metadata[0].error_hndl.error_code = DLP_CLSC_FAILURE;
+    dlp_metadata_t* metadata_ptrs[1]  = { &metadata[0] };
+
+    fn(order, transa, transb, m, n, k, alpha, a_ptrs, lda, b_ptrs, ldb, beta,
+       c_ptrs, ldc, 1, group_sizes, mem_format_a, mem_format_b, metadata_ptrs);
+
+    return metadata[0].error_hndl.error_code;
+}
+
 struct BatchApi
 {
     const char* name;
     dlp_clsc_err_t (*invoke)(const Knobs&);
+    dlp_clsc_err_t (*invoke_interior_null)(int);
 };
 
 #define DLP_BATCH_API(api, AType, BType, CType, ScalarT)                       \
     BatchApi                                                                   \
     {                                                                          \
-        #api, [](const Knobs& kn) -> dlp_clsc_err_t {                          \
-            return invoke_batch<AType, BType, CType, ScalarT>(                 \
-                &aocl_batch_gemm_##api, kn);                                   \
-        }                                                                      \
+        #api,                                                                  \
+            [](const Knobs& kn) -> dlp_clsc_err_t {                            \
+                return invoke_batch<AType, BType, CType, ScalarT>(             \
+                    &aocl_batch_gemm_##api, kn);                               \
+            },                                                                 \
+            [](int null_matrix) -> dlp_clsc_err_t {                            \
+                return invoke_batch_interior_null<AType, BType, CType,         \
+                                                  ScalarT>(                    \
+                    &aocl_batch_gemm_##api, null_matrix);                      \
+            }                                                                  \
     }
 
 // All 32 public batch entry points.
@@ -1449,6 +1522,205 @@ run_isolated(Fn&& probe)
 } // namespace validation
 
 using namespace validation;
+
+class BatchInteriorNullEveryApi : public ::testing::TestWithParam<BatchApi>
+{};
+
+TEST_P(BatchInteriorNullEveryApi, RejectsInteriorNullWithoutCrashing)
+{
+#if defined(DLP_ENABLE_OPENMP)
+    GTEST_SKIP() << "Interior-NULL fork probes are run in the non-OpenMP build";
+#endif
+
+    const BatchApi& api = GetParam();
+
+    for (int null_matrix = 0; null_matrix < 3; ++null_matrix) {
+        const ChildResult r = run_isolated([&api, null_matrix] {
+            return static_cast<int>(api.invoke_interior_null(null_matrix));
+        });
+
+        ASSERT_EQ(r.signal, 0)
+            << "aocl_batch_gemm_" << api.name << " crashed on an interior "
+            << (null_matrix == 0 ? "A" : (null_matrix == 1 ? "B" : "C"))
+            << " NULL pointer";
+
+        if (r.exit_code == DLP_CLSC_NOT_SUPPORTED) {
+            continue;
+        }
+
+        EXPECT_EQ(r.exit_code, DLP_CLSC_NULL_POINTER)
+            << "aocl_batch_gemm_" << api.name
+            << " did not report DLP_CLSC_NULL_POINTER for an interior "
+               "NULL pointer in "
+            << (null_matrix == 0 ? "A" : (null_matrix == 1 ? "B" : "C"));
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(AllApis,
+                         BatchInteriorNullEveryApi,
+                         ::testing::ValuesIn(all_batch_apis()),
+                         [](const ::testing::TestParamInfo<BatchApi>& info) {
+                             return std::string(info.param.name);
+                         });
+
+TEST(BatchGemmTest, RejectsInteriorNullMatrixPointers)
+{
+    enum class NullMatrix
+    {
+        A,
+        B,
+        C
+    };
+
+    const md_t m = 2, n = 2, k = 2;
+
+    auto run = [&](NullMatrix null_matrix, const std::vector<md_t>& group_sizes,
+                   std::size_t null_index) {
+        std::size_t matrix_count = 0;
+        for (const md_t group_size : group_sizes) {
+            matrix_count += static_cast<std::size_t>(group_size);
+        }
+
+        std::vector<std::vector<float>> a_storage(
+            matrix_count, std::vector<float>(m * k, 1.0f));
+        std::vector<std::vector<float>> b_storage(
+            matrix_count, std::vector<float>(k * n, 1.0f));
+        std::vector<std::vector<float>> c_storage(
+            matrix_count, std::vector<float>(m * n, 0.0f));
+
+        std::vector<const float*> a_ptrs(matrix_count);
+        std::vector<const float*> b_ptrs(matrix_count);
+        std::vector<float*>       c_ptrs(matrix_count);
+        for (std::size_t i = 0; i < matrix_count; ++i) {
+            a_ptrs[i] = a_storage[i].data();
+            b_ptrs[i] = b_storage[i].data();
+            c_ptrs[i] = c_storage[i].data();
+        }
+
+        if (null_matrix == NullMatrix::A) {
+            a_ptrs[null_index] = nullptr;
+        } else if (null_matrix == NullMatrix::B) {
+            b_ptrs[null_index] = nullptr;
+        } else {
+            c_ptrs[null_index] = nullptr;
+        }
+
+        const std::size_t group_count = group_sizes.size();
+        std::vector<char> order(group_count, 'r');
+        std::vector<char> transa(group_count, 'n');
+        std::vector<char> transb(group_count, 'n');
+        std::vector<char> mem_format_a(group_count, 'n');
+        std::vector<char> mem_format_b(group_count, 'n');
+
+        std::vector<md_t>  m_values(group_count, m);
+        std::vector<md_t>  n_values(group_count, n);
+        std::vector<md_t>  k_values(group_count, k);
+        std::vector<md_t>  lda(group_count, k);
+        std::vector<md_t>  ldb(group_count, n);
+        std::vector<md_t>  ldc(group_count, n);
+        std::vector<float> alpha(group_count, 1.0f);
+        std::vector<float> beta(group_count, 0.0f);
+
+        std::vector<dlp_metadata_t>  metadata(group_count);
+        std::vector<dlp_metadata_t*> metadata_ptrs(group_count);
+        for (std::size_t i = 0; i < group_count; ++i) {
+            std::memset(&metadata[i], 0, sizeof(dlp_metadata_t));
+            metadata_ptrs[i] = &metadata[i];
+        }
+
+        aocl_batch_gemm_f32f32f32of32(
+            order.data(), transa.data(), transb.data(), m_values.data(),
+            n_values.data(), k_values.data(), alpha.data(), a_ptrs.data(),
+            lda.data(), b_ptrs.data(), ldb.data(), beta.data(), c_ptrs.data(),
+            ldc.data(), static_cast<md_t>(group_count), group_sizes.data(),
+            mem_format_a.data(), mem_format_b.data(), metadata_ptrs.data());
+
+        std::vector<dlp_clsc_err_t> statuses;
+        statuses.reserve(group_count);
+        for (const auto& md : metadata) {
+            statuses.push_back(md.error_hndl.error_code);
+        }
+        return statuses;
+    };
+
+    // Keep the child exit status small enough for POSIX wait-status encoding:
+    // SUCCESS=0, NULL_POINTER=1, NOT_SUPPORTED=2, all other errors=3.
+    const auto compact_status = [](dlp_clsc_err_t status) {
+        if (status == DLP_CLSC_SUCCESS) {
+            return 0;
+        }
+        if (status == DLP_CLSC_NULL_POINTER) {
+            return 1;
+        }
+        if (status == DLP_CLSC_NOT_SUPPORTED) {
+            return 2;
+        }
+        return 3;
+    };
+
+    const auto run_isolated_case = [&](NullMatrix               null_matrix,
+                                       const std::vector<md_t>& group_sizes,
+                                       std::size_t              null_index) {
+        return run_isolated([&] {
+            const auto statuses = run(null_matrix, group_sizes, null_index);
+            int        result   = compact_status(statuses[0]);
+            if (statuses.size() > 1) {
+                result |= compact_status(statuses[1]) << 2;
+            }
+            return result;
+        });
+    };
+
+    for (const auto null_matrix :
+         { NullMatrix::A, NullMatrix::B, NullMatrix::C }) {
+        const char* null_name =
+            null_matrix == NullMatrix::A
+                ? "A"
+                : (null_matrix == NullMatrix::B ? "B" : "C");
+        SCOPED_TRACE(null_name);
+
+        // The group-indexed checks see slot 0, but slot 1 is consumed by the
+        // group and must also be validated.
+        const ChildResult single_group =
+            run_isolated_case(null_matrix, { 2 }, 1);
+        ASSERT_EQ(single_group.signal, 0)
+            << "interior NULL in " << null_name
+            << " crashed the batch GEMM test process";
+        if (single_group.exit_code == 2) {
+            GTEST_SKIP() << "F32 batch GEMM is not supported on this processor";
+        }
+        ASSERT_EQ(single_group.exit_code, 1)
+            << "interior NULL in the single-group " << null_name
+            << " group was not rejected";
+    }
+
+#if defined(DLP_ENABLE_OPENMP)
+    GTEST_SKIP()
+        << "Cumulative interior-NULL fork probes are run in the non-OpenMP "
+           "build";
+#else
+    for (const auto null_matrix :
+         { NullMatrix::A, NullMatrix::B, NullMatrix::C }) {
+        const char* null_name =
+            null_matrix == NullMatrix::A
+                ? "A"
+                : (null_matrix == NullMatrix::B ? "B" : "C");
+        SCOPED_TRACE(null_name);
+
+        // The second group's first matrix is at cumulative flat index 2;
+        // validating only a[gc_i]/b[gc_i]/c[gc_i] would inspect slot 1.
+        const ChildResult multiple_groups =
+            run_isolated_case(null_matrix, { 2, 1 }, 2);
+        ASSERT_EQ(multiple_groups.signal, 0)
+            << "cumulative interior NULL in batch GEMM crashed the test "
+               "process";
+        EXPECT_EQ(multiple_groups.exit_code & 0x3, 0)
+            << "the valid first group did not complete successfully";
+        EXPECT_EQ((multiple_groups.exit_code >> 2) & 0x3, 1)
+            << "the second group did not report DLP_CLSC_NULL_POINTER";
+    }
+#endif
+}
 
 // --- every entry point x every invalid parameter
 // ------------------------------
