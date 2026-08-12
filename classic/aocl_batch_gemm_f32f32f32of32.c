@@ -109,6 +109,8 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
             mem_format_a[gc_i], b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
             ldc[gc_i], err_no);
 
+        AOCL_DLP_BATCH_GEMM_MATRIX_PTR_CHECK(a, b, c, mat_idx, g_sz, err_no);
+
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
             goto err_hndl;

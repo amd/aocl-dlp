@@ -108,6 +108,7 @@ aocl_batch_gemm_bf16s4f32of32(const char*      order,
             group_count, g_sz, m[gc_i], n[gc_i], k[gc_i], a[gc_i], lda[gc_i],
             mem_format_a[gc_i], b[gc_i], ldb[gc_i], mem_format_b[gc_i], c[gc_i],
             ldc[gc_i], err_no);
+        AOCL_DLP_BATCH_GEMM_MATRIX_PTR_CHECK(a, b, c, mat_idx, g_sz, err_no);
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);
@@ -359,6 +360,7 @@ aocl_batch_gemm_bf16s4f32obf16(const char*      order,
             group_count, group_size[gc_i], m[gc_i], n[gc_i], k[gc_i], a[gc_i],
             lda[gc_i], mem_format_a[gc_i], b[gc_i], ldb[gc_i],
             mem_format_b[gc_i], c[gc_i], ldc[gc_i], err_no);
+        AOCL_DLP_BATCH_GEMM_MATRIX_PTR_CHECK(a, b, c, mat_idx, g_sz, err_no);
 
         if (err_no != DLP_CLSC_SUCCESS) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], err_no);

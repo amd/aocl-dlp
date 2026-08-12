@@ -451,6 +451,31 @@
         AOCL_DLP_ERROR_CHECK(op_str, arg_pos, err_no);                         \
     }
 
+/*
+ * AOCL_DLP_BATCH_GEMM_CHECK validates the matrix pointer at the group index,
+ * while the batch kernels consume the cumulative flat matrix range beginning
+ * at mat_idx. Check every matrix pointer in that range before any dispatch or
+ * metadata-dependent processing.
+ */
+#define AOCL_DLP_BATCH_GEMM_MATRIX_PTR_CHECK(a, b, c, mat_idx, group_size,     \
+                                             err_no)                           \
+    do {                                                                       \
+        if ((err_no) == DLP_CLSC_SUCCESS) {                                    \
+            for (int64_t matrix_idx = 0; matrix_idx < (group_size);            \
+                 ++matrix_idx) {                                               \
+                if ((a)[(mat_idx) + matrix_idx] == NULL                        \
+                    || (b)[(mat_idx) + matrix_idx] == NULL                     \
+                    || (c)[(mat_idx) + matrix_idx] == NULL) {                  \
+                    dlp_print_msg(                                             \
+                        " NULL matrix pointer in batch group. Exiting..",      \
+                        __FILE__, __LINE__);                                   \
+                    (err_no) = DLP_CLSC_NULL_POINTER;                          \
+                    break;                                                     \
+                }                                                              \
+            }                                                                  \
+        }                                                                      \
+    } while (0)
+
 #define AOCL_DLP_UTIL_ELTWISE_OPS_CHECK(op_str, order, transa, transb, m, n,   \
                                         a, lda, b, ldb, err_no)                \
     {                                                                          \
