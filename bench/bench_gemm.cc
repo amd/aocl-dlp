@@ -48,6 +48,7 @@
 #include "aocl_dlp_config.h"
 #include "bench_metrics.hh"
 #include "bench_types.hh"
+#include "cold_cache.hh"
 
 #include "adaptors/dlp/ual_dlp.hh"
 #include "framework/matrix.hh"
@@ -63,6 +64,7 @@
 #include <benchmark/benchmark.h>
 
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
@@ -199,19 +201,35 @@ class OptimizedGemmBenchmark : public ConcreteUAL
         // Bind buffers once before the hot loop
         plan_->setBuffers(A_, B_, C_);
 
-        // WARMUP: 5 iterations to stabilize CPU/cache
-        for (iter_t i = 0; i < 5; ++i) {
-            plan_->execute();
+        const bool cold = dlp::bench::coldCacheEnabled();
+
+        // WARMUP: 5 iterations to stabilize CPU/cache (skip when measuring
+        // cold-cache behaviour — warming defeats the point).
+        if (!cold) {
+            for (iter_t i = 0; i < 5; ++i) {
+                plan_->execute();
+            }
         }
 
-        // MEASURED LOOP: Only plan execute calls
+        // MEASURED LOOP: time only plan_->execute() via std::chrono and
+        // submit to gbench through SetIterationTime() (UseManualTime).
+        // This excludes the optional cold-cache flush from the reported time.
         for (auto _ : state) {
-            UALError status = plan_->execute();
+            if (cold)
+                dlp::bench::flushColdCache();
+
+            const auto t0     = std::chrono::steady_clock::now();
+            UALError   status = plan_->execute();
+            const auto t1     = std::chrono::steady_clock::now();
 
             if (status != UALError::UAL_SUCCESS) {
                 state.SkipWithError("GEMM operation failed");
                 return;
             }
+
+            const double iter_seconds =
+                std::chrono::duration<double>(t1 - t0).count();
+            state.SetIterationTime(iter_seconds);
 
             // Prevent compiler optimization
             benchmark::DoNotOptimize(c_ptr_);
@@ -350,7 +368,8 @@ checkValidGemmParams(const GemmBenchConfig& config)
  */
 void
 registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
-                            int64_t                             iterations = -1)
+                            int64_t                             iterations = -1,
+                            double bench_min_time = 3.0)
 {
     // Store fixture instances to keep them alive
     // This is critical: fixtures are created ONCE and reused
@@ -369,7 +388,8 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
         std::cerr << "Benchmark mode: Fixed iterations (" << iterations << ")"
                   << std::endl;
     } else {
-        std::cerr << "Benchmark mode: MinTime (3.0 seconds)" << std::endl;
+        std::cerr << "Benchmark mode: MinTime (" << bench_min_time
+                  << " seconds)" << std::endl;
     }
     std::cerr << "================================================"
               << std::endl;
@@ -397,6 +417,7 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
                 config.name.c_str(),
                 [fixture_ptr](benchmark::State& st) { fixture_ptr->run(st); })
                 ->Unit(benchmark::kMillisecond)
+                ->UseManualTime()
                 ->Iterations(
                     static_cast<benchmark::IterationCount>(iterations));
         } else {
@@ -404,7 +425,8 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
                 config.name.c_str(),
                 [fixture_ptr](benchmark::State& st) { fixture_ptr->run(st); })
                 ->Unit(benchmark::kMillisecond)
-                ->MinTime(3.0);
+                ->UseManualTime()
+                ->MinTime(bench_min_time);
         }
     }
     std::cerr << "================================================"
@@ -527,8 +549,16 @@ main(int argc, char** argv)
     // Get iteration count from command line (-n flag)
     int64_t iterations = parser.getIterations();
 
+    // Resolve MinTime: --benchmark_min_time CLI > BENCH_MIN_TIME env > 3.0
+    double bench_min_time = parser.getBenchMinTime();
+
+    // One-time cold-cache init (no-op unless --cold was passed).
+    // Must come AFTER OMP setup so omp_get_max_threads() returns the right
+    // value for the per-thread sink array.
+    dlp::bench::initColdCache(parser.getColdCache(), parser.getColdPasses());
+
     // Register all benchmarks
-    registerOptimizedBenchmarks(configs, iterations);
+    registerOptimizedBenchmarks(configs, iterations, bench_min_time);
 
     // Initialize and run Google Benchmark
     benchmark::Initialize(&argc, argv);

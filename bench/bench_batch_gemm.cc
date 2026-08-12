@@ -49,6 +49,7 @@
 
 #include "bench_metrics.hh"
 #include "bench_types.hh"
+#include "cold_cache.hh"
 
 #include "adaptors/dlp/ual_dlp.hh"
 #include "framework/batch_gemm_args.hh"
@@ -66,6 +67,7 @@
 #include <benchmark/benchmark.h>
 
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <iterator>
@@ -222,21 +224,36 @@ class OptimizedBatchGemmBenchmark : public ConcreteUAL
     // Benchmark execution
     void run(benchmark::State& state)
     {
-        // WARMUP: 5 iterations to stabilize CPU/cache
-        for (iter_t i = 0; i < 5; ++i) {
-            UALError status = this->batch_gemm(prepared_args_);
-            if (status != UALError::UAL_SUCCESS) {
-                state.SkipWithError("Warmup batch_gemm failed");
-                return;
+        const bool cold = dlp::bench::coldCacheEnabled();
+
+        // WARMUP: 5 iterations to stabilize CPU/cache (skip when measuring
+        // cold-cache behaviour — warming defeats the point).
+        if (!cold) {
+            for (iter_t i = 0; i < 5; ++i) {
+                UALError status = this->batch_gemm(prepared_args_);
+                if (status != UALError::UAL_SUCCESS) {
+                    state.SkipWithError("Warmup batch_gemm failed");
+                    return;
+                }
             }
         }
 
-        // MEASURED LOOP: Only pure batch GEMM calls
-        // NO metadata preparation overhead - all done in constructor!
-        // Using batch_gemm() for ZERO validation overhead
+        // MEASURED LOOP: time only batch_gemm() via std::chrono and submit
+        // to gbench through SetIterationTime() (UseManualTime). The optional
+        // cold-cache flush runs before the timed region so it is excluded
+        // from the reported time.
         bool status = true;
         for (auto _ : state) {
+            if (cold)
+                dlp::bench::flushColdCache();
+
+            const auto t0 = std::chrono::steady_clock::now();
             status &= this->batch_gemm(prepared_args_) == UALError::UAL_SUCCESS;
+            const auto t1 = std::chrono::steady_clock::now();
+
+            const double iter_seconds =
+                std::chrono::duration<double>(t1 - t0).count();
+            state.SetIterationTime(iter_seconds);
 
             // Prevent compiler from optimizing away memory writes
             benchmark::ClobberMemory();
@@ -293,7 +310,8 @@ using OptimizedBatchGemmBenchmarkDlp = OptimizedBatchGemmBenchmark<UalDlp>;
  */
 void
 registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
-                            int64_t iterations = -1)
+                            int64_t iterations     = -1,
+                            double  bench_min_time = 3.0)
 {
     // Store fixture instances to keep them alive
     static std::vector<std::unique_ptr<OptimizedBatchGemmBenchmarkDlp>>
@@ -305,7 +323,8 @@ registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
         std::cerr << "Benchmark mode: Fixed iterations (" << iterations << ")"
                   << std::endl;
     } else {
-        std::cerr << "Benchmark mode: MinTime (3.0 seconds)" << std::endl;
+        std::cerr << "Benchmark mode: MinTime (" << bench_min_time
+                  << " seconds)" << std::endl;
     }
     std::cerr << "================================================"
               << std::endl;
@@ -329,6 +348,7 @@ registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
                         fixture_ptr->run(st);
                     })
                     ->Unit(benchmark::kMillisecond)
+                    ->UseManualTime()
                     ->Iterations(
                         static_cast<benchmark::IterationCount>(iterations));
             } else {
@@ -338,7 +358,8 @@ registerOptimizedBenchmarks(const std::vector<BatchGemmBenchConfig>& configs,
                         fixture_ptr->run(st);
                     })
                     ->Unit(benchmark::kMillisecond)
-                    ->MinTime(3.0);
+                    ->UseManualTime()
+                    ->MinTime(bench_min_time);
             }
         } catch (const std::exception& ex) {
             std::cerr << "Skipping benchmark '" << config.name
@@ -474,7 +495,13 @@ main(int argc, char** argv)
     int64_t iterations = parser.getIterations();
 
     // Register all benchmarks
-    registerOptimizedBenchmarks(configs, iterations);
+    // Resolve MinTime: --benchmark_min_time CLI > BENCH_MIN_TIME env > 3.0
+    double bench_min_time = parser.getBenchMinTime();
+
+    // One-time cold-cache init (no-op unless --cold was passed).
+    dlp::bench::initColdCache(parser.getColdCache(), parser.getColdPasses());
+
+    registerOptimizedBenchmarks(configs, iterations, bench_min_time);
 
     // Initialize and run Google Benchmark
     benchmark::Initialize(&argc, argv);

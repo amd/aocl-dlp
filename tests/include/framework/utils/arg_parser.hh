@@ -30,6 +30,7 @@
 #include "classic/dlp_base_types.h"
 
 #include "framework/types.hh"
+#include <cstdlib>
 #include <filesystem>
 #include <iostream>
 #include <sstream>
@@ -219,10 +220,19 @@ class ArgParser
                      "files in one run\n";
         std::cout << "  -n <count>              Number of benchmark iterations "
                      "(overrides MinTime)\n";
+        std::cout << "  --benchmark_min_time=<N>[s]\n";
+        std::cout << "                          Bench-only: MinTime in seconds "
+                     "(overrides\n";
+        std::cout << "                          BENCH_MIN_TIME and the 3s "
+                     "default)\n";
         std::cout << "  --ual-test <type>       UAL implementation to test "
                      "(DLP|REF|MKL|ONEDNN)\n";
         std::cout << "  --ual-ref <type>        UAL reference implementation "
                      "(DLP|REF|MKL|ONEDNN)\n";
+        std::cout << "  --cold                  Bench-only: flush caches "
+                     "between iterations\n";
+        std::cout << "  --cold-passes <N>       Bench-only: number of flush "
+                     "passes per iter (default 1)\n";
         std::cout << "  -h, --help              Show this help message\n";
         std::cout << "  -v, --verbose           Enable verbose/detailed debug "
                      "output\n";
@@ -237,6 +247,9 @@ class ArgParser
         std::cout << "  Level 3 (-vvv):        + Print full matrices\n";
         std::cout << "\nBenchmark Iteration Control:\n";
         std::cout << "  By default, benchmarks run for MinTime(3.0) seconds.\n";
+        std::cout
+            << "  Set BENCH_MIN_TIME=<N> for an environment fallback, or\n";
+        std::cout << "  --benchmark_min_time=<N>[s] for a CLI override.\n";
         std::cout << "  Use -n to specify exact iteration count instead.\n";
         std::cout << "\nExample:\n";
         std::cout << "  " << program_name << " -f my_config.yaml\n";
@@ -358,6 +371,54 @@ class ArgParser
     int64_t getIterations() const { return iterations_; }
 
     /**
+     * @brief Get MinTime budget for Google Benchmark, in seconds.
+     * @param default_value Returned when neither CLI flag nor env var set
+     *                      a positive value. Defaults to 3.0s, matching the
+     *                      existing hardcoded ->MinTime(3.0) behaviour.
+     * @return Resolved MinTime in seconds.
+     *
+     * Resolution order: --benchmark_min_time=N[s] CLI flag > BENCH_MIN_TIME
+     * env var > default_value.
+     *
+     * Google Benchmark's --benchmark_min_time CLI flag is silently ignored
+     * when a benchmark is registered with ->MinTime(X), since the chain
+     * call wins. We peek at argv during parseArguments() and feed the
+     * resolved value into the chain call so users can override the time
+     * budget without recompiling.
+     *
+     * Iteration mode (--benchmark_min_time=Nx) is intentionally not handled
+     * here; pass -n N for explicit iteration counts instead.
+     */
+    double getBenchMinTime(double default_value = 3.0) const
+    {
+        if (bench_min_time_cli_ > 0.0)
+            return bench_min_time_cli_;
+        const char* env = std::getenv("BENCH_MIN_TIME");
+        if (env && *env) {
+            double v = std::atof(env);
+            if (v > 0.0)
+                return v;
+        }
+        return default_value;
+    }
+
+    /**
+     * @brief Cold-cache mode requested via --cold flag.
+     *
+     * When set, bench fixtures evict all caches between iterations so each
+     * timed kernel call starts cold. Bench-only feature; tests ignore.
+     */
+    bool getColdCache() const { return cold_cache_; }
+
+    /**
+     * @brief Number of flush passes per iteration (--cold-passes <N>).
+     *
+     * Defaults to 1. Higher values insure against retention-resistant
+     * replacement policies; useful only in pathological cases.
+     */
+    int getColdPasses() const { return cold_passes_; }
+
+    /**
      * @brief Parse UAL type string to UALType enum
      * @param type_str String representation of UAL type
      * @return UALType enum value
@@ -437,6 +498,22 @@ class ArgParser
                     std::cerr << "Warning: '-n' requires a value and will be "
                                  "ignored. Usage: -n <iterations>"
                               << std::endl;
+                }
+                continue;
+            }
+
+            // Skip bench-only --cold (boolean flag, no value).
+            if (arg == "--cold") {
+                continue;
+            }
+
+            // Skip bench-only --cold-passes <N>. Consume the flag whether or
+            // not its value is present so it is not forwarded as an
+            // unrecognized argument to Google Benchmark. A following flag is
+            // not a value and must remain available to Google Benchmark.
+            if (arg == "--cold-passes") {
+                if (i + 1 < argc && argv[i + 1][0] != '-') {
+                    ++i; // Skip both flag and value
                 }
                 continue;
             }
@@ -530,6 +607,51 @@ class ArgParser
                 }
                 ++i; // Skip the next argument (the value)
             }
+
+            // Cold-cache flag (bench-only; tests ignore the parsed value).
+            else if (arg == "--cold") {
+                cold_cache_ = true;
+            }
+
+            // --cold-passes <N>. Do not consume a following flag as the value;
+            // it belongs to Google Benchmark or another parser.
+            else if (arg == "--cold-passes") {
+                if (i + 1 < argc_ && argv_[i + 1][0] != '-') {
+                    try {
+                        int n = std::stoi(argv_[i + 1]);
+                        if (n > 0)
+                            cold_passes_ = n;
+                    } catch (const std::exception&) {
+                        // Silently keep default; bad value is operator error.
+                    }
+                    ++i;
+                } else {
+                    std::cerr
+                        << "Warning: '--cold-passes' requires a value and will "
+                           "be ignored. Usage: --cold-passes <N>"
+                        << std::endl;
+                }
+            }
+
+            // Peek at Google Benchmark's --benchmark_min_time=N[s] flag so
+            // benchmarks can feed the value into ->MinTime() (which would
+            // otherwise dominate the CLI flag). Iteration mode (=Nx) is left
+            // for gbench / -n to handle.
+            else if (arg.rfind("--benchmark_min_time=", 0) == 0) {
+                std::string val =
+                    arg.substr(std::string("--benchmark_min_time=").length());
+                if (!val.empty() && val.back() != 'x') {
+                    if (val.back() == 's')
+                        val.pop_back();
+                    try {
+                        double v = std::stod(val);
+                        if (v > 0.0)
+                            bench_min_time_cli_ = v;
+                    } catch (const std::exception&) {
+                        // Silent — gbench will produce its own diagnostic.
+                    }
+                }
+            }
         }
     }
 
@@ -541,6 +663,10 @@ class ArgParser
     std::string              ual_ref_;
     int64_t                  iterations_ = -1; // -1 means use default MinTime
                                                // behavior
+    double bench_min_time_cli_ =
+        0.0; // 0 means CLI flag not specified; fallback to env/default
+    bool cold_cache_  = false; // --cold flag (bench-only, default off)
+    int  cold_passes_ = 1;     // --cold-passes <N> (default 1)
 };
 
 } // namespace dlp::testing::utils
