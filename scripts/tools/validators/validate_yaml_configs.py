@@ -64,6 +64,11 @@ VALID_FIELDS = {
     "pre_operations",
     "fill_value",
     "fill_pattern",
+    # Tuning knobs (blocking parameters, SUP thresholds, and GEMM hints).
+    # Nested leaves accept a scalar, list, or {lb, ub, step} range.
+    "blocking",
+    "sup_thresholds",
+    "gemm_hints",
 }
 
 VALID_MTAG_VALUES = {"none", "reorder", "pack"}

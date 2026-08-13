@@ -30,6 +30,8 @@
 // INCLUDES AND DEPENDENCIES
 // ============================================================================
 
+#include "adaptors/dlp/ual_dlp.hh"
+#include "adaptors/dlp/ual_plan_dlp.hh"
 #include "classic/aocl_bf16_type.h"
 #include "framework/allocator.hh"
 #include "framework/operation.hh"
@@ -69,9 +71,20 @@
 using namespace dlp::testing::utils;
 using namespace dlp::testing::framework;
 using namespace dlp::testing::framework::postops;
+using dlp::testing::classic::DlpUalPlan;
+using dlp::testing::classic::UalDlp;
 
 constexpr size_t MAX_CONFIGS_PER_TEST_SET = 50000;
 constexpr size_t MAX_MISMATCHES           = 10;
+
+bool
+isExpectedTuningRejection(dlp_clsc_err_t error_code)
+{
+    return error_code == DLP_CLSC_INVALID_BLOCK_PARAMS
+           || error_code == DLP_CLSC_INVALID_SUP_THRESHOLDS
+           || error_code == DLP_CLSC_INVALID_JIT_KERNEL
+           || error_code == DLP_CLSC_INVALID_KERNEL;
+}
 
 // ============================================================================
 // GLOBAL TEST CONFIGURATION
@@ -192,6 +205,19 @@ struct GemmTestConfig
     // Optional NaN-equality opt-in for deliberate NaN-propagation tests.
     // Default (false) treats a NaN in the output as a mismatch.
     bool treat_nan_equal = false;
+
+    // Optional blocking tuning knobs (0 = library default). Fed to both the
+    // reorder path and the DLP GEMM so they agree on block sizes.
+    bool has_blocking = false;
+    md_t blk_MR = 0, blk_NR = 0, blk_MC = 0, blk_NC = 0, blk_KC = 0;
+
+    // Optional SUP thresholds (-1 = library default).
+    bool has_sup_thresholds = false;
+    md_t sup_MT = -1, sup_NT = -1, sup_KT = -1;
+
+    // Optional GEMM hints (0 = no hint).
+    bool has_gemm_hints = false;
+    md_t m_hint = 0, nt_hint = 0;
 
     // Default constructor (required by GoogleTest)
     GemmTestConfig() = default;
@@ -833,6 +859,31 @@ loadTestConfigurations(const std::string& yaml_file,
 
                 config.treat_nan_equal = microTest.getTreatNaNEqual();
 
+                // Extract blocking tuning knobs if present (MR/NR/MC/NC/KC).
+                if (microTest.hasBlocking()) {
+                    config.has_blocking = true;
+                    config.blk_MR       = microTest.getMR();
+                    config.blk_NR       = microTest.getNR();
+                    config.blk_MC       = microTest.getMC();
+                    config.blk_NC       = microTest.getNC();
+                    config.blk_KC       = microTest.getKC();
+                }
+
+                // Extract SUP thresholds if present (MT/NT/KT).
+                if (microTest.hasSupThresholds()) {
+                    config.has_sup_thresholds = true;
+                    config.sup_MT             = microTest.getMT();
+                    config.sup_NT             = microTest.getNT();
+                    config.sup_KT             = microTest.getKT();
+                }
+
+                // Extract GEMM hints if present.
+                if (microTest.hasGemmHints()) {
+                    config.has_gemm_hints = true;
+                    config.m_hint         = microTest.getMHint();
+                    config.nt_hint        = microTest.getNTHint();
+                }
+
                 configs.push_back(config);
 
                 if (j < test_count - 1) {
@@ -1224,6 +1275,24 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
         bool     params_valid       = check_valid_params(config_);
         UALError dlp_reorder_status = UALError::UAL_SUCCESS;
         UALError ref_reorder_status = UALError::UAL_SUCCESS;
+
+        // Feed tuning knobs (blocking params / SUP thresholds) to the DLP UAL
+        // BEFORE reorder so the buffer-size query and packing use the same
+        // block sizes as the GEMM (the "set before reorder" use case). The
+        // reference UAL ignores these (blocking-agnostic oracle). We always
+        // clear them for non-tuned cases since ual_test_ is shared across the
+        // whole suite and must not leak knobs between tests.
+        if (config_.has_blocking || config_.has_sup_thresholds
+            || config_.has_gemm_hints) {
+            ual_test_->setTuningKnobs(
+                config_.blk_MR, config_.blk_NR, config_.blk_MC, config_.blk_NC,
+                config_.blk_KC, config_.sup_MT, config_.sup_NT, config_.sup_KT,
+                config_.has_blocking, config_.has_sup_thresholds,
+                config_.m_hint, config_.nt_hint, config_.has_gemm_hints);
+        } else {
+            ual_test_->clearTuningKnobs();
+        }
+
         if (config_.reorderB) {
             // Create reordered matrix with custom allocation size in bytes
             Matrix B_reordered;
@@ -1232,11 +1301,22 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             dlp_reorder_status = ual_test_->reorder(
                 B, B_reordered, config_.a_type, config_.b_type, config_.c_type,
                 config_.acc_type, config_.group_scale_param.get());
+            const auto* dlp_ual = dynamic_cast<const UalDlp*>(ual_test_.get());
+            const dlp_clsc_err_t dlp_reorder_error =
+                dlp_ual ? dlp_ual->lastErrorCode() : DLP_CLSC_FAILURE;
 
             // Skip test if DLP reorder is not supported
             if (dlp_reorder_status == UALError::UAL_NOT_SUPPORTED) {
                 GTEST_SKIP()
                     << "DLP reorder not supported for this configuration";
+            }
+
+            if ((config_.has_blocking || config_.has_sup_thresholds
+                 || config_.has_gemm_hints)
+                && isExpectedTuningRejection(dlp_reorder_error)) {
+                GTEST_SKIP()
+                    << "DLP rejected invalid tuning parameters (native error="
+                    << dlp_reorder_error << ").";
             }
 
             if (dlp_reorder_status == UALError::UAL_SUCCESS) {
@@ -1303,16 +1383,42 @@ class GemmParameterizedTest : public ::testing::TestWithParam<GemmTestConfig>
             test_plan->setGroupScale(
                 std::make_unique<GroupScaleParam>(*config_.group_scale_param));
         }
+        // Feed the SAME tuning knobs to the GEMM path so the kernel uses the
+        // same block sizes as the reorder above. Only the DLP plan honors
+        // these; the reference plan ignores them (blocking-agnostic oracle).
+        if (config_.has_blocking) {
+            test_plan->setBlocking(config_.blk_MR, config_.blk_NR,
+                                   config_.blk_MC, config_.blk_NC,
+                                   config_.blk_KC);
+        }
+        if (config_.has_sup_thresholds) {
+            test_plan->setSupThresholds(config_.sup_MT, config_.sup_NT,
+                                        config_.sup_KT);
+        }
+        if (config_.has_gemm_hints) {
+            test_plan->setGemmHints(config_.m_hint, config_.nt_hint);
+        }
         if (gluTerminal)
             test_plan->setGluOutput(&D);
         test_plan->prepare();
-        UALError test_status = test_plan->executeWith(A, B, C);
+        UALError    test_status = test_plan->executeWith(A, B, C);
+        const auto* dlp_plan = dynamic_cast<const DlpUalPlan*>(test_plan.get());
+        const dlp_clsc_err_t dlp_execute_error =
+            dlp_plan ? dlp_plan->lastErrorCode() : DLP_CLSC_FAILURE;
         if (test_status == UALError::UAL_NOT_SUPPORTED) {
             GTEST_SKIP()
                 << "UAL under test GEMM not supported for this configuration";
         }
 
         bool test_result = (test_status == UALError::UAL_SUCCESS);
+
+        if ((config_.has_blocking || config_.has_sup_thresholds
+             || config_.has_gemm_hints)
+            && isExpectedTuningRejection(dlp_execute_error)) {
+            GTEST_SKIP()
+                << "DLP rejected invalid tuning parameters (native error="
+                << dlp_execute_error << ").";
+        }
 
         // Odd interleaved width for a terminal GLU is a known non-existent
         // shape. Confirm the GEMM framework rejected it with an early-return

@@ -84,6 +84,21 @@ struct GemmBenchConfig
     std::shared_ptr<WOQParam>        woq_param;
     std::shared_ptr<GroupScaleParam> group_scale_param;
 
+    // Optional blocking tuning knobs (0 = library default). Fed to both the
+    // reorder path (UalDlp::setTuningKnobs) and the GEMM plan
+    // (IUalPlan::setBlocking) so they agree on block sizes.
+    bool has_blocking = false;
+    md_t blk_MR = 0, blk_NR = 0, blk_MC = 0, blk_NC = 0, blk_KC = 0;
+
+    // Optional SUP thresholds (-1 = library default).
+    bool has_sup_thresholds = false;
+    md_t sup_MT = -1, sup_NT = -1, sup_KT = -1;
+
+    // Optional GEMM hints (0 = no hint). Fed to both the reorder path and the
+    // GEMM plan so the reordered layout and consuming GEMM agree.
+    bool has_gemm_hints = false;
+    md_t m_hint = 0, nt_hint = 0;
+
     // Default constructor
     GemmBenchConfig()
         : name("default")

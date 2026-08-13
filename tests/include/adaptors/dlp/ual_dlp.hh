@@ -31,6 +31,12 @@
 #include "framework/ual.hh"
 #include "framework/ual_plan.hh"
 
+extern "C"
+{
+#include "classic/aocl_gemm_metadata.h"
+#include "classic/dlp_errors.h"
+}
+
 namespace dlp::testing::classic {
 
 using dlp::testing::framework::BatchGroup;
@@ -125,6 +131,27 @@ class UalDlp : public IUal
                      MatrixType             accType,
                      const GroupScaleParam* group_scale = nullptr) override;
 
+    // Tuning knobs applied to the reorder path (set-before-reorder use case).
+    // Stored here and attached to the local metadata inside reorder() so the
+    // buffer-size query and the packing use the same block sizes as the GEMM.
+    void setTuningKnobs(md_t MR,
+                        md_t NR,
+                        md_t MC,
+                        md_t NC,
+                        md_t KC,
+                        md_t MT,
+                        md_t NT,
+                        md_t KT,
+                        bool has_blocking,
+                        bool has_sup_thresholds,
+                        md_t m_hint,
+                        md_t nt_hint,
+                        bool has_gemm_hints) override;
+    void clearTuningKnobs() override;
+
+    // Return the native DLP error from the most recent reorder operation.
+    dlp_clsc_err_t lastErrorCode() const { return m_last_error_code; }
+
     UALError batch_gemm(std::vector<BatchGroup>& groups,
                         MatrixType               accType) override;
 
@@ -153,6 +180,17 @@ class UalDlp : public IUal
      * @return UALError Error code indicating success or failure
      */
     UALError batch_gemm(const PreparedBatchGemmArgs& prepared) override;
+
+  private:
+    // Tuning-knob backing storage for the reorder path. Attached to the local
+    // metadata inside reorder() only when the corresponding has-flag is set.
+    dlp_gemm_blocking_t      m_block_params{};
+    dlp_gemm_sup_threshold_t m_sup_thres{};
+    dlp_gemm_hints_t         m_gemm_hints{};
+    bool                     m_has_blocking    = false;
+    bool                     m_has_sup_thres   = false;
+    bool                     m_has_gemm_hints  = false;
+    dlp_clsc_err_t           m_last_error_code = DLP_CLSC_SUCCESS;
 };
 
 } // namespace dlp::testing::classic

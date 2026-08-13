@@ -147,6 +147,22 @@ class OptimizedGemmBenchmark : public ConcreteUAL
             C_.fillRandom(44 + k_);
         }
 
+        // Feed tuning knobs (blocking params / SUP thresholds / GEMM hints) to
+        // the DLP UAL
+        // BEFORE reorder so the buffer-size query and packing use the same
+        // block sizes as the GEMM (the "set before reorder" use case). Only the
+        // DLP backend honors these; absent knobs leave library defaults.
+        if (config.has_blocking || config.has_sup_thresholds
+            || config.has_gemm_hints) {
+            this->setTuningKnobs(
+                config.blk_MR, config.blk_NR, config.blk_MC, config.blk_NC,
+                config.blk_KC, config.sup_MT, config.sup_NT, config.sup_KT,
+                config.has_blocking, config.has_sup_thresholds, config.m_hint,
+                config.nt_hint, config.has_gemm_hints);
+        } else {
+            this->clearTuningKnobs();
+        }
+
         // Apply memory tag for A (reorder and pack are mutually exclusive)
         if (config.reorderA) {
             A_.setReordered(true);
@@ -156,9 +172,18 @@ class OptimizedGemmBenchmark : public ConcreteUAL
 
         // Apply memory tag for B (reorder and pack are mutually exclusive)
         if (config.reorderB) {
-            Matrix B_reordered;
-            this->reorder(B_, B_reordered, a_type_, b_type_, c_type_, acc_type_,
-                          config.group_scale_param.get());
+            Matrix   B_reordered;
+            UALError rstat =
+                this->reorder(B_, B_reordered, a_type_, b_type_, c_type_,
+                              acc_type_, config.group_scale_param.get());
+            if (rstat != UALError::UAL_SUCCESS) {
+                // Kernel REJECTED this configuration during reorder (e.g. an
+                // unsupported tuning-knob combination). Mark the fixture as
+                // not-runnable; registration will SKIP it (mirrors the GTest
+                // harness) instead of reporting a benchmark ERROR later.
+                m_probe_status = rstat;
+                return;
+            }
             B_ = std::move(B_reordered);
             // Reorder handles transposition; reset trans flag for GEMM call
             transB_ = false;
@@ -190,10 +215,36 @@ class OptimizedGemmBenchmark : public ConcreteUAL
             plan_->setGroupScale(
                 std::make_unique<GroupScaleParam>(*config.group_scale_param));
         }
+        // Feed the SAME tuning knobs to the GEMM path so the kernel uses the
+        // same block sizes as the reorder above. Only the DLP plan honors
+        // these; absent knobs leave the library defaults.
+        if (config.has_blocking) {
+            plan_->setBlocking(config.blk_MR, config.blk_NR, config.blk_MC,
+                               config.blk_NC, config.blk_KC);
+        }
+        if (config.has_sup_thresholds) {
+            plan_->setSupThresholds(config.sup_MT, config.sup_NT,
+                                    config.sup_KT);
+        }
+        if (config.has_gemm_hints) {
+            plan_->setGemmHints(config.m_hint, config.nt_hint);
+        }
 
         // Pre-build all backend state
         plan_->prepare();
+
+        // Trial-execute ONCE at setup so that configurations the kernel
+        // REJECTS (e.g. an unsupported tuning-knob combination) are detected
+        // here and SKIPPED at registration — instead of surfacing as a
+        // benchmark ERROR ("GEMM operation failed") in the hot loop. This
+        // mirrors the GTest harness, which skips such cases.
+        plan_->setBuffers(A_, B_, C_);
+        m_probe_status = plan_->execute();
     }
+
+    // Whether the fixture is runnable (kernel accepted the config at setup).
+    // UAL_SUCCESS means it can be benchmarked; anything else => skip.
+    UALError probeStatus() const { return m_probe_status; }
 
     // Benchmark execution (called once per benchmark)
     void run(benchmark::State& state)
@@ -255,6 +306,12 @@ class OptimizedGemmBenchmark : public ConcreteUAL
 
     // Cached pointer for DoNotOptimize
     void* c_ptr_;
+
+    // Setup-time kernel status: UAL_SUCCESS if the config was accepted (and the
+    // trial execute succeeded), otherwise the rejection code. Used to skip
+    // registration of configs the kernel does not support (e.g. unsupported
+    // tuning knobs) so they are reported as SKIPPED, not ERROR.
+    UALError m_probe_status = UALError::UAL_SUCCESS;
 
     // Cached metadata for metrics reporting
     md_t         m_, n_, k_;
@@ -405,6 +462,17 @@ registerOptimizedBenchmarks(const std::vector<GemmBenchConfig>& configs,
         // Create fixture ONCE per benchmark
         auto fixture =
             std::make_unique<OptimizedGemmBenchmarkDlp>(config, numa_node);
+
+        // If probing this config failed, SKIP it instead of registering — so
+        // it is reported as skipped, not as a benchmark ERROR (mirrors
+        // GTest).
+        const auto probe_status = fixture->probeStatus();
+        if (probe_status != UALError::UAL_SUCCESS) {
+            std::cerr << "Skipping (probe failed; status="
+                      << static_cast<int>(probe_status) << "): " << config.name
+                      << std::endl;
+            continue; // fixture destructed here; not registered
+        }
 
         // Capture raw pointer (fixture lifetime managed by static vector)
         auto* fixture_ptr = fixture.get();

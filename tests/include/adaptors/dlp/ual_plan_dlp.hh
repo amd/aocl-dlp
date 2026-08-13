@@ -37,6 +37,7 @@
 extern "C"
 {
 #include "classic/aocl_gemm_metadata.h"
+#include "classic/dlp_errors.h"
 }
 
 namespace dlp::testing::classic {
@@ -60,7 +61,16 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
     void     prepare() override;
     UALError execute() override;
 
+    // Tuning knobs (blocking parameters + SUP thresholds). Stored here and
+    // attached to m_metadata in prepare(); the public GEMM API applies them
+    // via dlp_gemm_upd_cntx_with_metadata(). Absent knobs leave the metadata
+    // pointers NULL (unchanged default behavior).
+    void setBlocking(md_t MR, md_t NR, md_t MC, md_t NC, md_t KC) override;
+    void setSupThresholds(md_t MT, md_t NT, md_t KT) override;
+    void setGemmHints(md_t m_hint, md_t nt_hint) override;
+
     dlp_metadata_t* getMetadata() const { return m_metadata; }
+    dlp_clsc_err_t  lastErrorCode() const { return m_last_error_code; }
 
   private:
     // Pre-built metadata (ONE struct for everything)
@@ -86,6 +96,16 @@ class DlpUalPlan : public dlp::testing::framework::IUalPlan
 
     // Encoded type combo for dispatch
     uint64_t m_type_code = 0;
+
+    // Tuning knobs backing storage. Pointed to by m_metadata->block_params /
+    // sup_thresholds in prepare() only when the corresponding has-flag is set.
+    dlp_gemm_blocking_t      m_block_params{};
+    dlp_gemm_sup_threshold_t m_sup_thres{};
+    dlp_gemm_hints_t         m_gemm_hints{};
+    bool                     m_has_blocking    = false;
+    bool                     m_has_sup_thres   = false;
+    bool                     m_has_gemm_hints  = false;
+    dlp_clsc_err_t           m_last_error_code = DLP_CLSC_SUCCESS;
 
     // Typed post-op vectors (filled during prepare from m_post_ops)
     std::vector<std::unique_ptr<dlp::testing::framework::ElementWiseParam>>

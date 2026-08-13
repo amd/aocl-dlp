@@ -59,6 +59,10 @@ GemmBenchConfig::hash() const
     h ^= std::hash<bool>{}(this->reorderB) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<bool>{}(this->packA) + 0x9e3779b9 + (h << 6) + (h >> 2);
     h ^= std::hash<bool>{}(this->packB) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<bool>{}(this->has_gemm_hints) + 0x9e3779b9 + (h << 6)
+         + (h >> 2);
+    h ^= std::hash<md_t>{}(this->m_hint) + 0x9e3779b9 + (h << 6) + (h >> 2);
+    h ^= std::hash<md_t>{}(this->nt_hint) + 0x9e3779b9 + (h << 6) + (h >> 2);
     return h;
 }
 
@@ -201,6 +205,23 @@ generateBenchmarkName(const GemmBenchConfig& config)
         name << postops_desc;
     }
 
+    // Add tuning-knob values so configs that differ ONLY in blocking / SUP
+    // thresholds get DISTINCT benchmark names (otherwise e.g. MR=1 vs MR=6 vs a
+    // rejected MC%MR case would all share the same name and be
+    // indistinguishable in the output / skip messages).
+    if (config.has_blocking) {
+        name << ",blk:MR" << config.blk_MR << "_NR" << config.blk_NR << "_MC"
+             << config.blk_MC << "_NC" << config.blk_NC << "_KC"
+             << config.blk_KC;
+    }
+    if (config.has_sup_thresholds) {
+        name << ",sup:MT" << config.sup_MT << "_NT" << config.sup_NT << "_KT"
+             << config.sup_KT;
+    }
+    if (config.has_gemm_hints) {
+        name << ",hint:M" << config.m_hint << "_NT" << config.nt_hint;
+    }
+
     return name.str();
 }
 
@@ -317,6 +338,31 @@ loadBenchmarkConfigs(const std::string& yaml_path)
                 if (auto sq = microTest.getGroupScaleParam()) {
                     config.group_scale_param =
                         std::make_shared<GroupScaleParam>(*sq);
+                }
+
+                // Extract blocking tuning knobs if present (MR/NR/MC/NC/KC).
+                if (microTest.hasBlocking()) {
+                    config.has_blocking = true;
+                    config.blk_MR       = microTest.getMR();
+                    config.blk_NR       = microTest.getNR();
+                    config.blk_MC       = microTest.getMC();
+                    config.blk_NC       = microTest.getNC();
+                    config.blk_KC       = microTest.getKC();
+                }
+
+                // Extract SUP thresholds if present (MT/NT/KT).
+                if (microTest.hasSupThresholds()) {
+                    config.has_sup_thresholds = true;
+                    config.sup_MT             = microTest.getMT();
+                    config.sup_NT             = microTest.getNT();
+                    config.sup_KT             = microTest.getKT();
+                }
+
+                // Extract GEMM hints if present (m_hint/nt_hint).
+                if (microTest.hasGemmHints()) {
+                    config.has_gemm_hints = true;
+                    config.m_hint         = microTest.getMHint();
+                    config.nt_hint        = microTest.getNTHint();
                 }
 
                 // Generate name after populating config
