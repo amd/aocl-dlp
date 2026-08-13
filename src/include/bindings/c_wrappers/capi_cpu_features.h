@@ -90,6 +90,14 @@ dlp_cpuid_is_avx512vnni_supported(void);
 bool
 dlp_cpuid_is_avx512bf16_supported(void);
 
+// API to check if AVX512_bf16 is supported or not by the configured
+// architecture, i.e. after any downgrade requested through
+// AOCL_DLP_ENABLE_INSTRUCTIONS. This is the query the decision engine uses to
+// decide whether BF16 kernels are generated at all, or whether BF16 is
+// rerouted to the F32 kernels instead.
+bool
+dlp_cpuid_is_avx512bf16_configured(void);
+
 // API to check if AVX512_fp16 is supported or not on the current platform.
 bool
 dlp_cpuid_is_avx512fp16_supported(void);

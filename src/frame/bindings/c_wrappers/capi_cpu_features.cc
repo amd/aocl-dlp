@@ -70,6 +70,14 @@ dlp_cpuid_is_avx512bf16_supported(void)
     return archConfigManager::getInstance().isAvx512Bf16SupportedByArch();
 }
 
+// Determine if the configured architecture has support for AVX512_BF16.
+bool
+dlp_cpuid_is_avx512bf16_configured(void)
+{
+    return archConfigManager::getInstance()
+        .isAvx512Bf16SupportedByConfiguredArch();
+}
+
 // Determine if the CPU has support for AVX512_FP16.
 bool
 dlp_cpuid_is_avx512fp16_supported(void)
