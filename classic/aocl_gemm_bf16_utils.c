@@ -400,16 +400,24 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         return; // Error.
     }
 
-    // JIT pack B (BF16): optional optimization for the reorder path, mirroring
+    // JIT pack B (BF16): the pack-B kernel used by the reorder path, mirroring
     // the F32 reorder scaffolding. cs_b == 1 selects the row-major packer;
     // cs_b != 1 (with rs_b == 1, i.e. transB) selects the column-major 16x16
-    // transpose packer. A NULL handle (e.g. no BF16 support) falls back to the
-    // classic intrinsic packer, so it is not an error. lcntx_g is already a
-    // local copy (with metadata-tuned block sizes applied above), so installing
-    // the handle here does not mutate the shared global context object.
+    // transpose packer. lcntx_g is already a local copy (with metadata-tuned
+    // block sizes applied above), so installing the handle here does not mutate
+    // the shared global context object.
     lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
     dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, rs_b,
                                        cs_b, &lcntx_g);
+
+    // An arch without AVX512-BF16 has already returned above (through the
+    // reference reorder), so by this point a pack-B kernel is expected to
+    // exist and a NULL handle means JIT generation failed. Honour that as an
+    // error instead of silently falling back to the intrinsic packer.
+    if (lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL) {
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
+        return; // Error.
+    }
 
     err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
     if (err_no != DLP_CLSC_SUCCESS) {

@@ -297,6 +297,27 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
             goto err_hndl;
         }
 
+        // JIT pack B (BF16): the pack-B kernel (full NR + fringe ladder) for
+        // the AVX512-BF16 path, mirroring the GEMM kernel init above. cs_b == 1
+        // selects the row-major packer; cs_b != 1 (with rs_b == 1, i.e. transB)
+        // selects the column-major 16x16 transpose packer.
+        lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+        dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n_local,
+                                           rs_b, cs_b, &lcntx_l);
+
+        // A pack-B kernel is only generated when the configured arch has
+        // AVX512-BF16. Without it, BF16 reroutes to the F32 kernels, which
+        // convert/unreorder B instead, so a NULL handle is expected there and
+        // execution continues. With it, a NULL handle means JIT generation
+        // failed, which is an error. n=1 gemv copies B rather than packing it
+        // into an NR panel (NR == 1), and therefore needs no pack-B kernel.
+        if ((dlp_cpuid_is_avx512bf16_configured() == TRUE)
+            && (lcntx_l.blksz.NR > 1)
+            && (lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL)) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
         err = dlp_gemm_validate_metadata_with_lcntx(metadata[gc_i], &lcntx_l);
         if (err != DLP_CLSC_SUCCESS) {
             char msg[256];
@@ -593,6 +614,28 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
         // Invalid handle means that the jit kernel generation has failed. Do
         // not attempt to execute the kernel, and return an error instead.
         if (lcntx_l.dlp_kernel_hndl.kernel_base == NULL) {
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
+            goto err_hndl;
+        }
+
+        // JIT pack B (BF16): the pack-B kernel (full NR + fringe ladder) for
+        // the AVX512-BF16 path, mirroring the GEMM kernel init above. cs_b == 1
+        // selects the row-major packer; cs_b != 1 (with rs_b == 1, i.e. transB)
+        // selects the column-major 16x16 transpose packer. The B panel layout
+        // does not depend on the GEMM output type.
+        lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
+        dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OBF16, n_local,
+                                           rs_b, cs_b, &lcntx_l);
+
+        // A pack-B kernel is only generated when the configured arch has
+        // AVX512-BF16. Without it, BF16 reroutes to the F32 kernels, which
+        // convert/unreorder B instead, so a NULL handle is expected there and
+        // execution continues. With it, a NULL handle means JIT generation
+        // failed, which is an error. n=1 gemv copies B rather than packing it
+        // into an NR panel (NR == 1), and therefore needs no pack-B kernel.
+        if ((dlp_cpuid_is_avx512bf16_configured() == TRUE)
+            && (lcntx_l.blksz.NR > 1)
+            && (lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base == NULL)) {
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
             goto err_hndl;
         }
