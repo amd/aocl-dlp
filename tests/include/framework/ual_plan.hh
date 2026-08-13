@@ -217,6 +217,18 @@ class IUalPlan
         m_buffers_set = true;
     }
 
+    // ─── Tuning knobs (blocking parameters + SUP thresholds) ────
+    // No-op by default; only the DLP backend honors these. The reference
+    // implementation intentionally ignores them: blocking is a performance
+    // knob (tiling / packing) and must NOT change the mathematical result,
+    // so the reference stays the blocking-agnostic oracle.
+    virtual void setBlocking(
+        md_t /*MR*/, md_t /*NR*/, md_t /*MC*/, md_t /*NC*/, md_t /*KC*/)
+    {
+    }
+    virtual void setSupThresholds(md_t /*MT*/, md_t /*NT*/, md_t /*KT*/) {}
+    virtual void setGemmHints(md_t /*m_hint*/, md_t /*nt_hint*/) {}
+
     // ─── Lifecycle ──────────────────────────────────────────────
     virtual void     prepare() = 0;
     virtual UALError execute() = 0;

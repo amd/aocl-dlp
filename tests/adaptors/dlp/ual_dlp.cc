@@ -115,6 +115,44 @@ UalDlp::toString(UALType type)
  * @param accType Target accumulation type
  * @return UALError Error code indicating success or failure
  */
+void
+UalDlp::setTuningKnobs(md_t MR,
+                       md_t NR,
+                       md_t MC,
+                       md_t NC,
+                       md_t KC,
+                       md_t MT,
+                       md_t NT,
+                       md_t KT,
+                       bool has_blocking,
+                       bool has_sup_thresholds,
+                       md_t m_hint,
+                       md_t nt_hint,
+                       bool has_gemm_hints)
+{
+    m_block_params.MR    = MR;
+    m_block_params.NR    = NR;
+    m_block_params.MC    = MC;
+    m_block_params.NC    = NC;
+    m_block_params.KC    = KC;
+    m_sup_thres.MT       = MT;
+    m_sup_thres.NT       = NT;
+    m_sup_thres.KT       = KT;
+    m_gemm_hints.m_hint  = m_hint;
+    m_gemm_hints.nt_hint = nt_hint;
+    m_has_blocking       = has_blocking;
+    m_has_sup_thres      = has_sup_thresholds;
+    m_has_gemm_hints     = has_gemm_hints;
+}
+
+void
+UalDlp::clearTuningKnobs()
+{
+    m_has_blocking   = false;
+    m_has_sup_thres  = false;
+    m_has_gemm_hints = false;
+}
+
 UALError
 UalDlp::reorder(const Matrix&          in,
                 Matrix&                out,
@@ -124,9 +162,26 @@ UalDlp::reorder(const Matrix&          in,
                 MatrixType             accType,
                 const GroupScaleParam* group_scale)
 {
+    m_last_error_code = DLP_CLSC_SUCCESS;
+
     dlp_metadata_t meta{};
     meta.error_hndl.error_code = DLP_CLSC_SUCCESS;
     dlp_quant_op_t b_quant_op{};
+
+    // Attach tuning knobs (blocking params / SUP thresholds) so the buffer-size
+    // query and the packing below use the SAME block sizes that the GEMM will
+    // use. This is the "set before reorder" use case: mismatched block sizes
+    // between reorder and GEMM would corrupt the packed layout. When unset,
+    // the pointers stay NULL and the library uses its default block sizes.
+    if (m_has_blocking) {
+        meta.block_params = &m_block_params;
+    }
+    if (m_has_sup_thres) {
+        meta.sup_thresholds = &m_sup_thres;
+    }
+    if (m_has_gemm_hints) {
+        meta.gemm_hints = &m_gemm_hints;
+    }
 
     // Use effective (logical) dimensions for reordering
     md_t effective_rows = in.getEffectiveRows();
@@ -255,9 +310,11 @@ UalDlp::reorder(const Matrix&          in,
             in.isTransposed() ? 't' : 'n', 'B', effective_rows, effective_cols,
             &meta);
     } else {
+        m_last_error_code = DLP_CLSC_NOT_SUPPORTED;
         return UALError::UAL_NOT_SUPPORTED;
     }
 
+    m_last_error_code = meta.error_hndl.error_code;
     if (meta.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
         return UALError::UAL_NOT_SUPPORTED;
     }
@@ -399,9 +456,11 @@ UalDlp::reorder(const Matrix&          in,
                 &meta);
             break;
         default:
+            m_last_error_code = DLP_CLSC_NOT_SUPPORTED;
             return UALError::UAL_NOT_SUPPORTED;
     }
 
+    m_last_error_code = meta.error_hndl.error_code;
     if (meta.error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED) {
         return UALError::UAL_NOT_SUPPORTED;
     }

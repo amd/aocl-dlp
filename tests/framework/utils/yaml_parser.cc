@@ -516,6 +516,69 @@ namespace dlp { namespace testing { namespace utils {
                     ValueIterable<md_t>(1, report_inf).begin();
             }
 
+            // Parse blocking tuning knobs (optional): MR, NR, MC, NC, KC.
+            // Each leaf supports scalar | list | range via get_value<md_t>().
+            // Absent leaves default to 0 (= "use library default"). The
+            // iterators are ALWAYS populated so the parameter-vector layout
+            // stays consistent (indices 18..22).
+            {
+                auto blk               = node["blocking"];
+                iterators.has_blocking = static_cast<bool>(blk)
+                                         && (blk["MR"] || blk["NR"] || blk["MC"]
+                                             || blk["NC"] || blk["KC"]);
+
+                auto blk_knob = [&](const char* key) {
+                    return (blk && blk[key])
+                               ? get_value<md_t>(blk[key],
+                                                 yield_type_for_parsing)
+                               : ValueIterable<md_t>(0, report_inf).begin();
+                };
+                iterators.MR = blk_knob("MR");
+                iterators.NR = blk_knob("NR");
+                iterators.MC = blk_knob("MC");
+                iterators.NC = blk_knob("NC");
+                iterators.KC = blk_knob("KC");
+            }
+
+            // Parse SUP thresholds (optional): MT, NT, KT. Absent leaves
+            // default to -1 (= "use library default"), matching the kernel's
+            // >= 0 "apply" rule. Iterators always populated (indices 23..25).
+            {
+                auto sup = node["sup_thresholds"];
+                iterators.has_sup_thresholds =
+                    static_cast<bool>(sup)
+                    && (sup["MT"] || sup["NT"] || sup["KT"]);
+
+                auto sup_knob = [&](const char* key) {
+                    return (sup && sup[key])
+                               ? get_value<md_t>(sup[key],
+                                                 yield_type_for_parsing)
+                               : ValueIterable<md_t>(-1, report_inf).begin();
+                };
+                iterators.MT = sup_knob("MT");
+                iterators.NT = sup_knob("NT");
+                iterators.KT = sup_knob("KT");
+            }
+
+            // Parse GEMM hints (optional): m_hint and nt_hint. Absent leaves
+            // default to 0 (= no hint), matching the public metadata contract.
+            // Each leaf supports scalar | list | range via get_value<md_t>().
+            {
+                auto hints = node["gemm_hints"];
+                iterators.has_gemm_hints =
+                    static_cast<bool>(hints)
+                    && (hints["m_hint"] || hints["nt_hint"]);
+
+                auto hint = [&](const char* key) {
+                    return (hints && hints[key])
+                               ? get_value<md_t>(hints[key],
+                                                 yield_type_for_parsing)
+                               : ValueIterable<md_t>(0, report_inf).begin();
+                };
+                iterators.m_hint  = hint("m_hint");
+                iterators.nt_hint = hint("nt_hint");
+            }
+
             // Parse fill_value if present
             if (node["fill_value"]) {
                 iterators.has_fill_value = true;

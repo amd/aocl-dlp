@@ -86,6 +86,34 @@ DlpUalPlan::~DlpUalPlan()
 }
 
 void
+DlpUalPlan::setBlocking(md_t MR, md_t NR, md_t MC, md_t NC, md_t KC)
+{
+    m_block_params.MR = MR;
+    m_block_params.NR = NR;
+    m_block_params.MC = MC;
+    m_block_params.NC = NC;
+    m_block_params.KC = KC;
+    m_has_blocking    = true;
+}
+
+void
+DlpUalPlan::setSupThresholds(md_t MT, md_t NT, md_t KT)
+{
+    m_sup_thres.MT  = MT;
+    m_sup_thres.NT  = NT;
+    m_sup_thres.KT  = KT;
+    m_has_sup_thres = true;
+}
+
+void
+DlpUalPlan::setGemmHints(md_t m_hint, md_t nt_hint)
+{
+    m_gemm_hints.m_hint  = m_hint;
+    m_gemm_hints.nt_hint = nt_hint;
+    m_has_gemm_hints     = true;
+}
+
+void
 DlpUalPlan::cleanupMetadata()
 {
     if (m_metadata) {
@@ -195,6 +223,21 @@ DlpUalPlan::prepare()
     // Allocate fresh metadata
     m_metadata = new dlp_metadata_t;
     std::memset(m_metadata, 0, sizeof(dlp_metadata_t));
+
+    // Attach tuning knobs (blocking params / SUP thresholds) if provided.
+    // These point at member storage (not heap), so cleanupMetadata() must NOT
+    // free them; the public GEMM API reads them via
+    // dlp_gemm_upd_cntx_with_metadata(). When unset, the pointers stay NULL
+    // and the library uses its default block sizes (unchanged behavior).
+    if (m_has_blocking) {
+        m_metadata->block_params = &m_block_params;
+    }
+    if (m_has_sup_thres) {
+        m_metadata->sup_thresholds = &m_sup_thres;
+    }
+    if (m_has_gemm_hints) {
+        m_metadata->gemm_hints = &m_gemm_hints;
+    }
 
     // Sort m_post_ops into typed vectors by casting
     for (auto& param : m_post_ops) {
@@ -782,13 +825,17 @@ DlpUalPlan::prepare()
 UALError
 DlpUalPlan::execute()
 {
+    m_last_error_code = DLP_CLSC_SUCCESS;
     if (!m_prepared) {
+        m_last_error_code = DLP_CLSC_FAILURE;
         return UALError::UAL_FAILURE;
     }
     if (!m_buffers_set) {
+        m_last_error_code = DLP_CLSC_FAILURE;
         return UALError::UAL_FAILURE;
     }
     if (!m_dispatch) {
+        m_last_error_code = DLP_CLSC_FAILURE;
         return UALError::UAL_FAILURE;
     }
 
@@ -796,6 +843,7 @@ DlpUalPlan::execute()
     m_metadata->error_hndl.error_code = DLP_CLSC_SUCCESS;
 
     m_dispatch(m_a_ptr, m_buf_lda, m_b_ptr, m_buf_ldb, m_c_ptr, m_buf_ldc);
+    m_last_error_code = m_metadata->error_hndl.error_code;
 
     if (m_metadata->error_hndl.error_code == DLP_CLSC_NOT_SUPPORTED)
         return UALError::UAL_NOT_SUPPORTED;

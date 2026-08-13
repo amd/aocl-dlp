@@ -275,6 +275,28 @@ struct TestCaseIterators
     // Default (false) treats a NaN in the output as a mismatch.
     bool treat_nan_equal = false;
 
+    // Optional blocking tuning knobs (MR, NR, MC, NC, KC). Each iterator
+    // supports scalar | list | range via get_value<md_t>(). A single default
+    // value (0 = library default) contributes a factor of 1 to the cartesian
+    // product, so existing tests are unaffected when these are absent.
+    bool               has_blocking = false; ///< Whether blocking is present
+    TypeErasedIterator MR;                   ///< Micro-kernel M dim (md_t)
+    TypeErasedIterator NR;                   ///< Micro-kernel N dim (md_t)
+    TypeErasedIterator MC;                   ///< Cache block M dim (md_t)
+    TypeErasedIterator NC;                   ///< Cache block N dim (md_t)
+    TypeErasedIterator KC;                   ///< Cache block K dim (md_t)
+
+    // Optional SUP thresholds (MT, NT, KT). Default -1 = library default.
+    bool has_sup_thresholds = false; ///< Whether sup_thresholds is present
+    TypeErasedIterator MT;           ///< M packing threshold (md_t)
+    TypeErasedIterator NT;           ///< N packing threshold (md_t)
+    TypeErasedIterator KT;           ///< K packing threshold (md_t)
+
+    // Optional GEMM kernel hints (m_hint, nt_hint). Default 0 means no hint.
+    bool has_gemm_hints = false; ///< Whether gemm_hints is present
+    TypeErasedIterator m_hint;   ///< Expected GEMM M dimension (md_t)
+    TypeErasedIterator nt_hint;  ///< Expected GEMM thread count (md_t)
+
     /**
      * @brief Default constructor - creates default-constructed
      * TypeErasedIterators
@@ -371,9 +393,9 @@ class MicroTest
     {
         m_test_case_iterators = test_case_iterators;
 
-        // Build the iterators vector (18 total: 17 base GEMM params + 1
-        // group_size for batch)
-        m_iterators.reserve(18);
+        // Build the iterators vector (28 total: 17 base GEMM params + 1
+        // group_size for batch + 10 tuning knobs).
+        m_iterators.reserve(28);
         m_iterators.push_back(m_test_case_iterators.a_type);
         m_iterators.push_back(m_test_case_iterators.b_type);
         m_iterators.push_back(m_test_case_iterators.c_type);
@@ -392,6 +414,16 @@ class MicroTest
         m_iterators.push_back(m_test_case_iterators.mtag_a);
         m_iterators.push_back(m_test_case_iterators.mtag_b);
         m_iterators.push_back(m_test_case_iterators.group_size); // Index 17
+        m_iterators.push_back(m_test_case_iterators.MR);         // Index 18
+        m_iterators.push_back(m_test_case_iterators.NR);         // Index 19
+        m_iterators.push_back(m_test_case_iterators.MC);         // Index 20
+        m_iterators.push_back(m_test_case_iterators.NC);         // Index 21
+        m_iterators.push_back(m_test_case_iterators.KC);         // Index 22
+        m_iterators.push_back(m_test_case_iterators.MT);         // Index 23
+        m_iterators.push_back(m_test_case_iterators.NT);         // Index 24
+        m_iterators.push_back(m_test_case_iterators.KT);         // Index 25
+        m_iterators.push_back(m_test_case_iterators.m_hint);     // Index 26
+        m_iterators.push_back(m_test_case_iterators.nt_hint);    // Index 27
 
         // Initialize the appropriate product
         if (is_cartesian_product == YieldType::CARTESIAN_PRODUCT) {
@@ -428,9 +460,9 @@ class MicroTest
     {
         m_test_case_iterators = test_case_iterators;
 
-        // Build the iterators vector (18 total: 17 base GEMM params + 1
-        // group_size for batch)
-        m_iterators.reserve(18);
+        // Build the iterators vector (28 total: 17 base GEMM params + 1
+        // group_size for batch + 10 tuning knobs).
+        m_iterators.reserve(28);
         m_iterators.push_back(m_test_case_iterators.a_type);
         m_iterators.push_back(m_test_case_iterators.b_type);
         m_iterators.push_back(m_test_case_iterators.c_type);
@@ -449,6 +481,16 @@ class MicroTest
         m_iterators.push_back(m_test_case_iterators.mtag_a);
         m_iterators.push_back(m_test_case_iterators.mtag_b);
         m_iterators.push_back(m_test_case_iterators.group_size); // Index 17
+        m_iterators.push_back(m_test_case_iterators.MR);         // Index 18
+        m_iterators.push_back(m_test_case_iterators.NR);         // Index 19
+        m_iterators.push_back(m_test_case_iterators.MC);         // Index 20
+        m_iterators.push_back(m_test_case_iterators.NC);         // Index 21
+        m_iterators.push_back(m_test_case_iterators.KC);         // Index 22
+        m_iterators.push_back(m_test_case_iterators.MT);         // Index 23
+        m_iterators.push_back(m_test_case_iterators.NT);         // Index 24
+        m_iterators.push_back(m_test_case_iterators.KT);         // Index 25
+        m_iterators.push_back(m_test_case_iterators.m_hint);     // Index 26
+        m_iterators.push_back(m_test_case_iterators.nt_hint);    // Index 27
 
         // Initialize the appropriate product
         if (is_cartesian_product == YieldType::CARTESIAN_PRODUCT) {
@@ -788,6 +830,57 @@ class MicroTest
         } catch (const std::bad_any_cast& e) {
             throw std::runtime_error("Failed to cast GroupSize: "
                                      + std::string(e.what()));
+        }
+    }
+
+    /**
+     * @brief Check whether blocking tuning knobs were specified in YAML.
+     * @return bool True if a `blocking:` section was present.
+     */
+    bool hasBlocking() const { return m_test_case_iterators.has_blocking; }
+
+    /**
+     * @brief Check whether SUP thresholds were specified in YAML.
+     * @return bool True if a `sup_thresholds:` section was present.
+     */
+    bool hasSupThresholds() const
+    {
+        return m_test_case_iterators.has_sup_thresholds;
+    }
+
+    // Blocking tuning knob getters (0 = library default).
+    md_t getMR() const { return getKnobValue(18, 0); }
+    md_t getNR() const { return getKnobValue(19, 0); }
+    md_t getMC() const { return getKnobValue(20, 0); }
+    md_t getNC() const { return getKnobValue(21, 0); }
+    md_t getKC() const { return getKnobValue(22, 0); }
+
+    // SUP threshold getters (-1 = library default).
+    md_t getMT() const { return getKnobValue(23, -1); }
+    md_t getNT() const { return getKnobValue(24, -1); }
+    md_t getKT() const { return getKnobValue(25, -1); }
+
+    bool hasGemmHints() const { return m_test_case_iterators.has_gemm_hints; }
+
+    // GEMM hint getters (0 = no hint).
+    md_t getMHint() const { return getKnobValue(26, 0); }
+    md_t getNTHint() const { return getKnobValue(27, 0); }
+
+    /**
+     * @brief Safely read a tuning-knob value at the given parameter index.
+     * @param idx  Index in the current parameter combination vector (18..27).
+     * @param dflt Value to return if the index is absent or not castable.
+     * @return md_t The knob value, or @p dflt on any failure.
+     */
+    md_t getKnobValue(size_t idx, md_t dflt) const
+    {
+        if (idx >= m_current_mt.size()) {
+            return dflt;
+        }
+        try {
+            return std::any_cast<md_t>(m_current_mt[idx]);
+        } catch (const std::bad_any_cast&) {
+            return dflt;
         }
     }
 

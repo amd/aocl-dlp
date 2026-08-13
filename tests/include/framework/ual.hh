@@ -252,6 +252,45 @@ class IUal
     virtual std::unique_ptr<IUalPlan> createPlan() = 0;
 
     /**
+     * @brief Set tuning knobs (blocking parameters, SUP thresholds, and GEMM
+     *        hints) applied
+     *        to the reorder path (buffer-size query + reorder).
+     *
+     * No-op by default; only the DLP backend honors these. The reference
+     * implementation intentionally ignores them (blocking is a performance
+     * knob that must not change results). When mtag=reorder/pack, the same
+     * knobs must be fed here AND to the plan (setBlocking/setSupThresholds) so
+     * the packed layout and the GEMM kernel agree.
+     *
+     * @param has_blocking       Whether MR/NR/MC/NC/KC are meaningful.
+     * @param has_sup_thresholds Whether MT/NT/KT are meaningful.
+     * @param m_hint             Expected GEMM M dimension (0 = no hint).
+     * @param nt_hint            Expected GEMM thread count (0 = no hint).
+     * @param has_gemm_hints     Whether the GEMM hints are meaningful.
+     */
+    virtual void setTuningKnobs(md_t /*MR*/,
+                                md_t /*NR*/,
+                                md_t /*MC*/,
+                                md_t /*NC*/,
+                                md_t /*KC*/,
+                                md_t /*MT*/,
+                                md_t /*NT*/,
+                                md_t /*KT*/,
+                                bool /*has_blocking*/,
+                                bool /*has_sup_thresholds*/,
+                                md_t /*m_hint*/,
+                                md_t /*nt_hint*/,
+                                bool /*has_gemm_hints*/)
+    {
+    }
+
+    /**
+     * @brief Clear any previously-set tuning knobs so they don't leak across
+     *        tests that share a UAL instance. No-op by default.
+     */
+    virtual void clearTuningKnobs() {}
+
+    /**
      * @brief Perform batch matrix multiplication organized into groups.
      *
      * Each group contains matrices with identical dimensions and metadata. The
