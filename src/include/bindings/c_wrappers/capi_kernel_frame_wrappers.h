@@ -242,6 +242,51 @@ typedef struct
     md_t KT;
 } dlp_gemm_sup_thres_t;
 
+// Thread configuration for the current call, in/out.
+//
+// On entry the pool is stated one of two ways, never both. Usually num_threads
+// carries the count the runtime resolved. Where the caller pinned DLP_IC_NT /
+// DLP_JC_NT the ways carry that pin instead and the count is left non-positive,
+// ways outranking counts in the runtime's precedence. Non-positive throughout
+// means no pool was supplied, which leaves the DE on the context tile and the
+// split to the decorator.
+//
+// The ways travel with the tile because they are one decision: ic_ways bounds
+// the M rows a way holds and jc_ways the N panels, so scoring a tile without
+// them measures work no thread does. See decision_engine/de_shape_model.hh.
+//
+// On exit the three describe the partition the chosen tile was resolved under,
+// with ic_ways * jc_ways == num_threads, which can be fewer threads than the
+// pool offered where that divides the work more evenly. That holds only where
+// the model resolved a split; otherwise the fields come back as they went in.
+typedef struct
+{
+    md_t num_threads;
+    md_t ic_ways;
+    md_t jc_ways;
+} dlp_gemm_thread_info_t;
+
+// Provenance of the block sizes, one bit per dimension.
+//
+// Merging application metadata into the context is lossy on its own: once
+// block_params->MR has been copied over the default, the two are the same
+// number and nothing downstream can tell them apart. The DE needs to, because
+// a value the application measured is a constraint while a default is only a
+// starting point. These bits record the distinction at the one instant the
+// merge still knows it.
+//
+// A zero mask means every block size came from the library defaults, which is
+// the case for every call that supplies no metadata.
+//
+// These bits constrain tile selection only. Snapping MC, NC and KC onto the
+// chosen tile is unconditional, and it is the validator that decides whether
+// the resulting divergence from a stated value is an error.
+#define DLP_BLKSZ_SET_MR (1u << 0)
+#define DLP_BLKSZ_SET_NR (1u << 1)
+#define DLP_BLKSZ_SET_MC (1u << 2)
+#define DLP_BLKSZ_SET_NC (1u << 3)
+#define DLP_BLKSZ_SET_KC (1u << 4)
+
 typedef struct
 {
     md_t m_hint;
@@ -251,6 +296,7 @@ typedef struct
 typedef struct
 {
     dlp_gemm_block_size_t        blksz;
+    md_t                         blksz_set_mask;
     opaq_fp_t                    kern_fun_ptr;
     opaq_fp_t                    packa_fun_ptr;
     opaq_fp_t                    packb_mxp_fun_ptr;
@@ -259,6 +305,7 @@ typedef struct
     opaq_fp_t                    packsclb_fun_ptr;
     dlp_gemm_pack_strides_t      pack_s;
     dlp_gemm_sup_thres_t         sup_thres;
+    dlp_gemm_thread_info_t       thread_info;
     dlp_kernel_hndl_t            dlp_kernel_hndl;
     dlp_pack_kernel_hndl_t       dlp_pack_kernel_hndl;
     dlp_gemm_kernel_hints_t      gemm_kernel_hints;
@@ -288,12 +335,34 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t   k_dtype,
                              dlp_gemm_cntx_t*    cntx,
                              md_t                c_downscale);
 
+// Selects the pack-B kernel, and with it the packed panel width.
+//
+// Whether the width is this call's to choose is read out of
+// cntx->blksz_set_mask rather than being passed in. DLP_BLKSZ_SET_NR is set
+// either by the application or by a kernel init earlier in the same call, and
+// this honours it in both cases; where it is clear, the same rule the kernel
+// init uses picks the width, and this records the result. So the two inits can
+// run in either order, and a Reorder and a later GEMM given the same metadata
+// cannot disagree about the panel.
+//
+// k is the real k, which the model needs and cntx->blksz.KC is not.
 void
 dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
                                    md_t              n,
+                                   md_t              k,
                                    md_t              rs_src,
                                    md_t              cs_src,
                                    dlp_gemm_cntx_t*  cntx);
+
+// Derives the strides of the packed A and B buffers from the tile in cntx.
+//
+// Call this once the inits above are done, not between them: MR is settled by
+// the kernel init and NR by whichever of the two ran last, and a stride derived
+// against a width other than the one the pack kernel writes returns wrong
+// numbers rather than failing. A datatype whose tile no knob can move keeps the
+// strides its global context was configured with and does not need this.
+void
+dlp_upd_pack_strides(kernel_datatype_t k_dtype, dlp_gemm_cntx_t* cntx);
 
 // Packs B with the JIT pack-B kernel. The caller must only invoke this with a
 // valid (non-NULL) handle; the kernel ladder covers the full NR panel plus the

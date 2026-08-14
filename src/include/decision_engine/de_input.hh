@@ -62,26 +62,35 @@ class gemmDEInput : public iDEInput
     md_t                         nr_hint;
     md_t                         kc_hint;
     md_t                         c_downscale;
+    // The remaining three carry what the shape model needs, in the same order
+    // the fast path takes them. rerouted_from_other_backend is not here: it
+    // describes the dispatch that reached the backend, not the call.
+    dlp_gemm_thread_info_t*        thread_info;
+    const dlp_gemm_kernel_hints_t* gemm_hints;
+    md_t                           blksz_set_mask;
 
-    gemmDEInput(kernel_frame::kernelDatatype k_dtype,
-                md_t                         m,
-                md_t                         n,
-                md_t                         k,
-                md_t                         rs_a,
-                md_t                         cs_a,
-                md_t                         rs_b,
-                md_t                         cs_b,
-                md_t                         rs_c,
-                md_t                         cs_c,
-                void*                        alpha,
-                void*                        beta,
-                AOCL_DLP_MEMORY_TAG          mtag_a,
-                AOCL_DLP_MEMORY_TAG          mtag_b,
-                dlp_gemm_post_op*            metadata,
-                md_t                         mr_hint,
-                md_t                         nr_hint,
-                md_t                         kc_hint,
-                md_t                         c_downscale)
+    gemmDEInput(kernel_frame::kernelDatatype   k_dtype,
+                md_t                           m,
+                md_t                           n,
+                md_t                           k,
+                md_t                           rs_a,
+                md_t                           cs_a,
+                md_t                           rs_b,
+                md_t                           cs_b,
+                md_t                           rs_c,
+                md_t                           cs_c,
+                void*                          alpha,
+                void*                          beta,
+                AOCL_DLP_MEMORY_TAG            mtag_a,
+                AOCL_DLP_MEMORY_TAG            mtag_b,
+                dlp_gemm_post_op*              metadata,
+                md_t                           mr_hint,
+                md_t                           nr_hint,
+                md_t                           kc_hint,
+                md_t                           c_downscale,
+                dlp_gemm_thread_info_t*        thread_info,
+                const dlp_gemm_kernel_hints_t* gemm_hints,
+                md_t                           blksz_set_mask)
         : k_dtype(k_dtype)
         , m(m)
         , n(n)
@@ -101,6 +110,9 @@ class gemmDEInput : public iDEInput
         , nr_hint(nr_hint)
         , kc_hint(kc_hint)
         , c_downscale(c_downscale)
+        , thread_info(thread_info)
+        , gemm_hints(gemm_hints)
+        , blksz_set_mask(blksz_set_mask)
     {
     }
 
@@ -124,6 +136,9 @@ class gemmDEInput : public iDEInput
         , nr_hint(other.nr_hint)
         , kc_hint(other.kc_hint)
         , c_downscale(other.c_downscale)
+        , thread_info(other.thread_info)
+        , gemm_hints(other.gemm_hints)
+        , blksz_set_mask(other.blksz_set_mask)
     {
     }
 
@@ -147,30 +162,36 @@ class gemmDEInput : public iDEInput
         , nr_hint(other.nr_hint)
         , kc_hint(other.kc_hint)
         , c_downscale(other.c_downscale)
+        , thread_info(other.thread_info)
+        , gemm_hints(other.gemm_hints)
+        , blksz_set_mask(other.blksz_set_mask)
     {
     }
 
     gemmDEInput& operator=(const gemmDEInput& other)
     {
-        k_dtype     = other.k_dtype;
-        m           = other.m;
-        n           = other.n;
-        k           = other.k;
-        rs_a        = other.rs_a;
-        cs_a        = other.cs_a;
-        rs_b        = other.rs_b;
-        cs_b        = other.cs_b;
-        rs_c        = other.rs_c;
-        cs_c        = other.cs_c;
-        alpha       = other.alpha;
-        beta        = other.beta;
-        mtag_a      = other.mtag_a;
-        mtag_b      = other.mtag_b;
-        metadata    = other.metadata;
-        mr_hint     = other.mr_hint;
-        nr_hint     = other.nr_hint;
-        kc_hint     = other.kc_hint;
-        c_downscale = other.c_downscale;
+        k_dtype        = other.k_dtype;
+        m              = other.m;
+        n              = other.n;
+        k              = other.k;
+        rs_a           = other.rs_a;
+        cs_a           = other.cs_a;
+        rs_b           = other.rs_b;
+        cs_b           = other.cs_b;
+        rs_c           = other.rs_c;
+        cs_c           = other.cs_c;
+        alpha          = other.alpha;
+        beta           = other.beta;
+        mtag_a         = other.mtag_a;
+        mtag_b         = other.mtag_b;
+        metadata       = other.metadata;
+        mr_hint        = other.mr_hint;
+        nr_hint        = other.nr_hint;
+        kc_hint        = other.kc_hint;
+        c_downscale    = other.c_downscale;
+        thread_info    = other.thread_info;
+        gemm_hints     = other.gemm_hints;
+        blksz_set_mask = other.blksz_set_mask;
         return *this;
     }
 

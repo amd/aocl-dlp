@@ -33,11 +33,126 @@
 
 #include "classic/dlp_macros.h"
 #include "de_input.hh"
+#include "de_shape_model.hh"
 #include "kernel_frame/kernel_frame_base.hh"
 #include "utils/ctype_utils.hh"
 #include "utils/float16_types.hh"
 
 namespace dlp::de {
+
+// Leaf helpers for the shape model: the questions it asks about an input, and
+// the tile that stands when it has nothing to choose.
+//
+// They sit here rather than with the model because they decide nothing. Each
+// is a pure function of one input, with no candidate set and no dispatch, so a
+// backend that overrides the model still asks these the same questions. What
+// the model does with the answers is in optimizer/de_optimizer.hh.
+class gemmShapeModelUtils
+{
+  public:
+    // True when both halves of the tile are already settled, leaving the model
+    // nothing to choose. One of the two is not enough: the other is still the
+    // model's to pick, under the settled one as a constraint.
+    DLP_ALWAYS_INLINE static bool isTilePinnedByCaller(
+        const shape_model::gemmShapeModelInput& in)
+    {
+        constexpr md_t both = DLP_BLKSZ_SET_MR | DLP_BLKSZ_SET_NR;
+        return (in.frozen & both) == both;
+    }
+
+    // True when the model may choose a tile from this input.
+    //
+    // The mask is the caller's say in the matter; there is no separate opt-in
+    // flag. A bit is set either because the application authored that block
+    // size or because an earlier init in the same call settled it, and both
+    // mean the value is not the model's to choose. That is what keeps the
+    // kernel init and the pack-B init from having to know which runs first:
+    // whichever gets there first marks what it settled, and the other honours
+    // the marks it finds.
+    //
+    // An m and a pool are also required, read straight off the input, which
+    // already describes the GEMM the tile is being chosen for. A zero in either
+    // is the application declining to describe it.
+    //
+    // The pool is stated one of two ways and either will do. A count is the
+    // usual one. A pinned pair of ways is the other: ways outrank the count in
+    // the runtime's precedence, so a pinned call arrives with the count at -1
+    // and both ways filled, a half-stated pin having been completed to 1 x n
+    // before it got here. Reading that -1 as an absent pool would refuse the
+    // sweep exactly where the partition is already settled and a candidate can
+    // be ranked against it directly.
+    //
+    // The memory tag of A is deliberately not part of this. The intrinsic
+    // pack-A writes a plain row-major MC x KC image: every arm of its unroll
+    // ladder stores to (ic + j) * KC + kr and reports rs_p = KC, so the packed
+    // buffer carries no MR-shaped structure that a later MR could contradict.
+    //
+    // The architecture half of the screen is resolved once in the backend
+    // constructor.
+    DLP_ALWAYS_INLINE static bool isEligible(
+        const shape_model::gemmShapeModelInput& in)
+    {
+        const bool poolStated = (in.num_threads > 0)
+                                || ((in.ic_ways > 0) && (in.jc_ways > 0));
+
+        return !isTilePinnedByCaller(in) && (in.m > 0) && poolStated;
+    }
+
+    // True when the application pinned MR through metadata. Honoured on every
+    // path, modelled or not. This needs the provenance mask because by the time
+    // a block size reaches the model, a stated 6 and a default 6 are the same
+    // number.
+    DLP_ALWAYS_INLINE static bool isMRFixedByCaller(
+        const shape_model::gemmShapeModelInput& in)
+    {
+        return (in.frozen & DLP_BLKSZ_SET_MR) != 0;
+    }
+
+    // The same, for NR. Note what this does not cover: an NR that a Reorder
+    // settled on. Nothing records that width, so it is not frozen in this
+    // sense. See sweepCandidates for how the two ends agree on it instead.
+    DLP_ALWAYS_INLINE static bool isNRFixedByCaller(
+        const shape_model::gemmShapeModelInput& in)
+    {
+        return (in.frozen & DLP_BLKSZ_SET_NR) != 0;
+    }
+
+    // Whether the tunables admit this candidate into the sweep.
+    //
+    // A frozen dimension narrows the candidate set rather than being imposed
+    // on the winner afterwards. Tiles are costed as pairs, so freezing one half
+    // is a statement about which pairs are worth costing at all. Freezing both
+    // leaves nothing to choose, and isEligible screens that out before the
+    // sweep is reached.
+    DLP_ALWAYS_INLINE static bool isCandidateAdmissible(
+        const shape_model::gemmShapeModelInput& in,
+        const shape_model::kernelDims&          cand)
+    {
+        if (isMRFixedByCaller(in) && (cand.mr != in.mr)) {
+            return false;
+        }
+        if (isNRFixedByCaller(in) && (cand.nr != in.nr)) {
+            return false;
+        }
+        return true;
+    }
+
+    // The tile that stands when the model has no say: every ineligible call,
+    // and the fallback inside the modelled arm.
+    //
+    // It is just the context tile. NR comes back exactly as it was found, so
+    // both ends of a Reorder fall back to the same width.
+    //
+    // Nothing here may size itself against an extent. This object may describe
+    // the GEMM the hints characterise rather than the call, so a rule needing
+    // the rows that will actually be loaded belongs in the kernel-info fold,
+    // which has them.
+    DLP_ALWAYS_INLINE static shape_model::kernelDims baselineKernelDims(
+        const shape_model::gemmShapeModelInput& in)
+    {
+        return shape_model::kernelDims{ in.mr, in.nr };
+    }
+};
 
 class gemmDEBackendUtils
 {

@@ -313,6 +313,17 @@ class decisionEngine
      * @param nr_hint Micro-panel column size hint
      * @param kc_hint K dimension blocking size hint
      * @param c_downscale Downscale store type for matrix C
+     * @param thread_info Threading state, in/out, or nullptr when the caller
+     * does not supply it. In: the count the runtime resolved, or the pinned
+     * DLP_IC_NT / DLP_JC_NT ways with the count left non-positive. Out: the
+     * split the chosen tile was resolved under, where the model resolved one
+     * @param gemm_hints The m and thread count the application states its
+     * follow-up GEMMs will use, or nullptr where none were stated. Over a
+     * reordered B the tile is derived from these rather than from this call's
+     * own m, because the Reorder that packed the panel had only these to go on.
+     * Not read under any other memory tag
+     * @param blksz_set_mask DLP_BLKSZ_SET_* bits marking which block sizes the
+     * application authored through metadata; 0 when all are library defaults
      * @param kType Kernel routine type (e.g., GEMM, GEMV)
      * @param dt Datatype specification for kernel operation
      * @return kernelInfo with optimal kernel configuration, or
@@ -339,6 +350,9 @@ class decisionEngine
                           md_t                                 nr_hint,
                           md_t                                 kc_hint,
                           md_t                                 c_downscale,
+                          dlp_gemm_thread_info_t*              thread_info,
+                          const dlp_gemm_kernel_hints_t*       gemm_hints,
+                          md_t                                 blksz_set_mask,
                           dlp::kernel_frame::kernelRoutineType kType,
                           dlp::kernel_frame::kernelDatatype    dt)
     {
@@ -356,7 +370,7 @@ class decisionEngine
             return backend->T::getGemmKernelInfoForInputFastPath(
                 dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, false);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask, false);
         }
 
         return INVALID_KERNEL_INFO;
@@ -364,10 +378,14 @@ class decisionEngine
 
     template<typename T>
     DLP_ALWAYS_INLINE dlp::kernel_frame::packKernelInfo
-                      getGemmPackBInfoForInputFastPath(md_t                              nc,
-                                                       md_t                              kc,
-                                                       md_t                              cs_src,
-                                                       md_t                              nr_hint,
+                      getGemmPackBInfoForInputFastPath(md_t nc,
+                                                       md_t cs_src,
+                                                       md_t n,
+                                                       md_t k,
+                                                       md_t mr_hint,
+                                                       md_t nr_hint,
+                                                       md_t blksz_set_mask,
+                                                       const dlp_gemm_kernel_hints_t* gemm_hints,
                                                        dlp::kernel_frame::kernelDatatype dt)
     {
         auto kTypeIdx = utils::getUnderlyingValueOfEnum(
@@ -375,8 +393,8 @@ class decisionEngine
         auto dtIdx = utils::getUnderlyingValueOfEnum(dt);
         if (backends[kTypeIdx][dtIdx] != nullptr) {
             T* backend = static_cast<T*>(backends[kTypeIdx][dtIdx]);
-            return backend->T::getGemmPackBInfoForInputFastPath(nc, kc, cs_src,
-                                                                nr_hint);
+            return backend->T::getGemmPackBInfoForInputFastPath(
+                nc, cs_src, n, k, mr_hint, nr_hint, blksz_set_mask, gemm_hints);
         }
 
         return kernel_frame::INVALID_PACK_KERNEL_INFO;

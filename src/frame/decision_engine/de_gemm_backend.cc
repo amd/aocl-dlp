@@ -126,7 +126,8 @@ gemmF32DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->thread_info,
+            gemmIn->gemm_hints, gemmIn->blksz_set_mask, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {
@@ -143,6 +144,7 @@ gemmBF16DEBackend::gemmBF16DEBackend()
     , eKernelInstPref(kernel_frame::kernelInstrPreference::none)
     , canGenerateKernelInfo(true)
     , f32Backend(nullptr)
+    , isAnalyticalShapeModelArch(false)
 {
     // Check for AVX512_BF16 support using the archConfigManager.
     // If it doesn't exist, we reroute to use the F32 JIT path.
@@ -180,6 +182,13 @@ gemmBF16DEBackend::gemmBF16DEBackend()
         eKernelInstPref =
             kernel_frame::kernelInstrPreference::avx512_zmm_bf16_favour;
     }
+
+    // Tuned against the Zen5 cache hierarchy and the AVX512-BF16 microkernel
+    // family, so fenced to that combination. Resolved here to keep the per-call
+    // check a boolean load.
+    isAnalyticalShapeModelArch = isAvx512Bf16
+                                 && arch_utils::archConfigManager::getInstance()
+                                        .isZen5SimilarConfiguredArch();
 }
 
 std::optional<kernel_frame::kernelInfo>
@@ -209,7 +218,8 @@ gemmBF16DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->thread_info,
+            gemmIn->gemm_hints, gemmIn->blksz_set_mask, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {
@@ -270,7 +280,8 @@ gemmU8S8DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->thread_info,
+            gemmIn->gemm_hints, gemmIn->blksz_set_mask, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {
@@ -332,7 +343,8 @@ gemmS8DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->thread_info,
+            gemmIn->gemm_hints, gemmIn->blksz_set_mask, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {
@@ -618,7 +630,8 @@ gemmFP16DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->thread_info,
+            gemmIn->gemm_hints, gemmIn->blksz_set_mask, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {
@@ -672,7 +685,8 @@ gemmF32FP16DEBackend::getKernelInfoForInput(iDEInput* in)
             gemmIn->cs_a, gemmIn->rs_b, gemmIn->cs_b, gemmIn->rs_c,
             gemmIn->cs_c, gemmIn->alpha, gemmIn->beta, gemmIn->mtag_a,
             gemmIn->mtag_b, gemmIn->metadata, gemmIn->mr_hint, gemmIn->nr_hint,
-            gemmIn->kc_hint, gemmIn->c_downscale, false);
+            gemmIn->kc_hint, gemmIn->c_downscale, gemmIn->thread_info,
+            gemmIn->gemm_hints, gemmIn->blksz_set_mask, false);
     }
 
     if ((kI.mr <= 0) || (kI.nr <= 0)) {

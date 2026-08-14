@@ -400,6 +400,24 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         return; // Error.
     }
 
+    // A malformed hint is refused here rather than packed against. Only the
+    // negative test applies: the pair describes the GEMMs that will consume
+    // this panel, and this call is not one of them, so there is no thread count
+    // to hold nt_hint to. The runtime this Reorder happens to run under
+    // describes nothing about those GEMMs.
+    err_no = dlp_gemm_validate_hints(&lcntx_g);
+    if (err_no != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "GEMM hints must be zero (unset) or positive, got "
+                 "m_hint: %ld nt_hint: %ld\n",
+                 (lcntx_g.gemm_kernel_hints).m_hint,
+                 (lcntx_g.gemm_kernel_hints).nt_hint);
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err_no);
+        return; // Error.
+    }
+
     // JIT pack B (BF16): the pack-B kernel used by the reorder path, mirroring
     // the F32 reorder scaffolding. cs_b == 1 selects the row-major packer;
     // cs_b != 1 (with rs_b == 1, i.e. transB) selects the column-major 16x16
@@ -407,7 +425,7 @@ aocl_reorder_bf16bf16f32of32(const char      order,
     // block sizes applied above), so installing the handle here does not mutate
     // the shared global context object.
     lcntx_g.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
-    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, rs_b,
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n, k, rs_b,
                                        cs_b, &lcntx_g);
 
     // An arch without AVX512-BF16 has already returned above (through the
@@ -418,6 +436,9 @@ aocl_reorder_bf16bf16f32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         return; // Error.
     }
+
+    // The init is done, so the panel width the reorder writes is final.
+    dlp_upd_pack_strides(DLP_KERNEL_BF16BF16F32OF32, &lcntx_g);
 
     err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_g);
     if (err_no != DLP_CLSC_SUCCESS) {

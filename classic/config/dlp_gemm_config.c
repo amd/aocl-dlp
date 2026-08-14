@@ -372,6 +372,11 @@ dlp_gemm_set_block_sizes_global_cntx(AOCL_DLP_OPERATION_TYPE op_type,
     global_cntx_t_list[idx].blksz.KC = KC;
     global_cntx_t_list[idx].blksz.MR = MR;
     global_cntx_t_list[idx].blksz.NR = NR;
+
+    // Defaults by definition, so nothing here is application-authored. Stated
+    // rather than left to zero-initialisation because every local context is
+    // copied from this one, and the copy is what the DE reads provenance from.
+    global_cntx_t_list[idx].blksz_set_mask = 0;
 }
 
 DLP_INLINE void
@@ -578,112 +583,35 @@ dlp_gemm_get_global_cntx_obj(AOCL_DLP_OPERATION_TYPE op)
         (int)op, AOCL_DLP_OPERATION_TYPE_LEN)];
 }
 
-/**
- * @brief Calculate pack strides for INT8 data types (U8S8, S8S8, etc.)
- *
- * @param packa_rs Output: Pack A row stride
- * @param packa_cs Output: Pack A column stride
- * @param packb_rs Output: Pack B row stride
- * @param packb_cs Output: Pack B column stride
- * @param MR Micro-kernel M dimension (register blocking)
- * @param NR Micro-kernel N dimension (register blocking)
- * @param cache_line_size Architecture cache line size (typically 64 bytes)
- */
-#define DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,   \
-                                 NR, cache_line_size)                          \
-    do {                                                                       \
-        *(packa_rs) = 4;        /* VNNI packing: 4×int8 → int32 */             \
-        *(packa_cs) = 4 * (MR); /* MR rows × 4-element packing */              \
-        *(packb_rs) = 4 * (NR); /* NR cols × 4-element packing */              \
-        *(packb_cs) =                                                          \
-            (cache_line_size) / sizeof(int8_t); /* Cache line align */         \
-    } while (0)
-
-/**
- * @brief Calculate pack strides for BF16 (Brain Float16) data types
- *
- * @param packa_rs Output: Pack A row stride
- * @param packa_cs Output: Pack A column stride
- * @param packb_rs Output: Pack B row stride
- * @param packb_cs Output: Pack B column stride
- * @param MR Micro-kernel M dimension (register blocking)
- * @param NR Micro-kernel N dimension (register blocking)
- * @param cache_line_size Architecture cache line size (typically 64 bytes)
- */
-#define DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,  \
-                                  NR, cache_line_size)                         \
-    do {                                                                       \
-        *(packa_rs) = 2;        /* BF16 packing: 2×bf16 pairs */               \
-        *(packa_cs) = 2 * (MR); /* MR rows × 2-element packing */              \
-        *(packb_rs) = 2 * (NR); /* NR cols × 2-element packing */              \
-        *(packb_cs) =                                                          \
-            (cache_line_size) / sizeof(int16_t); /* Cache line align */        \
-    } while (0)
-
-/**
- * @brief Calculate pack strides for F32/F16 floating point data types
- *
- * Note: F16 (float16) uses same strides as F32 despite different sizes.
- *       The kernel handles element size; packing layout remains consistent.
- *
- * @param packa_rs Output: Pack A row stride
- * @param packa_cs Output: Pack A column stride
- * @param packb_rs Output: Pack B row stride
- * @param packb_cs Output: Pack B column stride
- * @param MR Micro-kernel M dimension (register blocking)
- * @param NR Micro-kernel N dimension (register blocking)
- * @param cache_line_size Architecture cache line size (unused for F32/F16)
- */
-#define DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR, \
-                                   NR, cache_line_size)                        \
-    do {                                                                       \
-        *(packa_rs) = 1;    /* Unit stride, no packing */                      \
-        *(packa_cs) = (MR); /* Natural column-major stride */                  \
-        *(packb_rs) = (NR); /* Natural row-major stride */                     \
-        *(packb_cs) = 1;    /* Unit stride, contiguous */                      \
-    } while (0)
-
-// **NOTE** This function makes certain assumptions about pack strides for
-// datatypes which requires mandatory B packing (like bf16, u8s8). This
-// function needs to be revisited in case any assumption gets broken. For
-// instance one assumption is that kernels are row major favoring and has
-// A broadcasts, B loads. Subsequently A and B strides will calculated on
-// the basis of kr loop, in a way that each kr iteration gets the correct
-// A and B ptrs offsets.
-static inline dlp_clsc_err_t
-dlp_gemm_upd_pack_strides(AOCL_DLP_OPERATION_TYPE op,
-                          md_t                    MR,
-                          md_t                    NR,
-                          md_t*                   packa_rs,
-                          md_t*                   packa_cs,
-                          md_t*                   packb_rs,
-                          md_t*                   packb_cs)
+// Which block sizes the application authored.
+//
+// The merge into the context is lossy: once block_params->MR has overwritten
+// the default the two are the same number. The DE needs the distinction, since
+// a measured value is a constraint and a default is only a starting point, and
+// this is the last point where it still exists. The predicate matches the one
+// the merge uses, so a bit is set exactly when that field came from metadata.
+static md_t
+dlp_gemm_blksz_provenance(const dlp_gemm_blocking_t* block_params)
 {
-    const md_t cache_line_size = 64;
+    md_t mask = 0;
 
-    // As it stands, pack strides needs to be derived from the supplied
-    // metadata context, the data types and the underlying machine ISA.
-    if ((dlp_cpuid_is_avx2fma3_supported() == TRUE)
-        || (dlp_cpuid_is_avx512_supported() == TRUE)) {
-        if ((op == U8S8S32OS32) || (op == S8S8S32OS32) || (op == U8S4S32OS32)) {
-            DLP_SET_INT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs, MR,
-                                     NR, cache_line_size);
-        } else if ((op == F32F32F32OF32) || (op == F16F16F16OF16)
-                   || (op == F32F16F32OF32)) {
-            DLP_SET_FLOAT_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
-                                       MR, NR, cache_line_size);
-        } else if ((op == BF16BF16F32OF32) || (op == BF16S4F32OF32)
-                   || (op == F32OBF16) || (op == BF16U4F32OF32)) {
-            DLP_SET_BF16_PACK_STRIDES(packa_rs, packa_cs, packb_rs, packb_cs,
-                                      MR, NR, cache_line_size);
-        } else {
-            return DLP_CLSC_INVALID_BLOCK_PARAMS;
-        }
-    } else {
-        return DLP_CLSC_INVALID_BLOCK_PARAMS;
+    if (block_params->MC > 0) {
+        mask |= DLP_BLKSZ_SET_MC;
+    }
+    if (block_params->NC > 0) {
+        mask |= DLP_BLKSZ_SET_NC;
+    }
+    if (block_params->KC > 0) {
+        mask |= DLP_BLKSZ_SET_KC;
+    }
+    if (block_params->MR > 0) {
+        mask |= DLP_BLKSZ_SET_MR;
+    }
+    if (block_params->NR > 0) {
+        mask |= DLP_BLKSZ_SET_NR;
     }
 
-    return DLP_CLSC_SUCCESS;
+    return mask;
 }
 
 dlp_clsc_err_t
@@ -691,6 +619,10 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
                                 dlp_gemm_cntx_t*        lcntx,
                                 dlp_metadata_t*         metadata)
 {
+    // Kept in the signature for the ~70 call sites; nothing merged here is
+    // op-specific since the pack strides moved out.
+    (void)op;
+
     if (!lcntx) {
         // Invalid context pointer, return error.
         return DLP_CLSC_NULL_POINTER;
@@ -726,13 +658,15 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
             return DLP_CLSC_INVALID_BLOCK_PARAMS;
         }
 
-        dlp_clsc_err_t err = dlp_gemm_upd_pack_strides(
-            op, lcntx->blksz.MR, lcntx->blksz.NR, &lcntx->pack_s.packa_rs,
-            &lcntx->pack_s.packa_cs, &lcntx->pack_s.packb_rs,
-            &lcntx->pack_s.packb_cs);
-        if (err != DLP_CLSC_SUCCESS) {
-            return err;
-        }
+        // The first write to the mask in this call. Every caller merges into a
+        // fresh copy of the global context, whose mask is zero, and the kernel
+        // and pack-B inits add their own bits only after this, so there is
+        // nothing here to preserve.
+        lcntx->blksz_set_mask = dlp_gemm_blksz_provenance(block_params);
+
+        // The pack strides are not derived here. They follow from MR and NR,
+        // and the DE has not chosen those yet; dlp_init_and_get_kernel_hndl
+        // and dlp_init_and_get_packb_kernel_hndl derive them once it has.
     }
 
     // Set SUP thresholds if applicable.
