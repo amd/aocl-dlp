@@ -33,18 +33,16 @@
 namespace dlp::benchmarking {
 
 // FIXME(#544): Duplicates dlp::testing::framework::getElementSizeBytes() in
-// tests/include/framework/types.hh. The two helpers disagree on packed types
-// (u4/s4 here returns 1 vs 0 there) and on the default arm (4 here vs 0
-// there). Pick one canonical implementation, fix packed-type accounting at
-// the call site (bytes = (rows*cols + 1) / 2 for u4/s4), and delete the
-// duplicate. Tracked in github.com/AMD-AOCL/aocl-dlp#544.
+// tests/include/framework/types.hh, which returns 0 for u4/s4 and 0 by
+// default where this returns 1 and 4. Packed accounting is now handled by
+// getMatrixSizeBytes(); the duplicate helper still needs to be reconciled.
 size_t
 BenchmarkMetrics::getMatrixTypeSize(MatrixType type)
 {
     switch (type) {
         case MatrixType::u4:
         case MatrixType::s4:
-            return 1; // 4-bit types packed, but count as 1 byte min
+            return 1; // Memory is byte-addressable; packed arrays are special.
         case MatrixType::u8:
         case MatrixType::s8:
             return 1;
@@ -60,6 +58,23 @@ BenchmarkMetrics::getMatrixTypeSize(MatrixType type)
         default:
             return 4; // Default to 4 bytes
     }
+}
+
+size_t
+BenchmarkMetrics::getMatrixSizeBytes(MatrixType type, md_t rows, md_t cols)
+{
+    if (rows <= 0 || cols <= 0) {
+        return 0;
+    }
+
+    const size_t elements = static_cast<size_t>(rows) * cols;
+    if (type == MatrixType::u4 || type == MatrixType::s4) {
+        // Two 4-bit elements share one byte; round up for an odd element
+        // count rather than reporting a fractional physical byte.
+        return (elements / 2) + (elements % 2);
+    }
+
+    return elements * getMatrixTypeSize(type);
 }
 
 void
@@ -80,14 +95,12 @@ BenchmarkMetrics::calculateAndReport(benchmark::State& state,
 
     // For bandwidth calculation, we need bytes and will let Google Benchmark
     // calculate the rate
-    size_t size_a = getMatrixTypeSize(a_type);
-    size_t size_b = getMatrixTypeSize(b_type);
-    size_t size_c = getMatrixTypeSize(c_type);
-
-    double bytes_A     = static_cast<double>(m) * k * size_a;
-    double bytes_B     = static_cast<double>(k) * n * size_b;
-    double bytes_C     = static_cast<double>(m) * n * size_c;
-    double total_bytes = bytes_A + bytes_B + bytes_C;
+    const size_t bytes_A     = getMatrixSizeBytes(a_type, m, k);
+    const size_t bytes_B     = getMatrixSizeBytes(b_type, k, n);
+    const size_t bytes_C     = getMatrixSizeBytes(c_type, m, n);
+    const double total_bytes = static_cast<double>(bytes_A)
+                               + static_cast<double>(bytes_B)
+                               + static_cast<double>(bytes_C);
 
     // Bandwidth in GB/s (Google Benchmark will calculate the rate)
     state.counters["Bandwidth_GB/s"] = benchmark::Counter(
@@ -107,8 +120,7 @@ BenchmarkMetrics::calculateAndReport(benchmark::State& state,
     state.counters["group_size"] = static_cast<double>(group_size);
 
     // Matrix size in MB
-    double matrix_size_mb =
-        (size_a * m * k + size_b * k * n + size_c * m * n) / (1024.0 * 1024.0);
+    double matrix_size_mb            = total_bytes / (1024.0 * 1024.0);
     state.counters["Matrix_Size_MB"] = matrix_size_mb;
 }
 
