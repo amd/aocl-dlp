@@ -27,6 +27,7 @@
  */
 
 #include "u8s8_gemv_generator.hh"
+#include "store/store_emit.hh"
 
 namespace amdzen::gen {
 
@@ -199,567 +200,37 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVN1<KType>::storeResult_S32(int mSize, bool isRowStored)
 {
-    int mLeft = mSize % nElemsPerReg;
+    const int mLeft     = mSize % nElemsPerReg;
+    auto      storeMask = store::StoreMask::none();
+    if (mLeft) {
+        storeMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto convert =
+        accumulatorsAreF32
+            ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::s32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                        dlp::kernel_frame::DataType::s32);
+    const store::GemvN1Source source = store::GemvN1Source::packedLanes(
+        store::RegSpan{ accumBaseIdx, store::SourceRegWidth::zmm, mSize });
 
+    auto               scratch = store::StoreTemps::none();
+    std::array<int, 4> scratchRegisters{};
     if (isRowStored) {
-        RETURN_IF_ERROR(storeY_rowStored_S32(mSize));
-    } else {
-        // Column-major storage for S32
-        for (iter_t i = 0; i < mSize / nElemsPerReg; i += 1) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - convert to S32 before
-                // storing
-                vcvtps2dq(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-                vmovdqu32(ptr[regTmpYptr], Zmm(tmpBaseIdx));
-            } else {
-                // S32 accumulators (no post-ops) - direct store
-                vmovdqu32(ptr[regTmpYptr], Zmm(accumBaseIdx + i));
-            }
+        for (std::size_t i = 0; i < scratchRegisters.size(); ++i) {
+            scratchRegisters[i] =
+                tmpBaseIdx + static_cast<int>(i) + (accumulatorsAreF32 ? 1 : 0);
         }
-        if (mLeft) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators - convert to S32 before storing
-                vcvtps2dq(Zmm(tmpBaseIdx),
-                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vmovdqu32(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
-            } else {
-                // S32 accumulators - direct store
-                vmovdqu32(ptr[regTmpYptr] | mask_regs[1],
-                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-            }
-        }
+        scratch = store::StoreTemps::withZmm(scratchRegisters[0]);
     }
 
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeResult_U8(int mSize, bool isRowStored)
-{
-    int mLeft = mSize % nElemsPerReg;
-
-    if (isRowStored) {
-        RETURN_IF_ERROR(storeY_rowStored_U8(mSize));
-    } else {
-        // Column-major storage for U8 with saturation
-        updateCBufferPointers();
-
-        vpxord(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1),
-               Zmm(tmpBaseIdx + 1)); // 0
-        mov(regKIter, 255);
-        vpbroadcastd(Zmm(tmpBaseIdx + 2), regKIter.cvt32());
-
-        for (iter_t i = 0; i < mSize / nElemsPerReg; i += 1) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - convert F32→S32 then
-                // clamp to U8
-                vcvtps2dq(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-                vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1));
-                vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2));
-                vpmovdb(ptr[regTmpYptr], Zmm(tmpBaseIdx));
-            } else {
-                // S32 accumulators (no post-ops) - direct clamp to U8
-                vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1),
-                        Zmm(accumBaseIdx + i));
-                vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx));
-                vpmovdb(ptr[regTmpYptr], Zmm(tmpBaseIdx));
-            }
-        }
-        if (mLeft) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators - convert F32→S32 then clamp to U8
-                vcvtps2dq(Zmm(tmpBaseIdx),
-                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1));
-                vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2));
-                vpmovdb(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
-            } else {
-                // S32 accumulators - direct clamp to U8
-                vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1),
-                        Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx));
-                vpmovdb(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
-            }
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeResult_S8(int mSize, bool isRowStored)
-{
-    int mLeft = mSize % nElemsPerReg;
-
-    if (isRowStored) {
-        RETURN_IF_ERROR(storeY_rowStored_S8(mSize));
-    } else {
-        // Column-major storage for S8 with saturation
-        updateCBufferPointers();
-
-        for (iter_t i = 0; i < mSize / nElemsPerReg; i += 1) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - convert F32→S32 then
-                // saturate to S8
-                vcvtps2dq(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-                vpmovsdb(ptr[regTmpYptr], Zmm(tmpBaseIdx));
-            } else {
-                // S32 accumulators (no post-ops) - direct saturation to S8
-                vpmovsdb(ptr[regTmpYptr], Zmm(accumBaseIdx + i));
-            }
-        }
-        if (mLeft) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators - convert F32→S32 then saturate to S8
-                vcvtps2dq(Zmm(tmpBaseIdx),
-                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vpmovsdb(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
-            } else {
-                // S32 accumulators - direct saturation to S8
-                vpmovsdb(ptr[regTmpYptr] | mask_regs[1],
-                         Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-            }
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeResult_F32(int mSize, bool isRowStored)
-{
-    int mLeft = mSize % nElemsPerReg;
-
-    if (isRowStored) {
-        RETURN_IF_ERROR(storeY_rowStored_F32(mSize));
-    } else {
-        // Column-major storage for F32
-        updateCBufferPointers();
-
-        for (iter_t i = 0; i < mSize / nElemsPerReg; i += 1) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - direct store
-                vmovups(ptr[regTmpYptr], Zmm(accumBaseIdx + i));
-            } else {
-                // S32 accumulators (no post-ops) - convert to F32 and store
-                vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-                vmovups(ptr[regTmpYptr], Zmm(tmpBaseIdx));
-            }
-        }
-        if (mLeft) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators - direct store
-                vmovups(ptr[regTmpYptr] | mask_regs[1],
-                        Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-            } else {
-                // S32 accumulators - convert to F32 and store
-                vcvtdq2ps(Zmm(tmpBaseIdx),
-                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-                vmovups(ptr[regTmpYptr] | mask_regs[1], Zmm(tmpBaseIdx));
-            }
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeResult_F16(int mSize, bool isRowStored)
-{
-    if (isRowStored) {
-        RETURN_IF_ERROR(storeY_rowStored_F16(mSize));
-    } else {
-        updateCBufferPointers();
-
-        for (iter_t i = 0; i < mSize / nElemsPerReg; i += 1) {
-            if (accumulatorsAreF32) {
-                vmovups(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            } else {
-                vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            }
-            vcvtps2ph(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx), 0);
-            vmovdqu16(ptr[regTmpYptr], Ymm(tmpBaseIdx + 1));
-            add(regTmpYptr, regTmp1);
-        }
-
-        if (mSize % nElemsPerReg) {
-            if (accumulatorsAreF32) {
-                vmovups(Zmm(tmpBaseIdx),
-                        Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-            } else {
-                vcvtdq2ps(Zmm(tmpBaseIdx),
-                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-            }
-            vcvtps2ph(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx), 0);
-            vmovdqu16(ptr[regTmpYptr] | mask_regs[1], Ymm(tmpBaseIdx + 1));
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeResult_BF16(int mSize, bool isRowStored)
-{
-    int mLeft = mSize % nElemsPerReg;
-
-    if (isRowStored) {
-        RETURN_IF_ERROR(storeY_rowStored_BF16(mSize));
-    } else {
-        // Column-major storage for BF16 with conversion
-        updateCBufferPointers();
-
-        for (iter_t i = 0; i < mSize / nElemsPerReg; i += 1) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - direct F32→BF16
-                // conversion
-                vmovups(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            } else {
-                // S32 accumulators (no post-ops) - convert S32→F32 first
-                vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            }
-
-            // Software BF16 conversion
-            // Algorithm: bf16 = (f32 + 0x00007FFF + ((f32 >> 16) & 1)) >> 16
-
-            // Extract LSB of bit 16 for rounding (ties-to-even)
-            vpsrld(Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx), 16);
-            vpandd(Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx + 2),
-                   ptr[rip + label_bf16_lsb_mask]);
-
-            // Add rounding bias (0x00007FFF) + LSB
-            vpaddd(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx),
-                   ptr[rip + label_bf16_round_bias]);
-            vpaddd(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1),
-                   Zmm(tmpBaseIdx + 2));
-
-            // Shift right 16 bits to get BF16 in lower 16 bits of each dword
-            vpsrld(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1), 16);
-
-            // Pack 16x32-bit to 16x16-bit: use vpmovdw to convert dword to word
-            vpmovdw(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1));
-
-            vmovdqu16(ptr[regTmpYptr], Ymm(tmpBaseIdx + 1));
-        }
-
-        if (mLeft) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators - direct use
-                vmovups(Zmm(tmpBaseIdx),
-                        Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-            } else {
-                // S32 accumulators - convert to F32 first
-                vcvtdq2ps(Zmm(tmpBaseIdx),
-                          Zmm(accumBaseIdx + (mSize / nElemsPerReg)));
-            }
-
-            // Software BF16 conversion for masked case
-            vpsrld(Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx), 16);
-            vpandd(Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx + 2),
-                   ptr[rip + label_bf16_lsb_mask]);
-            vpaddd(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx),
-                   ptr[rip + label_bf16_round_bias]);
-            vpaddd(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1),
-                   Zmm(tmpBaseIdx + 2));
-            vpsrld(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1), 16);
-            vpmovdw(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1));
-
-            vmovdqu16(ptr[regTmpYptr] | mask_regs[1], Ymm(tmpBaseIdx + 1));
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_S32(int mSize)
-{
-    // Process each ZMM register (which contains 16 elements) for S32 output
-    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
-        int elems_in_reg = (i < mSize / nElemsPerReg) ? nElemsPerReg
-                                                      : (mSize % nElemsPerReg);
-        if (elems_in_reg == 0)
-            break;
-
-        // Handle both S32 and F32 accumulators
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - convert to S32 before
-            // extraction
-            vcvtps2dq(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            // Extract 4 chunks of 128-bits from the converted S32 ZMM
-            for (iter_t j = 0; j < elems_in_reg; j += 4) {
-                vextracti32x4(Xmm(tmpBaseIdx + 1 + j / 4), Zmm(tmpBaseIdx),
-                              j / 4);
-            }
-        } else {
-            // S32 accumulators (no post-ops) - direct extraction
-            for (iter_t j = 0; j < elems_in_reg; j += 4) {
-                vextracti32x4(Xmm(tmpBaseIdx + j / 4), Zmm(accumBaseIdx + i),
-                              j / 4);
-            }
-        }
-
-        for (iter_t j = 0; j < elems_in_reg; j++) {
-            int tmp_reg    = accumulatorsAreF32 ? (1 + j / 4) : (j / 4);
-            int pos_in_reg = j % 4;
-
-            if (pos_in_reg == 0) {
-                // First element in XMM can be stored directly (32-bit)
-                vmovd(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg));
-            } else {
-                // Extract to memory directly (32-bit)
-                vpextrd(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
-                        pos_in_reg);
-            }
-
-            // Move to next row (S32 stride)
-            add(regTmpYptr, regRsC);
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_U8(int mSize)
-{
-    updateCBufferPointers();
-
-    // Setup saturation constants for U8 (0-255)
-    vpxord(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1)); // 0
-    mov(regKIter, 255);
-    vpbroadcastd(Zmm(tmpBaseIdx + 2), regKIter.cvt32());
-
-    // Process each ZMM register for U8 output
-    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
-        int elems_in_reg = (i < mSize / nElemsPerReg) ? nElemsPerReg
-                                                      : (mSize % nElemsPerReg);
-        if (elems_in_reg == 0)
-            break;
-
-        // Handle both S32 and F32 accumulators
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - convert F32→S32 then clamp to
-            // U8
-            vcvtps2dq(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1));
-            vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2));
-            vpmovdb(Xmm(tmpBaseIdx), Zmm(tmpBaseIdx));
-        } else {
-            // S32 accumulators (no post-ops) - direct clamp to U8
-            vpmaxsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 1),
-                    Zmm(accumBaseIdx + i));
-            vpminsd(Zmm(tmpBaseIdx), Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx));
-            vpmovdb(Xmm(tmpBaseIdx), Zmm(tmpBaseIdx));
-        }
-
-        // Extract and store each element as U8
-        for (iter_t j = 0; j < elems_in_reg; j++) {
-            vpextrb(ptr[regTmpYptr], Xmm(tmpBaseIdx), j);
-            add(regTmpYptr, regTmp1); // Move to next row (U8 stride)
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_S8(int mSize)
-{
-    updateCBufferPointers();
-
-    // Process each ZMM register for S8 output
-    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
-        int elems_in_reg = (i < mSize / nElemsPerReg) ? nElemsPerReg
-                                                      : (mSize % nElemsPerReg);
-        if (elems_in_reg == 0)
-            break;
-
-        // Handle both S32 and F32 accumulators
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - convert F32→S32 then saturate
-            // to S8
-            vcvtps2dq(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            vpmovsdb(Xmm(tmpBaseIdx), Zmm(tmpBaseIdx));
-        } else {
-            // S32 accumulators (no post-ops) - direct saturation to S8
-            vpmovsdb(Xmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-        }
-
-        // Extract and store each element as S8
-        for (iter_t j = 0; j < elems_in_reg; j++) {
-            vpextrb(ptr[regTmpYptr], Xmm(tmpBaseIdx), j);
-            add(regTmpYptr, regTmp1); // Move to next row (S8 stride)
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_F32(int mSize)
-{
-    updateCBufferPointers();
-
-    // Process each ZMM register (which contains 16 elements) for F32 output
-    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
-        int elems_in_reg = (i < mSize / nElemsPerReg) ? nElemsPerReg
-                                                      : (mSize % nElemsPerReg);
-        if (elems_in_reg == 0)
-            break;
-
-        // Handle both S32 and F32 accumulators
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - direct use
-            // Extract 4 chunks of 128-bits from the F32 ZMM
-            for (iter_t j = 0; j < elems_in_reg; j += 4) {
-                vextractf32x4(Xmm(tmpBaseIdx + j / 4), Zmm(accumBaseIdx + i),
-                              j / 4);
-            }
-        } else {
-            // S32 accumulators (no post-ops) - convert to F32 first
-            vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-            // Extract 4 chunks of 128-bits from the converted F32 ZMM
-            for (iter_t j = 0; j < elems_in_reg; j += 4) {
-                vextractf32x4(Xmm(tmpBaseIdx + 1 + j / 4), Zmm(tmpBaseIdx),
-                              j / 4);
-            }
-        }
-
-        for (iter_t j = 0; j < elems_in_reg; j++) {
-            int tmp_reg    = accumulatorsAreF32 ? (j / 4) : (1 + j / 4);
-            int pos_in_reg = j % 4;
-
-            if (pos_in_reg == 0) {
-                // First element in XMM can be stored directly (32-bit)
-                vmovss(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg));
-            } else {
-                // Extract to memory directly (32-bit)
-                vextractps(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
-                           pos_in_reg);
-            }
-
-            // Move to next row (F32 stride)
-            add(regTmpYptr, regTmp1);
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_F16(int mSize)
-{
-    updateCBufferPointers();
-
-    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
-        int elems_in_reg = (i < mSize / nElemsPerReg) ? nElemsPerReg
-                                                      : (mSize % nElemsPerReg);
-        if (elems_in_reg == 0)
-            break;
-
-        if (accumulatorsAreF32) {
-            vmovups(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-        } else {
-            vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-        }
-
-        vcvtps2ph(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx), 0);
-
-        for (iter_t j = 0; j < elems_in_reg; j += 8) {
-            vextracti32x4(Xmm(tmpBaseIdx + 2 + j / 8), Ymm(tmpBaseIdx + 1),
-                          j / 8);
-        }
-
-        for (iter_t j = 0; j < elems_in_reg; j++) {
-            int tmp_reg    = j / 8 + 2;
-            int pos_in_reg = j % 8;
-            vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
-                    pos_in_reg);
-            add(regTmpYptr, regTmp1);
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVN1<KType>::storeY_rowStored_BF16(int mSize)
-{
-    updateCBufferPointers();
-
-    // Process each ZMM register for BF16 output
-    for (iter_t i = 0; i < (mSize + nElemsPerReg - 1) / nElemsPerReg; i++) {
-        int elems_in_reg = (i < mSize / nElemsPerReg) ? nElemsPerReg
-                                                      : (mSize % nElemsPerReg);
-        if (elems_in_reg == 0)
-            break;
-
-        // Handle both S32 and F32 accumulators
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - direct F32→BF16 conversion
-            vmovups(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-        } else {
-            // S32 accumulators (no post-ops) - convert S32→F32 first
-            vcvtdq2ps(Zmm(tmpBaseIdx), Zmm(accumBaseIdx + i));
-        }
-
-        // Software BF16 conversion
-        // Algorithm: bf16 = (f32 + 0x00007FFF + ((f32 >> 16) & 1)) >> 16
-
-        // Extract LSB of bit 16 for rounding (ties-to-even)
-        vpsrld(Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx), 16);
-        vpandd(Zmm(tmpBaseIdx + 2), Zmm(tmpBaseIdx + 2),
-               ptr[rip + label_bf16_lsb_mask]);
-
-        // Add rounding bias (0x00007FFF) + LSB
-        vpaddd(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx),
-               ptr[rip + label_bf16_round_bias]);
-        vpaddd(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 2));
-
-        // Shift right 16 bits to get BF16 in lower 16 bits of each dword
-        vpsrld(Zmm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1), 16);
-
-        // Pack 16x32-bit to 16x16-bit: use vpmovdw to convert dword to word
-        vpmovdw(Ymm(tmpBaseIdx + 1), Zmm(tmpBaseIdx + 1));
-
-        // Extract 2 chunks of 128-bits from the YMM (each chunk has 8 BF16
-        // elements)
-        for (iter_t j = 0; j < elems_in_reg; j += 8) {
-            vextracti32x4(Xmm(tmpBaseIdx + 2 + j / 8), Ymm(tmpBaseIdx + 1),
-                          j / 8);
-        }
-
-        for (iter_t j = 0; j < elems_in_reg; j++) {
-            int tmp_reg    = j / 8 + 2; // Each XMM holds 8 BF16 elements
-            int pos_in_reg = j % 8;     // Position within XMM (0-7)
-
-            if (pos_in_reg == 0) {
-                // First element in XMM - store lower 16 bits
-                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg), 0);
-            } else {
-                // Extract to memory directly (16-bit)
-                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
-                        pos_in_reg);
-            }
-
-            // Move to next row (BF16 stride)
-            add(regTmpYptr, regTmp1);
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
+    const store::GemvN1Destination destination =
+        isRowStored
+            ? store::GemvN1Destination::scalarStrided(regTmpYptr, regRsC)
+            : store::GemvN1Destination::contiguous(regTmpYptr, storeMask);
+    const store::GemvN1StoreRequest request{ source, destination, convert,
+                                             scratch };
+    return store::emit<KType>(*this, request);
 }
 
 template<utils::kernelInstrType KType>
@@ -767,23 +238,55 @@ dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVN1<KType>::storeResult(int mSize)
 {
     mov(regTmpYptr, regYptr);
-    bool isRowStored = (yFormat == dlp::kernel_frame::storageFormat::rowMajor);
-
+    const bool scalar = yFormat == dlp::kernel_frame::storageFormat::rowMajor;
     if (c_downscale == DLP_S32) {
-        RETURN_IF_ERROR(storeResult_S32(mSize, isRowStored));
-    } else if (c_downscale == DLP_U8) {
-        RETURN_IF_ERROR(storeResult_U8(mSize, isRowStored));
-    } else if (c_downscale == DLP_S8) {
-        RETURN_IF_ERROR(storeResult_S8(mSize, isRowStored));
-    } else if (c_downscale == DLP_F32) {
-        RETURN_IF_ERROR(storeResult_F32(mSize, isRowStored));
-    } else if (c_downscale == DLP_F16) {
-        RETURN_IF_ERROR(storeResult_F16(mSize, isRowStored));
-    } else if (c_downscale == DLP_BF16) {
-        RETURN_IF_ERROR(storeResult_BF16(mSize, isRowStored));
+        return storeResult_S32(mSize, scalar);
     }
+    updateCBufferPointers();
+    const int  count     = (mSize + nElemsPerReg - 1) / nElemsPerReg;
+    const int  valid     = count == 0             ? 0
+                           : mSize % nElemsPerReg ? mSize % nElemsPerReg
+                                                  : nElemsPerReg;
+    const auto storeMask = valid == 0 || valid == nElemsPerReg
+                               ? store::StoreMask::none()
+                               : store::StoreMask::opmask(mask_regs[1]);
+    const auto src       = accumulatorsAreF32 ? dlp::kernel_frame::DataType::f32
+                                              : dlp::kernel_frame::DataType::s32;
+    auto       dst       = dlp::kernel_frame::DataType::s8;
+    if (c_downscale == DLP_S8) {
+        dst = dlp::kernel_frame::DataType::s8;
+    } else if (c_downscale == DLP_U8) {
+        dst = dlp::kernel_frame::DataType::u8;
+    } else if (c_downscale == DLP_F32) {
+        dst = dlp::kernel_frame::DataType::f32;
+    } else if (c_downscale == DLP_F16) {
+        dst = dlp::kernel_frame::DataType::f16;
+    } else if (c_downscale == DLP_BF16) {
+        dst = dlp::kernel_frame::DataType::bf16;
+    } else {
+        return dlp::jit::jitGeneratorError::notSupported;
+    }
+    const auto convert = dst == dlp::kernel_frame::DataType::bf16
+                             ? store::StoreSpec::softwareBf16(src)
+                             : store::StoreSpec::convert(src, dst);
 
-    return dlp::jit::jitGeneratorError::success;
+    std::array<int, 5> vectors{ tmpBaseIdx, tmpBaseIdx + 1, tmpBaseIdx + 2,
+                                tmpBaseIdx + 3, tmpBaseIdx + 4 };
+    const int          gpr[]   = { regKIter.getIdx() };
+    auto               scratch = store::StoreTemps::none();
+    if (c_downscale == DLP_U8 || c_downscale == DLP_BF16
+        || (c_downscale == DLP_S8 && src == dlp::kernel_frame::DataType::f32))
+        scratch =
+            store::StoreTemps::withZmmAndGpr(vectors[0], Xbyak::Reg64(gpr[0]));
+    else if (scalar || c_downscale == DLP_F16)
+        scratch = store::StoreTemps::withZmm(vectors[0]);
+    const auto destination =
+        scalar ? store::GemvN1Destination::scalarStrided(regTmpYptr, regTmp1)
+               : store::GemvN1Destination::contiguous(regTmpYptr, storeMask);
+    return store::emit<KType>(
+        *this, { store::GemvN1Source::packedLanes(store::RegSpan{
+                     accumBaseIdx, store::SourceRegWidth::zmm, mSize }),
+                 destination, convert, scratch });
 }
 
 template<utils::kernelInstrType KType>
@@ -1557,7 +1060,6 @@ dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
-
     c_downscale      = params.c_downscale;
     MR               = params.MR;
     M_LEFT           = params.M_LEFT;
@@ -1595,9 +1097,6 @@ jitU8S8VNNI_GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             RETURN_IF_ERROR(generateIrLoop(params.M_LEFT));
         }
     } // StackFrame destructor inserts 'ret' here
-
-    // Generate constant data tables after the return instruction
-    generateConstantData();
 
     kernelOpsPtr = nullptr;
     return dlp::jit::jitGeneratorError::success;
@@ -2540,461 +2039,59 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVM1<KType>::storeYValues(bool nMask)
 {
-    // Dispatch to type-specific store functions
     if (c_downscale == DLP_S32) {
-        return storeYValues_S32(nMask);
-    } else if (c_downscale == DLP_U8) {
-        return storeYValues_U8(nMask);
+        mov(regTmpYptr, regYptr);
+    } else {
+        updateYBufferPointers();
+    }
+    const int count = nMask
+                          ? N_LEFT / nElemsPerReg + (N_LEFT % nElemsPerReg != 0)
+                          : NR / nElemsPerReg;
+    if (count == 0) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+    const int  valid = nMask && N_LEFT % nElemsPerReg ? N_LEFT % nElemsPerReg
+                                                      : nElemsPerReg;
+    const auto finalMask = valid == nElemsPerReg
+                               ? store::StoreMask::none()
+                               : store::StoreMask::opmask(mask_regs[0]);
+    const auto src       = accumulatorsAreF32 ? dlp::kernel_frame::DataType::f32
+                                              : dlp::kernel_frame::DataType::s32;
+    auto       scratch   = store::StoreTemps::none();
+    const int  vectors[] = { xBaseIdx, xBaseIdx + 1, xBaseIdx + 2 };
+    const int  gprs[]    = { regKSubIter.getIdx() };
+    auto       dst       = dlp::kernel_frame::DataType::s32;
+    if (c_downscale == DLP_S32) {
     } else if (c_downscale == DLP_S8) {
-        return storeYValues_S8(nMask);
+        dst = dlp::kernel_frame::DataType::s8;
+        if (src == dlp::kernel_frame::DataType::f32)
+            scratch = store::StoreTemps::withZmmAndGpr(vectors[0],
+                                                       Xbyak::Reg64(gprs[0]));
+    } else if (c_downscale == DLP_U8) {
+        dst = dlp::kernel_frame::DataType::u8;
+        scratch =
+            store::StoreTemps::withZmmAndGpr(vectors[0], Xbyak::Reg64(gprs[0]));
     } else if (c_downscale == DLP_F32) {
-        return storeYValues_F32(nMask);
+        dst = dlp::kernel_frame::DataType::f32;
     } else if (c_downscale == DLP_F16) {
-        return storeYValues_F16(nMask);
+        dst     = dlp::kernel_frame::DataType::f16;
+        scratch = store::StoreTemps::withZmm(vectors[0]);
     } else if (c_downscale == DLP_BF16) {
-        return storeYValues_BF16(nMask);
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValues_S32(bool nMask)
-{
-    mov(regTmpYptr, regYptr);
-
-    if (!nMask) {
-        for (iter_t i = 0; i < NR / nElemsPerReg; i += 1) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - convert to S32 before
-                // storing
-                vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-                vmovdqu32(ptr[regTmpYptr + i * nElemsPerReg * sizeof(int32_t)],
-                          Zmm(xBaseIdx));
-            } else {
-                // S32 accumulators (no post-ops) - direct store
-                vmovdqu32(ptr[regTmpYptr + i * nElemsPerReg * sizeof(int32_t)],
-                          Zmm(accumBaseIdx + i));
-            }
-        }
+        dst = dlp::kernel_frame::DataType::bf16;
+        scratch =
+            store::StoreTemps::withZmmAndGpr(vectors[0], Xbyak::Reg64(gprs[0]));
     } else {
-        storeYValuesFringe_S32();
+        return dlp::jit::jitGeneratorError::notSupported;
     }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValues_U8(bool nMask)
-{
-    updateYBufferPointers(); // Point to downscale buffer
-
-    // Setup clamping constants for U8 (0-255)
-    vpxord(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1)); // 0
-    mov(regKSubIter, 255);
-    vpbroadcastd(Zmm(xBaseIdx + 2), regKSubIter.cvt32()); // 255
-
-    if (!nMask) {
-        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - convert F32→S32 then
-                // clamp to U8
-                vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-                vpmaxsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 1));
-                vpminsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 2));
-                vpmovdb(ptr[regTmpYptr + i * 16], Zmm(xBaseIdx));
-            } else {
-                // S32 accumulators (no post-ops) - direct clamp to U8
-                vpmaxsd(Zmm(xBaseIdx), Zmm(accumBaseIdx + i),
-                        Zmm(xBaseIdx + 1));
-                vpminsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 2));
-                vpmovdb(ptr[regTmpYptr + i * 16], Zmm(xBaseIdx));
-            }
-        }
-    } else {
-        storeYValuesFringe_U8();
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValues_S8(bool nMask)
-{
-    updateYBufferPointers();
-
-    if (!nMask) {
-        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - convert F32→S32 then
-                // saturate to S8
-                vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-                vpmovsdb(ptr[regTmpYptr + i * 16], Zmm(xBaseIdx));
-            } else {
-                // S32 accumulators (no post-ops) - direct saturation to S8
-                vpmovsdb(ptr[regTmpYptr + i * 16], Zmm(accumBaseIdx + i));
-            }
-        }
-    } else {
-        storeYValuesFringe_S8();
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValues_F32(bool nMask)
-{
-    updateYBufferPointers();
-
-    if (!nMask) {
-        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - direct store
-                vmovups(ptr[regTmpYptr + i * RegBytes], Zmm(accumBaseIdx + i));
-            } else {
-                // S32 accumulators (no post-ops) - convert to F32 and store
-                vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-                vmovups(ptr[regTmpYptr + i * RegBytes], Zmm(xBaseIdx));
-            }
-        }
-    } else {
-        storeYValuesFringe_F32();
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValues_F16(bool nMask)
-{
-    updateYBufferPointers();
-
-    if (!nMask) {
-        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
-            if (accumulatorsAreF32) {
-                vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            } else {
-                vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            }
-            vcvtps2ph(Ymm(xBaseIdx + 1), Zmm(xBaseIdx), 0);
-            vmovdqu16(ptr[regTmpYptr + i * 32], Ymm(xBaseIdx + 1));
-        }
-    } else {
-        storeYValuesFringe_F16();
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValues_BF16(bool nMask)
-{
-    updateYBufferPointers();
-
-    if (!nMask) {
-        for (iter_t i = 0; i < NR / nElemsPerReg; i++) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - direct F32→BF16
-                // conversion
-                vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            } else {
-                // S32 accumulators (no post-ops) - convert S32→F32 first
-                vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            }
-
-            // Software BF16 conversion
-            // Algorithm: bf16 = (f32 + 0x00007FFF + ((f32 >> 16) & 1)) >> 16
-
-            // Extract LSB of bit 16 for rounding (ties-to-even)
-            vpsrld(Zmm(xBaseIdx + 2), Zmm(xBaseIdx), 16);
-            vpandd(Zmm(xBaseIdx + 2), Zmm(xBaseIdx + 2),
-                   ptr[rip + label_bf16_lsb_mask]);
-
-            // Add rounding bias (0x00007FFF) + LSB
-            vpaddd(Zmm(xBaseIdx + 1), Zmm(xBaseIdx),
-                   ptr[rip + label_bf16_round_bias]);
-            vpaddd(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 2));
-
-            // Shift right 16 bits to get BF16 in lower 16 bits of each dword
-            vpsrld(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), 16);
-
-            // Pack 16x32-bit to 16x16-bit: use vpmovdw to convert dword to word
-            vpmovdw(Ymm(xBaseIdx + 1), Zmm(xBaseIdx + 1));
-
-            vmovdqu16(ptr[regTmpYptr + i * 32], Ymm(xBaseIdx + 1));
-        }
-    } else {
-        storeYValuesFringe_BF16();
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_S32()
-{
-    int n_iter = N_LEFT / nElemsPerReg;
-    int n_left = N_LEFT % nElemsPerReg;
-
-    for (iter_t i = 0; i < n_iter; i++) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - convert to S32 before storing
-            vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            vmovdqu32(ptr[regTmpYptr + i * nElemsPerReg * sizeof(int32_t)],
-                      Zmm(xBaseIdx));
-        } else {
-            // S32 accumulators (no post-ops) - direct store
-            vmovdqu32(ptr[regTmpYptr + i * nElemsPerReg * sizeof(int32_t)],
-                      Zmm(accumBaseIdx + i));
-        }
-    }
-    if (n_left) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators - convert to S32 before storing
-            vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-            vmovdqu32(ptr[regTmpYptr + n_iter * nElemsPerReg * sizeof(int32_t)]
-                          | mask_regs[0],
-                      Zmm(xBaseIdx));
-        } else {
-            // S32 accumulators - direct store
-            vmovdqu32(ptr[regTmpYptr + n_iter * nElemsPerReg * sizeof(int32_t)]
-                          | mask_regs[0],
-                      Zmm(accumBaseIdx + n_iter));
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_U8()
-{
-    updateYBufferPointers();
-
-    // Setup clamping constants for U8 (0-255)
-    vpxord(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1)); // 0
-    mov(regKSubIter, 255);
-    vpbroadcastd(Zmm(xBaseIdx + 2), regKSubIter.cvt32()); // 255
-
-    int n_iter = N_LEFT / nElemsPerReg;
-    int n_left = N_LEFT % nElemsPerReg;
-
-    for (iter_t i = 0; i < n_iter; i++) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - convert F32→S32 then clamp to
-            // U8
-            vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            vpmaxsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 1));
-            vpminsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 2));
-            vpmovdb(ptr[regTmpYptr + i * 16], Zmm(xBaseIdx));
-        } else {
-            // S32 accumulators (no post-ops) - direct clamp to U8
-            vpmaxsd(Zmm(xBaseIdx), Zmm(accumBaseIdx + i), Zmm(xBaseIdx + 1));
-            vpminsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 2));
-            vpmovdb(ptr[regTmpYptr + i * 16], Zmm(xBaseIdx));
-        }
-    }
-
-    if (n_left) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators - convert F32→S32 then clamp to U8
-            vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-            vpmaxsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 1));
-            vpminsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 2));
-            vpmovdb(ptr[regTmpYptr + n_iter * 16] | mask_regs[0],
-                    Zmm(xBaseIdx));
-        } else {
-            // S32 accumulators - direct clamp to U8
-            vpmaxsd(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter),
-                    Zmm(xBaseIdx + 1));
-            vpminsd(Zmm(xBaseIdx), Zmm(xBaseIdx), Zmm(xBaseIdx + 2));
-            vpmovdb(ptr[regTmpYptr + n_iter * 16] | mask_regs[0],
-                    Zmm(xBaseIdx));
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_S8()
-{
-    updateYBufferPointers();
-
-    int n_iter = N_LEFT / nElemsPerReg;
-    int n_left = N_LEFT % nElemsPerReg;
-
-    for (iter_t i = 0; i < n_iter; i++) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - convert F32→S32 then saturate
-            // to S8
-            vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            vpmovsdb(ptr[regTmpYptr + i * 16], Zmm(xBaseIdx));
-        } else {
-            // S32 accumulators (no post-ops) - direct saturation to S8
-            vpmovsdb(ptr[regTmpYptr + i * 16], Zmm(accumBaseIdx + i));
-        }
-    }
-
-    if (n_left) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators - convert F32→S32 then saturate to S8
-            vcvtps2dq(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-            vpmovsdb(ptr[regTmpYptr + n_iter * 16] | mask_regs[0],
-                     Zmm(xBaseIdx));
-        } else {
-            // S32 accumulators - direct saturation to S8
-            vpmovsdb(ptr[regTmpYptr + n_iter * 16] | mask_regs[0],
-                     Zmm(accumBaseIdx + n_iter));
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_F32()
-{
-    updateYBufferPointers();
-
-    int n_iter = N_LEFT / nElemsPerReg;
-    int n_left = N_LEFT % nElemsPerReg;
-
-    for (iter_t i = 0; i < n_iter; i++) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - direct store
-            vmovups(ptr[regTmpYptr + i * RegBytes], Zmm(accumBaseIdx + i));
-        } else {
-            // S32 accumulators (no post-ops) - convert to F32 and store
-            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-            vmovups(ptr[regTmpYptr + i * RegBytes], Zmm(xBaseIdx));
-        }
-    }
-
-    if (n_left) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators - direct store
-            vmovups(ptr[regTmpYptr + n_iter * RegBytes] | mask_regs[0],
-                    Zmm(accumBaseIdx + n_iter));
-        } else {
-            // S32 accumulators - convert to F32 and store
-            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-            vmovups(ptr[regTmpYptr + n_iter * RegBytes] | mask_regs[0],
-                    Zmm(xBaseIdx));
-        }
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_F16()
-{
-    updateYBufferPointers();
-
-    int n_iter = N_LEFT / nElemsPerReg;
-    int n_left = N_LEFT % nElemsPerReg;
-
-    for (iter_t i = 0; i < n_iter; i++) {
-        if (accumulatorsAreF32) {
-            vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-        } else {
-            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-        }
-        vcvtps2ph(Ymm(xBaseIdx + 1), Zmm(xBaseIdx), 0);
-        vmovdqu16(ptr[regTmpYptr + i * 32], Ymm(xBaseIdx + 1));
-    }
-
-    if (n_left) {
-        if (accumulatorsAreF32) {
-            vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-        } else {
-            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-        }
-        vcvtps2ph(Ymm(xBaseIdx + 1), Zmm(xBaseIdx), 0);
-        vmovdqu16(ptr[regTmpYptr + n_iter * 32] | mask_regs[0],
-                  Ymm(xBaseIdx + 1));
-    }
-
-    return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-dlp::jit::jitGeneratorError
-jitU8S8VNNI_GEMVM1<KType>::storeYValuesFringe_BF16()
-{
-    updateYBufferPointers();
-
-    int n_iter = N_LEFT / nElemsPerReg;
-    int n_left = N_LEFT % nElemsPerReg;
-
-    for (iter_t i = 0; i < n_iter; i++) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators (after post-ops) - direct F32→BF16 conversion
-            vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-        } else {
-            // S32 accumulators (no post-ops) - convert S32→F32 first
-            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + i));
-        }
-
-        // Software BF16 conversion
-        // Algorithm: bf16 = (f32 + 0x00007FFF + ((f32 >> 16) & 1)) >> 16
-
-        // Extract LSB of bit 16 for rounding (ties-to-even)
-        vpsrld(Zmm(xBaseIdx + 2), Zmm(xBaseIdx), 16);
-        vpandd(Zmm(xBaseIdx + 2), Zmm(xBaseIdx + 2),
-               ptr[rip + label_bf16_lsb_mask]);
-
-        // Add rounding bias (0x00007FFF) + LSB
-        vpaddd(Zmm(xBaseIdx + 1), Zmm(xBaseIdx),
-               ptr[rip + label_bf16_round_bias]);
-        vpaddd(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 2));
-
-        // Shift right 16 bits to get BF16 in lower 16 bits of each dword
-        vpsrld(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), 16);
-
-        // Pack 16x32-bit to 16x16-bit: use vpmovdw to convert dword to word
-        vpmovdw(Ymm(xBaseIdx + 1), Zmm(xBaseIdx + 1));
-
-        vmovdqu16(ptr[regTmpYptr + i * 32], Ymm(xBaseIdx + 1));
-    }
-
-    if (n_left) {
-        if (accumulatorsAreF32) {
-            // F32 accumulators - direct use
-            vmovups(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-        } else {
-            // S32 accumulators - convert to F32 first
-            vcvtdq2ps(Zmm(xBaseIdx), Zmm(accumBaseIdx + n_iter));
-        }
-
-        // Software BF16 conversion for masked case
-        vpsrld(Zmm(xBaseIdx + 2), Zmm(xBaseIdx), 16);
-        vpandd(Zmm(xBaseIdx + 2), Zmm(xBaseIdx + 2),
-               ptr[rip + label_bf16_lsb_mask]);
-        vpaddd(Zmm(xBaseIdx + 1), Zmm(xBaseIdx),
-               ptr[rip + label_bf16_round_bias]);
-        vpaddd(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 2));
-        vpsrld(Zmm(xBaseIdx + 1), Zmm(xBaseIdx + 1), 16);
-        vpmovdw(Ymm(xBaseIdx + 1), Zmm(xBaseIdx + 1));
-
-        vmovdqu16(ptr[regTmpYptr + n_iter * 32] | mask_regs[0],
-                  Ymm(xBaseIdx + 1));
-    }
-
-    return dlp::jit::jitGeneratorError::success;
+    const auto convert = dst == dlp::kernel_frame::DataType::bf16
+                             ? store::StoreSpec::softwareBf16(src)
+                             : store::StoreSpec::convert(src, dst);
+    return store::emit<KType>(
+        *this, { store::RegSpan{ accumBaseIdx, store::SourceRegWidth::zmm,
+                                 nMask ? N_LEFT : NR },
+                 { regTmpYptr, finalMask },
+                 convert,
+                 scratch });
 }
 
 template<utils::kernelInstrType KType>
@@ -3002,7 +2099,6 @@ dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvM1Params(params));
-
     // Initialize kernel ops handler if post-ops are present
     if (!params.kernelOps.empty()) {
         kernelOpsHandlerPtr =
@@ -3420,55 +2516,8 @@ jitU8S8VNNI_GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
         outLocalLabel();
     } // StackFrame destructor inserts 'ret' here
 
-    // Generate constant data tables after the return instruction
-    generateConstantData();
-
     kernelOpsPtr = nullptr;
     return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-void
-jitU8S8VNNI_GEMVN1<KType>::generateConstantData()
-{
-    // Constant data for BF16 conversion (accessed via RIP-relative addressing)
-    // These are placed after the function return, so they won't be executed
-
-    if (c_downscale == DLP_BF16) {
-        {
-            size_t remain = getSize() % 16;
-            if (remain)
-                nop(16 - remain);
-        }
-        L(label_bf16_round_bias);
-        for (iter_t i = 0; i < 16; i++)
-            dd(0x00007FFF);
-        L(label_bf16_lsb_mask);
-        for (iter_t i = 0; i < 16; i++)
-            dd(0x00000001);
-    }
-}
-
-template<utils::kernelInstrType KType>
-void
-jitU8S8VNNI_GEMVM1<KType>::generateConstantData()
-{
-    // Constant data for BF16 conversion (accessed via RIP-relative addressing)
-    // These are placed after the function return, so they won't be executed
-
-    if (c_downscale == DLP_BF16) {
-        {
-            size_t remain = getSize() % 16;
-            if (remain)
-                nop(16 - remain);
-        }
-        L(label_bf16_round_bias);
-        for (iter_t i = 0; i < 16; i++)
-            dd(0x00007FFF);
-        L(label_bf16_lsb_mask);
-        for (iter_t i = 0; i < 16; i++)
-            dd(0x00000001);
-    }
 }
 
 } // namespace amdzen::gen

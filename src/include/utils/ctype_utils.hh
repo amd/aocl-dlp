@@ -36,6 +36,34 @@
 
 namespace dlp::utils {
 
+constexpr int
+dataTypeSizeBits(dlp::kernel_frame::DataType type) noexcept
+{
+    using dlp::kernel_frame::DataType;
+    switch (type) {
+        case DataType::s4:
+        case DataType::u4:
+        case DataType::f4:
+            return 4;
+        case DataType::s8:
+        case DataType::u8:
+            return 8;
+        case DataType::s16:
+        case DataType::u16:
+        case DataType::f16:
+        case DataType::bf16:
+            return 16;
+        case DataType::s32:
+        case DataType::u32:
+        case DataType::f32:
+            return 32;
+        case DataType::invalid:
+        case DataType::max_datatypes:
+            return 0;
+    }
+    return 0;
+}
+
 inline dlp::kernel_frame::kernelDatatype
 getKernelDatatype(kernel_datatype_t kDtype)
 {

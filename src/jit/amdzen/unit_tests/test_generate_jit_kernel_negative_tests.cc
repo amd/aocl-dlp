@@ -238,16 +238,20 @@ struct GemmNegativeParam
 
 struct GemvN1NegativeParam
 {
-    Datatype           dtype;
-    std::string        testCase;
-    GemvN1ParamBuilder buildParams;
+    Datatype                    dtype;
+    std::string                 testCase;
+    GemvN1ParamBuilder          buildParams;
+    dlp::jit::jitGeneratorError expectedError =
+        dlp::jit::jitGeneratorError::badKernelInfo;
 };
 
 struct GemvM1NegativeParam
 {
-    Datatype           dtype;
-    std::string        testCase;
-    GemvM1ParamBuilder buildParams;
+    Datatype                    dtype;
+    std::string                 testCase;
+    GemvM1ParamBuilder          buildParams;
+    dlp::jit::jitGeneratorError expectedError =
+        dlp::jit::jitGeneratorError::badKernelInfo;
 };
 
 } // anonymous namespace
@@ -535,8 +539,7 @@ TEST_P(JitGemvN1NegativeTest, InvalidParam)
                                + "]";
 
         expectGenerationFailure(
-            testName, dlp::jit::jitGeneratorError::badKernelInfo,
-            [&]() -> dlp::jit::jitGeneratorError {
+            testName, p.expectedError, [&]() -> dlp::jit::jitGeneratorError {
                 return dispatchGemvN1Kernel(p.dtype, kType, gen_params);
             });
     }
@@ -560,6 +563,12 @@ INSTANTIATE_TEST_SUITE_P(
                              corruptGemvN1CDownscale(-1) },
         GemvN1NegativeParam{ Datatype::S8, "InvalidCDownscale",
                              corruptGemvN1CDownscale(-1) },
+        GemvN1NegativeParam{ Datatype::U8S8, "UnsupportedCDownscaleU32",
+                             corruptGemvN1CDownscale(DLP_U32),
+                             dlp::jit::jitGeneratorError::notSupported },
+        GemvN1NegativeParam{ Datatype::S8, "UnsupportedCDownscaleS16",
+                             corruptGemvN1CDownscale(DLP_S16),
+                             dlp::jit::jitGeneratorError::notSupported },
         // --- F32F16 ---
         GemvN1NegativeParam{ Datatype::F32F16, "NegativeMR",
                              corruptGemvN1MR(-1) },
@@ -596,8 +605,7 @@ TEST_P(JitGemvM1NegativeTest, InvalidParam)
                                + "]";
 
         expectGenerationFailure(
-            testName, dlp::jit::jitGeneratorError::badKernelInfo,
-            [&]() -> dlp::jit::jitGeneratorError {
+            testName, p.expectedError, [&]() -> dlp::jit::jitGeneratorError {
                 return dispatchGemvM1Kernel(p.dtype, kType, gen_params);
             });
     }
@@ -635,7 +643,13 @@ INSTANTIATE_TEST_SUITE_P(
         GemvM1NegativeParam{ Datatype::U8S8, "InvalidCDownscale",
                              corruptGemvM1CDownscale(-1) },
         GemvM1NegativeParam{ Datatype::S8, "InvalidCDownscale",
-                             corruptGemvM1CDownscale(-1) }),
+                             corruptGemvM1CDownscale(-1) },
+        GemvM1NegativeParam{ Datatype::U8S8, "UnsupportedCDownscaleS16",
+                             corruptGemvM1CDownscale(DLP_S16),
+                             dlp::jit::jitGeneratorError::notSupported },
+        GemvM1NegativeParam{ Datatype::S8, "UnsupportedCDownscaleU32",
+                             corruptGemvM1CDownscale(DLP_U32),
+                             dlp::jit::jitGeneratorError::notSupported }),
     [](const ::testing::TestParamInfo<GemvM1NegativeParam>& info) {
         return datatypeToString(info.param.dtype) + "_GEMVM1_"
                + info.param.testCase;

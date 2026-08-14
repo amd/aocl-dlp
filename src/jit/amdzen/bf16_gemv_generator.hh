@@ -63,7 +63,6 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::storageFormat yFormat; // Storage format of C matrix
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
-
     int yReg;     // Number of registers for loading/storing from Y
     int aReg;     // Number of registers for matrix A
     int xReg;     // Number of registers for vector x
@@ -150,6 +149,16 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeYValuesColStored(int);
 
     dlp::jit::jitGeneratorError storeYValuesRowStored(int);
+    dlp::jit::jitGeneratorError emitN1ContiguousStore(
+        int mSize, dlp::kernel_frame::DataType destinationType);
+    dlp::jit::jitGeneratorError emitN1ScalarStore(
+        int                         regOffset,
+        int                         regCount,
+        int                         lanesPerReg,
+        int                         lanesInLastReg,
+        dlp::kernel_frame::DataType destinationType,
+        const Xbyak::Reg64&         regRsC,
+        bool                        compact);
 
     // Fused GLU half-width store: the lane-wise de-interleave leaves the I
     // results packed low in each accumulator; this compacts them along M into
@@ -159,7 +168,7 @@ class jitBF16GEMVN1 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError reduceToXmm(int, int, int);
 
   public:
-    jitBF16GEMVN1(size_t maxSize);
+    explicit jitBF16GEMVN1(size_t maxSize);
     ~jitBF16GEMVN1()                          = default;
     jitBF16GEMVN1(jitBF16GEMVN1&)             = delete;
     jitBF16GEMVN1(jitBF16GEMVN1&&)            = delete;
@@ -197,19 +206,18 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
-
-    int xReg;
-    int bReg;
-    int yReg;
-    int maskReg;
-    int accumReg;
-    int tmpReg;
-    int xBaseIdx;
-    int bBaseIdx;
-    int yBaseIdx;
-    int accumBaseIdx;
-    int maskBaseIdx;
-    int tmpBaseIdx;
+    int                              xReg;
+    int                              bReg;
+    int                              yReg;
+    int                              maskReg;
+    int                              accumReg;
+    int                              tmpReg;
+    int                              xBaseIdx;
+    int                              bBaseIdx;
+    int                              yBaseIdx;
+    int                              accumBaseIdx;
+    int                              maskBaseIdx;
+    int                              tmpBaseIdx;
 
     Xbyak::Reg64 stackPtr;
     Xbyak::Reg64 regXptr;
@@ -321,11 +329,13 @@ class jitBF16GEMVM1 : public Xbyak::CodeGenerator
     // low by the lane-wise de-interleave) and stores them to the caller's
     // passed D buffer (buf_d)
     dlp::jit::jitGeneratorError storeHalfWidthResult(int n_size);
+    dlp::jit::jitGeneratorError emitM1Store(
+        int nSize, dlp::kernel_frame::DataType destinationType, bool compact);
 
     //------------------------------------------------
 
   public:
-    jitBF16GEMVM1(size_t maxSize);
+    explicit jitBF16GEMVM1(size_t maxSize);
     ~jitBF16GEMVM1()                          = default;
     jitBF16GEMVM1(jitBF16GEMVM1&)             = delete;
     jitBF16GEMVM1(jitBF16GEMVM1&&)            = delete;

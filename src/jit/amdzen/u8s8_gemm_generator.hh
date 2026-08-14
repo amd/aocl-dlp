@@ -50,7 +50,7 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
   public:
     // Constructor that specifies the maximum size of generated JIT code.
     // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
-    jitU8S8VNNI_GEMM(size_t maxSize);
+    explicit jitU8S8VNNI_GEMM(size_t maxSize);
     ~jitU8S8VNNI_GEMM()                             = default;
     jitU8S8VNNI_GEMM(jitU8S8VNNI_GEMM&)             = delete;
     jitU8S8VNNI_GEMM& operator=(jitU8S8VNNI_GEMM&)  = delete;
@@ -89,7 +89,6 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
         false; // Flag to indicate if masked instructions are generated
     bool accumulatorsAreF32 =
         false; // Track if accumulators were converted to F32 for post-ops
-
     // =================================================================
     // REGISTER ALLOCATION
     // =================================================================
@@ -112,8 +111,6 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
     // =================================================================
     // LABELS
     // =================================================================
-    Xbyak::Label label_bf16_round_bias; // Constant data for BF16 conversion
-    Xbyak::Label label_bf16_lsb_mask;   // Constant data for BF16 conversion
 
     // =================================================================
     // CORE SETUP AND INITIALIZATION
@@ -244,16 +241,6 @@ class jitU8S8VNNI_GEMM : public Xbyak::CodeGenerator
      * Handle bias, scaling, activation functions, output conversion
      */
     dlp::jit::jitGeneratorError generatePostOps(utils::generatorParams& params);
-
-    // =================================================================
-    // CONSTANT DATA GENERATION
-    // =================================================================
-    /**
-     * @brief Generate constant data tables used by the kernel
-     * These are placed after the return instruction and accessed via
-     * RIP-relative addressing
-     */
-    void generateConstantData();
 
     // =================================================================
     // NOTE: VNNI BUFFER HANDLING

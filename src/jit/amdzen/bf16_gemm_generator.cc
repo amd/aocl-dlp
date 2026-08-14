@@ -26,6 +26,7 @@
  *
  */
 
+#include <array>
 #include <functional>
 #include <memory>
 
@@ -33,6 +34,7 @@
 
 #include "bf16_gemm_generator.hh"
 #include "jit_register/jit_register.hh"
+#include "store/store_emit.hh"
 
 namespace amdzen::GEMMcodeGenerator {
 
@@ -338,6 +340,7 @@ jitGEMMBF16<KType>::scaleBeta()
 
         jmp("BETAOP_END", T_NEAR);
         L("BETAOP");
+        mov(regTmpCptr, regCPtr);
     }
     for (iter_t i = 0; i < MR; i++) {
         for (iter_t j = 0; j < bFullReg; j++) {
@@ -362,13 +365,11 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::storeResult()
 {
-    // Scope-local labels: the GLU path emits storeResult() twice per kernel
-    // (pre-fold raw-C store + non-last-k full-width store), so global labels
-    // would collide with "label is redefined".
+    // Scope-local labels: the GLU path emits storeResult() twice per kernel.
     inLocalLabel();
     mov(regTmpCptr, regCPtr);
     if (c_downscale < DLP_F32) {
-        // Check for is_last_k
+        // Routing remains caller-owned; only the physical store is extracted.
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
@@ -378,8 +379,6 @@ jitGEMMBF16<KType>::storeResult()
         mov(regTmpCptr,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, buf_downscale)]);
-
-        // NULL check
         cmp(regTmpCptr, 0);
         je(".STOREOP", T_NEAR);
 
@@ -387,13 +386,12 @@ jitGEMMBF16<KType>::storeResult()
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, post_op_c_j)]);
         lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
-
         add(regTmpCptr, regTmp1);
 
         mov(regTmp1,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
                 + offsetof(dlp_gemm_post_op_attr, rs_c_downscale)]);
-        lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]); // BF16 stride
+        lea(regTmp1, ptr[regTmp1 * sizeof(int16_t)]);
 
         mov(regKIter,
             ptr[stackPtr + offsetof(dlp::kernels::gemmParams, kernelOpsAttr)
@@ -401,41 +399,54 @@ jitGEMMBF16<KType>::storeResult()
         imul(regKIter, regTmp1);
         add(regTmpCptr, regKIter);
 
-        for (iter_t i = 0; i < MR; i++) {
-            for (iter_t j = 0; j < bFullReg; j++) {
-                vcvtneps2bf16(Xbyak::Ymm(bRegIdx + j),
-                              Xbyak::Zmm(cRegIdx + i * bReg + j));
-                vmovdqu16(ptr[regTmpCptr + j * halfRegBytes],
-                          Xbyak::Ymm(bRegIdx + j));
-            }
-            if (bMaskReg > 0) {
-                vcvtneps2bf16(Xbyak::Ymm(bRegIdx + bFullReg),
-                              Xbyak::Zmm(cRegIdx + i * bReg + bFullReg));
-                vmovdqu16(ptr[regTmpCptr + bFullReg * halfRegBytes]
-                              | mask_regs[0],
-                          Xbyak::Ymm(bRegIdx + bFullReg));
-            }
-            add(regTmpCptr, regTmp1);
-        }
+        RETURN_IF_ERROR(emitNativeBf16Store());
 
         jmp(".STOREOP_END", T_NEAR);
         L(".STOREOP");
+        mov(regTmpCptr, regCPtr);
     }
-    for (iter_t i = 0; i < MR; i++) {
-        for (iter_t j = 0; j < bFullReg; j++) {
-            // Regular store
-            vmovups(ptr[regTmpCptr + j * RegBytes],
-                    RegType(cRegIdx + i * bReg + j));
-        }
-        if (bMaskReg > 0) {
-            vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | mask_regs[0],
-                    RegType(cRegIdx + i * bReg + bFullReg));
-        }
-        add(regTmpCptr, regRsC);
-    }
+    RETURN_IF_ERROR(emitF32CStore());
     L(".STOREOP_END");
     outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMBF16<KType>::emitF32CStore()
+{
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[0]);
+    }
+    const store::GemmStoreRequest request{
+        { cRegIdx, MR, bReg, store::SourceRegWidth::zmm },
+        { regTmpCptr, regRsC, finalMask },
+        store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                  dlp::kernel_frame::DataType::f32),
+        store::StoreTemps::none()
+    };
+    return store::emit<KType>(*this, request);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMBF16<KType>::emitNativeBf16Store()
+{
+
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[0]);
+    }
+
+    const auto                    scratch = store::StoreTemps::withZmm(bRegIdx);
+    const store::GemmStoreRequest request{
+        { cRegIdx, MR, bReg, store::SourceRegWidth::zmm },
+        { regTmpCptr, regTmp1, finalMask },
+        store::StoreSpec::nativeBf16(dlp::kernel_frame::DataType::f32),
+        scratch
+    };
+    return store::emit<KType>(*this, request);
 }
 
 template<utils::kernelInstrType KType>
@@ -451,11 +462,8 @@ jitGEMMBF16<KType>::emitHalfWidthResult(bool colMajor)
     // base = buf_d + og_col*elt + og_row*(ld_d*elt), storeTile advances
     // ld_d*elt per row (row-major: ld_d=I, og_col=c_j/2, og_row=c_i; col-major:
     // ld_d=m, og_col=c_j, og_row=c_i/2).
-    const int    f32HalfBytes  = halfRegBytes;     // 8 f32  = 32 B (low Ymm)
-    const int    bf16HalfBytes = halfRegBytes / 2; // 8 bf16 = 16 B (low Xmm)
-    const int    eltBytes      = (c_downscale < DLP_F32) ? (int)sizeof(int16_t)
-                                                         : (int)sizeof(float);
-    const iter_t rows          = colMajor ? (MR / 2) : MR;
+    const int eltBytes = (c_downscale < DLP_F32) ? (int)sizeof(int16_t)
+                                                 : (int)sizeof(float);
 
     // Row-major halves the lanes: derive the half-width fringe mask
     // (mask_regs[1]) as (1 << (popcnt(mask_regs[0])/2)) - 1. Column-major keeps
@@ -469,64 +477,6 @@ jitGEMMBF16<KType>::emitHalfWidthResult(bool colMajor)
         kmovw(mask_regs[1], regTmp1.cvt32());
     }
     const Xbyak::Opmask& fringeMask = colMajor ? mask_regs[0] : mask_regs[1];
-
-    // Emit `rows` stores from regTmpCptr, advancing rowStrideBytes per row.
-    // Column-major writes the full register; row-major writes the low half.
-    auto storeTile = [&](const Xbyak::Reg64& rowStrideBytes) {
-        for (iter_t i = 0; i < rows; i++) {
-            for (iter_t j = 0; j < bFullReg; j++) {
-                if (c_downscale < DLP_F32) {
-                    if (colMajor) {
-                        vcvtneps2bf16(Xbyak::Ymm(bRegIdx + j),
-                                      Xbyak::Zmm(cRegIdx + i * bReg + j));
-                        vmovdqu16(ptr[regTmpCptr + j * halfRegBytes],
-                                  Xbyak::Ymm(bRegIdx + j));
-                    } else {
-                        vcvtneps2bf16(Xbyak::Xmm(bRegIdx + j),
-                                      Xbyak::Ymm(cRegIdx + i * bReg + j));
-                        vmovdqu16(ptr[regTmpCptr + j * bf16HalfBytes],
-                                  Xbyak::Xmm(bRegIdx + j));
-                    }
-                } else {
-                    if (colMajor)
-                        vmovups(ptr[regTmpCptr + j * RegBytes],
-                                Xbyak::Zmm(cRegIdx + i * bReg + j));
-                    else
-                        vmovups(ptr[regTmpCptr + j * f32HalfBytes],
-                                Xbyak::Ymm(cRegIdx + i * bReg + j));
-                }
-            }
-            if (bMaskReg > 0) {
-                if (c_downscale < DLP_F32) {
-                    if (colMajor) {
-                        vcvtneps2bf16(
-                            Xbyak::Ymm(bRegIdx + bFullReg),
-                            Xbyak::Zmm(cRegIdx + i * bReg + bFullReg));
-                        vmovdqu16(ptr[regTmpCptr + bFullReg * halfRegBytes]
-                                      | fringeMask,
-                                  Xbyak::Ymm(bRegIdx + bFullReg));
-                    } else {
-                        vcvtneps2bf16(
-                            Xbyak::Xmm(bRegIdx + bFullReg),
-                            Xbyak::Ymm(cRegIdx + i * bReg + bFullReg));
-                        vmovdqu16(ptr[regTmpCptr + bFullReg * bf16HalfBytes]
-                                      | fringeMask,
-                                  Xbyak::Xmm(bRegIdx + bFullReg));
-                    }
-                } else {
-                    if (colMajor)
-                        vmovups(ptr[regTmpCptr + bFullReg * RegBytes]
-                                    | fringeMask,
-                                Xbyak::Zmm(cRegIdx + i * bReg + bFullReg));
-                    else
-                        vmovups(ptr[regTmpCptr + bFullReg * f32HalfBytes]
-                                    | fringeMask,
-                                Xbyak::Ymm(cRegIdx + i * bReg + bFullReg));
-                }
-            }
-            add(regTmpCptr, rowStrideBytes);
-        }
-    };
 
     // base = buf_d + og_col*elt + og_row*(ld_d*elt). Row-major halves the
     // column (c_j/2), column-major halves the row (c_i/2).
@@ -556,8 +506,45 @@ jitGEMMBF16<KType>::emitHalfWidthResult(bool colMajor)
         shr(regTmp1, 1);
     imul(regTmp1, regKIter);
     add(regTmpCptr, regTmp1);
-    storeTile(regKIter);
-    return dlp::jit::jitGeneratorError::success;
+    return emitGluStore(colMajor, fringeMask, regKIter);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMBF16<KType>::emitGluStore(bool                 colMajor,
+                                 const Xbyak::Opmask& fringeMask,
+                                 const Xbyak::Reg64&  regRsC)
+{
+    const int rows = colMajor ? MR / 2 : MR;
+    if (rows == 0) {
+        // The variant table includes MR=1 even though a column-major GLU folds
+        // rows in pairs, so this unreachable variant emits no store.
+        return dlp::jit::jitGeneratorError::success;
+    }
+
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(fringeMask);
+    }
+
+    const auto scratch = c_downscale < DLP_F32
+                             ? store::StoreTemps::withZmm(bRegIdx)
+                             : store::StoreTemps::none();
+
+    const auto                    destinationType = c_downscale < DLP_F32
+                                                        ? dlp::kernel_frame::DataType::bf16
+                                                        : dlp::kernel_frame::DataType::f32;
+    const store::GemmStoreRequest request{
+        { cRegIdx, rows, bReg,
+          colMajor ? store::SourceRegWidth::zmm : store::SourceRegWidth::ymm },
+        { regTmpCptr, regRsC, finalMask },
+        destinationType == dlp::kernel_frame::DataType::bf16
+            ? store::StoreSpec::nativeBf16(dlp::kernel_frame::DataType::f32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        destinationType),
+        scratch
+    };
+    return store::emit<KType>(*this, request);
 }
 
 // Row-major GLU half-width store: halve along the lanes (MR rows, low I lanes).
@@ -795,7 +782,6 @@ dlp::jit::jitGeneratorError
 jitGEMMBF16<KType>::generateKernel(utils::generatorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemmParams(params));
-
     MR              = params.MR;
     NR              = params.NR;
     K_UNROLL        = params.K_UNROLL;

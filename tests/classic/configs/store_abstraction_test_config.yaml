@@ -1,0 +1,120 @@
+# Store-abstraction test configuration file
+#
+# ============================================================================
+# DESTRUCTIVE IN-PLACE STORE COVERAGE (u8s8s32 integer-narrowing rails)
+# ============================================================================
+# These cases exercise the destructive in-place F32->S32 conversion used by the
+# terminal integer-narrowing stores (U8 / S8 / S32) in the u8s8 GEMM and GEMV
+# generators. The F32 accumulator path is forced by attaching an F32 per-N
+# Scale post-op; the shapes span:
+#   - GEMM full / fringe / multi-panel (m: 6,15,33; n: 31,63,64,129),
+#   - GEMV M1 (m == 1),
+#   - GEMV N1 (n == 1),
+#   - public row-major N1 output (column-major u8s8 output is unsupported).
+#
+# Run standalone via:
+#   ./test_gemm -f <configs>/store_abstraction_test_config.yaml
+# ============================================================================
+
+gemm_tests:
+  # --------------------------------------------------------------------------
+  # u8 x s8 -> u8 with F32 post-ops (destructive U8 terminal store).
+  # --------------------------------------------------------------------------
+  - name: "u8s8_u8_postops_destructive_store"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["u8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 6, 15, 33]
+    n: [1, 31, 63, 64, 129]
+    k: [65]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 100.0
+      absolute: 1.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["n"]
+
+  # --------------------------------------------------------------------------
+  # u8 x s8 -> s8 with F32 post-ops (destructive S8 terminal store).
+  # --------------------------------------------------------------------------
+  - name: "u8s8_s8_postops_destructive_store"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s8"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 6, 15, 33]
+    n: [1, 31, 63, 64, 129]
+    k: [65]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 100.0
+      absolute: 1.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["n"]
+
+  # --------------------------------------------------------------------------
+  # u8 x s8 -> s32 with F32 post-ops (destructive S32 terminal store).
+  # --------------------------------------------------------------------------
+  - name: "u8s8_s32_postops_destructive_store"
+    a_type: ["u8"]
+    b_type: ["s8"]
+    c_type: ["s32"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 6, 15, 33]
+    n: [1, 31, 63, 64, 129]
+    k: [65]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["none"]
+    fill_value:
+      lb: -4.0
+      ub: 4.0
+      dist: "uniform"
+      force_int_distribution: true
+    tolerances:
+      relative: 100.0
+      absolute: 1.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "Scale"
+          params:
+            scale_factor_type: ["f32"]
+            scale_factor_len: ["n"]
