@@ -28,6 +28,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
 #include "kernel_frame/kernel_frame_base.hh"
@@ -52,7 +54,7 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
   public:
     // Constructor that specifies the maximum size of generated JIT code.
     // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
-    jitU8S8VNNI_GEMVN1(size_t maxSize);
+    explicit jitU8S8VNNI_GEMVN1(size_t maxSize);
     ~jitU8S8VNNI_GEMVN1()                               = default;
     jitU8S8VNNI_GEMVN1(jitU8S8VNNI_GEMVN1&)             = delete;
     jitU8S8VNNI_GEMVN1& operator=(jitU8S8VNNI_GEMVN1&)  = delete;
@@ -95,8 +97,7 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::storageFormat yFormat;
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
-
-    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
+    Xbyak::Opmask                    mask_regs[utils::NUM_USABLE_MASKS];
 
     // =================================================================
     // REGISTER ALLOCATION
@@ -292,61 +293,6 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
      */
     dlp::jit::jitGeneratorError storeResult_S32(int mSize, bool isRowStored);
 
-    /**
-     * @brief Store results for U8 data type (unified row/column storage)
-     */
-    dlp::jit::jitGeneratorError storeResult_U8(int mSize, bool isRowStored);
-
-    /**
-     * @brief Store results for S8 data type (unified row/column storage)
-     */
-    dlp::jit::jitGeneratorError storeResult_S8(int mSize, bool isRowStored);
-
-    /**
-     * @brief Store results for F32 data type (unified row/column storage)
-     */
-    dlp::jit::jitGeneratorError storeResult_F32(int mSize, bool isRowStored);
-
-    /**
-     * @brief Store results for F16 data type (unified row/column storage)
-     */
-    dlp::jit::jitGeneratorError storeResult_F16(int mSize, bool isRowStored);
-
-    /**
-     * @brief Store results for BF16 data type (unified row/column storage)
-     */
-    dlp::jit::jitGeneratorError storeResult_BF16(int mSize, bool isRowStored);
-
-    /**
-     * @brief Store results for S32 row-major storage format
-     */
-    dlp::jit::jitGeneratorError storeY_rowStored_S32(int mSize);
-
-    /**
-     * @brief Store results for U8 row-major storage format
-     */
-    dlp::jit::jitGeneratorError storeY_rowStored_U8(int mSize);
-
-    /**
-     * @brief Store results for S8 row-major storage format
-     */
-    dlp::jit::jitGeneratorError storeY_rowStored_S8(int mSize);
-
-    /**
-     * @brief Store results for F32 row-major storage format
-     */
-    dlp::jit::jitGeneratorError storeY_rowStored_F32(int mSize);
-
-    /**
-     * @brief Store results for F16 row-major storage format
-     */
-    dlp::jit::jitGeneratorError storeY_rowStored_F16(int mSize);
-
-    /**
-     * @brief Store results for BF16 row-major storage format
-     */
-    dlp::jit::jitGeneratorError storeY_rowStored_BF16(int mSize);
-
     // =================================================================
     // GEMV-SPECIFIC HELPER METHODS
     // =================================================================
@@ -354,15 +300,6 @@ class jitU8S8VNNI_GEMVN1 : public Xbyak::CodeGenerator
      * @brief Load masks for fringe case handling (AVX512 only)
      */
     dlp::jit::jitGeneratorError loadMasks();
-
-    /**
-     * @brief Generate constant data for BF16 conversion (Skylake compatibility)
-     */
-    void generateConstantData();
-
-    // Labels for BF16 constant data (for Skylake compatibility)
-    Xbyak::Label label_bf16_round_bias;
-    Xbyak::Label label_bf16_lsb_mask;
 
     // Kernel operations handler for post-ops
     std::unique_ptr<gen::kernelOpsHandler<KType>>      kernelOpsHandlerPtr;
@@ -384,7 +321,7 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
   public:
     // Constructor that specifies the maximum size of generated JIT code.
     // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
-    jitU8S8VNNI_GEMVM1(size_t maxSize);
+    explicit jitU8S8VNNI_GEMVM1(size_t maxSize);
     ~jitU8S8VNNI_GEMVM1()                               = default;
     jitU8S8VNNI_GEMVM1(jitU8S8VNNI_GEMVM1&)             = delete;
     jitU8S8VNNI_GEMVM1& operator=(jitU8S8VNNI_GEMVM1&)  = delete;
@@ -427,8 +364,7 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
     dlp::kernel_frame::scalingType   alphaScalingType;
     dlp::kernel_frame::scalingType   betaScalingType;
     AOCL_DLP_MEMORY_TAG              mtag_b;
-
-    Xbyak::Opmask mask_regs[utils::NUM_USABLE_MASKS];
+    Xbyak::Opmask                    mask_regs[utils::NUM_USABLE_MASKS];
 
     // =================================================================
     // REGISTER ALLOCATION
@@ -632,71 +568,6 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
      */
     dlp::jit::jitGeneratorError storeYValues(bool nMask);
 
-    /**
-     * @brief Store Y values for fringe case
-     */
-    dlp::jit::jitGeneratorError storeYValuesFringe();
-
-    /**
-     * @brief Store Y values for S32 data type
-     */
-    dlp::jit::jitGeneratorError storeYValues_S32(bool nMask);
-
-    /**
-     * @brief Store Y values for U8 data type
-     */
-    dlp::jit::jitGeneratorError storeYValues_U8(bool nMask);
-
-    /**
-     * @brief Store Y values for S8 data type
-     */
-    dlp::jit::jitGeneratorError storeYValues_S8(bool nMask);
-
-    /**
-     * @brief Store Y values for F32 data type
-     */
-    dlp::jit::jitGeneratorError storeYValues_F32(bool nMask);
-
-    /**
-     * @brief Store Y values for F16 data type
-     */
-    dlp::jit::jitGeneratorError storeYValues_F16(bool nMask);
-
-    /**
-     * @brief Store Y values for BF16 data type
-     */
-    dlp::jit::jitGeneratorError storeYValues_BF16(bool nMask);
-
-    /**
-     * @brief Store Y values for fringe case (S32)
-     */
-    dlp::jit::jitGeneratorError storeYValuesFringe_S32();
-
-    /**
-     * @brief Store Y values for fringe case (U8)
-     */
-    dlp::jit::jitGeneratorError storeYValuesFringe_U8();
-
-    /**
-     * @brief Store Y values for fringe case (S8)
-     */
-    dlp::jit::jitGeneratorError storeYValuesFringe_S8();
-
-    /**
-     * @brief Store Y values for fringe case (F32)
-     */
-    dlp::jit::jitGeneratorError storeYValuesFringe_F32();
-
-    /**
-     * @brief Store Y values for fringe case (F16)
-     */
-    dlp::jit::jitGeneratorError storeYValuesFringe_F16();
-
-    /**
-     * @brief Store Y values for fringe case (BF16)
-     */
-    dlp::jit::jitGeneratorError storeYValuesFringe_BF16();
-
     // =================================================================
     // HELPER METHODS
     // =================================================================
@@ -710,15 +581,6 @@ class jitU8S8VNNI_GEMVM1 : public Xbyak::CodeGenerator
      * @brief Masked load for B matrix
      */
     dlp::jit::jitGeneratorError maskLoadB(int regIdx, int maskIdx);
-
-    /**
-     * @brief Generate constant data for BF16 conversion (Skylake compatibility)
-     */
-    void generateConstantData();
-
-    // Labels for BF16 constant data (for Skylake compatibility)
-    Xbyak::Label label_bf16_round_bias;
-    Xbyak::Label label_bf16_lsb_mask;
 
     // Kernel operations handler for post-ops
     std::unique_ptr<gen::kernelOpsHandler<KType>>      kernelOpsHandlerPtr;

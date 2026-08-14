@@ -27,6 +27,7 @@
  */
 
 #include "u8s8_gemm_generator.hh"
+#include "store/store_emit.hh"
 
 namespace amdzen::gen {
 
@@ -250,19 +251,19 @@ jitU8S8VNNI_GEMM<KType>::storeResult()
         je(".STORE_S32", T_NEAR);
 
         if (c_downscale == DLP_S8) {
-            storeResultS8();
+            RETURN_IF_ERROR(storeResultS8());
             jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_U8) {
-            storeResultU8();
+            RETURN_IF_ERROR(storeResultU8());
             jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_F32) {
-            storeResultF32();
+            RETURN_IF_ERROR(storeResultF32());
             jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_F16) {
-            storeResultF16();
+            RETURN_IF_ERROR(storeResultF16());
             jmp(".END_STORE", T_NEAR);
         } else if (c_downscale == DLP_BF16) {
-            storeResultBF16();
+            RETURN_IF_ERROR(storeResultBF16());
             jmp(".END_STORE", T_NEAR);
         } else {
             outLocalLabel();
@@ -270,7 +271,7 @@ jitU8S8VNNI_GEMM<KType>::storeResult()
         }
 
         L(".STORE_S32");
-        storeResultS32();
+        RETURN_IF_ERROR(storeResultS32());
         L(".END_STORE");
 
         outLocalLabel();
@@ -282,291 +283,169 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::storeResultS32()
 {
-    // Store int32 accumulator results
-    // Handle both S32 and F32 accumulators (F32 when post-ops are present)
-    for (iter_t i = 0; i < MR; i++) {
-        for (iter_t j = 0; j < bFullReg; j++) {
-            if (accumulatorsAreF32) {
-                // F32 accumulators (after post-ops) - convert to S32 before
-                // storing
-                vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                vmovdqu32(ptr[regTmpCptr + j * RegBytes], Zmm(aRegIdx));
-            } else {
-                // S32 accumulators (no post-ops) - direct store
-                vmovdqu32(ptr[regTmpCptr + j * RegBytes],
-                          RegType(cRegIdx + i * bReg + j));
-            }
-        }
-        if (bMaskReg > 0) {
-            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-                if (accumulatorsAreF32) {
-                    // F32 accumulators - convert to S32 before storing
-                    vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                    vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes]
-                                  | mask_regs[1] | T_z,
-                              Zmm(aRegIdx));
-                } else {
-                    // S32 accumulators - direct store
-                    vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes]
-                                  | mask_regs[1] | T_z,
-                              RegType(cRegIdx + i * bReg + bFullReg));
-                }
-            }
-        }
-        add(regTmpCptr, regRsC);
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[1]);
     }
-
-    return dlp::jit::jitGeneratorError::success;
+    const auto convert =
+        accumulatorsAreF32
+            ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::s32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                        dlp::kernel_frame::DataType::s32);
+    const store::GemmStoreRequest request{ { cRegIdx, MR, bReg,
+                                             store::SourceRegWidth::zmm },
+                                           { regTmpCptr, regRsC, finalMask },
+                                           convert,
+                                           store::StoreTemps::none() };
+    return store::emit<KType>(*this, request);
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::storeResultS8()
 {
-
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-        // Store int8 results with signed saturation
+    if constexpr (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    } else {
         updateCBufferPointers();
-        for (iter_t i = 0; i < MR; i++) {
-            for (iter_t j = 0; j < bFullReg; j++) {
-                if (accumulatorsAreF32) {
-                    // F32 accumulators (after post-ops) - convert F32→S32 then
-                    // saturate to S8
-                    vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                    vpmovsdb(ptr[regTmpCptr + j * 16], Zmm(aRegIdx));
-                } else {
-                    // S32 accumulators (no post-ops) - direct saturation to S8
-                    vpmovsdb(ptr[regTmpCptr + j * 16],
-                             RegType(cRegIdx + i * bReg + j));
-                }
-            }
-            if (bMaskReg > 0) {
-                if (accumulatorsAreF32) {
-                    // F32 accumulators - convert F32→S32 then saturate to S8
-                    vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
-                             Zmm(aRegIdx));
-                } else {
-                    // S32 accumulators - direct saturation to S8
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
-                             RegType(cRegIdx + i * bReg + bFullReg));
-                }
-            }
-            add(regTmpCptr, regTmp1);
+        auto finalMask = store::StoreMask::none();
+        if (bMaskReg > 0) {
+            finalMask = store::StoreMask::opmask(mask_regs[1]);
         }
+        const auto convert =
+            accumulatorsAreF32
+                ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                            dlp::kernel_frame::DataType::s8)
+                : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                            dlp::kernel_frame::DataType::s8);
+        const auto scratch =
+            accumulatorsAreF32
+                ? store::StoreTemps::withZmmAndGpr(aRegIdx, regKIter)
+                : store::StoreTemps::none();
+        const store::GemmStoreRequest request{
+            { cRegIdx, MR, bReg, store::SourceRegWidth::zmm },
+            { regTmpCptr, regTmp1, finalMask },
+            convert,
+            scratch
+        };
+        return store::emit<KType>(*this, request);
     }
-
-    return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::storeResultU8()
 {
-
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-        // Store uint8 results with unsigned clipping
+    if constexpr (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    } else {
         updateCBufferPointers();
-
-        // Prepare constants for clamping values to [0, 255]
-        vpxord(Zmm(aRegIdx + 1), Zmm(aRegIdx + 1), Zmm(aRegIdx + 1)); // 0
-        mov(regKIter, 255);
-        vpbroadcastd(Zmm(aRegIdx + 2), regKIter.cvt32()); // 255
-
-        for (iter_t i = 0; i < MR; i++) {
-            for (iter_t j = 0; j < bFullReg; j++) {
-                if (accumulatorsAreF32) {
-                    // F32 accumulators (after post-ops) - convert F32→S32 then
-                    // clamp to U8
-                    vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                    vpmaxsd(Zmm(aRegIdx), Zmm(aRegIdx),
-                            Zmm(aRegIdx + 1)); // max(s32, 0)
-                    vpminsd(Zmm(aRegIdx), Zmm(aRegIdx),
-                            Zmm(aRegIdx + 2)); // min(s32, 255)
-                    vpmovdb(ptr[regTmpCptr + j * 16], Zmm(aRegIdx));
-                } else {
-                    // S32 accumulators (no post-ops) - direct clamp to U8
-                    vpmaxsd(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j),
-                            Zmm(aRegIdx + 1)); // max(s32, 0)
-                    vpminsd(Zmm(aRegIdx), Zmm(aRegIdx),
-                            Zmm(aRegIdx + 2)); // min(s32, 255)
-                    vpmovdb(ptr[regTmpCptr + j * 16], Zmm(aRegIdx));
-                }
-            }
-            if (bMaskReg > 0) {
-                if (accumulatorsAreF32) {
-                    // F32 accumulators - convert F32→S32 then clamp to U8
-                    vcvtps2dq(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                    vpmaxsd(Zmm(aRegIdx), Zmm(aRegIdx), Zmm(aRegIdx + 1));
-                    vpminsd(Zmm(aRegIdx), Zmm(aRegIdx), Zmm(aRegIdx + 2));
-                    vpmovdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
-                            Zmm(aRegIdx));
-                } else {
-                    // S32 accumulators - direct clamp to U8
-                    vpmaxsd(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg),
-                            Zmm(aRegIdx + 1));
-                    vpminsd(Zmm(aRegIdx), Zmm(aRegIdx), Zmm(aRegIdx + 2));
-                    vpmovdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
-                            Zmm(aRegIdx));
-                }
-            }
-            add(regTmpCptr, regTmp1);
+        auto finalMask = store::StoreMask::none();
+        if (bMaskReg > 0) {
+            finalMask = store::StoreMask::opmask(mask_regs[1]);
         }
+        const auto convert =
+            accumulatorsAreF32
+                ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                            dlp::kernel_frame::DataType::u8)
+                : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                            dlp::kernel_frame::DataType::u8);
+        const auto scratch =
+            store::StoreTemps::withZmmAndGpr(aRegIdx, regKIter);
+        const store::GemmStoreRequest request{
+            { cRegIdx, MR, bReg, store::SourceRegWidth::zmm },
+            { regTmpCptr, regTmp1, finalMask },
+            convert,
+            scratch
+        };
+        return store::emit<KType>(*this, request);
     }
-
-    return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::storeResultF32()
 {
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-
+    if constexpr (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    } else {
         updateCBufferPointers();
-
-        // Store float32 results
-        for (iter_t i = 0; i < MR; i++) {
-            for (iter_t j = 0; j < bFullReg; j++) {
-                if (accumulatorsAreF32) {
-                    // F32 accumulators (after post-ops) - direct store
-                    vmovups(ptr[regTmpCptr + j * RegBytes],
-                            Zmm(cRegIdx + i * bReg + j));
-                } else {
-                    // S32 accumulators (no post-ops) - convert to F32 and store
-                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                    vmovups(ptr[regTmpCptr + j * RegBytes], Zmm(aRegIdx));
-                }
-            }
-            if (bMaskReg > 0) {
-                if (accumulatorsAreF32) {
-                    // F32 accumulators - direct masked store
-                    vmovups(ptr[regTmpCptr + bFullReg * RegBytes]
-                                | mask_regs[1],
-                            Zmm(cRegIdx + i * bReg + bFullReg));
-                } else {
-                    // S32 accumulators - convert to F32 and store
-                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                    vmovups(ptr[regTmpCptr + bFullReg * RegBytes]
-                                | mask_regs[1],
-                            Zmm(aRegIdx));
-                }
-            }
-            add(regTmpCptr, regTmp1);
+        auto finalMask = store::StoreMask::none();
+        if (bMaskReg > 0) {
+            finalMask = store::StoreMask::opmask(mask_regs[1]);
         }
+        const auto convert =
+            accumulatorsAreF32
+                ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                            dlp::kernel_frame::DataType::f32)
+                : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                            dlp::kernel_frame::DataType::f32);
+        const store::GemmStoreRequest request{
+            { cRegIdx, MR, bReg, store::SourceRegWidth::zmm },
+            { regTmpCptr, regTmp1, finalMask },
+            convert,
+            store::StoreTemps::none()
+        };
+        return store::emit<KType>(*this, request);
     }
-
-    return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::storeResultF16()
 {
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+    if constexpr (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    } else {
         updateCBufferPointers();
-
-        for (iter_t i = 0; i < MR; i++) {
-            for (iter_t j = 0; j < bFullReg; j++) {
-                if (accumulatorsAreF32) {
-                    vmovups(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                } else {
-                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                }
-                vcvtps2ph(Ymm(aRegIdx + 1), Zmm(aRegIdx), 0);
-                vmovdqu16(ptr[regTmpCptr + j * 32], Ymm(aRegIdx + 1));
-            }
-            if (bMaskReg > 0) {
-                if (accumulatorsAreF32) {
-                    vmovups(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                } else {
-                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                }
-                vcvtps2ph(Ymm(aRegIdx + 1), Zmm(aRegIdx), 0);
-                vmovdqu16(ptr[regTmpCptr + bFullReg * 32] | mask_regs[1],
-                          Ymm(aRegIdx + 1));
-            }
-            add(regTmpCptr, regTmp1);
+        auto finalMask = store::StoreMask::none();
+        if (bMaskReg > 0) {
+            finalMask = store::StoreMask::opmask(mask_regs[1]);
         }
+        const auto scratch = store::StoreTemps::withZmm(aRegIdx);
+        const auto convert =
+            accumulatorsAreF32
+                ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                            dlp::kernel_frame::DataType::f16)
+                : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                            dlp::kernel_frame::DataType::f16);
+        const store::GemmStoreRequest request{
+            { cRegIdx, MR, bReg, store::SourceRegWidth::zmm },
+            { regTmpCptr, regTmp1, finalMask },
+            convert,
+            scratch
+        };
+        return store::emit<KType>(*this, request);
     }
-
-    return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitU8S8VNNI_GEMM<KType>::storeResultBF16()
 {
-
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-        // Store bfloat16 results
+    if constexpr (KType != utils::kernelInstrType::avx512_zmm_32_reg) {
+        return dlp::jit::jitGeneratorError::notSupported;
+    } else {
         updateCBufferPointers();
-
-        for (iter_t i = 0; i < MR; i++) {
-            for (iter_t j = 0; j < bFullReg; j++) {
-                // Handle both S32 and F32 accumulators
-                if (accumulatorsAreF32) {
-                    // F32 accumulators (after post-ops) - direct F32→BF16
-                    // conversion
-                    vmovups(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                } else {
-                    // S32 accumulators (no post-ops) - convert S32→F32 first
-                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + j));
-                }
-
-                // Convert F32 to BF16 using software algorithm
-                // Algorithm: bf16 = (f32 + 0x00007FFF + ((f32 >> 16) & 1)) >>
-                // 16
-
-                // Extract LSB of bit 16 for rounding (ties-to-even)
-                vpsrld(Zmm(aRegIdx + 2), Zmm(aRegIdx), 16); // Shift right 16
-                vpandd(Zmm(aRegIdx + 2), Zmm(aRegIdx + 2),
-                       ptr[rip + label_bf16_lsb_mask]); // Keep only bit 0 (LSB)
-
-                // Add rounding bias (0x00007FFF) + LSB
-                vpaddd(Zmm(aRegIdx + 1), Zmm(aRegIdx),
-                       ptr[rip + label_bf16_round_bias]);
-                vpaddd(Zmm(aRegIdx + 1), Zmm(aRegIdx + 1), Zmm(aRegIdx + 2));
-
-                // Shift right 16 bits to get BF16 in lower 16 bits of each
-                // dword
-                vpsrld(Zmm(aRegIdx + 1), Zmm(aRegIdx + 1), 16);
-
-                // Pack 16x32-bit to 16x16-bit: use vpmovdw to convert dword to
-                // word
-                vpmovdw(Ymm(aRegIdx + 1), Zmm(aRegIdx + 1));
-
-                // Store 32 bytes (16 bfloat16 values)
-                vmovdqu16(ptr[regTmpCptr + j * 32], Ymm(aRegIdx + 1));
-            }
-            if (bMaskReg > 0) {
-                // Masked store for remainder elements
-                if (accumulatorsAreF32) {
-                    // F32 accumulators - direct use
-                    vmovups(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                } else {
-                    // S32 accumulators - convert to F32 first
-                    vcvtdq2ps(Zmm(aRegIdx), Zmm(cRegIdx + i * bReg + bFullReg));
-                }
-
-                // Software BF16 conversion for masked case
-                vpsrld(Zmm(aRegIdx + 2), Zmm(aRegIdx), 16);
-                vpandd(Zmm(aRegIdx + 2), Zmm(aRegIdx + 2),
-                       ptr[rip + label_bf16_lsb_mask]);
-                vpaddd(Zmm(aRegIdx + 1), Zmm(aRegIdx),
-                       ptr[rip + label_bf16_round_bias]);
-                vpaddd(Zmm(aRegIdx + 1), Zmm(aRegIdx + 1), Zmm(aRegIdx + 2));
-                vpsrld(Zmm(aRegIdx + 1), Zmm(aRegIdx + 1), 16);
-                vpmovdw(Ymm(aRegIdx + 1), Zmm(aRegIdx + 1));
-
-                vmovdqu16(ptr[regTmpCptr + bFullReg * 32] | mask_regs[1],
-                          Ymm(aRegIdx + 1));
-            }
-            add(regTmpCptr, regTmp1);
+        auto finalMask = store::StoreMask::none();
+        if (bMaskReg > 0) {
+            finalMask = store::StoreMask::opmask(mask_regs[1]);
         }
+        const auto scratch =
+            store::StoreTemps::withZmmAndGpr(aRegIdx, regKIter);
+        const auto srcType = accumulatorsAreF32
+                                 ? dlp::kernel_frame::DataType::f32
+                                 : dlp::kernel_frame::DataType::s32;
+        const auto convert = store::StoreSpec::softwareBf16(srcType);
+        const store::GemmStoreRequest request{
+            { cRegIdx, MR, bReg, store::SourceRegWidth::zmm },
+            { regTmpCptr, regTmp1, finalMask },
+            convert,
+            scratch
+        };
+        return store::emit<KType>(*this, request);
     }
-
-    return dlp::jit::jitGeneratorError::success;
 }
 
 template<utils::kernelInstrType KType>
@@ -933,7 +812,6 @@ jitU8S8VNNI_GEMM<KType>::generateKernel(utils::generatorParams& params)
 
     // Reset accumulator type flag for each kernel generation
     accumulatorsAreF32 = false;
-
     RETURN_IF_ERROR(allocateRegisters());
 
     // There are 14 general purpose(64 bit) registers.
@@ -963,32 +841,7 @@ jitU8S8VNNI_GEMM<KType>::generateKernel(utils::generatorParams& params)
         }
     } // StackFrame destructor inserts 'ret' here
 
-    // Generate constant data tables after the return instruction
-    generateConstantData();
-
     return dlp::jit::jitGeneratorError::success;
-}
-
-template<utils::kernelInstrType KType>
-void
-jitU8S8VNNI_GEMM<KType>::generateConstantData()
-{
-    // Constant data for BF16 conversion (accessed via RIP-relative addressing)
-    // These are placed after the function return, so they won't be executed
-
-    if (c_downscale == DLP_BF16) {
-        {
-            size_t remain = getSize() % 16;
-            if (remain)
-                nop(16 - remain);
-        }
-        L(label_bf16_round_bias);
-        for (iter_t i = 0; i < 16; i++)
-            dd(0x00007FFF);
-        L(label_bf16_lsb_mask);
-        for (iter_t i = 0; i < 16; i++)
-            dd(0x00000001);
-    }
 }
 
 template<utils::kernelInstrType KType>

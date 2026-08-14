@@ -33,6 +33,7 @@
 
 #include "jit_register/jit_register.hh"
 #include "s8_gemm_generator.hh"
+#include "store/store_emit.hh"
 
 namespace amdzen::GEMMcodeGenerator {
 
@@ -570,11 +571,7 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitGEMMS8<KType>::storeResult(bool hasPostOps)
 {
-    using RegType = typename Traits::RegType;
-
-    // Defining labels locally to avoid redefinition issues
     Xbyak::Label label_storeop, label_storeop_end;
-
     mov(regTmpCptr, regCPtr);
 
     if (c_downscale == DLP_S8) {
@@ -583,43 +580,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
-
         RETURN_IF_ERROR(updateCBufferPointers());
-
-        for (iter_t i = 0; i < MR; ++i) {
-            for (iter_t j = 0; j < bFullReg; ++j) {
-                if (hasPostOps) {
-                    // Convert post-ops accumulated result from F32 to S32.
-                    vcvtps2dq(RegType(aRegIdx),
-                              RegType(cRegIdx + i * bReg + j));
-                    vpmovsdb(ptr[regTmpCptr + j * (RegBytes / 4)],
-                             RegType(aRegIdx));
-                } else {
-                    // Convert accumulated S32 results to S8 with saturation
-                    vpmovsdb(ptr[regTmpCptr + j * (RegBytes / 4)],
-                             RegType(cRegIdx + i * bReg + j));
-                }
-            }
-
-            // Masked Store
-            if (bMaskReg > 0) {
-                if (hasPostOps) {
-                    // Convert post-ops accumulated result from F32 to S32.
-                    vcvtps2dq(RegType(aRegIdx),
-                              RegType(cRegIdx + i * bReg + bFullReg));
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * (RegBytes / 4)]
-                                 | mask_regs[1],
-                             RegType(aRegIdx));
-                } else {
-                    vpmovsdb(ptr[regTmpCptr + bFullReg * (RegBytes / 4)]
-                                 | mask_regs[1],
-                             RegType(cRegIdx + i * bReg + bFullReg));
-                }
-            }
-
-            add(regTmpCptr, regTmp1);
-        }
-
+        RETURN_IF_ERROR(storeResultS8(hasPostOps));
         jmp(label_storeop_end, T_NEAR);
         L(label_storeop);
     } else if (c_downscale == DLP_U8) {
@@ -628,51 +590,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
-
         RETURN_IF_ERROR(updateCBufferPointers());
-
-        // Convert S32 to U8 with saturation by first clamping to [0, 255]
-        // Zero out the temporary register for clamping
-        vpxord(RegType(aRegIdx + 1), RegType(aRegIdx + 1),
-               RegType(aRegIdx + 1)); // 0
-        mov(regKIter, 255);
-        vpbroadcastd(RegType(aRegIdx + 2), regKIter.cvt32()); // 255
-
-        for (iter_t i = 0; i < MR; ++i) {
-            for (iter_t j = 0; j < bFullReg; ++j) {
-                if (hasPostOps) {
-                    // Convert post-ops accumulated result from F32 to S32.
-                    vcvtps2dq(RegType(cRegIdx + i * bReg + j),
-                              RegType(cRegIdx + i * bReg + j));
-                }
-                // Convert the accumulated result from S32 to U8.
-                vpmaxsd(RegType(aRegIdx), RegType(cRegIdx + i * bReg + j),
-                        RegType(aRegIdx + 1));
-                vpminsd(RegType(aRegIdx), RegType(aRegIdx),
-                        RegType(aRegIdx + 2));
-                vpmovdb(ptr[regTmpCptr + j * 16], RegType(aRegIdx));
-            }
-
-            // Masked Store
-            if (bMaskReg > 0) {
-                if (hasPostOps) {
-                    // Convert post-ops accumulated result from F32 to S32.
-                    vcvtps2dq(RegType(cRegIdx + i * bReg + bFullReg),
-                              RegType(cRegIdx + i * bReg + bFullReg));
-                }
-                // Convert the accumulated result from S32 to U8.
-                vpmaxsd(RegType(aRegIdx),
-                        RegType(cRegIdx + i * bReg + bFullReg),
-                        RegType(aRegIdx + 1));
-                vpminsd(RegType(aRegIdx), RegType(aRegIdx),
-                        RegType(aRegIdx + 2));
-                vpmovdb(ptr[regTmpCptr + bFullReg * 16] | mask_regs[1],
-                        RegType(aRegIdx));
-            }
-
-            add(regTmpCptr, regTmp1);
-        }
-
+        RETURN_IF_ERROR(storeResultU8(hasPostOps));
         jmp(label_storeop_end, T_NEAR);
         L(label_storeop);
     } else if (c_downscale == DLP_F16) {
@@ -681,38 +600,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
-
         RETURN_IF_ERROR(updateCBufferPointers());
-
-        for (iter_t i = 0; i < MR; ++i) {
-            for (iter_t j = 0; j < bFullReg; ++j) {
-                if (!hasPostOps) {
-                    vcvtdq2ps(RegType(cRegIdx + i * bReg + j),
-                              RegType(cRegIdx + i * bReg + j));
-                }
-
-                vcvtps2ph(Xbyak::Ymm(aRegIdx), RegType(cRegIdx + i * bReg + j),
-                          0);
-                vmovdqu16(ptr[regTmpCptr + j * (RegBytes / 2)],
-                          Xbyak::Ymm(aRegIdx));
-            }
-
-            if (bMaskReg > 0) {
-                if (!hasPostOps) {
-                    vcvtdq2ps(RegType(cRegIdx + i * bReg + bFullReg),
-                              RegType(cRegIdx + i * bReg + bFullReg));
-                }
-
-                vcvtps2ph(Xbyak::Ymm(aRegIdx),
-                          RegType(cRegIdx + i * bReg + bFullReg), 0);
-                vmovdqu16(ptr[regTmpCptr + bFullReg * (RegBytes / 2)]
-                              | mask_regs[1],
-                          Xbyak::Ymm(aRegIdx));
-            }
-
-            add(regTmpCptr, regTmp1);
-        }
-
+        RETURN_IF_ERROR(storeResultF16(hasPostOps));
         jmp(label_storeop_end, T_NEAR);
         L(label_storeop);
     } else if (c_downscale == DLP_BF16) {
@@ -721,67 +610,8 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
-
         RETURN_IF_ERROR(updateCBufferPointers());
-
-        for (iter_t i = 0; i < MR; ++i) {
-            for (iter_t j = 0; j < bFullReg; ++j) {
-                if (!hasPostOps) {
-                    // Convert accumulated S32 results to F32.
-                    vcvtdq2ps(RegType(cRegIdx + i * bReg + j),
-                              RegType(cRegIdx + i * bReg + j));
-                }
-
-                // Convert F32 to BF16
-                vpsrld(RegType(aRegIdx), RegType(cRegIdx + i * bReg + j), 16);
-                mov(regTmp3, 0x00000001);
-                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
-                vpandd(RegType(aRegIdx), RegType(aRegIdx),
-                       RegType(aRegIdx + 1));
-                mov(regTmp3, 0x00007FFF);
-                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
-                vpaddd(RegType(aRegIdx + 2), RegType(cRegIdx + i * bReg + j),
-                       RegType(aRegIdx + 1));
-                vpaddd(RegType(aRegIdx + 2), RegType(aRegIdx + 2),
-                       RegType(aRegIdx));
-                vpsrld(RegType(aRegIdx + 2), RegType(aRegIdx + 2), 16);
-                vpmovdw(Xbyak::Ymm(aRegIdx + 2), RegType(aRegIdx + 2));
-                vmovdqu16(ptr[regTmpCptr + j * (RegBytes / 2)],
-                          Xbyak::Ymm(aRegIdx + 2));
-            }
-
-            // Masked Store
-            if (bMaskReg > 0) {
-                if (!hasPostOps) {
-                    // Convert accumulated S32 results to F32.
-                    vcvtdq2ps(RegType(cRegIdx + i * bReg + bFullReg),
-                              RegType(cRegIdx + i * bReg + bFullReg));
-                }
-
-                // Convert F32 to BF16
-                vpsrld(RegType(aRegIdx), RegType(cRegIdx + i * bReg + bFullReg),
-                       16);
-                mov(regTmp3, 0x00000001);
-                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
-                vpandd(RegType(aRegIdx), RegType(aRegIdx),
-                       RegType(aRegIdx + 1));
-                mov(regTmp3, 0x00007FFF);
-                vpbroadcastd(RegType(aRegIdx + 1), regTmp3.cvt32());
-                vpaddd(RegType(aRegIdx + 2),
-                       RegType(cRegIdx + i * bReg + bFullReg),
-                       RegType(aRegIdx + 1));
-                vpaddd(RegType(aRegIdx + 2), RegType(aRegIdx + 2),
-                       RegType(aRegIdx));
-                vpsrld(RegType(aRegIdx + 2), RegType(aRegIdx + 2), 16);
-                vpmovdw(Xbyak::Ymm(aRegIdx + 2), RegType(aRegIdx + 2));
-                vmovdqu16(ptr[regTmpCptr + bFullReg * (RegBytes / 2)]
-                              | mask_regs[1],
-                          Xbyak::Ymm(aRegIdx + 2));
-            }
-
-            add(regTmpCptr, regTmp1);
-        }
-
+        RETURN_IF_ERROR(storeResultBF16(hasPostOps));
         jmp(label_storeop_end, T_NEAR);
         L(label_storeop);
     } else if (c_downscale == DLP_F32) {
@@ -790,71 +620,149 @@ jitGEMMS8<KType>::storeResult(bool hasPostOps)
                 + offsetof(dlp_gemm_post_op_attr, is_last_k)]);
         test(regTmp1, regTmp1);
         je(label_storeop, T_NEAR);
-
         RETURN_IF_ERROR(updateCBufferPointers());
-
-        for (iter_t i = 0; i < MR; ++i) {
-            for (iter_t j = 0; j < bFullReg; ++j) {
-                if (!hasPostOps) {
-                    // Converting the accumulated result from S32 to F32.
-                    vcvtdq2ps(RegType(cRegIdx + i * bReg + j),
-                              RegType(cRegIdx + i * bReg + j));
-                }
-
-                vmovups(ptr[regTmpCptr + j * RegBytes],
-                        RegType(cRegIdx + i * bReg + j));
-            }
-
-            // Masked Store
-            if (bMaskReg > 0) {
-                if (!hasPostOps) {
-                    // Converting the accumulated result from S32 to F32.
-                    vcvtdq2ps(RegType(cRegIdx + i * bReg + bFullReg),
-                              RegType(cRegIdx + i * bReg + bFullReg));
-                }
-
-                vmovups(ptr[regTmpCptr + bFullReg * RegBytes] | mask_regs[1],
-                        RegType(cRegIdx + i * bReg + bFullReg));
-            }
-
-            add(regTmpCptr, regTmp1);
-        }
-
+        RETURN_IF_ERROR(storeResultF32(hasPostOps));
         jmp(label_storeop_end, T_NEAR);
         L(label_storeop);
     }
 
-    // Default S32 store
-    for (iter_t i = 0; i < MR; ++i) {
-        // Regular Unmasked Store
-        for (iter_t j = 0; j < bFullReg; ++j) {
-            if (hasPostOps) {
-                // Convert post-ops accumulated result from F32 to S32.
-                vcvtps2dq(RegType(cRegIdx + i * bReg + j),
-                          RegType(cRegIdx + i * bReg + j));
-            }
-            vmovdqu32(ptr[regTmpCptr + j * RegBytes],
-                      RegType(cRegIdx + i * bReg + j));
-        }
-
-        // Masked Store
-        if (bMaskReg > 0) {
-            if (hasPostOps) {
-                // Convert post-ops accumulated result from F32 to S32.
-                vcvtps2dq(RegType(cRegIdx + i * bReg + bFullReg),
-                          RegType(cRegIdx + i * bReg + bFullReg));
-            }
-
-            vmovdqu32(ptr[regTmpCptr + bFullReg * RegBytes] | mask_regs[1]
-                          | T_z,
-                      RegType(cRegIdx + i * bReg + bFullReg));
-        }
-
-        add(regTmpCptr, regRsC);
-    }
-
+    RETURN_IF_ERROR(storeResultS32(hasPostOps));
     L(label_storeop_end);
     return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMS8<KType>::storeResultS32(bool hasPostOps)
+{
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto convert =
+        hasPostOps
+            ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::s32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                        dlp::kernel_frame::DataType::s32);
+    const store::GemmStoreRequest request{ { cRegIdx, MR, bReg,
+                                             store::SourceRegWidth::zmm },
+                                           { regTmpCptr, regRsC, finalMask },
+                                           convert,
+                                           store::StoreTemps::none() };
+    return store::emit<KType>(*this, request);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMS8<KType>::storeResultS8(bool hasPostOps)
+{
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto convert =
+        hasPostOps ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                               dlp::kernel_frame::DataType::s8)
+                   : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                               dlp::kernel_frame::DataType::s8);
+    const auto scratch =
+        hasPostOps ? store::StoreTemps::withZmmAndGpr(aRegIdx, regKIter)
+                   : store::StoreTemps::none();
+    const store::GemmStoreRequest request{ { cRegIdx, MR, bReg,
+                                             store::SourceRegWidth::zmm },
+                                           { regTmpCptr, regTmp1, finalMask },
+                                           convert,
+                                           scratch };
+    return store::emit<KType>(*this, request);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMS8<KType>::storeResultU8(bool hasPostOps)
+{
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto scratch = store::StoreTemps::withZmmAndGpr(aRegIdx, regKIter);
+    const auto convert =
+        hasPostOps ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                               dlp::kernel_frame::DataType::u8)
+                   : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                               dlp::kernel_frame::DataType::u8);
+    const store::GemmStoreRequest request{ { cRegIdx, MR, bReg,
+                                             store::SourceRegWidth::zmm },
+                                           { regTmpCptr, regTmp1, finalMask },
+                                           convert,
+                                           scratch };
+    return store::emit<KType>(*this, request);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMS8<KType>::storeResultF32(bool hasPostOps)
+{
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto convert =
+        hasPostOps
+            ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::f32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                        dlp::kernel_frame::DataType::f32);
+    const store::GemmStoreRequest request{ { cRegIdx, MR, bReg,
+                                             store::SourceRegWidth::zmm },
+                                           { regTmpCptr, regTmp1, finalMask },
+                                           convert,
+                                           store::StoreTemps::none() };
+    return store::emit<KType>(*this, request);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMS8<KType>::storeResultF16(bool hasPostOps)
+{
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto scratch = store::StoreTemps::withZmm(aRegIdx);
+    const auto convert =
+        hasPostOps
+            ? store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::f16)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::s32,
+                                        dlp::kernel_frame::DataType::f16);
+    const store::GemmStoreRequest request{ { cRegIdx, MR, bReg,
+                                             store::SourceRegWidth::zmm },
+                                           { regTmpCptr, regTmp1, finalMask },
+                                           convert,
+                                           scratch };
+    return store::emit<KType>(*this, request);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitGEMMS8<KType>::storeResultBF16(bool hasPostOps)
+{
+    auto finalMask = store::StoreMask::none();
+    if (bMaskReg > 0) {
+        finalMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto scratch = store::StoreTemps::withZmmAndGpr(aRegIdx, regTmp3);
+    const auto convert =
+        hasPostOps
+            ? store::StoreSpec::softwareBf16(dlp::kernel_frame::DataType::f32)
+            : store::StoreSpec::softwareBf16(dlp::kernel_frame::DataType::s32);
+    const store::GemmStoreRequest request{ { cRegIdx, MR, bReg,
+                                             store::SourceRegWidth::zmm },
+                                           { regTmpCptr, regTmp1, finalMask },
+                                           convert,
+                                           scratch };
+    return store::emit<KType>(*this, request);
 }
 
 template<utils::kernelInstrType KType>
@@ -1076,7 +984,6 @@ dlp::jit::jitGeneratorError
 jitGEMMS8<KType>::generateKernel(utils::generatorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemmParams(params));
-
     MR          = params.MR;
     NR          = params.NR;
     useMask     = params.useMask;

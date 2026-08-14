@@ -46,7 +46,7 @@ class jitGEMMS8 : public Xbyak::CodeGenerator
   public:
     // Constructor that specifies the maximum size of generated JIT code.
     // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
-    jitGEMMS8(size_t maxSize);
+    explicit jitGEMMS8(size_t maxSize);
     ~jitGEMMS8()                      = default;
     jitGEMMS8(jitGEMMS8&)             = delete;
     jitGEMMS8& operator=(jitGEMMS8&)  = delete;
@@ -84,7 +84,6 @@ class jitGEMMS8 : public Xbyak::CodeGenerator
     Xbyak::Label label_store_result;
 
     bool useMask = false; // Flag to indicate generation of masked instructions.
-
     // Setup and initialization
     dlp::jit::jitGeneratorError allocateReg();
 
@@ -115,6 +114,12 @@ class jitGEMMS8 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError updateCBufferPointers();
 
     dlp::jit::jitGeneratorError storeResult(bool hasPostOps = false);
+    dlp::jit::jitGeneratorError storeResultS32(bool hasPostOps);
+    dlp::jit::jitGeneratorError storeResultS8(bool hasPostOps);
+    dlp::jit::jitGeneratorError storeResultU8(bool hasPostOps);
+    dlp::jit::jitGeneratorError storeResultF32(bool hasPostOps);
+    dlp::jit::jitGeneratorError storeResultF16(bool hasPostOps);
+    dlp::jit::jitGeneratorError storeResultBF16(bool hasPostOps);
 
     void moveCPtr();
 

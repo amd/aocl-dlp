@@ -47,7 +47,7 @@ class jitGEMVS8N1 : public Xbyak::CodeGenerator
   public:
     // Constructor that specifies the maximum size of generated JIT code.
     // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
-    jitGEMVS8N1(size_t maxSize);
+    explicit jitGEMVS8N1(size_t maxSize);
     ~jitGEMVS8N1()                        = default;
     jitGEMVS8N1(jitGEMVS8N1&)             = delete;
     jitGEMVS8N1& operator=(jitGEMVS8N1&)  = delete;
@@ -93,7 +93,6 @@ class jitGEMVS8N1 : public Xbyak::CodeGenerator
 
     int vec128Reg; // Reserving one register for converting int8 to uint8.
     int c_downscale;
-
     // Register allocations
     Xbyak::Reg64 stackPtr;            // Stack frame pointer
     Xbyak::Reg64 regAptr, regTmpAptr; // Pointer to matrix A and its temp
@@ -152,10 +151,6 @@ class jitGEMVS8N1 : public Xbyak::CodeGenerator
 
     dlp::jit::jitGeneratorError scaleYByBeta(int mSize);
 
-    dlp::jit::jitGeneratorError storeYColStored(int, bool = false);
-
-    dlp::jit::jitGeneratorError storeYRowStored(int, bool = false);
-
     dlp::jit::jitGeneratorError storeY(int, bool = false);
 };
 
@@ -165,7 +160,7 @@ class jitGEMVS8M1 : public Xbyak::CodeGenerator
   public:
     // Constructor that specifies the maximum size of generated JIT code.
     // Buffer allocation and AutoGrow behavior are managed internally by Xbyak.
-    jitGEMVS8M1(size_t maxSize);
+    explicit jitGEMVS8M1(size_t maxSize);
     ~jitGEMVS8M1()                        = default;
     jitGEMVS8M1(jitGEMVS8M1&)             = delete;
     jitGEMVS8M1& operator=(jitGEMVS8M1&)  = delete;
@@ -192,7 +187,6 @@ class jitGEMVS8M1 : public Xbyak::CodeGenerator
     int KC;          // Blocking factor for K-dimension
     int K_SUB_ITER;  // Number of K iterations per unrolled segment
     int c_downscale;
-
     dlp::kernel_frame::storageFormat yFormat; // Storage format of C matrix
     dlp::kernel_frame::scalingType alphaScalingType; // Type of kernel operation
     dlp::kernel_frame::scalingType betaScalingType;  // Type of beta scaling

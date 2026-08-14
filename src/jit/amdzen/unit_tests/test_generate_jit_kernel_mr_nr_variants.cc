@@ -151,12 +151,19 @@ TEST_F(JitMrNrVariantsTest, BF16_GEMM_MR_NR_Variants)
 
 TEST_F(JitMrNrVariantsTest, U8S8_GEMM_MR_NR_Variants)
 {
-    testGemmWithPostOp(
-        "U8S8", "NoPostOps", allKTypes_u8s8, DLP_S32,
-        [](KernelOpsBuilder& b) -> KernelOpsBuilder& { return b; },
-        [this](generatorParams& p) {
-            return generateU8S8GemmKernel(p.kType, p);
-        });
+    const std::vector<std::pair<int, std::string>> outputTypes{
+        { DLP_S32, "S32" }, { DLP_S8, "S8" },   { DLP_U8, "U8" },
+        { DLP_F32, "F32" }, { DLP_F16, "F16" }, { DLP_BF16, "BF16" },
+    };
+
+    for (const auto& [outputType, outputName] : outputTypes) {
+        testGemmWithPostOp(
+            "U8S8_Out_" + outputName, "NoPostOps", allKTypes_u8s8, outputType,
+            [](KernelOpsBuilder& b) -> KernelOpsBuilder& { return b; },
+            [this](generatorParams& p) {
+                return generateU8S8GemmKernel(p.kType, p);
+            });
+    }
 }
 
 // ============================================================================

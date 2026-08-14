@@ -46,7 +46,7 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
 {
   public:
     // Constructor that takes buffer and its size for JIT code dumping
-    jitGEMMBF16(size_t maxSize);
+    explicit jitGEMMBF16(size_t maxSize);
     ~jitGEMMBF16()                        = default;
     jitGEMMBF16(jitGEMMBF16&)             = delete;
     jitGEMMBF16& operator=(jitGEMMBF16&)  = delete;
@@ -116,6 +116,8 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError scaleBeta();
 
     dlp::jit::jitGeneratorError storeResult();
+    dlp::jit::jitGeneratorError emitF32CStore();
+    dlp::jit::jitGeneratorError emitNativeBf16Store();
 
     // GLU half-width store into the compacted D buffer; axis encoded in the
     // name:
@@ -125,6 +127,9 @@ class jitGEMMBF16 : public Xbyak::CodeGenerator
     dlp::jit::jitGeneratorError storeHalfWidthResult();
     dlp::jit::jitGeneratorError storeHalfWidthResultAlongM();
     dlp::jit::jitGeneratorError emitHalfWidthResult(bool colMajor);
+    dlp::jit::jitGeneratorError emitGluStore(bool                 colMajor,
+                                             const Xbyak::Opmask& fringeMask,
+                                             const Xbyak::Reg64&  regRsC);
 
     dlp::jit::jitGeneratorError loadMask();
 

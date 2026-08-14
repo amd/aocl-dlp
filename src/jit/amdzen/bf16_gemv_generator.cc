@@ -26,12 +26,14 @@
  *
  */
 
+#include <array>
 #include <functional>
 #include <memory>
 
 #include "alias_mitigation_utils.hh"
 #include "bf16_gemv_generator.hh"
 #include "jit_register/jit_register.hh"
+#include "store/store_emit.hh"
 
 namespace amdzen::codegen {
 
@@ -765,7 +767,6 @@ template<utils::kernelInstrType KType>
 dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
 {
-    int mLeft = mSize % simdWidthF32;
     inLocalLabel();
     Xbyak::Label label_storeop_col, label_storeop_col_end;
 
@@ -804,37 +805,44 @@ jitBF16GEMVN1<KType>::storeYValuesColStored(int mSize)
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
 
-        // Store complete SIMD-width chunks
-        for (iter_t i = 0; i < mSize / simdWidthF32; i += 1) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + i),
-                          Xbyak::Zmm(accumBaseIdx + i));
-            vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(accumBaseIdx + i));
-            lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(bfloat16)]);
-        }
-        if (mLeft) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + (mSize / simdWidthF32)),
-                          Xbyak::Zmm(accumBaseIdx + (mSize / simdWidthF32)));
-            vmovdqu16(ptr[regTmpYptr] | mask_regs[1],
-                      Xbyak::Ymm(accumBaseIdx + (mSize / simdWidthF32)));
-        }
+        RETURN_IF_ERROR(
+            emitN1ContiguousStore(mSize, dlp::kernel_frame::DataType::bf16));
 
         jmp(label_storeop_col_end, T_NEAR);
         L(label_storeop_col);
     }
 
-    // Store complete SIMD-width chunks
-    for (iter_t i = 0; i < mSize / simdWidthF32; i += 1) {
-        vmovups(ptr[regTmpYptr], RegType(accumBaseIdx + i));
-        lea(regTmpYptr, ptr[regTmpYptr + simdWidthF32 * sizeof(float)]);
-    }
-    if (mLeft) {
-        vmovups(ptr[regTmpYptr] | mask_regs[1],
-                RegType(accumBaseIdx + (mSize / simdWidthF32)));
-    }
+    RETURN_IF_ERROR(
+        emitN1ContiguousStore(mSize, dlp::kernel_frame::DataType::f32));
 
     L(label_storeop_col_end);
     outLocalLabel();
     return dlp::jit::jitGeneratorError::success;
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitBF16GEMVN1<KType>::emitN1ContiguousStore(
+    int mSize, dlp::kernel_frame::DataType destinationType)
+{
+    const int mLeft     = mSize % simdWidthF32;
+    auto      storeMask = store::StoreMask::none();
+    if (mLeft) {
+        storeMask = store::StoreMask::opmask(mask_regs[1]);
+    }
+    const auto convert =
+        destinationType == dlp::kernel_frame::DataType::bf16
+            ? store::StoreSpec::nativeBf16(dlp::kernel_frame::DataType::f32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::f32);
+    const store::GemvN1StoreRequest request{
+        store::GemvN1Source::packedLanes(
+            store::RegSpan{ accumBaseIdx, store::SourceRegWidth::zmm, mSize }),
+        store::GemvN1Destination::contiguousAdvanceComplete(regTmpYptr, regTmp1,
+                                                            storeMask),
+        convert, store::StoreTemps::none()
+    };
+    return store::emit<KType>(*this, request);
 }
 
 template<utils::kernelInstrType KType>
@@ -853,13 +861,13 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
         if (elements_in_reg == 0)
             break;
 
-        // Extract 4 chunks of 128-bits (4 floats each) from the ZMM
+        // Extract once before the runtime destination branch.
         for (iter_t j = 0; j < elements_in_reg; j += 4) {
             if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
                 vextractf128(Xbyak::Xmm(tmpBaseIdx + j / 4),
                              RegType(accumBaseIdx + i), j / 4);
             } else {
-                vextractf32x4(Xbyak::Xmm(tmpBaseIdx + j / 4), // ISA specific
+                vextractf32x4(Xbyak::Xmm(tmpBaseIdx + j / 4),
                               RegType(accumBaseIdx + i), j / 4);
             }
         }
@@ -903,44 +911,17 @@ jitBF16GEMVN1<KType>::storeYValuesRowStored(int mSize)
             imul(regKIter, regTmp2);
             add(regTmpYptr, regKIter);
 
-            for (iter_t j = 0; j < (elements_in_reg + 3) / 4; j++) {
-                vcvtneps2bf16(Xbyak::Ymm(tmpBaseIdx + j),
-                              Xbyak::Zmm(tmpBaseIdx + j));
-            }
-
-            // Now store each extracted value to its proper row-strided location
-            for (iter_t j = 0; j < elements_in_reg; j++) {
-                int tmp_reg    = j / 4; // Which temp register has our value
-                int pos_in_reg = j % 4; // Position within that temp register
-
-                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
-                        pos_in_reg);
-
-                // Move to next row
-                add(regTmpYptr, regTmp2);
-            }
+            RETURN_IF_ERROR(emitN1ScalarStore(
+                i, 1, simdWidthF32, elements_in_reg,
+                dlp::kernel_frame::DataType::bf16, regTmp2, false));
 
             jmp(label_storeop_row_end, T_NEAR);
             L(label_storeop_row);
         }
 
-        // Now store each extracted value to its proper row-strided location
-        for (iter_t j = 0; j < elements_in_reg; j++) {
-            int tmp_reg    = j / 4; // Which temp register has our value
-            int pos_in_reg = j % 4; // Position within that temp register
-
-            if (pos_in_reg == 0) {
-                // First element in XMM can be stored directly
-                vmovss(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg));
-            } else {
-                // Extract the 32-bit float to memory directly
-                vpextrd(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
-                        pos_in_reg);
-            }
-
-            // Move to next row
-            add(regTmpYptr, regRsC);
-        }
+        RETURN_IF_ERROR(emitN1ScalarStore(i, 1, simdWidthF32, elements_in_reg,
+                                          dlp::kernel_frame::DataType::f32,
+                                          regRsC, false));
 
         L(label_storeop_row_end);
     }
@@ -964,8 +945,10 @@ jitBF16GEMVN1<KType>::storeHalfWidthResult(int mSize)
     // included). C keeps the raw 2I partials via the full-width store; only D
     // receives the GLU result. Called only on is_last_k (storeYValues already
     // branched).
-    const int m_iter   = mSize / simdWidthF32;
-    const int m_left   = mSize % simdWidthF32; // remaining rows (even for GLU)
+    if (mSize == 1) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+
     const int regs     = (mSize + simdWidthF32 - 1) / simdWidthF32;
     const int eltBytes = (c_downscale < DLP_F32) ? (int)sizeof(bfloat16)
                                                  : (int)sizeof(float);
@@ -993,39 +976,60 @@ jitBF16GEMVN1<KType>::storeHalfWidthResult(int mSize)
     imul(regKIter, regTmp2);
     add(regTmpYptr, regKIter); // base += (post_op_c_i/2)*ld_d*elt
 
-    // Scatter each compacted result into D, advancing by ld_d*elt (regTmp2).
-    for (iter_t i = 0; i < regs; i++) {
-        int rows_in_reg    = (i < m_iter) ? simdWidthF32 : m_left;
-        int results_in_reg = rows_in_reg / 2; // packed low by the de-interleave
-        if (results_in_reg == 0)
-            break;
+    const int  rowsInLastReg   = mSize % simdWidthF32 ? mSize % simdWidthF32
+                                                      : simdWidthF32;
+    const auto destinationType = c_downscale < DLP_F32
+                                     ? dlp::kernel_frame::DataType::bf16
+                                     : dlp::kernel_frame::DataType::f32;
+    const int  compactLanes    = rowsInLastReg / 2;
+    const int  compactRegs     = regs - (compactLanes == 0 ? 1 : 0);
+    const int  lanesInLastReg  = compactLanes == 0 ? simdWidthF32 / 2
+                                                   : compactLanes;
+    return emitN1ScalarStore(0, compactRegs, simdWidthF32 / 2, lanesInLastReg,
+                             destinationType, regTmp2, true);
+}
 
-        if (c_downscale < DLP_F32) {
-            vcvtneps2bf16(Xbyak::Xmm(tmpBaseIdx), Xbyak::Ymm(accumBaseIdx + i));
-            for (iter_t j = 0; j < results_in_reg; j++) {
-                vpextrw(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx), j);
-                add(regTmpYptr, regTmp2);
-            }
-        } else {
-            for (iter_t j = 0; j < results_in_reg; j += 4) {
-                vextractf32x4(Xbyak::Xmm(tmpBaseIdx + j / 4),
-                              RegType(accumBaseIdx + i), j / 4);
-            }
-            for (iter_t j = 0; j < results_in_reg; j++) {
-                int tmp_reg    = j / 4;
-                int pos_in_reg = j % 4;
-                if (pos_in_reg == 0) {
-                    vmovss(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg));
-                } else {
-                    vpextrd(ptr[regTmpYptr], Xbyak::Xmm(tmpBaseIdx + tmp_reg),
-                            pos_in_reg);
-                }
-                add(regTmpYptr, regTmp2);
-            }
-        }
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitBF16GEMVN1<KType>::emitN1ScalarStore(
+    int                         regOffset,
+    int                         regCount,
+    int                         lanesPerReg,
+    int                         lanesInLastReg,
+    dlp::kernel_frame::DataType destinationType,
+    const Xbyak::Reg64&         regRsC,
+    bool                        compact)
+{
+    const std::size_t scratchCount =
+        compact && destinationType == dlp::kernel_frame::DataType::bf16 ? 1
+        : compact ? static_cast<std::size_t>((lanesPerReg + 3) / 4)
+                  : static_cast<std::size_t>((lanesInLastReg + 3) / 4);
+    std::array<int, 4> scratchRegisters{};
+    for (std::size_t i = 0; i < scratchCount; ++i) {
+        scratchRegisters[i] = tmpBaseIdx + static_cast<int>(i);
     }
+    const auto convert =
+        destinationType == dlp::kernel_frame::DataType::bf16
+            ? store::StoreSpec::nativeBf16(dlp::kernel_frame::DataType::f32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::f32);
 
-    return dlp::jit::jitGeneratorError::success;
+    const auto source =
+        compact ? store::GemvN1Source::packedLanes(store::RegSpan{
+                      accumBaseIdx + regOffset, store::SourceRegWidth::ymm,
+                      regCount == 0
+                          ? 0
+                          : (regCount - 1) * lanesPerReg + lanesInLastReg })
+                : store::GemvN1Source::extractedXmm(
+                      scratchRegisters.data(), scratchCount, lanesInLastReg);
+    const auto                      scratch = compact
+                                                  ? store::StoreTemps::withZmm(scratchRegisters[0])
+                                                  : store::StoreTemps::none();
+    const store::GemvN1StoreRequest request{
+        source, store::GemvN1Destination::scalarStrided(regTmpYptr, regRsC),
+        convert, scratch
+    };
+    return store::emit<KType>(*this, request);
 }
 
 template<utils::kernelInstrType KType>
@@ -1070,7 +1074,6 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
 {
     RETURN_IF_ERROR(utils::jitGeneratorUtils::checkValidGemvN1Params(params));
-
     Xbyak::util::StackFrame frame(this, 1,
                                   12 | Xbyak::util::UseRBPAsFramePointer, 16);
     initializeStackFrame(frame);
@@ -1292,7 +1295,7 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             L(label_skip_kernel_ops);
         }
 
-        storeYValues(MR);
+        RETURN_IF_ERROR(storeYValues(MR));
 
         // if (params.mloop) {
         // Update pointers for next m iteration(for A and y)
@@ -1429,7 +1432,7 @@ jitBF16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
             L(label_skip_kernel_ops);
         }
 
-        storeYValues(M_LEFT);
+        RETURN_IF_ERROR(storeYValues(M_LEFT));
     }
     L(label_m_fringe_end);
     outLocalLabel();
@@ -2008,9 +2011,6 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVM1<KType>::storeYValues(int n_size)
 {
 
-    int n_iter = n_size / simdWidth;
-    int n_left = n_size % simdWidth;
-
     inLocalLabel();
     Xbyak::Label label_store, label_store_end;
 
@@ -2067,19 +2067,8 @@ jitBF16GEMVM1<KType>::storeYValues(int n_size)
         imul(regKIter, regTmp2);
         add(regTmpYptr, regKIter);
 
-        // Store complete SIMD-width chunks
-        for (iter_t i = 0; i < n_iter; i += 1) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + i),
-                          Xbyak::Zmm(accumBaseIdx + i));
-            vmovdqu16(ptr[regTmpYptr], Xbyak::Ymm(accumBaseIdx + i));
-            lea(regTmpYptr, ptr[regTmpYptr + simdWidth * sizeof(bfloat16)]);
-        }
-        if (n_left) {
-            vcvtneps2bf16(Xbyak::Ymm(accumBaseIdx + n_iter),
-                          Xbyak::Zmm(accumBaseIdx + n_iter));
-            vmovdqu16(ptr[regTmpYptr] | mask_regs[0],
-                      Xbyak::Ymm(accumBaseIdx + n_iter));
-        }
+        RETURN_IF_ERROR(
+            emitM1Store(n_size, dlp::kernel_frame::DataType::bf16, false));
 
         jmp(label_store_end, T_NEAR);
         L(label_store);
@@ -2087,15 +2076,8 @@ jitBF16GEMVM1<KType>::storeYValues(int n_size)
 
     mov(regTmpYptr, regYptr);
 
-    for (iter_t i = 0; i < n_iter; i++) {
-        vmovups(ptr[regTmpYptr + i * simdWidth * sizeof(float)],
-                RegType(accumBaseIdx + i));
-    }
-    if (n_left) {
-        vmovups(ptr[regTmpYptr + n_iter * simdWidth * sizeof(float)]
-                    | mask_regs[0],
-                RegType(accumBaseIdx + n_iter));
-    }
+    RETURN_IF_ERROR(
+        emitM1Store(n_size, dlp::kernel_frame::DataType::f32, false));
 
     L(label_store_end);
     outLocalLabel();
@@ -2114,8 +2096,6 @@ jitBF16GEMVM1<KType>::storeHalfWidthResult(int n_size)
     // post_op_c_j/2 (row post_op_c_i, m==1 so 0), output-typed (bf16 or f32).
     // C keeps the raw 2I partials via the full-width store; only D receives the
     // GLU result. Called only on is_last_k. n_size is compile-time.
-    const int half     = simdWidth / 2; // 8 f32 / 8 bf16 valid low lanes
-    const int n_iter   = n_size / simdWidth;
     const int n_left   = n_size % simdWidth;
     const int halfLeft = n_left / 2; // de-interleaved fringe result count
     const int eltBytes = (c_downscale < DLP_F32) ? (int)sizeof(bfloat16)
@@ -2148,33 +2128,50 @@ jitBF16GEMVM1<KType>::storeHalfWidthResult(int n_size)
     imul(regKIter, regTmp2);
     add(regTmpYptr, regKIter);
 
-    if (c_downscale < DLP_F32) {
-        for (iter_t i = 0; i < n_iter; i++) {
-            vcvtneps2bf16(Xbyak::Xmm(accumBaseIdx + i),
-                          Xbyak::Ymm(accumBaseIdx + i));
-            vmovdqu16(ptr[regTmpYptr + i * half * sizeof(bfloat16)],
-                      Xbyak::Xmm(accumBaseIdx + i));
-        }
-        if (n_left) {
-            vcvtneps2bf16(Xbyak::Xmm(accumBaseIdx + n_iter),
-                          Xbyak::Ymm(accumBaseIdx + n_iter));
-            vmovdqu16(ptr[regTmpYptr + n_iter * half * sizeof(bfloat16)]
-                          | mask_regs[1],
-                      Xbyak::Xmm(accumBaseIdx + n_iter));
-        }
-    } else {
-        for (iter_t i = 0; i < n_iter; i++) {
-            vmovups(ptr[regTmpYptr + i * half * sizeof(float)],
-                    Xbyak::Ymm(accumBaseIdx + i));
-        }
-        if (n_left) {
-            vmovups(ptr[regTmpYptr + n_iter * half * sizeof(float)]
-                        | mask_regs[1],
-                    Xbyak::Ymm(accumBaseIdx + n_iter));
-        }
+    const auto destinationType = c_downscale < DLP_F32
+                                     ? dlp::kernel_frame::DataType::bf16
+                                     : dlp::kernel_frame::DataType::f32;
+    return emitM1Store(n_size, destinationType, true);
+}
+
+template<utils::kernelInstrType KType>
+dlp::jit::jitGeneratorError
+jitBF16GEMVM1<KType>::emitM1Store(int                         nSize,
+                                  dlp::kernel_frame::DataType destinationType,
+                                  bool                        compact)
+{
+    if (compact && nSize == 1) {
+        return dlp::jit::jitGeneratorError::success;
+    }
+    const int  nIter              = nSize / simdWidth;
+    const int  nLeft              = nSize % simdWidth;
+    const bool emptyCompactFringe = compact && nLeft == 1;
+    const int  regCount       = nIter + (nLeft && !emptyCompactFringe ? 1 : 0);
+    const int  lanesPerReg    = compact ? simdWidth / 2 : simdWidth;
+    const int  lanesInLastReg = nLeft && !emptyCompactFringe
+                                    ? (compact ? nLeft / 2 : nLeft)
+                                    : lanesPerReg;
+    auto       finalMask      = store::StoreMask::none();
+    if (nLeft && !emptyCompactFringe) {
+        finalMask =
+            store::StoreMask::opmask(compact ? mask_regs[1] : mask_regs[0]);
     }
 
-    return dlp::jit::jitGeneratorError::success;
+    const auto convert =
+        destinationType == dlp::kernel_frame::DataType::bf16
+            ? store::StoreSpec::nativeBf16(dlp::kernel_frame::DataType::f32)
+            : store::StoreSpec::convert(dlp::kernel_frame::DataType::f32,
+                                        dlp::kernel_frame::DataType::f32);
+    const store::GemvM1StoreRequest request{
+        store::RegSpan{
+            accumBaseIdx,
+            compact ? store::SourceRegWidth::ymm : store::SourceRegWidth::zmm,
+            regCount == 0 ? 0 : (regCount - 1) * lanesPerReg + lanesInLastReg },
+        { regTmpYptr, finalMask },
+        convert,
+        store::StoreTemps::none()
+    };
+    return store::emit<KType>(*this, request);
 }
 
 template<utils::kernelInstrType KType>
@@ -2182,7 +2179,6 @@ dlp::jit::jitGeneratorError
 jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
 {
     RETURN_IF_ERROR(checkValidBF16GemvM1NLeftParams(params));
-
     // Using Xbyak's utility for managing the stack frame
     Xbyak::util::StackFrame frame(this, 1,
                                   12 | Xbyak::util::UseRBPAsFramePointer, 8);
@@ -2409,7 +2405,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             L(label_skip_kernel_ops);
         }
 
-        storeYValues(NR);
+        RETURN_IF_ERROR(storeYValues(NR));
 
         // Update the pointers for next n iteration(NOTE : B pointer is set
         // inside the kloop, owing to the implementation in static kernels)
@@ -2609,7 +2605,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             L(label_skip_kernel_ops);
         }
 
-        storeYValues(N_LEFT);
+        RETURN_IF_ERROR(storeYValues(N_LEFT));
 
         mov(regTmp2, N_LEFT);
         add(regIncN, regTmp2);
@@ -2809,7 +2805,7 @@ jitBF16GEMVM1<KType>::generateKernel(utils::gemvM1GeneratorParams& params)
             L(label_skip_kernel_ops);
         }
 
-        storeYValues(N_LEFT);
+        RETURN_IF_ERROR(storeYValues(N_LEFT));
     }
 
     L(label_n_fringe_left_end);
