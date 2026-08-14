@@ -1281,47 +1281,56 @@ jitF32FP16GEMVN1<KType>::generateIrLoop(
 {
     inLocalLabel();
 
-    mov(regTmpAptr, regAptr);
-    mov(regTmpYptr, regAptr);
-
-    mov(regXptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, x)]);
-
+    // Zeroed unconditionally: when alpha is zero these accumulators carry the
+    // beta-only result, and a beta of zero must still store a positive zero.
     regInit(accumBaseIdx, MR);
 
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
-    test(regKIter, regKIter);
-    jz(".KLOOP_FRINGE", T_NEAR);
+    // alpha == 0 makes the result independent of A and x, which the BLAS
+    // contract forbids referencing. Only the accumulation is skipped; beta
+    // scaling, post-ops and the store still run for every tile.
+    if (alphaScalingType != dlp::kernel_frame::scalingType::zero) {
+        mov(regTmpAptr, regAptr);
+        mov(regTmpYptr, regAptr);
 
-    L(".KLOOP_START");
+        mov(regXptr, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, x)]);
 
-    vmovdqu16(Ymm(xBaseIdx), ptr[regXptr]);
-    vcvtph2ps(Zmm(xBaseIdx), Ymm(xBaseIdx));
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_iter)]);
+        test(regKIter, regKIter);
+        jz(".KLOOP_FRINGE", T_NEAR);
 
-    RETURN_IF_ERROR(processMRBlock(mSize, false));
+        L(".KLOOP_START");
 
-    add(regTmpYptr, RegBytes);
-    mov(regTmpAptr, regTmpYptr);
-    add(regXptr, FP16_PER_YMM * FP16_ELEM_SIZE);
+        vmovdqu16(Ymm(xBaseIdx), ptr[regXptr]);
+        vcvtph2ps(Zmm(xBaseIdx), Ymm(xBaseIdx));
 
-    dec(regKIter);
-    jnz(".KLOOP_START", T_NEAR);
+        RETURN_IF_ERROR(processMRBlock(mSize, false));
 
-    L(".KLOOP_FRINGE");
+        add(regTmpYptr, RegBytes);
+        mov(regTmpAptr, regTmpYptr);
+        add(regXptr, FP16_PER_YMM * FP16_ELEM_SIZE);
 
-    mov(regKIter, ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_left)]);
-    test(regKIter, regKIter);
-    jz(".KLOOP_FRINGE_END", T_NEAR);
+        dec(regKIter);
+        jnz(".KLOOP_START", T_NEAR);
 
-    vmovdqu16(Ymm(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
-    vcvtph2ps(Zmm(xBaseIdx), Ymm(xBaseIdx));
-    processMRBlock(mSize, true);
+        L(".KLOOP_FRINGE");
 
-    L(".KLOOP_FRINGE_END");
+        mov(regKIter,
+            ptr[stackPtr + offsetof(dlp::kernels::gemvN1Params, k_left)]);
+        test(regKIter, regKIter);
+        jz(".KLOOP_FRINGE_END", T_NEAR);
 
-    RETURN_IF_ERROR(reduceAccumulation(mSize));
+        vmovdqu16(Ymm(xBaseIdx) | mask_regs[0] | T_z, ptr[regXptr]);
+        vcvtph2ps(Zmm(xBaseIdx), Ymm(xBaseIdx));
+        processMRBlock(mSize, true);
 
-    if (alphaScalingType != dlp::kernel_frame::scalingType::one) {
-        RETURN_IF_ERROR(scaleAccumulationWithAlpha(mSize));
+        L(".KLOOP_FRINGE_END");
+
+        RETURN_IF_ERROR(reduceAccumulation(mSize));
+
+        if (alphaScalingType != dlp::kernel_frame::scalingType::one) {
+            RETURN_IF_ERROR(scaleAccumulationWithAlpha(mSize));
+        }
     }
 
     if (betaScalingType != dlp::kernel_frame::scalingType::zero) {
@@ -1344,9 +1353,7 @@ jitF32FP16GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
 
     L(".MLOOP_START");
 
-    if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
-        RETURN_IF_ERROR(generateIrLoop(MR, params));
-    }
+    RETURN_IF_ERROR(generateIrLoop(MR, params));
 
     if (kernelOpsHandlerPtr) {
         using VecPoolType =
@@ -1400,9 +1407,7 @@ jitF32FP16GEMVN1<KType>::generateMLoop(utils::gemvN1GeneratorParams& params)
     L(".M_FRINGE");
 
     if (params.M_LEFT > 0) {
-        if (params.alphaScalingType != dlp::kernel_frame::scalingType::zero) {
-            RETURN_IF_ERROR(generateIrLoop(params.M_LEFT, params));
-        }
+        RETURN_IF_ERROR(generateIrLoop(params.M_LEFT, params));
 
         if (kernelOpsHandlerPtr) {
             using VecPoolType =
@@ -1468,10 +1473,7 @@ jitF32FP16GEMVN1<KType>::generateKernel(utils::gemvN1GeneratorParams& params)
         if (params.mloop) {
             RETURN_IF_ERROR(generateMLoop(params));
         } else {
-            if (params.alphaScalingType
-                != dlp::kernel_frame::scalingType::zero) {
-                RETURN_IF_ERROR(generateIrLoop(params.M_LEFT, params));
-            }
+            RETURN_IF_ERROR(generateIrLoop(params.M_LEFT, params));
 
             if (kernelOpsHandlerPtr) {
                 using VecPoolType =
