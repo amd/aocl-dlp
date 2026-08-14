@@ -59,9 +59,22 @@ class BenchmarkMetrics
                                    md_t              group_size);
 
     /**
-     * @brief Get size in bytes for a matrix type
+     * @brief Get the addressable storage-unit size for a matrix type.
+     *
+     * Packed 4-bit types return one byte because memory is byte-addressable.
+     * Use getMatrixSizeBytes() for the exact aggregate size of packed data.
      */
     static size_t getMatrixTypeSize(MatrixType type);
+
+    /**
+     * @brief Get the dense (unpadded) byte footprint of a rows x cols matrix.
+     *
+     * Packed 4-bit types are counted as ceil(rows * cols / 2), matching the
+     * framework's linear nibble packing. This ignores leading-dimension
+     * padding and is intended for bandwidth and metric accounting only. Use
+     * MatrixMemory::calculateRequiredBytes() to size an allocation.
+     */
+    static size_t getMatrixSizeBytes(MatrixType type, md_t rows, md_t cols);
 };
 
 } // namespace dlp::benchmarking

@@ -32,6 +32,7 @@
  */
 
 #include "bench_config.hh"
+#include "bench_metrics.hh"
 #include "bench_test_config.hh"
 #include "bench_types.hh"
 #include "framework/matrix.hh"
@@ -44,15 +45,22 @@
 using namespace dlp::benchmarking;
 using namespace dlp::testing::framework;
 
-// Forward declaration of BenchmarkMetrics class to test getMatrixTypeSize
-// without pulling in Google Benchmark dependencies
-namespace dlp::benchmarking {
-class BenchmarkMetrics
+namespace {
+
+class CapturingBenchmarkReporter : public benchmark::BenchmarkReporter
 {
   public:
-    static size_t getMatrixTypeSize(MatrixType type);
+    bool ReportContext(const Context&) override { return true; }
+
+    void ReportRuns(const std::vector<Run>& reports) override
+    {
+        runs.insert(runs.end(), reports.begin(), reports.end());
+    }
+
+    std::vector<Run> runs;
 };
-} // namespace dlp::benchmarking
+
+} // namespace
 
 // ============================================================================
 // Test Suite: GemmBenchConfig Hash Function
@@ -309,6 +317,61 @@ TEST_F(MatrixTypeSizeTest, U4TypeSize)
 TEST_F(MatrixTypeSizeTest, S4TypeSize)
 {
     EXPECT_EQ(BenchmarkMetrics::getMatrixTypeSize(MatrixType::s4), 1);
+}
+
+TEST_F(MatrixTypeSizeTest, U4ByteCountRoundsUp)
+{
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::u4, 1, 1), 1);
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::u4, 1, 2), 1);
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::u4, 1, 3), 2);
+}
+
+TEST_F(MatrixTypeSizeTest, S4ByteCountRoundsUp)
+{
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::s4, 3, 3), 5);
+}
+
+TEST_F(MatrixTypeSizeTest, RegularByteCountUsesElementSize)
+{
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::f32, 2, 2), 16);
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::bf16, 2, 3), 12);
+}
+
+TEST_F(MatrixTypeSizeTest, NonPositiveDimensionsHaveNoStorage)
+{
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::u4, 0, 8), 0);
+    EXPECT_EQ(BenchmarkMetrics::getMatrixSizeBytes(MatrixType::s4, 8, -1), 0);
+}
+
+TEST_F(MatrixTypeSizeTest, CalculateAndReportPublishesPackedBytes)
+{
+    constexpr char benchmark_name[] = "BenchmarkMetricsPackedByteCounters";
+    CapturingBenchmarkReporter reporter;
+
+    benchmark::RegisterBenchmark(benchmark_name, [](benchmark::State& state) {
+        BenchmarkMetrics::calculateAndReport(state, 1, 1, 3, MatrixType::u4,
+                                             MatrixType::u4, MatrixType::u4, 0);
+        for (auto iteration : state) {
+            benchmark::DoNotOptimize(iteration);
+        }
+    })->Iterations(1);
+
+    char  arg0[] = "test_bench_utilities";
+    char* argv[] = { arg0, nullptr };
+    int   argc   = 1;
+    benchmark::Initialize(&argc, argv);
+    const size_t runs =
+        benchmark::RunSpecifiedBenchmarks(&reporter, benchmark_name);
+    benchmark::Shutdown();
+    benchmark::ClearRegisteredBenchmarks();
+
+    ASSERT_EQ(runs, 1U);
+    ASSERT_EQ(reporter.runs.size(), 1U);
+
+    const auto& counters       = reporter.runs.front().counters;
+    const auto  matrix_size_it = counters.find("Matrix_Size_MB");
+    ASSERT_NE(matrix_size_it, counters.end());
+    EXPECT_DOUBLE_EQ(matrix_size_it->second.value, 5.0 / (1024.0 * 1024.0));
 }
 
 TEST_F(MatrixTypeSizeTest, U8TypeSize)
