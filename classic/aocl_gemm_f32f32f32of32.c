@@ -475,7 +475,7 @@ aocl_gemm_f32f32f32of32(const char      order,
 
     // JIT pack B: required for F32 GEMM path.
     lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
-    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_F32F32F32OF32, n_use,
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_F32F32F32OF32, n_use, k_use,
                                        rs_b_use, cs_b_use, &lcntx_l);
 
     // n=1 gemv does not require a pack B kernel and is array copy if rs_b > 1.
@@ -485,6 +485,10 @@ aocl_gemm_f32f32f32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         goto err_hndl;
     }
+
+    // Both inits are done, so the tile the packed buffers are written against
+    // is final.
+    dlp_upd_pack_strides(DLP_KERNEL_F32F32F32OF32, &lcntx_l);
 
     err = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_l);
     if (err != DLP_CLSC_SUCCESS) {

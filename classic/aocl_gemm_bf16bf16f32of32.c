@@ -306,6 +306,19 @@ aocl_gemm_bf16bf16f32of32(const char      order,
     // Create local copy, since each thread in a multi-instance setup
     // modified the context object.
     dlp_gemm_cntx_t lcntx_l = *(dlp_gemm_get_global_cntx_obj(BF16BF16F32OF32));
+
+    // Hand the threading state to the DE: MR bounds how much work an IC way
+    // holds and the thread count bounds how much work there is to size MR
+    // against, so neither can be reasoned about without the other.
+    //
+    // The ways go in alongside the count, carrying the -1 sentinels unless the
+    // application pinned them through DLP_IC_NT / DLP_JC_NT -- a pinned
+    // partition is a constraint, not a starting point. The DE writes the split
+    // it resolved back here.
+    lcntx_l.thread_info.num_threads = rntm_g.num_threads;
+    lcntx_l.thread_info.ic_ways     = rntm_g.ic_ways;
+    lcntx_l.thread_info.jc_ways     = rntm_g.jc_ways;
+
     // The BF16 5 loop framework internally queries F32 cntx in case BF16
     // API is called on a non BF16 ISA machine. Any update to BF16 cntx
     // and block params here via metadata therefore wont be reflected in
@@ -368,6 +381,39 @@ aocl_gemm_bf16bf16f32of32(const char      order,
         }
     }
 
+    // Reject a GEMM that cannot be served against the panel its reordered B
+    // was packed into, before a kernel is generated for it. These are the
+    // values the decision engine is about to fold on. A differing m is not
+    // such a case and is served -- see dlp_gemm_validate_hints_with_call.
+    err = dlp_gemm_validate_hints_with_call(&lcntx_l, jit_mtag_b,
+                                            rntm_g.num_threads, rntm_g.ic_ways,
+                                            rntm_g.jc_ways);
+    if (err != DLP_CLSC_SUCCESS) {
+        char msg[256];
+        if (err == DLP_CLSC_INVALID_GEMM_HINTS) {
+            snprintf(msg, sizeof(msg),
+                     "GEMM hints must be zero (unset) or positive, got "
+                     "m_hint: %ld nt_hint: %ld\n",
+                     (lcntx_l.gemm_kernel_hints).m_hint,
+                     (lcntx_l.gemm_kernel_hints).nt_hint);
+        } else {
+            // The pool as the runtime resolved it, which under pinned ways is
+            // their product rather than rntm_g.num_threads -- a pinned run
+            // leaves the count unset, and printing that -1 would report the
+            // sentinel as though it were the disagreement.
+            snprintf(msg, sizeof(msg),
+                     "GEMM over a reordered B will run on a different thread "
+                     "count than the buffer was reordered under, nt_hint: %ld "
+                     "vs threads: %ld\n",
+                     (lcntx_l.gemm_kernel_hints).nt_hint,
+                     dlp_gemm_effective_thread_count(
+                         rntm_g.num_threads, rntm_g.ic_ways, rntm_g.jc_ways));
+        }
+        dlp_print_msg(msg, __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, err);
+        goto err_hndl;
+    }
+
     // Initialize DLP Plus kernel path.
     lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
 
@@ -383,13 +429,33 @@ aocl_gemm_bf16bf16f32of32(const char      order,
         goto err_hndl;
     }
 
+    // Take the split the DE resolved. The decorator finds these set and hands
+    // them back rather than deriving its own, through the same arm that
+    // honours DLP_IC_NT / DLP_JC_NT. Both routes run the same heuristic over
+    // the same extents and tile, so this saves the second derivation rather
+    // than changing the answer -- what it changes is that the split each
+    // candidate was costed against is the one that executes.
+    //
+    // The DE leaves these as it found them wherever it resolved no split: an
+    // architecture the model does not serve, an ineligible call, or a pinned
+    // runtime over a reordered B, where the model cannot see the pin and must
+    // not overrule it. In each of those the assignment is an identity and the
+    // decorator partitions as before.
+    //
+    // The ways only. The decorator recovers the count as ic_ways * jc_ways, so
+    // leaving rntm_g.num_threads alone keeps the dlp_is_single_thread checks
+    // below on the count the runtime resolved; those select the execution path,
+    // not the partition.
+    rntm_g.ic_ways = lcntx_l.thread_info.ic_ways;
+    rntm_g.jc_ways = lcntx_l.thread_info.jc_ways;
+
     // JIT pack B (BF16): the pack-B kernel (full NR + fringe ladder) for the
     // AVX512-BF16 path. Generated while the (possibly F32-swapped) block sizes
     // are still in effect, mirroring the GEMM kernel init above. cs_b_use == 1
     // selects the row-major packer; cs_b_use != 1 (with rs_b_use == 1, i.e.
     // transB) selects the column-major 16x16 transpose packer.
     lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
-    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n_use,
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n_use, k,
                                        rs_b_use, cs_b_use, &lcntx_l);
 
     // A pack-B kernel is only generated when the configured arch has
@@ -403,6 +469,10 @@ aocl_gemm_bf16bf16f32of32(const char      order,
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         goto err_hndl;
     }
+
+    // Both inits are done, so the tile the packed buffers are written against
+    // is final.
+    dlp_upd_pack_strides(DLP_KERNEL_BF16BF16F32OF32, &lcntx_l);
 
     err = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx_l);
     if (err != DLP_CLSC_SUCCESS) {

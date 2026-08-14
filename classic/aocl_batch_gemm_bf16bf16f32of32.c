@@ -279,6 +279,26 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
             goto err_hndl;
         }
 
+        // A malformed hint is refused here rather than modelled against. Only
+        // the negative test applies: the decorator splits the pool across the
+        // GEMMs in the group, so no one of them runs on the count this runtime
+        // states and there is nothing here to hold nt_hint to. The tile is
+        // therefore costed against nt_hint rather than the count this GEMM
+        // runs on; the panel width both ends derive from the same hints
+        // either way.
+        err = dlp_gemm_validate_hints(&lcntx_l);
+        if (err != DLP_CLSC_SUCCESS) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "GEMM hints must be zero (unset) or positive, got "
+                     "m_hint: %ld nt_hint: %ld\n",
+                     (lcntx_l.gemm_kernel_hints).m_hint,
+                     (lcntx_l.gemm_kernel_hints).nt_hint);
+            dlp_print_msg(msg, __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
         // All the g_sz inputs in a given group will have the same matrix
@@ -303,7 +323,7 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
         // selects the column-major 16x16 transpose packer.
         lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
         dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OF32, n_local,
-                                           rs_b, cs_b, &lcntx_l);
+                                           k_local, rs_b, cs_b, &lcntx_l);
 
         // A pack-B kernel is only generated when the configured arch has
         // AVX512-BF16. Without it, BF16 reroutes to the F32 kernels, which
@@ -317,6 +337,10 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
             goto err_hndl;
         }
+
+        // Both inits are done, so the tile the packed buffers are written
+        // against is final.
+        dlp_upd_pack_strides(DLP_KERNEL_BF16BF16F32OF32, &lcntx_l);
 
         err = dlp_gemm_validate_metadata_with_lcntx(metadata[gc_i], &lcntx_l);
         if (err != DLP_CLSC_SUCCESS) {
@@ -600,6 +624,26 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
             goto err_hndl;
         }
 
+        // A malformed hint is refused here rather than modelled against. Only
+        // the negative test applies: the decorator splits the pool across the
+        // GEMMs in the group, so no one of them runs on the count this runtime
+        // states and there is nothing here to hold nt_hint to. The tile is
+        // therefore costed against nt_hint rather than the count this GEMM
+        // runs on; the panel width both ends derive from the same hints
+        // either way.
+        err = dlp_gemm_validate_hints(&lcntx_l);
+        if (err != DLP_CLSC_SUCCESS) {
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "GEMM hints must be zero (unset) or positive, got "
+                     "m_hint: %ld nt_hint: %ld\n",
+                     (lcntx_l.gemm_kernel_hints).m_hint,
+                     (lcntx_l.gemm_kernel_hints).nt_hint);
+            dlp_print_msg(msg, __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], err);
+            goto err_hndl;
+        }
+
         // Initialize DLP Plus kernel path.
         lcntx_l.dlp_kernel_hndl.kernel_base = NULL;
         // All the g_sz inputs in a given group will have the same matrix
@@ -625,7 +669,7 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
         // does not depend on the GEMM output type.
         lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
         dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_BF16BF16F32OBF16, n_local,
-                                           rs_b, cs_b, &lcntx_l);
+                                           k_local, rs_b, cs_b, &lcntx_l);
 
         // A pack-B kernel is only generated when the configured arch has
         // AVX512-BF16. Without it, BF16 reroutes to the F32 kernels, which
@@ -639,6 +683,10 @@ aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
             goto err_hndl;
         }
+
+        // Both inits are done, so the tile the packed buffers are written
+        // against is final.
+        dlp_upd_pack_strides(DLP_KERNEL_BF16BF16F32OBF16, &lcntx_l);
 
         err = dlp_gemm_validate_metadata_with_lcntx(metadata[gc_i], &lcntx_l);
         if (err != DLP_CLSC_SUCCESS) {

@@ -64,6 +64,17 @@ typedef enum
     DLP_CLSC_INVALID_BLOCK_PARAMS, /**< Invalid blocking parameters provided */
     DLP_CLSC_INVALID_SUP_THRESHOLDS, /**< Invalid SUP threshold parameters
                                         provided */
+    DLP_CLSC_INVALID_GEMM_HINTS,     /**< A GEMM hint is negative. Zero is the
+                                        documented way to leave a hint unset; a
+                                        negative value describes no problem, so it
+                                        is malformed input rather than an
+                                        omission. */
+    DLP_CLSC_HINT_MISMATCH, /**< A GEMM over a reordered B will run on a
+                               different number of threads than the nt_hint
+                               the buffer was reordered under. The reorder
+                               resolved a partition from that count and packed
+                               the panel to a width derived from it, and this
+                               call cannot reproduce either. */
     DLP_CLSC_ERROR_MAX /**< Maximum error code value (for bounds checking) */
 } dlp_clsc_err_t;
 

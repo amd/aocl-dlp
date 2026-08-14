@@ -29,6 +29,7 @@
 #pragma once
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 #include <optional>
 
@@ -37,7 +38,9 @@
 #include "classic/dlp_macros.h"
 #include "de_backend_utils.hh"
 #include "de_input.hh"
+#include "de_shape_model.hh"
 #include "kernel_frame/kernel_frame_base.hh"
+#include "optimizer/de_optimizer.hh"
 #include "utils/float16_types.hh"
 
 namespace dlp::de {
@@ -65,10 +68,11 @@ static const kernel_frame::kernelInfo INVALID_KERNEL_INFO{
 
 static const kernel_frame::quantKernelInfo INVALID_GEMM_QUANT_KERNEL_INFO{};
 
-class iDEBackend
+class iDEBackend : public optimizer::gemmOptimizer
 {
   public:
-    virtual ~iDEBackend() = default;
+    ~iDEBackend() override = default;
+
     virtual std::optional<dlp::kernel_frame::kernelInfo> getKernelInfoForInput(
         iDEInput* in) = 0;
 
@@ -92,6 +96,9 @@ class iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info,
+        const dlp_gemm_kernel_hints_t*    gemm_hints,
+        md_t                              blksz_set_mask,
         bool                              rerouted_from_other_backend) = 0;
 
     virtual dlp::kernel_frame::kernelInfo getGemvKernelInfoForInputFastPath(
@@ -116,11 +123,27 @@ class iDEBackend
         md_t                              c_downscale,
         bool                              rerouted_from_other_backend) = 0;
 
+    // Pack-B kernel selection, and with it the packed panel width.
+    //
+    // This is where the width is decided on the Reorder path, so it consults
+    // the same rule the GEMM path does over the same model input. It takes the
+    // fields and builds that input itself, for the reason the GEMM path does:
+    // the two ends agree on a width only by running one search over one object,
+    // and an object assembled at the call site is an object that can drift from
+    // the one the other end assembled.
+    //
+    // Inside a GEMM the kernel init has already marked the tile in
+    // blksz_set_mask, which makes the model ineligible here and leaves nr_hint
+    // standing.
     virtual dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
-        [[maybe_unused]] md_t nc,
-        [[maybe_unused]] md_t kc,
-        [[maybe_unused]] md_t cs_src,
-        [[maybe_unused]] md_t nr_hint)
+        [[maybe_unused]] md_t                           nc,
+        [[maybe_unused]] md_t                           cs_src,
+        [[maybe_unused]] md_t                           n,
+        [[maybe_unused]] md_t                           k,
+        [[maybe_unused]] md_t                           mr_hint,
+        [[maybe_unused]] md_t                           nr_hint,
+        [[maybe_unused]] md_t                           blksz_set_mask,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints)
     {
         return kernel_frame::INVALID_PACK_KERNEL_INFO;
     }
@@ -155,7 +178,7 @@ class iQuantDEBackend
         md_t                              c_downscale) = 0;
 };
 
-class gemmF32DEBackend : public iDEBackend
+class gemmF32DEBackend final : public iDEBackend
 {
     bool                                isAvx512;
     bool                                isAvx2;
@@ -340,6 +363,9 @@ class gemmF32DEBackend : public iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        dlp_gemm_thread_info_t*,
+        const dlp_gemm_kernel_hints_t*,
+        md_t,
         bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -503,10 +529,16 @@ class gemmF32DEBackend : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
-        [[maybe_unused]] md_t nc,
-        [[maybe_unused]] md_t kc,
-        md_t                  cs_src,
-        md_t                  nr_hint) override final
+        [[maybe_unused]] md_t                           nc,
+        md_t                                            cs_src,
+        [[maybe_unused]] md_t                           n,
+        [[maybe_unused]] md_t                           k,
+        [[maybe_unused]] md_t                           mr_hint,
+        md_t                                            nr_hint,
+        [[maybe_unused]] md_t                           blksz_set_mask,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints)
+        override final // Should we pass a pointer, so that it can be NULL for
+                       // non-supported DEs?
     {
         if (!canGeneratePackBKernelInfo) {
             return kernel_frame::INVALID_PACK_KERNEL_INFO;
@@ -527,14 +559,43 @@ class gemmF32DEBackend : public iDEBackend
             kInstPref = kernel_frame::kernelInstrPreference::avx2_ymm_favour;
         }
 
+        // No shape model on this backend, so the incoming NR stands.
         return dlp::kernel_frame::packKernelInfo(
             nr_hint, 1, kInstPref, kernel_frame::DataType::f32,
             kernel_frame::DataType::f32, colMajor);
     }
 };
 
-class gemmBF16DEBackend : public iDEBackend
+// final, and not as documentation. The optimizer reaches its datatype hooks,
+// adjustWays and costEval, through the base that defines them. With this class
+// left open, a further-derived backend could re-override either, so the
+// compiler would have to keep the vtable load. That measured as two indirect
+// calls inside the per-candidate loop; final removes them.
+class gemmBF16DEBackend final : public iDEBackend
 {
+  public:
+    // This backend's half of the shape model: the tiles its JIT generator can
+    // emit. That is a fact about this datatype on this microarchitecture, so it
+    // is not the model's to know. proposeShape below hands the set to the
+    // shared search in optimizer/de_optimizer.hh, which is why another datatype
+    // contributes a different set rather than a different algorithm.
+    //
+    // One entry, the Zen5 BF16 default, which leaves the sweep nothing to rank:
+    // the only admissible tile wins, and it is the tile the context already
+    // held. Widening this set is what gives costEval something to tell apart.
+    static constexpr shape_model::kernelDims candidateTiles[] = {
+        { 6, 64 },
+    };
+
+    // The n at or below which only the NR=16 kernel family is reachable, and
+    // the MR raised to there. Named because the rule that applies them and the
+    // flag that tells the JIT generator which NR variants it can skip both read
+    // them. Where the 16 comes from is written down at the rule, in the
+    // kernel-info fold.
+    static constexpr md_t skinnyNThreshold = 16;
+    static constexpr md_t skinnyNMr        = 16;
+
+  private:
     bool                                isAvx512;
     bool                                isAvx2;
     bool                                isAvx512Bf16;
@@ -543,6 +604,96 @@ class gemmBF16DEBackend : public iDEBackend
     std::unique_ptr<gemmF32DEBackend>
         f32Backend; // For rerouting when AVX512BF16 is not supported
 
+    // The tiles are tuned against the Zen5 cache hierarchy, so the model is
+    // fenced to that architecture. Resolved once at construction, since it
+    // cannot change for the life of the process.
+    bool isAnalyticalShapeModelArch;
+
+    // The whole screen: this architecture, and whether the object describes a
+    // GEMM well enough to choose a tile for. See
+    // gemmShapeModelUtils::isEligible for the second half.
+    //
+    // Over a reordered B the object holds the hints, so an unstated pair fails
+    // this and both ends fall to the context tile. Under any other tag it holds
+    // the call, which describes itself.
+    //
+    // This is the one predicate that decides the arm. The kernel-info fold asks
+    // it again before publishing a split, and asking twice is the point: a
+    // split may only be published by the arm that resolved one.
+    DLP_ALWAYS_INLINE bool canUseAnalyticalShapeModel(
+        const shape_model::gemmShapeModelInput& in) const
+    {
+        return isAnalyticalShapeModelArch
+               && gemmShapeModelUtils::isEligible(in);
+    }
+
+  protected:
+    // What BF16 does to the seed partition. It matches
+    // dlp_gemm_bf16bf16f32of32_get_threading, with the runtime and context
+    // reads taken as arguments so a scoring loop can call it once per
+    // candidate.
+    //
+    // These two rebalances are the whole of this datatype's divergence from
+    // the shared skeleton in gemmThreadPartitioner, which is why the hook is
+    // per-datatype: F32's classic factorizer works from MC, NC and KC and does
+    // neither.
+    //
+    // always_inline for the same reason resolveGemmShape is, and it matters
+    // more here: this runs once per candidate rather than once per call, so an
+    // out-of-line copy would put a PLT call inside that loop.
+    DLP_ALWAYS_INLINE void adjustWays(md_t  mr,
+                                      md_t  nr,
+                                      md_t  m,
+                                      md_t  n,
+                                      md_t& nThreads,
+                                      md_t& icWays,
+                                      md_t& jcWays) const override final
+    {
+        const md_t mrBlks = (m + mr - 1) / mr;
+
+        // The following attempts to further redistribute the threads among the
+        // ic and jc ways, in case the initial partitioning is not optimal.
+        // This is done purely based on the total panels of work per thread,
+        // and we attempt to mitigate the imbalance by increasing the ic ways
+        // and decreasing the jc ways. We check if there is oversubsciption in
+        // the ic direction, before calling it.
+        if (mrBlks >= icWays) {
+            thread_partition::adjustIcJcWays(mr, nr, m, n, nThreads, icWays,
+                                             jcWays);
+        }
+
+        if (utils::math::isPrime(nThreads)) {
+            thread_partition::adjustForPrimeThreadCount(mr, nr, m, n, nThreads,
+                                                        icWays, jcWays);
+        }
+    }
+
+  public:
+    // This backend has a candidate set, so it runs the sweep instead of the
+    // inherited baseline.
+    DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult proposeShape(
+        const shape_model::gemmShapeModelInput& in) const override final
+    {
+        return sweepCandidates(in, candidateTiles);
+    }
+
+    // final so the call devirtualises, and always_inline because final alone
+    // is not enough. A virtual override is emitted as an interposable
+    // definition, which the compiler will not inline through even once the
+    // call binds statically. The sweep has to stay inlined here: measured out
+    // of line, it costs a PLT call on the per-call path.
+    //
+    // An out-of-line copy is still emitted to fill the vtable slot, and that
+    // is the one a caller holding an iDEBackend* reaches.
+    DLP_ALWAYS_INLINE shape_model::gemmShapeModelResult resolveGemmShape(
+        const shape_model::gemmShapeModelInput& in) const override final
+    {
+        return canUseAnalyticalShapeModel(in)
+                   ? gemmBF16DEBackend::proposeShape(in)
+                   : gemmBF16DEBackend::baselineShape(in);
+    }
+
+  private:
     DLP_ALWAYS_INLINE constexpr md_t getPrefetchDistance()
     {
         // Setting this to 40, which works for ZEN5. Should we set this in
@@ -667,6 +818,9 @@ class gemmBF16DEBackend : public iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        dlp_gemm_thread_info_t*           thread_info,
+        const dlp_gemm_kernel_hints_t*    gemm_hints,
+        md_t                              blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -679,7 +833,7 @@ class gemmBF16DEBackend : public iDEBackend
             return f32Backend->getGemmKernelInfoForInputFastPath(
                 k_dtype, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
                 beta, mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, true);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask, true);
         }
 
         if ((mr_hint <= 1) || (nr_hint <= 1)) {
@@ -696,47 +850,115 @@ class gemmBF16DEBackend : public iDEBackend
         std::tie(alphaScalingType, betaScalingType) =
             gemmDEBackendUtils::getScalingTypes<float>(alpha, beta, k, kc_hint);
 
-        md_t mr = mr_hint;
         md_t nr = nr_hint;
 
-        // Increasing MR helps when n<=16.
+        // For n<=16 only the NR=16 kernel family is reachable (lt16-mask for
+        // n<16, the full kernel at n==16), so the JIT generator can skip the
+        // wider NR variants. This says which kernels exist for the shape, not
+        // which tile was chosen, so it is read off the call on either arm.
+        const bool skinnyN = (n <= skinnyNThreshold) && (m > 0);
+
+        // A caller may not offer thread info at all, so read the pool through a
+        // zeroed default rather than branching on the pointer at each use.
+        static constexpr dlp_gemm_thread_info_t noThreadInfo{};
+        const dlp_gemm_thread_info_t&           threads =
+            (thread_info != nullptr) ? *thread_info : noThreadInfo;
+
+        // The hints are read whole and handed over as they were stated. Whether
+        // they describe anything is the tag's business, and makeModelInput
+        // settles it in one place: only a reordered B has a packed panel whose
+        // width has to be reproduced, and only there do the hints stand for the
+        // GEMM being modelled. Under any other tag they are not read, stated or
+        // not, so nothing upstream has to blank them.
+        const md_t m_hint  = (gemm_hints != nullptr) ? gemm_hints->m_hint : 0;
+        const md_t nt_hint = (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0;
+
+        const bool b_reordered = (mtag_b == AOCL_DLP_MEMORY_TAG::REORDERED);
+
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            m, n, k, mr_hint, nr_hint, blksz_set_mask, m_hint, nt_hint,
+            threads.num_threads, threads.ic_ways, threads.jc_ways, b_reordered);
+
+        // Qualified so the call binds statically. Left unqualified it is a
+        // virtual call the linker may interpose, which costs the inlining.
+        const shape_model::gemmShapeModelResult shape =
+            gemmBF16DEBackend::resolveGemmShape(in);
+
+        md_t mr = shape.mr;
+
+        nr = shape.nr;
+
+        // Two register-block rules, applied to whichever tile came back.
         //
-        // The default DE returns mr=6, nr=64. For shapes with n<=16 the
-        // dispatcher only ever reaches the NR=16 family of kernels (the
-        // lt16-mask kernel for n<16 and the NR=16 full kernel for n==16),
-        // so only 6 of the 32 ZMM registers are used as C accumulators --
-        // the other ~25 ZMMs sit idle.
+        // Both are facts about the call in hand, and the model answers for a
+        // GEMM that may not be this call: its input holds the hinted extents
+        // over a reordered B and carries no strides at all. Applying them here
+        // is sound because a packed B panel records only NR, which neither rule
+        // touches, so the two ends of a reorder still meet at the same width.
         //
-        // We bump mr to min(16, M) so each cached B line is now consumed
-        // by up to 16 rows of A instead of 6, raising B reuse and cutting
-        // the M-iteration count from ceil(M/6) to ceil(M/16). With
-        // bReg=1 (the only NR variant the skinny-N dispatch reaches),
-        // cReg=16 and aReg=15: well inside the 32-ZMM budget.
+        // The skinny-N bump. The default tile is 6x64, and at n<=16 only the
+        // NR=16 kernel family is reachable, where six of the 32 ZMMs hold C
+        // accumulators and roughly 25 sit idle. Raising MR to 16 feeds each
+        // cached B line to 16 rows of A instead of 6 and cuts the M-loop from
+        // ceil(m/6) to ceil(m/16), at cReg=16, aReg=15 and bReg=1, inside the
+        // budget. NR stays put, so the row-major NR=64 packed-B layout and the
+        // N-direction blocking are reused untouched.
         //
-        // nr stays at nr_hint (=64) so the existing row-major NR=64
-        // packed-B layout and the framework's N-direction blocking are
-        // reused unchanged. The JIT generator below skips the wider NR
-        // variants whose register budget would overflow at MR=16
-        // (NR>=32 needs cReg>=32); those slots are never reached at
-        // runtime for n<=16 anyway.
-        //
-        // For M < 16 we cap mr at m so the kernel uses an MR-partial
-        // kernel sized exactly to the input row count (single full
-        // panel, no fringe). This avoids leaving C ZMMs idle for tiny-M
-        // shapes.
-        bool skinnyN = false;
-        if (n <= 16 && m > 0) {
-            mr      = (m < 16) ? m : 16;
-            skinnyN = true;
+        // Below m=16 the cap is m itself, sizing the kernel to one full panel
+        // with no fringe. MR cannot exceed the rows the caller brought, which
+        // is the other half of why this reads m and not m_hint.
+        if (skinnyN) {
+            mr = std::min<md_t>(m, skinnyNMr);
         }
 
-        // L1-cache aliasing mitigation for the BF16 skinny-N GEMM bump.
-        // Same vulnerability as F32 skinnyN: MR=16 + unpacked A with
-        // rsA near a multiple of 4096B -> L1 conflict misses, ~40%
-        // slowdown. Cap MR to the alias-safe associativity bound.
-        if (skinnyN && mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED
+        // The L1 aliasing guard, which the bump above is what makes reachable.
+        // The vulnerability needs an MR over the L1D associativity to exist at
+        // all, so at the default 6 shouldUseMrSplit returns false and this
+        // costs a compare. Where MR did reach 16 and A is unpacked with a row
+        // stride landing within a hair of a multiple of the 4096 B L1D way
+        // size, every k-iteration takes conflict misses instead, for about 40%
+        // of throughput. Capping MR at the associativity bound puts each
+        // k-iteration's rows back inside one set's worth of ways.
+        //
+        // Once the sweep can pick an MR of its own, both rules have to move
+        // into admissibility: a tile adjusted after the fact is one the split
+        // was not costed against, and the two have to be the same pair.
+        if (skinnyN && (mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED)
             && alias_detection::shouldUseMrSplit(rs_a, sizeof(uint16_t), mr)) {
             mr = std::min<md_t>(mr, alias_detection::getAliasSafeMrCap());
+        }
+
+        // Publish the split, so the threading decorator takes it instead of
+        // deriving its own. Both run the same heuristic over the same extents,
+        // so the partition does not change; what changes is that the split a
+        // candidate was costed against is the split that executes. Over a
+        // reordered B those extents are the hinted GEMM, and the split goes out
+        // all the same, because substituting another here would break the one
+        // property publishing exists to hold.
+        //
+        // Two cases publish nothing, and both are decided here because only
+        // this level can see them.
+        //
+        // The baseline arm resolves no split, so it has none to publish. Its
+        // result echoes the input's ways, which over an unhinted reordered B
+        // are zeros standing for a GEMM nobody described.
+        //
+        // A pinned runtime is already an answer. Over a reordered B the model
+        // cannot even see the pin, since the ways go in zeroed so that both
+        // ends rank alike, so a split from there would discard DLP_IC_NT /
+        // DLP_JC_NT. Such a call is still served the tile both ends agree on:
+        // that width came from nt_hint, which the entry point has already held
+        // the pin's product to. Elsewhere the factorizer was handed the pin and
+        // returns it unchanged, so withholding it costs nothing and says the
+        // true thing, that the partition is the caller's.
+        const bool publishSplit = canUseAnalyticalShapeModel(in)
+                                  && (threads.ic_ways <= 0)
+                                  && (threads.jc_ways <= 0);
+
+        if ((thread_info != nullptr) && publishSplit) {
+            thread_info->num_threads = shape.num_threads;
+            thread_info->ic_ways     = shape.ic_ways;
+            thread_info->jc_ways     = shape.jc_ways;
         }
 
         md_t k_unroll        = 1;
@@ -759,10 +981,14 @@ class gemmBF16DEBackend : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::packKernelInfo getGemmPackBInfoForInputFastPath(
-        [[maybe_unused]] md_t nc,
-        [[maybe_unused]] md_t kc,
-        md_t                  cs_src,
-        md_t                  nr_hint) override final
+        [[maybe_unused]] md_t          nc,
+        md_t                           cs_src,
+        md_t                           n,
+        md_t                           k,
+        md_t                           mr_hint,
+        md_t                           nr_hint,
+        md_t                           blksz_set_mask,
+        const dlp_gemm_kernel_hints_t* gemm_hints) override final
     {
         // BF16 pack-B JIT is only valid on AVX-512-BF16. On a non-AVX-512-BF16
         // machine no JIT-based pack-B is taken at all: when the backend has
@@ -782,13 +1008,46 @@ class gemmBF16DEBackend : public iDEBackend
         // packing).
         constexpr md_t k_factor = 2;
 
+        // The model input, built exactly as the kernel init builds it, which is
+        // the whole of how a Reorder and a later GEMM arrive at one width.
+        //
+        // A Reorder is not a GEMM, so there is no call to answer for: no m, no
+        // thread count and no ways, and nothing in a packed panel depends on
+        // any of the three. The zeros say that rather than stand in for it.
+        //
+        // b_reordered is passed true because that is what this path is. There
+        // is no tag to read, reordering being the operation rather than a
+        // property of an operand, and the hints are the only extents on offer.
+        const shape_model::gemmShapeModelInput in = shape_model::makeModelInput(
+            /*m=*/0, n, k, mr_hint, nr_hint, blksz_set_mask,
+            (gemm_hints != nullptr) ? gemm_hints->m_hint : 0,
+            (gemm_hints != nullptr) ? gemm_hints->nt_hint : 0,
+            /*num_threads=*/0, /*ic_ways=*/0, /*jc_ways=*/0,
+            /*b_reordered=*/true);
+
+        // The Reorder path is the one that decides the width, and it decides it
+        // with the same call the GEMM path makes, so the two cannot drift.
+        // Inside a GEMM the kernel init has already marked the tile in
+        // blksz_set_mask, so this is ineligible and in.nr -- the NR that init
+        // settled -- stands.
+        //
+        // Only the NR is taken. The MR and the split that come back describe
+        // the GEMM the hints predict, and nothing in a packed B panel depends
+        // on either. Resolving them anyway is the price of running the
+        // identical search: a cost model ranks candidates by the split they
+        // would run under, so a tile-only variant here would be free to
+        // disagree with the GEMM.
+        const md_t nr = canUseAnalyticalShapeModel(in)
+                            ? gemmBF16DEBackend::proposeShape(in).nr
+                            : in.nr;
+
         return dlp::kernel_frame::packKernelInfo(
-            nr_hint, k_factor, eKernelInstPref, kernel_frame::DataType::bf16,
+            nr, k_factor, eKernelInstPref, kernel_frame::DataType::bf16,
             kernel_frame::DataType::bf16, colMajor);
     }
 };
 
-class gemmU8S8DEBackend : public iDEBackend
+class gemmU8S8DEBackend final : public iDEBackend
 {
     bool                                isAvx512;
     bool                                isAvx2;
@@ -913,6 +1172,9 @@ class gemmU8S8DEBackend : public iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        dlp_gemm_thread_info_t*,
+        const dlp_gemm_kernel_hints_t*,
+        md_t,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -975,7 +1237,7 @@ class gemmU8S8DEBackend : public iDEBackend
     }
 };
 
-class gemmS8DEBackend : public iDEBackend
+class gemmS8DEBackend final : public iDEBackend
 {
     bool                                isAvx512;
     bool                                isAvx2;
@@ -1102,6 +1364,9 @@ class gemmS8DEBackend : public iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        dlp_gemm_thread_info_t*,
+        const dlp_gemm_kernel_hints_t*,
+        md_t,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1242,7 +1507,7 @@ class gemmQuantS8DEBackend : public iQuantDEBackend
     }
 };
 
-class gemmFP16DEBackend : public iDEBackend
+class gemmFP16DEBackend final : public iDEBackend
 {
     bool                                isAvx512;
     bool                                isAvx512FP16;
@@ -1353,6 +1618,9 @@ class gemmFP16DEBackend : public iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        dlp_gemm_thread_info_t*,
+        const dlp_gemm_kernel_hints_t*,
+        md_t,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1396,7 +1664,7 @@ class gemmFP16DEBackend : public iDEBackend
  * Requires AVX-512F + AVX-512BW only (NOT avx512fp16).
  * Alpha/beta are F32, accumulation is F32.
  */
-class gemmF32FP16DEBackend : public iDEBackend
+class gemmF32FP16DEBackend final : public iDEBackend
 {
     bool                                isAvx512;
     kernel_frame::kernelInstrPreference eKernelInstPref;
@@ -1504,6 +1772,9 @@ class gemmF32FP16DEBackend : public iDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale,
+        dlp_gemm_thread_info_t*,
+        const dlp_gemm_kernel_hints_t*,
+        md_t,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {

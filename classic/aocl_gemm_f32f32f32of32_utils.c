@@ -205,13 +205,16 @@ aocl_reorder_f32f32f32of32(const char      order,
 
     // JIT pack B: required for F32 GEMM reorder path.
     ((lcntx.dlp_pack_kernel_hndl).pack_b_hndl).kernel_base = NULL;
-    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_F32F32F32OF32, n, rs_b, cs_b,
-                                       &lcntx);
+    dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_F32F32F32OF32, n, k, rs_b,
+                                       cs_b, &lcntx);
 
     if (((lcntx.dlp_pack_kernel_hndl).pack_b_hndl).kernel_base == NULL) {
         DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_INVALID_JIT_KERNEL);
         return;
     }
+
+    // The init is done, so the panel width the reorder writes is final.
+    dlp_upd_pack_strides(DLP_KERNEL_F32F32F32OF32, &lcntx);
 
     err_no = dlp_gemm_validate_metadata_with_lcntx(metadata, &lcntx);
     if (err_no != DLP_CLSC_SUCCESS) {

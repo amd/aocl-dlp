@@ -90,38 +90,43 @@ get_kernel_family_name(kernelDatatype kDtype)
 }
 
 DLP_ALWAYS_INLINE static dlp::kernel_frame::kernelInfo
-dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
-                                 md_t                m,
-                                 md_t                n,
-                                 md_t                k,
-                                 md_t                rs_a,
-                                 md_t                cs_a,
-                                 md_t                rs_b,
-                                 md_t                cs_b,
-                                 md_t                rs_c,
-                                 md_t                cs_c,
-                                 void*               alpha,
-                                 void*               beta,
-                                 AOCL_DLP_MEMORY_TAG mtag_a,
-                                 AOCL_DLP_MEMORY_TAG mtag_b,
-                                 dlp_gemm_post_op*   metadata,
-                                 md_t                mr_hint,
-                                 md_t                nr_hint,
-                                 md_t                kc_hint,
-                                 md_t                c_downscale)
+dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype                 kDType,
+                                 md_t                           m,
+                                 md_t                           n,
+                                 md_t                           k,
+                                 md_t                           rs_a,
+                                 md_t                           cs_a,
+                                 md_t                           rs_b,
+                                 md_t                           cs_b,
+                                 md_t                           rs_c,
+                                 md_t                           cs_c,
+                                 void*                          alpha,
+                                 void*                          beta,
+                                 AOCL_DLP_MEMORY_TAG            mtag_a,
+                                 AOCL_DLP_MEMORY_TAG            mtag_b,
+                                 dlp_gemm_post_op*              metadata,
+                                 md_t                           mr_hint,
+                                 md_t                           nr_hint,
+                                 md_t                           kc_hint,
+                                 md_t                           c_downscale,
+                                 dlp_gemm_thread_info_t*        thread_info,
+                                 const dlp_gemm_kernel_hints_t* gemm_hints,
+                                 md_t                           blksz_set_mask)
 {
     if (kDType == dlp::kernel_frame::kernelDatatype::f32f32f32of32) {
         return dlp::de::decisionEngineInstance()
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmF32DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, kernelRoutineType::gemm, kDType);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask,
+                kernelRoutineType::gemm, kDType);
     } else if (kDType == dlp::kernel_frame::kernelDatatype::f16f16f16of16) {
         return dlp::de::decisionEngineInstance()
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmFP16DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, kernelRoutineType::gemm, kDType);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask,
+                kernelRoutineType::gemm, kDType);
     } else if (kDType == dlp::kernel_frame::kernelDatatype::f16f16f16of32) {
         // Of32: GEMV-shaped (m=1 or n=1) inputs route through the
         // dedicated FP16 GEMV kernels which carry a c_downscale-aware F32
@@ -133,7 +138,8 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmFP16DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, kernelRoutineType::gemm, kDType);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask,
+                kernelRoutineType::gemm, kDType);
     } else if (kDType == dlp::kernel_frame::kernelDatatype::f32f16f32of32) {
         // F32×FP16→F32 mixed-precision: uses separate backend (no avx512fp16
         // requirement)
@@ -141,7 +147,8 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmF32FP16DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, kernelRoutineType::gemm, kDType);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask,
+                kernelRoutineType::gemm, kDType);
     } else if ((kDType == dlp::kernel_frame::kernelDatatype::bf16bf16f32obf16)
                || (kDType
                    == dlp::kernel_frame::kernelDatatype::bf16bf16f32of32)) {
@@ -149,7 +156,8 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmBF16DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, kernelRoutineType::gemm, kDType);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask,
+                kernelRoutineType::gemm, kDType);
     } else if ((kDType == dlp::kernel_frame::kernelDatatype::u8s8s32os32)
                || (kDType == dlp::kernel_frame::kernelDatatype::u8s8s32of32)
                || (kDType == dlp::kernel_frame::kernelDatatype::u8s8s32of16)
@@ -160,7 +168,8 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmU8S8DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, kernelRoutineType::gemm, kDType);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask,
+                kernelRoutineType::gemm, kDType);
     } else if ((kDType == dlp::kernel_frame::kernelDatatype::s8s8s32os32)
                || (kDType == dlp::kernel_frame::kernelDatatype::s8s8s32of32)
                || (kDType == dlp::kernel_frame::kernelDatatype::s8s8s32of16)
@@ -171,7 +180,8 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
             .getGemmKernelInfoForInputFastPath<dlp::de::gemmS8DEBackend>(
                 m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, mr_hint, nr_hint, kc_hint,
-                c_downscale, kernelRoutineType::gemm, kDType);
+                c_downscale, thread_info, gemm_hints, blksz_set_mask,
+                kernelRoutineType::gemm, kDType);
     } else {
         return dlp::kernel_frame::kernelInfo();
     }
@@ -179,8 +189,7 @@ dlp_get_gemm_kernelInfo_by_dtype(kernelDatatype      kDType,
 
 // This function is not in the hot path, and therefore not inlined to avoid
 // unnecessary hot path code bloat.
-[[gnu::noinline]]
-static dlp::kernel_frame::kernelBaseRef
+[[gnu::noinline]] static dlp::kernel_frame::kernelBaseRef
 dlp_generate_jit_kernel(dlp::kernel_frame::kernelInfo& fastKI,
                         kernelDatatype                 kDType)
 {
@@ -223,6 +232,76 @@ dlp_generate_jit_kernel(dlp::kernel_frame::kernelInfo& fastKI,
     }
 }
 
+// Strides of the packed A and B buffers, a function of the tile and the number
+// of elements the kernel's dot-product instruction consumes per step: 4 int8
+// for VNNI, 2 bf16 for DPBF16PS, 1 for the float kernels.
+//
+// Not derived when application metadata is merged into the context, because
+// that happens before the DE has chosen a tile. packb_rs is the row stride of
+// the panel the pack kernel is about to write; a value derived against a
+// different NR than the one selected does not fail, it returns wrong numbers.
+// The caller runs this once its inits are done -- MR is settled by the kernel
+// init, NR by whichever of the two ran last -- which is what keeps the strides
+// and the panel in agreement.
+void
+dlp_upd_pack_strides(kernel_datatype_t k_dtype, dlp_gemm_cntx_t* cntx)
+{
+    if (!cntx) {
+        return;
+    }
+
+    constexpr md_t cache_line_size = 64;
+
+    const kernelDatatype kDType = getKernelDatatype(k_dtype);
+
+    const md_t mr = cntx->blksz.MR;
+    const md_t nr = cntx->blksz.NR;
+
+    md_t elems_per_step = 0;
+    md_t packb_cs       = 0;
+
+    switch (kDType) {
+        case kernelDatatype::u8s8s32os32:
+        case kernelDatatype::u8s8s32of32:
+        case kernelDatatype::u8s8s32of16:
+        case kernelDatatype::u8s8s32obf16:
+        case kernelDatatype::u8s8s32ou8:
+        case kernelDatatype::u8s8s32os8:
+        case kernelDatatype::s8s8s32ou8:
+        case kernelDatatype::s8s8s32os8:
+        case kernelDatatype::s8s8s32obf16:
+        case kernelDatatype::s8s8s32of32:
+        case kernelDatatype::s8s8s32of16:
+        case kernelDatatype::s8s8s32os32:
+            elems_per_step = 4;
+            packb_cs       = cache_line_size / (md_t)sizeof(int8_t);
+            break;
+
+        case kernelDatatype::bf16bf16f32obf16:
+        case kernelDatatype::bf16bf16f32of32:
+            elems_per_step = 2;
+            packb_cs       = cache_line_size / (md_t)sizeof(int16_t);
+            break;
+
+        case kernelDatatype::f32f32f32of32:
+        case kernelDatatype::f16f16f16of16:
+        case kernelDatatype::f16f16f16of32:
+        case kernelDatatype::f32f16f32of32:
+            elems_per_step = 1;
+            packb_cs       = 1;
+            break;
+
+        default:
+            // No kernel, so nothing reads these. Leave the defaults alone.
+            return;
+    }
+
+    cntx->pack_s.packa_rs = elems_per_step;
+    cntx->pack_s.packa_cs = elems_per_step * mr;
+    cntx->pack_s.packb_rs = elems_per_step * nr;
+    cntx->pack_s.packb_cs = packb_cs;
+}
+
 // Do NOT add likely/unlikely hints or __builtin_expect to the if-conditions
 // in this function, even though the error paths are rare. [[gnu::flatten]]
 // and [[gnu::aligned(64)]] attributes create a specific code layout optimized
@@ -232,8 +311,7 @@ dlp_generate_jit_kernel(dlp::kernel_frame::kernelInfo& fastKI,
 // predicted. Modern branch predictors achieve >99% accuracy on these
 // conditions after warmup, so prediction hints provide zero benefit while the
 // code layout destruction causes measurable harm.
-[[gnu::flatten]] [[gnu::aligned(64)]]
-void
+[[gnu::flatten]] [[gnu::aligned(64)]] void
 dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
                              [[maybe_unused]] char storage_format,
                              AOCL_DLP_MEMORY_TAG   mtag_a,
@@ -263,10 +341,20 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
         return;
     }
 
+    // Nothing here tells the optimizer whether to run. It works that out from
+    // blksz_set_mask, which already records which block sizes the application
+    // authored and which an earlier init settled. Either way those are not the
+    // library's to choose.
+    //
+    // A reordered B needs one more thing. The model has to reproduce a width
+    // the panel already has, and it can only do that from the hint pair. If
+    // either hint is zero it is ineligible, and both ends stay on the context
+    // NR.
     dlp::kernel_frame::kernelInfo fastKI = dlp_get_gemm_kernelInfo_by_dtype(
         kDType, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
         mtag_a, mtag_b, metadata, cntx->blksz.MR, cntx->blksz.NR,
-        cntx->blksz.KC, c_downscale);
+        cntx->blksz.KC, c_downscale, &cntx->thread_info,
+        &cntx->gemm_kernel_hints, cntx->blksz_set_mask);
 
     if ((fastKI.mr <= 0) || (fastKI.nr <= 0)) {
         cntx->dlp_kernel_hndl.kernel_base = nullptr;
@@ -286,9 +374,31 @@ dlp_init_and_get_kernel_hndl(kernel_datatype_t     k_dtype,
     cntx->blksz.MR = cntx->dlp_kernel_hndl.mr = fastKI.mr;
     cntx->blksz.NR = cntx->dlp_kernel_hndl.nr = fastKI.nr;
     cntx->blksz.KC                            = fastKI.kc;
-    // Always round MC and NC to multiples of MR and NR respectively.
+
+    // The tile is settled for the rest of this call, so record it the same way
+    // an application-authored tile is recorded. That is what a pack-B init
+    // later in this call reads to know the width is not its to choose, without
+    // either side having to know which of them runs first. The context is a
+    // per-call copy, so this does not reach the next call.
+    cntx->blksz_set_mask |= DLP_BLKSZ_SET_MR | DLP_BLKSZ_SET_NR;
+    // Snap MC and NC onto the chosen tile unconditionally, including where the
+    // application authored them: metadata may state MC and NC while leaving MR
+    // and NR to the library, and the pair it stated need not divide the tile
+    // the DE picked. What reaches the five-loop has to fit the kernel.
+    //
+    // Whether the snap was acceptable is the validator's call --
+    // dlp_gemm_validate_metadata_with_lcntx rejects a blksz that no longer
+    // matches what was asked for. Snapping is what makes that check fire on
+    // the stated value rather than on a weaker divisibility predicate, and it
+    // is a no-op wherever the stated value already divides the tile.
     cntx->blksz.MC = ((cntx->blksz.MC + fastKI.mr - 1) / fastKI.mr) * fastKI.mr;
     cntx->blksz.NC = ((cntx->blksz.NC + fastKI.nr - 1) / fastKI.nr) * fastKI.nr;
+
+    // The context now carries the block sizes decided above. The thread
+    // factorization in cntx->thread_info is not decided here. The shape model
+    // hands the caller's ways back as it found them, and the threading
+    // decorator derives the split later, against this call's real extents and
+    // the tile just chosen.
 
     cntx->dlp_kernel_hndl.kDtype   = k_dtype;
     cntx->dlp_kernel_hndl.invokeRD = fastKI.invokeRD;
@@ -324,20 +434,29 @@ dlp_generate_packb_jit_kernel(dlp::kernel_frame::packKernelInfo& packKI,
 }
 
 DLP_ALWAYS_INLINE static dlp::kernel_frame::packKernelInfo
-dlp_get_packb_kernelInfo_by_dtype(
-    kernelDatatype kDType, md_t nc, md_t kc, md_t cs_src, md_t nr_hint)
+dlp_get_packb_kernelInfo_by_dtype(kernelDatatype                 kDType,
+                                  md_t                           nc,
+                                  md_t                           cs_src,
+                                  md_t                           n,
+                                  md_t                           k,
+                                  md_t                           mr_hint,
+                                  md_t                           nr_hint,
+                                  md_t                           blksz_set_mask,
+                                  const dlp_gemm_kernel_hints_t* gemm_hints)
 {
     if (kDType == kernelDatatype::f32f32f32of32) {
         return dlp::de::decisionEngineInstance()
             .getGemmPackBInfoForInputFastPath<dlp::de::gemmF32DEBackend>(
-                nc, kc, cs_src, nr_hint, kDType);
+                nc, cs_src, n, k, mr_hint, nr_hint, blksz_set_mask, gemm_hints,
+                kDType);
     }
 
     else if (kDType == kernelDatatype::bf16bf16f32of32
              || kDType == kernelDatatype::bf16bf16f32obf16) {
         return dlp::de::decisionEngineInstance()
             .getGemmPackBInfoForInputFastPath<dlp::de::gemmBF16DEBackend>(
-                nc, kc, cs_src, nr_hint, kDType);
+                nc, cs_src, n, k, mr_hint, nr_hint, blksz_set_mask, gemm_hints,
+                kDType);
     }
 
     return dlp::kernel_frame::packKernelInfo();
@@ -346,6 +465,7 @@ dlp_get_packb_kernelInfo_by_dtype(
 void
 dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
                                    md_t              n,
+                                   md_t              k,
                                    md_t              rs_src,
                                    md_t              cs_src,
                                    dlp_gemm_cntx_t*  cntx)
@@ -367,10 +487,19 @@ dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
 
     // Currently n is passed in place of nc. Need to revisit this when there
     // is clarity on what is required.
-    md_t                              nc = n;
+    md_t nc = n;
+
+    // The context fields the model is a function of go down as they stand, and
+    // the backend assembles them, exactly as the kernel init above hands its
+    // own down for the same treatment. The hints are the only description
+    // available here of the GEMM this panel is being prepared for, and a later
+    // GEMM over this buffer hands the same pair in turn. A zero in either
+    // leaves the model ineligible and the context NR standing, which is still a
+    // width both ends agree on.
     dlp::kernel_frame::packKernelInfo packKI =
-        dlp_get_packb_kernelInfo_by_dtype(kDType, nc, cntx->blksz.KC, cs_src,
-                                          cntx->blksz.NR);
+        dlp_get_packb_kernelInfo_by_dtype(
+            kDType, nc, cs_src, n, k, cntx->blksz.MR, cntx->blksz.NR,
+            cntx->blksz_set_mask, &cntx->gemm_kernel_hints);
 
     if (packKI.panel_dim <= 0) {
         b_hndl->kernel_base = nullptr;
@@ -388,6 +517,19 @@ dlp_init_and_get_packb_kernel_hndl(kernel_datatype_t k_dtype,
                               : nullptr;
     b_hndl->kernel_base = static_cast<void*>(rawPtr);
     cntx->blksz.NR = b_hndl->panel_dim = packKI.panel_dim;
+
+    // The width is settled, whether this init chose it or inherited it from a
+    // kernel init earlier in the call. Recording it is what lets a kernel init
+    // that runs after this one honour it instead of deriving its own.
+    //
+    // Only NR, though the model returns the pair and the MR is there for the
+    // taking. NR is the half that is layout-bearing, so it is the half this
+    // init has standing to settle; MR is a per-call compute choice, and on the
+    // Reorder path there is no call yet to make it for. Writing one would also
+    // put this path on the hook for snapping MC onto it -- the validator
+    // requires MC % MR -- and a pack-B init has no business rewriting the
+    // blocking parameters.
+    cntx->blksz_set_mask |= DLP_BLKSZ_SET_NR;
     // Always round NC to multiples of panel_dim (NR) for PackB kernel.
     cntx->blksz.NC =
         ((cntx->blksz.NC + packKI.panel_dim - 1) / packKI.panel_dim)

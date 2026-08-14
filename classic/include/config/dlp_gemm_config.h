@@ -48,6 +48,106 @@ dlp_gemm_upd_cntx_with_metadata(AOCL_DLP_OPERATION_TYPE op,
                                 dlp_gemm_cntx_t*        lcntx,
                                 dlp_metadata_t*         metadata);
 
+// The size of the thread pool a call will actually run on.
+//
+// The runtime reports this two different ways and never both at once. Ways
+// outrank counts in its precedence, and when ways win it leaves the count at
+// -1, so a pinned run answers "no count" rather than answering wrongly. The
+// product of the ways is that run's pool. A pin of one way alone is filled to
+// 1 x n on the way out of dlp_init_threading; filling again here costs a
+// compare and keeps this a function of its own arguments.
+static inline md_t
+dlp_gemm_effective_thread_count(md_t num_threads, md_t ic_ways, md_t jc_ways)
+{
+    if ((ic_ways > 0) || (jc_ways > 0)) {
+        const md_t ic = (ic_ways > 0) ? ic_ways : 1;
+        const md_t jc = (jc_ways > 0) ? jc_ways : 1;
+
+        return ic * jc;
+    }
+
+    return num_threads;
+}
+
+// A hint that is not a number of anything: there is no m of -1 and no pool of
+// -1 threads. That is malformed input rather than another spelling of the unset
+// sentinel, and it is refused wherever it is stated -- over a reordered B, a
+// packed one, or an untagged one. Nothing reads a hint under those other tags,
+// but accepting a malformed one in silence would leave a caller believing it
+// had said something.
+//
+// This is the whole of what a Reorder can check. It has no call in hand and no
+// runtime describing one, so the thread count below is not its business.
+static inline dlp_clsc_err_t
+dlp_gemm_validate_hints(const dlp_gemm_cntx_t* lcntx)
+{
+    if (lcntx == NULL) {
+        return DLP_CLSC_NULL_POINTER;
+    }
+
+    if (((lcntx->gemm_kernel_hints).m_hint < 0)
+        || ((lcntx->gemm_kernel_hints).nt_hint < 0)) {
+        return DLP_CLSC_INVALID_GEMM_HINTS;
+    }
+
+    return DLP_CLSC_SUCCESS;
+}
+
+// The rest of the contract, which only a GEMM can be held to, because only a
+// GEMM knows the pool it will run on.
+//
+// Over a reordered B: zero is the sentinel for "unset" and leaves both ends on
+// the context tile, which agrees. nt_hint must equal the pool this call will
+// run on, because the Reorder resolved a partition from it and packed the panel
+// to a width derived from that, which a differently sized pool cannot
+// reproduce.
+//
+// The pool, not the partition: a caller pinning DLP_IC_NT / DLP_JC_NT to ways
+// that multiply to nt_hint is served. The width was derived from the count
+// alone, the ways never entered that derivation, and the pin is honoured when
+// the kernel runs, so any factorization of the same count is expressible.
+//
+// m_hint is deliberately not compared against the call. One Reorder of the
+// weights feeds many GEMMs at whatever m each batch brings, so a differing m is
+// the case this API exists for; it is charged in shape rather than in errors,
+// running a tile resolved for the characteristic m instead of its own.
+//
+// mtag_b must be the value handed to the decision engine, not the caller's
+// original, since a column-major swap or a GEMV reroute can change it first.
+static inline dlp_clsc_err_t
+dlp_gemm_validate_hints_with_call(const dlp_gemm_cntx_t* lcntx,
+                                  AOCL_DLP_MEMORY_TAG    mtag_b,
+                                  md_t                   num_threads,
+                                  md_t                   ic_ways,
+                                  md_t                   jc_ways)
+{
+    const dlp_clsc_err_t err = dlp_gemm_validate_hints(lcntx);
+    if (err != DLP_CLSC_SUCCESS) {
+        return err;
+    }
+
+    if (mtag_b != REORDERED) {
+        return DLP_CLSC_SUCCESS;
+    }
+
+    const md_t m_hint  = (lcntx->gemm_kernel_hints).m_hint;
+    const md_t nt_hint = (lcntx->gemm_kernel_hints).nt_hint;
+
+    // Not redundant with the comparison below, which is the reason to say so
+    // here: reaching that with nt_hint at zero would refuse every call that
+    // stated no hints at all.
+    if ((m_hint == 0) || (nt_hint == 0)) {
+        return DLP_CLSC_SUCCESS;
+    }
+
+    if (nt_hint
+        != dlp_gemm_effective_thread_count(num_threads, ic_ways, jc_ways)) {
+        return DLP_CLSC_HINT_MISMATCH;
+    }
+
+    return DLP_CLSC_SUCCESS;
+}
+
 static inline dlp_clsc_err_t
 dlp_gemm_validate_metadata_with_lcntx(dlp_metadata_t*  metadata,
                                       dlp_gemm_cntx_t* lcntx)

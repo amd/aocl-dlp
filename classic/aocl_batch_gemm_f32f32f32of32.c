@@ -295,7 +295,7 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
         // JIT pack B: required for F32 batch GEMM path.
         lcntx_l.dlp_pack_kernel_hndl.pack_b_hndl.kernel_base = NULL;
         dlp_init_and_get_packb_kernel_hndl(DLP_KERNEL_F32F32F32OF32, n_local,
-                                           rs_b, cs_b, &lcntx_l);
+                                           k_local, rs_b, cs_b, &lcntx_l);
 
         // n=1 gemv does not require a pack B kernel and is array copy if
         // rs_b > 1. Need to avoid null check in that case.
@@ -304,6 +304,10 @@ aocl_batch_gemm_f32f32f32of32(const char*      order,
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_INVALID_JIT_KERNEL);
             goto err_hndl;
         }
+
+        // Both inits are done, so the tile the packed buffers are written
+        // against is final.
+        dlp_upd_pack_strides(DLP_KERNEL_F32F32F32OF32, &lcntx_l);
 
         err = dlp_gemm_validate_metadata_with_lcntx(metadata[gc_i], &lcntx_l);
         if (err != DLP_CLSC_SUCCESS) {
