@@ -83,13 +83,18 @@ dlp_gemm_detect_thread_topo()
         int thread_place    = omp_get_place_num();
         int place_num_procs = omp_get_place_num_procs(thread_place);
 
-        // 1 extra int for storing num_procs value.
-        thread_core_bind_list[thread_num] =
-            malloc((place_num_procs + 1) * sizeof(int));
-        if (thread_core_bind_list[thread_num] != NULL) {
-            thread_core_bind_list[thread_num][0] = place_num_procs;
-            omp_get_place_proc_ids(thread_place,
-                                   &thread_core_bind_list[thread_num][1]);
+        if (place_num_procs == 0) {
+
+            thread_core_bind_list[thread_num] = NULL;
+        } else {
+            thread_core_bind_list[thread_num] =
+                malloc((place_num_procs + 1) * sizeof(int));
+
+            if (thread_core_bind_list[thread_num] != NULL) {
+                thread_core_bind_list[thread_num][0] = place_num_procs;
+                omp_get_place_proc_ids(thread_place,
+                                       &thread_core_bind_list[thread_num][1]);
+            }
         }
     }
 
