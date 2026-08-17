@@ -360,18 +360,6 @@ aocl_gemm_s8s8s32obf16_sym_quant(const char      order,
         goto err_hndl;
     }
 
-    /* Capability gate: sym_quant has no JIT alternative; post-ops with
-     * op_code > DLP_CLASSIC_MAX_POST_OP_CODE have no entry in the
-     * classic post_ops_labels[] dispatch table. Reject cleanly. */
-    if ((dlp_gemm_post_op_list_has_jit_only_op(post_op_list) == true)
-        && ((m == 1) || (n == 1))) {
-        dlp_print_msg(" Requested post-op is not supported in the "
-                      "classic kernel.",
-                      __FILE__, __LINE__);
-        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
-        goto err_hndl;
-    }
-
     // GLU is supported by BF16 with AVX512-BF16 ISA only and since it resides
     // in its own metadata slot rather than in seq_vector, so seq_length does
     // not capture it. Hence, adding a separate gate for it.

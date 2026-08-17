@@ -522,22 +522,29 @@ struct gemvN1Params : public kernelParams
     dlp_gemm_post_op*      kernelOpsList; // List of post-ops
     dlp_gemm_post_op_attr  kernelOpsAttr; // Attributes for post-ops
 
+    // Group-quantization state, consumed only by the quant GEMV kernels.
+    // non-quant callers leave all three zeroed.
+    md_t                      num_groups;  // K-groups covered by this call
+    md_t                      group_start; // index of the first K-group
+    dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+
     // Constructor
-    gemvN1Params(void*                 A,
-                 void*                 X,
-                 void*                 Y,
-                 md_t                  M,
-                 md_t                  K,
-                 md_t                  rs_a,
-                 md_t                  cs_a,
-                 md_t                  rs_b,
-                 md_t                  cs_b,
-                 md_t                  rs_c,
-                 md_t                  cs_c,
-                 void*                 alpha_acc,
-                 void*                 beta_acc,
-                 dlp_gemm_post_op*     kernelOps     = nullptr,
-                 dlp_gemm_post_op_attr kernelOpsAttr = {})
+    gemvN1Params(void*                     A,
+                 void*                     X,
+                 void*                     Y,
+                 md_t                      M,
+                 md_t                      K,
+                 md_t                      rs_a,
+                 md_t                      cs_a,
+                 md_t                      rs_b,
+                 md_t                      cs_b,
+                 md_t                      rs_c,
+                 md_t                      cs_c,
+                 void*                     alpha_acc,
+                 void*                     beta_acc,
+                 dlp_gemm_post_op*         kernelOps        = nullptr,
+                 dlp_gemm_post_op_attr     kernelOpsAttr    = {},
+                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {})
         : a(A)
         , x(X)
         , y(Y)
@@ -566,6 +573,9 @@ struct gemvN1Params : public kernelParams
         , kmask_i8_avx512{ 0 }
         , kernelOpsList(kernelOps)
         , kernelOpsAttr(kernelOpsAttr)
+        , num_groups(0)
+        , group_start(0)
+        , grpKernelOpsAttr(grpKernelOpsAttr)
     {
     }
 
@@ -599,6 +609,9 @@ struct gemvN1Params : public kernelParams
         , kmask_i8_avx512(other.kmask_i8_avx512)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , num_groups(other.num_groups)
+        , group_start(other.group_start)
+        , grpKernelOpsAttr(other.grpKernelOpsAttr)
     {
     }
 
@@ -632,6 +645,9 @@ struct gemvN1Params : public kernelParams
         , kmask_i8_avx512(other.kmask_i8_avx512)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , num_groups(other.num_groups)
+        , group_start(other.group_start)
+        , grpKernelOpsAttr(other.grpKernelOpsAttr)
     {
     }
 
@@ -666,6 +682,9 @@ struct gemvN1Params : public kernelParams
         kmask_i8_avx512   = other.kmask_i8_avx512;
         kernelOpsList     = other.kernelOpsList;
         kernelOpsAttr     = other.kernelOpsAttr;
+        num_groups        = other.num_groups;
+        group_start       = other.group_start;
+        grpKernelOpsAttr  = other.grpKernelOpsAttr;
         return *this;
     }
 
@@ -698,6 +717,9 @@ struct gemvN1Params : public kernelParams
         kmask_fp16_avx512 = { 0 };
         kmask_i8_avx512   = { 0 };
         kernelOpsList     = nullptr;
+        num_groups        = 0;
+        group_start       = 0;
+        grpKernelOpsAttr  = {};
     }
 };
 
@@ -748,24 +770,33 @@ struct gemvM1Params : public kernelParams
     dlp_gemm_post_op*     kernelOpsList; // List of post-ops
     dlp_gemm_post_op_attr kernelOpsAttr; // Attributes for post-ops
 
+    // Group-quantization state, consumed only by the quant GEMV kernels.
+    // non-quant callers leave all of these zeroed.
+    md_t num_groups;        // total K-groups covered by this call
+    md_t group_start;       // index of the first K-group
+    md_t groups_per_panel;  // K-groups in a full KC panel
+    md_t groups_last_panel; // K-groups in the trailing partial KC panel
+    dlp_gemm_grp_post_op_attr grpKernelOpsAttr;
+
     // Constructor
-    gemvM1Params(void*                 X,
-                 void*                 B,
-                 void*                 Y,
-                 md_t                  N,
-                 md_t                  K,
-                 md_t                  rs_x,
-                 md_t                  cs_x,
-                 md_t                  rs_b,
-                 md_t                  cs_b,
-                 md_t                  rs_y,
-                 md_t                  cs_y,
-                 md_t                  n_sub_updated,
-                 md_t                  jc_cur_loop_rem,
-                 void*                 alpha_acc,
-                 void*                 beta_acc,
-                 dlp_gemm_post_op*     kernelOps     = nullptr,
-                 dlp_gemm_post_op_attr kernelOpsAttr = {})
+    gemvM1Params(void*                     X,
+                 void*                     B,
+                 void*                     Y,
+                 md_t                      N,
+                 md_t                      K,
+                 md_t                      rs_x,
+                 md_t                      cs_x,
+                 md_t                      rs_b,
+                 md_t                      cs_b,
+                 md_t                      rs_y,
+                 md_t                      cs_y,
+                 md_t                      n_sub_updated,
+                 md_t                      jc_cur_loop_rem,
+                 void*                     alpha_acc,
+                 void*                     beta_acc,
+                 dlp_gemm_post_op*         kernelOps        = nullptr,
+                 dlp_gemm_post_op_attr     kernelOpsAttr    = {},
+                 dlp_gemm_grp_post_op_attr grpKernelOpsAttr = {})
         : x(X)
         , b(B)
         , y(Y)
@@ -801,6 +832,11 @@ struct gemvM1Params : public kernelParams
         , nmask_avx2{ 0, 0, 0, 0, 0, 0, 0, 0 }
         , kernelOpsList(kernelOps)
         , kernelOpsAttr(kernelOpsAttr)
+        , num_groups(0)
+        , group_start(0)
+        , groups_per_panel(0)
+        , groups_last_panel(0)
+        , grpKernelOpsAttr(grpKernelOpsAttr)
     {
     }
 
@@ -841,6 +877,11 @@ struct gemvM1Params : public kernelParams
         , nmask_avx2(other.nmask_avx2)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , num_groups(other.num_groups)
+        , group_start(other.group_start)
+        , groups_per_panel(other.groups_per_panel)
+        , groups_last_panel(other.groups_last_panel)
+        , grpKernelOpsAttr(other.grpKernelOpsAttr)
     {
     }
 
@@ -881,6 +922,11 @@ struct gemvM1Params : public kernelParams
         , nmask_avx2(other.nmask_avx2)
         , kernelOpsList(other.kernelOpsList)
         , kernelOpsAttr(other.kernelOpsAttr)
+        , num_groups(other.num_groups)
+        , group_start(other.group_start)
+        , groups_per_panel(other.groups_per_panel)
+        , groups_last_panel(other.groups_last_panel)
+        , grpKernelOpsAttr(other.grpKernelOpsAttr)
     {
     }
 
@@ -922,6 +968,11 @@ struct gemvM1Params : public kernelParams
         nmask_avx2        = other.nmask_avx2;
         kernelOpsList     = other.kernelOpsList;
         kernelOpsAttr     = other.kernelOpsAttr;
+        num_groups        = other.num_groups;
+        group_start       = other.group_start;
+        groups_per_panel  = other.groups_per_panel;
+        groups_last_panel = other.groups_last_panel;
+        grpKernelOpsAttr  = other.grpKernelOpsAttr;
         return *this;
     }
 
@@ -959,6 +1010,11 @@ struct gemvM1Params : public kernelParams
         nmask_avx2        = { 0, 0, 0, 0, 0, 0, 0, 0 };
         kernelOpsList     = nullptr;
         kernelOpsAttr     = {};
+        num_groups        = 0;
+        group_start       = 0;
+        groups_per_panel  = 0;
+        groups_last_panel = 0;
+        grpKernelOpsAttr  = {};
     }
 };
 

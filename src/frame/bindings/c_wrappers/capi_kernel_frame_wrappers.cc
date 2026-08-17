@@ -608,7 +608,7 @@ dlp_execute_kernel(dlp_kernel_hndl_t*    kernel_hndl,
         return;
     }
 
-    // Dont use new/delete and malloc/free calls here, since they are lock
+    // Don't use new/delete and malloc/free calls here, since they are lock
     // based and will result in performance degradation.
     // Extra m==1 check to ensure the mr=1 kernel used is intended for
     // GEMV-shaped inputs, not a tiny shape GEMM. Similarly for nr=1.
@@ -829,6 +829,8 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
                               void*                         B,
                               md_t                          rs_b,
                               md_t                          cs_b,
+                              md_t                          n_sub_updated,
+                              md_t                          jc_cur_loop_rem,
                               void*                         C,
                               md_t                          rs_c,
                               md_t                          cs_c,
@@ -842,29 +844,76 @@ dlp_execute_gemm_quant_kernel(dlp_gemm_quant_kernel_hndl_t* kernel_hndl,
         return;
     }
 
-    md_t       ps_b = 0;
-    gemmParams gemmParamsIn{ A,
-                             B,
-                             C,
-                             m,
-                             n,
-                             k,
-                             rs_a,
-                             cs_a,
-                             ps_a,
-                             rs_b,
-                             cs_b,
-                             ps_b,
-                             rs_c,
-                             cs_c,
-                             alpha,
-                             beta,
-                             post_ops_list,
-                             post_ops_attr,
-                             grp_post_ops_attr };
-
     kernelBase* kB = static_cast<kernelBase*>(kernel_hndl->kernel_base);
-    kB->operator()(std::addressof(gemmParamsIn));
+
+    // Don't use new/delete and malloc/free calls here, since they are lock
+    // based and will result in performance degradation.
+    // Extra m==1 check to ensure the mr=1 kernel used is intended for
+    // GEMV-shaped inputs, not a tiny shape GEMM. Similarly for nr=1
+    if ((kernel_hndl->mr == 1) && (m == 1)) {
+        gemvM1Params gemvM1ParamsIn{ A,
+                                     B,
+                                     C,
+                                     n,
+                                     k,
+                                     rs_a,
+                                     cs_a,
+                                     rs_b,
+                                     cs_b,
+                                     rs_c,
+                                     cs_c,
+                                     n_sub_updated,
+                                     jc_cur_loop_rem,
+                                     alpha,
+                                     beta,
+                                     post_ops_list,
+                                     post_ops_attr,
+                                     grp_post_ops_attr };
+        kB->operator()(std::addressof(gemvM1ParamsIn));
+    } else if ((kernel_hndl->nr == 1) && (n == 1)) {
+        gemvN1Params gemvN1ParamsIn{ A,
+                                     B,
+                                     C,
+                                     m,
+                                     k,
+                                     rs_a,
+                                     cs_a,
+                                     rs_b,
+                                     cs_b,
+                                     rs_c,
+                                     cs_c,
+                                     alpha,
+                                     beta,
+                                     post_ops_list,
+                                     post_ops_attr,
+                                     grp_post_ops_attr };
+        kB->operator()(std::addressof(gemvN1ParamsIn));
+    } else {
+        // The quant GEMM generator never reads psB, and the sole GEMM caller
+        // passes 0 for n_sub_updated, so this deliberately does not replicate
+        // the ps_b = n_sub_updated aliasing dlp_execute_kernel carries.
+        md_t       ps_b = 0;
+        gemmParams gemmParamsIn{ A,
+                                 B,
+                                 C,
+                                 m,
+                                 n,
+                                 k,
+                                 rs_a,
+                                 cs_a,
+                                 ps_a,
+                                 rs_b,
+                                 cs_b,
+                                 ps_b,
+                                 rs_c,
+                                 cs_c,
+                                 alpha,
+                                 beta,
+                                 post_ops_list,
+                                 post_ops_attr,
+                                 grp_post_ops_attr };
+        kB->operator()(std::addressof(gemmParamsIn));
+    }
 
     return;
 }

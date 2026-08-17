@@ -430,6 +430,31 @@ class decisionEngine
         if (quantBackends[kTypeIdx][dtIdx] != nullptr) {
             T* backend = static_cast<T*>(quantBackends[kTypeIdx][dtIdx]);
 
+            // Explicitly scope calls to bypass the vtable.
+            if ((m == 1) || (n == 1)) {
+                auto gemvKI =
+                    backend->T::getGemvQuantKernelInfoForInputFastPath(
+                        dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha,
+                        beta, mtag_a, mtag_b, metadata, group_ops, mr_hint,
+                        nr_hint, kc_hint, c_downscale);
+
+                // GEMV kernel has certain preconditions as below:
+                // 1. mtag_b == REORDERED
+                // 2. K % group_size == 0
+                // 3. KC % group_size == 0
+                // If any of these conditions are not met, GEMV returns an
+                // INVALID_GEMM_QUANT_KERNEL_INFO with base.mr = base.nr = 0.
+                // These cases are still supported by the GEMM kernel hence,
+                // the 5-loop framework falls back to the GEMM kernel.
+                // GEMV M=1, base.mr = 1 and base.nr = nr_hint
+                // GEMV N=1, base.mr = 16 and base.nr = 1
+                // Both the above conditions denote a valid GEMV kernel info
+                // hence we return the gemvKI.
+                if ((gemvKI.base.mr > 0) && (gemvKI.base.nr > 0)) {
+                    return gemvKI;
+                }
+            }
+
             return backend->T::getGemmQuantKernelInfoForInputFastPath(
                 dt, m, n, k, rs_a, cs_a, rs_b, cs_b, rs_c, cs_c, alpha, beta,
                 mtag_a, mtag_b, metadata, group_ops, mr_hint, nr_hint, kc_hint,
