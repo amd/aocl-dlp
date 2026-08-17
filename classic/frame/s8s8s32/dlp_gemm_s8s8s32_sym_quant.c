@@ -304,11 +304,19 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
                 cs_a_use = 1;
             }
 
-            // Call dlp_gemv_n_one kernel
-            dlp_gemv_n_one_s8s8s32os32_sym_quant(
-                mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
-                grp_post_ops_attr, post_op_list, &post_ops_attr);
+            if (lcntx->dlp_quant_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_gemm_quant_kernel(
+                    &(lcntx->dlp_quant_kernel_hndl), mc0, 1, k, (void*)a_use,
+                    rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use, 0,
+                    0, (void*)c_use, rs_c, cs_c, (void*)&alpha, (void*)&beta,
+                    post_op_list, post_ops_attr, grp_post_ops_attr);
+            } else {
+                // Call dlp_gemv_n_one kernel
+                dlp_gemv_n_one_s8s8s32os32_sym_quant(
+                    mc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, MR, KC,
+                    grp_post_ops_attr, post_op_list, &post_ops_attr);
+            }
         }
 
         // Release pack buffers
@@ -356,6 +364,10 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
         }
 
         grp_post_ops_attr.grp_post_op_k = 0;
+        // m == 1 on this path, so the output row origin is always 0. It has to
+        // be assigned rather than left at whatever the stack held: the kernel
+        // indexes the A scales from grp_post_op_i * grp_post_op_lda.
+        grp_post_ops_attr.grp_post_op_i = 0;
         for (iter_t jc = jc_start; jc < jc_end; jc += NC) {
             grp_post_ops_attr.grp_post_op_j = jc;
 
@@ -392,11 +404,22 @@ DLP_GEMV2(int8_t, int8_t, int32_t, s8s8s32o32_sym_quant)
             post_ops_attr.rs_c_downscale = rs_c;
             post_ops_attr.b_sum_offset   = 0;
 
-            dlp_gemv_m_one_s8s8s32os32_sym_quant(
-                nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
-                cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
-                n_sub_updated, jc_cur_loop_rem, grp_post_ops_attr, post_op_list,
-                &post_ops_attr);
+            // As in the n == 1 branch above, only use the cached JIT kernel
+            // when it was built for this shape (see the mr/nr note there).
+            if (lcntx->dlp_quant_kernel_hndl.kernel_base != NULL) {
+                dlp_execute_gemm_quant_kernel(
+                    &(lcntx->dlp_quant_kernel_hndl), 1, nc0, k, (void*)a_use,
+                    rs_a_use, cs_a_use, 1, (void*)b_use, rs_b_use, cs_b_use,
+                    n_sub_updated, jc_cur_loop_rem, (void*)c_use, rs_c, cs_c,
+                    (void*)&alpha, (void*)&beta, post_op_list, post_ops_attr,
+                    grp_post_ops_attr);
+            } else {
+                dlp_gemv_m_one_s8s8s32os32_sym_quant(
+                    nc0, k, a_use, rs_a_use, cs_a_use, mtag_a, b_use, rs_b_use,
+                    cs_b_use, mtag_b, c_use, rs_c, cs_c, alpha, beta, NR, KC,
+                    n_sub_updated, jc_cur_loop_rem, grp_post_ops_attr,
+                    post_op_list, &post_ops_attr);
+            }
 
             if (mtag_b == REORDERED) {
                 dlp_gemm_adjust_B_panel_reordered_jc(&jc, jc_cur_loop);
@@ -911,7 +934,7 @@ DLP_GEMM_5LOOP_UNIFIED(
                             &(lcntx->dlp_quant_kernel_hndl), mc0, nr0, kc0,
                             (void*)a_use, rs_a_use, cs_a_use, a_block_stride,
                             (void*)(b_use + (jr * kc0_updated)), rs_b_use,
-                            cs_b_use, (void*)(c_use_ic + jr), rs_c_use, 1,
+                            cs_b_use, 0, 0, (void*)(c_use_ic + jr), rs_c_use, 1,
                             (void*)&alpha, (void*)&beta0, post_op_list,
                             post_ops_attr, grp_post_ops_attr);
                     } else {

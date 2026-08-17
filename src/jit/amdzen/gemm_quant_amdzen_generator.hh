@@ -31,6 +31,8 @@
 #include <memory>
 #include <vector>
 
+#include "debug_utils/gdb_helper_utils.hh"
+#include "debug_utils/jit_debug_utils.hh"
 #include "jit/jit_generator_base.hh"
 #include "jit_generator_utils.hh"
 #include "kernel_frame/kernel_frame_base.hh"

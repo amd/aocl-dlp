@@ -176,6 +176,29 @@ class iQuantDEBackend
         md_t                              nr_hint,
         md_t                              kc_hint,
         md_t                              c_downscale) = 0;
+
+    virtual dlp::kernel_frame::quantKernelInfo
+    getGemvQuantKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        md_t                              m,
+        md_t                              n,
+        md_t                              k,
+        md_t                              rs_a,
+        md_t                              cs_a,
+        md_t                              rs_b,
+        md_t                              cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        dlp_group_op*                     group_ops,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) = 0;
 };
 
 class gemmF32DEBackend final : public iDEBackend
@@ -1504,6 +1527,119 @@ class gemmQuantS8DEBackend : public iQuantDEBackend
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
             kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, group_ops);
+    }
+
+    DLP_ALWAYS_INLINE
+    dlp::kernel_frame::quantKernelInfo getGemvQuantKernelInfoForInputFastPath(
+        dlp::kernel_frame::kernelDatatype k_dtype,
+        [[maybe_unused]] md_t             m,
+        md_t                              n,
+        md_t                              k,
+        [[maybe_unused]] md_t             rs_a,
+        [[maybe_unused]] md_t             cs_a,
+        [[maybe_unused]] md_t             rs_b,
+        [[maybe_unused]] md_t             cs_b,
+        md_t                              rs_c,
+        md_t                              cs_c,
+        void*                             alpha,
+        void*                             beta,
+        AOCL_DLP_MEMORY_TAG               mtag_a,
+        AOCL_DLP_MEMORY_TAG               mtag_b,
+        dlp_gemm_post_op*                 metadata,
+        dlp_group_op*                     group_ops,
+        md_t                              mr_hint,
+        md_t                              nr_hint,
+        md_t                              kc_hint,
+        md_t                              c_downscale) override final
+    {
+        if (!canGenerateKernelInfo || group_ops == nullptr) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        // The sym-quant GEMV kernels dequantize into f32 accumulators and only
+        // carry the f32 and bf16 store rails. Anything else must stay on the
+        // GEMM path, which has the wider set.
+        if ((c_downscale != DLP_F32) && (c_downscale != DLP_BF16)) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        // A GEMV-shaped input does not by itself mean the frame will run a GEMV
+        // kernel: The framework dispatches to the GEMV path only when B is
+        // reordered and the group size tiles both K and KC evenly.
+        // Otherwise falls through to the GEMM 5-loop. The kernel handle
+        // carries only one blocking, and mr/nr is what selects the runtime
+        // parameter struct, so a GEMV key handed to the GEMM 5-loop would feed
+        // GEMM machine code a GEMV parameter block. Mirror the frame's gate
+        // here and report "no GEMV kernel" when it does not hold, so the caller
+        // falls back to the GEMM key that path actually needs.
+        if (mtag_b != REORDERED) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        // group_ops points at the caller's metadata, where group_size 0 means
+        // one group spanning the full K. The frame compares against the
+        // already-normalised value, so normalise identically before testing.
+        md_t group_size = 0;
+        if (group_ops->a_post_quant_op != nullptr) {
+            group_size = group_ops->a_post_quant_op->group_size;
+        } else if (group_ops->b_post_quant_op != nullptr) {
+            group_size = group_ops->b_post_quant_op->group_size;
+        }
+        if ((group_size == 0) || (group_size > k)) {
+            group_size = k;
+        }
+        if ((group_size <= 0) || ((k % group_size) != 0)
+            || ((kc_hint % group_size) != 0)) {
+            return INVALID_GEMM_QUANT_KERNEL_INFO;
+        }
+
+        md_t mr;
+        md_t nr;
+        md_t k_unroll;
+
+        if (n == 1) {
+            // Matches the MR the n == 1 branch of the sym_quant 5-loop frame
+            // hardcodes; the kernel reduces MR rows along K per group.
+            mr       = 16;
+            nr       = 1;
+            k_unroll = 1;
+        } else {
+            // m == 1. The M=1 kernel bakes NR and KC into the generated code
+            // and owns its own N-tile loop, so both must agree with what the
+            // frame drives that loop with (lcntx->blksz.NR / .KC). Deriving
+            // them from the hints rather than hardcoding keeps that contract
+            // even if the block-size table changes.
+            mr       = 1;
+            nr       = nr_hint;
+            k_unroll = 4;
+
+            if ((nr <= 0) || ((nr % 16) != 0) || (nr > 64)) {
+                return INVALID_GEMM_QUANT_KERNEL_INFO;
+            }
+        }
+
+        kernel_frame::scalingType alphaScalingType;
+        kernel_frame::scalingType betaScalingType;
+        std::tie(alphaScalingType, betaScalingType) =
+            gemmDEBackendUtils::getScalingTypes<int32_t>(alpha, beta, k,
+                                                         kc_hint);
+
+        kernel_frame::kernelInstrPreference kInstPref = eKernelInstPref;
+
+        if (kInstPref == kernel_frame::kernelInstrPreference::none) {
+            if (isAvx512) {
+                kInstPref =
+                    kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+            } else {
+                // Invalid ISA, disable JIT kernel generation.
+                return INVALID_GEMM_QUANT_KERNEL_INFO;
+            }
+        }
+
+        return gemmDEBackendUtils::checkPostOpsAndCreateQuantKernelInfo(
+            mr, nr, 0, k_unroll, kc_hint, 0, alphaScalingType, betaScalingType,
+            mtag_a, mtag_b, false, false, false, kInstPref, c_downscale,
+            k_dtype, rs_c, cs_c, metadata, group_ops);
     }
 };
 

@@ -546,3 +546,254 @@ gemm_tests:
             group_size: ["0"]
             a_granularity: ["PER_TOKEN"]
             b_granularity: ["PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [13] M==1 GEMV, multi-group, group_size SWEEP. Counterpart of entry [8] for
+  # the M==1 micro-kernel, which owns its own N-tile loop and KC-panel loop.
+  #
+  # The n sweep is chosen to cross every band boundary of that kernel: 16/48
+  # are exact multiples of the 16-lane band, 33 and 65 land mid-band, 64 is a
+  # full NR tile with no fringe, and 128 exercises two full NR tiles. 65 also
+  # forces one full tile plus a 1-column fringe, which is where the packed
+  # remainder sub-panel and the masked B-scale load matter most.
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_m1_multigroup_groupsize_sweep"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [16, 33, 48, 64, 65, 128]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["16", "32", "64"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [14] M==1 GEMV with BF16-stored scale factors. Mirrors [13] on a reduced
+  # shape set: the bf16 rails differ from f32 only in how a scale is widened to
+  # f32 (a masked 16-bit vector load for the per-column B scales, a broadcast
+  # for the single A scale), so the shape space does not need re-sweeping.
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_m1_bf16scale_multigroup"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1]
+    n: [33, 64, 65]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["32", "64"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [15] N==1 GEMV with BF16-stored scale factors. The N==1 kernel builds its
+  # per-row A scale vector two different ways depending on granularity: one
+  # contiguous masked load when A collapses K (PER_TOKEN), or a scalar
+  # load-and-insert walk when the rows are strided (PER_GROUP). Both are swept
+  # here with bf16 scales, which the f32-scale entries [8]/[9] do not cover.
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_n1_bf16scale_multigroup"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16, 17, 32]
+    n: [1]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["bf16"]
+            b_scale_type: ["bf16"]
+            group_size: ["32", "64"]
+            a_granularity: ["PER_GROUP", "PER_TOKEN"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]
+
+  # --------------------------------------------------------------------------
+  # [16] JIT-only post-op on GEMV shapes.
+  #
+  # MISH has op_code 15, above DLP_CLASSIC_MAX_POST_OP_CODE (12), so it has no
+  # entry in the classic kernels' post_ops_labels[] table and can only be
+  # served by a JIT kernel. Both sym_quant entry points used to reject any such
+  # post-op outright when m == 1 or n == 1, because the GEMV path ran the
+  # classic micro-kernel; now that both GEMV shapes are JIT-backed the gate is
+  # gone and these cases compute instead of returning NOT_SUPPORTED. The
+  # M16_N64 combination is the control: it was never gated, since it takes the
+  # GEMM path.
+  #
+  # NOTE: the harness turns a NOT_SUPPORTED return into a SKIP rather than a
+  # failure, so re-introducing the gate would make the three GEMV-shaped cases
+  # here go quiet rather than red. Check the skip count, not just the pass
+  # count, when using this entry to police that gate.
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_jit_only_postop_mish"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16]
+    n: [1, 64]
+    k: [64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP"]
+        - type: "Elementwise-MISH"
+
+  # --------------------------------------------------------------------------
+  # [17] JIT-only post-op on GEMV shapes: PER_TOKEN downscale.
+  #
+  # POST_OPS_DOWNSCALE with scale_factor_dim == DLP_PARAM_DIM_PER_TOKEN is the
+  # second class of JIT-only post-op (alongside op_code > 12) that was un-gated
+  # when both sym_quant entry points switched to JIT-backed GEMV paths. The
+  # classic kernels reject this case because they would index past the scale
+  # factor buffer for a per-row vector.
+  #
+  # This entry covers M==1 and N==1 (the two GEMV shapes) plus M16_N64 as a
+  # control (GEMM path, never gated). Like entry [16], the harness turns
+  # NOT_SUPPORTED into SKIP, so check skip count when using this to verify the
+  # gate is gone.
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_jit_only_postop_pertoken_scale"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 16]
+    n: [1, 64]
+    k: [64]
+    alpha: [1]
+    beta: [0]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP"]
+        - type: "Scale"
+          params:
+            scale_factor_len: ["m"]
+
+  # --------------------------------------------------------------------------
+  # [18] N==1 GEMV writing into a strided C (ldc > 1).
+  #
+  # The N==1 kernel emits four variants per m_left, selected by
+  # m_left * 4 + is_col_stored * 2 + is_m_loop, where is_col_stored is
+  # (rs_c == 1). Every other entry leaves ldc unset, so the harness derives
+  # ldc = n = 1 for an m x 1 output and only the is_col_stored == 1 half is
+  # ever executed. Pinning ldc > 1 models the caller that writes the GEMV
+  # result into one column of a wider matrix, and is the only way to reach the
+  # strided-C store and the scalar strided beta gather.
+  #
+  # Column-major is not an alternative here: the sym_quant API rejects
+  # reordered column-major operands, and both the frame's GEMV gate and the
+  # decision engine's GEMV key require mtagB == reorder.
+  #
+  # The m sweep crosses MR = 16 so the fringe and m-loop variants are hit on
+  # the strided side too; beta 1 is what exercises the strided read-back.
+  # --------------------------------------------------------------------------
+  - name: "quant_gemv_n1_strided_c"
+    a_type: ["s8"]
+    b_type: ["s8"]
+    c_type: ["f32", "bf16"]
+    acc_type: ["s32"]
+    storage_format: ["row-major"]
+    transA: [false]
+    transB: [false]
+    m: [1, 8, 16, 17, 32]
+    n: [1]
+    k: [64, 128]
+    alpha: [1]
+    beta: [0, 1]
+    ldc: [7]
+    mtagA: ["none"]
+    mtagB: ["reorder"]
+    tolerances:
+      relative: 100.0
+      absolute: 50.0
+    post_operations:
+      cartesian: false
+      operations:
+        - type: "GroupScale"
+          params:
+            a_scale_type: ["f32"]
+            b_scale_type: ["f32"]
+            group_size: ["32", "64"]
+            a_granularity: ["PER_GROUP"]
+            b_granularity: ["PER_GROUP", "PER_CHANNEL"]

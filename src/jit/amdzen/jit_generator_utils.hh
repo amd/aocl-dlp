@@ -580,6 +580,47 @@ struct gemvM1GeneratorParams
     ~gemvM1GeneratorParams() = default;
 };
 
+// Quant GEMV generator parameters
+struct quantGemvN1GeneratorParams
+{
+    gemvN1GeneratorParams          base;
+    dlp::kernel_frame::opQuantInfo aQuant;
+    dlp::kernel_frame::opQuantInfo bQuant;
+
+    explicit quantGemvN1GeneratorParams(const gemvN1GeneratorParams& _base)
+        : base(_base)
+    {
+    }
+
+    quantGemvN1GeneratorParams(const quantGemvN1GeneratorParams&) = default;
+    quantGemvN1GeneratorParams(quantGemvN1GeneratorParams&&)      = default;
+    quantGemvN1GeneratorParams& operator=(const quantGemvN1GeneratorParams&) =
+        default;
+    quantGemvN1GeneratorParams& operator=(quantGemvN1GeneratorParams&&) =
+        default;
+    ~quantGemvN1GeneratorParams() = default;
+};
+
+struct quantGemvM1GeneratorParams
+{
+    gemvM1GeneratorParams          base;
+    dlp::kernel_frame::opQuantInfo aQuant;
+    dlp::kernel_frame::opQuantInfo bQuant;
+
+    explicit quantGemvM1GeneratorParams(const gemvM1GeneratorParams& _base)
+        : base(_base)
+    {
+    }
+
+    quantGemvM1GeneratorParams(const quantGemvM1GeneratorParams&) = default;
+    quantGemvM1GeneratorParams(quantGemvM1GeneratorParams&&)      = default;
+    quantGemvM1GeneratorParams& operator=(const quantGemvM1GeneratorParams&) =
+        default;
+    quantGemvM1GeneratorParams& operator=(quantGemvM1GeneratorParams&&) =
+        default;
+    ~quantGemvM1GeneratorParams() = default;
+};
+
 struct packBGeneratorParams
 {
     md_t            NR;
