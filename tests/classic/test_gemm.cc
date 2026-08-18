@@ -45,8 +45,10 @@
 #include "utils/matrix_conversion_utils.hh"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <csignal>
 #include <cstdlib>
 #include <cstring>
@@ -2675,6 +2677,82 @@ TEST_F(EmptyPostOpsTest, RowMajor_EmptyPostOps_EquivalentTo_NullptrPostOps)
     EXPECT_TRUE(compare_result.equal)
         << "Two plans with no post-ops should produce identical results for "
            "row-major";
+}
+
+// Test for TANH post-op sign preservation and monotonicity near zero.
+// Regression test for CPUPL-8765: the polynomial/exp path used by the JIT
+// TANH implementation can produce a slightly negative "magnitude" near zero,
+// which can invert sign and break oddness/monotonicity.
+TEST(TanhPostOp, PreservesSignAndMonotonicityNearZero)
+{
+    constexpr md_t n = 9;
+    constexpr md_t m = 4;
+    constexpr md_t k = 4;
+
+    constexpr std::array<float, n> inputs = {
+        -1.0e-6f, -1.0e-7f, -1.0e-8f, -1.0e-9f, 0.0f,
+        1.0e-9f,  1.0e-8f,  1.0e-7f,  1.0e-6f,
+    };
+
+    // A is chosen so that each output row equals the raw `inputs` vector,
+    // i.e. A(i, 0) = 1 and all other entries are 0, while B's first row
+    // holds `inputs` and all other rows are 0.
+    std::vector<std::vector<float>> aData(m, std::vector<float>(k, 0.0f));
+    for (md_t i = 0; i < m; ++i) {
+        aData[i][0] = 1.0f;
+    }
+    std::vector<std::vector<float>> bData(k, std::vector<float>(n, 0.0f));
+    bData[0].assign(inputs.begin(), inputs.end());
+
+    Matrix A = Matrix::fromData<float>(aData, MatrixType::f32);
+    Matrix B = Matrix::fromData<float>(bData, MatrixType::f32);
+
+    for (const bool withBias : { false, true }) {
+        SCOPED_TRACE(withBias ? "BIAS(0) -> TANH" : "TANH");
+
+        Matrix C(m, n, MatrixType::f32, MatrixLayout::ROW_MAJOR, -1, false);
+        C.fillValue(0.0f);
+
+        std::unique_ptr<IUal> ual_dlp = UalFactory::createUal(UALType::DLP);
+        auto                  plan    = ual_dlp->createPlan();
+        plan->configureFrom(A, B, C, MatrixType::f32);
+
+        if (withBias) {
+            Matrix bias = Matrix::vector(std::vector<float>(n, 0.0f));
+            plan->addPostOp(createBias().setBias(bias).build());
+        }
+        plan->addPostOp(createTanh().build());
+
+        plan->prepare();
+        UALError status = plan->executeWith(A, B, C);
+        if (status == UALError::UAL_NOT_SUPPORTED) {
+            GTEST_SKIP()
+                << "DLP GEMM with TANH post-op not supported on this processor";
+        }
+        ASSERT_EQ(status, UALError::UAL_SUCCESS);
+
+        const float* output = reinterpret_cast<const float*>(C.getData());
+
+        // A replicates the same TANH input across every row, so all rows of
+        // the output must be identical to row 0.
+        for (md_t row = 1; row < m; ++row) {
+            for (md_t col = 0; col < n; ++col) {
+                EXPECT_FLOAT_EQ(output[(size_t)row * n + col], output[col]);
+            }
+        }
+
+        for (md_t col = 0; col < n; ++col) {
+            EXPECT_EQ(std::signbit(output[col]), std::signbit(inputs[col]));
+        }
+        EXPECT_FLOAT_EQ(output[n / 2], 0.0f);
+
+        for (md_t col = 1; col < n; ++col) {
+            EXPECT_LE(output[col - 1], output[col]);
+        }
+        for (md_t col = 0; col < n / 2; ++col) {
+            EXPECT_FLOAT_EQ(output[col], -output[n - 1 - col]);
+        }
+    }
 }
 
 // ============================================================================
