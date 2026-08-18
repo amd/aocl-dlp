@@ -1522,6 +1522,13 @@ kernelOpsGeneratorX86<KType>::tanhF(
 
     jit->vmulps(RegType(z), RegType(z), RegType(const1));
 
+    // expF's polynomial can undershoot 1.0 near zero, making the magnitude
+    // slightly negative. Clamp it before applying the input sign so tanh
+    // remains odd and monotonic around zero. Keep z as the second vmaxps
+    // operand so NaNs propagate instead of being replaced by zero.
+    jit->vxorps(RegType(const2), RegType(const2), RegType(const2));
+    jit->vmaxps(RegType(z), RegType(const2), RegType(z));
+
     if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
         jit->mov(regTmp4Half, -2147483648);
         jit->movd(Xbyak::Xmm(const1), regTmp4Half);
