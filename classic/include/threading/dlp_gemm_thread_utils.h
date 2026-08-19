@@ -130,15 +130,26 @@ dlp_thread_task_range(dlp_task_id_t* thread,
                       md_t*          start,
                       md_t*          end)
 {
-    md_t n_way = thread->n_way;
+    md_t n_way   = thread->n_way;
+    md_t work_id = thread->work_id;
+
+    // Only n_way work ids own a slice of [0, n). A caller may hand us a
+    // work_id drawn from a wider pool than n_way: the GEMV paths partition a
+    // single loop ic_ways (or jc_ways) deep, as the user requested, while
+    // identifying the partition by tid so that no two threads land on the same
+    // one. The arithmetic below extrapolates past all_end for such ids, so
+    // retire them here with an empty range instead.
+    if ((work_id < 0) || (work_id >= n_way)) {
+        *start = n;
+        *end   = n;
+        return;
+    }
 
     if (n_way == 1) {
         *start = 0;
         *end   = n;
         return;
     }
-
-    md_t work_id = thread->work_id;
 
     md_t all_start = 0;
     md_t all_end   = n;
