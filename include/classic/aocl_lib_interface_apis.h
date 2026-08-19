@@ -141,10 +141,10 @@ DLP_CLASSIC_EXPORT md_t
 dlp_thread_get_num_threads_active(void);
 
 /**
- * @brief Query whether AOCL_DLP_ENABLE_INSTRUCTIONS environment variable is
- * set.
+ * @brief Query whether AOCL_DLP_ENABLE_INSTRUCTIONS names a valid architecture.
  *
- * @return true if the environment variable is set, false otherwise.
+ * @return true if the variable names a recognized architecture, false if
+ *         unset or invalid.
  */
 DLP_CLASSIC_EXPORT bool
 dlp_aocl_enable_instruction_query(void);

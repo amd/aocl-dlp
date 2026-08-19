@@ -44,7 +44,7 @@
  * @param[in] lda Leading dimension of matrix A.
  * @param[out] b Pointer to matrix B.
  * @param[in] ldb Leading dimension of matrix B.
- * @param[in] metadata Pointer to post-operation structures.
+ * @param[in,out] metadata Pointer to post-operation structures.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_eltwise_ops_bf16of32(const char      order,

@@ -54,7 +54,7 @@ typedef enum
     GELU_TANH = 2, /**< GELU activation using tanh approximation */
     GELU_ERF  = 3, /**< GELU activation using error function */
     CLIP      = 4, /**< Clipping operation: min(max(x, min_val), max_val) */
-    SWISH     = 5, /**< Swish activation: x * sigmoid(x) */
+    SWISH     = 5, /**< Swish activation: x * sigmoid(alpha * x) */
     TANH      = 6, /**< Hyperbolic tangent activation */
     SIGMOID   = 7, /**< Sigmoid activation: 1 / (1 + exp(-x)) */
     MISH      = 8, /**< Mish activation: x * tanh(softplus(x)) */
