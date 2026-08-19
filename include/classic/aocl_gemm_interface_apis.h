@@ -43,7 +43,7 @@
  * matrix B).
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
- * @param[in] metadata Metadata for the post-operations.
+ * @param[in,out] metadata Metadata for the post-operations.
  * @return Size of the buffer in bytes.
  */
 DLP_CLASSIC_EXPORT msz_t
@@ -141,7 +141,7 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
  * @param[in] ldb Leading dimension of the matrix.
- * @param[in] metadata Metadata for the post-operations.
+ * @param[in,out] metadata Metadata for the post-operations.
  */
 DLP_CLASSIC_EXPORT void
 aocl_reorder_f32f32f32of32(const char      order,
@@ -331,7 +331,7 @@ aocl_reorder_s8s4s32os32(const char      order,
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
  * @param[in] ldb Leading dimension of the matrix.
- * @param[in] metadata Metadata for the post-operations.
+ * @param[in,out] metadata Metadata for the post-operations.
  */
 DLP_CLASSIC_EXPORT void
 aocl_reorder_f32obf16(const char      order,
@@ -354,7 +354,7 @@ aocl_reorder_f32obf16(const char      order,
  * @param[in] k Number of rows in the matrix.
  * @param[in] n Number of columns in the matrix.
  * @param[in] ldb Leading dimension of the matrix.
- * @param[in] metadata Metadata for the post-operations.
+ * @param[in,out] metadata Metadata for the post-operations.
  */
 DLP_CLASSIC_EXPORT void
 aocl_unreorder_bf16bf16f32of32(const char      order,
@@ -431,7 +431,7 @@ aocl_unreorder_f16f16f16of16(const char      order,
  * @param[in] beta Scalar multiplier for matrix C.
  * @param[in,out] c Pointer to matrix C (output).
  * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation metadata, or NULL for
+ * @param[in,out] metadata Pointer to post-operation metadata, or NULL for
  *            no post-operations.
  */
 DLP_CLASSIC_EXPORT void
@@ -570,7 +570,7 @@ aocl_gemm_u8s8s32ou8(const char      order,
  * @param[in] beta Scalar multiplier for matrix C.
  * @param[in,out] c Pointer to matrix C.
  * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation structures.
+ * @param[in,out] metadata Pointer to post-operation structures.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32os32(const char      order,
@@ -708,7 +708,7 @@ aocl_gemm_s8s8s32ou8(const char      order,
  * @param[in] beta Scalar multiplier for matrix C.
  * @param[in,out] c Pointer to matrix C.
  * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation structures.
+ * @param[in,out] metadata Pointer to post-operation structures.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_s8s8s32of32_sym_quant(const char      order,
@@ -816,7 +816,7 @@ aocl_gemm_s8s4s32obf16(const char      order,
  * @param[in] beta Scalar multiplier for matrix C.
  * @param[in,out] c Pointer to matrix C.
  * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation structures.
+ * @param[in,out] metadata Pointer to post-operation structures.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16bf16f32of32(const char      order,
@@ -837,7 +837,6 @@ aocl_gemm_bf16bf16f32of32(const char      order,
                           const md_t      ldc,
                           dlp_metadata_t* metadata);
 
-/// User needs to pass Scale Factor for downscaling C Matrix to bfloat16.
 /// Refer to @ref aocl_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
 aocl_gemm_bf16bf16f32obf16(const char      order,
@@ -1012,7 +1011,7 @@ aocl_gemm_f32f16f32of32(const char      order,
  * @param[in] beta Scalar multiplier for matrix C (FP16).
  * @param[in,out] c Pointer to matrix C (FP16 output).
  * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation structures.
+ * @param[in,out] metadata Pointer to post-operation structures.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_f16f16f16of16(const char      order,
@@ -1061,7 +1060,7 @@ aocl_gemm_f16f16f16of16(const char      order,
  * @param[in] beta Scalar multiplier for matrix C (FP16).
  * @param[in,out] c Pointer to matrix C (F32 output).
  * @param[in] ldc Leading dimension of matrix C.
- * @param[in] metadata Pointer to post-operation structures.
+ * @param[in,out] metadata Pointer to post-operation structures.
  */
 DLP_CLASSIC_EXPORT void
 aocl_gemm_f16f16f16of32(const char      order,
@@ -1303,7 +1302,9 @@ aocl_gemm_f32f32f32of32(const char      order,
  * @param[in] group_size Array of group sizes.
  * @param[in] mem_format_a Array of memory formats for A matrices.
  * @param[in] mem_format_b Array of memory formats for B matrices.
- * @param[in] metadata Array of pointers to post-operation structures.
+ * @param[in,out] metadata Array of group_count metadata pointers; NULL causes
+ *                         a clean return without computation, and non-NULL
+ *                         elements may receive an error status.
  */
 DLP_CLASSIC_EXPORT void
 aocl_batch_gemm_bf16bf16f32of32(const char*      order,
@@ -1326,7 +1327,6 @@ aocl_batch_gemm_bf16bf16f32of32(const char*      order,
                                 const char*      mem_format_b,
                                 dlp_metadata_t** metadata);
 
-/// User needs to pass Scale Factor for downscaling C Matrix to bfloat16.
 /// Refer to @ref aocl_batch_gemm_bf16bf16f32of32 for info on parameters.
 DLP_CLASSIC_EXPORT void
 aocl_batch_gemm_bf16bf16f32obf16(const char*      order,
