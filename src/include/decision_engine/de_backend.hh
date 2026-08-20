@@ -367,28 +367,28 @@ class gemmF32DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        md_t                              m,
-        md_t                              n,
-        md_t                              k,
-        md_t                              rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        md_t                              cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
-        dlp_gemm_thread_info_t*,
-        const dlp_gemm_kernel_hints_t*,
-        md_t,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        md_t                                            m,
+        md_t                                            n,
+        md_t                                            k,
+        md_t                                            rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        md_t                                            cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t*        thread_info,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        md_t                                            blksz_set_mask,
         bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -520,13 +520,20 @@ class gemmF32DEBackend final : public iDEBackend
         //  - kc != 1              (the k=1 fused path is sized differently)
         //
         // For M < 16 we cap mr at m so the kernel uses an MR-partial
-        // kernel sized exactly to the input row count.
-        bool skinnyN = false;
-        if (!invokeRD && n <= 16 && m > 0 && kc != 1
+        // kernel sized exactly to the input row count. The skinnyN flag
+        // tells the JIT which NR slots to emit; the MR bump is skipped when
+        // the caller pinned MR through metadata.
+        shape_model::gemmShapeModelInput mrPinCheck{};
+        mrPinCheck.frozen = blksz_set_mask;
+        const bool mrFixedByCaller =
+            gemmShapeModelUtils::isMRFixedByCaller(mrPinCheck);
+
+        const bool skinnyN =
+            !invokeRD && n <= 16 && m > 0 && kc != 1
             && kInstPref
-                   == kernel_frame::kernelInstrPreference::avx512_zmm_favour) {
-            mr      = (m < 16) ? m : 16;
-            skinnyN = true;
+                   == kernel_frame::kernelInstrPreference::avx512_zmm_favour;
+        if (skinnyN && !mrFixedByCaller) {
+            mr = (m < 16) ? m : 16;
         }
 
         // L1-cache aliasing mitigation for the skinny-N GEMM bump.
@@ -537,17 +544,21 @@ class gemmF32DEBackend final : public iDEBackend
         // misses, costing ~40% throughput. Cap MR at the alias-safe
         // associativity bound (8) so each k-iter's MR rows fit within
         // L1D associativity on every Zen variant. Skipped entirely
-        // when A is packed (rsA = 1, no aliasing).
-        if (skinnyN && mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED
+        // when A is packed (rsA = 1, no aliasing), and when MR was
+        // pinned by the caller.
+        if (skinnyN && !mrFixedByCaller
+            && mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED
             && alias_detection::shouldUseMrSplit(rs_a, sizeof(float), mr)) {
             mr = std::min<md_t>(mr, alias_detection::getAliasSafeMrCap());
         }
+
+        const bool jitSkinnyN = skinnyN && !mrFixedByCaller;
 
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, allLtFringeKernels, invokeRD,
             anyKOpsOrder, kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata,
-            skinnyN);
+            jitSkinnyN);
     }
 
     DLP_ALWAYS_INLINE
@@ -929,8 +940,9 @@ class gemmBF16DEBackend final : public iDEBackend
         //
         // Below m=16 the cap is m itself, sizing the kernel to one full panel
         // with no fringe. MR cannot exceed the rows the caller brought, which
-        // is the other half of why this reads m and not m_hint.
-        if (skinnyN) {
+        // is the other half of why this reads m and not m_hint. Skipped when
+        // the caller pinned MR through metadata.
+        if (skinnyN && !gemmShapeModelUtils::isMRFixedByCaller(in)) {
             mr = std::min<md_t>(m, skinnyNMr);
         }
 
@@ -941,12 +953,10 @@ class gemmBF16DEBackend final : public iDEBackend
         // stride landing within a hair of a multiple of the 4096 B L1D way
         // size, every k-iteration takes conflict misses instead, for about 40%
         // of throughput. Capping MR at the associativity bound puts each
-        // k-iteration's rows back inside one set's worth of ways.
-        //
-        // Once the sweep can pick an MR of its own, both rules have to move
-        // into admissibility: a tile adjusted after the fact is one the split
-        // was not costed against, and the two have to be the same pair.
-        if (skinnyN && (mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED)
+        // k-iteration's rows back inside one set's worth of ways. Skipped when
+        // the caller pinned MR through metadata.
+        if (skinnyN && !gemmShapeModelUtils::isMRFixedByCaller(in)
+            && (mtag_a == AOCL_DLP_MEMORY_TAG::UNPACKED)
             && alias_detection::shouldUseMrSplit(rs_a, sizeof(uint16_t), mr)) {
             mr = std::min<md_t>(mr, alias_detection::getAliasSafeMrCap());
         }
@@ -996,10 +1006,14 @@ class gemmBF16DEBackend final : public iDEBackend
 
         md_t kc_rounded =
             ((kc + k_pack_factor - 1) / k_pack_factor) * k_pack_factor;
+
+        const bool jitSkinnyN =
+            skinnyN && !gemmShapeModelUtils::isMRFixedByCaller(in);
+
         return gemmDEBackendUtils::checkPostOpsAndCreateKernelInfo(
             mr, nr, 0, k_unroll, kc_rounded, prefetch_c_dist, alphaScalingType,
             betaScalingType, mtag_a, mtag_b, false, false, anyKOpsOrder,
-            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, skinnyN);
+            kInstPref, c_downscale, k_dtype, rs_c, cs_c, metadata, jitSkinnyN);
     }
 
     DLP_ALWAYS_INLINE
@@ -1176,28 +1190,28 @@ class gemmU8S8DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        [[maybe_unused]] md_t             n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
-        dlp_gemm_thread_info_t*,
-        const dlp_gemm_kernel_hints_t*,
-        md_t,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        [[maybe_unused]] md_t                           m,
+        [[maybe_unused]] md_t                           n,
+        md_t                                            k,
+        [[maybe_unused]] md_t                           rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        [[maybe_unused]] md_t                           cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t*        thread_info,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        [[maybe_unused]] md_t                           blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1368,28 +1382,28 @@ class gemmS8DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        [[maybe_unused]] md_t             n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
-        dlp_gemm_thread_info_t*,
-        const dlp_gemm_kernel_hints_t*,
-        md_t,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        [[maybe_unused]] md_t                           m,
+        [[maybe_unused]] md_t                           n,
+        md_t                                            k,
+        [[maybe_unused]] md_t                           rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        [[maybe_unused]] md_t                           cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t*        thread_info,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        [[maybe_unused]] md_t                           blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1735,28 +1749,28 @@ class gemmFP16DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        [[maybe_unused]] md_t             n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
-        dlp_gemm_thread_info_t*,
-        const dlp_gemm_kernel_hints_t*,
-        md_t,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        [[maybe_unused]] md_t                           m,
+        [[maybe_unused]] md_t                           n,
+        md_t                                            k,
+        [[maybe_unused]] md_t                           rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        [[maybe_unused]] md_t                           cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t*        thread_info,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        [[maybe_unused]] md_t                           blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
@@ -1889,28 +1903,28 @@ class gemmF32FP16DEBackend final : public iDEBackend
 
     DLP_ALWAYS_INLINE
     dlp::kernel_frame::kernelInfo getGemmKernelInfoForInputFastPath(
-        dlp::kernel_frame::kernelDatatype k_dtype,
-        [[maybe_unused]] md_t             m,
-        [[maybe_unused]] md_t             n,
-        md_t                              k,
-        [[maybe_unused]] md_t             rs_a,
-        [[maybe_unused]] md_t             cs_a,
-        [[maybe_unused]] md_t             rs_b,
-        [[maybe_unused]] md_t             cs_b,
-        md_t                              rs_c,
-        md_t                              cs_c,
-        void*                             alpha,
-        void*                             beta,
-        AOCL_DLP_MEMORY_TAG               mtag_a,
-        AOCL_DLP_MEMORY_TAG               mtag_b,
-        dlp_gemm_post_op*                 metadata,
-        md_t                              mr_hint,
-        md_t                              nr_hint,
-        md_t                              kc_hint,
-        md_t                              c_downscale,
-        dlp_gemm_thread_info_t*,
-        const dlp_gemm_kernel_hints_t*,
-        md_t,
+        dlp::kernel_frame::kernelDatatype               k_dtype,
+        [[maybe_unused]] md_t                           m,
+        [[maybe_unused]] md_t                           n,
+        md_t                                            k,
+        [[maybe_unused]] md_t                           rs_a,
+        [[maybe_unused]] md_t                           cs_a,
+        [[maybe_unused]] md_t                           rs_b,
+        [[maybe_unused]] md_t                           cs_b,
+        md_t                                            rs_c,
+        md_t                                            cs_c,
+        void*                                           alpha,
+        void*                                           beta,
+        AOCL_DLP_MEMORY_TAG                             mtag_a,
+        AOCL_DLP_MEMORY_TAG                             mtag_b,
+        dlp_gemm_post_op*                               metadata,
+        md_t                                            mr_hint,
+        md_t                                            nr_hint,
+        md_t                                            kc_hint,
+        md_t                                            c_downscale,
+        [[maybe_unused]] dlp_gemm_thread_info_t*        thread_info,
+        [[maybe_unused]] const dlp_gemm_kernel_hints_t* gemm_hints,
+        [[maybe_unused]] md_t                           blksz_set_mask,
         [[maybe_unused]] bool rerouted_from_other_backend) override final
     {
         if (!canGenerateKernelInfo) {
