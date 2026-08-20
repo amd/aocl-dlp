@@ -60,6 +60,15 @@ Int8
 .. doxygenfunction:: aocl_gemm_s8s8s32ou8
    :project: aocl-dlp
 
+Int8 GEMM with Float16 Output
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfunction:: aocl_gemm_s8s8s32of16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_u8s8s32of16
+   :project: aocl-dlp
+
 Mixed Precision GEMM
 ~~~~~~~~~~~~~~~~~~~~
 
@@ -120,6 +129,21 @@ Float16 GEMM
 .. doxygenfunction:: aocl_gemm_f16f16f16of16
    :project: aocl-dlp
 
+.. doxygenfunction:: aocl_gemm_f16f16f16of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_f32f16f32of32
+   :project: aocl-dlp
+
+Int8-Int4 Mixed Precision
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. doxygenfunction:: aocl_gemm_s8s4s32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_gemm_s8s4s32obf16
+   :project: aocl-dlp
+
 Symmetric Quantization GEMM
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -175,6 +199,57 @@ Batch GEMM Operations
    :project: aocl-dlp
 
 .. doxygenfunction:: aocl_batch_gemm_s8s8s32ou8
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_bf16s8s32os32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_bf16s8s32os8
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_bf16s8s32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_bf16s8s32obf16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_bf16s8s32ou8
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_bf16u4f32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_bf16u4f32obf16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f16f16f16of16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f16f16f16of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f32f16f32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f32s8s32os32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f32s8s32os8
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f32s8s32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f32s8s32obf16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_f32s8s32ou8
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_s8s8s32of32_sym_quant
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_batch_gemm_s8s8s32obf16_sym_quant
    :project: aocl-dlp
 
 .. _gemm-matrix-reordering:
@@ -243,6 +318,18 @@ Reordering Functions
    :project: aocl-dlp
 
 .. doxygenfunction:: aocl_get_reorder_buf_size_f16f16f16of16
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_get_reorder_buf_size_f32f16f32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_get_reorder_buf_size_s8s4s32os32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_reorder_f32f16f32of32
+   :project: aocl-dlp
+
+.. doxygenfunction:: aocl_reorder_s8s4s32os32
    :project: aocl-dlp
 
 Unreordering Functions
