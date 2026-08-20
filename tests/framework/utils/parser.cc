@@ -62,6 +62,28 @@ constexpr unsigned int RANDOM_SEED = 12345; // Fixed seed for reproducibility
 constexpr float MIN_VALUE = 1.0f;  // Minimum value for random quant params
 constexpr float MAX_VALUE = 15.0f; // Maximum value for random quant params
 
+// Optional Matrix-Add / Matrix-Mul leading dimension from YAML.
+// "n" or omitted -> auto (-1, row-major ldm = n). An integer string is used
+// as-is so padded postop matrices can exercise GEMV N=1 stride handling.
+md_t
+optionalMatrixPostOpLdm(const PostOpsIterator::PostOpConfig& config,
+                        const std::map<std::string, size_t>& param_indices)
+{
+    auto ldm_it = config.params.find("ldm");
+    if (ldm_it == config.params.end() || ldm_it->second.empty()) {
+        return -1;
+    }
+
+    auto   idx_it      = param_indices.find("ldm");
+    size_t idx         = (idx_it != param_indices.end()) ? idx_it->second : 0;
+    idx                = std::min(idx, ldm_it->second.size() - 1);
+    const auto ldm_str = std::any_cast<std::string>(ldm_it->second[idx]);
+    if (ldm_str == "n") {
+        return -1;
+    }
+    return static_cast<md_t>(std::stoll(ldm_str));
+}
+
 // Helper functions for parameter extraction
 double
 MicroTest::extractDoubleParam(
@@ -746,8 +768,9 @@ MicroTest::createOperationParam(
 
         // Get the storage format to match C matrix layout
         MatrixLayout layout = getStorageFormat();
+        md_t         ldm    = optionalMatrixPostOpLdm(config, param_indices);
 
-        auto matrix = Matrix(rows, cols, matrix_type, layout);
+        auto matrix = Matrix(rows, cols, matrix_type, layout, ldm);
         matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE, "uniform");
 
         // Check if scale_factor is explicitly provided (optional parameter)
@@ -840,8 +863,9 @@ MicroTest::createOperationParam(
 
         // Get the storage format to match C matrix layout
         MatrixLayout layout = getStorageFormat();
+        md_t         ldm    = optionalMatrixPostOpLdm(config, param_indices);
 
-        auto matrix = Matrix(rows, cols, matrix_type, layout);
+        auto matrix = Matrix(rows, cols, matrix_type, layout, ldm);
         matrix.fillRandom(RANDOM_SEED, MIN_VALUE, MAX_VALUE, "uniform");
 
         // Check if scale_factor is explicitly provided (optional parameter)

@@ -702,13 +702,27 @@ MatOps<KType>::generateImpl(kernelOpsMetaData& op)
 
     jit->mov(this->regTmp2, jit->ptr[this->regkernelOpsList + offsetof(dlp_gemm_post_op, op_args1)]);
 
-    if (this->isGEMVN1()) {
-        return gemvN1Path(opType, sclType, hasSF, sfDtype, op.paramStorageDt, matRegIdx, sfRegIdx);
-    }
-
+    // ldm in bytes. GEMV N=1 used to return before this load and then address
+    // the auxiliary operand as mat + c_i * elemSize (ldm=1). Both paths need it.
     jit->mov(this->regTmp3, jit->ptr[this->regkernelOpsList + offsetof(dlp_gemm_post_op, op_args3)]);
     jit->mov(this->regTmp3, jit->ptr[this->regTmp3]);
     jit->lea(this->regTmp3, jit->ptr[this->regTmp3 * matElemSize]);
+
+    if (this->isGEMVN1()) {
+        // GEMV N=1 packs output rows into lanes. A PerN scale is one value.
+        if (hasSF && sclType == matOpScaleType::rowVector) {
+            RETURN_IF_ERROR(this->broadcastScalar(
+                sfDtype, jit->ptr[this->regTmp1], RegType(sfRegIdx)));
+        }
+        // Aux layout is in op metadata, so dispatch at generate time the
+        // same way GEMM names rowMajorPath / colMajorPath.
+        if (op.cMatFormat == storageFormat::rowMajor) {
+            return gemvN1RowMajorPath(opType, sclType, hasSF, sfDtype,
+                                      op.paramStorageDt, matRegIdx, sfRegIdx);
+        }
+        return gemvN1ColMajorPath(opType, sclType, hasSF, sfDtype,
+                                  op.paramStorageDt, matRegIdx, sfRegIdx);
+    }
 
     jit->inLocalLabel();
 
@@ -788,6 +802,40 @@ inline void MatOps<KType>::applyMatOp(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// MatOps::convertGatheredAuxToF32 - widen a dword-gathered aux lane to f32
+// ─────────────────────────────────────────────────────────────────────────────
+template<utils::kernelInstrType KType>
+inline void MatOps<KType>::convertGatheredAuxToF32(DataType matOpDtype,
+                                                   int      matRegIdx)
+{
+    auto* jit = this->jit;
+    switch (matOpDtype) {
+        case DataType::s8:
+            jit->vpslld(RegType(matRegIdx), RegType(matRegIdx), 24);
+            jit->vpsrad(RegType(matRegIdx), RegType(matRegIdx), 24);
+            jit->vcvtdq2ps(RegType(matRegIdx), RegType(matRegIdx));
+            break;
+        case DataType::u8:
+            jit->vpslld(RegType(matRegIdx), RegType(matRegIdx), 24);
+            jit->vpsrld(RegType(matRegIdx), RegType(matRegIdx), 24);
+            jit->vcvtdq2ps(RegType(matRegIdx), RegType(matRegIdx));
+            break;
+        case DataType::bf16:
+            jit->vpslld(RegType(matRegIdx), RegType(matRegIdx), 16);
+            break;
+        case DataType::f16:
+            jit->vpmovdw(halfRegType(matRegIdx), RegType(matRegIdx));
+            jit->vcvtph2ps(RegType(matRegIdx), halfRegType(matRegIdx));
+            break;
+        case DataType::s32:
+            jit->vcvtdq2ps(RegType(matRegIdx), RegType(matRegIdx));
+            break;
+        default:
+            break;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MatOps::rowMajorPath - All KTypes (unified)
 // ─────────────────────────────────────────────────────────────────────────────
 template<utils::kernelInstrType KType>
@@ -849,38 +897,47 @@ jitGeneratorError MatOps<KType>::colMajorPath(
     const int sfElemSize = opBase::getElementSize(sfDtype);
     const int matElemSize = opBase::getElementSize(matOpDtype);
     const int sfLoadBytes = opBase::getLoadBytes(sfDtype);
+    constexpr int elemsPerReg =
+        Traits::regBytes / static_cast<int>(sizeof(float));
+    // vpgatherdd loads 4 bytes per lane. Sub-32-bit aux would over-read.
+    const bool useDwordGather =
+        (matElemSize >= static_cast<int>(sizeof(int32_t)));
+    const bool isFloat = (matOpDtype == DataType::f32);
 
-    if (this->maskPool) {
-        gatherMask0 = this->maskPool->acquireGuard();
-        gatherMask1 = this->maskPool->acquireGuard();
+    utils::registerGuard<RegType> off1Guard, off2Guard, scrReg2Guard;
+    utils::registerGuard<RegType> dw1Guard, dw2Guard;
+    int off1 = -1, off2 = -1, scrReg2 = -1, dw1 = -1, dw2 = -1;
+
+    if (useDwordGather) {
+        if (this->maskPool) {
+            gatherMask0 = this->maskPool->acquireGuard();
+            gatherMask1 = this->maskPool->acquireGuard();
+        }
+        if (!gatherMask0.isValid() || !gatherMask1.isValid())
+            return jitGeneratorError::notSupported;
+
+        Xbyak::Label offsets_label;
+        int64_t offsets[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+        jit->jmp(".offset_end", jit->T_NEAR);
+        { size_t r = jit->getSize() % 64; if (r) jit->nop(64 - r); }
+        jit->L(offsets_label);
+        jit->db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
+        jit->L(".offset_end");
+
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(off1Guard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(off2Guard));
+        RETURN_IF_ERROR(this->vecPool->acquireGuard(scrReg2Guard));
+
+        off1 = off1Guard.idx();
+        off2 = off2Guard.idx();
+        scrReg2 = scrReg2Guard.idx();
+
+        jit->vmovdqu32(RegType(off1), jit->ptr[jit->rip + offsets_label]);
+        jit->vmovdqu32(RegType(off2), jit->ptr[jit->rip + offsets_label + opBase::RegBytes]);
+        jit->vpbroadcastq(RegType(scrReg2), this->regTmp3);
+        jit->vpmullq(RegType(off1), RegType(off1), RegType(scrReg2));
+        jit->vpmullq(RegType(off2), RegType(off2), RegType(scrReg2));
     }
-    if (!gatherMask0.isValid() || !gatherMask1.isValid())
-        return jitGeneratorError::notSupported;
-
-    Xbyak::Label offsets_label;
-    int64_t offsets[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
-    jit->jmp(".offset_end", jit->T_NEAR);
-    { size_t r = jit->getSize() % 64; if (r) jit->nop(64 - r); }
-    jit->L(offsets_label);
-    jit->db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
-    jit->L(".offset_end");
-
-    utils::registerGuard<RegType> off1Guard;
-    RETURN_IF_ERROR(this->vecPool->acquireGuard(off1Guard));
-    utils::registerGuard<RegType> off2Guard;
-    RETURN_IF_ERROR(this->vecPool->acquireGuard(off2Guard));
-    utils::registerGuard<RegType> scrReg2Guard;
-    RETURN_IF_ERROR(this->vecPool->acquireGuard(scrReg2Guard));
-
-    int off1 = off1Guard.idx();
-    int off2 = off2Guard.idx();
-    int scrReg2 = scrReg2Guard.idx();
-
-    jit->vmovdqu32(RegType(off1), jit->ptr[jit->rip + offsets_label]);
-    jit->vmovdqu32(RegType(off2), jit->ptr[jit->rip + offsets_label + opBase::RegBytes]);
-    jit->vpbroadcastq(RegType(scrReg2), this->regTmp3);
-    jit->vpmullq(RegType(off1), RegType(off1), RegType(scrReg2));
-    jit->vpmullq(RegType(off2), RegType(off2), RegType(scrReg2));
 
     // Column-major address: mat + c_j * ldm + c_i * elemSize
     jit->lea(this->regTmp6, jit->ptr[this->regTmp6 * matElemSize]);
@@ -888,20 +945,19 @@ jitGeneratorError MatOps<KType>::colMajorPath(
     jit->add(this->regTmp7, this->regTmp6);
     jit->add(this->regTmp2, this->regTmp7);
 
-    // x86 addressing only supports scales 1,2,4,8; use lea*8 then *2 for ZMM
-    jit->lea(this->regTmp3, jit->ptr[this->regTmp3 * 8]);
-    if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
-        jit->lea(this->regTmp3, jit->ptr[this->regTmp3 * 2]);  // total: *16
-    }
+    if (useDwordGather) {
+        // x86 addressing only supports scales 1,2,4,8; use lea*8 then *2 for ZMM
+        jit->lea(this->regTmp3, jit->ptr[this->regTmp3 * 8]);
+        if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+            jit->lea(this->regTmp3, jit->ptr[this->regTmp3 * 2]);  // total: *16
+        }
 
-    utils::registerGuard<RegType> dw1Guard, dw2Guard;
-    int dw1 = -1, dw2 = -1;
-    bool isFloat = (matOpDtype == DataType::f32);
-    if (!isFloat) {
-        RETURN_IF_ERROR(this->vecPool->acquireGuard(dw1Guard));
-        RETURN_IF_ERROR(this->vecPool->acquireGuard(dw2Guard));
-        dw1 = dw1Guard.idx();
-        dw2 = dw2Guard.idx();
+        if (!isFloat) {
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(dw1Guard));
+            RETURN_IF_ERROR(this->vecPool->acquireGuard(dw2Guard));
+            dw1 = dw1Guard.idx();
+            dw2 = dw2Guard.idx();
+        }
     }
 
     for (int i = 0; i < this->MR; i++) {
@@ -922,79 +978,72 @@ jitGeneratorError MatOps<KType>::colMajorPath(
                                 RegType(sfRegIdx), false));
             }
 
-            resetGatherMasks(isFringe, maskIdx);
+            if (useDwordGather) {
+                resetGatherMasks(isFringe, maskIdx);
 
-            if (isFloat) {
-                jit->vgatherqps(halfRegType(matRegIdx) | Xbyak::Opmask(gatherMask0.idx()),
-                               jit->ptr[this->regTmp4 + RegType(off1) * 1]);
-                jit->vgatherqps(halfRegType(scrReg2) | Xbyak::Opmask(gatherMask1.idx()),
-                               jit->ptr[this->regTmp4 + RegType(off2) * 1]);
-            } else {
-                jit->vpmovqd(halfRegType(dw1), RegType(off1));
-                jit->vpmovqd(halfRegType(dw2), RegType(off2));
-                jit->vpgatherdd(halfRegType(matRegIdx) | Xbyak::Opmask(gatherMask0.idx()),
-                               jit->ptr[this->regTmp4 + halfRegType(dw1) * 1]);
-                jit->vpgatherdd(halfRegType(scrReg2) | Xbyak::Opmask(gatherMask1.idx()),
-                               jit->ptr[this->regTmp4 + halfRegType(dw2) * 1]);
-            }
-
-            if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
                 if (isFloat) {
-                    jit->vinsertf32x8(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+                    jit->vgatherqps(halfRegType(matRegIdx) | Xbyak::Opmask(gatherMask0.idx()),
+                                   jit->ptr[this->regTmp4 + RegType(off1) * 1]);
+                    jit->vgatherqps(halfRegType(scrReg2) | Xbyak::Opmask(gatherMask1.idx()),
+                                   jit->ptr[this->regTmp4 + RegType(off2) * 1]);
                 } else {
-                    jit->vinserti32x8(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+                    jit->vpmovqd(halfRegType(dw1), RegType(off1));
+                    jit->vpmovqd(halfRegType(dw2), RegType(off2));
+                    jit->vpgatherdd(halfRegType(matRegIdx) | Xbyak::Opmask(gatherMask0.idx()),
+                                   jit->ptr[this->regTmp4 + halfRegType(dw1) * 1]);
+                    jit->vpgatherdd(halfRegType(scrReg2) | Xbyak::Opmask(gatherMask1.idx()),
+                                   jit->ptr[this->regTmp4 + halfRegType(dw2) * 1]);
                 }
-            } else {
-                if (isFloat) {
-                    jit->vinsertf32x4(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+
+                if constexpr (KType == utils::kernelInstrType::avx512_zmm_32_reg) {
+                    if (isFloat) {
+                        jit->vinsertf32x8(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+                    } else {
+                        jit->vinserti32x8(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+                    }
                 } else {
-                    jit->vinserti32x4(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+                    if (isFloat) {
+                        jit->vinsertf32x4(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+                    } else {
+                        jit->vinserti32x4(RegType(matRegIdx), RegType(matRegIdx), halfRegType(scrReg2), 1);
+                    }
                 }
-            }
 
-            switch (matOpDtype) {
-                case DataType::s8:
-                    jit->vpslld(RegType(matRegIdx), RegType(matRegIdx), 24);
-                    jit->vpsrad(RegType(matRegIdx), RegType(matRegIdx), 24);
-                    jit->vcvtdq2ps(RegType(matRegIdx), RegType(matRegIdx));
-                    break;
-                case DataType::u8:
-                    jit->vpslld(RegType(matRegIdx), RegType(matRegIdx), 24);
-                    jit->vpsrld(RegType(matRegIdx), RegType(matRegIdx), 24);
-                    jit->vcvtdq2ps(RegType(matRegIdx), RegType(matRegIdx));
-                    break;
-                case DataType::bf16:
-                    jit->vpslld(RegType(matRegIdx), RegType(matRegIdx), 16);
-                    break;
-                case DataType::f16:
-                    jit->vpmovdw(halfRegType(matRegIdx), RegType(matRegIdx));
-                    jit->vcvtph2ps(RegType(matRegIdx), halfRegType(matRegIdx));
-                    break;
-                case DataType::s32:
-                    jit->vcvtdq2ps(RegType(matRegIdx), RegType(matRegIdx));
-                    break;
-                default: break;
-            }
+                convertGatheredAuxToF32(matOpDtype, matRegIdx);
 
-            if (hasSF && opType == matOpType::matOpAdd) {
-                jit->vfmadd231ps(RegType(accumIdx), RegType(matRegIdx), RegType(sfRegIdx));
-            } else if (hasSF) {
-                jit->vmulps(RegType(matRegIdx), RegType(matRegIdx), RegType(sfRegIdx));
-                jit->vmulps(RegType(accumIdx), RegType(accumIdx), RegType(matRegIdx));
-            } else if (opType == matOpType::matOpAdd) {
-                jit->vaddps(RegType(accumIdx), RegType(accumIdx), RegType(matRegIdx));
+                if (hasSF && opType == matOpType::matOpAdd) {
+                    jit->vfmadd231ps(RegType(accumIdx), RegType(matRegIdx), RegType(sfRegIdx));
+                } else if (hasSF) {
+                    jit->vmulps(RegType(matRegIdx), RegType(matRegIdx), RegType(sfRegIdx));
+                    jit->vmulps(RegType(accumIdx), RegType(accumIdx), RegType(matRegIdx));
+                } else if (opType == matOpType::matOpAdd) {
+                    jit->vaddps(RegType(accumIdx), RegType(accumIdx), RegType(matRegIdx));
+                } else {
+                    jit->vmulps(RegType(accumIdx), RegType(accumIdx), RegType(matRegIdx));
+                }
+
+                jit->add(this->regTmp4, this->regTmp3);
             } else {
-                jit->vmulps(RegType(accumIdx), RegType(accumIdx), RegType(matRegIdx));
+                const int numElems =
+                    isFringe ? (this->NR % elemsPerReg) : elemsPerReg;
+                RETURN_IF_ERROR(this->loadStridedAlongM(
+                    matOpDtype, matRegIdx, numElems));
+                Xbyak::Opmask fringeMask = Xbyak::Opmask(0);
+                if (isFringe) {
+                    fringeMask = this->getFringeMask(maskIdx);
+                }
+                applyMatOp(opType, hasSF, isFringe, accumIdx, matRegIdx,
+                           sfRegIdx, fringeMask);
             }
-
-            jit->add(this->regTmp4, this->regTmp3);
         }
 
         jit->add(this->regTmp2, matElemSize);
     }
 
-    gatherMask1 = utils::registerGuard<Xbyak::Opmask>();
-    gatherMask0 = utils::registerGuard<Xbyak::Opmask>();
+    if (useDwordGather) {
+        gatherMask1 = utils::registerGuard<Xbyak::Opmask>();
+        gatherMask0 = utils::registerGuard<Xbyak::Opmask>();
+    }
     return jitGeneratorError::success;
 }
 
@@ -1022,10 +1071,6 @@ inline jitGeneratorError MatOps<utils::kernelInstrType::avx2_ymm_16_reg>::colMaj
     jit->add(this->regTmp7, this->regTmp6);
     jit->add(this->regTmp2, this->regTmp7);
 
-    utils::registerGuard<RegType> tmpRegGuard;
-    RETURN_IF_ERROR(this->vecPool->acquireGuard(tmpRegGuard));
-    int tmpRegIdx = tmpRegGuard.idx();
-
     constexpr int elemsPerReg = 8; // YMM = 8 floats
 
     for (int i = 0; i < this->MR; i++) {
@@ -1046,21 +1091,8 @@ inline jitGeneratorError MatOps<utils::kernelInstrType::avx2_ymm_16_reg>::colMaj
                                 RegType(sfRegIdx), isFringe));
             }
 
-            jit->vxorps(RegType(matRegIdx), RegType(matRegIdx), RegType(matRegIdx));
-
-            for (int k = 0; k < numElems; k++) {
-                RETURN_IF_ERROR(this->broadcastScalar(
-                    matOpDtype, jit->ptr[this->regTmp4], RegType(tmpRegIdx)));
-
-                if (k == 0) {
-                    jit->vmovaps(RegType(matRegIdx), RegType(tmpRegIdx));
-                } else {
-                    jit->vblendps(RegType(matRegIdx), RegType(matRegIdx),
-                                 RegType(tmpRegIdx), (1 << k));
-                }
-
-                jit->add(this->regTmp4, this->regTmp3);
-            }
+            RETURN_IF_ERROR(this->loadStridedAlongM(
+                matOpDtype, matRegIdx, numElems));
 
             applyMatOp(opType, hasSF, isFringe, accumIdx, matRegIdx, sfRegIdx, Xbyak::Opmask(0));
         }
@@ -1071,46 +1103,332 @@ inline jitGeneratorError MatOps<utils::kernelInstrType::avx2_ymm_16_reg>::colMaj
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MatOps::gemvN1Path - GEMV N=1 (all KTypes)
+// MatOps::loadStridedAlongM - element-sized insert of strided aux lanes
 // ─────────────────────────────────────────────────────────────────────────────
 template<utils::kernelInstrType KType>
-jitGeneratorError MatOps<KType>::gemvN1Path(
-    matOpType opType, matOpScaleType sclType, bool hasSF,
-    DataType sfDtype, DataType matOpDtype,
-    int matRegIdx, int sfRegIdx)
+jitGeneratorError MatOps<KType>::loadStridedAlongM(
+    DataType matOpDtype, int matRegIdx, int numElems)
 {
     auto* jit = this->jit;
-    const int sfElemSize = opBase::getElementSize(sfDtype);
-    const int matElemSize = opBase::getElementSize(matOpDtype);
-    const int sfLoadBytes = opBase::getLoadBytes(sfDtype);
-    const int matLoadBytes = opBase::getLoadBytes(matOpDtype);
 
-    // mat + c_i * elemSize (contiguous, ldm=1)
-    jit->lea(this->regTmp3, jit->ptr[this->regTmp6 * matElemSize]);
-    jit->add(this->regTmp2, this->regTmp3);
+    utils::registerGuard<RegType> tmpGuard;
+    RETURN_IF_ERROR(this->vecPool->acquireGuard(tmpGuard));
+    int tmpRegIdx = tmpGuard.idx();
 
-    if (hasSF && sclType == matOpScaleType::rowVector) {
-        jit->lea(this->regTmp1, jit->ptr[this->regTmp1 + this->regTmp7 * sfElemSize]);
-        RETURN_IF_ERROR(this->broadcastScalar(sfDtype, jit->ptr[this->regTmp1], RegType(sfRegIdx)));
+    // AVX-512 needs EVEX vblendmps: VBLENDPS is VEX-only (ymm0-15).
+    utils::registerGuard<Xbyak::Opmask> laneMaskGuard;
+    if constexpr (Traits::isAVX512) {
+        if (numElems > 1) {
+            if (this->maskPool) {
+                laneMaskGuard = this->maskPool->acquireGuard();
+            }
+            if (!laneMaskGuard.isValid()) {
+                return jitGeneratorError::notSupported;
+            }
+        }
     }
 
+    for (int lane = 0; lane < numElems; lane++) {
+        RETURN_IF_ERROR(this->broadcastScalar(
+            matOpDtype, jit->ptr[this->regTmp4], RegType(tmpRegIdx)));
+
+        if (lane == 0) {
+            jit->vmovaps(RegType(matRegIdx), RegType(tmpRegIdx));
+        } else if constexpr (Traits::isAVX512) {
+            jit->mov(this->regTmp5Half, 1u << lane);
+            jit->kmovw(Xbyak::Opmask(laneMaskGuard.idx()), this->regTmp5Half);
+            jit->vblendmps(RegType(matRegIdx)
+                               | Xbyak::Opmask(laneMaskGuard.idx()),
+                           RegType(matRegIdx), RegType(tmpRegIdx));
+        } else {
+            jit->vblendps(RegType(matRegIdx), RegType(matRegIdx),
+                          RegType(tmpRegIdx), 1 << lane);
+        }
+
+        jit->add(this->regTmp4, this->regTmp3);
+    }
+
+    return jitGeneratorError::success;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MatOps::gemvN1LoadColumnVectorSf
+// ─────────────────────────────────────────────────────────────────────────────
+template<utils::kernelInstrType KType>
+jitGeneratorError MatOps<KType>::gemvN1LoadColumnVectorSf(
+    matOpScaleType sclType, bool hasSF, DataType sfDtype, int sfRegIdx,
+    bool isFringe, int j, const Xbyak::Opmask& fringeMask)
+{
+    if (!(hasSF && sclType == matOpScaleType::columnVector)) {
+        return jitGeneratorError::success;
+    }
+    const int sfLoadBytes = opBase::getLoadBytes(sfDtype);
+    return this->loadVector(sfDtype,
+                            this->jit->ptr[this->regTmp1 + j * sfLoadBytes],
+                            RegType(sfRegIdx), isFringe, fringeMask);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MatOps::gemvN1EmitContiguousAlongM - vector load of compact-along-M aux
+// ─────────────────────────────────────────────────────────────────────────────
+template<utils::kernelInstrType KType>
+jitGeneratorError MatOps<KType>::gemvN1EmitContiguousAlongM(
+    matOpType opType, matOpScaleType sclType, bool hasSF,
+    DataType sfDtype, DataType matOpDtype, int matRegIdx, int sfRegIdx)
+{
+    const int matLoadBytes = opBase::getLoadBytes(matOpDtype);
     for (int j = 0; j < this->numRegsPerRow; j++) {
         bool isFringe = (j >= this->numFullRegsPerRow);
         int maskIdx = isFringe ? (j - this->numFullRegsPerRow) : 0;
         int accumIdx = this->cRegStartIdx + j;
         Xbyak::Opmask fringeMask = this->getFringeMask(maskIdx);
 
-        RETURN_IF_ERROR(this->loadVector(matOpDtype, jit->ptr[this->regTmp2 + j * matLoadBytes],
-                        RegType(matRegIdx), isFringe, fringeMask));
-
-        if (hasSF && sclType == matOpScaleType::columnVector) {
-            RETURN_IF_ERROR(this->loadVector(sfDtype, jit->ptr[this->regTmp1 + j * sfLoadBytes],
-                            RegType(sfRegIdx), isFringe, fringeMask));
-        }
-
-        applyMatOp(opType, hasSF, isFringe, accumIdx, matRegIdx, sfRegIdx, fringeMask);
+        RETURN_IF_ERROR(this->loadVector(
+            matOpDtype, this->jit->ptr[this->regTmp2 + j * matLoadBytes],
+            RegType(matRegIdx), isFringe, fringeMask));
+        RETURN_IF_ERROR(this->gemvN1LoadColumnVectorSf(
+            sclType, hasSF, sfDtype, sfRegIdx, isFringe, j, fringeMask));
+        applyMatOp(opType, hasSF, isFringe, accumIdx, matRegIdx, sfRegIdx,
+                   fringeMask);
     }
     return jitGeneratorError::success;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MatOps::gemvN1RowMajorPath - GEMV N=1 row-major auxiliary
+// Address: mat + c_i * ldm + c_j * elemSize. Compact ldm is a vector load;
+// padded ldm is strided along M (scalar insert, or dword gather for f32/s32).
+// Named labels (not inLocalLabel) so a generate-time error can still bind
+// every forward reference.
+// ─────────────────────────────────────────────────────────────────────────────
+template<utils::kernelInstrType KType>
+jitGeneratorError MatOps<KType>::gemvN1RowMajorPath(
+    matOpType opType, matOpScaleType sclType, bool hasSF,
+    DataType sfDtype, DataType matOpDtype, int matRegIdx, int sfRegIdx)
+{
+    auto* jit = this->jit;
+    const int matElemSize = opBase::getElementSize(matOpDtype);
+
+    jit->mov(this->regTmp4, this->regTmp6);
+    jit->imul(this->regTmp4, this->regTmp3);
+    jit->lea(this->regTmp4,
+             jit->ptr[this->regTmp4 + this->regTmp7 * matElemSize]);
+    jit->add(this->regTmp2, this->regTmp4);
+
+    Xbyak::Label stridedLabel, doneLabel;
+    jitGeneratorError pathErr = jitGeneratorError::success;
+
+    jit->cmp(this->regTmp3, matElemSize);
+    jit->jne(stridedLabel, jit->T_NEAR);
+
+    pathErr = this->gemvN1EmitContiguousAlongM(
+        opType, sclType, hasSF, sfDtype, matOpDtype, matRegIdx, sfRegIdx);
+    jit->jmp(doneLabel, jit->T_NEAR);
+
+    jit->L(stridedLabel);
+    if (pathErr == jitGeneratorError::success) {
+        auto emitStridedScalar = [&]() -> jitGeneratorError {
+            constexpr int elemsPerReg =
+                Traits::regBytes / static_cast<int>(sizeof(float));
+            jit->mov(this->regTmp4, this->regTmp2);
+            for (int j = 0; j < this->numRegsPerRow; j++) {
+                bool isFringe = (j >= this->numFullRegsPerRow);
+                int maskIdx = isFringe ? (j - this->numFullRegsPerRow) : 0;
+                int accumIdx = this->cRegStartIdx + j;
+                const int numElems =
+                    isFringe ? (this->MR % elemsPerReg) : elemsPerReg;
+                Xbyak::Opmask fringeMask = Xbyak::Opmask(0);
+                if constexpr (KType
+                              != utils::kernelInstrType::avx2_ymm_16_reg) {
+                    if (isFringe) {
+                        fringeMask = this->getFringeMask(maskIdx);
+                    }
+                }
+
+                RETURN_IF_ERROR(this->loadStridedAlongM(
+                    matOpDtype, matRegIdx, numElems));
+                RETURN_IF_ERROR(this->gemvN1LoadColumnVectorSf(
+                    sclType, hasSF, sfDtype, sfRegIdx, isFringe, j,
+                    fringeMask));
+                applyMatOp(opType, hasSF, isFringe, accumIdx, matRegIdx,
+                           sfRegIdx, fringeMask);
+            }
+            return jitGeneratorError::success;
+        };
+
+        if constexpr (KType == utils::kernelInstrType::avx2_ymm_16_reg) {
+            pathErr = emitStridedScalar();
+        } else if (matElemSize < static_cast<int>(sizeof(int32_t))) {
+            pathErr = emitStridedScalar();
+        } else {
+            auto emitGatherStrided = [&]() -> jitGeneratorError {
+                if (this->maskPool) {
+                    gatherMask0 = this->maskPool->acquireGuard();
+                    gatherMask1 = this->maskPool->acquireGuard();
+                }
+                if (!gatherMask0.isValid() || !gatherMask1.isValid()) {
+                    return jitGeneratorError::notSupported;
+                }
+
+                Xbyak::Label offsetsLabel;
+                Xbyak::Label offsetsEndLabel;
+                int64_t offsets[16] = { 0, 1, 2, 3, 4, 5, 6, 7,
+                                        8, 9, 10, 11, 12, 13, 14, 15 };
+                jit->jmp(offsetsEndLabel, jit->T_NEAR);
+                { size_t r = jit->getSize() % 64; if (r) jit->nop(64 - r); }
+                jit->L(offsetsLabel);
+                jit->db(reinterpret_cast<uint8_t*>(&offsets), sizeof(offsets));
+                jit->L(offsetsEndLabel);
+
+                utils::registerGuard<RegType> off1Guard;
+                RETURN_IF_ERROR(this->vecPool->acquireGuard(off1Guard));
+                utils::registerGuard<RegType> off2Guard;
+                RETURN_IF_ERROR(this->vecPool->acquireGuard(off2Guard));
+                utils::registerGuard<RegType> scrReg2Guard;
+                RETURN_IF_ERROR(this->vecPool->acquireGuard(scrReg2Guard));
+
+                int off1 = off1Guard.idx();
+                int off2 = off2Guard.idx();
+                int scrReg2 = scrReg2Guard.idx();
+
+                jit->vmovdqu32(RegType(off1),
+                               jit->ptr[jit->rip + offsetsLabel]);
+                jit->vmovdqu32(
+                    RegType(off2),
+                    jit->ptr[jit->rip + offsetsLabel + opBase::RegBytes]);
+                jit->vpbroadcastq(RegType(scrReg2), this->regTmp3);
+                jit->vpmullq(RegType(off1), RegType(off1), RegType(scrReg2));
+                jit->vpmullq(RegType(off2), RegType(off2), RegType(scrReg2));
+
+                jit->lea(this->regTmp3, jit->ptr[this->regTmp3 * 8]);
+                if constexpr (KType
+                              == utils::kernelInstrType::avx512_zmm_32_reg) {
+                    jit->lea(this->regTmp3, jit->ptr[this->regTmp3 * 2]);
+                }
+                jit->mov(this->regTmp4, this->regTmp2);
+
+                utils::registerGuard<RegType> dw1Guard, dw2Guard;
+                int dw1 = -1, dw2 = -1;
+                bool isFloat = (matOpDtype == DataType::f32);
+                if (!isFloat) {
+                    RETURN_IF_ERROR(this->vecPool->acquireGuard(dw1Guard));
+                    RETURN_IF_ERROR(this->vecPool->acquireGuard(dw2Guard));
+                    dw1 = dw1Guard.idx();
+                    dw2 = dw2Guard.idx();
+                }
+
+                for (int j = 0; j < this->numRegsPerRow; j++) {
+                    bool isFringe = (j >= this->numFullRegsPerRow);
+                    int maskIdx = isFringe ? (j - this->numFullRegsPerRow) : 0;
+                    int accumIdx = this->cRegStartIdx + j;
+                    Xbyak::Opmask fringeMask = this->getFringeMask(maskIdx);
+
+                    resetGatherMasks(isFringe, maskIdx);
+
+                    if (isFloat) {
+                        jit->vgatherqps(
+                            halfRegType(matRegIdx)
+                                | Xbyak::Opmask(gatherMask0.idx()),
+                            jit->ptr[this->regTmp4 + RegType(off1) * 1]);
+                        jit->vgatherqps(
+                            halfRegType(scrReg2)
+                                | Xbyak::Opmask(gatherMask1.idx()),
+                            jit->ptr[this->regTmp4 + RegType(off2) * 1]);
+                    } else {
+                        jit->vpmovqd(halfRegType(dw1), RegType(off1));
+                        jit->vpmovqd(halfRegType(dw2), RegType(off2));
+                        jit->vpgatherdd(
+                            halfRegType(matRegIdx)
+                                | Xbyak::Opmask(gatherMask0.idx()),
+                            jit->ptr[this->regTmp4 + halfRegType(dw1) * 1]);
+                        jit->vpgatherdd(
+                            halfRegType(scrReg2)
+                                | Xbyak::Opmask(gatherMask1.idx()),
+                            jit->ptr[this->regTmp4 + halfRegType(dw2) * 1]);
+                    }
+
+                    if constexpr (KType
+                                  == utils::kernelInstrType::avx512_zmm_32_reg) {
+                        if (isFloat) {
+                            jit->vinsertf32x8(RegType(matRegIdx),
+                                              RegType(matRegIdx),
+                                              halfRegType(scrReg2), 1);
+                        } else {
+                            jit->vinserti32x8(RegType(matRegIdx),
+                                              RegType(matRegIdx),
+                                              halfRegType(scrReg2), 1);
+                        }
+                    } else {
+                        if (isFloat) {
+                            jit->vinsertf32x4(RegType(matRegIdx),
+                                              RegType(matRegIdx),
+                                              halfRegType(scrReg2), 1);
+                        } else {
+                            jit->vinserti32x4(RegType(matRegIdx),
+                                              RegType(matRegIdx),
+                                              halfRegType(scrReg2), 1);
+                        }
+                    }
+
+                    convertGatheredAuxToF32(matOpDtype, matRegIdx);
+                    RETURN_IF_ERROR(this->gemvN1LoadColumnVectorSf(
+                        sclType, hasSF, sfDtype, sfRegIdx, isFringe, j,
+                        fringeMask));
+                    applyMatOp(opType, hasSF, isFringe, accumIdx, matRegIdx,
+                               sfRegIdx, fringeMask);
+                    jit->add(this->regTmp4, this->regTmp3);
+                }
+
+                gatherMask1 = utils::registerGuard<Xbyak::Opmask>();
+                gatherMask0 = utils::registerGuard<Xbyak::Opmask>();
+                return jitGeneratorError::success;
+            };
+            pathErr = emitGatherStrided();
+        }
+    }
+    jit->L(doneLabel);
+    return pathErr;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MatOps::gemvN1ColMajorPath - GEMV N=1 col-major auxiliary
+// True Mx1 col-major (csC != 1) is contiguous along M. Public aocl_gemm
+// column-major GEMV induces a transpose first (csC == 1): user M=1 becomes
+// N=1 and the 1xN aux uses the row-major formula, so that arm emits
+// gemvN1RowMajorPath.
+// ─────────────────────────────────────────────────────────────────────────────
+template<utils::kernelInstrType KType>
+jitGeneratorError MatOps<KType>::gemvN1ColMajorPath(
+    matOpType opType, matOpScaleType sclType, bool hasSF,
+    DataType sfDtype, DataType matOpDtype, int matRegIdx, int sfRegIdx)
+{
+    auto* jit = this->jit;
+    const int matElemSize = opBase::getElementSize(matOpDtype);
+
+    Xbyak::Label inducedLabel, allDoneLabel;
+    jitGeneratorError pathErr = jitGeneratorError::success;
+
+    jit->cmp(this->regcsC, 1);
+    jit->je(inducedLabel, jit->T_NEAR);
+
+    jit->mov(this->regTmp4, this->regTmp7);
+    jit->imul(this->regTmp4, this->regTmp3);
+    jit->lea(this->regTmp4,
+             jit->ptr[this->regTmp4 + this->regTmp6 * matElemSize]);
+    jit->add(this->regTmp2, this->regTmp4);
+
+    pathErr = this->gemvN1EmitContiguousAlongM(
+        opType, sclType, hasSF, sfDtype, matOpDtype, matRegIdx, sfRegIdx);
+    jit->jmp(allDoneLabel, jit->T_NEAR);
+
+    jit->L(inducedLabel);
+    jitGeneratorError rowErr = this->gemvN1RowMajorPath(
+        opType, sclType, hasSF, sfDtype, matOpDtype, matRegIdx, sfRegIdx);
+    if (pathErr == jitGeneratorError::success) {
+        pathErr = rowErr;
+    }
+    jit->L(allDoneLabel);
+    return pathErr;
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
