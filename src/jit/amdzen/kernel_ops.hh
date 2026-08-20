@@ -57,7 +57,8 @@ class kernelopsBase : public kernelOpsGeneratorX86<KType>
 // Strategy classes
 // ═════════════════════════════════════════════════════════════════════════
 
-// MatOps: C += / *= auxiliary matrix (row-major, col-major, GEMV-N1 paths)
+// MatOps: C += / *= auxiliary matrix. GEMM and GEMV N=1 each have a
+// row-major and a col-major path; layout is the method, not an argument.
 template<utils::kernelInstrType KType>
 class MatOps : public kernelopsBase<MatOps<KType>, KType>
 {
@@ -87,6 +88,12 @@ class MatOps : public kernelopsBase<MatOps<KType>, KType>
                            int                  matRegIdx,
                            int                  sfRegIdx,
                            const Xbyak::Opmask& fringeMask);
+
+    // Shared by colMajorPath and gemvN1RowMajorPath after a dword gather.
+    // Sub-32-bit aux uses element-sized loads instead of gather. f32 is a
+    // no-op.
+    inline void convertGatheredAuxToF32(dlp::kernel_frame::DataType matOpDtype,
+                                        int                         matRegIdx);
 
     utils::registerGuard<Xbyak::Opmask> gatherMask0;
     utils::registerGuard<Xbyak::Opmask> gatherMask1;
@@ -141,7 +148,7 @@ class MatOps : public kernelopsBase<MatOps<KType>, KType>
         int                         matRegIdx,
         int                         sfRegIdx);
 
-    dlp::jit::jitGeneratorError gemvN1Path(
+    dlp::jit::jitGeneratorError gemvN1RowMajorPath(
         matOpType                   opType,
         matOpScaleType              sclType,
         bool                        hasSF,
@@ -149,6 +156,39 @@ class MatOps : public kernelopsBase<MatOps<KType>, KType>
         dlp::kernel_frame::DataType matOpDtype,
         int                         matRegIdx,
         int                         sfRegIdx);
+
+    dlp::jit::jitGeneratorError gemvN1ColMajorPath(
+        matOpType                   opType,
+        matOpScaleType              sclType,
+        bool                        hasSF,
+        dlp::kernel_frame::DataType sfDtype,
+        dlp::kernel_frame::DataType matOpDtype,
+        int                         matRegIdx,
+        int                         sfRegIdx);
+
+    dlp::jit::jitGeneratorError gemvN1LoadColumnVectorSf(
+        matOpScaleType              sclType,
+        bool                        hasSF,
+        dlp::kernel_frame::DataType sfDtype,
+        int                         sfRegIdx,
+        bool                        isFringe,
+        int                         j,
+        const Xbyak::Opmask&        fringeMask);
+
+    dlp::jit::jitGeneratorError gemvN1EmitContiguousAlongM(
+        matOpType                   opType,
+        matOpScaleType              sclType,
+        bool                        hasSF,
+        dlp::kernel_frame::DataType sfDtype,
+        dlp::kernel_frame::DataType matOpDtype,
+        int                         matRegIdx,
+        int                         sfRegIdx);
+
+    // Fill one register from strided aux elements at [regTmp4] with byte
+    // stride regTmp3, advancing regTmp4 by one element per lane. Uses
+    // element-sized loads (no dword gather over-read).
+    dlp::jit::jitGeneratorError loadStridedAlongM(
+        dlp::kernel_frame::DataType matOpDtype, int matRegIdx, int numElems);
 };
 
 // GeluErf: GELU(x) = 0.5 * x * (1 + erf(x / sqrt(2)))
