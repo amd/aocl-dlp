@@ -408,8 +408,8 @@ struct gemvM1GeneratorParams
     bool nloop;   // Whether to loop in n direction in steps of NR
     bool kloop;   // Whether to loop in k direction in steps of numElemsPerReg
     bool nfringe; // Whether to generate code for n-dimension fringe
-    bool nfringe_main;
-    bool nfringe_left;
+    bool nfringe_main = false; // Initialize to false
+    bool nfringe_left = false; // Initialize to false
     bool kfringe; // Whether to generate code for k-dimension fringe
 
     dlp::kernel_frame::storageFormat yFormat; // Storage format of the y vector
