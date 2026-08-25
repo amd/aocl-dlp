@@ -1484,14 +1484,12 @@ UalDlp::batch_prepare_metadata(PreparedBatchGemmArgs& args)
             plan->setDimensions(args.m[i], args.n[i], args.k[i]);
             plan->prepare();
             args.backend_metadata[i] = plan->getMetadata();
-            args.backend_metadata_storage.push_back(
-                std::static_pointer_cast<void>(plan));
+            args.backend_metadata_storage.push_back(std::move(plan));
         } else {
             auto meta = std::make_shared<dlp_metadata_t>();
             std::memset(meta.get(), 0, sizeof(dlp_metadata_t));
             args.backend_metadata[i] = meta.get();
-            args.backend_metadata_storage.push_back(
-                std::static_pointer_cast<void>(meta));
+            args.backend_metadata_storage.push_back(std::move(meta));
         }
     }
 
