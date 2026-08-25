@@ -30,6 +30,7 @@
 #define DLP_GEMM_UTILS_H
 
 #include <stdio.h>
+#include <string.h>
 
 #include "dlp_gemm_types.h"
 #include "runtime/dlp_runtime.h"
@@ -71,6 +72,52 @@ dlp_make_multiple_of_n(md_t k, md_t n)
     }
 
     return (((k + n - 1) / n) * n);
+}
+
+// Byte offset of the int32 column-sum array within the n==1 B layout, which
+// holds a tight s8 column of k elements immediately followed by the per-group
+// column sums. Rounding the boundary up keeps the int32 array naturally
+// aligned when k is not a multiple of sizeof(int32_t). Every producer,
+// consumer and buffer-size calculation for that layout must agree on it.
+DLP_INLINE md_t
+dlp_gemm_col_sum_byte_offset(md_t k)
+{
+    return dlp_make_multiple_of_n(k * (md_t)sizeof(int8_t),
+                                  (md_t)sizeof(int32_t));
+}
+
+// Read the four A elements that make up one VNNI dot-product group as a single
+// int32 suitable for _mm512_set1_epi32. A is walked at element granularity, so
+// a group boundary lands on an arbitrary byte for s8 and on an even byte for
+// bf16; dereferencing an int32_t* there is undefined behaviour even though x86
+// permits the unaligned access. Assemble the value through byte accesses to
+// avoid both the unaligned dereference and non-portable memcpy_s dependencies;
+// compilers fold this little-endian pattern into the same single load on x86.
+DLP_INLINE int32_t
+dlp_load_unaligned_int32(const void* src)
+{
+    const uint8_t* bytes = (const uint8_t*)src;
+    uint32_t       val   = (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8)
+                   | ((uint32_t)bytes[2] << 16) | ((uint32_t)bytes[3] << 24);
+    return (int32_t)val;
+}
+
+// The C accumulation pointer is deliberately null on the downscale paths that
+// fit in a single KC block: no temporary accumulation buffer is checked out,
+// the kernel keeps the tile in registers and writes the result out through
+// post_ops_attr.buf_downscale, so C is never dereferenced. Offsetting a null
+// pointer is undefined behaviour even when the offset is zero, so carry the
+// null through the jc/ic/jr subscripting instead of forming NULL + offset.
+DLP_INLINE int32_t*
+dlp_offset_or_null_s32(int32_t* base, md_t offset)
+{
+    return (base == NULL) ? NULL : (base + offset);
+}
+
+DLP_INLINE float*
+dlp_offset_or_null_f32(float* base, md_t offset)
+{
+    return (base == NULL) ? NULL : (base + offset);
 }
 
 DLP_INLINE md_t

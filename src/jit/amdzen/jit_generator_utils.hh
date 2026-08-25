@@ -32,6 +32,7 @@
 
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <initializer_list>
@@ -68,6 +69,18 @@ using jit_pack_b_kernel  = void (*)(dlp::kernels::packBParams*);
 // This size is used to allocate the memory for the JIT code generator, where
 // xbyak in autogrow mode will automatically grow the buffer size if needed.
 constexpr uint64_t JIT_KERNEL_SIZE = 8 * 4096;
+
+// The caller passes a null C whenever it downscales without checking out a
+// temporary accumulation buffer: the kernel keeps the tile in registers and
+// writes it out through the post-op downscale buffer, so C is never
+// dereferenced. Offsetting a null pointer is undefined behaviour even when
+// the offset is zero, so carry the null through the jr walk unchanged.
+template<typename T>
+inline T*
+offsetOrNull(T* base, std::ptrdiff_t offset)
+{
+    return (base == nullptr) ? nullptr : (base + offset);
+}
 
 enum class kernelInstrType : uint16_t
 {

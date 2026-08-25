@@ -136,12 +136,12 @@ DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
                 b_use += 32;
 
                 // Broadcast col0-col3 elements of A
-                zmm4 = DLP_CAST_SI512_BH(_mm512_set1_epi32(*(int32_t*)(a_use)));
-                zmm5 = DLP_CAST_SI512_BH(_mm512_set1_epi32(*(int32_t*)(a_use + (cs_a))));
+                zmm4 = DLP_CAST_SI512_BH(_mm512_set1_epi32(dlp_load_unaligned_int32(a_use)));
+                zmm5 = DLP_CAST_SI512_BH(_mm512_set1_epi32(dlp_load_unaligned_int32(a_use + (cs_a))));
                 zmm6 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                    *(int32_t*)(a_use + (cs_a * 2))));
+                    dlp_load_unaligned_int32(a_use + (cs_a * 2))));
                 zmm7 = DLP_CAST_SI512_BH(_mm512_set1_epi32(
-                    *(int32_t*)(a_use + (cs_a * 3))));
+                    dlp_load_unaligned_int32(a_use + (cs_a * 3))));
 
                 // Load second 4x32 tile from row 0-3
                 zmm24 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k6, b_use));
@@ -200,7 +200,7 @@ DLP_GEMV_M_EQ1_KERN(bfloat16, bfloat16, float, bf16bf16f32of32)
                 zmm3 = DLP_CAST_SI512_BH(_mm512_maskz_loadu_epi16(k8, b_use + cs_b * 3));
 
                 // Broadcast col0 elements of A
-                zmm4 = DLP_CAST_SI512_BH(_mm512_set1_epi32(*(int32_t*)(a_use)));
+                zmm4 = DLP_CAST_SI512_BH(_mm512_set1_epi32(dlp_load_unaligned_int32(a_use)));
 
                 zmm8  = _mm512_dpbf16_ps(zmm8, zmm4, zmm0);
                 zmm12 = _mm512_dpbf16_ps(zmm12, zmm4, zmm1);

@@ -128,24 +128,16 @@ aocl_get_reorder_buf_size_s8s8s32os32(const char      order,
     // should give 4x16=64 elements, enough for 1 zmm register.The padding is
     // not rounded to NR (=64), since that would result in memory wastage.
 #ifdef DLP_KERNELS_ZEN4
-    md_t n_reorder;
     if (n == 1) {
-        n_reorder = 1;
-    } else {
-        n_reorder = dlp_make_multiple_of_n(n, 16);
+        // Tight s8 column, padded so the trailing int32 column sum stays
+        // naturally aligned, followed by that single column sum.
+        return (msz_t)dlp_gemm_col_sum_byte_offset(k) + sizeof(int32_t);
     }
-
-    // Extra space since packing does length in multiples of 4.
-    md_t k_reorder;
-    if (n == 1) {
-        k_reorder = k;
-    } else {
-        k_reorder = dlp_make_multiple_of_n(k, 4);
-    }
-#else
-    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
-    md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 #endif
+    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
+    // Extra space since packing does length in multiples of 4.
+    md_t k_reorder = dlp_make_multiple_of_n(k, 4);
+
     // extra memory of n_reorder * sizeof(int32_t) to store sum of every column
     // of B matrix buffer
     msz_t size_req =
@@ -211,27 +203,20 @@ aocl_get_reorder_buf_size_s8s8s32os32_sym_quant(const char      order,
     // loaded; and since k_dim needs to be atleast 4, having n_dim atleast 16
     // should give 4x16=64 elements, enough for 1 zmm register.The padding is
     // not rounded to NR (=64), since that would result in memory wastage.
+    md_t num_groups = (k + group_size - 1) / group_size;
+
 #ifdef DLP_KERNELS_ZEN4
-    md_t n_reorder;
     // Follow alternate reordering for n==1 iff k is divisible by group_size.
     if ((n == 1) && (k % group_size == 0) && (KC % group_size == 0)) {
-        n_reorder = 1;
-    } else {
-        n_reorder = dlp_make_multiple_of_n(n, 16);
+        // Tight s8 column, padded so the per-group int32 column sums that
+        // follow stay naturally aligned.
+        return (msz_t)dlp_gemm_col_sum_byte_offset(k)
+               + (msz_t)num_groups * sizeof(int32_t);
     }
-
-    // Extra space since packing does length in multiples of 4.
-    md_t k_reorder;
-    if ((n == 1) && (k % group_size == 0) && (KC % group_size == 0)) {
-        k_reorder = k;
-    } else {
-        k_reorder = dlp_make_multiple_of_n(k, 4);
-    }
-#else
-    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
-    md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 #endif
-    md_t num_groups = (k + group_size - 1) / group_size;
+    md_t n_reorder = dlp_make_multiple_of_n(n, 16);
+    // Extra space since packing does length in multiples of 4.
+    md_t k_reorder = dlp_make_multiple_of_n(k, 4);
 
     // extra memory to store sum of every column per group of B matrix buffer
     size_t extra_mem_req = num_groups * n_reorder * sizeof(int32_t);
@@ -302,7 +287,7 @@ aocl_reorder_s8s8s32os32(const char      order,
 #ifdef DLP_KERNELS_ZEN4
     if (n == 1) {
         int32_t* pack_b_column_sum =
-            (int32_t*)(reorder_buf_addr + (sizeof(int8_t) * n * k));
+            (int32_t*)(reorder_buf_addr + dlp_gemm_col_sum_byte_offset(k));
 
         *pack_b_column_sum = 0;
 
@@ -418,7 +403,7 @@ aocl_reorder_s8s8s32os32_sym_quant(const char      order,
         // Calculate the address of the beginning of the column sum buffer that
         // is allocated after the reorder buffer.
         int32_t* pack_b_column_sum =
-            (int32_t*)(reorder_buf_addr + (k * sizeof(int8_t)));
+            (int32_t*)(reorder_buf_addr + dlp_gemm_col_sum_byte_offset(k));
 
         for (iter_t k0 = 0; k0 < k; k0 += group_size) {
             md_t gs            = dlp_min(group_size, k - k0);

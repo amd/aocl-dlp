@@ -178,7 +178,7 @@ DLP_GEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
 
             // Broadcast a[0,kr:kr+4].
             a_int32_0 =
-                _mm512_set1_epi32(*(int32_t*)(a + (rs_a * 0) + (cs_a * kr)));
+                _mm512_set1_epi32(dlp_load_unaligned_int32(a + (rs_a * 0) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -193,7 +193,7 @@ DLP_GEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
 
             // Broadcast a[1,kr:kr+4].
             a_int32_1 =
-                _mm512_set1_epi32(*(int32_t*)(a + (rs_a * 1) + (cs_a * kr)));
+                _mm512_set1_epi32(dlp_load_unaligned_int32(a + (rs_a * 1) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -208,7 +208,7 @@ DLP_GEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
 
             // Broadcast a[2,kr:kr+4].
             a_int32_0 =
-                _mm512_set1_epi32(*(int32_t*)(a + (rs_a * 2) + (cs_a * kr)));
+                _mm512_set1_epi32(dlp_load_unaligned_int32(a + (rs_a * 2) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -223,7 +223,7 @@ DLP_GEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
 
             // Broadcast a[3,kr:kr+4].
             a_int32_1 =
-                _mm512_set1_epi32(*(int32_t*)(a + (rs_a * 3) + (cs_a * kr)));
+                _mm512_set1_epi32(dlp_load_unaligned_int32(a + (rs_a * 3) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -238,7 +238,7 @@ DLP_GEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
 
             // Broadcast a[4,kr:kr+4].
             a_int32_0 =
-                _mm512_set1_epi32(*(int32_t*)(a + (rs_a * 4) + (cs_a * kr)));
+                _mm512_set1_epi32(dlp_load_unaligned_int32(a + (rs_a * 4) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -253,7 +253,7 @@ DLP_GEMM_MAIN_KERN(int8_t, int8_t, int32_t, s8s8s32os32_6x64)
 
             // Broadcast a[5,kr:kr+4].
             a_int32_1 =
-                _mm512_set1_epi32(*(int32_t*)(a + (rs_a * 5) + (cs_a * kr)));
+                _mm512_set1_epi32(dlp_load_unaligned_int32(a + (rs_a * 5) + (cs_a * kr)));
 
             // convert signed int8 to uint8 for VNNI
             a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);

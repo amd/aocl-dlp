@@ -26,6 +26,7 @@
  *
  */
 
+#include "gemm_utils/dlp_gemm_utils.h"
 #include "kernels/dlp_kernels.h"
 #include <immintrin.h>
 
@@ -35,6 +36,8 @@
 // 6x64 int8o32 kernel
 DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
 {
+    (void)cs_c;
+
     // clang-format off
     DLP_POST_OPS_LABELS_DECL(
         &&POST_OPS_6x64_DISABLE,    &&POST_OPS_BIAS_6x64,
@@ -80,7 +83,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
                 alpha, beta, grp_post_ops_attr, post_ops_list, post_ops_attr);
 
             b = b + (48 * k0_updated); // k0x48 packed contiguosly.
-            c = c + 48;
+            c = dlp_offset_or_null_f32(c, 48);
             post_ops_attr.post_op_c_j += 48;
             grp_post_ops_attr.grp_post_op_j += 48;
             post_ops_attr.b_sum_offset += 48;
@@ -90,7 +93,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
                 alpha, beta, grp_post_ops_attr, post_ops_list, post_ops_attr);
 
             b = b + (32 * k0_updated); // k0x32 packed contiguosly.
-            c = c + 32;
+            c = dlp_offset_or_null_f32(c, 32);
             post_ops_attr.post_op_c_j += 32;
             grp_post_ops_attr.grp_post_op_j += 32;
             post_ops_attr.b_sum_offset += 32;
@@ -100,7 +103,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
                 alpha, beta, grp_post_ops_attr, post_ops_list, post_ops_attr);
 
             b = b + (16 * k0_updated); // k0x16 packed contiguosly.
-            c = c + 16;
+            c = dlp_offset_or_null_f32(c, 16);
             post_ops_attr.post_op_c_j += 16;
             grp_post_ops_attr.grp_post_op_j += 16;
             post_ops_attr.b_sum_offset += 16;
@@ -224,7 +227,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
 
                 // Broadcast a[0,kr:kr+4].
                 a_int32_0 = _mm512_set1_epi32(
-                    *(int32_t*)(a_group + (rs_a * 0) + (cs_a * kr)));
+                    dlp_load_unaligned_int32(a_group + (rs_a * 0) + (cs_a * kr)));
 
                 // convert signed int8 to uint8 for VNNI
                 a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -239,7 +242,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
 
                 // Broadcast a[1,kr:kr+4].
                 a_int32_1 = _mm512_set1_epi32(
-                    *(int32_t*)(a_group + (rs_a * 1) + (cs_a * kr)));
+                    dlp_load_unaligned_int32(a_group + (rs_a * 1) + (cs_a * kr)));
 
                 // convert signed int8 to uint8 for VNNI
                 a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -254,7 +257,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
 
                 // Broadcast a[2,kr:kr+4].
                 a_int32_0 = _mm512_set1_epi32(
-                    *(int32_t*)(a_group + (rs_a * 2) + (cs_a * kr)));
+                    dlp_load_unaligned_int32(a_group + (rs_a * 2) + (cs_a * kr)));
 
                 // convert signed int8 to uint8 for VNNI
                 a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -269,7 +272,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
 
                 // Broadcast a[3,kr:kr+4].
                 a_int32_1 = _mm512_set1_epi32(
-                    *(int32_t*)(a_group + (rs_a * 3) + (cs_a * kr)));
+                    dlp_load_unaligned_int32(a_group + (rs_a * 3) + (cs_a * kr)));
 
                 // convert signed int8 to uint8 for VNNI
                 a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -284,7 +287,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
 
                 // Broadcast a[4,kr:kr+4].
                 a_int32_0 = _mm512_set1_epi32(
-                    *(int32_t*)(a_group + (rs_a * 4) + (cs_a * kr)));
+                    dlp_load_unaligned_int32(a_group + (rs_a * 4) + (cs_a * kr)));
 
                 // convert signed int8 to uint8 for VNNI
                 a_int32_0 = _mm512_add_epi8(a_int32_0, vec_uint8);
@@ -299,7 +302,7 @@ DLP_GEMM_MAIN_KERN2(int8_t, int8_t, int32_t, s8s8s32os32_6x64m_sym_quant)
 
                 // Broadcast a[5,kr:kr+4].
                 a_int32_1 = _mm512_set1_epi32(
-                    *(int32_t*)(a_group + (rs_a * 5) + (cs_a * kr)));
+                    dlp_load_unaligned_int32(a_group + (rs_a * 5) + (cs_a * kr)));
 
                 // convert signed int8 to uint8 for VNNI
                 a_int32_1 = _mm512_add_epi8(a_int32_1, vec_uint8);
@@ -2614,32 +2617,42 @@ DLP_POST_OPS_DISABLE(POST_OPS_6x64_DISABLE)
             md_t cs_a_use = (cs_a == 4) ? 4 : ((cs_a / 6) * 5);
             dlp_gemm_rowvar_s8s8s32os32_5x64_sym_quant(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
-                (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
-                grp_post_ops_attr, post_ops_list, post_ops_attr);
+                dlp_offset_or_null_f32(
+                    c, (rs_c * m_full_pieces_loop_limit)),
+                rs_c, alpha, beta, grp_post_ops_attr, post_ops_list,
+                post_ops_attr);
         } else if (m_partial_pieces == 4) {
             md_t cs_a_use = (cs_a == 4) ? 4 : ((cs_a / 6) * 4);
             dlp_gemm_rowvar_s8s8s32os32_4x64_sym_quant(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
-                (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
-                grp_post_ops_attr, post_ops_list, post_ops_attr);
+                dlp_offset_or_null_f32(
+                    c, (rs_c * m_full_pieces_loop_limit)),
+                rs_c, alpha, beta, grp_post_ops_attr, post_ops_list,
+                post_ops_attr);
         } else if (m_partial_pieces == 3) {
             md_t cs_a_use = (cs_a == 4) ? 4 : ((cs_a / 6) * 3);
             dlp_gemm_rowvar_s8s8s32os32_3x64_sym_quant(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
-                (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
-                grp_post_ops_attr, post_ops_list, post_ops_attr);
+                dlp_offset_or_null_f32(
+                    c, (rs_c * m_full_pieces_loop_limit)),
+                rs_c, alpha, beta, grp_post_ops_attr, post_ops_list,
+                post_ops_attr);
         } else if (m_partial_pieces == 2) {
             md_t cs_a_use = (cs_a == 4) ? 4 : ((cs_a / 6) * 2);
             dlp_gemm_rowvar_s8s8s32os32_2x64_sym_quant(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
-                (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
-                grp_post_ops_attr, post_ops_list, post_ops_attr);
+                dlp_offset_or_null_f32(
+                    c, (rs_c * m_full_pieces_loop_limit)),
+                rs_c, alpha, beta, grp_post_ops_attr, post_ops_list,
+                post_ops_attr);
         } else if (m_partial_pieces == 1) {
             md_t cs_a_use = (cs_a == 4) ? 4 : ((cs_a / 6) * 1);
             dlp_gemm_rowvar_s8s8s32os32_1x64_sym_quant(
                 k0, a, rs_a, cs_a_use, b, rs_b, cs_b,
-                (c + (rs_c * m_full_pieces_loop_limit)), rs_c, alpha, beta,
-                grp_post_ops_attr, post_ops_list, post_ops_attr);
+                dlp_offset_or_null_f32(
+                    c, (rs_c * m_full_pieces_loop_limit)),
+                rs_c, alpha, beta, grp_post_ops_attr, post_ops_list,
+                post_ops_attr);
         }
     }
 }
