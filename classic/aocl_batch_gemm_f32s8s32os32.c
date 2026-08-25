@@ -90,9 +90,16 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
     // check for validity of params.
     dlp_clsc_err_t err_no = DLP_CLSC_SUCCESS;
 
+    // Default every group to a failure state so a group only reports success
+    // once it has actually been computed. Aborting the batch on a group error
+    // leaves later groups unprocessed, and a zero-initialised metadata code
+    // equals DLP_CLSC_SUCCESS, so without this they would falsely report
+    // success over uncomputed output.
     for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
+        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_FAILURE);
+    }
 
-        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+    for (iter_t gc_i = 0; gc_i < group_count; gc_i++) {
 
         md_t g_sz = group_size[gc_i];
 
@@ -118,6 +125,16 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
                 "Exiting..",
                 __FILE__, __LINE__);
             DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NULL_POINTER);
+            goto err_hndl;
+        }
+
+        // Dequantization support is through the ADQUANTIZE post-op right now,
+        // and beta != 0 is not supported with it.
+        if (beta[gc_i] != 0) {
+            dlp_print_msg(" beta != 0 is not supported for f32s8s32 gemm."
+                          " Exiting..",
+                          __FILE__, __LINE__);
+            DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_NOT_SUPPORTED);
             goto err_hndl;
         }
 
@@ -265,6 +282,9 @@ aocl_batch_gemm_f32s8s32_impl(const char*       order,
             (int32_t**)&c[mat_idx], &rs_c, &cs_c, alpha[gc_i], beta[gc_i],
             &rntm_g, &lcntx_l, &ops, c_dtype);
 #endif
+        // The group completed compute; record success only now.
+        DLP_METADATA_SET_ERROR(metadata[gc_i], DLP_CLSC_SUCCESS);
+
         mat_idx += g_sz;
     }
 err_hndl:;

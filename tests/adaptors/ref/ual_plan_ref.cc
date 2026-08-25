@@ -240,6 +240,13 @@ RefUalPlan::execute()
         int32_t alpha_s32 = static_cast<int32_t>(m_alpha);
         int32_t beta_s32  = static_cast<int32_t>(m_beta);
 
+        // Dequantization support is through the ADQUANTIZE postop right now,
+        // and beta != 0 is not supported with it. Mirrors the rejection in the
+        // bf16s8s32 and f32s8s32 APIs. To be removed once beta != 0 is
+        // supported.
+        if (beta_s32 != 0)
+            return UALError::UAL_NOT_SUPPORTED;
+
         // Compute to f32 intermediate
         Matrix tempC_f32(C.getEffectiveRows(), C.getEffectiveCols(),
                          MatrixType::f32, C.getLayout());

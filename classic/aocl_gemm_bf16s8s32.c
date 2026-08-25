@@ -199,6 +199,16 @@ aocl_gemm_bf16s8s32_impl(const char        order,
         goto err_hndl;
     }
 
+    // Dequantization support is through the ADQUANTIZE post-op right now, and
+    // beta != 0 is not supported with it.
+    if (beta != 0) {
+        dlp_print_msg(" beta != 0 is not supported for bf16s8s32 gemm."
+                      " Exiting..",
+                      __FILE__, __LINE__);
+        DLP_METADATA_SET_ERROR(metadata, DLP_CLSC_NOT_SUPPORTED);
+        goto err_hndl;
+    }
+
     dlp_trans_t dlp_transa;
     dlp_trans_t dlp_transb;
     dlp_param_map_netlib_to_dlp_trans(transa, &dlp_transa);
