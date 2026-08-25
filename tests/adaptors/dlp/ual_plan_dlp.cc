@@ -972,6 +972,9 @@ DlpUalPlan::convertScaleOperations()
                 (sfDim == ParamDim::PerToken)     ? rows
                 : (sfDim == ParamDim::PerChannel) ? cols
                                                   : md_t{ 1 };
+        } else {
+            // No scale factor provided; invalid for SCALE op in testing.
+            throw std::runtime_error("Scale operation requires scale factor");
         }
 
         // Set zero point if provided
@@ -983,21 +986,6 @@ DlpUalPlan::convertScaleOperations()
                 param.getZeroPoint()->getCols();
             m_metadata->scale[i].zp->zero_point_type =
                 getStorageType(param.getZeroPoint()->getMatrixType());
-        } else {
-            // Based on DLP library validation, if we have a scale factor, we
-            // need zero point
-            if (param.hasScaleFactor()) {
-                // Allocate and set default zero point for SCALE operations
-                int8_t* zero_point_data                  = new int8_t(0);
-                m_metadata->scale[i].zp                  = new dlp_zp_t;
-                m_metadata->scale[i].zp->zero_point      = zero_point_data;
-                m_metadata->scale[i].zp->zero_point_len  = 1;
-                m_metadata->scale[i].zp->zero_point_type = DLP_S8;
-            } else {
-                // No scale factor provided; invalid for SCALE op in testing.
-                throw std::runtime_error(
-                    "Scale operation requires scale factor");
-            }
         }
     }
 }

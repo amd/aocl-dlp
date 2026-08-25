@@ -1040,56 +1040,99 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x64)
 
     __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
 
+    bool is_sf_bf16 = (post_ops_list_temp->sf_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->sf_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+    bool is_zp_bf16 = (post_ops_list_temp->zp_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->zp_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+
     // Need to account for row vs column major swaps. For scalars
     // scale and zero point, no implications.
     // Even though different registers are used for scalar in column
     // and row major downscale path, all those registers will contain
     // the same value.
     if (post_ops_list_temp->scale_factor_len == 1) {
-        selector1 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector2 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector3 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector4 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        if (is_sf_bf16) {
+            BF16_F32_SCALE_BCST(selector1);
+            BF16_F32_SCALE_BCST(selector2);
+            BF16_F32_SCALE_BCST(selector3);
+            BF16_F32_SCALE_BCST(selector4);
+        } else {
+            selector1 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector2 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector3 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector4 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        }
     }
 
-    // bf16 zero point value (scalar or vector).
+    // zero point value (scalar or vector).
     if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-        zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        if (is_zp_bf16) {
+            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        } else {
+            F32_ZP_BCST(zero_point0, zp_mask);
+            F32_ZP_BCST(zero_point1, zp_mask);
+            F32_ZP_BCST(zero_point2, zp_mask);
+            F32_ZP_BCST(zero_point3, zp_mask);
+        }
     }
 
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (0 * 16));
-            selector2 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (1 * 16));
-            selector3 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (2 * 16));
-            selector4 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (3 * 16));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_LOADU(selector1, 0);
+                BF16_F32_SCALE_LOADU(selector2, 1);
+                BF16_F32_SCALE_LOADU(selector3, 2);
+                BF16_F32_SCALE_LOADU(selector4, 3);
+            } else {
+                selector1 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (0 * 16));
+                selector2 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                selector3 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (2 * 16));
+                selector4 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (3 * 16));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (0 * 16)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (1 * 16)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (2 * 16)));
-            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (3 * 16)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (0 * 16)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (1 * 16)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (2 * 16)));
+                zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (3 * 16)));
+            } else {
+                F32_ZP_MASKZ_LOADU(zero_point0, zp_mask, 0);
+                F32_ZP_MASKZ_LOADU(zero_point1, zp_mask, 1);
+                F32_ZP_MASKZ_LOADU(zero_point2, zp_mask, 2);
+                F32_ZP_MASKZ_LOADU(zero_point3, zp_mask, 3);
+            }
         }
 
         // c[0, 0-15]
@@ -1159,33 +1202,47 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x64)
         // corresponds to an entire row of the transposed output array,
         // instead of an entire column.
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 0));
-            selector2 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 1));
-            selector3 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 2));
-            selector4 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 3));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_COL_BCST(selector1, 0);
+                BF16_F32_SCALE_COL_BCST(selector2, 1);
+                BF16_F32_SCALE_COL_BCST(selector3, 2);
+                BF16_F32_SCALE_COL_BCST(selector4, 3);
+            } else {
+                selector1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 0));
+                selector2 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 1));
+                selector3 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 2));
+                selector4 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 3));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 0)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 1)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 2)));
-            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 3)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 0)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 1)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 2)));
+                zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 3)));
+            } else {
+                F32_ZP_COL_BCST(zero_point0, zp_mask, 0);
+                F32_ZP_COL_BCST(zero_point1, zp_mask, 1);
+                F32_ZP_COL_BCST(zero_point2, zp_mask, 2);
+                F32_ZP_COL_BCST(zero_point3, zp_mask, 3);
+            }
         }
 
         // c[0, 0-15]
@@ -1237,15 +1294,23 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_5x64)
         SCL_MULRND_F32(c_float_3p3, selector4, zero_point3);
 
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 4));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_COL_BCST(selector1, 4);
+            } else {
+                selector1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 4));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 4)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 4)));
+            } else {
+                F32_ZP_COL_BCST(zero_point0, zp_mask, 4);
+            }
         }
         // c[4, 0-15]
         SCL_MULRND_F32(c_float_4p0, selector1, zero_point0);
@@ -2803,56 +2868,99 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x64)
 
     __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
 
+    bool is_sf_bf16 = (post_ops_list_temp->sf_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->sf_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+    bool is_zp_bf16 = (post_ops_list_temp->zp_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->zp_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+
     // Need to account for row vs column major swaps. For scalars
     // scale and zero point, no implications.
     // Even though different registers are used for scalar in column
     // and row major downscale path, all those registers will contain
     // the same value.
     if (post_ops_list_temp->scale_factor_len == 1) {
-        selector1 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector2 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector3 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector4 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        if (is_sf_bf16) {
+            BF16_F32_SCALE_BCST(selector1);
+            BF16_F32_SCALE_BCST(selector2);
+            BF16_F32_SCALE_BCST(selector3);
+            BF16_F32_SCALE_BCST(selector4);
+        } else {
+            selector1 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector2 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector3 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector4 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        }
     }
 
-    // bf16 zero point value (scalar or vector).
+    // zero point value (scalar or vector).
     if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-        zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        if (is_zp_bf16) {
+            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        } else {
+            F32_ZP_BCST(zero_point0, zp_mask);
+            F32_ZP_BCST(zero_point1, zp_mask);
+            F32_ZP_BCST(zero_point2, zp_mask);
+            F32_ZP_BCST(zero_point3, zp_mask);
+        }
     }
 
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (0 * 16));
-            selector2 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (1 * 16));
-            selector3 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (2 * 16));
-            selector4 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (3 * 16));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_LOADU(selector1, 0);
+                BF16_F32_SCALE_LOADU(selector2, 1);
+                BF16_F32_SCALE_LOADU(selector3, 2);
+                BF16_F32_SCALE_LOADU(selector4, 3);
+            } else {
+                selector1 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (0 * 16));
+                selector2 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                selector3 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (2 * 16));
+                selector4 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (3 * 16));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (0 * 16)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (1 * 16)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (2 * 16)));
-            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (3 * 16)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (0 * 16)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (1 * 16)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (2 * 16)));
+                zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (3 * 16)));
+            } else {
+                F32_ZP_MASKZ_LOADU(zero_point0, zp_mask, 0);
+                F32_ZP_MASKZ_LOADU(zero_point1, zp_mask, 1);
+                F32_ZP_MASKZ_LOADU(zero_point2, zp_mask, 2);
+                F32_ZP_MASKZ_LOADU(zero_point3, zp_mask, 3);
+            }
         }
 
         // c[0, 0-15]
@@ -2910,33 +3018,47 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_4x64)
         // corresponds to an entire row of the transposed output array,
         // instead of an entire column.
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 0));
-            selector2 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 1));
-            selector3 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 2));
-            selector4 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 3));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_COL_BCST(selector1, 0);
+                BF16_F32_SCALE_COL_BCST(selector2, 1);
+                BF16_F32_SCALE_COL_BCST(selector3, 2);
+                BF16_F32_SCALE_COL_BCST(selector4, 3);
+            } else {
+                selector1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 0));
+                selector2 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 1));
+                selector3 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 2));
+                selector4 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 3));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 0)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 1)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 2)));
-            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 3)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 0)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 1)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 2)));
+                zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 3)));
+            } else {
+                F32_ZP_COL_BCST(zero_point0, zp_mask, 0);
+                F32_ZP_COL_BCST(zero_point1, zp_mask, 1);
+                F32_ZP_COL_BCST(zero_point2, zp_mask, 2);
+                F32_ZP_COL_BCST(zero_point3, zp_mask, 3);
+            }
         }
 
         // c[0, 0-15]
@@ -4274,56 +4396,99 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x64)
 
     __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
 
+    bool is_sf_bf16 = (post_ops_list_temp->sf_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->sf_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+    bool is_zp_bf16 = (post_ops_list_temp->zp_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->zp_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+
     // Need to account for row vs column major swaps. For scalars
     // scale and zero point, no implications.
     // Even though different registers are used for scalar in column
     // and row major downscale path, all those registers will contain
     // the same value.
     if (post_ops_list_temp->scale_factor_len == 1) {
-        selector1 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector2 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector3 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector4 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        if (is_sf_bf16) {
+            BF16_F32_SCALE_BCST(selector1);
+            BF16_F32_SCALE_BCST(selector2);
+            BF16_F32_SCALE_BCST(selector3);
+            BF16_F32_SCALE_BCST(selector4);
+        } else {
+            selector1 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector2 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector3 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector4 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        }
     }
 
-    // bf16 zero point value (scalar or vector).
+    // zero point value (scalar or vector).
     if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-        zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        if (is_zp_bf16) {
+            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        } else {
+            F32_ZP_BCST(zero_point0, zp_mask);
+            F32_ZP_BCST(zero_point1, zp_mask);
+            F32_ZP_BCST(zero_point2, zp_mask);
+            F32_ZP_BCST(zero_point3, zp_mask);
+        }
     }
 
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (0 * 16));
-            selector2 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (1 * 16));
-            selector3 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (2 * 16));
-            selector4 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (3 * 16));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_LOADU(selector1, 0);
+                BF16_F32_SCALE_LOADU(selector2, 1);
+                BF16_F32_SCALE_LOADU(selector3, 2);
+                BF16_F32_SCALE_LOADU(selector4, 3);
+            } else {
+                selector1 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (0 * 16));
+                selector2 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                selector3 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (2 * 16));
+                selector4 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (3 * 16));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (0 * 16)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (1 * 16)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (2 * 16)));
-            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (3 * 16)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (0 * 16)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (1 * 16)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (2 * 16)));
+                zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (3 * 16)));
+            } else {
+                F32_ZP_MASKZ_LOADU(zero_point0, zp_mask, 0);
+                F32_ZP_MASKZ_LOADU(zero_point1, zp_mask, 1);
+                F32_ZP_MASKZ_LOADU(zero_point2, zp_mask, 2);
+                F32_ZP_MASKZ_LOADU(zero_point3, zp_mask, 3);
+            }
         }
 
         // c[0, 0-15]
@@ -4369,27 +4534,39 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_3x64)
         // corresponds to an entire row of the transposed output array,
         // instead of an entire column.
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 0));
-            selector2 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 1));
-            selector3 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 2));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_COL_BCST(selector1, 0);
+                BF16_F32_SCALE_COL_BCST(selector2, 1);
+                BF16_F32_SCALE_COL_BCST(selector3, 2);
+            } else {
+                selector1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 0));
+                selector2 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 1));
+                selector3 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 2));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 0)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 1)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 2)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 0)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 1)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 2)));
+            } else {
+                F32_ZP_COL_BCST(zero_point0, zp_mask, 0);
+                F32_ZP_COL_BCST(zero_point1, zp_mask, 1);
+                F32_ZP_COL_BCST(zero_point2, zp_mask, 2);
+            }
         }
 
         // c[0, 0-15]
@@ -5463,56 +5640,99 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x64)
 
     __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
 
+    bool is_sf_bf16 = (post_ops_list_temp->sf_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->sf_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+    bool is_zp_bf16 = (post_ops_list_temp->zp_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->zp_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+
     // Need to account for row vs column major swaps. For scalars
     // scale and zero point, no implications.
     // Even though different registers are used for scalar in column
     // and row major downscale path, all those registers will contain
     // the same value.
     if (post_ops_list_temp->scale_factor_len == 1) {
-        selector1 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector2 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector3 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector4 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        if (is_sf_bf16) {
+            BF16_F32_SCALE_BCST(selector1);
+            BF16_F32_SCALE_BCST(selector2);
+            BF16_F32_SCALE_BCST(selector3);
+            BF16_F32_SCALE_BCST(selector4);
+        } else {
+            selector1 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector2 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector3 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector4 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        }
     }
 
-    // bf16 zero point value (scalar or vector).
+    // zero point value (scalar or vector).
     if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-        zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        if (is_zp_bf16) {
+            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        } else {
+            F32_ZP_BCST(zero_point0, zp_mask);
+            F32_ZP_BCST(zero_point1, zp_mask);
+            F32_ZP_BCST(zero_point2, zp_mask);
+            F32_ZP_BCST(zero_point3, zp_mask);
+        }
     }
 
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (0 * 16));
-            selector2 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (1 * 16));
-            selector3 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (2 * 16));
-            selector4 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (3 * 16));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_LOADU(selector1, 0);
+                BF16_F32_SCALE_LOADU(selector2, 1);
+                BF16_F32_SCALE_LOADU(selector3, 2);
+                BF16_F32_SCALE_LOADU(selector4, 3);
+            } else {
+                selector1 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (0 * 16));
+                selector2 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                selector3 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (2 * 16));
+                selector4 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (3 * 16));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (0 * 16)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (1 * 16)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (2 * 16)));
-            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (3 * 16)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (0 * 16)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (1 * 16)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (2 * 16)));
+                zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (3 * 16)));
+            } else {
+                F32_ZP_MASKZ_LOADU(zero_point0, zp_mask, 0);
+                F32_ZP_MASKZ_LOADU(zero_point1, zp_mask, 1);
+                F32_ZP_MASKZ_LOADU(zero_point2, zp_mask, 2);
+                F32_ZP_MASKZ_LOADU(zero_point3, zp_mask, 3);
+            }
         }
 
         // c[0, 0-15]
@@ -5546,21 +5766,31 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_2x64)
         // corresponds to an entire row of the transposed output array,
         // instead of an entire column.
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 0));
-            selector2 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 1));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_COL_BCST(selector1, 0);
+                BF16_F32_SCALE_COL_BCST(selector2, 1);
+            } else {
+                selector1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 0));
+                selector2 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 1));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 0)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 1)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 0)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 1)));
+            } else {
+                F32_ZP_COL_BCST(zero_point0, zp_mask, 0);
+                F32_ZP_COL_BCST(zero_point1, zp_mask, 1);
+            }
         }
 
         // c[0, 0-15]
@@ -6369,56 +6599,99 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x64)
 
     __mmask16 zp_mask = _cvtu32_mask16(0xFFFF);
 
+    bool is_sf_bf16 = (post_ops_list_temp->sf_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->sf_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+    bool is_zp_bf16 = (post_ops_list_temp->zp_stor_type == DLP_BF16)
+                      || ((post_ops_list_temp->zp_stor_type == DLP_INVALID)
+                         && post_ops_attr.c_stor_type == DLP_BF16);
+
     // Need to account for row vs column major swaps. For scalars
     // scale and zero point, no implications.
     // Even though different registers are used for scalar in column
     // and row major downscale path, all those registers will contain
     // the same value.
     if (post_ops_list_temp->scale_factor_len == 1) {
-        selector1 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector2 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector3 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
-        selector4 = _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        if (is_sf_bf16) {
+            BF16_F32_SCALE_BCST(selector1);
+            BF16_F32_SCALE_BCST(selector2);
+            BF16_F32_SCALE_BCST(selector3);
+            BF16_F32_SCALE_BCST(selector4);
+        } else {
+            selector1 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector2 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector3 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+            selector4 =
+                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor));
+        }
     }
 
-    // bf16 zero point value (scalar or vector).
+    // zero point value (scalar or vector).
     if (*((md_t*)post_ops_list_temp->op_args3) == 1) {
-        zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
-        zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-            zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        if (is_zp_bf16) {
+            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                zp_mask, *((bfloat16*)post_ops_list_temp->op_args1)));
+        } else {
+            F32_ZP_BCST(zero_point0, zp_mask);
+            F32_ZP_BCST(zero_point1, zp_mask);
+            F32_ZP_BCST(zero_point2, zp_mask);
+            F32_ZP_BCST(zero_point3, zp_mask);
+        }
     }
 
     if ((*(char*)post_ops_list_temp->op_args2 == 'r')
         || (*(char*)post_ops_list_temp->op_args2 == 'R')) {
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (0 * 16));
-            selector2 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (1 * 16));
-            selector3 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (2 * 16));
-            selector4 = _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
-                                        + post_ops_attr.post_op_c_j + (3 * 16));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_LOADU(selector1, 0);
+                BF16_F32_SCALE_LOADU(selector2, 1);
+                BF16_F32_SCALE_LOADU(selector3, 2);
+                BF16_F32_SCALE_LOADU(selector4, 3);
+            } else {
+                selector1 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (0 * 16));
+                selector2 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (1 * 16));
+                selector3 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (2 * 16));
+                selector4 =
+                    _mm512_loadu_ps((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_j + (3 * 16));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (0 * 16)));
-            zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (1 * 16)));
-            zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (2 * 16)));
-            zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
-                zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
-                             + post_ops_attr.post_op_c_j + (3 * 16)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (0 * 16)));
+                zero_point1 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (1 * 16)));
+                zero_point2 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (2 * 16)));
+                zero_point3 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(
+                    zp_mask, ((bfloat16*)post_ops_list_temp->op_args1)
+                                + post_ops_attr.post_op_c_j + (3 * 16)));
+            } else {
+                F32_ZP_MASKZ_LOADU(zero_point0, zp_mask, 0);
+                F32_ZP_MASKZ_LOADU(zero_point1, zp_mask, 1);
+                F32_ZP_MASKZ_LOADU(zero_point2, zp_mask, 2);
+                F32_ZP_MASKZ_LOADU(zero_point3, zp_mask, 3);
+            }
         }
 
         // c[0, 0-15]
@@ -6440,15 +6713,23 @@ DLP_POST_OP_CASE(7, POST_OPS_DOWNSCALE_1x64)
         // corresponds to an entire row of the transposed output array,
         // instead of an entire column.
         if (post_ops_list_temp->scale_factor_len > 1) {
-            selector1 =
-                _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
-                                 + post_ops_attr.post_op_c_i + 0));
+            if (is_sf_bf16) {
+                BF16_F32_SCALE_COL_BCST(selector1, 0);
+            } else {
+                selector1 =
+                    _mm512_set1_ps(*((float*)post_ops_list_temp->scale_factor
+                                    + post_ops_attr.post_op_c_i + 0));
+            }
         }
 
         if (*((md_t*)post_ops_list_temp->op_args3) > 1) {
-            zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
-                zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
-                           + post_ops_attr.post_op_c_i + 0)));
+            if (is_zp_bf16) {
+                zero_point0 = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_set1_epi16(
+                    zp_mask, *(((bfloat16*)post_ops_list_temp->op_args1)
+                            + post_ops_attr.post_op_c_i + 0)));
+            } else {
+                F32_ZP_COL_BCST(zero_point0, zp_mask, 0);
+            }
         }
 
         // c[0, 0-15]
