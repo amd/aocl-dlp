@@ -84,7 +84,8 @@
         _mm512_set1_epi32(16))));                                              \
     F32_BETA_FMA(reg, scratch1, scratch2)
 
-// zero_point(avx512 register) contains bf16 zp upscaled to f32.
+// zero_point (avx512 register) is of type F32 (either native or bf16 upscaled
+// to f32).
 #define SCL_MULRND_F32(reg, selector, zero_point)                              \
     reg = _mm512_mul_ps(reg, selector);                                        \
     reg = _mm512_add_ps(reg, zero_point);
@@ -369,5 +370,46 @@
     zmm1 = _mm512_setzero_ps();                                                \
     zmm2 = _mm512_setzero_ps();                                                \
     zmm3 = _mm512_setzero_ps();
+
+// Per-tensor scale factor, scale_factor_len == 1.
+#define BF16_F32_SCALE_BCST(scr)                                               \
+    scr = CVT_BF16_F32_INT_SHIFT(                                              \
+        _mm256_set1_epi16(*((bfloat16*)post_ops_list_temp->scale_factor)));
+
+// Row-major per-column scale factor, full 16 element load.
+#define BF16_F32_SCALE_LOADU(scr, n_ind)                                       \
+    scr = CVT_BF16_F32_INT_SHIFT(                                              \
+        _mm256_loadu_epi16(((bfloat16*)post_ops_list_temp->scale_factor)       \
+                           + post_ops_attr.post_op_c_j + ((n_ind) * 16)));
+
+// Column-major per-row scale factor, broadcast of element post_op_c_i + m_off.
+#define BF16_F32_SCALE_COL_BCST(scr, m_off)                                    \
+    scr = CVT_BF16_F32_INT_SHIFT(                                              \
+        _mm256_set1_epi16(*(((bfloat16*)post_ops_list_temp->scale_factor)      \
+                            + post_ops_attr.post_op_c_i + (m_off))));
+
+// Row-major per-column scale factor, masked load for n-fringe tiles.
+#define BF16_F32_SCALE_MASKZ_LOADU(scr, mask, n_ind)                           \
+    scr = CVT_BF16_F32_INT_SHIFT(_mm256_maskz_loadu_epi16(                     \
+        (mask), ((bfloat16*)post_ops_list_temp->scale_factor)                  \
+                    + post_ops_attr.post_op_c_j + ((n_ind) * 16)));
+
+// Per-tensor f32 zero point, zero_point_len == 1
+#define F32_ZP_BCST(zp, mask)                                                  \
+    zp = _mm512_maskz_broadcastss_ps(                                          \
+        (mask), _mm_load_ss((float*)post_ops_list_temp->op_args1));
+
+// Row-major per-column f32 zero point, 16 element masked load.
+#define F32_ZP_MASKZ_LOADU(zp, mask, n_ind)                                    \
+    zp = _mm512_maskz_loadu_ps((mask), ((float*)post_ops_list_temp->op_args1)  \
+                                           + post_ops_attr.post_op_c_j         \
+                                           + ((n_ind) * 16));
+
+// Column-major per-row f32 zero point, broadcast of element post_op_c_i +
+// m_off.
+#define F32_ZP_COL_BCST(zp, mask, m_off)                                       \
+    zp = _mm512_maskz_broadcastss_ps(                                          \
+        (mask), _mm_load_ss(((float*)post_ops_list_temp->op_args1)             \
+                            + post_ops_attr.post_op_c_i + (m_off)));
 
 #endif // DLP_GEMM_F32_KERN_MACROS_H
